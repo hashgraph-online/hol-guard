@@ -32,6 +32,8 @@ CONTROL_TOKENS = FLOW_OPERATORS | GROUP_OPERATORS
 MAX_DIRECTORY_STACK_DEPTH = 32
 _NEWLINE_SENTINEL = "__HOL_GUARD_SHELL_NEWLINE__"
 _FD_AMPERSAND_SENTINEL = "__HOL_GUARD_SHELL_FD_AMPERSAND__"
+_FIND_PLACEHOLDER_SENTINEL = "__HOL_GUARD_FIND_PLACEHOLDER__"
+_ESCAPED_SEMICOLON_SENTINEL = "__HOL_GUARD_ESCAPED_SEMICOLON__"
 _SHELL_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 SHELL_DIRECTORY_COMMAND = re.compile(
     r"(?:^|(?:&&|\|\||[;|&(){}\n]))\s*"
@@ -82,6 +84,10 @@ class DirectoryOperation:
 def split_shell_tokens(command_text: str) -> tuple[str, ...]:
     command_text = _mask_heredoc_bodies(command_text)
     command_text = _protect_fd_redirection_ampersands(command_text)
+    if _FIND_PLACEHOLDER_SENTINEL in command_text or _ESCAPED_SEMICOLON_SENTINEL in command_text:
+        raise ValueError("reserved shell parsing sentinel")
+    command_text = re.sub(r"(?<!\S)\{\}(?!\S)", _FIND_PLACEHOLDER_SENTINEL, command_text)
+    command_text = _protect_escaped_semicolons(command_text)
     lexer = shlex.shlex(
         _replace_unquoted_newlines(command_text),
         posix=True,
@@ -96,8 +102,36 @@ def split_shell_tokens(command_text: str) -> tuple[str, ...]:
         elif token and all(character in ";&|(){}" for character in token):
             tokens.extend(_split_punctuation_run(token))
         else:
-            tokens.append(token.replace(_FD_AMPERSAND_SENTINEL, "&"))
+            tokens.append(
+                token.replace(_FD_AMPERSAND_SENTINEL, "&")
+                .replace(_FIND_PLACEHOLDER_SENTINEL, "{}")
+                .replace(_ESCAPED_SEMICOLON_SENTINEL, r"\;")
+            )
     return tuple(tokens)
+
+
+def _protect_escaped_semicolons(command_text: str) -> str:
+    result: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command_text):
+        character = command_text[index]
+        if character == "\\" and quote != "'":
+            next_character = command_text[index + 1 : index + 2]
+            if quote is None and next_character == ";":
+                result.append(_ESCAPED_SEMICOLON_SENTINEL)
+            else:
+                result.extend((character, next_character))
+            index += 2 if next_character else 1
+            continue
+        if character in {"'", '"'}:
+            if quote == character:
+                quote = None
+            elif quote is None:
+                quote = character
+        result.append(character)
+        index += 1
+    return "".join(result)
 
 
 def _protect_fd_redirection_ampersands(command_text: str) -> str:
@@ -222,7 +256,7 @@ def ordered_segments(
     pending_controls: list[str] = []
     controls_before: tuple[str, ...] = ()
     for token in tokens:
-        if token in CONTROL_TOKENS or _is_unknown_control_token(token):
+        if token != "{}" and (token in CONTROL_TOKENS or _is_unknown_control_token(token)):
             if current:
                 segments.append((tuple(current), controls_before))
                 current = []

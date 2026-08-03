@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from codex_plugin_scanner.guard.runtime.secret_file_request_services import credential_exfiltration
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.developer_inspection import (
+    _find_args_use_write_or_unsafe_exec_action,
     _read_only_lookup_find_args_are_safe,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.encoded_payloads import (
@@ -39,6 +40,13 @@ from codex_plugin_scanner.guard.runtime.secret_file_request_services.upload_argu
 
 def test_find_read_only_validation_checks_every_leading_path(tmp_path: Path) -> None:
     assert not _read_only_lookup_find_args_are_safe([".", "~/.ssh", "-type", "f"], home_dir=tmp_path)
+
+
+def test_find_exec_allows_only_literal_ls_over_discovered_paths() -> None:
+    assert not _find_args_use_write_or_unsafe_exec_action([".", "-exec", "ls", "-ld", "{}", ";"])
+    assert _find_args_use_write_or_unsafe_exec_action([".", "-exec", "./ls", "-ld", "{}", ";"])
+    assert _find_args_use_write_or_unsafe_exec_action([".", "-exec", "ls", "-ld", "{}", ".env", ";"])
+    assert _find_args_use_write_or_unsafe_exec_action([".", "-exec", "sh", "-c", "ls -ld {}", ";"])
 
 
 def test_read_only_segments_reject_non_stderr_redirection() -> None:

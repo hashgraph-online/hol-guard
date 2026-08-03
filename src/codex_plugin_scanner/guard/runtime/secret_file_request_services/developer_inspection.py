@@ -402,7 +402,8 @@ def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
         if arg in _FIND_EXEC_ACTION_FLAGS:
             if index + 1 >= len(args):
                 return True
-            command_name = Path(args[index + 1]).name.lower()
+            command_token = args[index + 1]
+            command_name = Path(command_token).name.lower()
             exec_args: list[str] = []
             exec_index = index + 2
             while exec_index < len(args) and args[exec_index] not in _FIND_EXEC_TERMINATOR_TOKENS:
@@ -410,7 +411,8 @@ def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
                 exec_index += 1
             is_safe_builtin = command_name in {"echo", "printf", "true", "false", "test", "["}
             is_read_only_sed = command_name == "sed" and _find_exec_sed_args_are_read_only(exec_args)
-            if not is_safe_builtin and not is_read_only_sed:
+            is_read_only_ls = command_token == "ls" and _find_exec_ls_args_are_read_only(exec_args)
+            if not is_safe_builtin and not is_read_only_sed and not is_read_only_ls:
                 return True
             index = exec_index + 1 if exec_index < len(args) else exec_index
             continue
@@ -421,6 +423,13 @@ def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
 def _find_exec_sed_args_are_read_only(args: list[str]) -> bool:
     normalized_args = [_FIND_EXEC_PLACEHOLDER_TARGET if arg == "{}" else arg for arg in args]
     return _read_only_lookup_sed_args_are_safe(normalized_args, require_target=True)
+
+
+def _find_exec_ls_args_are_read_only(args: list[str]) -> bool:
+    """Accept only option flags and exact find placeholders as ls operands."""
+
+    operands = [arg for arg in args if arg != "--" and not arg.startswith("-")]
+    return bool(operands) and all(operand == "{}" for operand in operands)
 
 
 def _static_shell_segment_is_safe(args: list[str]) -> bool:

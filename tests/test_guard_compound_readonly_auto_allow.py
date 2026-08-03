@@ -106,6 +106,24 @@ def test_multiline_read_only_inspection_is_explicitly_benign(tmp_path: Path) -> 
     )
 
 
+def test_find_exec_ls_inventory_is_explicitly_benign(tmp_path: Path) -> None:
+    home_dir, repository = _repository(tmp_path)
+    modules = repository / "node_modules"
+    (modules / "example").mkdir(parents=True)
+    command = "find node_modules -maxdepth 1 -mindepth 1 -print -exec ls -ld {} \\;"
+
+    assert _is_benign(command, home_dir=home_dir, repository=repository)
+    assert (
+        extract_sensitive_tool_action_request(
+            "bash",
+            {"command": command},
+            cwd=repository,
+            home_dir=home_dir,
+        )
+        is None
+    )
+
+
 def test_compound_inspection_uses_current_repository_without_redundant_cd(tmp_path: Path) -> None:
     home_dir, repository = _repository(tmp_path)
     command = 'pwd; git status --short --branch; sed -n "1,5p" ui.tsx'

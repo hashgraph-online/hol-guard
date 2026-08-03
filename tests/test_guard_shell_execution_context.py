@@ -926,3 +926,17 @@ def test_path_hash_changes_when_effective_directory_identity_changes(tmp_path: P
 
     assert first.context_hash != second.context_hash
     assert os.stat(old).st_ino != os.stat(project).st_ino
+
+
+def test_find_placeholder_is_modeled_as_an_argument(tmp_path: Path) -> None:
+    context = model_shell_execution_context(
+        "find . -exec ls -ld {} \\;",
+        cwd=tmp_path,
+        workspace_root=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert context.complete
+    assert len(context.segments) == 1
+    assert context.segments[0].tokens == ("find", ".", "-exec", "ls", "-ld", "{}", r"\;")
+    assert not context.segments[0].control_after
