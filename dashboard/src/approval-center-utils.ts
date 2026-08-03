@@ -583,6 +583,26 @@ export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
   return item.artifact_name.trim() || item.artifact_id;
 }
 
+export function resolveRequestWorkingDirectory(item: GuardApprovalRequest): string | null {
+  const actionType = item.action_envelope_json?.action_type;
+  const artifactType = item.artifact_type.toLowerCase();
+  const isExecutableAction =
+    actionType === "shell_command" ||
+    actionType === "package_script" ||
+    artifactType.includes("command") ||
+    artifactType.includes("shell") ||
+    artifactType.includes("package");
+  if (!isExecutableAction) {
+    return null;
+  }
+  const envelopeWorkspace = item.action_envelope_json?.workspace?.trim();
+  if (envelopeWorkspace) {
+    return envelopeWorkspace;
+  }
+  const requestWorkspace = item.workspace?.trim();
+  return requestWorkspace || null;
+}
+
 function resolvePrimaryReviewText(item: GuardApprovalRequest): string {
   const envelope = item.action_envelope_json;
   if (envelope) {

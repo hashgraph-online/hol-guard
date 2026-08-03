@@ -14887,6 +14887,20 @@ function resolveStoppedCommandText(item) {
   }
   return item.artifact_name.trim() || item.artifact_id;
 }
+function resolveRequestWorkingDirectory(item) {
+  const actionType = item.action_envelope_json?.action_type;
+  const artifactType = item.artifact_type.toLowerCase();
+  const isExecutableAction = actionType === "shell_command" || actionType === "package_script" || artifactType.includes("command") || artifactType.includes("shell") || artifactType.includes("package");
+  if (!isExecutableAction) {
+    return null;
+  }
+  const envelopeWorkspace = item.action_envelope_json?.workspace?.trim();
+  if (envelopeWorkspace) {
+    return envelopeWorkspace;
+  }
+  const requestWorkspace = item.workspace?.trim();
+  return requestWorkspace || null;
+}
 function resolvePrimaryReviewText(item) {
   const envelope = item.action_envelope_json;
   if (envelope) {
@@ -28427,6 +28441,7 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 }
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
+  const workingDirectory = resolveRequestWorkingDirectory(item);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -28435,17 +28450,24 @@ function PrimaryActionCard({ item }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      LoggedActionPanel,
-      {
-        label: action.label,
-        text: action.text,
-        copyAriaLabel: "Copy full stopped action to clipboard",
-        expandAriaLabel: "Expand full stopped action",
-        collapseAriaLabel: "Collapse full stopped action"
-      },
-      item.request_id
-    ) })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        LoggedActionPanel,
+        {
+          label: action.label,
+          text: action.text,
+          copyAriaLabel: "Copy full stopped action to clipboard",
+          expandAriaLabel: "Expand full stopped action",
+          collapseAriaLabel: "Collapse full stopped action"
+        },
+        item.request_id
+      ),
+      workingDirectory !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 font-medium text-brand-dark/70", children: "Working directory" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 break-all font-mono text-brand-dark", title: workingDirectory, children: workingDirectory })
+      ] })
+    ] })
   ] });
 }
 function buildWhatWouldHappen(item) {

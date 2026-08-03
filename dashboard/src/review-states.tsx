@@ -2,6 +2,7 @@ import {
   HiMiniArrowPath,
   HiMiniCheckCircle,
   HiMiniExclamationTriangle,
+  HiMiniFolder,
   HiMiniInformationCircle,
   HiMiniShieldCheck,
 } from "react-icons/hi2";
@@ -10,6 +11,7 @@ import {
   buildCodexResumeUx,
   buildPrimaryReviewAction,
   harnessDisplayName,
+  resolveRequestWorkingDirectory,
 } from "./approval-center-utils";
 import type {
   GuardApprovalRequest,
@@ -174,6 +176,7 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
 
 export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
+  const workingDirectory = resolveRequestWorkingDirectory(item);
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -199,6 +202,15 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
           expandAriaLabel="Expand full stopped action"
           collapseAriaLabel="Collapse full stopped action"
         />
+        {workingDirectory !== null && (
+          <div className="mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
+            <HiMiniFolder className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+            <span className="shrink-0 font-medium text-brand-dark/70">Working directory</span>
+            <code className="min-w-0 break-all font-mono text-brand-dark" title={workingDirectory}>
+              {workingDirectory}
+            </code>
+          </div>
+        )}
       </div>
     </div>
   );

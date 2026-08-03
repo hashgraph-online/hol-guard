@@ -12,8 +12,11 @@ import {
   scopeLabel,
   buildCodexResumeUx,
   resolveApprovalShareUrl,
+  resolveRequestWorkingDirectory,
 } from "./approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest, GuardCodexResumeResult } from "./guard-types";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PrimaryActionCard } from "./review-states";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -77,7 +80,8 @@ const shellEnvelope: GuardActionEnvelope = {
 
 const shellRequest: GuardApprovalRequest = {
   ...BASE_REQUEST,
-  action_envelope_json: shellEnvelope
+  workspace: "/workspace/legacy",
+  action_envelope_json: { ...shellEnvelope, workspace: "/workspace/current" }
 };
 
 assert(
@@ -88,6 +92,37 @@ assert(
 assert(
   resolveStoppedCommandText(shellRequest) === "git diff HEAD~1 -- src/",
   "T494: resolveStoppedCommandText returns the envelope command for shell_command item"
+);
+
+assert(
+  resolveRequestWorkingDirectory(shellRequest) === "/workspace/current",
+  "T494: working directory prefers the typed action envelope workspace"
+);
+
+assert(
+  resolveRequestWorkingDirectory({ ...BASE_REQUEST, workspace: "/workspace/legacy" }) === "/workspace/legacy",
+  "T494: working directory falls back to the approval request workspace"
+);
+
+assert(
+  resolveRequestWorkingDirectory({ ...BASE_REQUEST, workspace: "  " }) === null,
+  "T494: working directory omits empty workspace values"
+);
+
+assert(
+  resolveRequestWorkingDirectory({
+    ...BASE_REQUEST,
+    artifact_type: "file_read",
+    workspace: "/workspace/current",
+    action_envelope_json: { ...BASE_ENVELOPE, action_type: "file_read", workspace: "/workspace/current" }
+  }) === null,
+  "T494: working directory stays scoped to executable actions"
+);
+
+const primaryActionMarkup = renderToStaticMarkup(PrimaryActionCard({ item: shellRequest }));
+assert(
+  primaryActionMarkup.includes("Working directory") && primaryActionMarkup.includes("/workspace/current"),
+  "T494: primary action card shows the full working directory next to the stopped command"
 );
 
 const longCommand = "a".repeat(200);
