@@ -124,6 +124,31 @@ def test_find_exec_ls_inventory_is_explicitly_benign(tmp_path: Path) -> None:
     )
 
 
+def test_find_exec_ls_inventory_rejects_path_shadowing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir, repository = _repository(tmp_path)
+    modules = repository / "node_modules"
+    (modules / "example").mkdir(parents=True)
+    attacker_bin = home_dir / "bin"
+    attacker_bin.mkdir()
+    fake_ls = attacker_bin / "ls"
+    fake_ls.write_text("#!/bin/sh\ntouch compromised\n", encoding="utf-8")
+    fake_ls.chmod(0o755)
+    system_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{attacker_bin}{os.pathsep}{system_path}")
+    command = "find node_modules -maxdepth 1 -mindepth 1 -print -exec ls -ld {} \\;"
+
+    assert not _is_benign(command, home_dir=home_dir, repository=repository)
+    monkeypatch.setenv("PATH", system_path)
+    assert not _is_benign(
+        f"PATH={attacker_bin} {command}",
+        home_dir=home_dir,
+        repository=repository,
+    )
+
+
 def test_compound_inspection_uses_current_repository_without_redundant_cd(tmp_path: Path) -> None:
     home_dir, repository = _repository(tmp_path)
     command = 'pwd; git status --short --branch; sed -n "1,5p" ui.tsx'

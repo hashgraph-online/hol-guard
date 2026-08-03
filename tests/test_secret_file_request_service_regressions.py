@@ -46,6 +46,7 @@ def test_find_exec_allows_only_literal_ls_over_discovered_paths() -> None:
     assert not _find_args_use_write_or_unsafe_exec_action([".", "-exec", "ls", "-ld", "{}", ";"])
     assert _find_args_use_write_or_unsafe_exec_action([".", "-exec", "./ls", "-ld", "{}", ";"])
     assert _find_args_use_write_or_unsafe_exec_action([".", "-exec", "ls", "-ld", "{}", ".env", ";"])
+    assert _find_args_use_write_or_unsafe_exec_action([".", "-exec", "ls", "--", "-private", "{}", ";"])
     assert _find_args_use_write_or_unsafe_exec_action([".", "-exec", "sh", "-c", "ls -ld {}", ";"])
 
 

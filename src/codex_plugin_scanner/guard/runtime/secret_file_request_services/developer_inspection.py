@@ -17,6 +17,7 @@ from ..false_positive_rules import (
     split_fd_args_and_exec,
 )
 from ..github_capability_interaction import github_capability_requires_confirmation
+from ..shell_command_wrappers import is_trusted_absolute_command_path
 from ..shell_execution_context import ShellExecutionContext, model_shell_execution_context
 from .constants_core import (
     _FIND_EXEC_ACTION_FLAGS,
@@ -28,7 +29,7 @@ from .constants_core import (
     _SAFE_STATIC_SHELL_COMMANDS,
 )
 from .constants_patterns import _FIND_PATH_VALUE_PREDICATES
-from .docker_requests import shell_execution_context_starts_with_literal_cd
+from .docker_requests import _which_for_execution_cwd, shell_execution_context_starts_with_literal_cd
 from .github_shell_capabilities import classify_github_shell_capabilities
 from .local_read_operands import _local_read_operands_resolve_safely, _search_file_operand_tokens
 from .read_only_filters import (
@@ -193,6 +194,15 @@ def _compound_developer_effect_graph(
                 command_name,
                 args,
                 home_dir=segment_root,
+            )
+            and (
+                command_name != "find"
+                or _find_exec_ls_resolves_safely(
+                    args,
+                    prefix_tokens=list(segment.tokens[:command_index]),
+                    cwd=segment_root,
+                    home_dir=home_dir,
+                )
             )
             and _local_read_operands_resolve_safely(
                 command_name,
@@ -428,8 +438,39 @@ def _find_exec_sed_args_are_read_only(args: list[str]) -> bool:
 def _find_exec_ls_args_are_read_only(args: list[str]) -> bool:
     """Accept only option flags and exact find placeholders as ls operands."""
 
-    operands = [arg for arg in args if arg != "--" and not arg.startswith("-")]
+    operands: list[str] = []
+    options_ended = False
+    for arg in args:
+        if not options_ended and arg == "--":
+            options_ended = True
+            continue
+        if not options_ended and arg.startswith("-"):
+            continue
+        operands.append(arg)
     return bool(operands) and all(operand == "{}" for operand in operands)
+
+
+def _find_exec_ls_resolves_safely(
+    args: list[str],
+    *,
+    prefix_tokens: list[str],
+    cwd: Path,
+    home_dir: Path,
+) -> bool:
+    uses_ls = any(
+        arg in _FIND_EXEC_ACTION_FLAGS and index + 1 < len(args) and args[index + 1] == "ls"
+        for index, arg in enumerate(args)
+    )
+    if not uses_ls:
+        return True
+    if any(token == "PATH" or token.startswith("PATH=") for token in prefix_tokens):
+        return False
+    resolved = _which_for_execution_cwd("ls", cwd=cwd)
+    return resolved is not None and is_trusted_absolute_command_path(
+        Path(resolved).resolve(strict=False),
+        cwd=cwd,
+        home_dir=home_dir,
+    )
 
 
 def _static_shell_segment_is_safe(args: list[str]) -> bool:
