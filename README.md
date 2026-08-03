@@ -374,11 +374,11 @@ Scanner package:
 pip install plugin-scanner
 ```
 
-The lean baseline keeps Python 3.10+ support intact. It includes the shipped `cisco-ai-skill-scanner` integration on Python 3.10 through 3.14 with LiteLLM 1.93+ for resolver-safe Cisco evidence.
+The lean baseline keeps Python 3.10+ support intact. It includes the shipped `cisco-ai-skill-scanner` integration on Python 3.10 through 3.14 and directly pins LiteLLM 1.93.0 so bare `pip` and `pipx` installs cannot drift to an unverified LiteLLM release.
 
 ### Resolver-safe Cisco extra
 
-Install the Cisco extra on Python 3.11 through 3.14 when you want the Cisco-compatible LiteLLM pin in addition to the baseline skill scanner:
+Install the Cisco extra on Python 3.11 through 3.14 when you want to explicitly select the Cisco dependency surface in addition to the baseline skill scanner:
 
 ```bash
 pip install "hol-guard[cisco]"

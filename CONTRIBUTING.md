@@ -31,7 +31,7 @@ source .venv/bin/activate
 pip install -e ".[dev,cisco]"
 ```
 
-The editable Cisco extra is intended for Python 3.11+ contributor environments and keeps published metadata resolver-safe. Use uv with `--group cisco-mcp` when you need the repo-controlled Cisco MCP scanner surface.
+The editable Cisco extra is intended for Python 3.11+ contributor environments. The baseline package directly constrains its LiteLLM transitive dependency so published bare installs stay resolver-safe; use uv with `--group cisco-mcp` when you need the repo-controlled Cisco MCP scanner surface.
 
 ## Validation Requirements
 

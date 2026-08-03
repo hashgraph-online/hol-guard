@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import sys
+from importlib.metadata import metadata
 from pathlib import Path
+
+from packaging.markers import default_environment
+from packaging.requirements import Requirement
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -32,6 +36,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "python_version < '3.15'" in cisco_extra
     assert "python_full_version >= '3.11.4'" in cisco_mcp_group
     assert "cisco-ai-skill-scanner~=2.0.12" in dependency_entries
+    assert "litellm==1.93.0; python_version < '3.15'" in dependency_entries
     assert "requests>=2.32,<3" in dependency_entries
     assert "aiohttp==3.14.1" in override_entries
     assert "click==8.4.1" in override_entries
@@ -51,6 +56,23 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-a2a-scanner" not in cisco_extra
     assert "rich>=14.0,<15" in dependency_entries
     assert "rich>=15.0.0" not in dependency_entries
+
+
+def test_installed_metadata_constrains_baseline_litellm_on_python_314() -> None:
+    requirements = [Requirement(value) for value in metadata("hol-guard").get_all("Requires-Dist", [])]
+    baseline_litellm = [
+        requirement
+        for requirement in requirements
+        if requirement.name == "litellm" and "extra" not in str(requirement.marker)
+    ]
+    assert len(baseline_litellm) == 1
+    assert str(baseline_litellm[0].specifier) == "==1.93.0"
+
+    python_314 = default_environment() | {"python_full_version": "3.14.6", "python_version": "3.14"}
+    python_315 = default_environment() | {"python_full_version": "3.15.0", "python_version": "3.15"}
+    assert baseline_litellm[0].marker is not None
+    assert baseline_litellm[0].marker.evaluate(python_314)
+    assert not baseline_litellm[0].marker.evaluate(python_315)
 
 
 def test_pyproject_exposes_guard_and_scanner_commands_without_codex_alias() -> None:

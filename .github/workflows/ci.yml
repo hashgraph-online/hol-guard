@@ -174,7 +174,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.13"]
+        python-version: ["3.10", "3.11", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -191,6 +191,7 @@ jobs:
           tests/test_cli.py
           tests/test_verification.py
           tests/test_action_runner.py
+          tests/test_cisco_install_surfaces.py
           tests/test_policy.py
           tests/test_policy_bundle_parser.py
           --tb=short
