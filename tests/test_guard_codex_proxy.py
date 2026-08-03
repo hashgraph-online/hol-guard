@@ -412,7 +412,7 @@ def test_codex_guard_proxy_falls_back_to_approval_center_when_client_cannot_elic
     assert pending[0]["artifact_type"] == "tool_call"
 
 
-def test_codex_guard_proxy_observe_mode_allows_risky_tool_calls_and_still_queues_review(tmp_path):
+def test_codex_guard_proxy_observe_mode_allows_risky_tool_calls_without_approval_request(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe")
@@ -442,8 +442,7 @@ def test_codex_guard_proxy_observe_mode_allows_risky_tool_calls_and_still_queues
 
     assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
     assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
-    assert len(pending) == 1
-    assert pending[0]["policy_action"] == "require-reapproval"
+    assert pending == []
     event = result["events"][1]
     assert event["decision"] == "allow"
     assert event["policy_action"] == "allow"

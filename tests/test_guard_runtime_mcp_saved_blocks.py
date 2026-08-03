@@ -360,7 +360,7 @@ def _seed_exact_package_block(
     return artifact.artifact_id
 
 
-def test_nonpackage_authenticated_saved_block_is_terminal_before_inline_observe_and_queue(
+def test_nonpackage_authenticated_saved_block_is_observed_without_inline_or_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -379,7 +379,7 @@ def test_nonpackage_authenticated_saved_block_is_terminal_before_inline_observe_
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
     arguments: dict[str, object] = {"target": ".env"}
-    artifact_id = _seed_exact_tool_block(
+    _artifact_id = _seed_exact_tool_block(
         proxy=proxy,
         store=store,
         config=config,
@@ -392,17 +392,17 @@ def test_nonpackage_authenticated_saved_block_is_terminal_before_inline_observe_
         inline_approval_callback=_forbidden_inline,
     )
 
-    _assert_terminal_block(
-        result=result,
-        store=store,
-        marker_path=marker_path,
-        artifact_id=artifact_id,
-        event_decision="block-stored-policy",
-    )
+    assert marker_path.exists()
+    event = result["events"][2]
+    assert event["decision"] == "allow"
+    assert event["policy_action"] == "allow"
+    assert event["observed_policy_action"] == "require-reapproval"
+    assert store.list_approval_requests(limit=10) == []
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
 
 
 @pytest.mark.parametrize("approval_surface", ["inline", "native"])
-def test_package_preliminary_saved_tool_block_is_terminal_before_package_or_approval_surfaces(
+def test_package_preliminary_saved_tool_block_is_terminal_before_approval_surfaces(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     approval_surface: str,
@@ -410,7 +410,7 @@ def test_package_preliminary_saved_tool_block_is_terminal_before_package_or_appr
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe")
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
     marker_path = tmp_path / f"package-preliminary-{approval_surface}.json"
     proxy_class = CodexMcpGuardProxy if approval_surface == "inline" else OpenCodeMcpGuardProxy
     proxy = proxy_class(
@@ -471,7 +471,7 @@ def test_package_preliminary_saved_tool_block_is_terminal_before_package_or_appr
 
 
 @pytest.mark.parametrize("approval_surface", ["inline", "native"])
-def test_authenticated_saved_package_block_is_terminal_before_generic_approval_and_observe(
+def test_authenticated_saved_package_block_is_terminal_before_generic_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     approval_surface: str,
@@ -479,7 +479,7 @@ def test_authenticated_saved_package_block_is_terminal_before_generic_approval_a
     context = _context(tmp_path)
     assert context.workspace_dir is not None
     store = GuardStore(context.guard_home)
-    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe")
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
     marker_path = tmp_path / f"package-final-{approval_surface}.json"
     harness = "codex" if approval_surface == "inline" else "opencode"
     config_path = str(context.workspace_dir / f".{harness}" / "mcp.json")
@@ -942,14 +942,16 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
         "expected_observed",
     ),
     [
-        ("review", "allow", ["review"], [], "allow", "review"),
-        ("allow", "review", [], ["review"], "allow", "review"),
-        ("review", "require-reapproval", ["review"], ["require-reapproval"], "allow", "require-reapproval"),
+        ("review", "allow", [], [], "allow", "review"),
+        ("allow", "review", [], [], "allow", "review"),
+        ("review", "require-reapproval", [], [], "allow", "require-reapproval"),
+        ("block", "allow", [], [], "allow", "block"),
+        ("allow", "block", [], [], "allow", "block"),
         ("warn", "allow", [], [], "warn", None),
         ("allow", "warn", [], [], "warn", None),
     ],
 )
-def test_package_observe_mode_queues_each_authority_source_once_and_records_executed_allow(
+def test_package_observe_mode_records_each_authority_without_approval_requests(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     tool_action: GuardAction,
@@ -1040,16 +1042,6 @@ def test_package_observe_mode_queues_each_authority_source_once_and_records_exec
     monkeypatch.setattr(proxy, "_drain_and_validate_catalog_authority", lambda **_kwargs: True)
     monkeypatch.setattr(proxy, "_resolve_tool_call_authority", lambda **_kwargs: tool_authority)
     monkeypatch.setattr(proxy, "_resolve_package_policy", lambda **_kwargs: package_resolution)
-    monkeypatch.setattr(
-        proxy,
-        "_queue_observed_approval_requests",
-        lambda **kwargs: tool_queues.append(kwargs["policy_action"]) or [],
-    )
-    monkeypatch.setattr(
-        proxy,
-        "_queue_observed_package_request",
-        lambda **kwargs: package_queues.append(kwargs["policy_action"]),
-    )
 
     def capture_forward(**kwargs: object) -> tuple[dict[str, Any], dict[str, Any]]:
         forwarded.update(kwargs)
@@ -1087,6 +1079,8 @@ def test_package_observe_mode_queues_each_authority_source_once_and_records_exec
     else:
         assert event["observed_policy_action"] == expected_observed
         assert forwarded["scanner_evidence"][-1]["observed_policy_action"] == expected_observed
+
+
 def test_mcp_executable_identity_uses_launch_cwd_and_stays_pinned_after_spawn(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1674,9 +1668,7 @@ def test_observe_mode_does_not_consume_exact_saved_tool_approval(
     assert event["decision"] == "allow"
     assert event["policy_action"] == "allow"
     assert event["observed_policy_action"] == "review"
-    pending = store.list_approval_requests(limit=10)
-    assert len(pending) == 1
-    assert pending[0]["policy_action"] == "review"
+    assert store.list_approval_requests(limit=10) == []
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
     with sqlite3.connect(store.path) as connection:
         claimed_at = connection.execute(
@@ -1687,7 +1679,7 @@ def test_observe_mode_does_not_consume_exact_saved_tool_approval(
     assert store.list_events(event_name="approval.local_once_applied") == []
 
 
-def test_observe_mode_reprobes_terminal_tool_policy_immediately_before_forward(
+def test_observe_mode_records_terminal_tool_policy_immediately_before_forward(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1729,18 +1721,14 @@ def test_observe_mode_reprobes_terminal_tool_policy_immediately_before_forward(
 
     result = proxy.run_session(_messages(tool_name="safe_echo", arguments={"value": "hello"}, elicitation=False))
 
-    assert marker_path.exists() is False
-    response = result["responses"][2]
-    assert response["error"]["data"] == {
-        "approvalRequests": [],
-        "guardPolicyAction": "block",
-    }
-    assert result["events"][2]["decision"] == "terminal-block"
-    assert result["events"][2]["policy_action"] == "block"
+    assert marker_path.exists()
+    assert result["events"][2]["decision"] == "allow"
+    assert result["events"][2]["policy_action"] == "allow"
+    assert result["events"][2]["observed_policy_action"] == "block"
     assert store.list_approval_requests(limit=10) == []
     receipts = store.list_receipts(limit=10)
     assert len(receipts) == 1
-    assert receipts[0]["policy_decision"] == "block"
+    assert receipts[0]["policy_decision"] == "allow"
 
 
 def test_observe_mode_preserves_fresh_executable_warn_at_final_tool_boundary(

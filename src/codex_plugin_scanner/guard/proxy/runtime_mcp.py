@@ -1201,7 +1201,7 @@ class RuntimeMcpGuardProxy:
                 approval_reuse_claim_disposition=None,
             )
         decision_scanner_evidence = _tool_decision_scanner_evidence(decision)
-        if decision.saved_action == "block":
+        if self.config.mode != "observe" and decision.saved_action == "block":
             return self._stored_tool_block_response(
                 message_id=message.get("id"),
                 artifact=artifact,
@@ -1217,7 +1217,7 @@ class RuntimeMcpGuardProxy:
             decision.action,
             approval_decision=decision,
         )
-        if tool_policy_action in {"block", "sandbox-required"}:
+        if self.config.mode != "observe" and tool_policy_action in {"block", "sandbox-required"}:
             return self._terminal_tool_response(
                 message_id=message.get("id"),
                 artifact=artifact,
@@ -1290,7 +1290,7 @@ class RuntimeMcpGuardProxy:
                     expected_catalog_fingerprint=authority.catalog_fingerprint,
                 )
                 return response, package_event
-            if self._inline_prompt_available and approval_callback is not None:
+            if self.config.mode != "observe" and self._inline_prompt_available and approval_callback is not None:
                 approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
                 if _approval_allows(approval_result):
                     try:
@@ -1465,7 +1465,7 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_state=authority.catalog_state,
                 expected_catalog_fingerprint=authority.catalog_fingerprint,
             )
-        if self._inline_prompt_available and approval_callback is not None:
+        if self.config.mode != "observe" and self._inline_prompt_available and approval_callback is not None:
             approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
             if _approval_allows(approval_result):
                 return self._allow_and_forward(
@@ -1570,45 +1570,10 @@ class RuntimeMcpGuardProxy:
             authority = fresh_authority
             fresh_decision = fresh_authority.decision
             fresh_scanner_evidence = _tool_decision_scanner_evidence(fresh_decision)
-            if fresh_decision.saved_action == "block":
-                return self._stored_tool_block_response(
-                    message_id=message.get("id"),
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    signals=fresh_decision.signals,
-                    risk_categories=fresh_decision.risk_categories,
-                    scanner_evidence=fresh_scanner_evidence,
-                    package_request=False,
-                )
             fresh_policy_action = _enforcement_action(
                 fresh_decision.current_action or fresh_decision.action,
                 approval_decision=fresh_decision,
             )
-            if fresh_policy_action in {"block", "sandbox-required"}:
-                return self._terminal_tool_response(
-                    message_id=message.get("id"),
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    policy_action=fresh_policy_action,
-                    signals=fresh_decision.signals,
-                    risk_categories=fresh_decision.risk_categories,
-                    scanner_evidence=fresh_scanner_evidence,
-                )
-            if not is_execution_permitted(fresh_policy_action):
-                self._queue_observed_approval_requests(
-                    artifact=artifact,
-                    artifact_hash=tool_artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    policy_action=fresh_policy_action,
-                    risk_summary=fresh_decision.summary,
-                    risk_signals=list(fresh_decision.signals),
-                    extra_fields={"scanner_evidence": list(fresh_scanner_evidence)},
-                )
             observe_override = not is_execution_permitted(fresh_policy_action)
             executed_action: GuardAction = "allow" if observe_override else fresh_policy_action
             observe_evidence = fresh_scanner_evidence
@@ -1792,7 +1757,7 @@ class RuntimeMcpGuardProxy:
                 phase="before_package_revalidation",
                 package_request=True,
             )
-        if package_resolution.saved_policy_blocks:
+        if self.config.mode != "observe" and package_resolution.saved_policy_blocks:
             return self._stored_package_block_response(
                 message_id=message.get("id"),
                 artifact=artifact,
@@ -1804,7 +1769,7 @@ class RuntimeMcpGuardProxy:
             )
 
         package_action = _enforcement_action(package_evaluation.policy_action)
-        if package_action in {"block", "sandbox-required"}:
+        if self.config.mode != "observe" and package_action in {"block", "sandbox-required"}:
             return self._terminal_package_response(
                 message_id=message.get("id"),
                 artifact=artifact,
@@ -1843,7 +1808,7 @@ class RuntimeMcpGuardProxy:
             resolution=fresh_package_resolution,
             tool_evidence=fresh_tool_evidence,
         )
-        if fresh_tool_decision.saved_action == "block":
+        if self.config.mode != "observe" and fresh_tool_decision.saved_action == "block":
             return self._stored_tool_block_response(
                 message_id=message.get("id"),
                 artifact=tool_artifact,
@@ -1855,7 +1820,7 @@ class RuntimeMcpGuardProxy:
                 scanner_evidence=fresh_tool_evidence,
                 package_request=True,
             )
-        if fresh_package_resolution.saved_policy_blocks:
+        if self.config.mode != "observe" and fresh_package_resolution.saved_policy_blocks:
             return self._stored_package_block_response(
                 message_id=message.get("id"),
                 artifact=artifact,
@@ -1872,50 +1837,6 @@ class RuntimeMcpGuardProxy:
                 approval_decision=fresh_tool_decision,
             )
             package_observed_action = _enforcement_action(fresh_package_resolution.current_action)
-            if tool_observed_action in {"block", "sandbox-required"}:
-                return self._terminal_tool_response(
-                    message_id=message.get("id"),
-                    artifact=tool_artifact,
-                    artifact_hash=tool_artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    policy_action=tool_observed_action,
-                    signals=fresh_tool_decision.signals,
-                    risk_categories=fresh_tool_decision.risk_categories,
-                    scanner_evidence=fresh_tool_evidence,
-                )
-            if package_observed_action in {"block", "sandbox-required"}:
-                return self._terminal_package_response(
-                    message_id=message.get("id"),
-                    artifact=artifact,
-                    artifact_hash=fresh_package_resolution.artifact_digest,
-                    tool_name=tool_name,
-                    params=params,
-                    package_evaluation=fresh_package_resolution.evaluation,
-                    policy_action=package_observed_action,
-                    scanner_evidence=fresh_scanner_evidence,
-                )
-            if not is_execution_permitted(tool_observed_action):
-                self._queue_observed_approval_requests(
-                    artifact=tool_artifact,
-                    artifact_hash=tool_artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    policy_action=tool_observed_action,
-                    risk_summary=fresh_tool_decision.summary,
-                    risk_signals=list(fresh_tool_decision.signals),
-                    extra_fields={"scanner_evidence": list(fresh_tool_evidence)},
-                )
-            if not is_execution_permitted(package_observed_action):
-                self._queue_observed_package_request(
-                    artifact=artifact,
-                    artifact_hash=fresh_package_resolution.artifact_digest,
-                    tool_name=tool_name,
-                    params=params,
-                    package_evaluation=fresh_package_resolution.evaluation,
-                    policy_action=package_observed_action,
-                    scanner_evidence=fresh_scanner_evidence,
-                )
             observed_policy_action = most_restrictive_guard_action(
                 tool_observed_action,
                 package_observed_action,
@@ -2419,34 +2340,6 @@ class RuntimeMcpGuardProxy:
             "redacted_params": _safe_mcp_params(params),
             "scanner_evidence": list(scanner_evidence),
         }
-
-    def _queue_observed_package_request(
-        self,
-        *,
-        artifact: Any,
-        artifact_hash: str,
-        tool_name: str,
-        params: dict[str, Any],
-        package_evaluation: Any,
-        policy_action: GuardAction,
-        scanner_evidence: tuple[dict[str, object], ...],
-    ) -> None:
-        decision_v2_payload = self._package_decision_v2(package_evaluation, policy_action)
-        self._queue_observed_approval_requests(
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            tool_name=tool_name,
-            params=params,
-            policy_action=policy_action,
-            risk_summary=package_evaluation.risk_summary,
-            risk_signals=[str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons],
-            decision_v2_payload=decision_v2_payload,
-            extra_fields={
-                "changed_fields": ["runtime_tool_call", "package_request"],
-                "scanner_evidence": list(scanner_evidence),
-                "supply_chain_evaluation": package_evaluation.to_dict(),
-            },
-        )
 
     @staticmethod
     def _package_decision_v2(package_evaluation: Any, policy_action: GuardAction) -> dict[str, Any]:
@@ -3593,81 +3486,6 @@ class RuntimeMcpGuardProxy:
         if scanner_evidence:
             queued_event["scanner_evidence"] = list(scanner_evidence)
         return response, queued_event
-
-    def _queue_observed_approval_requests(
-        self,
-        *,
-        artifact: Any,
-        artifact_hash: str,
-        tool_name: str,
-        params: dict[str, Any],
-        policy_action: str,
-        risk_summary: str,
-        risk_signals: list[str],
-        decision_v2_payload: dict[str, Any] | None = None,
-        extra_fields: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
-        if policy_action not in {"review", "block", "sandbox-required", "require-reapproval"}:
-            return []
-        approval_center_url = ensure_guard_daemon(self.context.guard_home)
-        artifact_payload: dict[str, Any] = {
-            "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
-            "artifact_hash": artifact_hash,
-            "artifact_type": artifact.artifact_type,
-            "source_scope": artifact.source_scope,
-            "config_path": artifact.config_path,
-            "changed_fields": ["runtime_tool_call"],
-            "policy_action": policy_action,
-            "launch_target": self._launch_target(tool_name, params.get("arguments")),
-            "risk_summary": risk_summary,
-            "risk_signals": risk_signals,
-        }
-        # Include browser intent metadata when present
-        browser_intent = normalize_browser_mcp_intent(artifact, params.get("arguments"))
-        if browser_intent is not None:
-            artifact_payload["changed_fields"].append("runtime_browser_tool_call")
-            target = browser_intent_display_target(browser_intent, params.get("arguments"))
-            artifact_payload["launch_target"] = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
-            artifact_payload["browser_intent"] = _safe_mcp_arguments(
-                {
-                    "version": browser_intent.version,
-                    "intent": browser_intent.intent,
-                    "operation": browser_intent.operation,
-                    "target_url": browser_intent.target_url,
-                    "target_origin": browser_intent.target_origin,
-                    "target_domain": browser_intent.target_domain,
-                    "target_path_prefix": browser_intent.target_path_prefix,
-                    "method": browser_intent.method,
-                    "profile_mode": browser_intent.profile_mode,
-                    "mcp_server_name": browser_intent.mcp_server_name,
-                    "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-                    "mcp_tool_name": browser_intent.mcp_tool_name,
-                    "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-                    "mcp_schema_hash": browser_intent.mcp_schema_hash,
-                    "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-                    "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
-                    "risk_categories": list(tool_call_risk_categories(artifact, params.get("arguments"))),
-                }
-            )
-        if decision_v2_payload is not None:
-            artifact_payload["decision_v2_json"] = decision_v2_payload
-        if extra_fields:
-            artifact_payload.update(extra_fields)
-        return queue_blocked_approvals(
-            redaction_level=self.config.receipt_redaction_level,
-            detection=HarnessDetection(
-                harness=self.harness,
-                installed=True,
-                command_available=True,
-                config_paths=(self.config_path,),
-                artifacts=(artifact,),
-            ),
-            evaluation={"artifacts": [artifact_payload]},
-            store=self.store,
-            approval_center_url=approval_center_url,
-            now=_now(),
-        )
 
     def _clear_tools_catalog(
         self,

@@ -357,13 +357,9 @@ def test_runtime_observe_mode_preserves_executable_package_warning(
         scanner_evidence_payload=[],
         stored_policy_action=None,
     )
-    monkeypatch.setattr(runtime_review, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
-    monkeypatch.setattr(
-        runtime_review,
-        "load_guard_surface_daemon_client",
-        lambda _guard_home: (_ for _ in ()).throw(RuntimeError("offline fixture")),
-    )
-    monkeypatch.setattr(runtime_review, "queue_blocked_approvals", lambda **_kwargs: [])
+    monkeypatch.setattr(runtime_review, "ensure_guard_daemon", _fail_queue)
+    monkeypatch.setattr(runtime_review, "load_guard_surface_daemon_client", _fail_queue)
+    monkeypatch.setattr(runtime_review, "queue_blocked_approvals", _fail_queue)
 
     result = runtime_review._review_runtime_artifact_hook(
         state,
@@ -381,6 +377,7 @@ def test_runtime_observe_mode_preserves_executable_package_warning(
     assert result is None
     assert state.policy_action == "warn"
     assert state.response_payload["policy_action"] == "warn"
+    assert state.response_payload["approval_requests"] == []
     assert state.response_payload["observed_policy_action"] == "review"
     assert state.decision_v2_payload["guard_action"] == "warn"
     assert state.receipt.policy_decision == "warn"
@@ -397,7 +394,6 @@ def test_copilot_pretool_observe_mode_records_saved_block_without_enforcing_it(
     store = GuardStore(context.guard_home)
     output = io.StringIO()
     monkeypatch.setattr(copilot_hook, "evaluate_tool_call", lambda **_kwargs: _saved_block_decision())
-    monkeypatch.setattr(copilot_hook, "_queue_observed_copilot_approval", _fail_queue)
     monkeypatch.setattr(copilot_hook, "_record_harness_usage_for_hook", lambda **_kwargs: None)
 
     result = copilot_hook._run_hook_copilot_pretool(
@@ -448,7 +444,6 @@ def test_copilot_permission_request_observe_mode_does_not_enforce_saved_block(
     store = GuardStore(context.guard_home)
     output = io.StringIO()
     monkeypatch.setattr(copilot_hook, "evaluate_tool_call", lambda **_kwargs: _saved_block_decision())
-    monkeypatch.setattr(copilot_hook, "_queue_observed_copilot_approval", _fail_queue)
     monkeypatch.setattr(copilot_hook, "ensure_guard_daemon", _fail_queue)
     monkeypatch.setattr(copilot_hook, "queue_blocked_approvals", _fail_queue)
     monkeypatch.setattr(copilot_hook, "_record_harness_usage_for_hook", lambda **_kwargs: None)
@@ -495,7 +490,6 @@ def test_copilot_permission_request_fresh_block_is_terminal_and_never_queued(
     store = GuardStore(context.guard_home)
     output = io.StringIO()
     monkeypatch.setattr(copilot_hook, "evaluate_tool_call", lambda **_kwargs: _fresh_block_decision())
-    monkeypatch.setattr(copilot_hook, "_queue_observed_copilot_approval", _fail_queue)
     monkeypatch.setattr(copilot_hook, "ensure_guard_daemon", _fail_queue)
     monkeypatch.setattr(copilot_hook, "queue_blocked_approvals", _fail_queue)
     monkeypatch.setattr(copilot_hook, "_record_harness_usage_for_hook", lambda **_kwargs: None)
@@ -533,7 +527,6 @@ def test_copilot_saved_allow_is_explained_in_native_response_and_allow_receipt(
     store = GuardStore(context.guard_home)
     output = io.StringIO()
     monkeypatch.setattr(copilot_hook, "evaluate_tool_call", lambda **_kwargs: _saved_allow_decision())
-    monkeypatch.setattr(copilot_hook, "_queue_observed_copilot_approval", _fail_queue)
     monkeypatch.setattr(copilot_hook, "_record_harness_usage_for_hook", lambda **_kwargs: None)
 
     result = copilot_hook._run_hook_copilot_pretool(
@@ -575,7 +568,6 @@ def test_copilot_observe_mode_allows_fresh_block_without_approval_queue(
     store = GuardStore(context.guard_home)
     output = io.StringIO()
     monkeypatch.setattr(copilot_hook, "evaluate_tool_call", lambda **_kwargs: _fresh_block_decision())
-    monkeypatch.setattr(copilot_hook, "_queue_observed_copilot_approval", _fail_queue)
     monkeypatch.setattr(copilot_hook, "_record_harness_usage_for_hook", lambda **_kwargs: None)
     config = GuardConfig(context.guard_home, context.workspace_dir, mode="observe")
     if flow == "pretool":

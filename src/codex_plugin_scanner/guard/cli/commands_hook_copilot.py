@@ -114,104 +114,6 @@ def _copilot_approval_reuse_evidence(
     }
 
 
-def _queue_observed_copilot_approval(
-    *,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-    artifact_name: str,
-    args: argparse.Namespace,
-    action_envelope: GuardActionEnvelope | None,
-    config: GuardConfig,
-    context: HarnessContext,
-    decision: ToolCallDecision,
-    guard_home: Path,
-    managed_install: dict[str, object] | None,
-    payload: Mapping[str, object],
-    runtime_arguments: object,
-    runtime_workspace: Path | None,
-    store: GuardStore,
-) -> list[dict[str, object]]:
-    observed_policy_action = resolve_tool_call_policy_action(decision)
-    approval_center_url = schedule_guard_daemon_ensure(
-        guard_home,
-        home_dir=context.home_dir,
-    )
-    runtime_detection = _runtime_detection(args.harness, artifact)
-    evaluation_payload: dict[str, object] = {
-        "artifacts": [
-            {
-                "artifact_id": artifact.artifact_id,
-                "artifact_name": artifact_name,
-                "artifact_hash": artifact_hash,
-                "policy_action": observed_policy_action,
-                "changed_fields": ["runtime_tool_call", *decision.signals],
-                "artifact_type": artifact.artifact_type,
-                "source_scope": artifact.source_scope,
-                "config_path": artifact.config_path,
-                "launch_target": json.dumps(runtime_arguments, sort_keys=True)
-                if runtime_arguments is not None
-                else artifact.command,
-                "action_envelope_json": _action_envelope_json(action_envelope),
-                "scanner_evidence": list(_copilot_tool_decision_scanner_evidence(decision)),
-            }
-        ]
-    }
-    approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
-    try:
-        daemon_client = load_guard_surface_daemon_client(guard_home)
-        session = daemon_client.start_session(
-            harness=args.harness,
-            surface="harness-adapter",
-            workspace=str(runtime_workspace) if runtime_workspace else None,
-            client_name=f"{args.harness}-permission-hook",
-            client_title=f"{args.harness} permission hook",
-            client_version="1.0.0",
-            capabilities=["approval-resolution", "receipt-view"],
-        )
-        blocked_operation = daemon_client.queue_blocked_operation(
-            session_id=str(session["session_id"]),
-            operation_type="tool_call",
-            harness=args.harness,
-            metadata={
-                "tool_name": str(payload.get("tool_name", "")),
-                "hook_name": "permissionRequest",
-                "hook_event_name": "PermissionRequest",
-                **_codex_browser_wait_metadata(
-                    args=args,
-                    event_name="PermissionRequest",
-                    policy_action=observed_policy_action,
-                    config=config,
-                    payload=payload,
-                ),
-                "command_text": _hook_command_text(payload),
-                "workspace": str(runtime_workspace) if runtime_workspace else None,
-            },
-            detection=runtime_detection.to_dict(),
-            evaluation=evaluation_payload,
-            approval_center_url=approval_center_url,
-            approval_surface_policy=_approval_surface_policy_for_flow(
-                config.approval_surface_policy,
-                approval_flow,
-            ),
-            open_key=artifact.artifact_id,
-            redaction_level=config.receipt_redaction_level,
-        )
-    except RuntimeError:
-        queued = queue_blocked_approvals(
-            redaction_level=config.receipt_redaction_level,
-            detection=runtime_detection,
-            evaluation=evaluation_payload,
-            store=store,
-            approval_center_url=approval_center_url,
-            now=_now(),
-        )
-    else:
-        queued = blocked_operation.get("approval_requests")
-        if not isinstance(queued, list):
-            queued = []
-    return queued
-
-
 def _run_hook_copilot_pretool(
     args: argparse.Namespace,
     *,
@@ -248,27 +150,9 @@ def _run_hook_copilot_pretool(
     approval_reuse = _copilot_approval_reuse_evidence(decision)
     decision_scanner_evidence = _copilot_tool_decision_scanner_evidence(decision)
     saved_policy_blocks = decision.saved_action == "block"
-    terminal_action = policy_action in {"block", "sandbox-required"}
     now = _now()
     if config.mode == "observe" and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
-        if not terminal_action:
-            _queue_observed_copilot_approval(
-                artifact=runtime_artifact,
-                artifact_hash=runtime_artifact_hash,
-                artifact_name=runtime_artifact.name,
-                args=args,
-                action_envelope=action_envelope,
-                config=config,
-                context=context,
-                decision=decision,
-                guard_home=context.guard_home,
-                managed_install=None,
-                payload=payload,
-                runtime_arguments=runtime_arguments,
-                runtime_workspace=runtime_workspace,
-                store=store,
-            )
         observe_mode_evidence: dict[str, object] = {
             "source": "observe_mode",
             "observed_policy_action": observed_policy_action,
@@ -442,27 +326,7 @@ def _run_hook_copilot_permission_request(
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
     if config.mode == "observe" and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
-        queued = (
-            []
-            if terminal_action
-            else _queue_observed_copilot_approval(
-                artifact=runtime_artifact,
-                artifact_hash=runtime_artifact_hash,
-                artifact_name=artifact_name,
-                args=args,
-                action_envelope=action_envelope,
-                config=config,
-                context=context,
-                decision=decision,
-                guard_home=guard_home,
-                managed_install=managed_install,
-                payload=payload,
-                runtime_arguments=runtime_arguments,
-                runtime_workspace=runtime_workspace,
-                store=store,
-            )
-        )
-        response_payload["approval_requests"] = queued
+        response_payload["approval_requests"] = []
         if terminal_action:
             response_payload["observed_terminal_action"] = policy_action
         response_payload["observed_policy_action"] = observed_policy_action
