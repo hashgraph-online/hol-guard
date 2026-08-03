@@ -68,8 +68,14 @@ def test_installed_metadata_constrains_baseline_litellm_on_python_314() -> None:
     assert len(baseline_litellm) == 1
     assert str(baseline_litellm[0].specifier) == "==1.93.0"
 
-    python_314 = default_environment() | {"python_full_version": "3.14.6", "python_version": "3.14"}
-    python_315 = default_environment() | {"python_full_version": "3.15.0", "python_version": "3.15"}
+    python_314: dict[str, str] = default_environment() | {
+        "python_full_version": "3.14.6",
+        "python_version": "3.14",
+    }
+    python_315: dict[str, str] = default_environment() | {
+        "python_full_version": "3.15.0",
+        "python_version": "3.15",
+    }
     assert baseline_litellm[0].marker is not None
     assert baseline_litellm[0].marker.evaluate(python_314)
     assert not baseline_litellm[0].marker.evaluate(python_315)
