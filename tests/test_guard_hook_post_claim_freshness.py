@@ -709,7 +709,7 @@ def test_browser_post_wait_revalidation_reloads_synced_policy(
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "block"
 
 
-def test_copilot_permission_postclaim_uses_fresh_authority_for_queue_and_evidence(
+def test_copilot_permission_postclaim_uses_fresh_authority_without_observe_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -817,9 +817,6 @@ def test_copilot_permission_postclaim_uses_fresh_authority_for_queue_and_evidenc
     receipt = store.list_receipts(limit=1)[0]
     inventory = store.find_inventory_item(fresh_artifact.artifact_id)
     event = store.list_events(limit=1, event_name="runtime_tool_call_allowed")[0]
-    evaluation = cast(dict[str, object], queue_call["evaluation"])
-    queued_artifact = cast(list[dict[str, object]], evaluation["artifacts"])[0]
-
     assert result == 0
     assert decision.action == "require-reapproval"
     assert authority is not None
@@ -830,11 +827,7 @@ def test_copilot_permission_postclaim_uses_fresh_authority_for_queue_and_evidenc
     assert response["behavior"] == "allow"
     assert "interrupt" not in response
     assert response["approval_reuse"]["reason_code"] == "approval_reuse_context_changed_after_claim"
-    assert queue_call["redaction_level"] == "none"
-    assert queued_artifact["artifact_name"] == fresh_artifact.name
-    assert queued_artifact["artifact_hash"] == fresh_hash
-    assert queued_artifact["config_path"] == fresh_artifact.config_path
-    assert queued_artifact["launch_target"] == json.dumps(fresh_arguments, sort_keys=True)
+    assert queue_call == {}
     assert receipt["artifact_name"] == fresh_artifact.name
     assert receipt["artifact_hash"] == fresh_hash
     assert receipt["policy_decision"] == "allow"
