@@ -94,7 +94,7 @@ def test_pi_approval_with_session_id_metadata_does_not_attempt_codex_resume(tmp_
     assert store.list_events(event_name="harness/operation_resume")
 
 
-def test_pi_denial_marks_waiting_operation_blocked_without_leaking_resume_token(tmp_path: Path) -> None:
+def test_omp_denial_marks_waiting_operation_blocked_without_leaking_resume_token(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     session = store.upsert_guard_session(
         session_id="pi-session",
@@ -129,7 +129,7 @@ def test_pi_denial_marks_waiting_operation_blocked_without_leaking_resume_token(
 
     assert result == {
         "operationId": "pi-operation-block",
-        "harness": "pi",
+        "harness": "omp",
         "status": "blocked",
         "action": "block",
         "completedAt": "2026-05-08T10:01:00+00:00",

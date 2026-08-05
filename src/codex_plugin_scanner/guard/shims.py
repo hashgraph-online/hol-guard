@@ -472,10 +472,10 @@ def _package_shim_profile_status(context: HarnessContext) -> dict[str, object]:
 def _package_shim_activation_path_status(
     *,
     installed_managers: list[str],
-    path_active: bool,
+    path_contains_shim_dir: bool,
     shell_profile_configured: bool,
 ) -> str:
-    if installed_managers and path_active:
+    if installed_managers and path_contains_shim_dir:
         return "in_path"
     if installed_managers and shell_profile_configured:
         return "restart_required"
@@ -639,11 +639,11 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
     path_active = bool(installed_managers) and len(protected_managers) == len(installed_managers)
     activation_path_status = _package_shim_activation_path_status(
         installed_managers=installed_managers,
-        path_active=path_active,
+        path_contains_shim_dir=path_contains_shim_dir,
         shell_profile_configured=bool(profile_status["shell_profile_configured"]),
     )
     process_path_status = "missing"
-    if path_active:
+    if path_contains_shim_dir:
         process_path_status = "active"
     elif activation_path_status == "restart_required":
         process_path_status = "profile_staged"
