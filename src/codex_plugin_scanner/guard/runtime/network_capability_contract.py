@@ -83,6 +83,9 @@ class CapabilityRequirement:
             raise ValueError("capabilities must contain exact values")
         if not isinstance(cast(object, self.minimum_grade), EnforcementGrade):
             raise ValueError("minimum_grade must be exact")
+        missing_for_grade = grade_required_capabilities(self.minimum_grade) - self.capabilities
+        if missing_for_grade:
+            raise ValueError("minimum_grade exceeds required capabilities")
 
 
 @dataclass(frozen=True, slots=True)

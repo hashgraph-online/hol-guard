@@ -48,7 +48,15 @@ def test_capability_negotiation_never_infers_missing_support() -> None:
         negotiate_capability(
             profile,
             CapabilityRequirement(
-                capabilities=frozenset({BackendCapability.DNS_CORRELATION}),
+                capabilities=frozenset(
+                    {
+                        BackendCapability.TCP_DESTINATION,
+                        BackendCapability.UDP_DESTINATION,
+                        BackendCapability.DNS_CORRELATION,
+                        BackendCapability.PROCESS_TREE,
+                        BackendCapability.RECEIPTS,
+                    }
+                ),
                 minimum_grade=EnforcementGrade.DESTINATION_ENFORCED,
             ),
         )
@@ -66,6 +74,14 @@ def test_profile_rejects_grade_capability_contradiction() -> None:
             requires_privilege=True,
             production_ready=True,
             reason_code="invalid",
+        )
+
+
+def test_requirement_rejects_grade_capability_contradiction() -> None:
+    with pytest.raises(ValueError, match="minimum_grade"):
+        CapabilityRequirement(
+            capabilities=frozenset({BackendCapability.OBSERVE}),
+            minimum_grade=EnforcementGrade.DESTINATION_ENFORCED,
         )
 
 
