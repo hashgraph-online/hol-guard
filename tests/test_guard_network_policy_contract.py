@@ -71,6 +71,10 @@ def test_destination_canonicalization_is_unambiguous() -> None:
         Destination(DestinationKind.CIDR, "10.0.0.1/8")
 
 
+def test_canonical_json_keeps_structured_set_members_distinct() -> None:
+    assert canonical_json(frozenset({("a", "b"), ("ab",)})) == '[["a","b"],["ab"]]'
+
+
 def test_private_address_classification_is_explicit() -> None:
     assert classify_private_address("127.0.0.1") is PrivateNetworkClass.LOOPBACK
     assert classify_private_address("169.254.1.1") is PrivateNetworkClass.LINK_LOCAL

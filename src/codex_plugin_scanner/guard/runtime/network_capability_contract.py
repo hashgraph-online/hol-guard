@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final, cast
+from typing import cast
 
 from codex_plugin_scanner.guard.runtime.network_policy_contract import (
     NETWORK_PRIVACY_SCHEMA_VERSION,
@@ -13,10 +12,9 @@ from codex_plugin_scanner.guard.runtime.network_policy_contract import (
     EnforcementGrade,
     FailureMode,
     grade_required_capabilities,
+    require_digest,
+    require_id,
 )
-
-_STABLE_ID: Final = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
-_SHA256: Final = re.compile(r"[0-9a-f]{64}")
 
 
 class PlatformFamily(str, Enum):
@@ -62,7 +60,7 @@ class PlatformCapabilityProfile:
     def __post_init__(self) -> None:
         if not isinstance(cast(object, self.platform), PlatformFamily):
             raise ValueError("platform must be exact")
-        _require_id(self.backend_id, "backend_id")
+        require_id(self.backend_id, "backend_id")
         if any(not isinstance(item, BackendCapability) for item in self.capabilities):
             raise ValueError("capabilities must be exact")
         if not isinstance(cast(object, self.maximum_grade), EnforcementGrade):
@@ -72,7 +70,7 @@ class PlatformCapabilityProfile:
             raise ValueError("maximum_grade exceeds verified capabilities")
         if type(self.requires_privilege) is not bool or type(self.production_ready) is not bool:
             raise ValueError("boolean capability fields must be exact")
-        _require_id(self.reason_code, "reason_code")
+        require_id(self.reason_code, "reason_code")
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +105,7 @@ class FailureDisposition:
             raise ValueError("permit_workload_network must be exact")
         if not isinstance(cast(object, self.recovery), RecoveryAction):
             raise ValueError("recovery must be exact")
-        _require_id(self.reason_code, "reason_code")
+        require_id(self.reason_code, "reason_code")
         if self.backend_state is not BackendState.AVAILABLE and self.permit_workload_network:
             raise ValueError("unhealthy enforcement cannot permit workload networking")
         if self.permit_workload_network and self.effective_grade in {
@@ -127,14 +125,14 @@ class ControlPlaneEscapeHatch:
     inheritable_by_workload: bool = False
 
     def __post_init__(self) -> None:
-        _require_id(self.installation_id, "installation_id")
+        require_id(self.installation_id, "installation_id")
         if not self.routes or any(not isinstance(item, ControlPlaneRoute) for item in self.routes):
             raise ValueError("routes must contain exact values")
         if not self.endpoint_digests:
             raise ValueError("endpoint_digests cannot be empty")
         for digest in self.endpoint_digests:
-            _require_digest(digest, "endpoint_digest")
-        _require_digest(self.executable_digest, "executable_digest")
+            require_digest(digest, "endpoint_digest")
+        require_digest(self.executable_digest, "executable_digest")
         if type(self.expires_at_epoch_ms) is not int or self.expires_at_epoch_ms <= 0:
             raise ValueError("expires_at_epoch_ms must be positive")
         if self.inheritable_by_workload is not False:
@@ -180,6 +178,8 @@ def negotiate_capability(
     """Return the verified grade or unavailable; never infer missing capability."""
 
     if not profile.production_ready or not requirement.capabilities.issubset(profile.capabilities):
+        return EnforcementGrade.UNAVAILABLE
+    if not grade_required_capabilities(requirement.minimum_grade).issubset(profile.capabilities):
         return EnforcementGrade.UNAVAILABLE
     if _grade_rank(profile.maximum_grade) < _grade_rank(requirement.minimum_grade):
         return EnforcementGrade.UNAVAILABLE
@@ -269,13 +269,3 @@ def _grade_rank(value: EnforcementGrade) -> int:
         EnforcementGrade.PROXY_ONLY: 3,
         EnforcementGrade.DESTINATION_ENFORCED: 4,
     }[value]
-
-
-def _require_id(value: object, name: str) -> None:
-    if not isinstance(value, str) or _STABLE_ID.fullmatch(value) is None:
-        raise ValueError(f"{name} must be a stable identifier")
-
-
-def _require_digest(value: object, name: str) -> None:
-    if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
-        raise ValueError(f"{name} must be a lowercase SHA-256 digest")

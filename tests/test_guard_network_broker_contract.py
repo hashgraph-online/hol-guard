@@ -55,6 +55,20 @@ def _observation(process: ProcessTreeIdentity, address: str, *, observed: int = 
     )
 
 
+def test_dns_binding_rejects_noncanonical_host_names() -> None:
+    with pytest.raises(ValueError, match="canonical ASCII host"):
+        DnsResolutionBinding(
+            binding_id="binding.one",
+            process_tree_digest=_DIGEST,
+            query_name="API.Example.Test.",
+            canonical_name="edge.example.test",
+            addresses=("192.0.2.2",),
+            observed_at_epoch_ms=_NOW,
+            expires_at_epoch_ms=_NOW + 1,
+            resolver_digest=_OTHER_DIGEST,
+        )
+
+
 def test_dns_binding_canonicalizes_addresses_and_correlates_exact_process() -> None:
     process = _process()
     binding = _binding(process)

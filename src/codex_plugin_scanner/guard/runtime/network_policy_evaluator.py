@@ -21,6 +21,9 @@ from .network_policy_contract import (
     NetworkProtocol,
     NetworkRule,
     PrivateNetworkClass,
+    ProcessScope,
+    ProcessScopeKind,
+    ProcessTreeIdentity,
     canonical_digest,
     classify_private_address,
 )
@@ -54,7 +57,7 @@ def evaluate_policy(
         raise ValueError("decision_ttl_ms must be within 1..300000")
 
     matches = tuple(rule for rule in policy.rules if _rule_matches(rule, request, now_epoch_ms=now_epoch_ms))
-    dns_binding = _verified_dns_binding(request, verified_dns_bindings)
+    dns_binding = _verified_dns_binding(request, verified_dns_bindings, now_epoch_ms=now_epoch_ms)
     dns_binding_missing = protocol_requires_dns_binding(request.protocol, request.destination) and dns_binding is None
     if request.protocol is NetworkProtocol.UNKNOWN:
         action = NetworkAction.DENY
@@ -99,26 +102,36 @@ def _rule_matches(rule: NetworkRule, request: NetworkFlowRequest, *, now_epoch_m
         return False
     if rule.ports and not any(port.start <= request.port <= port.end for port in rule.ports):
         return False
-    if rule.process_scopes and not any(
-        scope in (request.process_tree.installation_id, request.process_tree.session_id)
-        for scope in rule.process_scopes
-    ):
+    if rule.process_scopes and not any(_scope_matches(scope, request.process_tree) for scope in rule.process_scopes):
         return False
-    return any(_destination_matches(destination, request.destination) for destination in rule.destinations)
+    requested_destinations = [request.destination]
+    if request.destination.kind is DestinationKind.HOST and request.connected_address is not None:
+        requested_destinations.append(Destination(DestinationKind.IP, request.connected_address))
+    return any(
+        _destination_matches(destination, requested)
+        for destination in rule.destinations
+        for requested in requested_destinations
+    )
 
 
 def _verified_dns_binding(
     request: NetworkFlowRequest,
     bindings: tuple[DnsResolutionBinding, ...],
+    *,
+    now_epoch_ms: int,
 ) -> DnsResolutionBinding | None:
     if not protocol_requires_dns_binding(request.protocol, request.destination):
         return None
     if request.dns_binding_digest is None or request.connected_address is None:
         return None
     for binding in bindings:
+        if request.destination.value not in (binding.query_name, binding.canonical_name):
+            continue
+        if request.connected_address not in binding.addresses:
+            continue
         if binding.digest != request.dns_binding_digest:
             continue
-        if request.destination.value not in (binding.query_name, binding.canonical_name):
+        if now_epoch_ms >= binding.expires_at_epoch_ms:
             continue
         observation = ConnectionObservation(
             flow_id=request.request_id,
@@ -131,6 +144,12 @@ def _verified_dns_binding(
         if correlate_dns_connection(observation, binding) is CorrelationStatus.MATCHED:
             return binding
     return None
+
+
+def _scope_matches(scope: ProcessScope, process_tree: ProcessTreeIdentity) -> bool:
+    if scope.kind is ProcessScopeKind.INSTALLATION:
+        return scope.value == process_tree.installation_id
+    return scope.value == process_tree.session_id
 
 
 def _destination_matches(rule: Destination, requested: Destination) -> bool:

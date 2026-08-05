@@ -49,6 +49,11 @@ class PrivateNetworkClass(str, Enum):
     UNSPECIFIED = "unspecified"
 
 
+class ProcessScopeKind(str, Enum):
+    INSTALLATION = "installation"
+    SESSION = "session"
+
+
 class EnforcementGrade(str, Enum):
     UNAVAILABLE = "unavailable"
     OBSERVE = "observe"
@@ -139,17 +144,28 @@ class ProcessTreeIdentity:
     executable_digest: str
 
     def __post_init__(self) -> None:
-        _require_id(self.installation_id, "installation_id")
-        _require_id(self.session_id, "session_id")
+        require_id(self.installation_id, "installation_id")
+        require_id(self.session_id, "session_id")
         if type(self.root_pid) is not int or self.root_pid <= 0:
             raise ValueError("root_pid must be a positive integer")
         if type(self.root_start_time_ns) is not int or self.root_start_time_ns <= 0:
             raise ValueError("root_start_time_ns must be a positive integer")
-        _require_digest(self.executable_digest, "executable_digest")
+        require_digest(self.executable_digest, "executable_digest")
 
     @property
     def digest(self) -> str:
         return canonical_digest(asdict(self))
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessScope:
+    kind: ProcessScopeKind
+    value: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(cast(object, self.kind), ProcessScopeKind):
+            raise ValueError("process scope kind must be exact")
+        require_id(self.value, "process scope value")
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,11 +176,11 @@ class NetworkRule:
     destinations: tuple[Destination, ...]
     protocols: tuple[NetworkProtocol, ...]
     ports: tuple[PortRange, ...] = ()
-    process_scopes: tuple[str, ...] = ()
+    process_scopes: tuple[ProcessScope, ...] = ()
     expires_at_epoch_seconds: int | None = None
 
     def __post_init__(self) -> None:
-        _require_id(self.rule_id, "rule_id")
+        require_id(self.rule_id, "rule_id")
         if not isinstance(cast(object, self.owner), PolicyOwner):
             raise ValueError("owner must be exact")
         if not isinstance(cast(object, self.action), NetworkAction):
@@ -183,9 +199,9 @@ class NetworkRule:
             raise ValueError("DNS rules with ports must include port 53")
         if NetworkProtocol.UNKNOWN in self.protocols:
             raise ValueError("rules cannot authorize unknown protocols")
-        scopes = tuple(sorted(set(self.process_scopes)))
-        for scope in scopes:
-            _require_id(scope, "process scope")
+        if any(not isinstance(scope, ProcessScope) for scope in self.process_scopes):
+            raise ValueError("process_scopes must contain exact ProcessScope values")
+        scopes = tuple(sorted(set(self.process_scopes), key=lambda item: (item.kind.value, item.value)))
         if self.expires_at_epoch_seconds is not None and (
             type(self.expires_at_epoch_seconds) is not int or self.expires_at_epoch_seconds <= 0
         ):
@@ -208,7 +224,7 @@ class NetworkPolicy:
     def __post_init__(self) -> None:
         if self.schema_version != NETWORK_POLICY_SCHEMA_VERSION:
             raise ValueError("unsupported network policy schema version")
-        _require_id(self.policy_id, "policy_id")
+        require_id(self.policy_id, "policy_id")
         if type(self.generation) is not int or self.generation < 1:
             raise ValueError("generation must be a positive integer")
         if any(not isinstance(item, NetworkRule) for item in self.rules):
@@ -242,7 +258,7 @@ class NetworkFlowRequest:
     def __post_init__(self) -> None:
         if self.schema_version != NETWORK_BROKER_SCHEMA_VERSION:
             raise ValueError("unsupported broker schema version")
-        _require_id(self.request_id, "request_id")
+        require_id(self.request_id, "request_id")
         if not isinstance(self.process_tree, ProcessTreeIdentity):
             raise ValueError("process_tree must be exact")
         if not isinstance(self.destination, Destination):
@@ -254,7 +270,7 @@ class NetworkFlowRequest:
         if type(self.observed_at_epoch_ms) is not int or self.observed_at_epoch_ms <= 0:
             raise ValueError("observed_at_epoch_ms must be positive")
         if self.dns_binding_digest is not None:
-            _require_digest(self.dns_binding_digest, "dns_binding_digest")
+            require_digest(self.dns_binding_digest, "dns_binding_digest")
         if self.connected_address is not None:
             try:
                 address = ipaddress.ip_address(self.connected_address).compressed
@@ -273,8 +289,8 @@ class NetworkDecision:
     expires_at_epoch_ms: int
 
     def __post_init__(self) -> None:
-        _require_digest(self.request_digest, "request_digest")
-        _require_digest(self.policy_digest, "policy_digest")
+        require_digest(self.request_digest, "request_digest")
+        require_digest(self.policy_digest, "policy_digest")
         if type(self.generation) is not int or self.generation < 1:
             raise ValueError("generation must be positive")
         if not isinstance(cast(object, self.action), NetworkAction):
@@ -282,7 +298,7 @@ class NetworkDecision:
         if not self.rule_ids:
             raise ValueError("rule_ids cannot be empty")
         for rule_id in self.rule_ids:
-            _require_id(rule_id, "rule_id")
+            require_id(rule_id, "rule_id")
         if type(self.expires_at_epoch_ms) is not int or self.expires_at_epoch_ms <= 0:
             raise ValueError("expires_at_epoch_ms must be positive")
         object.__setattr__(self, "rule_ids", tuple(sorted(set(self.rule_ids))))
@@ -300,8 +316,8 @@ class BackendAdvertisement:
     def __post_init__(self) -> None:
         if self.schema_version != NETWORK_BACKEND_SCHEMA_VERSION:
             raise ValueError("unsupported backend schema version")
-        _require_id(self.backend_id, "backend_id")
-        _require_digest(self.backend_digest, "backend_digest")
+        require_id(self.backend_id, "backend_id")
+        require_digest(self.backend_digest, "backend_digest")
         if not self.capabilities or any(not isinstance(item, BackendCapability) for item in self.capabilities):
             raise ValueError("capabilities must contain exact values")
         if not isinstance(cast(object, self.maximum_grade), EnforcementGrade):
@@ -330,14 +346,14 @@ class NetworkEvidence:
     def __post_init__(self) -> None:
         if self.schema_version != NETWORK_EVIDENCE_SCHEMA_VERSION:
             raise ValueError("unsupported network evidence schema version")
-        _require_id(self.flow_id, "flow_id")
+        require_id(self.flow_id, "flow_id")
         for name, value in (
             ("process_tree_digest", self.process_tree_digest),
             ("destination_digest", self.destination_digest),
             ("policy_digest", self.policy_digest),
             ("backend_digest", self.backend_digest),
         ):
-            _require_digest(value, name)
+            require_digest(value, name)
         if not isinstance(cast(object, self.protocol), NetworkProtocol):
             raise ValueError("protocol must be exact")
         if type(self.port) is not int or not 1 <= self.port <= 65535:
@@ -410,9 +426,11 @@ def _json_value(value: object) -> object:
         if any(not isinstance(key, str) for key in value):
             raise ValueError("canonical mapping keys must be strings")
         return {key: _json_value(item) for key, item in value.items()}
-    if isinstance(value, (tuple, list, set, frozenset)):
+    if isinstance(value, (set, frozenset)):
         items = [_json_value(item) for item in value]
         return sorted(items, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
+    if isinstance(value, (tuple, list)):
+        return [_json_value(item) for item in value]
     if isinstance(value, (str, int, bool)) or value is None:
         return value
     raise ValueError(f"unsupported canonical value: {type(value).__name__}")
@@ -422,11 +440,11 @@ def _destination_key(value: Destination) -> tuple[str, str]:
     return value.kind.value, value.value
 
 
-def _require_id(value: object, name: str) -> None:
+def require_id(value: object, name: str) -> None:
     if not isinstance(value, str) or _STABLE_ID.fullmatch(value) is None:
         raise ValueError(f"{name} must be a stable identifier")
 
 
-def _require_digest(value: object, name: str) -> None:
+def require_digest(value: object, name: str) -> None:
     if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
         raise ValueError(f"{name} must be a lowercase SHA-256 digest")

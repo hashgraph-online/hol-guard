@@ -12,6 +12,8 @@ from codex_plugin_scanner.guard.runtime.network_policy_contract import (
     NetworkRule,
     PolicyOwner,
     PortRange,
+    ProcessScope,
+    ProcessScopeKind,
     ProcessTreeIdentity,
 )
 from codex_plugin_scanner.guard.runtime.network_policy_evaluator import (
@@ -203,6 +205,20 @@ def test_allow_expiry_is_capped_by_rule_and_dns_binding() -> None:
     assert expired.decision.action is NetworkAction.DENY
 
 
+def test_host_request_can_match_connected_ip_cidr_only_with_valid_binding() -> None:
+    destination = Destination(DestinationKind.HOST, "example.com")
+    binding = _binding(address="203.0.113.9")
+    rule = _rule("local.cidr", NetworkAction.ALLOW, Destination(DestinationKind.CIDR, "203.0.113.0/24"))
+    policy = NetworkPolicy("policy.one", 1, (rule,), EnforcementGrade.DESTINATION_ENFORCED)
+    result = evaluate_policy(
+        policy,
+        _request(destination, binding=binding, connected_address="203.0.113.9"),
+        now_epoch_ms=_NOW,
+        verified_dns_bindings=(binding,),
+    )
+    assert result.decision.action is NetworkAction.ALLOW
+
+
 def test_expired_and_wrong_process_scope_rules_do_not_match() -> None:
     destination = Destination(DestinationKind.HOST, "example.com")
     binding = _binding()
@@ -212,7 +228,7 @@ def test_expired_and_wrong_process_scope_rules_do_not_match() -> None:
         NetworkAction.ALLOW,
         (destination,),
         (NetworkProtocol.TCP,),
-        process_scopes=("session.other",),
+        process_scopes=(ProcessScope(ProcessScopeKind.SESSION, "session.other"),),
         expires_at_epoch_seconds=1,
     )
     policy = NetworkPolicy("policy.one", 1, (rule,), EnforcementGrade.DESTINATION_ENFORCED)

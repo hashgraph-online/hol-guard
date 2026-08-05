@@ -10,12 +10,16 @@ from .network_policy_contract import (
     NETWORK_BACKEND_SCHEMA_VERSION,
     NETWORK_BROKER_SCHEMA_VERSION,
     BackendCapability,
+    DestinationKind,
     EnforcementGrade,
     NetworkAction,
     NetworkProtocol,
     ProcessTreeIdentity,
+    canonical_destination,
     canonical_digest,
     grade_required_capabilities,
+    require_digest,
+    require_id,
 )
 
 
@@ -49,11 +53,11 @@ class DnsResolutionBinding:
     def __post_init__(self) -> None:
         if self.schema_version != NETWORK_BROKER_SCHEMA_VERSION:
             raise ValueError("unsupported broker schema version")
-        _require_digest(self.process_tree_digest, "process_tree_digest")
-        _require_digest(self.resolver_digest, "resolver_digest")
-        _require_identifier(self.binding_id, "binding_id")
+        require_digest(self.process_tree_digest, "process_tree_digest")
+        require_digest(self.resolver_digest, "resolver_digest")
+        require_id(self.binding_id, "binding_id")
         for name, value in (("query_name", self.query_name), ("canonical_name", self.canonical_name)):
-            if not value or value != value.lower() or value.endswith(".") or any(ord(char) > 127 for char in value):
+            if value != canonical_destination(DestinationKind.HOST, value):
                 raise ValueError(f"{name} must be a canonical ASCII host")
         if not self.addresses:
             raise ValueError("addresses cannot be empty")
@@ -79,7 +83,7 @@ class ConnectionObservation:
     observed_at_epoch_ms: int
 
     def __post_init__(self) -> None:
-        _require_identifier(self.flow_id, "flow_id")
+        require_id(self.flow_id, "flow_id")
         if not isinstance(self.process_tree, ProcessTreeIdentity):
             raise ValueError("process_tree must be exact")
         object.__setattr__(self, "remote_address", ipaddress.ip_address(self.remote_address).compressed)
@@ -130,9 +134,9 @@ class BackendReceipt:
         if self.schema_version != NETWORK_BACKEND_SCHEMA_VERSION:
             raise ValueError("unsupported backend schema version")
         for name in ("receipt_id", "backend_id", "signature_key_id"):
-            _require_identifier(getattr(self, name), name)
+            require_id(getattr(self, name), name)
         for name in ("backend_digest", "process_tree_digest", "policy_digest", "flow_digest"):
-            _require_digest(getattr(self, name), name)
+            require_digest(getattr(self, name), name)
         if type(self.generation) is not int or self.generation < 1:
             raise ValueError("generation must be positive")
         if not isinstance(self.action, NetworkAction) or not isinstance(self.achieved_grade, EnforcementGrade):
@@ -165,13 +169,13 @@ class ReceiptVerification:
     reason_code: str
 
     def __post_init__(self) -> None:
-        _require_digest(self.receipt_digest, "receipt_digest")
-        _require_identifier(self.verifier_id, "verifier_id")
+        require_digest(self.receipt_digest, "receipt_digest")
+        require_id(self.verifier_id, "verifier_id")
         if not isinstance(self.trust, ReceiptTrust):
             raise ValueError("trust must be exact")
         if type(self.verified_at_epoch_ms) is not int or self.verified_at_epoch_ms <= 0:
             raise ValueError("verified_at_epoch_ms must be positive")
-        _require_identifier(self.reason_code, "reason_code")
+        require_id(self.reason_code, "reason_code")
 
 
 def receipt_authority_current(
@@ -212,18 +216,3 @@ class BrokerPerformanceBudget:
             raise ValueError("one logical flow permits at most one prompt")
         if self.primary_view_usable_ms > 1_000:
             raise ValueError("primary view budget cannot exceed one second")
-
-
-def _require_digest(value: object, name: str) -> None:
-    if not isinstance(value, str) or len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
-        raise ValueError(f"{name} must be a lowercase SHA-256 digest")
-
-
-def _require_identifier(value: object, name: str) -> None:
-    if (
-        not isinstance(value, str)
-        or not value
-        or len(value) > 128
-        or not value.replace(".", "").replace("-", "").replace("_", "").isalnum()
-    ):
-        raise ValueError(f"{name} must be a bounded stable identifier")
