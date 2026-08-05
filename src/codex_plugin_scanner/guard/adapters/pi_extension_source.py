@@ -284,7 +284,7 @@ def managed_extension_source(
         "  } catch (error) {\n"
         "    return {\n"
         '      decision: "deny",\n'
-        "      reason: `HOL Guard could not serialize Pi hook payload: ${\n"
+        f"      reason: `HOL Guard could not serialize {display_name} hook payload: ${{\n"
         "        error instanceof Error ? error.message : String(error)\n"
         "      }`,\n"
         "    };\n"
@@ -302,7 +302,7 @@ def managed_extension_source(
         "      cleanupPayloadReference();\n"
         "      return {\n"
         '        decision: "deny",\n'
-        "        reason: `HOL Guard could not serialize Pi hook payload reference: ${\n"
+        f"        reason: `HOL Guard could not serialize {display_name} hook payload reference: ${{\n"
         "          error instanceof Error ? error.message : String(error)\n"
         "        }`,\n"
         "      };\n"
@@ -315,7 +315,8 @@ def managed_extension_source(
         "    cleanupPayloadReference();\n"
         "    return {\n"
         '      decision: "deny",\n'
-        '      reason: "HOL Guard blocked this Pi hook payload before review because it exceeded "\n'
+        f'      reason: "HOL Guard blocked this {display_name} hook payload before review because it exceeded '
+        '"\n'
         '        + "the safe size limit.",\n'
         "    };\n"
         "  }\n"
@@ -403,7 +404,8 @@ def managed_extension_source(
         "  if (result === null) {\n"
         "    return {\n"
         '      decision: "deny",\n'
-        '      reason: "HOL Guard Pi hook failed before completing review: Guard CLI was not found.",\n'
+        f'      reason: "HOL Guard {display_name} hook failed before completing review: '
+        'Guard CLI was not found.",\n'
         "    };\n"
         "  }\n"
         "  if (result.error) {\n"
@@ -412,13 +414,15 @@ def managed_extension_source(
         "    if (errorCode === 'ETIMEDOUT') {\n"
         "      return {\n"
         '        decision: "deny",\n'
-        '        reason: "HOL Guard could not complete fallback review before the Pi deadline. Retry the action.",\n'
+        f'        reason: "HOL Guard could not complete fallback review before the {display_name} '
+        'deadline. Retry the action.",\n'
         '        reason_code: "guard_cli_recovery_timeout",\n'
         "      };\n"
         "    }\n"
         "    return {\n"
         '      decision: "deny",\n'
-        "      reason: `HOL Guard Pi hook failed before completing review: ${errorMessage}`,\n"
+        f"      reason: `HOL Guard {display_name} hook failed before completing review: "
+        "${errorMessage}`,\n"
         "    };\n"
         "  }\n"
         '  const lines = (result.stdout ?? "").split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);\n'
@@ -439,7 +443,7 @@ def managed_extension_source(
         "}\n"
         "\n"
         "function modelVisibleBlockedReason(reason: string): string {\n"
-        '  const prefix = "HOL Guard blocked this tool output before Pi could use it.";\n'
+        f'  const prefix = "HOL Guard blocked this tool output before {display_name} could use it.";\n'
         "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
         "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
         "  return `${prefix}${approvalHint} Do not retry the same tool call automatically; wait for the user to "
@@ -498,9 +502,11 @@ def managed_extension_source(
         "            },\n"
         "            { triggerTurn: true, deliverAs: 'nextTurn' },\n"
         "          );\n"
-        "          ctx.ui.notify('HOL Guard approved this request. Pi is continuing the task.', 'info');\n"
+        f"          ctx.ui.notify('HOL Guard approved this request. {display_name} is continuing the task.', "
+        "'info');\n"
         "        } else if (action === 'block') {\n"
-        "          ctx.ui.notify('HOL Guard kept this request blocked. Pi will not retry it.', 'warning');\n"
+        f"          ctx.ui.notify('HOL Guard kept this request blocked. {display_name} will not retry it.', "
+        "'warning');\n"
         "        }\n"
         "      } finally {\n"
         "        pendingApprovalResumes.delete(requestId);\n"
@@ -635,4 +641,4 @@ def managed_extension_source(
         "  });\n"
         "}\n"
     )
-    return source.replace("Pi", display_name)
+    return source
