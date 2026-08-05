@@ -11,6 +11,8 @@ from .runtime.command_expression import CommandExpression, command_expression_fr
 
 POLICY_API_VERSION = "guard.hashgraphonline.com/v1alpha1"
 POLICY_KIND = "GuardPolicy"
+NETWORK_POLICY_SPEC_FIELD = "networkPolicy"
+NETWORK_POLICY_SCHEMA_VERSION = "guard.network-policy.v1"
 POLICY_RULE_EFFECTS = ("allow", "block", "review", "ignore")
 POLICY_MODES = ("observe", "prompt", "enforce")
 POLICY_LIFETIME_MODES = ("once", "session", "project", "machine", "workspace", "team", "permanent", "until")
@@ -362,6 +364,19 @@ class GuardPolicyDocument:
             "spec": spec,
         }
         return _with_extensions(result, self.extensions)
+
+
+def guard_policy_network_extension(document: GuardPolicyDocument) -> dict[str, JsonValue] | None:
+    """Return the versioned network extension without creating a second policy authority."""
+
+    extension = _decode_extensions(document.spec_extensions).get(NETWORK_POLICY_SPEC_FIELD)
+    if extension is None:
+        return None
+    if not isinstance(extension, dict):
+        raise ValueError("networkPolicy must be an object")
+    if extension.get("schemaVersion") != NETWORK_POLICY_SCHEMA_VERSION:
+        raise ValueError("unsupported networkPolicy schemaVersion")
+    return extension
 
 
 def canonical_json_bytes(value: JsonValue) -> bytes:
