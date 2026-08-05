@@ -1,0 +1,137 @@
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.runtime.container_network_plan import (
+    ContainerNetworkPlanError,
+    ContainerNetworkReceiptOutcome,
+    build_verified_container_network_plan,
+    issue_container_network_receipt,
+)
+from codex_plugin_scanner.guard.runtime.containment_contract import (
+    ContainmentNetworkMode,
+    ContainmentPolicy,
+)
+from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
+    GuardExecutionAssuranceBoundary,
+)
+from codex_plugin_scanner.guard.runtime.oci_plan_generator import (
+    OCIExecutionPlan,
+    OCIPlanNamespace,
+    OCIPlanNetwork,
+)
+
+
+def _oci_plan(
+    *,
+    isolated: bool = True,
+    loopback_only: bool = True,
+    ports: tuple[str, ...] = (),
+    network_mode: str = "none",
+) -> OCIExecutionPlan:
+    return OCIExecutionPlan(
+        plan_digest="a" * 64,
+        bundle_version="1.2.0",
+        minimum_boundary=GuardExecutionAssuranceBoundary.OS_ISOLATED,
+        available_boundary=GuardExecutionAssuranceBoundary.OS_ISOLATED,
+        boundary_lowered=False,
+        network=OCIPlanNetwork(mode=network_mode, port_mappings=ports, loopback_only=loopback_only),
+        namespaces=OCIPlanNamespace(
+            pid_isolated=True,
+            net_isolated=isolated,
+            ipc_isolated=True,
+            uts_isolated=True,
+            user_isolated=True,
+        ),
+    )
+
+
+def test_offline_plan_binds_verified_namespace_to_policy(tmp_path: Path) -> None:
+    policy = ContainmentPolicy(str(tmp_path), ())
+
+    first = build_verified_container_network_plan(oci_plan=_oci_plan(), containment_policy=policy)
+    second = build_verified_container_network_plan(oci_plan=_oci_plan(), containment_policy=policy)
+
+    assert first == second
+    assert first.loopback_only is True
+    assert first.oci_plan_digest == "a" * 64
+    assert len(first.plan_digest) == 64
+
+
+@pytest.mark.parametrize(
+    ("oci_plan", "message"),
+    [
+        (_oci_plan(isolated=False), "isolated network namespace"),
+        (_oci_plan(loopback_only=False), "loopback-only"),
+        (_oci_plan(ports=("8080:80",)), "must not publish ports"),
+    ],
+)
+def test_offline_plan_fails_closed(oci_plan: OCIExecutionPlan, message: str, tmp_path: Path) -> None:
+    with pytest.raises(ContainerNetworkPlanError, match=message):
+        build_verified_container_network_plan(
+            oci_plan=oci_plan,
+            containment_policy=ContainmentPolicy(str(tmp_path), ()),
+        )
+
+
+def test_proxy_only_plan_binds_endpoint_digest(tmp_path: Path) -> None:
+    policy = ContainmentPolicy(
+        str(tmp_path),
+        (),
+        network_mode=ContainmentNetworkMode.GUARDED_PROXY,
+        proxy_endpoint_digest="b" * 64,
+    )
+
+    plan = build_verified_container_network_plan(
+        oci_plan=_oci_plan(network_mode="bridge", loopback_only=False),
+        containment_policy=policy,
+    )
+
+    assert plan.mode is ContainmentNetworkMode.GUARDED_PROXY
+    assert plan.proxy_endpoint_digest == "b" * 64
+    assert plan.loopback_only is False
+
+
+def test_proxy_only_plan_rejects_unrouted_network(tmp_path: Path) -> None:
+    policy = ContainmentPolicy(
+        str(tmp_path),
+        (),
+        network_mode=ContainmentNetworkMode.GUARDED_PROXY,
+        proxy_endpoint_digest="b" * 64,
+    )
+
+    with pytest.raises(ContainerNetworkPlanError, match="isolated bridge"):
+        build_verified_container_network_plan(oci_plan=_oci_plan(), containment_policy=policy)
+
+
+def test_container_receipt_binds_plan_namespace_and_outcome(tmp_path: Path) -> None:
+    plan = build_verified_container_network_plan(
+        oci_plan=_oci_plan(),
+        containment_policy=ContainmentPolicy(str(tmp_path), ()),
+    )
+
+    receipt = issue_container_network_receipt(
+        plan=plan,
+        namespace_identity_digest="c" * 64,
+        observed_at_epoch_ms=123,
+        outcome=ContainerNetworkReceiptOutcome.ENFORCED,
+    )
+
+    assert receipt.plan_digest == plan.plan_digest
+    assert receipt.namespace_identity_digest == "c" * 64
+    assert len(receipt.receipt_digest) == 64
+
+
+def test_container_receipt_rejects_raw_namespace_identity(tmp_path: Path) -> None:
+    plan = build_verified_container_network_plan(
+        oci_plan=_oci_plan(),
+        containment_policy=ContainmentPolicy(str(tmp_path), ()),
+    )
+
+    with pytest.raises(ContainerNetworkPlanError, match="namespace identity"):
+        issue_container_network_receipt(
+            plan=plan,
+            namespace_identity_digest="/proc/123/ns/net:[4026531992]",
+            observed_at_epoch_ms=123,
+            outcome=ContainerNetworkReceiptOutcome.ENFORCED,
+        )
