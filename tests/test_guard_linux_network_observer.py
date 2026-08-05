@@ -23,7 +23,7 @@ def test_linux_observer_projects_procfs_without_raw_address(tmp_path: Path) -> N
         tmp_path,
         42,
         "tcp",
-        "0: 0100007F:1234 08080808:01BB 01 0:0 0:0 00:0 1000 0 77",
+        "0: 0100007F:1234 08080808:01BB 01 0:0 0:0 00:0 0 1000 0 77",
     )
 
     observations = observe_linux_sockets(proc_root=tmp_path, pid=42)

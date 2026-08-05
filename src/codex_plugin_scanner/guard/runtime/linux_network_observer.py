@@ -48,7 +48,7 @@ def observe_linux_sockets(
             raise LinuxNetworkObservationError(f"cannot read {filename} socket table") from error
         for line in lines:
             fields = line.split()
-            if len(fields) < 10:
+            if len(fields) < 11:
                 raise LinuxNetworkObservationError(f"malformed {filename} socket row")
             address, port = _decode_endpoint(fields[2], width=width)
             observations.append(
@@ -56,7 +56,7 @@ def observe_linux_sockets(
                     protocol=protocol,
                     remote_address_digest=hashlib.sha256(address.packed).hexdigest(),
                     remote_port=port,
-                    socket_inode=int(fields[9]),
+                    socket_inode=int(fields[10]),
                     tcp_state=int(fields[3], 16) if protocol is NetworkProtocol.TCP else None,
                 )
             )
