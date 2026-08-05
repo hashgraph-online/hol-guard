@@ -38,7 +38,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-skill-scanner~=2.0.12" in dependency_entries
     assert "litellm==1.93.0; python_version < '3.15'" in dependency_entries
     assert "requests>=2.32,<3" in dependency_entries
-    assert "aiohttp==3.14.1" in override_entries
+    assert "aiohttp==3.14.3" in override_entries
     assert "click==8.4.1" in override_entries
     assert "cisco-ai-skill-scanner==2.0.12" in override_entries
     assert "importlib-metadata==8.9.0" in override_entries
@@ -140,7 +140,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert requirements_copy_index < source_copy_index
     assert build_deps_index < pip_install_index
     assert pip_install_index < purge_index
-    assert "aiohttp==3.14.1" in docker_requirements
+    assert "aiohttp==3.14.3" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==8.9.0" in docker_requirements
     assert "litellm==1.93.0" in docker_requirements
