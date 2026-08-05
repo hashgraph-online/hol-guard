@@ -166,6 +166,14 @@ def test_backend_receipt_payload_excludes_signature_but_binds_authority() -> Non
         "signature-valid",
     )
     assert receipt_authority_current(receipt, verified, now_epoch_ms=_NOW)
+    mismatched = ReceiptVerification(
+        _OTHER_DIGEST,
+        "verifier.one",
+        ReceiptTrust.VERIFIED,
+        _NOW,
+        "signature-valid",
+    )
+    assert not receipt_authority_current(receipt, mismatched, now_epoch_ms=_NOW)
     assert not receipt_authority_current(
         receipt,
         verified,

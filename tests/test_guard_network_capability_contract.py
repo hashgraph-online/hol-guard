@@ -164,7 +164,5 @@ def test_platform_matrix_is_explicitly_alpha_only() -> None:
     profiles = default_platform_profiles()
     assert {profile.platform for profile in profiles} == set(PlatformFamily)
     assert all(profile.production_ready is False for profile in profiles)
-    assert (
-        max(profile.maximum_grade for profile in profiles if profile.platform is PlatformFamily.LINUX)
-        is EnforcementGrade.PROXY_ONLY
-    )
+    linux_profile = next(profile for profile in profiles if profile.platform is PlatformFamily.LINUX)
+    assert linux_profile.maximum_grade is EnforcementGrade.PROXY_ONLY

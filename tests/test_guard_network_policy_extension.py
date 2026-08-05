@@ -47,6 +47,16 @@ def test_legacy_guard_policy_remains_explicitly_compatible() -> None:
     assert guard_policy_network_extension(document) is None
 
 
+def test_explicit_null_network_extension_is_rejected() -> None:
+    mapping = _mapping()
+    spec = mapping["spec"]
+    assert isinstance(spec, dict)
+    spec["networkPolicy"] = None
+    document = GuardPolicyDocument.from_mapping(mapping)
+    with pytest.raises(ValueError, match="networkPolicy must be an object"):
+        guard_policy_network_extension(document)
+
+
 @pytest.mark.parametrize(
     "extension",
     (
