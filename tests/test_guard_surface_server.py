@@ -1294,10 +1294,16 @@ class TestGuardSurfaceServer:
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
 
+        captured: dict[str, object] = {}
+
+        def review(**kwargs: object) -> HookProcessReview:
+            captured["workspace"] = kwargs["workspace"]
+            return HookProcessReview({"decision": "allow"}, None)
+
         monkeypatch.setattr(
             daemon._server.hook_process_runner,
             "review",
-            lambda **_kwargs: HookProcessReview({"decision": "allow"}, None),
+            review,
         )
         daemon.start()
 
@@ -1329,6 +1335,7 @@ class TestGuardSurfaceServer:
 
         assert response.status == 200
         assert payload == {"decision": "allow"}
+        assert captured["workspace"] == workspace_dir
 
     @pytest.mark.skipif(os.name != "posix", reason="POSIX shared temp root contract")
     def test_guard_daemon_pi_hook_endpoint_omits_shared_temporary_root_workspace(
@@ -1347,10 +1354,16 @@ class TestGuardSurfaceServer:
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
 
+        captured: dict[str, object] = {}
+
+        def review(**kwargs: object) -> HookProcessReview:
+            captured["workspace"] = kwargs["workspace"]
+            return HookProcessReview({"decision": "allow"}, None)
+
         monkeypatch.setattr(
             daemon._server.hook_process_runner,
             "review",
-            lambda **_kwargs: HookProcessReview({"decision": "allow"}, None),
+            review,
         )
         daemon.start()
 
@@ -1382,6 +1395,7 @@ class TestGuardSurfaceServer:
 
         assert response.status == 200
         assert payload == {"decision": "allow"}
+        assert captured["workspace"] is None
 
     def test_guard_daemon_pi_hook_endpoint_rejects_worker_payload_after_deadline(self, tmp_path, monkeypatch) -> None:
         home_dir = tmp_path / "home"
