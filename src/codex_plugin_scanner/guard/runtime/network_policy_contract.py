@@ -61,6 +61,7 @@ class EnforcementGrade(str, Enum):
     OBSERVE = "observe"
     DENY_ALL = "deny-all"
     PROXY_ONLY = "proxy-only"
+    TCP_IP_DESTINATION_ENFORCED = "tcp-ip-destination-enforced"
     DESTINATION_ENFORCED = "destination-enforced"
 
 
@@ -81,6 +82,15 @@ _GRADE_REQUIREMENTS: Final[dict[EnforcementGrade, frozenset[BackendCapability]]]
     EnforcementGrade.OBSERVE: frozenset({BackendCapability.OBSERVE}),
     EnforcementGrade.DENY_ALL: frozenset({BackendCapability.DENY_ALL}),
     EnforcementGrade.PROXY_ONLY: frozenset({BackendCapability.PROXY_ONLY, BackendCapability.PROCESS_TREE}),
+    EnforcementGrade.TCP_IP_DESTINATION_ENFORCED: frozenset(
+        {
+            BackendCapability.DENY_ALL,
+            BackendCapability.TCP_DESTINATION,
+            BackendCapability.PROCESS_TREE,
+            BackendCapability.ATOMIC_POLICY,
+            BackendCapability.RECEIPTS,
+        }
+    ),
     EnforcementGrade.DESTINATION_ENFORCED: frozenset(
         {
             BackendCapability.TCP_DESTINATION,

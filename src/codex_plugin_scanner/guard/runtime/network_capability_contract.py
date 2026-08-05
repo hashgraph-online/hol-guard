@@ -270,5 +270,6 @@ def _grade_rank(value: EnforcementGrade) -> int:
         EnforcementGrade.OBSERVE: 1,
         EnforcementGrade.DENY_ALL: 2,
         EnforcementGrade.PROXY_ONLY: 3,
-        EnforcementGrade.DESTINATION_ENFORCED: 4,
+        EnforcementGrade.TCP_IP_DESTINATION_ENFORCED: 4,
+        EnforcementGrade.DESTINATION_ENFORCED: 5,
     }[value]
