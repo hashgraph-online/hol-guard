@@ -873,7 +873,7 @@ class TestGuardCli:
         assert "hook" not in error_output
         assert "daemon" not in error_output
 
-    def test_bare_hol_guard_runs_noninteractive_init_without_side_effects(self, tmp_path, monkeypatch):
+    def test_bare_hol_guard_shows_help_without_side_effects(self, tmp_path, monkeypatch, capsys):
         side_effects: list[str] = []
         monkeypatch.setattr(sys, "argv", ["hol-guard"])
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -899,8 +899,14 @@ class TestGuardCli:
             lambda *_args, **_kwargs: side_effects.append("notifications"),
         )
 
-        assert main() == 0
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 0
         assert side_effects == []
+        output = capsys.readouterr().out
+        assert "usage: hol-guard" in output
+        assert "Run `hol-guard --help`" not in output
 
     def test_hol_guard_routes_flat_commands_without_nested_guard_alias(self, monkeypatch, capsys) -> None:
         called: dict[str, object] = {}

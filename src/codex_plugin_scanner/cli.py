@@ -188,7 +188,7 @@ def _resolve_legacy_args(
 ) -> list[str] | None:
     if not argv:
         if program_mode == "hol-guard":
-            return ["init"]
+            return ["--help"]
         return argv
     if program_mode == "guard":
         if argv[0] == "guard":
