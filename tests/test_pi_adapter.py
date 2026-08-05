@@ -500,7 +500,7 @@ class TestPiInstall:
         assert not (ctx.home_dir / ".pi" / "agent" / "extensions" / "hol-guard.ts").exists()
 
     def test_omp_display_name_does_not_rewrite_paths_containing_pi(self) -> None:
-        home_dir = Path("/home/Pieter/__PI_NAME__")
+        home_dir = Path("Pieter") / "__PI_NAME__"
         guard_home = home_dir / "Pi Tools" / ".hol-guard"
         settings_path = home_dir / ".omp" / "agent" / "settings.json"
 
@@ -515,7 +515,7 @@ class TestPiInstall:
         assert str(guard_home) in source
         assert str(home_dir) in source
         assert "Oh My Pieter" not in source
-        assert "/home/Pieter/Oh My Pi" not in source
+        assert "Pieter/Oh My Pi" not in source
         assert "Oh My Pi hook failed before completing review" in source
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
