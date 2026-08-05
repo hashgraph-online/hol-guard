@@ -7223,7 +7223,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             candidate = os.path.dirname(candidate)
             if not candidate.strip():
                 return None
-        return os.path.normpath(candidate)
+        candidate = os.path.normpath(candidate)
+        try:
+            temporary_root = trusted_temporary_root_for_path(Path(candidate))
+        except OSError:
+            temporary_root = None
+        if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
+            return None
+        return candidate
 
     def _validate_hook_directory_path(
         self,
