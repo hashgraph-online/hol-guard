@@ -54,7 +54,10 @@ def test_guard_init_cloud_step_uses_connect_browser_open_and_finalization(tmp_pa
         }
 
     monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_connect)
-    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_workspace.open_browser_url",
+        lambda url: opened_urls.append(url) or True,
+    )
     monkeypatch.setattr(
         guard_commands_module,
         "apply_managed_install",
@@ -143,7 +146,10 @@ def test_guard_init_human_cloud_step_announces_approval_before_waiting(tmp_path,
         }
 
     monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_connect)
-    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_workspace.open_browser_url",
+        lambda url: opened_urls.append(url) or True,
+    )
     monkeypatch.setattr(
         guard_commands_module,
         "apply_managed_install",

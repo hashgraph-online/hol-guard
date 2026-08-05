@@ -74,6 +74,7 @@ AgentInventoryType = Literal[
     "kimi",
     "grok",
     "pi",
+    "omp",
     "zcode",
 ]
 _AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
@@ -88,6 +89,7 @@ _AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
     "kimi",
     "grok",
     "pi",
+    "omp",
     "zcode",
 )
 

@@ -23,7 +23,7 @@ SIZE_BUCKETS = (
     (5 * 1024 * 1024, "1m-5m"),
 )
 _MAX_COUNTER_KEYS = 256
-_HARNESSES = {"pi", "codex", "claude-code", "cursor", "opencode"}
+_HARNESSES = {"pi", "omp", "codex", "claude-code", "cursor", "opencode"}
 _DECISIONS = {"allow", "deny", "ask", "block", "warn", "error"}
 _CACHE_STATUSES = {"hit", "miss", "bypass", "disabled", "error"}
 _FALLBACK_KINDS = {"none", "fail_closed", "local", "cache", "error"}

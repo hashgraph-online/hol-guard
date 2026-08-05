@@ -314,6 +314,12 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
 
       {protectionHealth.state !== "protected" ? (
         <FleetProtectionRecovery
+          cloudPolicy={{
+            cloudState: props.runtime.cloud_state,
+            cloudSyncState: props.runtime.cloud_sync_health.state,
+            cloudPolicySyncError: props.runtime.cloud_policy_sync_error,
+            connectUrl: props.runtime.connect_url,
+          }}
           health={protectionHealth}
           repairHarness={repairHarness}
           repairHarnesses={repairHarnesses}

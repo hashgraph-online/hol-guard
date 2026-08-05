@@ -1,3 +1,4 @@
+import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
 import { resolveFleetHeroCopy } from "./fleet-workspace";
 import type { FleetHeroCopy } from "./fleet-workspace";
 
@@ -62,6 +63,40 @@ assert(
 assert(pairedActiveWithApps.status === "clear", "F4: paired_active with apps status should be clear");
 
 const pairedActiveNoApps = resolveFleetHeroCopy("paired_active", 0, "degraded", urls);
+
+const localCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "local_only",
+  cloudSyncState: "disabled",
+  cloudPolicySyncError: null,
+  connectUrl: urls.connect_url,
+});
+assert(localCloudProof?.actionLabel === "Connect Guard Cloud", "local Cloud proof uses the separate connect action");
+assert(
+  localCloudProof?.detail.includes("Local Guard remains active") === true,
+  "missing Cloud proof must not degrade local Guard copy",
+);
+assert(
+  localCloudProof?.detail.includes("separate from local repair") === true,
+  "Cloud proof must not be described as a local integrity repair",
+);
+const activeCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "healthy",
+  cloudPolicySyncError: null,
+  connectUrl: urls.connect_url,
+});
+assert(activeCloudProof === null, "healthy Cloud proof needs no recovery hint");
+const pendingCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "pending",
+  cloudPolicySyncError: null,
+  connectUrl: urls.fleet_url,
+});
+assert(
+  pendingCloudProof?.actionLabel === "Open Guard Cloud" &&
+    pendingCloudProof.detail.includes("separate from local repair"),
+  "incomplete Cloud proof remains an independent Cloud action",
+);
 
 const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", urls);
 assert(degradedWithApps.status === "degraded", "active installs cannot imply protected fleet health");

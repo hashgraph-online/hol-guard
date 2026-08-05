@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -444,26 +445,37 @@ def _package_shim_profile_status(context: HarnessContext) -> dict[str, object]:
         return {
             "shell_profile_configured": False,
             "shell_profile_path": None,
+            "shell_profile_paths": [],
+            "shell_profile_missing_paths": [],
         }
-    profile_path, _export_line = _package_shim_profile_target(home_dir, shim_dir)
-    try:
-        existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
-    except OSError:
-        existing = ""
-    configured = _profile_already_references_path(existing, shim_dir)
+    targets = _package_shim_profile_targets(home_dir, shim_dir)
+    configured_paths: list[str] = []
+    missing_paths: list[str] = []
+    for profile_path, _export_line in targets:
+        try:
+            existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
+        except OSError:
+            existing = ""
+        if _profile_already_references_path(existing, shim_dir):
+            configured_paths.append(str(profile_path))
+        else:
+            missing_paths.append(str(profile_path))
+    primary_path = str(targets[0][0]) if targets else None
     return {
-        "shell_profile_configured": configured,
-        "shell_profile_path": str(profile_path),
+        "shell_profile_configured": bool(targets) and not missing_paths,
+        "shell_profile_path": primary_path,
+        "shell_profile_paths": configured_paths,
+        "shell_profile_missing_paths": missing_paths,
     }
 
 
 def _package_shim_activation_path_status(
     *,
     installed_managers: list[str],
-    path_contains_shim_dir: bool,
+    path_active: bool,
     shell_profile_configured: bool,
 ) -> str:
-    if installed_managers and path_contains_shim_dir:
+    if installed_managers and path_active:
         return "in_path"
     if installed_managers and shell_profile_configured:
         return "restart_required"
@@ -571,7 +583,8 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
     manager_details: list[dict[str, object]] = []
     effective_path = path_env if path_env is not None else os.environ.get("PATH", "")
     path_entries = [entry for entry in effective_path.split(os.pathsep) if entry]
-    path_contains_shim_dir = any(Path(entry).expanduser() == shim_dir.expanduser() for entry in path_entries)
+    resolved_shim_dir = shim_dir.expanduser().resolve()
+    path_contains_shim_dir = any(Path(entry).expanduser().resolve() == resolved_shim_dir for entry in path_entries)
     for manager in installed_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
         shim_path = shim_dir / command
@@ -623,11 +636,17 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
                 }
             )
     profile_status = _package_shim_profile_status(context)
+    path_active = bool(installed_managers) and len(protected_managers) == len(installed_managers)
     activation_path_status = _package_shim_activation_path_status(
         installed_managers=installed_managers,
-        path_contains_shim_dir=path_contains_shim_dir,
+        path_active=path_active,
         shell_profile_configured=bool(profile_status["shell_profile_configured"]),
     )
+    process_path_status = "missing"
+    if path_active:
+        process_path_status = "active"
+    elif activation_path_status == "restart_required":
+        process_path_status = "profile_staged"
     return enrich_package_shim_status_payload(
         {
             "active_managers": active_managers,
@@ -635,7 +654,7 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
             "installed_managers": installed_managers,
             "last_test_at": normalized_last_tests,
             "protected_managers": protected_managers,
-            "path_active": bool(installed_managers) and len(protected_managers) == len(installed_managers),
+            "path_active": path_active,
             "path_contains_shim_dir": path_contains_shim_dir,
             "path_status": activation_path_status,
             "bypasses": bypasses,
@@ -643,8 +662,12 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
             "manifest_path": str(_package_shim_manifest_path(context)),
             "missing_managers": missing_managers,
             "restart_shell_required": activation_path_status == "restart_required",
+            "process_path_status": process_path_status,
+            "process_restart_required": activation_path_status == "restart_required",
             "shell_profile_configured": bool(profile_status["shell_profile_configured"]),
             "shell_profile_path": profile_status["shell_profile_path"],
+            "shell_profile_paths": profile_status["shell_profile_paths"],
+            "shell_profile_missing_paths": profile_status["shell_profile_missing_paths"],
             "shell_hints": _path_export_hints(shim_dir),
             "shim_dir": str(shim_dir),
             "supported_managers": list(package_shim_supported_managers()),
@@ -814,11 +837,17 @@ def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[s
             "restart_shell_required": False,
             "manual_path_required": True,
         }
-    profile_path, export_line = _package_shim_profile_target(context.home_dir, shim_dir)
-    result = _upsert_managed_profile_block(profile_path, export_line, _PACKAGE_PROFILE_MARKER)
+    targets = _package_shim_profile_targets(context.home_dir, shim_dir)
+    changed_paths: list[str] = []
+    for profile_path, export_line in targets:
+        result = _upsert_managed_profile_block(profile_path, export_line, _PACKAGE_PROFILE_MARKER)
+        if bool(result["changed"]):
+            changed_paths.append(str(profile_path))
     return {
-        "changed": result["changed"],
-        "profile_path": str(profile_path),
+        "changed": bool(changed_paths),
+        "changed_paths": changed_paths,
+        "profile_path": str(targets[0][0]),
+        "profile_paths": [str(profile_path) for profile_path, _export_line in targets],
         "shim_dir": str(shim_dir),
         "restart_shell_required": True,
     }
@@ -924,16 +953,16 @@ def _guard_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, st
     if shell == "fish":
         return (
             home_dir / ".config" / "fish" / "config.fish",
-            f"{marker}\nfish_add_path --prepend {shim_dir}",
+            f"{marker}\n{_fish_path_prepend(shim_dir)}",
         )
     if shell == "bash":
         return (
             home_dir / ".bashrc",
-            f'{marker}\nexport PATH="{shim_dir}:$PATH"',
+            f"{marker}\n{_posix_path_export(shim_dir)}",
         )
     return (
         home_dir / ".zshrc",
-        f'{marker}\nexport PATH="{shim_dir}:$PATH"',
+        f"{marker}\n{_posix_path_export(shim_dir)}",
     )
 
 
@@ -943,17 +972,64 @@ def _package_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, 
     if shell == "fish":
         return (
             home_dir / ".config" / "fish" / "config.fish",
-            f"{marker}\nfish_add_path --prepend {shim_dir}",
+            f"{marker}\n{_fish_path_prepend(shim_dir)}",
         )
     if shell == "bash":
         return (
             home_dir / ".bashrc",
-            f'{marker}\nexport PATH="{shim_dir}:$PATH"',
+            f"{marker}\n{_posix_path_export(shim_dir)}",
         )
     return (
         home_dir / ".zshrc",
-        f'{marker}\nexport PATH="{shim_dir}:$PATH"',
+        f"{marker}\n{_posix_path_export(shim_dir)}",
     )
+
+
+def _package_shim_profile_targets(home_dir: Path, shim_dir: Path) -> tuple[tuple[Path, str], ...]:
+    """Return the selected-shell target plus Bash interactive and login targets.
+
+    ``$SHELL`` is the login shell, not necessarily the shell that launches a
+    package manager. On Linux a user can have a zsh login shell and run Bash,
+    and Bash reads different files for interactive and login sessions. Keep
+    the selected shell's normal target, then make the same idempotent export
+    available to both Bash startup modes.
+    """
+
+    primary = _package_shim_profile_target(home_dir, shim_dir)
+    marker = _PACKAGE_PROFILE_MARKER
+    bash_export = f"{marker}\n{_posix_path_export(shim_dir)}"
+    bash_login_path = _bash_login_profile_path(home_dir)
+    candidates = (
+        primary,
+        (home_dir / ".bashrc", bash_export),
+        (bash_login_path, bash_export),
+    )
+    deduplicated: list[tuple[Path, str]] = []
+    seen_paths: set[Path] = set()
+    for profile_path, export_line in candidates:
+        if profile_path in seen_paths:
+            continue
+        seen_paths.add(profile_path)
+        deduplicated.append((profile_path, export_line))
+    return tuple(deduplicated)
+
+
+def _bash_login_profile_path(home_dir: Path) -> Path:
+    """Choose Bash's first existing login profile without changing precedence."""
+
+    for name in (".bash_profile", ".bash_login"):
+        candidate = home_dir / name
+        if candidate.exists():
+            return candidate
+    return home_dir / ".profile"
+
+
+def _posix_path_export(shim_dir: Path) -> str:
+    return f"export PATH={shlex.quote(str(shim_dir))}:$PATH"
+
+
+def _fish_path_prepend(shim_dir: Path) -> str:
+    return f"fish_add_path --prepend -- {shlex.quote(str(shim_dir))}"
 
 
 def _is_transient_path(path: Path) -> bool:
@@ -983,8 +1059,10 @@ def _is_transient_path(path: Path) -> bool:
 
 def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
     shim_text = str(shim_dir)
+    expected_lines = {_posix_path_export(shim_dir), _fish_path_prepend(shim_dir)}
     return any(
-        (shim_text in line and "PATH" in line) or (shim_text in line and "fish_add_path" in line)
+        line.strip() in expected_lines
+        or ((shim_text in line and "PATH" in line) or (shim_text in line and "fish_add_path" in line))
         for line in content.splitlines()
     )
 
@@ -1288,15 +1366,15 @@ def _command_program_name() -> str:
 def _path_export_hint(shim_dir: Path) -> str:
     if os.name == "nt":
         return f"set PATH={shim_dir};%PATH%"
-    return f'export PATH="{shim_dir}:$PATH"'
+    return _posix_path_export(shim_dir)
 
 
 def _path_export_hints(shim_dir: Path) -> dict[str, str]:
-    posix_hint = f'export PATH="{shim_dir}:$PATH"'
+    posix_hint = _posix_path_export(shim_dir)
     return {
         "bash": posix_hint,
         "zsh": posix_hint,
-        "fish": f"fish_add_path --prepend {shim_dir}",
+        "fish": _fish_path_prepend(shim_dir),
         "powershell": f'$env:Path = "{shim_dir};$env:Path"',
     }
 

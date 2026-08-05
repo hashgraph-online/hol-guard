@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from ..browser_opener import open_browser_url
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
@@ -438,7 +439,7 @@ def _build_guard_device_connect_payload(
                 connect_url=connect_url,
                 wait_timeout_seconds=wait_timeout_seconds,
                 announce_copy=announce_copy,
-                open_browser=webbrowser.open,
+                open_browser=open_browser_url,
                 ci_safe=ci_safe,
                 machine_label=machine_label,
             )

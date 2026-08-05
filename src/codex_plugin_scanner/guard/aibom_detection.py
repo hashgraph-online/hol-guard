@@ -72,6 +72,7 @@ _WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
         "cursor",
         "gemini",
         "pi",
+        "omp",
     }
 )
 _STANDARDS_CONTEXT_ROOTS = (".", ".agents/context", "docs")

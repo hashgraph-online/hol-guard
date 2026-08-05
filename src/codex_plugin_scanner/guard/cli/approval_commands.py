@@ -5,13 +5,13 @@ from __future__ import annotations
 import argparse
 import os
 import urllib.parse
-import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..approval_gate import ApprovalGateError, require_high_risk, revoke_cooldown, unlock_cooldown
 from ..approval_gate import public_config as approval_gate_public_config
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
+from ..browser_opener import open_browser_url
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
 from ..daemon import load_guard_daemon_url
@@ -26,6 +26,7 @@ _HARNESS_RETRY_COPY: dict[str, str] = {
     "opencode": "Return to OpenCode and retry",
     "copilot": "Return to Copilot and retry",
     "pi": "Return to Pi and retry",
+    "omp": "Return to Oh My Pi and retry",
 }
 _DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
 
@@ -323,7 +324,7 @@ def _auto_open_first_pending_request(*, store: GuardStore, workspace: Path | Non
         approval_center_url=approval_center_url,
         approval_surface_policy=approval_surface_policy,
         open_key=f"approval-request:{request_id}",
-        opener=webbrowser.open,
+        opener=open_browser_url,
     )
     result["request_id"] = request_id
     return result

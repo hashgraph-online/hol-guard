@@ -265,7 +265,7 @@ def _native_hook_permission_decision(policy_action: str) -> str | None:
 def _should_exit_block(harness: str, event_name: str, policy_action: str) -> bool:
     """Mirror _should_emit_native_hook_exit_block."""
     canonical = harness.strip().lower().replace("_", "-")
-    if canonical in {"kimi", "grok", "pi", "zcode"} and event_name in {"PreToolUse", "UserPromptSubmit"}:
+    if canonical in {"kimi", "grok", "pi", "omp", "zcode"} and event_name in {"PreToolUse", "UserPromptSubmit"}:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 

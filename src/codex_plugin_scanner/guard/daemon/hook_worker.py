@@ -126,7 +126,7 @@ class HookWorker:
         request = self._request_from_payload(
             payload,
             harness=harness,
-            source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") == "pi",
+            source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
             home_dir=home_dir,
             guard_home=guard_home,
             workspace=workspace,
@@ -310,7 +310,7 @@ def post_tool_fail_safe_response(
     reason: str = "HOL Guard could not complete local hook review safely.",
     reason_code: str = "daemon_worker_exception",
 ) -> dict[str, object]:
-    if _canonical_hook_harness(harness) == "pi":
+    if _canonical_hook_harness(harness) in {"pi", "omp"}:
         return {
             "decision": "deny",
             "reason": reason,
@@ -332,7 +332,7 @@ def _harness_json_from_review_response(
         payload = {}
     if event_name != "PostToolUse":
         return payload
-    if _canonical_hook_harness(harness) == "pi":
+    if _canonical_hook_harness(harness) in {"pi", "omp"}:
         return payload
     decision = str(payload.get("decision") or "")
     model_output_action = str(payload.get("model_output_action") or "")

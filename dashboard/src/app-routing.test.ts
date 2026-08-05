@@ -43,6 +43,7 @@ assert(normalizeHarnessFilter("Ce2b7ac2ccab4fab9902347b033bf25e") === "all", "fi
 assert(isDisplayableHarness("codex"), "real app harness is displayable");
 assert(isConnectableAppHarness("codex"), "registered AI app is connectable");
 assert(isConnectableAppHarness("pi-agent"), "registered AI app alias is connectable");
+assert(isConnectableAppHarness("omp"), "Oh My Pi is a connectable app");
 assert(!isConnectableAppHarness("bunx"), "package runner is not sent to AI app setup");
 assert(!isConnectableAppHarness("guard-cli"), "Guard's internal source is not sent to AI app setup");
 assert(!isConnectableAppHarness("package-firewall"), "package firewall source is not sent to AI app setup");
@@ -53,6 +54,7 @@ assert(!isDisplayableHarness("*"), "wildcard pseudo-harness is not displayable")
 assert(!isDisplayableHarness("Ce2b7ac2ccab4fab9902347b033bf25e"), "token-like pseudo-harness is not displayable");
 assert(harnessDisplayName("*") === "All apps", "wildcard pseudo-harness never renders as raw star");
 assert(harnessDisplayName("grok") === "Grok", "grok harness displays as Grok");
+assert(harnessDisplayName("omp") === "Oh My Pi", "omp harness displays as Oh My Pi");
 assert(harnessDisplayName("grok") !== "*", "grok harness never renders as wildcard");
 assert(
   harnessDisplayName("Ce2b7ac2ccab4fab9902347b033bf25e") === "Unknown app",

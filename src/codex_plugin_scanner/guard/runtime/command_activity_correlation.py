@@ -42,6 +42,8 @@ _PROVEN_REQUEST_ID_FIELDS: Final[dict[tuple[str, str], str]] = {
     ("cursor", "afterMCPExecution"): "generation_id",
     ("pi", "PreToolUse"): "tool_call_id",
     ("pi", "PostToolUse"): "tool_call_id",
+    ("omp", "PreToolUse"): "tool_call_id",
+    ("omp", "PostToolUse"): "tool_call_id",
 }
 
 

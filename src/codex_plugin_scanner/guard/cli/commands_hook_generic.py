@@ -1143,7 +1143,7 @@ def _run_hook_generic_payload(
                 reason=block_reason,
                 output_stream=output_stream,
             )
-        elif _canonical_harness_name(args.harness) == "pi":
+        elif _canonical_harness_name(args.harness) in {"pi", "omp"}:
             from ..adapters.pi_hooks import emit_pi_hook_response
 
             emit_pi_hook_response(
@@ -1202,7 +1202,7 @@ def _run_hook_generic_payload(
                 output_stream=output_stream,
             )
             return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
-        if _canonical_harness_name(args.harness) == "pi":
+        if _canonical_harness_name(args.harness) in {"pi", "omp"}:
             from ..adapters.pi_hooks import emit_pi_hook_response
 
             emit_pi_hook_response(

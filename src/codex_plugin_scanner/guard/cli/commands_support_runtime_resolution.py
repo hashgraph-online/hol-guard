@@ -572,13 +572,13 @@ def _runtime_policy_path(
         if workspace is not None:
             return workspace / ".codex" / "config.toml"
         return home_dir / ".codex" / "config.toml"
-    if harness == "pi":
+    if harness in {"pi", "omp"}:
         override_path = _validated_pi_runtime_policy_override(home_dir, workspace, payload)
         if override_path is not None:
             return override_path
         if workspace is not None:
-            return workspace / ".pi" / "settings.json"
-        return home_dir / ".pi" / "agent" / "settings.json"
+            return workspace / (".omp" if harness == "omp" else ".pi") / "settings.json"
+        return home_dir / (".omp" if harness == "omp" else ".pi") / "agent" / "settings.json"
     if harness == "copilot":
         if workspace is not None:
             return workspace / ".github" / "hooks" / "hol-guard-copilot.json"

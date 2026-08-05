@@ -34,6 +34,12 @@ class TestMCPModuleImport:
 
         assert CONTRACT_VERSION == "guard-mcp.v1"
 
+    def test_omp_is_an_allowed_harness(self):
+        from codex_plugin_scanner.guard.mcp.schemas import VALID_HARNESSES, HarnessName
+
+        assert HarnessName.OMP.value == "omp"
+        assert "omp" in VALID_HARNESSES
+
 
 class TestMCPServerInitialization:
     """Verify the MCP server initializes correctly."""
@@ -349,6 +355,7 @@ class TestReceiptPagination:
     @pytest.fixture()
     def server(self, tmp_path: Path):
         from codex_plugin_scanner.guard.mcp.server import GuardMCPServer
+
         return GuardMCPServer(guard_home=tmp_path)
 
     def test_search_finds_older_receipt_beyond_page(self, server, tmp_path: Path):
@@ -363,6 +370,7 @@ class TestReceiptPagination:
 
     def test_fetch_finds_older_receipt_beyond_scan_limit(self, server, tmp_path: Path):
         from codex_plugin_scanner.guard.mcp.schemas import make_opaque_id
+
         oldest_receipt_id = "rcpt-oldest-target-001"
         _seed_receipt(tmp_path, server, artifact_name="oldest-target")
         for i in range(250):

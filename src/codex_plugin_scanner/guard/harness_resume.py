@@ -56,7 +56,7 @@ def resume_harness_operation(
     if operation is None:
         return None
     canonical_harness = _canonical_harness(operation.get("harness"))
-    if canonical_harness != "pi":
+    if canonical_harness not in {"pi", "omp"}:
         return None
     normalized_action = _normalize_action(action)
     if normalized_action is None:

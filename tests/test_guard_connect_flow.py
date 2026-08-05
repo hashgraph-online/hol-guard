@@ -203,7 +203,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
         return {}
 
     monkeypatch.setattr(daemon_server_module, "start_guard_browser_session", lambda **_: session)
-    monkeypatch.setattr(daemon_server_module.webbrowser, "open", lambda _url: True)
+    monkeypatch.setattr(daemon_server_module, "open_browser_url", lambda _url: True)
     monkeypatch.setattr(daemon_server_module, "prepare_guard_cloud_connect_authorization", fake_connect_preflight)
     monkeypatch.setattr(
         daemon_server_module,

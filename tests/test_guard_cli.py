@@ -32,6 +32,8 @@ from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_
 from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
+from codex_plugin_scanner.guard.cli import commands_support_workspace as guard_workspace_support_module
 from codex_plugin_scanner.guard.cli import product as guard_product_module
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
@@ -871,14 +873,34 @@ class TestGuardCli:
         assert "hook" not in error_output
         assert "daemon" not in error_output
 
-    def test_root_guard_missing_subcommand_points_to_root_help(self, monkeypatch, capsys):
+    def test_bare_hol_guard_runs_noninteractive_init_without_side_effects(self, tmp_path, monkeypatch):
+        side_effects: list[str] = []
         monkeypatch.setattr(sys, "argv", ["hol-guard"])
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: False)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda *_args, **_kwargs: side_effects.append("dashboard"),
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "apply_managed_install",
+            lambda *_args, **_kwargs: side_effects.append("apps"),
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_run_guard_device_connect_flow",
+            lambda **_kwargs: side_effects.append("cloud"),
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_desktop_notification_setup",
+            lambda *_args, **_kwargs: side_effects.append("notifications"),
+        )
 
-        with pytest.raises(SystemExit) as exc_info:
-            main([])
-
-        assert exc_info.value.code == 2
-        assert "Run `hol-guard --help` to inspect available Guard commands." in capsys.readouterr().err
+        assert main() == 0
+        assert side_effects == []
 
     def test_hol_guard_routes_flat_commands_without_nested_guard_alias(self, monkeypatch, capsys) -> None:
         called: dict[str, object] = {}
@@ -3061,7 +3083,7 @@ args = ["workspace-skill.js", "--changed"]
         assert store.get_managed_install("claude-code") is not None
         assert store.get_managed_install("claude") is None
 
-    def test_guard_install_omp_alias_dry_run_returns_pi_setup_plan(self, tmp_path, capsys):
+    def test_guard_install_omp_alias_dry_run_returns_omp_setup_plan(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         home_dir.mkdir(parents=True, exist_ok=True)
@@ -3085,11 +3107,11 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["dry_run"] is True
-        assert output["harness"] == "pi"
-        assert output["contract"]["harness"] == "pi"
+        assert output["harness"] == "omp"
+        assert output["contract"]["harness"] == "omp"
         assert "omp" in output["contract"]["install_aliases"]
         assert "oh-my-pi" in output["contract"]["install_aliases"]
-        assert store.get_managed_install("pi") is None
+        assert store.get_managed_install("omp") is None
 
     def test_guard_uninstall_claude_removes_legacy_claude_code_shim(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -7546,7 +7568,7 @@ url = http://127.0.0.1:8787/guard-canary
             del store, announce_copy, ci_safe, machine_label
             assert connect_url == "https://hol.org/guard/connect"
             assert wait_timeout_seconds == 180
-            assert open_browser is not None
+            assert open_browser is guard_connect_support_module.open_browser_url
             browser_opened = bool(open_browser("https://hol.org/guard/oauth/device"))
             return {
                 "status": "connected",
@@ -7559,7 +7581,11 @@ url = http://127.0.0.1:8787/guard-canary
 
         monkeypatch.setattr(guard_commands_module, "_run_guard_browser_connect_flow", unexpected_browser_flow)
         monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda target: opened.append(target) or True)
+        monkeypatch.setattr(
+            guard_connect_support_module,
+            "open_browser_url",
+            lambda target: opened.append(target) or True,
+        )
 
         connect_rc = main(
             [
@@ -8566,15 +8592,16 @@ url = http://127.0.0.1:8787/guard-canary
             }
 
         monkeypatch.setattr(guard_commands_module, "apply_managed_install", fake_install)
-        monkeypatch.setattr(
-            guard_commands_module,
-            "_run_guard_device_connect_flow",
-            lambda **_kwargs: {
+
+        def fake_device_connect_flow(**kwargs: object) -> dict[str, object]:
+            assert kwargs["open_browser"] is guard_workspace_support_module.open_browser_url
+            return {
                 "connected": False,
                 "status": "waiting_for_browser",
                 "connect_url": "https://hol.org/guard/connect",
-            },
-        )
+            }
+
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_connect_flow)
 
         def fake_setup(
             guard_home_path: Path,

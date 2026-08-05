@@ -182,7 +182,6 @@ args = ["workspace-skill.js", "--changed"]
 
         monkeypatch.setattr("codex_plugin_scanner.guard.cli.commands.sync_receipts", fail_cloud_call)
         monkeypatch.setattr("codex_plugin_scanner.guard.cli.commands.sync_runtime_session", fail_cloud_call)
-        monkeypatch.setattr("codex_plugin_scanner.guard.cli.commands.webbrowser.open", fail_cloud_call)
 
         rc = main(
             [

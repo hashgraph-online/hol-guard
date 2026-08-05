@@ -31,7 +31,7 @@ _MIN_SERVICE_SECONDS: Final = 0.1
 _MAX_SERVICE_SECONDS: Final = 2.8
 _MIN_PREDICTION_SAMPLES: Final = 20
 _HISTOGRAM_WINDOW_SECONDS: Final = 60.0
-_STABLE_HARNESSES: Final = frozenset({"pi", "codex", "claude-code", "cursor", "opencode"})
+_STABLE_HARNESSES: Final = frozenset({"pi", "omp", "codex", "claude-code", "cursor", "opencode"})
 
 
 @final

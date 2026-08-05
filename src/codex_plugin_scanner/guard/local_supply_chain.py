@@ -3049,6 +3049,8 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
         "path_status": path_status,
         "path_contains_shim_dir": bool(status.get("path_contains_shim_dir")),
         "restart_shell_required": bool(status.get("restart_shell_required")),
+        "process_path_status": str(status.get("process_path_status") or "missing"),
+        "process_restart_required": bool(status.get("process_restart_required")),
         "shell_profile_configured": bool(status.get("shell_profile_configured")),
         "shell_profile_path": status.get("shell_profile_path"),
         "shim_dir": str(shim_dir),

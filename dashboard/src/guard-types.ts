@@ -448,6 +448,8 @@ export type PackageManagerProtection = {
   path_status: "in_path" | "restart_required" | "missing_from_path";
   path_contains_shim_dir: boolean;
   restart_shell_required: boolean;
+  process_path_status?: "active" | "profile_staged" | "missing";
+  process_restart_required?: boolean;
   shell_profile_configured: boolean;
   shell_profile_path: string | null;
   shim_dir: string;

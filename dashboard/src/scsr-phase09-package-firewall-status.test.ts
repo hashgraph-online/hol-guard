@@ -70,6 +70,8 @@ const nestedPayload = normalizePackageFirewallStatus({
     tested_managers: ["npm"],
     path_broken_managers: [],
     path_status: "restart_required",
+    process_path_status: "profile_staged",
+    process_restart_required: true,
     last_intercept_proof_at: {
       npm: "2026-06-07T10:00:00Z",
     },
@@ -96,6 +98,14 @@ assert(
 assert(
   nestedNpm?.last_intercept_proof_at === "2026-06-07T10:00:00Z",
   "SCSR151: snake_case intercept proof map is read",
+);
+assert(
+  nestedPayload.protection?.process_path_status === "profile_staged",
+  "SCSR151: staged profile status remains distinct from a missing activation",
+);
+assert(
+  nestedPayload.protection?.process_restart_required === true,
+  "SCSR151: dashboard retains the process restart signal",
 );
 
 const pathBrokenSummaryPayload = normalizePackageFirewallStatus({

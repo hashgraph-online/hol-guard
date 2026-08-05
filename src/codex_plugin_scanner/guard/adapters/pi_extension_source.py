@@ -28,8 +28,15 @@ GUARD_HOOK_MAX_DEPTH = 24
 GUARD_HOOK_MAX_SERIALIZED_PAYLOAD_CHARS = 24_000
 
 
-def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path: Path) -> str:
-    guard_args = ["hook", "--json", "--guard-home", str(guard_home), "--harness", "pi"]
+def managed_extension_source(
+    *,
+    guard_home: Path,
+    home_dir: Path,
+    settings_path: Path,
+    harness: str = "pi",
+    display_name: str = "Pi",
+) -> str:
+    guard_args = ["hook", "--json", "--guard-home", str(guard_home), "--harness", harness]
     if home_dir.resolve() != Path.home().resolve():
         guard_args.extend(["--home", str(home_dir)])
     guard_args_json = json.dumps(guard_args)
@@ -53,7 +60,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "config={'python_executable':sys.executable,"
         f"'package_root':{str(package_root)!r},"
         f"'guard_home':{str(guard_home)!r},"
-        "'cli_args':argv,'harness':'pi','timeout_seconds':0.75};"
+        f"'cli_args':argv,'harness':{harness!r},'timeout_seconds':0.75}};"
         "raise SystemExit(run_bounded_cli_hook(config,input_text=sys.stdin.read(1000001)))"
     )
     cli_wrapper_command_json = json.dumps(str(Path(sys.executable).expanduser().absolute()))
@@ -78,7 +85,7 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
     except (OSError, ValueError):
         taskkill_path = None
     taskkill_path_json = json.dumps(taskkill_path)
-    return (
+    source = (
         'import { spawn } from "node:child_process";\n'
         + 'import { createCipheriv, createHash, randomBytes } from "node:crypto";\n'  # pyright: ignore[reportImplicitStringConcatenation]
         'import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";\n'
@@ -183,7 +190,8 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "      parsedPayload.guard_remaining_ms = Math.min(60_000, Math.max(1, Math.min(timeoutMs, remainingMs)));\n"
         "      daemonPayload = JSON.stringify(parsedPayload);\n"
         "    } catch {}\n"
-        "    const response = await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?${params.toString()}`, {\n"
+        f"    const response = await fetch(`http://127.0.0.1:${{connection.port}}"
+        f"/v1/hooks/{harness}?${{params.toString()}}`, {{\n"
         "      method: 'POST',\n"
         "      headers: {\n"
         "        'Content-Type': 'application/json',\n"
@@ -627,3 +635,4 @@ def managed_extension_source(*, guard_home: Path, home_dir: Path, settings_path:
         "  });\n"
         "}\n"
     )
+    return source.replace("Pi", display_name)

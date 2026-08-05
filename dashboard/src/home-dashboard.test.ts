@@ -141,6 +141,7 @@ const displayNames = [
   { harness: "openclaw", expected: "OpenClaw" },
   { harness: "kimi", expected: "Kimi" },
   { harness: "grok", expected: "Grok" },
+  { harness: "omp", expected: "Oh My Pi" },
 ];
 
 for (const { harness, expected } of displayNames) {

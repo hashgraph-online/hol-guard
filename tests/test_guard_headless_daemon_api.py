@@ -539,7 +539,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             return None
 
     monkeypatch.setattr(daemon_server, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
-    monkeypatch.setattr(daemon_server.webbrowser, "open", lambda _url: False)
+    monkeypatch.setattr(daemon_server, "open_browser_url", lambda _url: False)
     monkeypatch.setattr(
         daemon_server,
         "exchange_guard_authorization_code",
@@ -702,7 +702,7 @@ def test_guard_cloud_connect_starts_local_browser_flow_for_insights_share(
                 return None
 
         monkeypatch.setattr(daemon_server, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
-        monkeypatch.setattr(daemon_server.webbrowser, "open", lambda _url: True)
+        monkeypatch.setattr(daemon_server, "open_browser_url", lambda _url: True)
         monkeypatch.setattr(
             daemon_server,
             "exchange_guard_authorization_code",
@@ -785,7 +785,7 @@ def test_package_firewall_connect_accepts_hosted_dashboard_origin(
                 return None
 
         monkeypatch.setattr(daemon_server, "start_guard_browser_session", lambda **_kwargs: _FakeSession())
-        monkeypatch.setattr(daemon_server.webbrowser, "open", lambda _url: True)
+        monkeypatch.setattr(daemon_server, "open_browser_url", lambda _url: True)
         monkeypatch.setattr(
             daemon_server,
             "exchange_guard_authorization_code",
@@ -866,7 +866,7 @@ def _assert_connect_endpoint_coalesces_concurrent_browser_starts(
         return _FakeSession()
 
     monkeypatch.setattr(daemon_server, "start_guard_browser_session", _start_session_once)
-    monkeypatch.setattr(daemon_server.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+    monkeypatch.setattr(daemon_server, "open_browser_url", lambda url: opened_urls.append(url) or True)
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

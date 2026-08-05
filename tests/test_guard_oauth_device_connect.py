@@ -1381,7 +1381,10 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
         }
 
     monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_headless_flow)
-    monkeypatch.setattr(guard_commands.webbrowser, "open", lambda target: opened.append(target) or True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_connect.open_browser_url",
+        lambda target: opened.append(target) or True,
+    )
 
     exit_code = run_guard_command(args)
     captured = capsys.readouterr()

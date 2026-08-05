@@ -83,6 +83,33 @@ const pathBrokenStatus: PackageFirewallStatusResponse = {
 const repairAction = resolvePackageFirewallNextAction(pathBrokenStatus);
 assert(repairAction.op === "repair", "SCSR161: path broken manager suggests repair");
 
+const stagedPathStatus: PackageFirewallStatusResponse = {
+  ...baseStatus,
+  protection: {
+    ...baseStatus.protection!,
+    path_status: "restart_required",
+    process_path_status: "profile_staged",
+    process_restart_required: true,
+    restart_shell_required: true,
+    installed_managers: ["npm"],
+  },
+  package_shims: [
+    makeShim({
+      manager: "npm",
+      detected: true,
+      installed: true,
+      integrity: "ok",
+      activation_state: "restart_required",
+    }),
+  ],
+};
+const stagedAction = resolvePackageFirewallNextAction(stagedPathStatus);
+assert(stagedAction.op === null, "SCSR161b: staged shell profile must not invoke daemon test with stale PATH");
+assert(
+  stagedAction.detail.includes("dashboard daemon cannot observe"),
+  "SCSR161c: staged shell guidance explains process-local PATH truth",
+);
+
 const auditDetail = parsePackageFirewallActionResult("audit", {
   result: {
     decision: "monitor",

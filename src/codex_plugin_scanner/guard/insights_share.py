@@ -22,6 +22,7 @@ _HARNESS_LABELS: dict[str, str] = {
     "hermes": "Hermes",
     "opencode": "OpenCode",
     "pi": "Pi",
+    "omp": "Oh My Pi",
     "windsurf": "Windsurf",
 }
 

@@ -10,7 +10,6 @@ import shlex
 import subprocess
 import sys
 import threading
-import webbrowser
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
@@ -29,6 +28,7 @@ from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..approvals import approval_prompt_flow, build_approval_browser_url, first_approval_url, queue_blocked_approvals
+from ..browser_opener import open_browser_url
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
 from ..daemon.manager import load_guard_daemon_auth_token
@@ -648,7 +648,7 @@ class RuntimeMcpGuardProxy:
             browser_url=browser_url,
             approval_surface_policy=approval_surface_policy,
             open_key=open_key,
-            opener=webbrowser.open,
+            opener=open_browser_url,
         )
 
     def run_session(

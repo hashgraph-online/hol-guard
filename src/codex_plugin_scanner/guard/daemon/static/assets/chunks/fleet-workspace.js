@@ -10,12 +10,12 @@ const PROTECTION_CHECK_ACTIONS = {
     detail: "The local Guard runtime needs attention before protection can finish."
   },
   policy_engine: {
-    label: "Policy engine",
+    label: "Local policy engine",
     detail: "Guard could not confirm the local policy engine is ready."
   },
   rule_packs: {
-    label: "Rule packs",
-    detail: "Guard cannot confirm the active rule-pack proof yet."
+    label: "Local rule packs",
+    detail: "Guard cannot confirm the active local rule-pack proof yet."
   },
   decision_plane_compatibility: {
     label: "Decision plane",
@@ -34,10 +34,20 @@ const PROTECTION_CHECK_ACTIONS = {
     detail: "Guard attempts evidence-store recovery during repair. Run a protected command only if fresh proof is still needed."
   },
   tamper_checks: {
-    label: "Integrity checks",
+    label: "Local integrity checks",
     detail: "Managed Guard files or hooks did not pass integrity checks."
   }
 };
+function cloudPolicyRecoveryHint(input) {
+  const cloudProofUnavailable = input.cloudState !== "paired_active" || input.cloudSyncState !== "healthy" || Boolean(input.cloudPolicySyncError);
+  if (!cloudProofUnavailable) return null;
+  return {
+    actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
+    detail: "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
+    href: input.connectUrl,
+    title: "Guard Cloud policy proof"
+  };
+}
 function actionForCheck(check, repairHarness) {
   if (check.check_id === "harness_hooks" && repairHarness) {
     return {
@@ -72,14 +82,14 @@ function ProtectionGapItem({
 }
 function recoverySummary(failCount, unknownCount) {
   if (failCount === 0) {
-    return "Complete the remaining proof here. Guard repairs and rechecks every protection layer in one pass.";
+    return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
   }
   const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
   let remainingProofs = "";
   if (unknownCount > 0) {
     remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
   }
-  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every protection layer in one pass.`;
+  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
 }
 function repairButtonLabel(repairState) {
   if (repairState?.status === "working") return "Repairing…";
@@ -92,10 +102,11 @@ function FleetProtectionRecovery(props) {
   const gaps = props.health.checks.filter((check) => check.status !== "pass");
   const failCount = gaps.filter((check) => check.status === "fail").length;
   const unknownCount = gaps.length - failCount;
+  const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
   const handleRepair = reactExports.useCallback(async () => {
     setRepairState({
       status: "working",
-      message: "Repairing app hooks, runtime, rule packs, and integrity…"
+      message: "Repairing app hooks, local runtime, local rule packs, and local integrity…"
     });
     try {
       const message = await props.onRepairProtection(props.repairHarnesses);
@@ -131,12 +142,17 @@ function FleetProtectionRecovery(props) {
                   "aria-hidden": "true"
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Restore full protection" })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Restore local protection" })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: repairButtonLabel(repairState) })
         ] }),
+        cloudPolicyHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: cloudPolicyHint.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1", children: cloudPolicyHint.detail }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: cloudPolicyHint.href, variant: "outline", className: "mt-2", children: cloudPolicyHint.actionLabel })
+        ] }) : null,
         repairState ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "p",
           {
@@ -382,6 +398,12 @@ function FleetWorkspace(props) {
     protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       FleetProtectionRecovery,
       {
+        cloudPolicy: {
+          cloudState: props.runtime.cloud_state,
+          cloudSyncState: props.runtime.cloud_sync_health.state,
+          cloudPolicySyncError: props.runtime.cloud_policy_sync_error,
+          connectUrl: props.runtime.connect_url
+        },
         health: protectionHealth,
         repairHarness,
         repairHarnesses,

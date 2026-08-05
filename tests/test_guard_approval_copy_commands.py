@@ -564,8 +564,8 @@ class TestApprovalsAutoOpenCommand:
             lambda _guard_home: "http://127.0.0.1:5474",
         )
         monkeypatch.setattr(
-            approval_commands_module.webbrowser,
-            "open",
+            approval_commands_module,
+            "open_browser_url",
             lambda url: opened_urls.append(url) or True,
         )
 
@@ -594,8 +594,8 @@ class TestApprovalsAutoOpenCommand:
             lambda _guard_home: "http://127.0.0.1:5474",
         )
         monkeypatch.setattr(
-            approval_commands_module.webbrowser,
-            "open",
+            approval_commands_module,
+            "open_browser_url",
             lambda url: opened_urls.append(url) or True,
         )
 
@@ -619,8 +619,8 @@ class TestApprovalsAutoOpenCommand:
             lambda _guard_home: "http://127.0.0.1:5474",
         )
         monkeypatch.setattr(
-            approval_commands_module.webbrowser,
-            "open",
+            approval_commands_module,
+            "open_browser_url",
             lambda url: opened_urls.append(url) or True,
         )
 

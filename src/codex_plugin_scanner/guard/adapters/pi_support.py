@@ -41,6 +41,7 @@ def stable_suffix(value: str) -> str:
 
 def artifact(
     *,
+    harness: str,
     artifact_id: str,
     name: str,
     artifact_type: str,
@@ -52,7 +53,7 @@ def artifact(
     return GuardArtifact(
         artifact_id=artifact_id,
         name=name,
-        harness="pi",
+        harness=harness,
         artifact_type=artifact_type,
         source_scope=scope,
         config_path=str(path),

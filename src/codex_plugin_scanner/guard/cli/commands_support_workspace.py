@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from ..browser_opener import open_browser_url
 
 def _add_guard_common_args(
     parser: argparse.ArgumentParser,
@@ -277,7 +278,7 @@ def _run_init_command(
                         announce_copy=None
                         if getattr(args, "json", False)
                         else _announce_guard_device_connect_copy,
-                        open_browser=webbrowser.open,
+                        open_browser=open_browser_url,
                     )
                     step_payload = _finalize_guard_connect_payload(
                         store=store,

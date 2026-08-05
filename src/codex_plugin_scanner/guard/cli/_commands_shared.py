@@ -20,7 +20,6 @@ import subprocess
 import sys
 import urllib.error
 import urllib.parse
-import webbrowser
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, replace

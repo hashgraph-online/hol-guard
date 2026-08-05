@@ -17,6 +17,7 @@ _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
     (".grok", "GrokHarnessAdapter"),
     (".hermes", "HermesHarnessAdapter"),
     (".kimi", "KimiHarnessAdapter"),
+    (".pi", "OmpHarnessAdapter"),
     (".pi", "PiHarnessAdapter"),
     (".openclaw", "OpenClawHarnessAdapter"),
     (".opencode", "OpenCodeHarnessAdapter"),

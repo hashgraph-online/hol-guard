@@ -252,7 +252,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
     try:
         with (
             patch(
-                "codex_plugin_scanner.guard.daemon.server.webbrowser.open",
+                "codex_plugin_scanner.guard.daemon.server.open_browser_url",
                 side_effect=lambda url: browser_calls.append(str(url)) or False,
             ),
             ThreadPoolExecutor(max_workers=max_workers) as executor,

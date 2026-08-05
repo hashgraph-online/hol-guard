@@ -39,7 +39,8 @@
         "gemini",
         "hermes",
         "openclaw",
-        "pi"
+        "pi",
+        "omp"
     ],
     "supported_harnesses": [
         "codex",
@@ -54,6 +55,7 @@
         "kimi",
         "grok",
         "pi",
+        "omp",
         "zcode"
     ],
     "action_categories": [

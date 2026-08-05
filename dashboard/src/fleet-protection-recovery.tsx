@@ -19,6 +19,20 @@ type GapAction = {
 
 type RepairState = { status: "working" | "success" | "error"; message: string };
 
+export type CloudPolicyRecoveryInput = {
+  cloudState: "local_only" | "paired_waiting" | "paired_active";
+  cloudSyncState: "healthy" | "pending" | "failed" | "degraded" | "disabled" | "stale";
+  cloudPolicySyncError?: string | null;
+  connectUrl: string;
+};
+
+type CloudPolicyRecoveryHint = {
+  actionLabel: string;
+  detail: string;
+  href: string;
+  title: string;
+};
+
 const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
   harness_hooks: {
     label: "App hooks",
@@ -30,12 +44,12 @@ const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
       "The local Guard runtime needs attention before protection can finish.",
   },
   policy_engine: {
-    label: "Policy engine",
+    label: "Local policy engine",
     detail: "Guard could not confirm the local policy engine is ready.",
   },
   rule_packs: {
-    label: "Rule packs",
-    detail: "Guard cannot confirm the active rule-pack proof yet.",
+    label: "Local rule packs",
+    detail: "Guard cannot confirm the active local rule-pack proof yet.",
   },
   decision_plane_compatibility: {
     label: "Decision plane",
@@ -58,10 +72,25 @@ const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
       "Guard attempts evidence-store recovery during repair. Run a protected command only if fresh proof is still needed.",
   },
   tamper_checks: {
-    label: "Integrity checks",
+    label: "Local integrity checks",
     detail: "Managed Guard files or hooks did not pass integrity checks.",
   },
 };
+
+export function cloudPolicyRecoveryHint(input: CloudPolicyRecoveryInput): CloudPolicyRecoveryHint | null {
+  const cloudProofUnavailable =
+    input.cloudState !== "paired_active"
+    || input.cloudSyncState !== "healthy"
+    || Boolean(input.cloudPolicySyncError);
+  if (!cloudProofUnavailable) return null;
+  return {
+    actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
+    detail:
+      "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
+    href: input.connectUrl,
+    title: "Guard Cloud policy proof",
+  };
+}
 
 function actionForCheck(
   check: GuardProtectionCheck,
@@ -111,6 +140,7 @@ function ProtectionGapItem({
 }
 
 type FleetProtectionRecoveryProps = {
+  cloudPolicy: CloudPolicyRecoveryInput;
   health: GuardProtectionHealth;
   repairHarness?: string;
   repairHarnesses: string[];
@@ -119,14 +149,14 @@ type FleetProtectionRecoveryProps = {
 
 function recoverySummary(failCount: number, unknownCount: number): string {
   if (failCount === 0) {
-    return "Complete the remaining proof here. Guard repairs and rechecks every protection layer in one pass.";
+    return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
   }
   const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
   let remainingProofs = "";
   if (unknownCount > 0) {
     remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
   }
-  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every protection layer in one pass.`;
+  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
 }
 
 function repairButtonLabel(repairState: RepairState | null): string {
@@ -141,11 +171,12 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const gaps = props.health.checks.filter((check) => check.status !== "pass");
   const failCount = gaps.filter((check) => check.status === "fail").length;
   const unknownCount = gaps.length - failCount;
+  const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
 
   const handleRepair = useCallback(async () => {
     setRepairState({
       status: "working",
-      message: "Repairing app hooks, runtime, rule packs, and integrity…",
+      message: "Repairing app hooks, local runtime, local rule packs, and local integrity…",
     });
     try {
       const message = await props.onRepairProtection(props.repairHarnesses);
@@ -183,7 +214,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
               aria-hidden="true"
             />
             <h2 className="text-sm font-semibold text-brand-dark">
-              Restore full protection
+              Restore local protection
             </h2>
           </div>
           <p className="mt-1 text-sm text-slate-600">
@@ -194,6 +225,15 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           {repairButtonLabel(repairState)}
         </ActionButton>
       </div>
+      {cloudPolicyHint ? (
+        <div className="mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600">
+          <p className="font-medium text-brand-dark">{cloudPolicyHint.title}</p>
+          <p className="mt-1">{cloudPolicyHint.detail}</p>
+          <ActionButton href={cloudPolicyHint.href} variant="outline" className="mt-2">
+            {cloudPolicyHint.actionLabel}
+          </ActionButton>
+        </div>
+      ) : null}
       {repairState ? (
         <p
           className={`mt-3 flex items-start gap-2 text-sm ${repairState.status === "error" ? "text-red-600" : "text-slate-600"}`}

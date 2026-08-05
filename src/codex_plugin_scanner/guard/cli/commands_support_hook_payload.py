@@ -60,6 +60,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..adapters.kimi_hooks import normalize_kimi_prompt
+from ..browser_opener import open_browser_url
 from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
 
 def _emit_native_hook_response(
@@ -390,7 +391,7 @@ def _open_approval_center(
         approval_surface_policy=config.approval_surface_policy,
         open_key=open_key or approval_center_url,
         force_open=force_open,
-        opener=webbrowser.open,
+        opener=open_browser_url,
     )
     open_result["browser_url"] = _public_approval_center_url(browser_url) or approval_center_url
     return open_result
@@ -473,6 +474,7 @@ _ACTION_ENVELOPE_HARNESSES = frozenset(
         "grok",
         "kimi",
         "pi",
+        "omp",
         "zcode",
     }
 )

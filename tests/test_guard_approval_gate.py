@@ -2048,7 +2048,7 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     opened_urls: list[str] = []
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
     monkeypatch.setattr(runtime_mcp_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
-    monkeypatch.setattr(runtime_mcp_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+    monkeypatch.setattr(runtime_mcp_module, "open_browser_url", lambda url: opened_urls.append(url) or True)
 
     response, event = proxy._allow_and_forward(
         message={"id": 1},

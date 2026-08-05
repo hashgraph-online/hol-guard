@@ -402,7 +402,10 @@ def test_gr081b_codex_package_install_pretooluse_is_live_wait_candidate() -> Non
 def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsys) -> None:
     opened_urls: list[str] = []
 
-    monkeypatch.setattr(guard_commands_module.webbrowser, "open", opened_urls.append)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_interaction.open_browser_url",
+        lambda url: opened_urls.append(url) or True,
+    )
 
     guard_commands_module._open_codex_live_approval(
         {

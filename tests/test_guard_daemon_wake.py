@@ -145,8 +145,8 @@ class TestNoDashboardApprovalURLWake:
 
     def test_approval_url_exposed_without_browser_open(self, tmp_path, monkeypatch) -> None:
         """Guard must provide an approval URL for CLI/headless consumers
-        even when webbrowser.open is never called."""
-        import webbrowser
+        even when the shared browser opener is never called."""
+        from codex_plugin_scanner.guard import browser_opener
 
         guard_home = tmp_path / "guard-home"
         port = 5703
@@ -155,7 +155,7 @@ class TestNoDashboardApprovalURLWake:
         def _fake_browser_open(url: str, *_args, **_kwargs) -> None:
             browser_opens.append(url)
 
-        monkeypatch.setattr(webbrowser, "open", _fake_browser_open)
+        monkeypatch.setattr(browser_opener, "open_browser_url", _fake_browser_open)
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
         monkeypatch.setattr(
             daemon_manager_module,

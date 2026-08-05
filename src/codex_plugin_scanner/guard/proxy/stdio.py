@@ -8,7 +8,6 @@ import queue
 import select
 import subprocess
 import threading
-import webbrowser
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -24,6 +23,7 @@ from ..approvals import (
     first_approval_url,
     queue_blocked_approvals,
 )
+from ..browser_opener import open_browser_url
 from ..config import GuardConfig, resolve_risk_action
 from ..consumer import artifact_hash
 from ..daemon.manager import load_guard_daemon_auth_token
@@ -420,7 +420,7 @@ class StdioGuardProxy:
             browser_url=browser_url,
             approval_surface_policy=approval_surface_policy,
             open_key=open_key,
-            opener=webbrowser.open,
+            opener=open_browser_url,
         )
 
     def run_session(self, messages: list[dict[str, Any]]) -> dict[str, Any]:

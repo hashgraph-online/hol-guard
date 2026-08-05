@@ -41,6 +41,7 @@ class HarnessName(str, Enum):
     OPENCLAW = "openclaw"
     ANTIGRAVITY = "antigravity"
     PI = "pi"
+    OMP = "omp"
 
 
 VALID_HARNESSES = frozenset(h.value for h in HarnessName)

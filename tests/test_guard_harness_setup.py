@@ -401,8 +401,7 @@ def test_apps_connect_opens_guard_cloud_app_page(
         lambda _guard_home: "local-daemon-token-1234567890",
     )
     monkeypatch.setattr(
-        guard_commands_module.webbrowser,
-        "open",
+        "codex_plugin_scanner.guard.cli.commands_support_interaction.open_browser_url",
         lambda url: opened_urls.append(url) or True,
     )
     args = argparse.Namespace(

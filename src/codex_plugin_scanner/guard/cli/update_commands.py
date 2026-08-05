@@ -33,6 +33,7 @@ from ..adapters.opencode_pretool import (
     managed_plugin_path,
     pretool_plugin_source,
 )
+from ..adapters.pi import legacy_omp_managed_extension_is_verified
 from ..codex_hook_integrity import CodexHookIntegrityError, load_authenticated_hook_manifest
 from ..config import load_guard_config, resolve_guard_home
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
@@ -2060,37 +2061,91 @@ def _repair_supported_harnesses_in_process(
         repaired_installs.append(repaired_cursor)
     if cursor_warning is not None:
         repair_notes.append(cursor_warning)
-    repaired_pi, pi_warning = _repair_pi_install(
+    legacy_omp_migration, legacy_omp_warning = _migrate_legacy_omp_install(
         context=context,
         store=store,
         workspace=workspace,
         now=now,
     )
-    if repaired_pi is not None:
-        repaired_installs.append(repaired_pi)
-    if pi_warning is not None:
-        repair_notes.append(pi_warning)
+    if legacy_omp_migration is not None:
+        repaired_installs.append(legacy_omp_migration)
+    if legacy_omp_warning is not None:
+        repair_notes.append(legacy_omp_warning)
+    for harness, display_name in (("pi", "Pi"), ("omp", "Oh My Pi")):
+        if harness == "omp" and legacy_omp_migration is not None:
+            continue
+        repaired_pi_family, pi_family_warning = _repair_pi_family_install(
+            harness=harness,
+            display_name=display_name,
+            context=context,
+            store=store,
+            workspace=workspace,
+            now=now,
+        )
+        if repaired_pi_family is not None:
+            repaired_installs.append(repaired_pi_family)
+        if pi_family_warning is not None:
+            repair_notes.append(pi_family_warning)
     opencode_note = _refresh_opencode_pretool_plugin(context=context, store=store)
     if opencode_note is not None:
         repair_notes.append(opencode_note)
     return repaired_installs, repair_notes
 
 
-def _repair_pi_install(
+def _migrate_legacy_omp_install(
     *,
     context: HarnessContext,
     store: GuardStore,
     workspace: str | None,
     now: str,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Rewrite the managed Pi extension after package updates.
+    """Split only a verified extension from the former combined Pi installation."""
+
+    try:
+        pi_install = store.get_managed_install("pi")
+        omp_install = store.get_managed_install("omp")
+    except (json.JSONDecodeError, sqlite3.Error):
+        return None, None
+    if omp_install is not None or pi_install is None:
+        return None, None
+    if not legacy_omp_managed_extension_is_verified(context, pi_install):
+        return None, None
+    try:
+        repair_context, repair_workspace = _repair_context_from_managed_install(context, pi_install)
+        payload = apply_managed_install(
+            "install",
+            "omp",
+            False,
+            repair_context,
+            store,
+            repair_workspace or workspace,
+            now,
+        )
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+        return None, f"Could not migrate verified Oh My Pi protection during update: {error}"
+    migrated = payload.get("managed_install")
+    if not isinstance(migrated, dict):
+        return None, "Could not migrate verified Oh My Pi protection during update: managed install was not recorded"
+    return migrated, None
+
+
+def _repair_pi_family_install(
+    *,
+    harness: str,
+    display_name: str,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Rewrite one managed Pi-family extension after package updates.
 
     The extension embeds timeout and daemon-compat constants. Refreshing it after
     update keeps the fast daemon path available and avoids cold CLI timeouts.
     """
 
     try:
-        managed_install = store.get_managed_install("pi")
+        managed_install = store.get_managed_install(harness)
     except (json.JSONDecodeError, sqlite3.Error):
         return None, None
     if managed_install is None or not bool(managed_install.get("active")):
@@ -2099,7 +2154,7 @@ def _repair_pi_install(
         repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
         payload = apply_managed_install(
             "install",
-            "pi",
+            harness,
             False,
             repair_context,
             store,
@@ -2107,10 +2162,10 @@ def _repair_pi_install(
             now,
         )
     except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
-        return None, f"Could not refresh Pi protection during update: {error}"
+        return None, f"Could not refresh {display_name} protection during update: {error}"
     repaired = payload.get("managed_install")
     if not isinstance(repaired, dict):
-        return None, "Could not refresh Pi protection during update: managed install was not recorded"
+        return None, f"Could not refresh {display_name} protection during update: managed install was not recorded"
     return repaired, None
 
 

@@ -59,6 +59,9 @@ def remove_guard_profile_blocks(
 def _managed_shell_profile_paths(home_dir: Path) -> tuple[Path, ...]:
     return (
         home_dir / ".bashrc",
+        home_dir / ".bash_profile",
+        home_dir / ".bash_login",
+        home_dir / ".profile",
         home_dir / ".zshrc",
         home_dir / ".config" / "fish" / "config.fish",
     )

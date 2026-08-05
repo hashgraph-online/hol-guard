@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING
 
+from ..browser_opener import open_browser_url
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 
 if TYPE_CHECKING:
@@ -144,7 +145,7 @@ def _run_apps_command(
             payload["cloud_app"] = _open_guard_cloud_app(
                 harness=canonical_harness,
                 guard_home=context.guard_home,
-                opener=webbrowser.open,
+                opener=open_browser_url,
             )
         except (RuntimeError, OSError) as error:
             payload["cloud_app"] = _guard_cloud_app_error_payload(
@@ -290,7 +291,7 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     return (
-        _canonical_harness_name(args.harness) in {"claude-code", "codex", "kimi", "grok", "pi", "zcode"}
+        _canonical_harness_name(args.harness) in {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode"}
         and not getattr(args, "json", False)
     )
 
@@ -330,7 +331,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     # Codex v0.133 logs non-zero PreToolUse hooks as failed but still executes
     # the tool. Blocking must be communicated through the JSON hook response.
     canonical = _canonical_harness_name(args.harness)
-    if canonical in {"kimi", "grok", "pi", "zcode"} and event_name in {"PreToolUse", "UserPromptSubmit"}:
+    if canonical in {"kimi", "grok", "pi", "omp", "zcode"} and event_name in {"PreToolUse", "UserPromptSubmit"}:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
@@ -756,7 +757,7 @@ def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_h
             or review_url
         )
     with suppress(Exception):
-        webbrowser.open(browser_url)
+        open_browser_url(browser_url)
 
 __all__ = [
     "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_build_cisco_scan_options",

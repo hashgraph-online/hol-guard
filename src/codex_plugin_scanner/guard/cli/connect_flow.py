@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
+from ..browser_opener import open_browser_url
 from ..mdm.network import managed_urlopen
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
@@ -1215,7 +1216,7 @@ def run_guard_browser_connect_command(
         device = store.get_device_metadata()
         _, allowed_origin = resolve_connect_url(connect_url)
         oauth_client = resolve_guard_oauth_client_config(allowed_origin)
-        browser_opener = open_browser if open_browser is not None else __import__("webbrowser").open
+        browser_opener = open_browser if open_browser is not None else open_browser_url
 
         bar.step("Starting browser session...")
         session = start_browser_session(

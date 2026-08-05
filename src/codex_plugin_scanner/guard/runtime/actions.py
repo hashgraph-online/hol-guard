@@ -482,21 +482,40 @@ def normalize_zcode_hook_payload(
     )
 
 
+def _normalize_pi_family_payload(
+    payload: Mapping[str, object],
+    *,
+    harness: str,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Pi-family extension event payload into a typed action envelope."""
+
+    return _normalize_action_payload(
+        payload,
+        harness=harness,
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def normalize_pi_payload(
     payload: Mapping[str, object],
     *,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
 ) -> GuardActionEnvelope:
-    """Normalize a Pi extension event payload into a typed action envelope."""
+    return _normalize_pi_family_payload(payload, harness="pi", workspace=workspace, home_dir=home_dir)
 
-    return _normalize_action_payload(
-        payload,
-        harness="pi",
-        default_event_name=None,
-        workspace=workspace,
-        home_dir=home_dir,
-    )
+
+def normalize_omp_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    return _normalize_pi_family_payload(payload, harness="omp", workspace=workspace, home_dir=home_dir)
 
 
 def normalize_kimi_payload(
@@ -533,6 +552,7 @@ _ACTION_PAYLOAD_NORMALIZERS = {
     "grok": normalize_grok_hook_payload,
     "kimi": normalize_kimi_payload,
     "pi": normalize_pi_payload,
+    "omp": normalize_omp_payload,
     "zcode": normalize_zcode_hook_payload,
     "zai": normalize_zcode_hook_payload,
 }

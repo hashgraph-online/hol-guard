@@ -107,7 +107,7 @@ def test_runtime_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypa
     opened_urls: list[str] = []
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(runtime_mcp_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
-    monkeypatch.setattr(runtime_mcp_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+    monkeypatch.setattr(runtime_mcp_module, "open_browser_url", lambda url: opened_urls.append(url) or True)
     proxy = RuntimeMcpGuardProxy(
         harness="hermes",
         server_name="danger_lab",
@@ -148,7 +148,7 @@ def test_runtime_guard_proxy_rewrites_stale_request_url_to_active_approval_cente
     marker_path = tmp_path / "dangerous-call.json"
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(runtime_mcp_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
-    monkeypatch.setattr(runtime_mcp_module.webbrowser, "open", lambda _url: True)
+    monkeypatch.setattr(runtime_mcp_module, "open_browser_url", lambda _url: True)
     monkeypatch.setattr(
         runtime_mcp_module,
         "queue_blocked_approvals",
@@ -207,8 +207,8 @@ def test_runtime_guard_proxy_respects_native_only_approval_surface_policy(tmp_pa
         lambda _guard_home: (_ for _ in ()).throw(AssertionError("should not read auth token")),
     )
     monkeypatch.setattr(
-        runtime_mcp_module.webbrowser,
-        "open",
+        runtime_mcp_module,
+        "open_browser_url",
         lambda _url: (_ for _ in ()).throw(AssertionError("should not open browser")),
     )
     proxy = RuntimeMcpGuardProxy(

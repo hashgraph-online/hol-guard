@@ -401,7 +401,10 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
     opened_urls: list[str] = []
     resolved_request_ids: list[str] = []
-    monkeypatch.setattr(guard_commands_module.webbrowser, "open", opened_urls.append)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_interaction.open_browser_url",
+        lambda url: opened_urls.append(url) or True,
+    )
 
     def resolve_actual_exact_request(**kwargs: object) -> dict[str, object]:
         request_ids = kwargs.get("request_ids")
@@ -502,7 +505,10 @@ def test_guard_hook_ask_package_live_wait_caps_browser_approval_wait(
         raise RuntimeError("no daemon")
 
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
-    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: None)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_interaction.open_browser_url",
+        lambda _url: False,
+    )
 
     def unresolved_wait(**kwargs: object) -> dict[str, object]:
         timeout_seconds = kwargs.get("timeout_seconds")

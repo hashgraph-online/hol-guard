@@ -8,6 +8,7 @@ import {
   fetchApprovalPage,
   fetchGuardUpdateStatus,
   GuardHarnessActionError,
+  GuardProtectionRepairError,
   GuardSessionUnavailableError,
   fetchQueueSummary,
   fetchRuntimeSnapshot,
@@ -47,6 +48,17 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const snapshot = buildDemoRuntimeSnapshot();
+
+const localIntegrityRepairError = new GuardProtectionRepairError(409, {
+  error: "local_integrity_repair_incomplete",
+  repair_scope: "local_integrity",
+  message: "Guard could not establish a local integrity proof.",
+});
+assert(
+  localIntegrityRepairError.code === "local_integrity_repair_incomplete" &&
+    localIntegrityRepairError.repairScope === "local_integrity",
+  "protection repair preserves the structured local-integrity failure scope",
+);
 
 const missingRuntimeStateSnapshot = normalizeRuntimeSnapshot({
   ...snapshot,

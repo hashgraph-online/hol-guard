@@ -11187,7 +11187,10 @@ def test_guard_run_headless_blocks_with_review_hint_without_opening_browser(tmp_
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
     opened_urls: list[str] = []
-    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_hook_payload.open_browser_url",
+        lambda url: opened_urls.append(url) or True,
+    )
 
     rc = main(
         [
@@ -11263,7 +11266,10 @@ def test_headless_approval_resolver_skips_browser_for_hook_first_harnesses(tmp_p
         "load_guard_surface_daemon_client",
         lambda _guard_home: FailingDaemonClient(),
     )
-    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_hook_payload.open_browser_url",
+        lambda url: opened_urls.append(url) or True,
+    )
 
     blocked_resolver = guard_commands_module._headless_approval_resolver(
         args=argparse.Namespace(harness="copilot"),
@@ -18596,8 +18602,8 @@ def test_stdio_proxy_respects_native_only_approval_surface_policy(tmp_path, monk
         lambda _guard_home: (_ for _ in ()).throw(AssertionError("should not read auth token")),
     )
     monkeypatch.setattr(
-        stdio_proxy_module.webbrowser,
-        "open",
+        stdio_proxy_module,
+        "open_browser_url",
         lambda _url: (_ for _ in ()).throw(AssertionError("should not open browser")),
     )
     proxy = StdioGuardProxy(
@@ -18703,8 +18709,8 @@ def test_stdio_proxy_respects_adapter_no_browser_flow(tmp_path, monkeypatch):
         lambda _guard_home: (_ for _ in ()).throw(AssertionError("should not read auth token")),
     )
     monkeypatch.setattr(
-        stdio_proxy_module.webbrowser,
-        "open",
+        stdio_proxy_module,
+        "open_browser_url",
         lambda _url: (_ for _ in ()).throw(AssertionError("should not open browser")),
     )
     proxy = StdioGuardProxy(

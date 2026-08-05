@@ -12,6 +12,9 @@ Regression coverage for two defects:
 
 from __future__ import annotations
 
+import os
+import shlex
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -22,8 +25,11 @@ from codex_plugin_scanner.guard.shims import (
     _is_transient_path,
     _strip_managed_marker_blocks,
     _upsert_managed_profile_block,
+    activate_package_shims,
     ensure_guard_shim_path_in_shell_profile,
     ensure_package_shim_path_in_shell_profile,
+    install_package_shims,
+    package_shim_status,
     remove_guard_profile_blocks,
 )
 
@@ -180,6 +186,157 @@ class TestEnsureWritesStablePath:
         text = (home / ".zshrc").read_text(encoding="utf-8")
         assert text.count(_PACKAGE_PROFILE_MARKER) == 1
         assert "package-shims/bin" in text
+
+    def test_package_shim_path_works_in_bash_interactive_and_login_shells(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A zsh login shell must not leave Bash package commands unprotected."""
+
+        home = tmp_path / "home"
+        home.mkdir()
+        guard_home = home / ".hol-guard"
+        context = _context(home, guard_home)
+        bash_login_profile = home / ".bash_profile"
+        bash_login_profile.write_text("export KEEP_LOGIN=1\n", encoding="utf-8")
+        monkeypatch.setenv("SHELL", "/bin/zsh")
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims._is_transient_path", lambda _path: False)
+        install_package_shims(context, managers=("npm",))
+        result = ensure_package_shim_path_in_shell_profile(context)
+        shim_path = guard_home / "package-shims" / "bin" / "npm"
+
+        assert result["profile_path"] == str(home / ".zshrc")
+        assert set(result["profile_paths"]) == {
+            str(home / ".zshrc"),
+            str(home / ".bashrc"),
+            str(home / ".bash_profile"),
+        }
+        assert (home / ".bashrc").read_text(encoding="utf-8").count(_PACKAGE_PROFILE_MARKER) == 1
+        assert "export KEEP_LOGIN=1" in bash_login_profile.read_text(encoding="utf-8")
+        assert bash_login_profile.read_text(encoding="utf-8").count(_PACKAGE_PROFILE_MARKER) == 1
+
+        shell_env = dict(os.environ)
+        shell_env["HOME"] = str(home)
+        shell_env["PATH"] = os.environ.get("PATH", "")
+        interactive = subprocess.run(
+            ["bash", "--noprofile", "--norc", "-ic", 'source "$HOME/.bashrc"; command -v npm'],
+            capture_output=True,
+            check=True,
+            env=shell_env,
+            text=True,
+        )
+        login = subprocess.run(
+            ["bash", "-lc", "command -v npm"],
+            capture_output=True,
+            check=True,
+            env=shell_env,
+            text=True,
+        )
+
+        assert Path(interactive.stdout.strip()) == shim_path
+        assert Path(login.stdout.strip()) == shim_path
+        status = package_shim_status(context)
+        assert status["process_path_status"] == "profile_staged"
+        assert status["shell_profile_paths"] == [
+            str(home / ".zshrc"),
+            str(home / ".bashrc"),
+            str(home / ".bash_profile"),
+        ]
+
+    def test_partial_profile_migration_stays_repairable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        guard_home = home / ".hol-guard"
+        context = _context(home, guard_home)
+        monkeypatch.setenv("SHELL", "/bin/zsh")
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims._is_transient_path", lambda _path: False)
+        install_package_shims(context, managers=("npm",))
+        shim_dir = guard_home / "package-shims" / "bin"
+        (home / ".zshrc").write_text(
+            f'{_PACKAGE_PROFILE_MARKER}\nexport PATH="{shim_dir}:$PATH"\n',
+            encoding="utf-8",
+        )
+
+        before = package_shim_status(context)
+
+        assert before["shell_profile_configured"] is False
+        assert before["process_path_status"] == "missing"
+        assert before["shell_profile_paths"] == [str(home / ".zshrc")]
+        assert before["shell_profile_missing_paths"] == [
+            str(home / ".bashrc"),
+            str(home / ".profile"),
+        ]
+
+        repaired = activate_package_shims(context, managers=("npm",), repair=True)
+
+        assert repaired["activation_state"] == "restart_required"
+        after = package_shim_status(context)
+        assert after["shell_profile_configured"] is True
+        assert after["process_path_status"] == "profile_staged"
+        assert after["shell_profile_missing_paths"] == []
+
+    def test_hostile_guard_home_path_is_literal_in_bash_profiles(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        sentinel = tmp_path / "shim-injection-ran"
+        guard_home = home / "guard 'quoted' $(touch shim-injection-ran) \\ suffix"
+        context = _context(home, guard_home)
+        (home / ".bash_profile").write_text("export KEEP_LOGIN=1\n", encoding="utf-8")
+        monkeypatch.setenv("SHELL", "/bin/zsh")
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims._is_transient_path", lambda _path: False)
+        install_package_shims(context, managers=("npm",))
+        ensure_package_shim_path_in_shell_profile(context)
+        shim_path = guard_home / "package-shims" / "bin" / "npm"
+
+        shell_env = dict(os.environ)
+        shell_env["HOME"] = str(home)
+        shell_env["PATH"] = os.environ.get("PATH", "")
+        interactive = subprocess.run(
+            ["bash", "--noprofile", "--norc", "-ic", 'source "$HOME/.bashrc"; command -v npm'],
+            capture_output=True,
+            check=True,
+            cwd=tmp_path,
+            env=shell_env,
+            text=True,
+        )
+        login = subprocess.run(
+            ["bash", "-lc", "command -v npm"],
+            capture_output=True,
+            check=True,
+            cwd=tmp_path,
+            env=shell_env,
+            text=True,
+        )
+
+        assert not sentinel.exists()
+        assert Path(interactive.stdout.strip()) == shim_path
+        assert Path(login.stdout.strip()) == shim_path
+        status = package_shim_status(context)
+        assert status["shell_profile_configured"] is True
+        assert status["process_path_status"] == "profile_staged"
+        assert status["shell_profile_missing_paths"] == []
+
+    def test_hostile_guard_home_path_is_quoted_for_fish(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        guard_home = home / "guard 'quoted' $(printf unsafe) \\ suffix"
+        context = _context(home, guard_home)
+        monkeypatch.setenv("SHELL", "/usr/bin/fish")
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims._is_transient_path", lambda _path: False)
+
+        ensure_package_shim_path_in_shell_profile(context)
+
+        fish_profile = home / ".config" / "fish" / "config.fish"
+        expected = f"fish_add_path --prepend -- {shlex.quote(str(guard_home / 'package-shims' / 'bin'))}"
+        assert expected in fish_profile.read_text(encoding="utf-8")
+        status = package_shim_status(context)
+        assert status["shell_profile_configured"] is True
+        assert status["shell_profile_missing_paths"] == []
 
 
 class TestEnsureSkipsOnWindows:

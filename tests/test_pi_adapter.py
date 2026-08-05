@@ -12,6 +12,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
@@ -62,9 +63,13 @@ class TestPiAdapterIdentity:
         adapter = get_adapter("pi")
         assert adapter.harness == "pi"
 
-    def test_aliases_resolve_to_pi(self) -> None:
-        for alias in ("pi", "pi-agent", "pi-coding-agent", "omp", "oh-my-pi"):
+    def test_pi_aliases_resolve_to_pi(self) -> None:
+        for alias in ("pi", "pi-agent", "pi-coding-agent"):
             assert get_adapter(alias).harness == "pi"
+
+    def test_omp_aliases_resolve_to_omp(self) -> None:
+        for alias in ("omp", "oh-my-pi"):
+            assert get_adapter(alias).harness == "omp"
 
     def test_pi_is_registered(self) -> None:
         assert "pi" in {item.harness for item in list_adapters()}
@@ -75,9 +80,14 @@ class TestPiAdapterIdentity:
         assert contract.harness == "pi"
         assert contract.smoke_command == "hol-guard install pi --dry-run"
         assert "tool_result" in contract.event_surfaces
-        assert contract_for("omp") == contract
-        assert "omp" in contract.install_aliases
-        assert "oh-my-pi" in contract.install_aliases
+        assert "omp" not in contract.install_aliases
+
+    def test_omp_contract_exists(self) -> None:
+        contract = contract_for("omp")
+        assert contract is not None
+        assert contract.harness == "omp"
+        assert contract.smoke_command == "hol-guard install omp --dry-run"
+        assert contract_for("oh-my-pi") == contract
 
     def test_managed_approval_flow_auto_opens_approval_center_once_as_fallback(self) -> None:
         flow = get_adapter("pi").approval_flow(managed_install={"active": True, "manifest": {}})
@@ -95,6 +105,12 @@ class TestPiAdapterIdentity:
         assert flow["auto_open_browser"] is True
         assert _approval_surface_policy_for_flow("auto-open-once", flow) == "auto-open-once"
 
+    def test_unmanaged_omp_approval_flow_names_oh_my_pi(self) -> None:
+        flow = get_adapter("omp").approval_flow(managed_install=None)
+
+        assert flow["summary"] == "Guard routes Oh My Pi approvals through the local approval center."
+        assert flow["fallback_hint"] == "Resolve pending Oh My Pi requests from the Guard approval center."
+
 
 class TestPiDetect:
     def test_detect_marks_omp_cli_as_available(self, tmp_path: Path, monkeypatch) -> None:
@@ -104,12 +120,12 @@ class TestPiDetect:
             lambda command, candidates=(): "/opt/homebrew/bin/omp" if command == "omp" else None,
         )
 
-        result = get_adapter("pi").detect(ctx)
+        result = get_adapter("omp").detect(ctx)
 
         assert result.installed is True
         assert result.command_available is True
 
-    def test_detect_omp_warning_mentions_pi_or_omp(self, tmp_path: Path, monkeypatch) -> None:
+    def test_detect_omp_warning_mentions_omp(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         _write_json(ctx.home_dir / ".omp" / "agent" / "settings.json", {"extensions": []})
         monkeypatch.setattr(
@@ -117,11 +133,11 @@ class TestPiDetect:
             lambda command, candidates=(): None,
         )
 
-        adapter = get_adapter("pi")
+        adapter = get_adapter("omp")
         result = adapter.detect(ctx)
         warnings = adapter.diagnostic_warnings(result, runtime_probe=None)
 
-        assert any("pi or omp command" in warning for warning in warnings)
+        assert any("omp command" in warning for warning in warnings)
 
     def test_detects_settings_extensions_skills_prompts_themes_and_packages(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
@@ -168,43 +184,44 @@ class TestPiDetect:
         )
         _write_text(ctx.home_dir / ".omp" / "agent" / "extensions" / "omp-ext.ts", "export default function () {}\n")
 
-        result = get_adapter("pi").detect(ctx)
+        result = get_adapter("omp").detect(ctx)
 
+        assert result.harness == "omp"
         assert str(ctx.home_dir / ".omp" / "agent" / "settings.json") in result.config_paths
-        assert "pi:omp-global:extension:omp-ext.ts" in {artifact.artifact_id for artifact in result.artifacts}
+        assert "omp:omp-global:extension:omp-ext.ts" in {artifact.artifact_id for artifact in result.artifacts}
 
-    def test_pi_and_omp_managed_extensions_have_distinct_aibom_item_ids(self, tmp_path: Path) -> None:
+    def test_pi_and_omp_managed_extensions_have_separate_harnesses(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write_text(ctx.home_dir / ".pi" / "agent" / "extensions" / "hol-guard.ts", "export default 'pi';\n")
         _write_text(ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts", "export default 'omp';\n")
 
-        detection = get_adapter("pi").detect(ctx)
-        snapshot = inventory_snapshot_from_detection(
-            detection,
+        pi_snapshot = inventory_snapshot_from_detection(
+            get_adapter("pi").detect(ctx),
+            generated_at="2026-06-29T00:00:00Z",
+            home_dir=ctx.home_dir,
+            workspace_dir=ctx.workspace_dir,
+        )
+        omp_snapshot = inventory_snapshot_from_detection(
+            get_adapter("omp").detect(ctx),
             generated_at="2026-06-29T00:00:00Z",
             home_dir=ctx.home_dir,
             workspace_dir=ctx.workspace_dir,
         )
 
-        item_keys = [(item.item_kind, item.item_id) for item in snapshot.items]
-        assert len(item_keys) == len(set(item_keys))
-        assert {item.item_id for item in snapshot.items} >= {
-            "pi:pi-global:extension:hol-guard.ts",
-            "pi:omp-global:extension:hol-guard.ts",
-        }
+        assert {item.item_id for item in pi_snapshot.items} == {"pi:pi-global:extension:hol-guard.ts"}
+        assert {item.item_id for item in omp_snapshot.items} == {"omp:omp-global:extension:hol-guard.ts"}
 
-    def test_pi_and_omp_shared_configured_extension_keeps_both_scoped_items(self, tmp_path: Path) -> None:
+    def test_pi_and_omp_shared_configured_extension_keeps_separate_harness_ids(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         shared_extension = tmp_path / "shared" / "hol-guard.ts"
         _write_text(shared_extension, "export default 'shared';\n")
         _write_json(ctx.home_dir / ".pi" / "agent" / "settings.json", {"extensions": [str(shared_extension)]})
         _write_json(ctx.home_dir / ".omp" / "agent" / "settings.json", {"extensions": [str(shared_extension)]})
 
-        result = get_adapter("pi").detect(ctx)
-
-        artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
-        assert "pi:pi-global:extension:hol-guard.ts" in artifact_ids
-        assert "pi:omp-global:extension:hol-guard.ts" in artifact_ids
+        pi_ids = {artifact.artifact_id for artifact in get_adapter("pi").detect(ctx).artifacts}
+        omp_ids = {artifact.artifact_id for artifact in get_adapter("omp").detect(ctx).artifacts}
+        assert "pi:pi-global:extension:hol-guard.ts" in pi_ids
+        assert "omp:omp-global:extension:hol-guard.ts" in omp_ids
 
     def test_detect_expands_configured_extension_glob(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
@@ -250,7 +267,6 @@ class TestPiInstall:
         assert extension_path.is_file()
         settings_path = ctx.home_dir / ".pi" / "agent" / "settings.json"
         omp_extension_path = ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
-        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
         text = extension_path.read_text(encoding="utf-8")
         assert 'pi.on("tool_call"' in text
         assert 'pi.on("tool_result"' in text
@@ -314,8 +330,40 @@ class TestPiInstall:
             "runGuardCliCommand("
         )
         assert str(extension_path) in json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
-        assert omp_extension_path.is_file()
-        assert str(omp_extension_path) in json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"]
+        assert not omp_extension_path.exists()
+        assert "guardPayload.tool_response = event.content" in text
+        assert "stdout: toolOutput" in text
+        assert "contentText(event.content)" not in text
+        assert "options?.enforceSizeCap === true" in text
+        assert 'payloadToSend.hook_event_name === "PostToolUse"' not in text
+        assert "delete reducedPayload.stdout;" not in text
+        # Source-ref fast path support
+        assert "guard_source_ref" in text
+        assert "digestOutputText" in text
+        assert "sourceFileRefForPostToolUse" in text
+        assert "isVirtualSourcePath" in text
+        assert "isAbsoluteSourcePath" not in text
+        assert "if (!path || isVirtualSourcePath(path)) return null;" in text
+        assert "text_excerpt: toolOutput" in text
+        assert "GUARD_SOURCE_REF_MAX_OUTPUT_CHARS" in text
+        assert "GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES" in text
+        assert "reviewed_output_sha256" in text
+        assert 'response.model_output_action === "allow_original"' in text
+        assert "response.reviewed_output_sha256 === digest.sha256" in text
+        assert "observe_mode?: boolean;" in text
+        assert "if (response.observe_mode === true) return undefined;" in text
+        assert text.index("if (response.observe_mode === true) return undefined;") < text.index(
+            "if (outputTruncated) {"
+        )
+        # digestOutputText must only hash text-bearing fields, not metadata
+        # like {type: "text"} - otherwise structured source reads never match
+        assert "record.type === 'text'" in text
+        assert "record.text" in text
+        assert "OUTPUT_TEXT_KEYS" in text
+        # guard_payload_ref fallback still present
+        assert "guard_payload_ref" in text
+        # Reviewed excerpt still returned when not proven safe
+        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
 
     def test_reinstall_migrates_existing_extension_to_deadline_retry_contract(
         self,
@@ -432,39 +480,24 @@ class TestPiInstall:
         # returned to Pi so omitted content never reaches the model.
         assert "function reviewedToolResult(" in text
         assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
-        assert "guardPayload.tool_response = event.content" in text
-        assert "stdout: toolOutput" in text
-        assert "contentText(event.content)" not in text
-        assert "options?.enforceSizeCap === true" in text
-        assert 'payloadToSend.hook_event_name === "PostToolUse"' not in text
-        assert "delete reducedPayload.stdout;" not in text
-        # Source-ref fast path support
-        assert "guard_source_ref" in text
-        assert "digestOutputText" in text
-        assert "sourceFileRefForPostToolUse" in text
-        assert "isVirtualSourcePath" in text
-        assert "isAbsoluteSourcePath" not in text
-        assert "if (!path || isVirtualSourcePath(path)) return null;" in text
-        assert "text_excerpt: toolOutput" in text
-        assert "GUARD_SOURCE_REF_MAX_OUTPUT_CHARS" in text
-        assert "GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES" in text
-        assert "reviewed_output_sha256" in text
-        assert 'response.model_output_action === "allow_original"' in text
-        assert "response.reviewed_output_sha256 === digest.sha256" in text
-        assert "observe_mode?: boolean;" in text
-        assert "if (response.observe_mode === true) return undefined;" in text
-        assert text.index("if (response.observe_mode === true) return undefined;") < text.index(
-            "if (outputTruncated) {"
+
+    def test_omp_install_writes_only_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-omp"), "notes": []},
         )
-        # digestOutputText must only hash text-bearing fields, not metadata
-        # like {type: "text"} — otherwise structured source reads never match
-        assert "record.type === 'text'" in text
-        assert "record.text" in text
-        assert "OUTPUT_TEXT_KEYS" in text
-        # guard_payload_ref fallback still present
-        assert "guard_payload_ref" in text
-        # Reviewed excerpt still returned when not proven safe
-        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+
+        manifest = get_adapter("omp").install(ctx)
+
+        extension_path = Path(str(manifest["config_path"]))
+        assert manifest["harness"] == "omp"
+        assert extension_path == ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
+        assert '"--harness", "omp"' in extension_path.read_text(encoding="utf-8")
+        assert "/v1/hooks/omp?" in extension_path.read_text(encoding="utf-8")
+        assert "Oh My Pi hook failed before completing review" in extension_path.read_text(encoding="utf-8")
+        assert "before Pi could use it" not in extension_path.read_text(encoding="utf-8")
+        assert not (ctx.home_dir / ".pi" / "agent" / "extensions" / "hol-guard.ts").exists()
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -482,13 +515,42 @@ class TestPiInstall:
         settings_path = ctx.home_dir / ".pi" / "agent" / "settings.json"
         omp_extension_path = ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
         omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
+        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
+        omp_extension_path.write_text("export default 'omp';\n", encoding="utf-8")
+        omp_settings_path.parent.mkdir(parents=True, exist_ok=True)
+        omp_settings_path.write_text(json.dumps({"extensions": [str(omp_extension_path)]}), encoding="utf-8")
 
         uninstall_manifest = adapter.uninstall(ctx)
 
         assert uninstall_manifest["active"] is False
         assert not extension_path.exists()
-        assert not omp_extension_path.exists()
+        assert omp_extension_path.exists()
         assert json.loads(settings_path.read_text(encoding="utf-8"))["extensions"] == []
+        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == [str(omp_extension_path)]
+
+    def test_uninstall_removes_verified_legacy_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
+        )
+        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
+        omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
+        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
+        omp_extension_path.write_text(
+            managed_extension_source(
+                guard_home=ctx.guard_home,
+                home_dir=ctx.home_dir,
+                settings_path=omp_settings_path,
+                harness="pi",
+            ),
+            encoding="utf-8",
+        )
+        _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
+
+        get_adapter("pi").uninstall(ctx)
+
+        assert not omp_extension_path.exists()
         assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
 
 
@@ -503,6 +565,18 @@ class TestPiRuntime:
         )
 
         assert envelope.harness == "pi"
+        assert envelope.action_type == "shell_command"
+
+    def test_omp_payload_keeps_omp_identity(self, tmp_path: Path) -> None:
+        envelope = normalize_harness_payload(
+            "omp",
+            "PreToolUse",
+            {"tool_name": "bash", "tool_input": {"command": "pwd"}},
+            workspace=tmp_path,
+            home_dir=tmp_path,
+        )
+
+        assert envelope.harness == "omp"
         assert envelope.action_type == "shell_command"
 
     def test_pi_post_tool_payload_normalizes_like_other_harnesses(self, tmp_path: Path) -> None:

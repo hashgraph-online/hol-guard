@@ -50,10 +50,10 @@ export function resolvePackageFirewallNextAction(
       protection?.protected_managers[0] ??
       null;
     return {
-      detail: "Restart your shell so updated PATH exports load before testing intercepts.",
-      label: "Restart shell, then test intercept",
+      detail: "Open a new terminal or source the matching profile. The dashboard daemon cannot observe another terminal's PATH; restart AI apps only when they run package managers.",
+      label: "Open terminal to finish activation",
       manager: protectedManager,
-      op: "test",
+      op: null,
     };
   }
 

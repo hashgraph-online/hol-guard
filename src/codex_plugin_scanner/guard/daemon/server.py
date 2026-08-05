@@ -21,7 +21,6 @@ import tempfile
 import threading
 import time
 import uuid
-import webbrowser
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -75,6 +74,7 @@ from ..approvals import (
     build_runtime_snapshot,
     bulk_allow_read_only_once,
 )
+from ..browser_opener import open_browser_url
 from ..cli.connect_flow import (
     CONNECT_SYNC_AUTH_CONTEXT_KEY,
     _build_sync_auth_context,
@@ -636,7 +636,7 @@ class _GuardDaemonHttpServer(HTTPServer):
         self.approval_attention = ApprovalAttentionCoordinator(
             store=store,
             runtime=self.runtime,
-            opener=webbrowser.open,
+            opener=open_browser_url,
         )
         self.request_executors_stopped = False
         self.general_request_executor = _BoundedRequestExecutor(
@@ -1506,7 +1506,11 @@ def _activate_package_firewall_runtime(context: HarnessContext) -> tuple[int, di
         200,
         {
             "status": "verified",
-            "message": "Guard verified the installed package shim. Restart existing AI apps before using it.",
+            "message": (
+                "Guard verified the installed package shim directly. Open a new terminal or source the matching "
+                "shell profile to use it. Restart AI apps only when they run package managers, because existing "
+                "app processes do not inherit a terminal PATH change."
+            ),
             "package_shims": package_shim_status(context),
             "proof": proof,
         },
@@ -3903,7 +3907,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 machine_id=str(device["installation_id"]),
                 machine_label=str(device["device_label"]),
             )
-            browser_opened = bool(webbrowser.open(session.authorize_url))
+            browser_opened = open_browser_url(session.authorize_url)
         except Exception as error:
             failure = {
                 **_default_package_firewall_connect_flow(store=store, reason=reason),
@@ -4085,7 +4089,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 machine_id=str(device["installation_id"]),
                 machine_label=str(device["device_label"]),
             )
-            browser_opened = bool(webbrowser.open(session.authorize_url))
+            browser_opened = open_browser_url(session.authorize_url)
         except Exception as error:
             failure = {
                 **_default_guard_cloud_connect_flow(store=store, repair_mode=repair_mode),
@@ -4746,11 +4750,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         now=_now(),
                         include_items=False,
                     )
-                counts = status.get("counts")
-                valid_count = counts.get("valid", 0) if isinstance(counts, dict) else 0
-                if status.get("mode") != "protected" and valid_count == 0:
-                    store.reset_policy_integrity(now=_now())
-                    status = store.setup_policy_integrity(now=_now(), include_items=False)
             except (OSError, RuntimeError, TypeError, ValueError):
                 self._write_json(
                     {
@@ -4815,16 +4814,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     return
             self._write_json(
                 {
+                    **({"error": "local_integrity_repair_incomplete"} if not repaired else {}),
                     "repaired": repaired,
+                    "repair_scope": "local_integrity",
                     "check_ids": repaired_check_ids,
                     "pending_check_ids": pending_check_ids,
                     "message": (
                         "Integrity protection restored."
                         if repaired
                         else (
-                            "Integrity repair preserved unauthenticated policy data instead of trusting it. "
-                            "Retry repair from Protect; Guard will keep the remaining "
-                            f"{reason_count or 1} issue isolated."
+                            "Guard could not establish a local integrity proof. "
+                            "Unverified local rules remain disabled. Local repair did not change Guard Cloud policy "
+                            "availability. Retry local repair from Protect; "
+                            f"Guard will keep the remaining {reason_count or 1} issue isolated."
                         )
                     ),
                 },
@@ -5233,7 +5235,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 browser_url=_approval_center_browser_url(approval_center_url, self.server.auth_token),  # type: ignore[attr-defined]
                 approval_surface_policy=approval_surface_policy,
                 open_key=self._optional_string(payload.get("open_key")),
-                opener=webbrowser.open,
+                opener=open_browser_url,
                 redaction_level=redaction_level,
             )
         except ValueError as error:
@@ -5702,7 +5704,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except (OSError, RuntimeError, TypeError, ValueError):
             observe_mode = False
         if observe_mode:
-            if harness == "pi":
+            if harness in {"pi", "omp"}:
                 return {
                     "decision": "allow",
                     "reason_code": reason_code,
@@ -5731,7 +5733,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "reason_code": reason_code,
                 "observed_review_failure": True,
             }
-        if harness == "pi":
+        if harness in {"pi", "omp"}:
             return {
                 "decision": "deny",
                 "reason": reason,
@@ -8314,6 +8316,7 @@ _HARNESS_RETRY_COPY: dict[str, str] = {
     "opencode": "Return to OpenCode and retry",
     "copilot": "Return to Copilot and retry",
     "pi": "Return to Pi and retry",
+    "omp": "Return to Oh My Pi and retry",
 }
 _DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
 

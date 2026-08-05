@@ -222,7 +222,7 @@ class HookReviewEngine:
             source_path = request.source_ref.tool_input_path or request.source_ref.path
             target_paths = _target_paths(envelope)
             if (
-                request.harness == "pi"
+                request.harness in {"pi", "omp"}
                 and len(target_paths) == 1
                 and source_path == target_paths[0]
                 and is_safe_pi_inline_resource_uri(source_path)

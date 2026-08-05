@@ -1518,6 +1518,16 @@ function normalizeQueueSummary(raw: unknown, pendingCount: number): GuardQueueSu
   };
 }
 
+function normalizeProcessPathStatus(value: unknown): NonNullable<PackageManagerProtection["process_path_status"]> {
+  if (value === "active") {
+    return "active";
+  }
+  if (value === "profile_staged") {
+    return "profile_staged";
+  }
+  return "missing";
+}
+
 function normalizePackageManagerProtection(raw: unknown): PackageManagerProtection | undefined {
   if (!isRecord(raw)) {
     return undefined;
@@ -1528,11 +1538,14 @@ function normalizePackageManagerProtection(raw: unknown): PackageManagerProtecti
       : raw["path_status"] === "restart_required"
       ? "restart_required"
       : "missing_from_path";
+  const processPathStatus = normalizeProcessPathStatus(raw["process_path_status"]);
   const shimDir = typeof raw["shim_dir"] === "string" ? raw["shim_dir"] : "";
   return {
     path_status: pathStatus,
     path_contains_shim_dir: raw["path_contains_shim_dir"] === true,
     restart_shell_required: raw["restart_shell_required"] === true,
+    process_path_status: processPathStatus,
+    process_restart_required: raw["process_restart_required"] === true,
     shell_profile_configured: raw["shell_profile_configured"] === true,
     shell_profile_path: isStringOrNull(raw["shell_profile_path"]) ? raw["shell_profile_path"] : null,
     shim_dir: shimDir,
@@ -3117,13 +3130,34 @@ export async function repairApprovalCenter(): Promise<{ repaired: boolean; clear
 
 export type GuardProtectionRepairResult = {
   repaired: boolean;
+  repair_scope: "local_integrity";
   check_ids: string[];
   message: string;
 };
 
+export class GuardProtectionRepairError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly repairScope: "local_integrity" | null;
+
+  constructor(status: number, payload: Record<string, unknown> | null) {
+    const message = payload === null ? null : stringValue(payload.message);
+    super(message ?? `Protection repair failed with ${status}`);
+    this.name = "GuardProtectionRepairError";
+    this.status = status;
+    this.code = payload === null ? null : stringValue(payload.error);
+    this.repairScope = payload?.repair_scope === "local_integrity" ? "local_integrity" : null;
+  }
+}
+
 export async function repairProtectionCheck(checkId: string): Promise<GuardProtectionRepairResult> {
   if (isGuardDemoMode()) {
-    return { repaired: true, check_ids: [checkId], message: "Protection restored." };
+    return {
+      repaired: true,
+      repair_scope: "local_integrity",
+      check_ids: [checkId],
+      message: "Protection restored.",
+    };
   }
   const response = await fetchWithGuardAuth("/v1/protection/repair", {
     method: "POST",
@@ -3132,14 +3166,19 @@ export async function repairProtectionCheck(checkId: string): Promise<GuardProte
   });
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
-    const message = isRecord(payload) ? stringValue(payload.message) : null;
-    throw new Error(message ?? `Protection repair failed with ${response.status}`);
+    throw new GuardProtectionRepairError(response.status, isRecord(payload) ? payload : null);
   }
-  if (!isRecord(payload) || payload.repaired !== true || !Array.isArray(payload.check_ids)) {
+  if (
+    !isRecord(payload)
+    || payload.repaired !== true
+    || payload.repair_scope !== "local_integrity"
+    || !Array.isArray(payload.check_ids)
+  ) {
     throw new Error("Guard returned an invalid protection repair result.");
   }
   return {
     repaired: true,
+    repair_scope: "local_integrity",
     check_ids: payload.check_ids.filter((value): value is string => typeof value === "string"),
     message: stringValue(payload.message) ?? "Protection restored.",
   };
@@ -3680,6 +3719,12 @@ export function normalizePackageFirewallStatus(value: unknown): PackageFirewallS
       : pathStatusValue === "restart_required"
       ? "restart_required"
       : "missing_from_path";
+  const processPathStatusValue = readPackageShimField(
+    shimStatus,
+    "process_path_status",
+    "processPathStatus",
+  );
+  const processPathStatus = normalizeProcessPathStatus(processPathStatusValue);
   const packageShims = normalizePackageShimEntries(record.package_shims, supportedManagers, rawPathStatus);
   const protectedManagers = packageShims
     .filter((shim) => shim.activation_state === "protected")
@@ -3695,6 +3740,9 @@ export function normalizePackageFirewallStatus(value: unknown): PackageFirewallS
       readPackageShimField(shimStatus, "path_contains_shim_dir", "pathContainsShimDir") === true,
     restart_shell_required:
       readPackageShimField(shimStatus, "restart_shell_required", "restartShellRequired") === true,
+    process_path_status: processPathStatus,
+    process_restart_required:
+      readPackageShimField(shimStatus, "process_restart_required", "processRestartRequired") === true,
     shell_profile_configured:
       readPackageShimField(shimStatus, "shell_profile_configured", "shellProfileConfigured") === true,
     shell_profile_path: isStringOrNull(shellProfilePath) ? (shellProfilePath as string | null) : null,
