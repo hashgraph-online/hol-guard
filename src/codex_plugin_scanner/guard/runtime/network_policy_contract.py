@@ -6,7 +6,7 @@ import hashlib
 import ipaddress
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Final, cast
 
@@ -404,7 +404,7 @@ def canonical_digest(value: object) -> str:
 def _json_value(value: object) -> object:
     if isinstance(value, Enum):
         return value.value
-    if hasattr(value, "__dataclass_fields__"):
+    if is_dataclass(value) and not isinstance(value, type):
         return {key: _json_value(item) for key, item in asdict(value).items()}
     if isinstance(value, dict):
         if any(not isinstance(key, str) for key in value):
