@@ -690,6 +690,38 @@ def test_pip_execution_argv_is_isolated_absolute_and_source_pinned(
     ]
 
 
+def test_manager_recovery_pip_uses_authenticated_python_and_pinned_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context, _manager = _build_manager_context(
+        tmp_path,
+        monkeypatch,
+        "pipx",
+        source_url="https://packages.enterprise.example/simple",
+    )
+    display = [str(context.python.launch_path), "-m", "pip", "install", "hol-guard==2.2.3"]
+
+    command = context.build_python_pip_command(display)
+
+    assert command == [
+        str(context.python.launch_path),
+        *update_subprocess_module._trusted_python_flags(),
+        "-S",
+        "-c",
+        update_subprocess_module._TRUSTED_MODULE_BOOTSTRAP,
+        json.dumps([str(path) for path in context.python_import_paths], separators=(",", ":")),
+        "pip",
+        "--isolated",
+        "--disable-pip-version-check",
+        "--no-input",
+        "install",
+        "hol-guard==2.2.3",
+        "--index-url",
+        "https://packages.enterprise.example/simple",
+    ]
+
+
 @pytest.mark.skipif(
     os.name == "nt",
     reason="uses an extensionless POSIX shebang executable as the uv manager fixture",

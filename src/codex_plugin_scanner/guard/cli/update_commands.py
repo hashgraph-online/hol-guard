@@ -60,6 +60,34 @@ _ALREADY_CURRENT_HINTS = (
     "already at latest version",
     "already up-to-date",
 )
+_PIPX_LAUNCHER_FAILURE_HINTS = (
+    "ModuleNotFoundError: No module named 'pipx'",
+    'ModuleNotFoundError: No module named "pipx"',
+)
+_PYPI_PROPAGATION_FAILURE_HINTS = (
+    "No matching distribution found for hol-guard==",
+    "Could not find a version that satisfies the requirement hol-guard==",
+)
+_PYPI_PROPAGATION_EXCLUSION_HINTS = (
+    "401",
+    "403",
+    "authentication",
+    "certificate verify failed",
+    "connection error",
+    "connection refused",
+    "connection reset",
+    "could not fetch url",
+    "credential",
+    "forbidden",
+    "invalid index",
+    "name or service not known",
+    "ssl",
+    "temporary failure in name resolution",
+    "timed out",
+    "timeout",
+    "tls",
+    "unauthorized",
+)
 _PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
 _PYPI_TIMEOUT_SECONDS = 3.0
 _PYPI_RESPONSE_LIMIT_BYTES = 8 * 1024 * 1024
@@ -478,6 +506,7 @@ def run_guard_update(
     active_command = execution_command
     active_display_command = command
     attempted_force_retry = False
+    attempted_pipx_recovery = False
     installer_execution_started = False
     while True:
         try:
@@ -522,25 +551,45 @@ def run_guard_update(
             )
         initial_version_check = payload.get("version_check")
         resulting_version = str(payload.get("resulting_version") or current_version)
-        if trusted_wheel is not None:
-            try:
-                if Version(resulting_version) != Version(trusted_wheel.version):
-                    return _trusted_update_failure(
-                        payload,
-                        UpdateSubprocessError("update_version_mismatch"),
-                        trusted_wheel=trusted_wheel,
-                        retain_trusted_wheel=installer_execution_started,
-                    )
-            except InvalidVersion:
-                return _trusted_update_failure(
-                    payload,
-                    UpdateSubprocessError("update_version_output_invalid"),
-                    trusted_wheel=trusted_wheel,
-                    retain_trusted_wheel=installer_execution_started,
-                )
         if result.returncode != 0:
+            installer_output = _installer_output_text(payload.get("stdout"), payload.get("stderr"))
+            if (
+                installer == "pipx"
+                and not attempted_pipx_recovery
+                and _contains_any(installer_output, _PIPX_LAUNCHER_FAILURE_HINTS)
+            ):
+                pip_display_command = _update_command(
+                    "pip",
+                    use_pypi=trusted_wheel is None,
+                    target_version=target_version,
+                    wheel_path=requested_wheel_path if trusted_wheel is not None else None,
+                )
+                pip_execution_display_command = _update_command(
+                    "pip",
+                    use_pypi=trusted_wheel is None,
+                    target_version=target_version,
+                    wheel_path=trusted_wheel.staged_path if trusted_wheel is not None else None,
+                )
+                try:
+                    active_command = update_context.build_python_pip_command(pip_execution_display_command)
+                except UpdateSubprocessError as error:
+                    return _trusted_update_failure(payload, error, trusted_wheel=trusted_wheel)
+                attempted_pipx_recovery = True
+                active_display_command = pip_display_command
+                payload["installer_recovery"] = "trusted_python_pip"
+                continue
+            if requested_wheel_path is None and _is_pypi_propagation_failure(installer_output):
+                payload["status"] = "deferred"
+                payload["changed"] = False
+                payload["reason_code"] = "update_release_propagating"
+                payload["message"] = (
+                    "The newest HOL Guard release is still reaching PyPI. "
+                    "Your current installation remains active; try the update again shortly."
+                )
+                payload.pop("retry_command", None)
+                return payload, 0
             conflict_message = _dependency_conflict_message(
-                _installer_output_text(payload.get("stdout"), payload.get("stderr")),
+                installer_output,
             )
             if conflict_message:
                 payload["status"] = "blocked"
@@ -558,6 +607,22 @@ def run_guard_update(
             if trusted_wheel is not None:
                 _retain_local_wheel_staging(payload)
             return payload, 1
+        if trusted_wheel is not None:
+            try:
+                if Version(resulting_version) != Version(trusted_wheel.version):
+                    return _trusted_update_failure(
+                        payload,
+                        UpdateSubprocessError("update_version_mismatch"),
+                        trusted_wheel=trusted_wheel,
+                        retain_trusted_wheel=installer_execution_started,
+                    )
+            except InvalidVersion:
+                return _trusted_update_failure(
+                    payload,
+                    UpdateSubprocessError("update_version_output_invalid"),
+                    trusted_wheel=trusted_wheel,
+                    retain_trusted_wheel=installer_execution_started,
+                )
         if trusted_wheel is not None:
             _record_verified_local_wheel_receipt(
                 payload,
@@ -1380,6 +1445,17 @@ def _target_version_is_prerelease(target_version: str | None) -> bool:
 
 def _installer_output_text(stdout: object, stderr: object) -> str:
     return "\n".join(part.strip() for part in (str(stdout or "").strip(), str(stderr or "").strip()) if part.strip())
+
+
+def _contains_any(value: str, candidates: tuple[str, ...]) -> bool:
+    return any(candidate in value for candidate in candidates)
+
+
+def _is_pypi_propagation_failure(installer_output: str) -> bool:
+    if not _contains_any(installer_output, _PYPI_PROPAGATION_FAILURE_HINTS):
+        return False
+    lowered = installer_output.lower()
+    return not _contains_any(lowered, _PYPI_PROPAGATION_EXCLUSION_HINTS)
 
 
 def _dependency_conflict_message(installer_output: str) -> str | None:

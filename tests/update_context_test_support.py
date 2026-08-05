@@ -68,6 +68,9 @@ class LegacyUpdateContext:
     def build_installer_command(self, display_command: list[str]) -> list[str]:
         return list(display_command)
 
+    def build_python_pip_command(self, display_command: list[str]) -> list[str]:
+        return list(display_command)
+
     def python_command(self, script: str, *args: str) -> list[str]:
         return [sys.executable, *_trusted_python_flags(), "-c", script, *args]
 

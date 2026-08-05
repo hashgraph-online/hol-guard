@@ -6983,6 +6983,31 @@ url = http://127.0.0.1:8787/guard-canary
         assert "stdout" in output
         assert "pipx could not upgrade hol-guard in the current environment" in output
 
+    def test_guard_update_deferred_output_keeps_propagation_detail_calm(self, capsys):
+        emit_guard_payload(
+            "update",
+            {
+                "current_version": "2.2.1",
+                "installer": "pipx",
+                "command": ["pipx", "install", "--force", "hol-guard==2.2.3"],
+                "dry_run": False,
+                "resulting_version": "2.2.1",
+                "status": "deferred",
+                "message": (
+                    "The newest HOL Guard release is still reaching PyPI. "
+                    "Your current installation remains active; try the update again shortly."
+                ),
+                "stderr": "ERROR: No matching distribution found for hol-guard==2.2.3",
+            },
+            False,
+        )
+
+        output = capsys.readouterr().out
+
+        assert "Guard update: deferred" in output
+        assert "current installation remains active" in output
+        assert "stderr" not in output
+
     def test_guard_uninstall_auto_detects_managed_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

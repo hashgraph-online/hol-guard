@@ -1769,6 +1769,7 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
         "blocked": "red",
         "updated": "green",
         "skipped": "yellow",
+        "deferred": "yellow",
         "failed": "red",
     }.get(status, "red")
     console.print(Panel(body, title=f"Guard update: {status}", border_style=border_style))

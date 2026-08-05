@@ -503,6 +503,20 @@ class TrustedUpdateContext:
             )
         raise UpdateSubprocessError("update_installer_untrusted")
 
+    def build_python_pip_command(self, display_command: list[str]) -> list[str]:
+        """Build a pip command through the authenticated Guard interpreter."""
+
+        if len(display_command) < 4 or display_command[1:3] != ["-m", "pip"]:
+            raise UpdateSubprocessError("update_installer_command_invalid")
+        command = self.python_module_command(
+            "pip",
+            "--isolated",
+            "--disable-pip-version-check",
+            "--no-input",
+            *display_command[3:],
+        )
+        return _append_pip_source(command, self.source.index_url)
+
     def run(
         self,
         command: list[str],
