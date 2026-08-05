@@ -62,6 +62,7 @@ class EnforcementGrade(str, Enum):
     DENY_ALL = "deny-all"
     PROXY_ONLY = "proxy-only"
     TCP_IP_DESTINATION_ENFORCED = "tcp-ip-destination-enforced"
+    UDP_DNS_DESTINATION_ENFORCED = "udp-dns-destination-enforced"
     DESTINATION_ENFORCED = "destination-enforced"
 
 
@@ -75,6 +76,9 @@ class BackendCapability(str, Enum):
     PROCESS_TREE = "process-tree"
     ATOMIC_POLICY = "atomic-policy"
     RECEIPTS = "receipts"
+    FORCED_BROKER_ROUTING = "forced-broker-routing"
+    RESOLVER_ROUTE_ATTESTATION = "resolver-route-attestation"
+    DOH_CLASSIFICATION_OR_APP_INTENT = "doh-classification-or-app-intent"
 
 
 _GRADE_REQUIREMENTS: Final[dict[EnforcementGrade, frozenset[BackendCapability]]] = {
@@ -91,13 +95,32 @@ _GRADE_REQUIREMENTS: Final[dict[EnforcementGrade, frozenset[BackendCapability]]]
             BackendCapability.RECEIPTS,
         }
     ),
-    EnforcementGrade.DESTINATION_ENFORCED: frozenset(
+    EnforcementGrade.UDP_DNS_DESTINATION_ENFORCED: frozenset(
         {
+            BackendCapability.DENY_ALL,
             BackendCapability.TCP_DESTINATION,
             BackendCapability.UDP_DESTINATION,
             BackendCapability.DNS_CORRELATION,
             BackendCapability.PROCESS_TREE,
+            BackendCapability.ATOMIC_POLICY,
             BackendCapability.RECEIPTS,
+            BackendCapability.FORCED_BROKER_ROUTING,
+            BackendCapability.RESOLVER_ROUTE_ATTESTATION,
+            BackendCapability.DOH_CLASSIFICATION_OR_APP_INTENT,
+        }
+    ),
+    EnforcementGrade.DESTINATION_ENFORCED: frozenset(
+        {
+            BackendCapability.DENY_ALL,
+            BackendCapability.TCP_DESTINATION,
+            BackendCapability.UDP_DESTINATION,
+            BackendCapability.DNS_CORRELATION,
+            BackendCapability.PROCESS_TREE,
+            BackendCapability.ATOMIC_POLICY,
+            BackendCapability.RECEIPTS,
+            BackendCapability.FORCED_BROKER_ROUTING,
+            BackendCapability.RESOLVER_ROUTE_ATTESTATION,
+            BackendCapability.DOH_CLASSIFICATION_OR_APP_INTENT,
         }
     ),
 }

@@ -42,24 +42,33 @@ def test_registry_returns_none_for_unsupported_requirement_and_rejects_conflict(
     profiles = default_platform_profiles()
     registry = NetworkBackendRegistry(profiles)
     requirement = CapabilityRequirement(
-        frozenset({
-            BackendCapability.TCP_DESTINATION,
-            BackendCapability.UDP_DESTINATION,
-            BackendCapability.DNS_CORRELATION,
-            BackendCapability.PROCESS_TREE,
-            BackendCapability.RECEIPTS,
-        }),
+        frozenset(
+            {
+                BackendCapability.TCP_DESTINATION,
+                BackendCapability.UDP_DESTINATION,
+                BackendCapability.DNS_CORRELATION,
+                BackendCapability.PROCESS_TREE,
+                BackendCapability.RECEIPTS,
+                BackendCapability.DENY_ALL,
+                BackendCapability.ATOMIC_POLICY,
+                BackendCapability.FORCED_BROKER_ROUTING,
+                BackendCapability.RESOLVER_ROUTE_ATTESTATION,
+                BackendCapability.DOH_CLASSIFICATION_OR_APP_INTENT,
+            }
+        ),
         EnforcementGrade.DESTINATION_ENFORCED,
     )
 
     assert registry.select(platform=PlatformFamily.MACOS, requirement=requirement) is None
     with pytest.raises(ValueError, match="backend profile conflict"):
-        registry.register(profiles[0].__class__(
-            platform=profiles[0].platform,
-            backend_id=profiles[0].backend_id,
-            capabilities=profiles[0].capabilities,
-            maximum_grade=profiles[0].maximum_grade,
-            requires_privilege=profiles[0].requires_privilege,
-            production_ready=True,
-            reason_code="changed",
-        ))
+        registry.register(
+            profiles[0].__class__(
+                platform=profiles[0].platform,
+                backend_id=profiles[0].backend_id,
+                capabilities=profiles[0].capabilities,
+                maximum_grade=profiles[0].maximum_grade,
+                requires_privilege=profiles[0].requires_privilege,
+                production_ready=True,
+                reason_code="changed",
+            )
+        )

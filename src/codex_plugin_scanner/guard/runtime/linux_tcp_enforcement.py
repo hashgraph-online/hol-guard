@@ -66,8 +66,11 @@ def compile_linux_tcp_policy(
 ) -> LinuxTcpPolicyArtifact:
     """Lower exact IP/CIDR TCP rules without claiming UDP, DNS, or runtime activation."""
 
-    if policy.required_grade is not EnforcementGrade.TCP_IP_DESTINATION_ENFORCED:
-        raise ValueError("Linux TCP lowering requires the exact TCP IP enforcement grade")
+    if policy.required_grade not in (
+        EnforcementGrade.TCP_IP_DESTINATION_ENFORCED,
+        EnforcementGrade.UDP_DNS_DESTINATION_ENFORCED,
+    ):
+        raise ValueError("Linux TCP lowering requires the exact TCP IP enforcement grade or composite UDP/DNS grade")
 
     entries: list[LinuxTcpRuleEntry] = []
     for rule in policy.rules:
@@ -84,6 +87,8 @@ def compile_linux_tcp_policy(
         port_ranges = tuple((item.start, item.end) for item in rule.ports) or ((1, 65535),)
         for destination in rule.destinations:
             if destination.kind is DestinationKind.HOST:
+                if policy.required_grade is EnforcementGrade.UDP_DNS_DESTINATION_ENFORCED:
+                    continue
                 raise ValueError("host destinations require authenticated DNS correlation")
             if destination.kind is DestinationKind.PRIVATE_CLASS:
                 raise ValueError("private classes must be expanded before native lowering")

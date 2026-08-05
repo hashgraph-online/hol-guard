@@ -18,7 +18,8 @@ _GRADE_RANK = {
     EnforcementGrade.DENY_ALL: 2,
     EnforcementGrade.PROXY_ONLY: 3,
     EnforcementGrade.TCP_IP_DESTINATION_ENFORCED: 4,
-    EnforcementGrade.DESTINATION_ENFORCED: 5,
+    EnforcementGrade.UDP_DNS_DESTINATION_ENFORCED: 5,
+    EnforcementGrade.DESTINATION_ENFORCED: 6,
 }
 
 if set(_GRADE_RANK) != set(EnforcementGrade):

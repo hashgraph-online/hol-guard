@@ -55,6 +55,11 @@ def test_capability_negotiation_never_infers_missing_support() -> None:
                         BackendCapability.DNS_CORRELATION,
                         BackendCapability.PROCESS_TREE,
                         BackendCapability.RECEIPTS,
+                        BackendCapability.DENY_ALL,
+                        BackendCapability.ATOMIC_POLICY,
+                        BackendCapability.FORCED_BROKER_ROUTING,
+                        BackendCapability.RESOLVER_ROUTE_ATTESTATION,
+                        BackendCapability.DOH_CLASSIFICATION_OR_APP_INTENT,
                     }
                 ),
                 minimum_grade=EnforcementGrade.DESTINATION_ENFORCED,
