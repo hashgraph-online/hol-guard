@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import ipaddress
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from typing import Final
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from codex_plugin_scanner.guard.runtime.linux_tcp_enforcement import LinuxTcpPolicyArtifact
 from codex_plugin_scanner.guard.runtime.network_policy_contract import (
@@ -60,6 +64,8 @@ class LinuxResolverRoute:
     executable_digest: str
     route_attestation_digest: str
     doh_boundary_digest: str
+    resolver_public_key: str
+    route_signature: str
 
     def __post_init__(self) -> None:
         address = ipaddress.ip_address(self.address)
@@ -80,6 +86,16 @@ class LinuxResolverRoute:
                 _ = bytes.fromhex(digest)
             except ValueError as error:
                 raise ValueError(f"resolver {label} digest must be SHA-256") from error
+        for label, value, expected_length in (
+            ("public key", self.resolver_public_key, 64),
+            ("signature", self.route_signature, 128),
+        ):
+            if len(value) != expected_length:
+                raise ValueError(f"resolver route {label} is not valid Ed25519 evidence")
+            try:
+                _ = bytes.fromhex(value)
+            except ValueError as error:
+                raise ValueError(f"resolver route {label} is not valid Ed25519 evidence") from error
         object.__setattr__(self, "address", address.compressed)
 
     @property
@@ -104,6 +120,7 @@ class DnsBindingLease:
     resolver_route_digest: str
     resolver_nonce: str
     issuance_receipt_digest: str
+    resolver_signature: str
 
     def __post_init__(self) -> None:
         if self.protocol not in (NetworkProtocol.TCP, NetworkProtocol.UDP):
@@ -122,11 +139,156 @@ class DnsBindingLease:
                 _ = bytes.fromhex(digest)
             except ValueError as error:
                 raise ValueError(f"DNS binding {label} must be SHA-256") from error
+        if len(self.resolver_signature) != 128:
+            raise ValueError("DNS binding signature is not valid Ed25519 evidence")
+        try:
+            _ = bytes.fromhex(self.resolver_signature)
+        except ValueError as error:
+            raise ValueError("DNS binding signature is not valid Ed25519 evidence") from error
         object.__setattr__(self, "address", ipaddress.ip_address(self.address).compressed)
 
     @property
     def digest(self) -> str:
         return canonical_digest(asdict(self))
+
+
+def _resolver_route_manifest_digest(route: LinuxResolverRoute) -> str:
+    return canonical_digest(
+        {
+            "address": route.address,
+            "broker_cgroup_id": route.broker_cgroup_id,
+            "doh_boundary_digest": route.doh_boundary_digest,
+            "executable_digest": route.executable_digest,
+            "resolver_public_key": route.resolver_public_key,
+            "tcp_port": route.tcp_port,
+            "udp_port": route.udp_port,
+        }
+    )
+
+
+def _binding_manifest_digest(binding: DnsBindingLease) -> str:
+    return canonical_digest(
+        {
+            "address": binding.address,
+            "authoritative_ttl_seconds": binding.authoritative_ttl_seconds,
+            "expires_at_epoch_seconds": binding.expires_at_epoch_seconds,
+            "generation": binding.generation,
+            "host": binding.host,
+            "issued_at_epoch_seconds": binding.issued_at_epoch_seconds,
+            "policy_id": binding.policy_id,
+            "port_end": binding.port_end,
+            "port_start": binding.port_start,
+            "process_tree_digest": binding.process_tree_digest,
+            "protocol": binding.protocol,
+            "resolver_nonce": binding.resolver_nonce,
+            "resolver_route_digest": binding.resolver_route_digest,
+            "workload_cgroup_id": binding.workload_cgroup_id,
+        }
+    )
+
+
+def create_linux_resolver_route(
+    address: str,
+    udp_port: int,
+    tcp_port: int,
+    broker_cgroup_id: int,
+    executable_digest: str,
+    doh_boundary_digest: str,
+    resolver_private_key: Ed25519PrivateKey,
+) -> LinuxResolverRoute:
+    public_key = resolver_private_key.public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    provisional = LinuxResolverRoute(
+        address,
+        udp_port,
+        tcp_port,
+        broker_cgroup_id,
+        executable_digest,
+        "0" * 64,
+        doh_boundary_digest,
+        public_key.hex(),
+        "0" * 128,
+    )
+    digest = _resolver_route_manifest_digest(provisional)
+    return replace(
+        provisional,
+        route_attestation_digest=digest,
+        route_signature=resolver_private_key.sign(bytes.fromhex(digest)).hex(),
+    )
+
+
+def create_dns_binding_lease(
+    *,
+    resolver_private_key: Ed25519PrivateKey,
+    policy_id: str,
+    generation: int,
+    process_tree_digest: str,
+    workload_cgroup_id: int,
+    host: str,
+    address: str,
+    protocol: NetworkProtocol,
+    port_start: int,
+    port_end: int,
+    issued_at_epoch_seconds: int,
+    authoritative_ttl_seconds: int,
+    expires_at_epoch_seconds: int,
+    resolver_route_digest: str,
+    resolver_nonce: str,
+) -> DnsBindingLease:
+    provisional = DnsBindingLease(
+        policy_id,
+        generation,
+        process_tree_digest,
+        workload_cgroup_id,
+        host,
+        address,
+        protocol,
+        port_start,
+        port_end,
+        issued_at_epoch_seconds,
+        authoritative_ttl_seconds,
+        expires_at_epoch_seconds,
+        resolver_route_digest,
+        resolver_nonce,
+        "0" * 64,
+        "0" * 128,
+    )
+    digest = _binding_manifest_digest(provisional)
+    return replace(
+        provisional,
+        issuance_receipt_digest=digest,
+        resolver_signature=resolver_private_key.sign(bytes.fromhex(digest)).hex(),
+    )
+
+
+def _resolver_route_is_attested(route: LinuxResolverRoute) -> bool:
+    digest = _resolver_route_manifest_digest(route)
+    if digest != route.route_attestation_digest:
+        return False
+    try:
+        Ed25519PublicKey.from_public_bytes(bytes.fromhex(route.resolver_public_key)).verify(
+            bytes.fromhex(route.route_signature),
+            bytes.fromhex(digest),
+        )
+    except (InvalidSignature, ValueError):
+        return False
+    return True
+
+
+def _binding_is_attested(binding: DnsBindingLease, resolver_public_key: str) -> bool:
+    digest = _binding_manifest_digest(binding)
+    if digest != binding.issuance_receipt_digest:
+        return False
+    try:
+        Ed25519PublicKey.from_public_bytes(bytes.fromhex(resolver_public_key)).verify(
+            bytes.fromhex(binding.resolver_signature),
+            bytes.fromhex(digest),
+        )
+    except (InvalidSignature, ValueError):
+        return False
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +297,7 @@ class LinuxUdpDnsPolicyArtifact:
     generation: int
     policy_digest: str
     tcp_artifact_digest: str
+    process_tree_digest: str
     process_tree: ProcessTreeIdentity
     workload_cgroup_id: int
     resolver_route: LinuxResolverRoute
@@ -174,9 +337,12 @@ def compile_linux_udp_dns_policy(
         tcp_artifact.policy_id != policy.policy_id
         or tcp_artifact.generation != policy.generation
         or tcp_artifact.policy_digest != policy.digest
-        or tcp_artifact.process_tree.digest != process_tree.digest
+        or tcp_artifact.process_tree_digest != process_tree.digest
+        or tcp_artifact.process_tree.digest != tcp_artifact.process_tree_digest
     ):
         raise ValueError("TCP artifact does not match policy generation and process tree")
+    if not _resolver_route_is_attested(resolver_route):
+        raise ValueError("resolver route attestation is invalid")
     l4_entries: list[LinuxL4RuleEntry] = []
     host_entries: list[LinuxHostRuleEntry] = []
     for rule in policy.rules:
@@ -245,12 +411,20 @@ def compile_linux_udp_dns_policy(
             item.rule_id,
         )
     )
+    process_tree_snapshot = ProcessTreeIdentity(
+        installation_id=process_tree.installation_id,
+        session_id=process_tree.session_id,
+        root_pid=process_tree.root_pid,
+        root_start_time_ns=process_tree.root_start_time_ns,
+        executable_digest=process_tree.executable_digest,
+    )
     return LinuxUdpDnsPolicyArtifact(
         policy.policy_id,
         policy.generation,
         policy.digest,
         tcp_artifact.digest,
-        process_tree,
+        process_tree_snapshot.digest,
+        process_tree_snapshot,
         workload_cgroup_id,
         resolver_route,
         tuple(l4_entries),
@@ -263,19 +437,29 @@ def evaluate_linux_udp_dns_artifact(
     process_tree: ProcessTreeIdentity,
     *,
     cgroup_id: int,
+    installed_artifact_digest: str,
     hook: LinuxSocketHook,
     protocol: NetworkProtocol,
     remote_address: str,
     remote_port: int,
     now_epoch_seconds: int,
     binding: DnsBindingLease | None = None,
-    verified_binding_digest: str | None = None,
-    verified_route_attestation_digest: str | None = None,
     application_intent_digest: str | None = None,
 ) -> NetworkAction:
-    """Reference TCP-host and connected/sendmsg UDP semantics for cgroup hooks."""
+    """Evaluate trusted installation state and signed resolver evidence."""
 
-    if process_tree.digest != artifact.process_tree.digest or cgroup_id != artifact.workload_cgroup_id:
+    if artifact.digest != installed_artifact_digest:
+        raise ValueError("Linux UDP/DNS policy artifact digest does not match installation")
+    if (
+        not _resolver_route_is_attested(artifact.resolver_route)
+        or artifact.schema_version != LINUX_UDP_DNS_SCHEMA_VERSION
+        or artifact.decision_semantics != "all-matches-deny-wins"
+        or artifact.resolver_semantics != "deny-external-53-853-attested-route-only"
+        or artifact.default_action is not NetworkAction.DENY
+        or artifact.process_tree.digest != artifact.process_tree_digest
+    ):
+        raise ValueError("invalid Linux UDP/DNS policy artifact")
+    if process_tree.digest != artifact.process_tree_digest or cgroup_id != artifact.workload_cgroup_id:
         return NetworkAction.DENY
     address = ipaddress.ip_address(remote_address)
     expected_family = "4" if address.version == 4 else "6"
@@ -307,15 +491,11 @@ def evaluate_linux_udp_dns_artifact(
         return NetworkAction.DENY
     if remote_port == 443 and application_intent_digest != artifact.resolver_route.doh_boundary_digest:
         return NetworkAction.DENY
-    if (
-        address == route_address
-        and remote_port == route_port
-        and verified_route_attestation_digest == artifact.resolver_route.route_attestation_digest
-    ):
+    if address == route_address and remote_port == route_port:
         actions.add(NetworkAction.ALLOW)
     if (
         binding is not None
-        and verified_binding_digest == binding.digest
+        and _binding_is_attested(binding, artifact.resolver_route.resolver_public_key)
         and _binding_matches(
             artifact,
             process_tree,

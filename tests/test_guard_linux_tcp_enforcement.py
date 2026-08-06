@@ -89,9 +89,9 @@ def test_tcp_lowering_fails_closed_for_semantics_the_native_hook_cannot_prove() 
     )
 
     with pytest.raises(ValueError, match="DNS correlation"):
-        compile_linux_tcp_policy(_policy(host_rule), _tree())
+        _ = compile_linux_tcp_policy(_policy(host_rule), _tree())
     with pytest.raises(ValueError, match="broker mediation"):
-        compile_linux_tcp_policy(_policy(approval_rule), _tree())
+        _ = compile_linux_tcp_policy(_policy(approval_rule), _tree())
 
 
 def test_tcp_lowering_does_not_claim_full_destination_enforcement() -> None:
@@ -103,7 +103,7 @@ def test_tcp_lowering_does_not_claim_full_destination_enforcement() -> None:
     )
 
     with pytest.raises(ValueError, match="exact TCP IP enforcement grade"):
-        compile_linux_tcp_policy(policy, _tree())
+        _ = compile_linux_tcp_policy(policy, _tree())
 
 
 def test_tcp_reference_semantics_enforce_overlap_expiry_and_identity() -> None:
@@ -123,11 +123,13 @@ def test_tcp_reference_semantics_enforce_overlap_expiry_and_identity() -> None:
         protocols=(NetworkProtocol.TCP,),
     )
     artifact = compile_linux_tcp_policy(_policy(allow, deny), _tree())
+    allow_artifact = compile_linux_tcp_policy(_policy(allow), _tree())
 
     assert (
         evaluate_linux_tcp_artifact(
             artifact,
             _tree(),
+            installed_artifact_digest=artifact.digest,
             remote_address="203.0.113.7",
             remote_port=443,
             now_epoch_seconds=19,
@@ -136,8 +138,9 @@ def test_tcp_reference_semantics_enforce_overlap_expiry_and_identity() -> None:
     )
     assert (
         evaluate_linux_tcp_artifact(
-            compile_linux_tcp_policy(_policy(allow), _tree()),
+            allow_artifact,
             _tree(),
+            installed_artifact_digest=allow_artifact.digest,
             remote_address="203.0.113.8",
             remote_port=443,
             now_epoch_seconds=20,
@@ -152,9 +155,10 @@ def test_tcp_reference_semantics_enforce_overlap_expiry_and_identity() -> None:
         executable_digest="a" * 64,
     )
     with pytest.raises(ValueError, match="identity does not match"):
-        evaluate_linux_tcp_artifact(
+        _ = evaluate_linux_tcp_artifact(
             artifact,
             other_tree,
+            installed_artifact_digest=artifact.digest,
             remote_address="203.0.113.8",
             remote_port=443,
             now_epoch_seconds=19,

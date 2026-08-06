@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from codex_plugin_scanner.guard.runtime.linux_tcp_enforcement import (
     compile_linux_tcp_policy,
@@ -11,6 +14,8 @@ from codex_plugin_scanner.guard.runtime.linux_udp_dns_enforcement import (
     LinuxSocketHook,
     LinuxUdpDnsPolicyArtifact,
     compile_linux_udp_dns_policy,
+    create_dns_binding_lease,
+    create_linux_resolver_route,
     evaluate_linux_udp_dns_artifact,
 )
 from codex_plugin_scanner.guard.runtime.network_policy_contract import (
@@ -26,13 +31,23 @@ from codex_plugin_scanner.guard.runtime.network_policy_contract import (
     ProcessTreeIdentity,
 )
 
+RESOLVER_PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+
 
 def _tree() -> ProcessTreeIdentity:
     return ProcessTreeIdentity("install.alpha", "session.alpha", 123, 456, "a" * 64)
 
 
 def _route() -> LinuxResolverRoute:
-    return LinuxResolverRoute("127.0.0.1", 5353, 5354, 99, "b" * 64, "c" * 64, "d" * 64)
+    return create_linux_resolver_route(
+        "127.0.0.1",
+        5353,
+        5354,
+        99,
+        "b" * 64,
+        "d" * 64,
+        RESOLVER_PRIVATE_KEY,
+    )
 
 
 def _policy(*rules: NetworkRule) -> NetworkPolicy:
@@ -62,7 +77,8 @@ def _lease(
     generation: int | None = None,
     expires_at: int = 20,
 ) -> DnsBindingLease:
-    return DnsBindingLease(
+    return create_dns_binding_lease(
+        resolver_private_key=RESOLVER_PRIVATE_KEY,
         policy_id=artifact.policy_id,
         generation=artifact.generation if generation is None else generation,
         process_tree_digest=_tree().digest,
@@ -77,7 +93,6 @@ def _lease(
         expires_at_epoch_seconds=expires_at,
         resolver_route_digest=_route().digest,
         resolver_nonce="e" * 64,
-        issuance_receipt_digest="f" * 64,
     )
 
 
@@ -91,11 +106,11 @@ def _evaluate(
     cgroup_id: int = 42,
     now: int = 1,
     binding: DnsBindingLease | None = None,
-    trust_route: bool = True,
 ) -> NetworkAction:
     return evaluate_linux_udp_dns_artifact(
         artifact,
         _tree(),
+        installed_artifact_digest=artifact.digest,
         cgroup_id=cgroup_id,
         hook=hook,
         protocol=protocol,
@@ -103,8 +118,6 @@ def _evaluate(
         remote_port=port,
         now_epoch_seconds=now,
         binding=binding,
-        verified_binding_digest=binding.digest if binding is not None else None,
-        verified_route_attestation_digest=(artifact.resolver_route.route_attestation_digest if trust_route else None),
         application_intent_digest=artifact.resolver_route.doh_boundary_digest,
     )
 
@@ -192,27 +205,6 @@ def test_resolver_route_is_protocol_and_port_specific() -> None:
             hook=LinuxSocketHook.CONNECT4,
             address="127.0.0.1",
             port=5353,
-        )
-        is NetworkAction.DENY
-    )
-    assert (
-        _evaluate(
-            artifact,
-            protocol=NetworkProtocol.TCP,
-            hook=LinuxSocketHook.CONNECT4,
-            address="1.1.1.1",
-            port=853,
-        )
-        is NetworkAction.DENY
-    )
-    assert (
-        _evaluate(
-            artifact,
-            protocol=NetworkProtocol.UDP,
-            hook=LinuxSocketHook.CONNECT4,
-            address="127.0.0.1",
-            port=5353,
-            trust_route=False,
         )
         is NetworkAction.DENY
     )
@@ -382,6 +374,44 @@ def test_udp_dns_artifact_is_deterministic_process_bound_and_deny_wins() -> None
             address="2001:db8::8",
             port=443,
             cgroup_id=41,
+        )
+        is NetworkAction.DENY
+    )
+
+
+def test_udp_dns_rejects_tampered_resolver_attestations() -> None:
+    route = replace(_route(), route_signature="0" * 128)
+    policy = _policy()
+    with pytest.raises(ValueError, match="resolver route attestation"):
+        _ = compile_linux_udp_dns_policy(
+            policy,
+            _tree(),
+            compile_linux_tcp_policy(policy, _tree()),
+            workload_cgroup_id=42,
+            resolver_route=route,
+        )
+
+    host = NetworkRule(
+        "allow.host.tcp",
+        PolicyOwner.LOCAL,
+        NetworkAction.ALLOW,
+        (Destination(DestinationKind.HOST, "api.example.com"),),
+        (NetworkProtocol.TCP,),
+        (PortRange(443, 443),),
+    )
+    artifact = _compile(host)
+    forged_lease = replace(
+        _lease(artifact, NetworkProtocol.TCP),
+        address="203.0.113.8",
+    )
+    assert (
+        _evaluate(
+            artifact,
+            protocol=NetworkProtocol.TCP,
+            hook=LinuxSocketHook.CONNECT4,
+            address="203.0.113.8",
+            port=443,
+            binding=forged_lease,
         )
         is NetworkAction.DENY
     )

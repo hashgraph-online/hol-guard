@@ -128,11 +128,23 @@ def evaluate_linux_tcp_artifact(
     artifact: LinuxTcpPolicyArtifact,
     process_tree: ProcessTreeIdentity,
     *,
+    installed_artifact_digest: str,
     remote_address: str,
     remote_port: int,
     now_epoch_seconds: int,
 ) -> NetworkAction:
-    """Reference mandatory native all-match, expiry, and identity semantics."""
+    """Evaluate an artifact against its digest from the trusted installation record."""
+    if artifact.digest != installed_artifact_digest:
+        raise ValueError("Linux TCP policy artifact digest does not match installation")
+    if (
+        artifact.schema_version != LINUX_TCP_POLICY_SCHEMA_VERSION
+        or artifact.decision_semantics != LINUX_TCP_DECISION_SEMANTICS
+        or artifact.expiry_semantics != LINUX_TCP_EXPIRY_SEMANTICS
+        or artifact.attachment_semantics != LINUX_TCP_ATTACHMENT_SEMANTICS
+        or artifact.default_action is not NetworkAction.DENY
+        or artifact.process_tree.digest != artifact.process_tree_digest
+    ):
+        raise ValueError("invalid Linux TCP policy artifact")
 
     if process_tree.digest != artifact.process_tree_digest:
         raise ValueError("process tree identity does not match the compiled artifact")
