@@ -253,12 +253,14 @@ def test_repair_verifies_healthy_state_without_changing_identity(tmp_path: Path)
 def test_repair_restores_replaced_artifact_from_verified_file(tmp_path: Path) -> None:
     state, path, metadata = _install(tmp_path)
     artifact = Path(path)
-    artifact.unlink()
-    _ = artifact.write_bytes(b"release-one")
-    _ = artifact.chmod(0o555)
-    restored = repair_linux_artifact(
-        state, path, metadata, _receipt(path, metadata), expected_uid=os.getuid(), **_TRUST
-    )
+    with artifact.open("rb") as original_handle:
+        artifact.unlink()
+        _ = artifact.write_bytes(b"release-one")
+        _ = artifact.chmod(0o555)
+        restored = repair_linux_artifact(
+            state, path, metadata, _receipt(path, metadata), expected_uid=os.getuid(), **_TRUST
+        )
+        assert original_handle.fileno() >= 0
 
     assert state.active is not None
     assert restored.state.active is not None
@@ -275,12 +277,14 @@ def test_repair_preserves_upgrade_rollback_after_same_release_replacement(tmp_pa
         initial, path, metadata, _receipt(path, metadata), expected_uid=os.getuid(), **_TRUST
     )
     artifact = Path(path)
-    artifact.unlink()
-    _ = artifact.write_bytes(b"release-two")
-    _ = artifact.chmod(0o555)
-    repaired = repair_linux_artifact(
-        upgraded.state, path, metadata, _receipt(path, metadata), expected_uid=os.getuid(), **_TRUST
-    )
+    with artifact.open("rb") as original_handle:
+        artifact.unlink()
+        _ = artifact.write_bytes(b"release-two")
+        _ = artifact.chmod(0o555)
+        repaired = repair_linux_artifact(
+            upgraded.state, path, metadata, _receipt(path, metadata), expected_uid=os.getuid(), **_TRUST
+        )
+        assert original_handle.fileno() >= 0
 
     assert repaired.receipt.outcome is LinuxArtifactLifecycleOutcome.RESTORED
     assert repaired.state.rollback == upgraded.state.rollback
