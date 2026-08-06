@@ -54,6 +54,9 @@ from .shell_static_safety import (
 from .shell_tokenization import _shell_segment_primary_command
 
 
+_READ_ONLY_SEARCH_FILE_INPUT_FLAGS = frozenset({"-f", "--file", "--ignore-file"})
+
+
 class DeveloperShellEffect(str, Enum):
     """Effects that may participate in a silently verified inspection chain."""
 
@@ -341,10 +344,34 @@ def _read_only_lookup_search_args_are_safe(
     execution_flags = _READ_ONLY_SEARCH_EXECUTION_FLAGS.get(command, frozenset())
     if any(arg in execution_flags or any(arg.startswith(f"{flag}=") for flag in execution_flags) for arg in args):
         return False
+    if _read_only_lookup_search_uses_file_input(args):
+        return False
+    if command == "rg" and os.environ.get("RIPGREP_CONFIG_PATH") and not _ripgrep_config_is_disabled(args):
+        return False
     targets = [arg for arg in args if arg and not arg.startswith("-")]
     return len(targets) < 2 or all(
         _read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in targets[1:]
     )
+
+
+def _read_only_lookup_search_uses_file_input(args: list[str]) -> bool:
+    for arg in args:
+        if arg in _READ_ONLY_SEARCH_FILE_INPUT_FLAGS:
+            return True
+        if arg.startswith(("--file=", "--ignore-file=")):
+            return True
+        if arg.startswith("-f") and not arg.startswith("--"):
+            return True
+    return False
+
+
+def _ripgrep_config_is_disabled(args: list[str]) -> bool:
+    for arg in args:
+        if arg == "--":
+            return False
+        if arg == "--no-config":
+            return True
+    return False
 
 
 def _read_only_lookup_fd_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
