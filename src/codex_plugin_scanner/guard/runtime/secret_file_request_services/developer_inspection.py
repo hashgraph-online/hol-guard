@@ -193,6 +193,13 @@ def _compound_developer_effect_graph(
             continue
         if (
             command_name in _READ_ONLY_LOOKUP_COMMANDS
+            and not (
+                command_name == "rg"
+                and not _ripgrep_config_is_disabled(args)
+                and any(
+                    token.startswith("RIPGREP_CONFIG_PATH=") for token in segment.tokens[:command_index]
+                )
+            )
             and _read_only_lookup_primary_segment_is_safe(
                 command_name,
                 args,
