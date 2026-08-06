@@ -36,8 +36,6 @@ class ControlSurface(str, Enum):
 
 
 class ResolverFailureCode(str, Enum):
-    AUTHORITY_TAMPERED = "authority-tampered"
-    AUTHORITY_UNAVAILABLE = "authority-unavailable"
     UNSUPPORTED_CONTROL_SCHEMA = "unsupported-control-schema"
     DUPLICATE_LAYER_KIND = "duplicate-layer-kind"
     DUPLICATE_TARGET_IN_LAYER = "duplicate-target-in-layer"
@@ -49,11 +47,6 @@ class ResolverFailureCode(str, Enum):
     CATALOG_UNAVAILABLE = "catalog-unavailable"
     INPUT_LIMIT_EXCEEDED = "input-limit-exceeded"
     NON_CANONICAL_TARGET = "non-canonical-target"
-    MANAGED_POLICY_UNAVAILABLE = "managed-policy-unavailable"
-    MANAGED_POLICY_NOT_YET_VALID = "managed-policy-not-yet-valid"
-    MANAGED_POLICY_EXPIRED = "managed-policy-expired"
-    MANAGED_POLICY_REVOKED = "managed-policy-revoked"
-    MANAGED_POLICY_ROLLBACK = "managed-policy-rollback"
 
 
 @dataclass(frozen=True, slots=True, order=True)

@@ -34,10 +34,10 @@ def _stable_versions_for_line(base: Version, existing_versions: Iterable[str]) -
     for version_text in existing_versions:
         try:
             version = Version(version_text)
-        except InvalidVersion:
-            continue
+        except InvalidVersion as exc:
+            raise ValueError(f"Registry version is invalid: {version_text!r}") from exc
         if version_text != str(version) or version.local is not None:
-            continue
+            raise ValueError(f"Registry version is not canonical: {version_text!r}")
         if (
             version.release[:2] == base.release[:2]
             and len(version.release) == 3

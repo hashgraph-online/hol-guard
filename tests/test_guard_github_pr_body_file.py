@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.github_pr_body_file import (
+    _omp_session_authored_root,
     github_pr_body_file_is_safe,
 )
 
@@ -32,6 +33,17 @@ def test_github_pr_body_file_accepts_canonical_markdown_name(tmp_path: Path, nam
         cwd=tmp_path,
         home_dir=tmp_path.parent,
     )
+
+
+def test_github_pr_body_file_recognizes_only_direct_omp_session_local_output(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    local_file = home / ".omp" / "agent" / "sessions" / "workspace" / "session" / "local" / "pr-body.md"
+    state_file = home / ".omp" / "agent" / "sessions" / "workspace" / "session" / "state" / "pr-body.md"
+    nested_file = local_file.parent / "nested" / "pr-body.md"
+
+    assert _omp_session_authored_root(local_file, home_dir=home) == home
+    assert _omp_session_authored_root(state_file, home_dir=home) is None
+    assert _omp_session_authored_root(nested_file, home_dir=home) is None
 
 
 def test_github_pr_body_file_rejects_oversized_markdown(tmp_path: Path) -> None:

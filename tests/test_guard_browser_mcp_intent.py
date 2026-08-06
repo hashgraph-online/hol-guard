@@ -130,6 +130,53 @@ class TestBrowserIntentLiterals:
         assert "browser.privileged" in BrowserIntent.__args__  # type: ignore[attr-defined]
 
 
+class TestBrowserPageContext:
+    def test_selected_page_response_extracts_redacted_url(self) -> None:
+        from codex_plugin_scanner.guard.proxy.runtime_mcp import _selected_browser_page_url
+
+        response = {
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "## Pages\n0: https://example.com/private?token=secret [selected]\n1: https://hol.org/"
+                        ),
+                    }
+                ]
+            }
+        }
+
+        assert _selected_browser_page_url(response) == "https://example.com/private?token=%5Bredacted%5D"
+
+    def test_selected_page_ignores_untrusted_response_fields(self) -> None:
+        from codex_plugin_scanner.guard.proxy.runtime_mcp import _selected_browser_page_url
+
+        response = {
+            "result": {
+                "content": [],
+                "logs": "0: https://attacker.example/ [selected]",
+            }
+        }
+
+        assert _selected_browser_page_url(response) is None
+
+    def test_new_child_process_state_clears_page_context(self) -> None:
+        from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
+
+        proxy = object.__new__(RuntimeMcpGuardProxy)
+        proxy._buffered_child_responses = {}
+        proxy._buffered_client_responses = {}
+        proxy._child_output_queue = None
+        proxy._active_child_stdout = None
+        proxy._browser_current_page_url = "https://previous.example/private"
+        proxy._tool_catalog_generation = 0
+
+        proxy._reset_child_process_state()
+
+        assert proxy._browser_current_page_url is None
+
+
 class TestBrowserAutomationIntentV1:
     """HGBM013: GuardBrowserAutomationIntentV1 dataclass."""
 
@@ -497,6 +544,30 @@ class TestRedactedTargetUrl:
         result = _redacted_target_url("https://hol.org/guard?id=123")
         assert "123" in result
 
+    def test_redacts_sensitive_fragment(self) -> None:
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            _redacted_target_url,
+        )
+
+        result = _redacted_target_url("http://127.0.0.1:5474/requests/abc#guard-token=secret")
+        assert result == "http://127.0.0.1:5474/requests/abc#guard-token=%5Bredacted%5D"
+
+    def test_preserves_safe_spa_fragment(self) -> None:
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            _redacted_target_url,
+        )
+
+        assert _redacted_target_url("https://example.com/#/dashboard") == "https://example.com/#/dashboard"
+
+    def test_redacts_sensitive_spa_fragment_query(self) -> None:
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            _redacted_target_url,
+        )
+
+        result = _redacted_target_url("https://example.com/#/dashboard?token=secret&tab=network")
+
+        assert result == "https://example.com/#/dashboard?token=%5Bredacted%5D&tab=network"
+
 
 class TestOperationMaps:
     """HGBM023-HGBM029: Operation maps for browser MCP tools."""
@@ -740,6 +811,77 @@ class TestFullIntentNormalization:
         assert result.intent == "browser.inspect"
         assert "pageId" in result.volatile_fields_dropped
 
+    def test_current_chrome_devtools_quality_tools_are_routine(self) -> None:
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            normalize_browser_mcp_intent,
+        )
+
+        expected_intents = {
+            "emulate": "browser.interact",
+            "lighthouse_audit": "browser.inspect",
+            "list_console_messages": "browser.inspect",
+            "list_network_requests": "browser.inspect",
+            "performance_start_trace": "browser.inspect",
+            "performance_stop_trace": "browser.inspect",
+            "resize_page": "browser.interact",
+        }
+
+        for tool_name, expected_intent in expected_intents.items():
+            artifact, arguments = _browser_artifact(tool_name=tool_name, arguments={})
+            result = normalize_browser_mcp_intent(artifact, arguments)
+            assert result is not None, tool_name
+            assert result.intent == expected_intent, tool_name
+
+    def test_network_response_body_access_is_privileged(self) -> None:
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            normalize_browser_mcp_intent,
+        )
+
+        artifact, arguments = _browser_artifact(
+            tool_name="get_network_request",
+            arguments={"reqid": "request-1"},
+        )
+        result = normalize_browser_mcp_intent(artifact, arguments)
+        assert result is not None
+        assert result.intent == "browser.privileged"
+
+    def test_emulation_with_custom_headers_is_sensitive(self) -> None:
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            normalize_browser_mcp_intent,
+        )
+
+        artifact, arguments = _browser_artifact(
+            tool_name="emulate",
+            arguments={"extraHttpHeaders": {"X-Test": "value"}},
+        )
+        result = normalize_browser_mcp_intent(artifact, arguments)
+        assert result is not None
+        assert result.intent == "browser.interact"
+        assert "auth_headers" in result.sensitive_surface_flags
+
+    def test_screenshot_uses_confirmed_current_page_context(self) -> None:
+        from dataclasses import replace
+
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            normalize_browser_mcp_intent,
+        )
+
+        artifact, arguments = _browser_artifact(tool_name="take_screenshot", arguments={})
+        artifact = replace(
+            artifact,
+            metadata={
+                **artifact.metadata,
+                "browser_current_page_url": "https://example.com/private?token=secret",
+            },
+        )
+
+        result = normalize_browser_mcp_intent(artifact, arguments)
+
+        assert result is not None
+        assert result.target_origin == "https://example.com"
+        assert result.target_domain == "example.com"
+        assert result.target_url == "https://example.com/private?token=%5Bredacted%5D"
+
     def test_evaluate_script_is_privileged(self) -> None:
         from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
             normalize_browser_mcp_intent,
@@ -752,6 +894,56 @@ class TestFullIntentNormalization:
         result = normalize_browser_mcp_intent(artifact, arguments)
         assert result is not None
         assert result.intent == "browser.privileged"
+        assert "script_eval" in result.sensitive_surface_flags
+
+    def test_navigate_page_ignores_unused_script_schema_capability(self) -> None:
+        from dataclasses import replace
+
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            normalize_browser_mcp_intent,
+        )
+
+        artifact, arguments = _browser_artifact(
+            tool_name="navigate_page",
+            arguments={"type": "url", "url": "http://localhost:3000/guard"},
+        )
+        artifact = replace(
+            artifact,
+            metadata={
+                **artifact.metadata,
+                "tool_schema": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"},
+                        "initScript": {"type": "string"},
+                    },
+                },
+            },
+        )
+
+        result = normalize_browser_mcp_intent(artifact, arguments)
+
+        assert result is not None
+        assert result.intent == "browser.navigation"
+        assert result.sensitive_surface_flags == ()
+
+    def test_supplied_script_argument_remains_sensitive(self) -> None:
+        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+            normalize_browser_mcp_intent,
+        )
+
+        artifact, arguments = _browser_artifact(
+            tool_name="navigate_page",
+            arguments={
+                "type": "url",
+                "url": "http://localhost:3000/guard",
+                "initScript": "document.title",
+            },
+        )
+
+        result = normalize_browser_mcp_intent(artifact, arguments)
+
+        assert result is not None
         assert "script_eval" in result.sensitive_surface_flags
 
     def test_fill_form_is_interact(self) -> None:
@@ -826,6 +1018,28 @@ class TestBrowserRiskClassifierIntegration:
         categories = tool_call_risk_categories(artifact, arguments)
         assert "browser_inspection" in categories
 
+    def test_screenshot_optional_file_path_schema_is_not_an_active_file_transfer(self) -> None:
+        artifact, arguments = _browser_artifact(
+            tool_name="take_screenshot",
+            arguments={},
+        )
+        from dataclasses import replace
+
+        artifact = replace(
+            artifact,
+            metadata={
+                **artifact.metadata,
+                "tool_schema": {
+                    "type": "object",
+                    "properties": {"filePath": {"type": "string"}},
+                },
+            },
+        )
+
+        categories = tool_call_risk_categories(artifact, arguments)
+
+        assert categories == ("browser_inspection",)
+
     def test_browser_interaction_category(self) -> None:
         """HGBM039: Click/type has browser_interaction category."""
         artifact, arguments = _browser_artifact(
@@ -834,6 +1048,10 @@ class TestBrowserRiskClassifierIntegration:
         )
         categories = tool_call_risk_categories(artifact, arguments)
         assert "browser_interaction" in categories
+        signals = tool_call_risk_signals(artifact, arguments)
+        assert "browser interaction on page element" in signals
+        assert all("unknown" not in signal for signal in signals)
+        assert all("#button" not in signal for signal in signals)
 
     def test_browser_transfer_category(self) -> None:
         """HGBM040: Upload/download has browser_transfer category."""
@@ -1062,4 +1280,29 @@ class TestProxyBrowserIntentMetadata:
             params={"arguments": arguments},
             signals=(),
         )
-        assert payload["launch_target"] == "chrome-devtools navigate_page hol.org"
+        assert "hol.org" in payload["launch_target"]
+        assert "navigate_page" not in payload["launch_target"] or "chrome" in payload["launch_target"].lower()
+
+        cases: tuple[tuple[str, dict[str, object], str], ...] = (
+            ("click", {"uid": "12_3"}, "chrome-devtools click page element"),
+            (
+                "fill_form",
+                {"elements": [{"uid": "1", "value": "a"}, {"uid": "2", "value": "b"}]},
+                "chrome-devtools fill_form page elements",
+            ),
+            ("take_snapshot", {}, "chrome-devtools take_snapshot current page"),
+            ("get_network_request", {"reqid": 7}, "chrome-devtools get_network_request network request"),
+            ("get_console_message", {"msgid": 4}, "chrome-devtools get_console_message console message"),
+        )
+        for tool_name, arguments, expected_target in cases:
+            case_artifact, _ = _browser_artifact(tool_name=tool_name, arguments=arguments)
+            case_payload = RuntimeMcpGuardProxy._build_artifact_payload(
+                _FakeProxy(),
+                artifact=case_artifact,
+                artifact_hash="test-hash",
+                tool_name=tool_name,
+                params={"arguments": arguments},
+                signals=(),
+            )
+            assert case_payload["launch_target"] == expected_target
+            assert all(str(value) not in case_payload["launch_target"] for value in arguments.values())

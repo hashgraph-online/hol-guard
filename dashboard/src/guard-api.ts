@@ -19,6 +19,9 @@ import {
   mostRestrictiveGuardAction,
   normalizeGuardAction,
 } from "./guard-action";
+import { parseTemporaryMcpApproval } from "./temporary-mcp-approval";
+import { parseLocalToolApproval } from "./local-tool-approval";
+import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import type {
   GuardActionEnvelope,
   GuardAction,
@@ -75,11 +78,11 @@ import type {
   GuardUpdateStatus,
   GuardUpdateVersionCheck,
   DecisionScope,
+  GuardApprovalResolutionInput,
+  RiskSignalV2,
   RiskSignalV2Category,
-  RiskSignalV2Severity,
-  TrayAction,
-  TrayLifecycleResultPayload,
-  TrayStatusPayload,
+  RiskSignalV2RedactionLevel,
+  RiskSignalV2Severity
 } from "./guard-types";
 import {
   getDemoDiff,
@@ -121,6 +124,8 @@ type RawGuardApprovalRequest = Omit<
   | "recommended_scope_by_action"
   | "scope_restrictions"
   | "task_capability_eligibility"
+  | "temporary_mcp_approval"
+  | "local_tool_approval"
 > & {
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
@@ -134,6 +139,8 @@ type RawGuardApprovalRequest = Omit<
   recommended_scope_by_action?: unknown;
   scope_restrictions?: unknown;
   task_capability_eligibility?: unknown;
+  temporary_mcp_approval?: unknown;
+  local_tool_approval?: unknown;
 };
 
 type RawGuardReceipt = Omit<GuardReceipt, "action_envelope_json" | "policy_decision"> & {
@@ -161,6 +168,7 @@ type RuntimeSnapshotPayload = Omit<
   | "managed_installs"
   | "cloud_command_capability"
   | "protection_health"
+  | "operator_health"
   | "runtime_state"
   | "latest_receipts"
   | "inventory"
@@ -173,6 +181,7 @@ type RuntimeSnapshotPayload = Omit<
   managed_installs?: unknown;
   cloud_command_capability?: unknown;
   protection_health?: unknown;
+  operator_health?: unknown;
   runtime_state?: unknown;
 };
 
@@ -777,6 +786,7 @@ export async function fetchGuardUpdateStatusAtOrigin(
   }
   const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/status`, {
     headers: guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {},
+    cache: "no-store",
     redirect: "error",
   });
   if (!response.ok) {
@@ -973,16 +983,6 @@ export async function fetchCommandActivityApi(input: RequestInfo, init?: Request
   return fetchWithGuardAuth(input, init);
 }
 
-export async function fetchExtensionControlApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
-  const approvedPath =
-    typeof input === "string" &&
-    /^\/v1\/extension-controls\/(?:catalog|effective|preview|apply|refresh)$/.test(input);
-  if (!approvedPath) {
-    throw new Error("Invalid extension-control API path");
-  }
-  return fetchWithGuardAuth(input, init);
-}
-
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -1146,6 +1146,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   const mcpTool = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
+  const commandCategory = raw["command_category"];
   const packageIntentKind = raw["package_intent_kind"];
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
@@ -1172,6 +1173,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     !isStringOrNull(mcpTool) ||
     !isStringOrNull(packageManager) ||
     !isStringOrNull(packageName) ||
+    (commandCategory !== undefined && !isStringOrNull(commandCategory)) ||
     (packageIntentKind !== undefined && !isStringOrNull(packageIntentKind)) ||
     (preExecutionResult !== undefined && preExecutionResult !== null && !isGuardAction(preExecutionResult)) ||
     (policyAction !== undefined && policyAction !== null && !isGuardAction(policyAction)) ||
@@ -1207,6 +1209,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     mcp_tool: mcpTool,
     package_manager: packageManager,
     package_name: packageName,
+    command_category: isStringOrNull(commandCategory) ? commandCategory : null,
     package_intent_kind: isStringOrNull(packageIntentKind) ? packageIntentKind : null,
     package_targets: isStringArray(packageTargets) ? packageTargets : [],
     pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,
@@ -1280,6 +1283,7 @@ export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
   const dashboardPrimaryDetail = raw["dashboard_primary_detail"];
   const approvalScopes = raw["approval_scopes"];
   const retryInstruction = raw["retry_instruction"];
+  const packageReviewCloudReasonCode = raw["package_review_cloud_reason_code"];
   const signals = raw["signals"];
   const confidence = raw["confidence"];
   if (
@@ -1293,6 +1297,7 @@ export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
     !isNonEmptyString(dashboardPrimaryDetail) ||
     !isStringArray(approvalScopes) ||
     !isStringOrNull(retryInstruction) ||
+    !(packageReviewCloudReasonCode === undefined || isStringOrNull(packageReviewCloudReasonCode)) ||
     !isRiskSignalV2Array(signals) ||
     !isDecisionV2Confidence(confidence)
   ) {
@@ -1308,6 +1313,7 @@ export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
     dashboard_primary_detail: dashboardPrimaryDetail,
     approval_scopes: approvalScopes,
     retry_instruction: retryInstruction,
+    package_review_cloud_reason_code: packageReviewCloudReasonCode,
     signals,
     confidence
   };
@@ -1460,6 +1466,8 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
       : undefined,
     scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : undefined,
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
+    temporary_mcp_approval: parseTemporaryMcpApproval(item.temporary_mcp_approval),
+    local_tool_approval: parseLocalToolApproval(item.local_tool_approval),
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...(hasDecisionContractError
@@ -1647,6 +1655,38 @@ function normalizeCloudCommandCapability(raw: unknown): GuardRuntimeSnapshot["cl
   };
 }
 
+function nonNegativeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+export function normalizeOperatorHealth(raw: unknown): GuardRuntimeSnapshot["operator_health"] {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+  const state = raw["state"];
+  const cause = raw["cause"];
+  const automaticRecovery = raw["automatic_recovery"];
+  if (
+    !["healthy", "backlogged", "saturated", "store-contended"].includes(String(state))
+    || typeof cause !== "string"
+    || typeof automaticRecovery !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    state: state as "healthy" | "backlogged" | "saturated" | "store-contended",
+    cause,
+    automatic_recovery: automaticRecovery,
+    repairable: raw["repairable"] === true,
+    queue_depth: nonNegativeNumber(raw["queue_depth"]),
+    queue_limit: nonNegativeNumber(raw["queue_limit"]),
+    oldest_wait_ms: nonNegativeNumber(raw["oldest_wait_ms"]),
+    workers_busy: nonNegativeNumber(raw["workers_busy"]),
+    workers_ready: nonNegativeNumber(raw["workers_ready"]),
+    workers_configured: nonNegativeNumber(raw["workers_configured"]),
+  };
+}
+
 export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): GuardRuntimeSnapshot {
   const protectionHealth = normalizeProtectionHealth(snapshot.protection_health);
   const runtimeState = normalizeRuntimeState(snapshot.runtime_state);
@@ -1666,6 +1706,7 @@ export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): Guar
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
     cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
+    operator_health: normalizeOperatorHealth(snapshot.operator_health),
     protection_health: protectionHealth,
   };
 }
@@ -1845,9 +1886,13 @@ function queuePath(basePath: string, params: URLSearchParams): string {
 const PENDING_QUEUE_PAGE_LIMIT = 200;
 const MAX_PENDING_QUEUE_PAGES = 50;
 
-export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]> {
+type PendingRequestPageCallback = (items: GuardApprovalRequest[]) => void;
+
+export async function fetchAllPendingRequests(onPage?: PendingRequestPageCallback): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
-    return getDemoRequests();
+    const demoRequests = getDemoRequests();
+    onPage?.(demoRequests);
+    return demoRequests;
   }
   const items: GuardApprovalRequest[] = [];
   let cursor: string | undefined;
@@ -1859,6 +1904,7 @@ export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]>
       includeTotals: pageIndex === 0,
     });
     items.push(...page.items);
+    onPage?.([...items]);
     if (!page.next_cursor || page.next_cursor === cursor) {
       return items;
     }
@@ -1883,6 +1929,24 @@ function runtimeSnapshotSearchParams(
   return params;
 }
 
+export class GuardSessionUnavailableError extends Error {
+  constructor() {
+    super("Guard dashboard session is not available. Reopen the Guard dashboard from the authenticated URL.");
+    this.name = "GuardSessionUnavailableError";
+  }
+}
+
+/**
+ * Fail fast when the dashboard has no session token. Without this gate,
+ * auth-required polling loops keep issuing requests that the daemon rejects
+ * with 401s, generating a steady stream of unauthorized audit events.
+ */
+function requireGuardSessionToken(): void {
+  if (!readGuardToken()) {
+    throw new GuardSessionUnavailableError();
+  }
+}
+
 export async function fetchInboxState(input: { activeRequestId?: string } = {}): Promise<{
   snapshot: GuardRuntimeSnapshot;
   items: GuardApprovalRequest[];
@@ -1891,6 +1955,7 @@ export async function fetchInboxState(input: { activeRequestId?: string } = {}):
     const snapshot = buildDemoRuntimeSnapshot();
     return { snapshot, items: snapshot.items };
   }
+  requireGuardSessionToken();
   const [snapshotPayload, items] = await Promise.all([
     readJson<RuntimeSnapshotPayload>(
       queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false, includeReceipts: false })),
@@ -1918,6 +1983,7 @@ export async function fetchApprovalPage(input: GuardApprovalPageFilters = {}): P
       status: input.status ?? "pending"
     };
   }
+  requireGuardSessionToken();
   const payload = await readJson<ApprovalRequestListPayload>(queuePath("/v1/requests", queueSearchParams(input)));
   return normalizeApprovalPage(payload, input.status ?? "pending");
 }
@@ -1928,6 +1994,7 @@ export async function fetchRuntimeSnapshot(
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
+  requireGuardSessionToken();
   const params = runtimeSnapshotSearchParams(input);
   const query = params.toString();
   const path = query.length > 0 ? `/v1/runtime?${query}` : "/v1/runtime";
@@ -1939,6 +2006,7 @@ export async function fetchQueueSummary(input: { activeRequestId?: string } = {}
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot().queue_summary ?? normalizeQueueSummary(null, getDemoRequests().length);
   }
+  requireGuardSessionToken();
   const params = new URLSearchParams();
   if (input.activeRequestId) {
     params.set("active_request_id", input.activeRequestId);
@@ -2012,6 +2080,18 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
       started_at: now,
       last_heartbeat_at: now,
       approval_center_url: "http://127.0.0.1:4455"
+    },
+    operator_health: {
+      state: "healthy",
+      cause: "Local reviews are processing within available capacity.",
+      automatic_recovery: "Guard drains queued work and adjusts ready workers automatically.",
+      repairable: false,
+      queue_depth: 0,
+      queue_limit: 256,
+      oldest_wait_ms: 0,
+      workers_busy: 1,
+      workers_ready: 3,
+      workers_configured: 4,
     },
     device: {
       installation_id: "demo-device-7f4a9c2d",
@@ -2145,6 +2225,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
         approval_browser_immediate_severity: "critical",
         telemetry: false,
         sync: false,
+        receipt_redaction_level: "full",
         billing: false
       }
     };
@@ -2504,16 +2585,17 @@ function normalizeGuardCloudConnectStatus(value: unknown): GuardCloudConnectStat
   };
 }
 
-export async function fetchGuardCloudConnectStatus(): Promise<GuardCloudConnectStatusResponse> {
-  return normalizeGuardCloudConnectStatus(await readJson<unknown>("/v1/cloud/connect"));
+export async function fetchGuardCloudConnectStatus(signal?: AbortSignal): Promise<GuardCloudConnectStatusResponse> {
+  return normalizeGuardCloudConnectStatus(await readJson<unknown>("/v1/cloud/connect", { signal }));
 }
 
-export async function startGuardCloudConnect(): Promise<GuardCloudConnectStatusResponse> {
+export async function startGuardCloudConnect(signal?: AbortSignal): Promise<GuardCloudConnectStatusResponse> {
   return normalizeGuardCloudConnectStatus(
     await readJson<unknown>("/v1/cloud/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
+      signal,
     }),
   );
 }
@@ -2617,67 +2699,6 @@ export async function createCloudExceptionRequest(
     };
   }
   return readJson<GuardCloudExceptionRequestListResponse>("/v1/policy/cloud-exception-requests", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeaders(),
-    },
-    body: JSON.stringify(input),
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Command-policy exception requests (Phase 11)
-// ---------------------------------------------------------------------------
-
-export type GuardCommandPolicyRequestedDuration =
-  | "once"
-  | "session"
-  | "machine"
-  | "workspace"
-  | "30d"
-  | "90d";
-
-/**
- * Input for a command-policy exception request. Carries ONLY correlation
- * identifiers — never the raw command, regex, graph, or policy action.
- * The Cloud re-fetches the bound pending command server-side.
- */
-export type GuardCommandPolicyExceptionRequestInput = {
-  kind: "command-policy";
-  sourceLocalRequestId: string;
-  sourceMachineInstallationId: string;
-  workspaceId: string;
-  requestedDuration: GuardCommandPolicyRequestedDuration;
-  reason: string;
-  note?: string;
-};
-
-export type GuardCommandPolicyExceptionRequestResult =
-  | { status: "created"; requestId: string; proposalId: string; triageItemId: string | null }
-  | { status: "duplicate"; requestId: string; proposalId: string }
-  | { status: "rejected"; reason: string };
-
-/**
- * Submit a command-policy exception request through the daemon proxy.
- *
- * The daemon validates the payload locally (no raw command/graph keys
- * allowed), forces the local-request snapshot sync, then forwards to
- * Cloud using the existing runtime sync auth. The Cloud re-fetches the
- * bound pending command server-side using the correlation identifiers.
- */
-export async function createCommandPolicyExceptionRequest(
-  input: GuardCommandPolicyExceptionRequestInput,
-): Promise<GuardCommandPolicyExceptionRequestResult> {
-  if (isGuardDemoMode()) {
-    return {
-      status: "created",
-      requestId: "demo-command-policy-request",
-      proposalId: "demo-policy-proposal",
-      triageItemId: null,
-    };
-  }
-  return readJson<GuardCommandPolicyExceptionRequestResult>("/v1/policy/cloud-exception-requests", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -2800,6 +2821,9 @@ export async function runHarnessAction(input: {
   dryRun?: boolean;
   confirmationPhrase?: string;
 }): Promise<GuardHarnessActionResult> {
+  if (!isConnectableAppHarness(input.harness)) {
+    throw new Error(`${input.harness} is not a connectable AI app.`);
+  }
   if (isGuardDemoMode()) {
     return {
       harness: input.harness,
@@ -2866,15 +2890,7 @@ function fetchGuardApi(input: RequestInfo, init?: RequestInit): Promise<Response
   return fetchWithGuardAuth(input, init);
 }
 
-export async function resolveRequest(input: {
-  requestId: string;
-  action: "allow" | "block";
-  scope: DecisionScope;
-  workspace?: string;
-  reason: string;
-  scope_contract_version?: string;
-  scope_contract_digest?: string;
-}): Promise<void> {
+export async function resolveRequest(input: GuardApprovalResolutionInput): Promise<void> {
   await resolveRequestWithQueueResult(input);
 }
 
@@ -2985,18 +3001,7 @@ export async function disableApprovalGateTotp(
   });
 }
 
-export async function resolveRequestWithQueueResult(input: {
-  requestId: string;
-  action: "allow" | "block";
-  scope: DecisionScope;
-  workspace?: string;
-  reason: string;
-  approval_password?: string;
-  approval_totp_code?: string;
-  approval_gate_use_cooldown?: boolean;
-  scope_contract_version?: string;
-  scope_contract_digest?: string;
-}): Promise<GuardQueueResolutionResult> {
+export async function resolveRequestWithQueueResult(input: GuardApprovalResolutionInput): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
     return {
       resolved: true,
@@ -3030,6 +3035,14 @@ export async function resolveRequestWithQueueResult(input: {
         : {}),
       ...(input.scope_contract_digest !== undefined
         ? { scope_contract_digest: input.scope_contract_digest }
+        : {}),
+      ...(input.mcp_grant_target !== undefined ? { mcp_grant_target: input.mcp_grant_target } : {}),
+      ...(input.mcp_grant_duration !== undefined ? { mcp_grant_duration: input.mcp_grant_duration } : {}),
+      ...(input.local_tool_grant_target !== undefined
+        ? { local_tool_grant_target: input.local_tool_grant_target }
+        : {}),
+      ...(input.local_tool_grant_duration !== undefined
+        ? { local_tool_grant_duration: input.local_tool_grant_duration }
         : {}),
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
@@ -3332,43 +3345,6 @@ export async function setupDesktopNotifications(): Promise<GuardNotificationSetu
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({})
-  });
-}
-
-// ── Tray icon lifecycle ────────────────────────────────────────────────────
-
-export async function fetchTrayStatus(): Promise<TrayStatusPayload> {
-  if (isGuardDemoMode()) {
-    return {
-      state: "absent",
-      capability: {
-        platform: "macos",
-        backend: "appkit",
-        supported: true,
-        reason: "ok",
-        details: "macOS with appkit backend",
-      },
-      locator: null,
-    };
-  }
-  return readJson<TrayStatusPayload>("/v1/tray/status");
-}
-
-export async function runTrayAction(action: TrayAction): Promise<TrayLifecycleResultPayload> {
-  if (isGuardDemoMode()) {
-    return {
-      ok: true,
-      state: action === "stop" ? "absent" : "running",
-      reason: "ok",
-      message: `Tray ${action} (demo)`,
-      recovery_command: null,
-      process: null,
-    };
-  }
-  return readJson<TrayLifecycleResultPayload>(`/v1/tray/${action}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
   });
 }
 
@@ -4087,222 +4063,6 @@ export type FeedPageData = {
 export async function loadFeedPage(): Promise<FeedPageData> {
   const snapshot = await fetchRuntimeSnapshot();
   return { snapshot };
-}
-
-// ── MCP policy creation requests (VPC045–047/056) ──────────────────────────
-// Dashboard surface for staged MCP policy creation. Loads sanitized detail
-// from GET /v1/mcp-policy/requests/<id> and resolves via
-// POST /v1/mcp-policy/requests/<id>/decision. The daemon never returns the
-// canonical policy YAML, plan JSON, or approval credentials; we only ever
-// render the sanitized summary the daemon provides.
-
-export type McpPolicyWritePlan = {
-  additions: readonly string[];
-  replacements: readonly string[];
-  removals: readonly string[];
-};
-
-export type McpPolicySemanticDiff = {
-  additionCount: number;
-  replacementCount: number;
-  removalCount: number;
-};
-
-export type McpPolicyApplyResult = {
-  inserted: number;
-  replaced: number;
-};
-
-export type McpPolicyRequestStatus =
-  | "pending"
-  | "applied"
-  | "declined"
-  | "expired"
-  | "failed";
-
-export type McpPolicyRequest = {
-  requestId: string;
-  status: McpPolicyRequestStatus;
-  documentId: string;
-  candidateDigest: string;
-  expectedCurrentDigest: string | null;
-  expectedPolicyGeneration: number | null;
-  mode: "merge" | "replace";
-  createdAt: string;
-  expiresAt: string;
-  resolvedAt: string | null;
-  failureCode: string | null;
-  isTerminal: boolean;
-  isExpired: boolean;
-  result: McpPolicyApplyResult;
-  writePlan: McpPolicyWritePlan;
-  semanticDiff: McpPolicySemanticDiff;
-  activeEnforcementWarning: boolean;
-};
-
-export type McpPolicyDecisionResult = {
-  resolved: boolean;
-  requestId: string;
-  status: McpPolicyRequestStatus;
-  resolvedAt: string | null;
-  failureCode?: string | null;
-  message?: string;
-};
-
-const MCP_POLICY_TERMINAL_STATUSES: Record<McpPolicyRequestStatus, true> = {
-  applied: true,
-  declined: true,
-  expired: true,
-  failed: true,
-  pending: false,
-};
-
-function normalizeMcpPolicyStatus(value: unknown): McpPolicyRequestStatus {
-  if (typeof value === "string" && value in MCP_POLICY_TERMINAL_STATUSES) {
-    return value as McpPolicyRequestStatus;
-  }
-  return "pending";
-}
-
-function normalizeMcpPolicyApplyResult(value: unknown): McpPolicyApplyResult {
-  const record = isRecord(value) ? value : {};
-  const inserted = record["inserted"];
-  const replaced = record["replaced"];
-  return {
-    inserted:
-      typeof inserted === "number" && Number.isFinite(inserted) ? inserted : 0,
-    replaced:
-      typeof replaced === "number" && Number.isFinite(replaced) ? replaced : 0,
-  };
-}
-
-function asStringList(value: unknown): readonly string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
-function normalizeMcpPolicyWritePlan(value: unknown): McpPolicyWritePlan {
-  const record = isRecord(value) ? value : {};
-  return {
-    additions: asStringList(record["additions"]),
-    replacements: asStringList(record["replacements"]),
-    removals: asStringList(record["removals"]),
-  };
-}
-
-function normalizeMcpPolicySemanticDiff(value: unknown): McpPolicySemanticDiff {
-  const record = isRecord(value) ? value : {};
-  const additionCount = record["additionCount"];
-  const replacementCount = record["replacementCount"];
-  const removalCount = record["removalCount"];
-  return {
-    additionCount:
-      typeof additionCount === "number" && Number.isFinite(additionCount) ? additionCount : 0,
-    replacementCount:
-      typeof replacementCount === "number" && Number.isFinite(replacementCount)
-        ? replacementCount
-        : 0,
-    removalCount:
-      typeof removalCount === "number" && Number.isFinite(removalCount) ? removalCount : 0,
-  };
-}
-
-// Defensively normalize an opaque daemon payload into the dashboard view
-// model. Never trusts unknown keys; only the explicitly-sanitized fields
-// surface. The canonical YAML / plan JSON never arrive here.
-function normalizeMcpPolicyRequest(raw: unknown): McpPolicyRequest {
-  const record = isRecord(raw) ? raw : {};
-  const expectedPolicyGeneration = record["expectedPolicyGeneration"];
-  return {
-    requestId: typeof record["requestId"] === "string" ? record["requestId"] : "",
-    status: normalizeMcpPolicyStatus(record["status"]),
-    documentId: typeof record["documentId"] === "string" ? record["documentId"] : "",
-    candidateDigest: typeof record["candidateDigest"] === "string" ? record["candidateDigest"] : "",
-    expectedCurrentDigest:
-      typeof record["expectedCurrentDigest"] === "string" ? record["expectedCurrentDigest"] : null,
-    expectedPolicyGeneration:
-      typeof expectedPolicyGeneration === "number" && Number.isFinite(expectedPolicyGeneration)
-        ? expectedPolicyGeneration
-        : null,
-    mode: record["mode"] === "replace" ? "replace" : "merge",
-    createdAt: typeof record["createdAt"] === "string" ? record["createdAt"] : "",
-    expiresAt: typeof record["expiresAt"] === "string" ? record["expiresAt"] : "",
-    resolvedAt: typeof record["resolvedAt"] === "string" ? record["resolvedAt"] : null,
-    failureCode: typeof record["failureCode"] === "string" ? record["failureCode"] : null,
-    isTerminal: record["isTerminal"] === true,
-    isExpired: record["isExpired"] === true,
-    result: normalizeMcpPolicyApplyResult(record["result"]),
-    writePlan: normalizeMcpPolicyWritePlan(record["writePlan"]),
-    semanticDiff: normalizeMcpPolicySemanticDiff(record["semanticDiff"]),
-    activeEnforcementWarning: record["activeEnforcementWarning"] === true,
-  };
-}
-
-/**
- * GET /v1/mcp-policy/requests/<id>
- *
- * Loads the sanitized MCP policy request detail. The daemon never returns
- * the canonical policy YAML or the full plan JSON — only the summary this
- * surface renders. Returns null when the request does not exist (404) so
- * callers can distinguish "not an MCP request" from a real fetch failure.
- */
-export async function fetchMcpPolicyRequest(requestId: string): Promise<McpPolicyRequest | null> {
-  const response = await fetchGuardApi(`/v1/mcp-policy/requests/${encodeURIComponent(requestId)}`, {
-    method: "GET",
-  });
-  if (response.status === 404) {
-    return null;
-  }
-  if (!response.ok) {
-    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
-  }
-  const payload = (await response.json().catch(() => null)) as unknown;
-  return normalizeMcpPolicyRequest(payload);
-}
-
-/**
- * POST /v1/mcp-policy/requests/<id>/decision
- *
- * Resolves an MCP policy creation request with `action: "approve" | "decline"`.
- * Authenticated via the existing dashboard session header (withGuardAuth) and
- * idempotent: re-submitting on a terminal request returns the current
- * resolved state with `resolved: true` rather than an error.
- */
-export async function resolveMcpPolicyRequest(input: {
-  requestId: string;
-  action: "approve" | "decline";
-  approval_password?: string;
-  approval_totp_code?: string;
-}): Promise<McpPolicyDecisionResult> {
-  const response = await fetchGuardApi(
-    `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: input.action,
-        ...(input.approval_password ? { approval_password: input.approval_password } : {}),
-        ...(input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}),
-      }),
-    },
-  );
-  const payloadBody = (await response.json().catch(() => null)) as unknown;
-  if (!response.ok) {
-    throw new GuardHarnessActionError(
-      response.status,
-      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null,
-    );
-  }
-  const record = isRecord(payloadBody) ? payloadBody : {};
-  return {
-    resolved: record["resolved"] === true,
-    requestId: typeof record["requestId"] === "string" ? record["requestId"] : "",
-    status: normalizeMcpPolicyStatus(record["status"]),
-    resolvedAt: typeof record["resolvedAt"] === "string" ? record["resolvedAt"] : null,
-    failureCode: typeof record["failureCode"] === "string" ? record["failureCode"] : null,
-    message: typeof record["message"] === "string" ? record["message"] : undefined,
-  };
 }
 
 export {

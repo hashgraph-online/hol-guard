@@ -8,7 +8,6 @@ import hashlib
 import hmac
 import inspect
 import json
-import logging
 import math
 import mimetypes
 import os
@@ -158,7 +157,6 @@ from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
 from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
 from ..runtime.command_evaluation import evaluate_command
-from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.command_shadow_evaluation import (
     CommandShadowCohort,
     CommandShadowControl,
@@ -166,11 +164,8 @@ from ..runtime.command_shadow_evaluation import (
     build_command_shadow_observation,
 )
 from ..runtime.containment_health import containment_health_signals
-from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.local_temp_paths import trusted_temporary_root_for_path
-from ..runtime.network_status import build_network_status, project_network_supervisor_health
-from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.protection_health import ProtectionCheckStatus
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -242,7 +237,6 @@ from .discovery import (
     load_authenticated_daemon_state,
     load_daemon_discovery_key,
 )
-from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .manager import (
@@ -259,8 +253,6 @@ from .runtime_heartbeat import RuntimeHeartbeatWriter
 from .runtime_hook_deadline import RuntimeHookDeadline
 from .runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from .runtime_hook_scheduler import RuntimeHookAdmissionReason, RuntimeHookLane, RuntimeHookScheduler
-
-_LOGGER = logging.getLogger(__name__)
 
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
@@ -317,14 +309,6 @@ def _is_decision_scope(value: str) -> TypeGuard[DecisionScope]:
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict) and all(isinstance(key, str) for key in value)
-
-
-def _safe_int(value: object) -> int:
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value if value >= 0 else 0
-    return 0
 
 
 class _CursorReceiptContext(TypedDict):
@@ -504,7 +488,6 @@ class _GuardDaemonHttpServer(HTTPServer):
     containment_health_cache: dict[str, object] | None
     containment_health_cache_monotonic: float
     containment_health_cache_lock: threading.Lock
-    network_supervisor: NetworkSupervisor
     active_hook_requests: int
     rejected_hook_requests: int
     hook_harness_active: dict[str, int]
@@ -605,7 +588,6 @@ class _GuardDaemonHttpServer(HTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
-        self.network_supervisor = NetworkSupervisor()
         self.active_hook_requests = 0
         self.rejected_hook_requests = 0
         self.hook_harness_active = {}
@@ -651,16 +633,6 @@ class _GuardDaemonHttpServer(HTTPServer):
 
         self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
         self.hook_worker = HookWorker(store=store, activity_writer=self.runtime_hook_evidence_writer)
-        self.extension_control_runtime = ExtensionControlRuntime(
-            store.read_extension_control_authority(
-                catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            )
-        )
-        self.extension_control_api = ExtensionControlApiService(
-            store=store,
-            registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            runtime=self.extension_control_runtime,
-        )
         self.approval_attention = ApprovalAttentionCoordinator(
             store=store,
             runtime=self.runtime,
@@ -681,12 +653,6 @@ class _GuardDaemonHttpServer(HTTPServer):
             run=self._process_request_worker,
             discard=self._discard_request,
         )
-
-    def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
-        view = self.store.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        )
-        return self.extension_control_runtime.refresh(view)
 
     def process_request(self, request: object, client_address: tuple[str, int]) -> None:
         request_socket = cast(socket.socket, request)
@@ -2046,30 +2012,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path == "/v1/extension-controls/catalog":
-            self._write_json(
-                self._daemon_server().extension_control_api.catalog(),
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
-        if parsed.path == "/v1/extension-controls/effective":
-            self._write_json(
-                self._daemon_server().extension_control_api.effective(),
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
-            return
-        if parsed.path == "/v1/network/status":
-            self._write_json(
-                build_network_status(
-                    supervisor_health=self._daemon_server().network_supervisor.health(
-                        now_epoch_ms=int(time.time() * 1000)
-                    )
-                ),
-                extra_headers={"Cache-Control": "no-store"},
-            )
             return
         if parsed.path == "/v1/runtime/containment-health":
             self._write_json(
@@ -2190,9 +2134,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_json({"error": "not_found"}, status=404)
                 return
             self._write_json(operation)
-            return
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "mcp-policy", "requests"]:
-            self._handle_mcp_policy_request_get(path_parts[3])
             return
         if parsed.path == "/v1/events":
             self._write_json({"items": store.list_events_after(_int_query_value(parsed.query, "cursor"), limit=200)})
@@ -2457,24 +2398,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        extension_control_paths = {
-            "/v1/extension-controls/preview",
-            "/v1/extension-controls/apply",
-            "/v1/extension-controls/refresh",
-            "/v1/extension-controls/acknowledge-degraded",
-        }
-        if parsed.path in extension_control_paths and not self._header_token_is_valid():
-            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
-            return
-        if parsed.path in extension_control_paths:
-            try:
-                content_length = int(self.headers.get("Content-Length", "0"))
-            except ValueError:
-                self._write_json({"error": "invalid_content_length"}, status=400)
-                return
-            if content_length < 0 or content_length > self._MAX_BODY_BYTES:
-                self._write_json({"error": "body_too_large"}, status=413)
-                return
         payload, body_error = self._load_request_body()
         if body_error is not None:
             status = {
@@ -2540,21 +2463,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 {"error": "daemon_identity_required", "repair": "Run `hol-guard daemon repair`."},
                 status=401,
             )
-            return
-        if parsed.path in extension_control_paths:
-            try:
-                if parsed.path.endswith("/preview"):
-                    response = self._daemon_server().extension_control_api.preview(payload)
-                elif parsed.path.endswith("/apply"):
-                    response = self._daemon_server().extension_control_api.apply(payload)
-                elif parsed.path.endswith("/acknowledge-degraded"):
-                    response = self._daemon_server().extension_control_api.acknowledge_degraded(payload)
-                else:
-                    response = self._daemon_server().extension_control_api.refresh()
-            except ExtensionControlApiError as error:
-                self._write_json(error.to_payload(), status=error.status)
-                return
-            self._write_json(response, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
@@ -2741,9 +2649,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
             self._handle_request_resume_retry(path_parts[2])
-            return
-        if len(path_parts) == 5 and path_parts[:3] == ["v1", "mcp-policy", "requests"] and path_parts[4] == "decision":
-            self._handle_mcp_policy_decision(path_parts[3], payload)
             return
         request_id, action, matched = self._resolve_request_action(path_parts, payload)
         if not matched:
@@ -5193,193 +5098,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         settings["approval_gate"] = gate.to_dict()
         self._write_json(_settings_response_payload(guard_home, settings))
 
-    def _handle_mcp_policy_request_get(self, request_id: str) -> None:
-        """Return sanitized MCP policy request details for the dashboard.
-
-        GET /v1/mcp-policy/requests/<id>
-
-        Returns the request status, digests, mode, timestamps, and a
-        sanitized semantic diff summary.  Never returns the canonical
-        policy YAML or the full plan JSON — the dashboard renders the
-        diff summary only.
-        """
-        import json as _json
-
-        from codex_plugin_scanner.guard.mcp.policy_store import MCPolicyRequestRepository
-
-        store = self.server.store  # type: ignore[attr-defined]
-        repo = MCPolicyRequestRepository(store)
-        request = repo.get_request(request_id)
-        if request is None:
-            self._write_json({"error": "not_found"}, status=404)
-            return
-
-        result: dict[str, object] = {}
-        if request.result_json:
-            try:
-                parsed_result: object = _json.loads(request.result_json)
-                if _is_string_object_dict(parsed_result):
-                    result = parsed_result
-            except _json.JSONDecodeError:
-                pass
-
-        plan_summary: dict[str, object] = {}
-        if request.plan_json:
-            try:
-                parsed_plan: object = _json.loads(request.plan_json)
-                if _is_string_object_dict(parsed_plan):
-                    plan_summary = parsed_plan
-            except _json.JSONDecodeError:
-                pass
-
-        inserted_value = result.get("inserted", 0)
-        replaced_value = result.get("replaced", 0)
-        inserted = inserted_value if isinstance(inserted_value, (bool, int)) else 0
-        replaced = replaced_value if isinstance(replaced_value, (bool, int)) else 0
-        additions_value = plan_summary.get("additions", [])
-        replacements_value = plan_summary.get("replacements", [])
-        removals_value = plan_summary.get("removals", [])
-        additions = additions_value if isinstance(additions_value, list) else []
-        replacements = replacements_value if isinstance(replacements_value, list) else []
-        removals = removals_value if isinstance(removals_value, list) else []
-
-        self._write_json(
-            {
-                "requestId": request.request_id,
-                "status": request.status,
-                "documentId": request.policy_document_id,
-                "candidateDigest": request.policy_document_digest,
-                "expectedCurrentDigest": request.expected_current_digest,
-                "expectedPolicyGeneration": request.expected_policy_generation,
-                "mode": request.mode,
-                "createdAt": request.created_at,
-                "expiresAt": request.expires_at,
-                "resolvedAt": request.resolved_at,
-                "failureCode": request.failure_code,
-                "isTerminal": request.is_terminal,
-                "isExpired": request.is_expired,
-                "result": {
-                    "inserted": _safe_int(inserted),
-                    "replaced": _safe_int(replaced),
-                },
-                "writePlan": {
-                    "additions": list(additions),
-                    "replacements": list(replacements),
-                    "removals": list(removals),
-                },
-                "semanticDiff": {
-                    "additionCount": len(additions),
-                    "replacementCount": len(replacements),
-                    "removalCount": len(removals),
-                },
-                "activeEnforcementWarning": request.status == "pending" and not request.is_expired,
-            }
-        )
-
-    def _handle_mcp_policy_decision(self, request_id: str, payload: dict[str, object]) -> None:
-        """Resolve an MCP policy creation request via human approval.
-
-        POST /v1/mcp-policy/requests/<id>/decision
-        Body: {"action": "approve" | "decline", ...approval_gate_input}
-
-        On approve: obtains the ApprovalGateGrant via require_high_risk
-        (purpose="policy_import"), then calls apply_pending_policy_request
-        with the grant.  On decline: calls decline_pending_policy_request.
-        """
-
-        from codex_plugin_scanner.guard.mcp.policy_errors import PolicyToolError
-        from codex_plugin_scanner.guard.mcp.policy_tools import (
-            apply_pending_policy_request,
-            decline_pending_policy_request,
-        )
-
-        action = payload.get("action")
-        if not isinstance(action, str) or action.strip() not in {"approve", "decline"}:
-            self._write_json(
-                {"resolved": False, "error": "missing_required_fields"},
-                status=400,
-            )
-            return
-        action = action.strip()
-        store = self.server.store  # type: ignore[attr-defined]
-        guard_home = store.guard_home
-
-        if action == "decline":
-            try:
-                decline_result = decline_pending_policy_request(store, request_id)
-            except PolicyToolError as error:
-                if error.code == "approval_already_resolved":
-                    # VPC047: a terminal/expired/declined request is stable.
-                    # Return the honest current state so the dashboard renders
-                    # disabled controls instead of an error.
-                    from codex_plugin_scanner.guard.mcp.policy_store import (
-                        MCPolicyRequestRepository,
-                    )
-
-                    repo = MCPolicyRequestRepository(store)
-                    current = repo.get_request(request_id)
-                    if current is not None:
-                        self._write_json(
-                            {
-                                "resolved": True,
-                                "requestId": current.request_id,
-                                "status": current.status,
-                                "resolvedAt": current.resolved_at,
-                            }
-                        )
-                        return
-                self._write_json(
-                    {"resolved": False, "error": error.code, "message": error.message},
-                    status=400,
-                )
-                return
-            self._write_json({"resolved": True, **decline_result})
-            return
-
-        # action == "approve" — obtain the grant and apply.
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="policy_import",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-
-        try:
-            apply_result = apply_pending_policy_request(
-                store,
-                request_id,
-                approval_gate_grant=approval_gate_grant,
-            )
-        except PolicyToolError as error:
-            if error.code == "approval_already_resolved":
-                # VPC047: re-approving a terminal request is stable; return
-                # the honest current state so controls render disabled.
-                from codex_plugin_scanner.guard.mcp.policy_store import (
-                    MCPolicyRequestRepository,
-                )
-
-                repo = MCPolicyRequestRepository(store)
-                current = repo.get_request(request_id)
-                if current is not None:
-                    self._write_json(
-                        {
-                            "resolved": True,
-                            "requestId": current.request_id,
-                            "status": current.status,
-                            "resolvedAt": current.resolved_at,
-                        }
-                    )
-                    return
-            self._write_json(
-                {"resolved": False, "error": error.code, "message": error.message},
-                status=400,
-            )
-            return
-        self._write_json({"resolved": True, **apply_result})
-
     def _handle_initialize(self, payload: dict[str, object]) -> None:
         client_name = self._optional_string(payload.get("client_name")) or "guard-client"
         surface = self._optional_string(payload.get("surface")) or "cli"
@@ -6828,8 +6546,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
         if self.command == "GET":
-            if len(path_parts) == 4 and path_parts[:3] == ["v1", "mcp-policy", "requests"]:
-                return True
             if len(path_parts) == 3 and path_parts[:2] in (
                 ["v1", "requests"],
                 ["v1", "receipts"],
@@ -6839,12 +6555,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
                 return True
         if self.command == "POST":
-            if (
-                len(path_parts) == 5
-                and path_parts[:3] == ["v1", "mcp-policy", "requests"]
-                and path_parts[4] == "decision"
-            ):
-                return True
             if path in {"/v1/update", "/v1/update/channel", "/v1/update/reconnect/prepare"}:
                 return True
             if (
@@ -7096,11 +6806,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/command-activity/events",
             "/v1/command-activity/feedback",
             "/v1/command-extensions",
-            "/v1/extension-controls/catalog",
-            "/v1/extension-controls/effective",
-            "/v1/extension-controls/preview",
-            "/v1/extension-controls/apply",
-            "/v1/extension-controls/refresh",
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",
@@ -7265,9 +6970,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 ),
                 "schema_version": activity_health.schema_version,
             },
-            "network_protection": project_network_supervisor_health(
-                daemon_server.network_supervisor.health(now_epoch_ms=int(time.time() * 1000))
-            ),
             "hook_capacity": hook_capacity,
             "hook_load": {
                 "state": load_state,
@@ -7729,11 +7431,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision":
             return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
-            return True
-        return (
-            len(path_parts) == 5 and path_parts[:3] == ["v1", "mcp-policy", "requests"] and path_parts[4] == "decision"
-        )
+        return len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision"
 
     def _write_json(
         self,
@@ -7904,7 +7602,6 @@ class GuardDaemonServer:
         bundle_refresh_interval_seconds: float | None = _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS,
         aibom_refresh_backoff_seconds: float = _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS,
         aibom_refresh_interval_seconds: float | None = float(_AIBOM_AUTO_SYNC_INTERVAL_SECONDS),
-        extension_control_refresh_interval_seconds: float = 5.0,
         idle_timeout_seconds: float | None = None,
         home_dir: Path | None = None,
         workspace_dir: Path | None = None,
@@ -7953,8 +7650,6 @@ class GuardDaemonServer:
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
         self._command_activity_maintenance_thread: threading.Thread | None = None
-        self._extension_control_refresh_thread: threading.Thread | None = None
-        self._extension_control_refresh_interval_seconds = extension_control_refresh_interval_seconds
         self._live_request_sync_worker: LiveRequestSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
@@ -8007,11 +7702,11 @@ class GuardDaemonServer:
         self._shutdown_started.set()
         self._server.shutdown()
         self._server.server_close()
+        _ = self._finish_service()
         if self._thread is not None:
             self._thread.join(timeout=5)
             if not self._thread.is_alive():
                 self._thread = None
-        _ = self._finish_service()
 
     def _begin_service(self) -> None:
         self._record_lifecycle("start_requested")
@@ -8060,7 +7755,6 @@ class GuardDaemonServer:
         self._start_headless_cloud_sync()
         self._start_supply_chain_bundle_refresh()
         self._start_aibom_inventory_refresh()
-        self._start_extension_control_refresh()
         self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
         self._live_request_sync_worker = start_cloud_sync_sync_worker(
             self._server.store,
@@ -8331,10 +8025,6 @@ class GuardDaemonServer:
             getattr(self, "_aibom_refresh_thread", None),
             deadline=deadline,
         )
-        self._extension_control_refresh_thread = self._join_service_thread(
-            getattr(self, "_extension_control_refresh_thread", None),
-            deadline=deadline,
-        )
         self._headless_cloud_sync_thread = self._join_service_thread(
             getattr(self, "_headless_cloud_sync_thread", None),
             deadline=deadline,
@@ -8349,7 +8039,6 @@ class GuardDaemonServer:
                 self._watchdog_thread,
                 self._bundle_refresh_thread,
                 self._aibom_refresh_thread,
-                self._extension_control_refresh_thread,
                 self._headless_cloud_sync_thread,
                 self._command_activity_maintenance_thread,
             )
@@ -8397,21 +8086,17 @@ class GuardDaemonServer:
         while not self._shutdown_started.is_set():
             with self._server.active_stream_clients_lock:
                 active_stream_clients = self._server.active_stream_clients
-            try:
-                pending_live_requests = self._server.store.list_approval_requests(
-                    status="pending",
-                    limit=1,
-                )
-                cloud_profile = self._server.store.get_cloud_sync_profile()
-                workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
-                outbox_status = self._server.store.live_request_outbox_status(
-                    now=_now(),
-                    workspace_id=workspace_id,
-                )
-                outbox_depth = outbox_status["depth"]
-            except sqlite3.OperationalError:
-                time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
-                continue
+            pending_live_requests = self._server.store.list_approval_requests(
+                status="pending",
+                limit=1,
+            )
+            cloud_profile = self._server.store.get_cloud_sync_profile()
+            workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
+            outbox_status = self._server.store.live_request_outbox_status(
+                now=_now(),
+                workspace_id=workspace_id,
+            )
+            outbox_depth = outbox_status["depth"]
             if (
                 active_stream_clients > 0
                 or pending_live_requests
@@ -8484,23 +8169,6 @@ class GuardDaemonServer:
                 wait_seconds = backoff_seconds
             if self._shutdown_started.wait(wait_seconds):
                 return
-
-    def _start_extension_control_refresh(self) -> None:
-        if self._extension_control_refresh_thread is not None:
-            return
-        self._extension_control_refresh_thread = threading.Thread(
-            target=self._refresh_extension_control_loop,
-            daemon=True,
-            name="guard-extension-control-refresh",
-        )
-        self._extension_control_refresh_thread.start()
-
-    def _refresh_extension_control_loop(self) -> None:
-        while not self._shutdown_started.wait(self._extension_control_refresh_interval_seconds):
-            try:
-                _ = self._server.refresh_extension_control_runtime()
-            except Exception:
-                _LOGGER.exception("Failed to refresh resident extension-control authority")
 
     def _start_aibom_inventory_refresh(self) -> None:
         if self._aibom_refresh_interval_seconds is None or self._aibom_refresh_interval_seconds <= 0:

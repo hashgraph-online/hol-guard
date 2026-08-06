@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import queue
+import secrets
 import sys
 import threading
 import time
@@ -41,11 +42,16 @@ _RISKY_PROMPT_ADDITIONAL_CONTEXT = (
 _HARNESS_TIMEOUT_BUDGET_SECONDS = 10
 _DAEMON_IO_TIMEOUT_SECONDS = 2
 _RECOVERY_TIMEOUT_SECONDS = 3
-_FALLBACK_TIMEOUT_SECONDS = 8
+_RECOVERY_SCHEDULING_TIMEOUT_SECONDS = 0.25
+_FALLBACK_TIMEOUT_SECONDS = 2.75
 _MAX_DAEMON_RESPONSE_BYTES = 1_000_000
 _MAX_HOOK_INPUT_BYTES = 1_000_000
 _HOOK_DEADLINE_SECONDS = 8
 _MINIMUM_OPERATION_SECONDS = 0.01
+_OVERLOAD_RESERVE_MS = 100
+_OVERLOAD_REASON = (
+    "HOL Guard is temporarily saturated and kept this action blocked. No approval was requested; retry the action."
+)
 
 
 class _ResponseReader(Protocol):
@@ -89,17 +95,41 @@ def main(
     except Exception as error:
         reason = _daemon_failure_reason(error)
         failure_kind = _daemon_failure_kind(error)
-        if failure_kind == "authenticated-control-plane-failure":
-            response_body = _authenticated_control_plane_failure(reason, data)
+        overload = _transient_overload(error)
+        if overload is not None:
+            retry_after_ms, estimated_service_ms = overload
+            jitter_ms = max(retry_after_ms, 25 + secrets.randbelow(51))
+            remaining_ms = int((deadline - time.monotonic()) * 1000)
+            if remaining_ms >= jitter_ms + estimated_service_ms + _OVERLOAD_RESERVE_MS:
+                time.sleep(jitter_ms / 1000)
+                try:
+                    retry_endpoint = urljoin(
+                        _daemon_url(state_path, fallback_daemon_url),
+                        f"/v1/hooks/claude-code?{query}",
+                    )
+                    _assert_loopback_http_url(retry_endpoint)
+                    response_body = _valid_hook_json_or_degraded(
+                        _post_to_loopback_daemon(
+                            retry_endpoint,
+                            data,
+                            state_path=state_path,
+                            deadline=deadline,
+                        ),
+                        reason="daemon overload retry returned malformed hook JSON",
+                        data=data,
+                    )
+                except Exception:
+                    response_body = _overload_block(data)
+            else:
+                response_body = _overload_block(data)
+        elif _daemon_failure_is_authenticated_overload(error):
+            response_body = _overload_block(data)
         elif _daemon_failure_is_recoverable(error):
             response_body = _recover_retry_or_fallback(
                 reason,
                 data,
-                state_path=state_path,
-                fallback_daemon_url=fallback_daemon_url,
                 fallback_command=fallback_command,
                 recovery_command=recovery_command,
-                query=query,
                 deadline=deadline,
                 failure_kind=failure_kind,
             )
@@ -155,6 +185,8 @@ def _post_to_loopback_daemon(
     if timeout_seconds < _MINIMUM_OPERATION_SECONDS:
         raise TimeoutError("Guard daemon hook request exhausted its absolute deadline")
 
+    hinted_data = _with_remaining_hint(data, deadline)
+
     def request_once() -> None:
         request_deadline = time.monotonic() + timeout_seconds
         try:
@@ -162,7 +194,7 @@ def _post_to_loopback_daemon(
                 (
                     _blocking_post_to_loopback_daemon(
                         endpoint,
-                        data,
+                        hinted_data,
                         state_path=state_path,
                         timeout_seconds=timeout_seconds,
                     ),
@@ -257,6 +289,66 @@ def _event_name(data: str) -> str:
     return str(event or "PreToolUse")
 
 
+def _with_remaining_hint(data: str, deadline: float | None) -> str:
+    if deadline is None:
+        return data
+    try:
+        payload = json.loads(data or "{}")
+    except json.JSONDecodeError:
+        return data
+    if not isinstance(payload, dict):
+        return data
+    payload["guard_remaining_ms"] = min(60_000, max(1, int((deadline - time.monotonic()) * 1000)))
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+
+
+def _transient_overload(error: Exception) -> tuple[int, int] | None:
+    if not isinstance(error, _DaemonHTTPError):
+        return None
+    try:
+        payload = json.loads(error.detail)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict) or payload.get("reason_code") != "transient_overload":
+        return None
+    retry_after = payload.get("retry_after_ms", 25)
+    estimated_service = payload.get("estimated_service_ms", 750)
+    if not isinstance(retry_after, int) or isinstance(retry_after, bool):
+        return None
+    if not isinstance(estimated_service, int) or isinstance(estimated_service, bool):
+        return None
+    return min(75, max(25, retry_after)), min(2_800, max(100, estimated_service))
+
+
+def _overload_block(data: str) -> str:
+    event = _event_name(data)
+    if event == "UserPromptSubmit":
+        return json.dumps(
+            {
+                "decision": "block",
+                "reason": _OVERLOAD_REASON,
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "additionalContext": _OVERLOAD_REASON,
+                },
+            },
+            separators=(",", ":"),
+        )
+    if event == "PreToolUse":
+        return json.dumps(
+            {
+                "systemMessage": _OVERLOAD_REASON,
+                "hookSpecificOutput": {
+                    "hookEventName": event,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": _OVERLOAD_REASON,
+                },
+            },
+            separators=(",", ":"),
+        )
+    return json.dumps({"continue": False, "stopReason": _OVERLOAD_REASON}, separators=(",", ":"))
+
+
 def _prompt_text(data: str) -> str:
     try:
         payload = json.loads(data or "{}")
@@ -305,23 +397,6 @@ def _degraded(reason: str, data: str) -> str:
             separators=(",", ":"),
         )
     return "{}"
-
-
-def _authenticated_control_plane_failure(reason: str, data: str) -> str:
-    message = f"HOL Guard denied the action because daemon authentication failed: {reason}"
-    if _event_name(data) == "PreToolUse":
-        return json.dumps(
-            {
-                "systemMessage": message,
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": message,
-                },
-            },
-            separators=(",", ":"),
-        )
-    return json.dumps({"continue": False, "stopReason": message}, separators=(",", ":"))
 
 
 def _should_suppress_output(data: str, response_body: str) -> bool:
@@ -393,7 +468,7 @@ def _daemon_failure_is_recoverable(error: Exception) -> bool:
     if isinstance(error, (urllib.error.HTTPError, _DaemonHTTPError)):
         if _daemon_failure_is_authenticated_overload(error):
             return False
-        return error.code in {408, 500, 502, 503, 504}
+        return error.code in {401, 403, 408, 500, 502, 503, 504}
     return True
 
 
@@ -401,30 +476,22 @@ def _recover_retry_or_fallback(
     reason: str,
     data: str,
     *,
-    state_path: str | Path,
-    fallback_daemon_url: str,
     fallback_command: tuple[str, ...],
     recovery_command: tuple[str, ...],
-    query: str,
     deadline: float | None = None,
     failure_kind: str = "transport-failure",
 ) -> str:
-    if recovery_command and _run_recovery_command(
-        recovery_command,
-        deadline=deadline,
-        failure_kind=failure_kind,
-    ):
-        try:
-            endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
-            _assert_loopback_http_url(endpoint)
-            return _valid_hook_json_or_degraded(
-                _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=deadline),
-                reason=f"{reason}; recovered daemon returned malformed hook JSON",
-                data=data,
-            )
-        except Exception as retry_error:
-            reason = f"{reason}; daemon recovery retry failed: {retry_error}"
-    return _run_local_fallback(reason, data, fallback_command, deadline=deadline)
+    fallback_response = _run_local_fallback(reason, data, fallback_command, deadline=deadline)
+    if recovery_command:
+        recovery_deadline = time.monotonic() + _RECOVERY_SCHEDULING_TIMEOUT_SECONDS
+        if deadline is not None:
+            recovery_deadline = min(deadline, recovery_deadline)
+        _ = _run_recovery_command(
+            recovery_command,
+            deadline=recovery_deadline,
+            failure_kind=failure_kind,
+        )
+    return fallback_response
 
 
 def _run_recovery_command(
@@ -449,7 +516,9 @@ def _run_recovery_command(
     return result.returncode == 0 and not result.timed_out and not result.output_limit_exceeded
 
 
-def _daemon_failure_is_authenticated_overload(error: urllib.error.HTTPError | _DaemonHTTPError) -> bool:
+def _daemon_failure_is_authenticated_overload(error: Exception) -> bool:
+    if not isinstance(error, (urllib.error.HTTPError, _DaemonHTTPError)):
+        return False
     detail = error.detail.lower() if isinstance(error, _DaemonHTTPError) else ""
     return error.code == 429 or any(
         marker in detail for marker in ("capacity", "overload", "too_many", "too many", "busy")

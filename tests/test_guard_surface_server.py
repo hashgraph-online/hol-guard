@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import socket
@@ -13,10 +14,12 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from base64 import urlsafe_b64encode
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -934,6 +937,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
+            assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
+                minimum_workers=1,
+                timeout_seconds=15,
+            ), daemon._server.hook_process_runner.stats()  # pyright: ignore[reportPrivateUsage]
             hook_request = urllib.request.Request(
                 (
                     f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
@@ -966,19 +973,25 @@ class TestGuardSurfaceServer:
         assert "protect your local secrets" in hook_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
         assert store.list_guard_sessions() == []
 
-    def test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload(self, tmp_path) -> None:
+    def test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
+        # This test owns response-shape coverage; latency budgets have dedicated tests.
+        monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 8.0)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
-        assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1,
-            timeout_seconds=15,
-        )
 
         try:
+            assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
+                minimum_workers=1,
+                timeout_seconds=15,
+            ), daemon._server.hook_process_runner.stats()  # pyright: ignore[reportPrivateUsage]
             hook_request = urllib.request.Request(
                 (
                     f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
@@ -999,15 +1012,8 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(hook_request, timeout=5) as response:
+            with urllib.request.urlopen(hook_request, timeout=10) as response:
                 hook_payload = json.loads(response.read().decode("utf-8"))
-            if hook_payload.get("reason") == "HOL Guard could not complete isolated local hook review safely.":
-                assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-                    minimum_workers=1,
-                    timeout_seconds=15,
-                )
-                with urllib.request.urlopen(hook_request, timeout=5) as response:
-                    hook_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
 
@@ -1107,6 +1113,115 @@ class TestGuardSurfaceServer:
         events = store.list_events(event_name="daemon.auth.unauthorized")
         assert events[-1]["payload"]["path"] == "/v1/hooks/claude-code"
 
+    def test_guard_daemon_coalesces_repeated_unauthorized_audit_writes(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            url = f"http://127.0.0.1:{daemon.port}/v1/runtime"
+            for _ in range(20):
+                with pytest.raises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(url, timeout=5)
+                assert error.value.code == 401
+            with daemon._server.auth_audit_lock:  # pyright: ignore[reportPrivateUsage]
+                windows = tuple(daemon._server.auth_audit_windows.values())  # pyright: ignore[reportPrivateUsage]
+                assert len(windows) == 1
+                assert windows[0]["suppressed_count"] == 19
+                windows[0]["started_at"] -= daemon_server_module._AUTH_AUDIT_COALESCE_SECONDS  # pyright: ignore[reportPrivateUsage]
+            with pytest.raises(urllib.error.HTTPError) as rollover_error:
+                urllib.request.urlopen(url, timeout=5)
+            assert rollover_error.value.code == 401
+        finally:
+            daemon.stop()
+
+        events = store.list_events(event_name="daemon.auth.unauthorized")
+        assert len(events) == 2
+        assert events[0]["payload"]["path"] == "/v1/runtime"
+        assert events[0]["payload"]["suppressed_count"] == 19
+
+    def test_guard_daemon_auth_audit_failure_preserves_concurrent_suppressions(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        original_add_event = store.add_event
+        leader_started = daemon_server_module.threading.Event()
+        release_leader = daemon_server_module.threading.Event()
+        first_status: list[int] = []
+        audit_write_count = 0
+
+        def flaky_add_event(event_name: str, payload: dict[str, object], now: str) -> None:
+            nonlocal audit_write_count
+            if event_name == "daemon.auth.unauthorized":
+                audit_write_count += 1
+                if audit_write_count == 1:
+                    leader_started.set()
+                    assert release_leader.wait(timeout=2.0)
+                    raise sqlite3.OperationalError("database is locked")
+            original_add_event(event_name, payload, now)
+
+        monkeypatch.setattr(store, "add_event", flaky_add_event)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        url = f"http://127.0.0.1:{daemon.port}/v1/runtime"
+
+        def first_request() -> None:
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(url, timeout=5)
+            first_status.append(error.value.code)
+
+        leader = daemon_server_module.threading.Thread(target=first_request)
+        leader.start()
+        assert leader_started.wait(timeout=2.0)
+        try:
+            with pytest.raises(urllib.error.HTTPError) as suppressed_error:
+                urllib.request.urlopen(url, timeout=5)
+            release_leader.set()
+            leader.join(timeout=2.0)
+            with pytest.raises(urllib.error.HTTPError) as retry_error:
+                urllib.request.urlopen(url, timeout=5)
+        finally:
+            release_leader.set()
+            leader.join(timeout=2.0)
+            daemon.stop()
+
+        assert leader.is_alive() is False
+        assert first_status == [401]
+        assert suppressed_error.value.code == 401
+        assert retry_error.value.code == 401
+        events = store.list_events(event_name="daemon.auth.unauthorized")
+        assert len(events) == 1
+        assert events[0]["payload"]["suppressed_count"] == 2
+
+    def test_guard_daemon_auth_audit_failure_does_not_break_denial(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        blocker = sqlite3.connect(store.path, timeout=5, isolation_level=None)
+        _ = blocker.execute("begin exclusive")
+        url = f"http://127.0.0.1:{daemon.port}/v1/runtime"
+
+        try:
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(url, timeout=5)
+        finally:
+            blocker.rollback()
+            blocker.close()
+
+        try:
+            with pytest.raises(urllib.error.HTTPError) as retry_error:
+                urllib.request.urlopen(url, timeout=5)
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 401
+        assert json.loads(error.value.read().decode("utf-8")) == {"error": "unauthorized"}
+        assert retry_error.value.code == 401
+        events = store.list_events(event_name="daemon.auth.unauthorized")
+        assert len(events) == 1
+
     def test_guard_daemon_claude_hook_endpoint_returns_notification_context_with_auth(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1181,6 +1296,7 @@ class TestGuardSurfaceServer:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
+        events = store.list_events(event_name="daemon.hook.path_rejected")
 
         try:
             request = urllib.request.Request(
@@ -1194,13 +1310,17 @@ class TestGuardSurfaceServer:
             )
             with pytest.raises(urllib.error.HTTPError) as error:
                 urllib.request.urlopen(request, timeout=5)
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline and not events:
+                events = store.list_events(event_name="daemon.hook.path_rejected")
+                if not events:
+                    time.sleep(0.01)
         finally:
             daemon.stop()
 
         assert error.value.code == 400
         payload = json.loads(error.value.read().decode("utf-8"))
         assert payload["error"] == "invalid_hook_workspace_path"
-        events = store.list_events(event_name="daemon.hook.path_rejected")
         assert events[-1]["payload"]["parameter"] == "workspace"
         assert events[-1]["payload"]["reason"] == "relative_path"
 
@@ -1961,6 +2081,54 @@ class TestGuardSurfaceServer:
 
         assert response.status == 200
         assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
+
+    def test_guard_daemon_runtime_hook_uses_validated_payload_cwd_when_query_omits_workspace(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        captured: dict[str, str | None] = {}
+
+        def fake_review(**kwargs):
+            captured["workspace"] = str(kwargs["workspace"])
+            from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
+
+            return HookProcessReview({}, None)
+
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        monkeypatch.setattr(daemon._server.hook_process_runner, "review", fake_review)
+
+        try:
+            request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"guard-home={urllib.parse.quote(str(store.guard_home))}&"
+                    f"home={urllib.parse.quote(str(tmp_path))}"
+                ),
+                data=json.dumps(
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "shell",
+                        "tool_input": {"command": "pwd; git status --short --branch"},
+                        "cwd": str(workspace_dir),
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert payload == {}
+        assert captured["workspace"] == str(workspace_dir)
 
     def test_guard_daemon_claude_hook_endpoint_preserves_workspace_trailing_none_sentinel(
         self, tmp_path, monkeypatch
@@ -2835,14 +3003,38 @@ class TestGuardSurfaceServer:
         assert runtime_state is not None
         assert daemon_thread_alive is True
 
-    def test_guard_daemon_idle_timeout_ignores_invalid_env_value(self, tmp_path, monkeypatch) -> None:
+    @pytest.mark.parametrize("configured_timeout", (None, "ten"))
+    def test_persistent_guard_daemon_keeps_running_without_valid_idle_timeout(
+        self,
+        tmp_path,
+        monkeypatch,
+        configured_timeout: str | None,
+    ) -> None:
         guard_home = tmp_path / "guard-home"
-        monkeypatch.setenv("GUARD_DAEMON_IDLE_TIMEOUT_SECONDS", "ten")
+        if configured_timeout is not None:
+            monkeypatch.setenv("GUARD_DAEMON_IDLE_TIMEOUT_SECONDS", configured_timeout)
+        else:
+            monkeypatch.delenv("GUARD_DAEMON_IDLE_TIMEOUT_SECONDS", raising=False)
         monkeypatch.setattr(daemon_server_module, "_guard_home_is_ephemeral", lambda _guard_home: False)
 
         idle_timeout = daemon_server_module._guard_daemon_idle_timeout_seconds(guard_home)
+        store = GuardStore(guard_home)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=idle_timeout)
+        daemon.start()
 
-        assert idle_timeout is None
+        try:
+            time.sleep(0.75)
+            daemon_thread = daemon._thread
+            daemon_thread_alive = daemon_thread is not None and daemon_thread.is_alive()
+            runtime_state = store.get_runtime_state()
+            effective_timeout = daemon._server.idle_timeout_seconds
+        finally:
+            daemon.stop()
+
+        assert effective_timeout is None
+        assert daemon_thread is not None
+        assert daemon_thread_alive is True
+        assert runtime_state is not None
 
     def test_surface_server_contract_is_exposed_during_initialize(self, tmp_path) -> None:
         contract = build_surface_server_contract()
@@ -4255,6 +4447,149 @@ class TestGuardDaemonFastHookPath:
         assert result["model_output_action"] == "allow_original"
         assert result["reviewed_output_sha256"] == output_sha256
         assert result["notice"] == "none"
+
+    def test_fast_path_rejects_authorization_after_deadline(self, tmp_path, monkeypatch) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        home_dir.mkdir()
+        workspace_dir.mkdir()
+        store = GuardStore(tmp_path / "guard-home")
+        monkeypatch.setattr(
+            daemon_server_module._GuardDaemonHandler,
+            "_hook_safe_roots",
+            lambda _self: (tmp_path.resolve(),),
+        )
+        monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "1")
+
+        def late_allow(*_args: object, **_kwargs: object) -> dict[str, object]:
+            time.sleep(0.05)
+            return {"decision": "allow", "model_output_action": "allow_original"}
+
+        monkeypatch.setattr(
+            daemon_server_module._GuardDaemonHandler,
+            "_handle_runtime_hook_fast",
+            late_allow,
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
+                    f"guard-home={urllib.parse.quote(str(store.guard_home))}&"
+                    f"home={urllib.parse.quote(str(home_dir))}&"
+                    f"workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(
+                    {
+                        "hook_event_name": "PostToolUse",
+                        "tool_name": "Read",
+                        "guard_remaining_ms": 30,
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert result["decision"] == "deny"
+        assert result["reason_code"] == "daemon_hook_deadline_exhausted"
+
+    @pytest.mark.parametrize("source_kind", ["relative", "virtual", "absolute"])
+    def test_fast_path_hydrates_large_pi_payload_reference(
+        self,
+        tmp_path,
+        monkeypatch,
+        source_kind: str,
+    ) -> None:
+        """Pi transport references retain clean large-read review semantics."""
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        output = "routine documentation\n" * 1_000
+        tool_path = "docs/large.md"
+        payload: dict[str, object] = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"path": tool_path},
+            "stdout": output,
+            "tool_response": [{"type": "text", "text": output}],
+        }
+        if source_kind == "relative":
+            source_file = workspace_dir / tool_path
+            source_file.parent.mkdir(parents=True)
+            source_file.write_text(output)
+            payload["guard_source_ref"] = {
+                "version": 1,
+                "kind": "source_file",
+                "path": tool_path,
+                "tool_input_path": tool_path,
+                "output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+                "output_chars": len(output),
+            }
+        elif source_kind == "virtual":
+            tool_path = "skill://large-instructions"
+            payload["tool_input"] = {"path": tool_path}
+        else:
+            tool_path = str(tmp_path / "large-instructions.md")
+            payload["tool_input"] = {"path": tool_path}
+
+        raw_payload = json.dumps(payload).encode()
+        key = os.urandom(32)
+        nonce = os.urandom(12)
+        ciphertext = AESGCM(key).encrypt(nonce, raw_payload, None)
+        store = GuardStore(home_dir)
+        monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "1")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir:
+                reference_path = Path(reference_dir) / "payload.json"
+                reference_path.write_bytes(ciphertext)
+                reference_payload = {
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Read",
+                    "guard_payload_ref": {
+                        "version": 1,
+                        "path": str(reference_path),
+                        "sha256": hashlib.sha256(ciphertext).hexdigest(),
+                        "encoding": "json",
+                        "encryption": "aes-256-gcm",
+                        "key": urlsafe_b64encode(key).decode().rstrip("="),
+                        "nonce": urlsafe_b64encode(nonce).decode().rstrip("="),
+                    },
+                }
+                request = urllib.request.Request(
+                    (
+                        f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
+                        f"guard-home={urllib.parse.quote(str(home_dir))}&"
+                        f"home={urllib.parse.quote(str(home_dir))}&"
+                        f"workspace={urllib.parse.quote(str(workspace_dir))}"
+                    ),
+                    data=json.dumps(reference_payload).encode(),
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Guard-Token": daemon._server.auth_token,
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    result = json.loads(response.read().decode())
+        finally:
+            daemon.stop()
+            monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
+
+        assert result["decision"] == "allow"
+        assert result["model_output_action"] == "allow_original"
 
     def test_fast_path_pre_tool_use_falls_back_to_legacy(self, tmp_path, monkeypatch) -> None:
         """PreToolUse must NOT be handled by the fast worker.

@@ -144,11 +144,14 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "observed = decision.decision_plane.action" in runner_text
     assert "observed = decision.minimum_action" not in runner_text
     assert '"no_post_execution_proof": _no_post_execution_proof_smoke()' in runner_text
+    assert '"runtime_dependencies": _runtime_dependency_smoke()' in runner_text
+    assert '"codex_install": _codex_install_smoke()' in runner_text
     attributes_text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
     assert "/tests/guard_command_corpus*.py text eol=lf" in attributes_text
     assert "/tests/fixtures/guard-command-corpus/*.json text eol=lf" in attributes_text
     assert "/src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf" in attributes_text
     assert '"$CANARY_PYTHON" -m pip install --no-compile' in workflow_text
+    assert 'uv venv --seed --managed-python --python 3.12 "$RUNNER_TEMP/hol-guard-canary-venv"' in workflow_text
     assert "uv pip install" not in workflow_text
 
 

@@ -366,11 +366,7 @@ class HookProcessRunner:
             spawn_threads = list(self._spawn_threads)
             retirement_threads = list(self._retirement_threads)
             self._recovery_event.set()
-        isolation_deadline = time.monotonic() + _HOOK_PROCESS_READY_TIMEOUT_SECONDS
         for slot in slots:
-            if not slot.isolation_ready and not slot.pre_isolation_contained:
-                remaining = max(0.0, isolation_deadline - time.monotonic())
-                _ = hook_worker_became_isolated(slot, remaining)
             _ = self._retire_slot(slot, graceful=True)
         for retirement_thread in retirement_threads:
             if retirement_thread is not threading.current_thread():
@@ -380,16 +376,6 @@ class HookProcessRunner:
         for spawn_thread in spawn_threads:
             if spawn_thread is not threading.current_thread():
                 spawn_thread.join(timeout=0.2)
-        active_review_deadline = time.monotonic() + 1.0
-        while True:
-            with self._state_lock:
-                if not self._active_reviews:
-                    break
-            remaining = active_review_deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            _ = self._recovery_event.wait(timeout=min(0.05, remaining))
-            self._recovery_event.clear()
         with self._state_lock:
             if supervisor is not None and not supervisor.is_alive():
                 self._supervisor_thread = None

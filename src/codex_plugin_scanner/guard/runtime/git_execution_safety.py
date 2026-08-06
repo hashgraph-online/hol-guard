@@ -81,9 +81,8 @@ def git_binary_path_is_trusted(git_path: Path, *, cwd: Path) -> bool:
     """Reject Git executables from user-controlled or broadly writable roots."""
 
     try:
-        resolved_cwd = cwd.resolve()
         untrusted_roots = (
-            *((resolved_cwd,) if resolved_cwd != Path(resolved_cwd.anchor) else ()),
+            cwd.resolve(),
             Path.home().resolve(),
             Path("/tmp").resolve(),
             Path("/private/tmp").resolve(),

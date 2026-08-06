@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from hashlib import sha256
 from pathlib import Path
-
-import pytest
+from typing import Final
 
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 
-CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
+CRITICAL_COMMAND_FLOORS: Final[tuple[tuple[str, GuardAction], ...]] = (
     ("aws route53 delete-hosted-zone --id zone --output json", "block"),
     ("aws --profile prod route53 delete-hosted-zone --id zone", "block"),
     ("aws route53 --profile prod delete-hosted-zone --id zone", "block"),
@@ -124,6 +124,8 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("parallel sh -c 'hol-guard uninstall --all'", "block"),
     ("xargs aws route53 delete-hosted-zone --id zone", "block"),
     ("xargs gh pr merge 17 --repo example/repo --squash", "require-reapproval"),
+    ("xargs gh repo sync --force", "block"),
+    ("xargs gh secret set TOKEN", "block"),
     ("aws.exe route53 delete-hosted-zone --id zone", "block"),
     ("/usr/bin/stripe.exe products delete product", "block"),
     ("hol-guard.exe uninstall --all", "block"),
@@ -153,10 +155,25 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
 )
 
 
-@pytest.mark.parametrize(("command", "expected"), CRITICAL_COMMAND_FLOORS)
-def test_security_critical_commands_retain_exact_floors(command: str, expected: GuardAction) -> None:
-    evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action == expected
+def _critical_floor_case_id(command: str) -> str:
+    return f"critical-floor-{sha256(command.encode('utf-8')).hexdigest()[:16]}"
+
+
+def test_security_critical_command_floor_case_ids_are_unique() -> None:
+    case_ids = {_critical_floor_case_id(command) for command, _expected in CRITICAL_COMMAND_FLOORS}
+
+    assert len(case_ids) == len(CRITICAL_COMMAND_FLOORS)
+
+
+def test_security_critical_commands_retain_exact_floors() -> None:
+    failures: list[str] = []
+    for command, expected in CRITICAL_COMMAND_FLOORS:
+        actual = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home")).decision_plane.action
+        if actual != expected:
+            failures.append(
+                f"{_critical_floor_case_id(command)}: expected {expected!r}, got {actual!r}; command={command!r}"
+            )
+    assert not failures, "\n".join(failures)
 
 
 def test_launcher_ambiguity_fanout_fails_closed() -> None:
@@ -165,7 +182,7 @@ def test_launcher_ambiguity_fanout_fails_closed() -> None:
     assert evaluation.decision_plane.action == "block"
 
 
-CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
+CRITICAL_NEAR_MISS_COMMANDS: Final[tuple[str, ...]] = (
     "gh pr view 17 --repo example/repo",
     "rm -r workspace/cache",
     "rm -rf ./build",
@@ -204,7 +221,10 @@ CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
 )
 
 
-@pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)
-def test_security_floors_do_not_widen_near_misses_to_block(command: str) -> None:
-    evaluation = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    assert evaluation.decision_plane.action != "block"
+def test_security_floors_do_not_widen_near_misses_to_block() -> None:
+    failures: list[str] = []
+    for command in CRITICAL_NEAR_MISS_COMMANDS:
+        actual = evaluate_command(command, cwd=Path("workspace"), home_dir=Path("home")).decision_plane.action
+        if actual == "block":
+            failures.append(f"{_critical_floor_case_id(command)}: expected non-blocking action; command={command!r}")
+    assert not failures, "\n".join(failures)

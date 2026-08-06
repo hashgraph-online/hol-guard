@@ -34,13 +34,12 @@ from ..adapters.opencode_pretool import (
     pretool_plugin_source,
 )
 from ..adapters.pi import legacy_omp_managed_extension_is_verified
+from ..codex_hook_integrity import CodexHookIntegrityError, load_authenticated_hook_manifest
 from ..config import load_guard_config, resolve_guard_home
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
 from ..redaction import redact_sensitive_text
-from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..runtime.extension_control_authority import AuthorityHealth
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .update_artifact import (
@@ -272,27 +271,6 @@ def _read_direct_url_dir_info(direct_url: dict[str, object] | None) -> dict[str,
     return dir_info if isinstance(dir_info, dict) else {}
 
 
-def _authority_blocks_downgrade(
-    store: GuardStore | None,
-    *,
-    guard_home: Path,
-    current_version: str,
-    candidate_version: str | None,
-) -> bool:
-    if candidate_version is None:
-        return False
-    try:
-        if Version(candidate_version) >= Version(current_version):
-            return False
-    except InvalidVersion:
-        return False
-    authority_store = store or GuardStore(guard_home)
-    authority = authority_store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
-    return authority.health is not AuthorityHealth.UNENROLLED
-
-
 def run_guard_update(
     *,
     dry_run: bool,
@@ -479,24 +457,6 @@ def run_guard_update(
             )
         except UpdateArtifactError as error:
             return _trusted_update_failure(payload, UpdateSubprocessError(error.reason_code))
-    downgrade_candidate = trusted_wheel.version if trusted_wheel is not None else target_version
-    if _authority_blocks_downgrade(
-        store,
-        guard_home=resolved_guard_home,
-        current_version=current_version,
-        candidate_version=downgrade_candidate,
-    ):
-        if trusted_wheel is not None:
-            trusted_wheel.cleanup()
-        payload.update(
-            {
-                "status": "blocked",
-                "changed": False,
-                "reason_code": "extension_control_authority_downgrade_blocked",
-                "message": "HOL Guard cannot downgrade while extension-control authority is active.",
-            }
-        )
-        return payload, 1
     command = _update_command(
         installer,
         use_pypi=use_pypi,
@@ -546,15 +506,6 @@ def run_guard_update(
     active_command = execution_command
     active_display_command = command
     attempted_force_retry = False
-    # Stop the tray before updating so the old package's process doesn't
-    # hold files open on Windows or reference stale modules after cutover.
-    tray_was_running = _stop_tray_for_update(store)
-
-    def finish_update(result: tuple[dict[str, object], int]) -> tuple[dict[str, object], int]:
-        if tray_was_running:
-            _restart_tray_after_update(store)
-        return result
-
     attempted_pipx_recovery = False
     installer_execution_started = False
     while True:
@@ -564,47 +515,39 @@ def run_guard_update(
             installer_execution_started = True
             result = update_context.run(active_command)
         except UpdateArtifactError as error:
-            return finish_update(
-                _trusted_update_failure(
-                    payload,
-                    UpdateSubprocessError(error.reason_code),
-                    trusted_wheel=trusted_wheel,
-                    retain_trusted_wheel=installer_execution_started,
-                )
+            return _trusted_update_failure(
+                payload,
+                UpdateSubprocessError(error.reason_code),
+                trusted_wheel=trusted_wheel,
+                retain_trusted_wheel=installer_execution_started,
             )
         except UpdateSubprocessError as error:
-            return finish_update(
-                _trusted_update_failure(
-                    payload,
-                    error,
-                    trusted_wheel=trusted_wheel,
-                    retain_trusted_wheel=installer_execution_started,
-                )
+            return _trusted_update_failure(
+                payload,
+                error,
+                trusted_wheel=trusted_wheel,
+                retain_trusted_wheel=installer_execution_started,
             )
         payload["command"] = active_display_command
         payload["stdout"] = _normalize_output_text(result.stdout)
         payload["stderr"] = _normalize_output_text(result.stderr)
         payload["return_code"] = result.returncode
         if result.output_limited:
-            return finish_update(
-                _trusted_update_failure(
-                    payload,
-                    UpdateSubprocessError("update_installer_output_limit"),
-                    trusted_wheel=trusted_wheel,
-                    retain_trusted_wheel=installer_execution_started,
-                )
+            return _trusted_update_failure(
+                payload,
+                UpdateSubprocessError("update_installer_output_limit"),
+                trusted_wheel=trusted_wheel,
+                retain_trusted_wheel=installer_execution_started,
             )
         importlib.invalidate_caches()
         try:
             payload["resulting_version"] = _current_version_from_subprocess(update_context)
         except UpdateSubprocessError as error:
-            return finish_update(
-                _trusted_update_failure(
-                    payload,
-                    error,
-                    trusted_wheel=trusted_wheel,
-                    retain_trusted_wheel=installer_execution_started,
-                )
+            return _trusted_update_failure(
+                payload,
+                error,
+                trusted_wheel=trusted_wheel,
+                retain_trusted_wheel=installer_execution_started,
             )
         initial_version_check = payload.get("version_check")
         resulting_version = str(payload.get("resulting_version") or current_version)
@@ -656,33 +599,29 @@ def run_guard_update(
                 payload.pop("retry_command", None)
                 if trusted_wheel is not None:
                     _retain_local_wheel_staging(payload)
-                return finish_update((payload, 1))
+                return payload, 1
             payload["status"] = "failed"
             payload["changed"] = False
             payload["reason_code"] = "update_installer_failed"
             payload["message"] = "HOL Guard update failed."
             if trusted_wheel is not None:
                 _retain_local_wheel_staging(payload)
-            return finish_update((payload, 1))
+            return payload, 1
         if trusted_wheel is not None:
             try:
                 if Version(resulting_version) != Version(trusted_wheel.version):
-                    return finish_update(
-                        _trusted_update_failure(
-                            payload,
-                            UpdateSubprocessError("update_version_mismatch"),
-                            trusted_wheel=trusted_wheel,
-                            retain_trusted_wheel=installer_execution_started,
-                        )
-                    )
-            except InvalidVersion:
-                return finish_update(
-                    _trusted_update_failure(
+                    return _trusted_update_failure(
                         payload,
-                        UpdateSubprocessError("update_version_output_invalid"),
+                        UpdateSubprocessError("update_version_mismatch"),
                         trusted_wheel=trusted_wheel,
                         retain_trusted_wheel=installer_execution_started,
                     )
+            except InvalidVersion:
+                return _trusted_update_failure(
+                    payload,
+                    UpdateSubprocessError("update_version_output_invalid"),
+                    trusted_wheel=trusted_wheel,
+                    retain_trusted_wheel=installer_execution_started,
                 )
         if trusted_wheel is not None:
             _record_verified_local_wheel_receipt(
@@ -725,7 +664,7 @@ def run_guard_update(
                 try:
                     active_command = update_context.build_installer_command(retry_command)
                 except UpdateSubprocessError as error:
-                    return finish_update(_trusted_update_failure(payload, error, trusted_wheel=trusted_wheel))
+                    return _trusted_update_failure(payload, error, trusted_wheel=trusted_wheel)
                 payload["upgrade_source"] = update_context.source.public_name
                 continue
         break
@@ -792,8 +731,8 @@ def run_guard_update(
                     "message": "HOL Guard was updated, but its daemon could not be restarted safely.",
                 }
             )
-            return finish_update((payload, 1))
-    return finish_update((payload, 0))
+            return payload, 1
+    return payload, 0
 
 
 def _record_verified_local_wheel_receipt(
@@ -1080,7 +1019,10 @@ def _stale_retry_command(payload: dict[str, object]) -> str:
         return ""
     version_check = payload.get("version_check")
     if isinstance(version_check, dict) and version_check.get("update_available") is True:
-        return _shell_command(["hol-guard", "update"])
+        command = ["hol-guard", "update"]
+        if payload.get("release_channel") == "alpha":
+            command.append("--alpha")
+        return _shell_command(command)
     retry_command = payload.get("retry_command")
     if isinstance(retry_command, str) and retry_command.strip():
         return retry_command.strip()
@@ -2388,12 +2330,20 @@ def _repair_context_from_managed_install(
     managed_workspace = managed_install.get("workspace")
     if isinstance(managed_workspace, str) and managed_workspace.strip():
         workspace_path = Path(managed_workspace).expanduser().resolve()
+        manifest = managed_install.get("manifest")
+        explicit_value = manifest.get("hook_workspace_explicit") if isinstance(manifest, dict) else None
+        workspace_override_explicit = (
+            explicit_value
+            if isinstance(explicit_value, bool)
+            else _legacy_codex_workspace_was_explicit(context, managed_install, workspace_path)
+        )
         return (
             HarnessContext(
                 home_dir=context.home_dir,
                 workspace_dir=workspace_path,
                 guard_home=context.guard_home,
                 home_override_explicit=context.home_override_explicit,
+                workspace_override_explicit=workspace_override_explicit,
             ),
             str(workspace_path),
         )
@@ -2406,6 +2356,25 @@ def _repair_context_from_managed_install(
         ),
         None,
     )
+
+
+def _legacy_codex_workspace_was_explicit(
+    context: HarnessContext,
+    managed_install: dict[str, object],
+    workspace_path: Path,
+) -> bool:
+    if managed_install.get("harness") != "codex":
+        return True
+    try:
+        authenticated = load_authenticated_hook_manifest(
+            context.guard_home,
+            CodexHarnessAdapter._hook_config_path(context),
+        )
+    except (CodexHookIntegrityError, OSError):
+        return False
+    manifest_context = authenticated.get("context")
+    bound_workspace = manifest_context.get("workspace_dir") if isinstance(manifest_context, dict) else None
+    return isinstance(bound_workspace, str) and Path(bound_workspace).resolve() == workspace_path
 
 
 def _repair_codex_install(
@@ -2621,50 +2590,6 @@ def _status_installed_distribution(
         ca_bundle_path=network.ca_bundle_path,
     )
     return context.query_distribution()
-
-
-def _stop_tray_for_update(store: GuardStore | None) -> bool:
-    """Stop the tray process before a package update.
-
-    Returns True if the tray was running and was stopped, False if it was
-    not running or could not be stopped. Errors are swallowed — the update
-    must proceed even if the tray can't be stopped (e.g. on a fresh install
-    where no tray exists yet).
-    """
-    if store is None:
-        return False
-    try:
-        from ..tray.lifecycle import get_status, stop_tray
-
-        guard_home = store.guard_home
-        state, _capability, locator = get_status(guard_home)
-        if state != "running" or locator is None:
-            return False
-        stop_tray(guard_home)
-        return True
-    except Exception:
-        # Never block the update if tray stop fails — the old process will
-        # be replaced on next start or cleaned up by the OS on reboot.
-        return False
-
-
-def _restart_tray_after_update(store: GuardStore | None) -> None:
-    """Restart a tray that was stopped for a package update attempt.
-
-    This restores the previous tray session after either a successful update
-    or a handled failure. Errors are swallowed so tray recovery cannot mask
-    the update result.
-    """
-    if store is None:
-        return
-    try:
-        from ..tray.lifecycle import start_tray
-
-        start_tray(store.guard_home)
-    except Exception:
-        # Update succeeded; tray restart failure is non-fatal. The user can
-        # manually start the tray via `hol-guard guard tray start`.
-        pass
 
 
 __all__ = ["build_guard_install_surface_payload", "build_guard_update_status_payload", "run_guard_update"]

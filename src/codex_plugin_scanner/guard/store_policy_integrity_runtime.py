@@ -43,9 +43,8 @@ class StorePolicyIntegrityAdminMixin:
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         query = """
             select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
-                   action, reason, owner, source, expires_at, updated_at,
-                   policy_document_schema_version, policy_document_id, policy_document_digest,
-                   policy_rule_id, policy_provenance_json, integrity_version, integrity_generation,
+                   action, reason, owner, source, expires_at, updated_at, integrity_version,
+                   integrity_generation,
                    payload_hash, payload_mac, integrity_key_id, signed_at
             from policy_decisions
         """
@@ -156,16 +155,6 @@ class StorePolicyIntegrityAdminMixin:
             "expires_at": row["expires_at"],
             "updated_at": str(row["updated_at"]),
         }
-        row_keys = set(row.keys())
-        for field in (
-            "policy_document_schema_version",
-            "policy_document_id",
-            "policy_document_digest",
-            "policy_rule_id",
-            "policy_provenance_json",
-        ):
-            if field in row_keys and row[field] is not None:
-                payload[field] = str(row[field])
         if row["integrity_version"] is not None:
             payload["integrity_version"] = int(row["integrity_version"])
         if row["integrity_generation"] is not None:

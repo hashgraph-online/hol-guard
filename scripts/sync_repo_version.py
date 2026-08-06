@@ -43,8 +43,8 @@ def _default_repo_root() -> Path:
 def _validate_version_token(version: str) -> str:
     try:
         Version(version)
-    except InvalidVersion as exc:
-        raise ValueError(f"Unsupported version format: {version}") from exc
+    except InvalidVersion:
+        raise ValueError(f"Unsupported version format: {version}")
     return version
 
 
@@ -93,7 +93,10 @@ def assert_repo_version(repo_root: Path, expected_version: str | None = None) ->
             f"{LOCKFILE_RELATIVE_PATH} has {state.lockfile}"
         )
     if expected_version is not None and state.pyproject != expected_version:
-        raise ValueError(f"Repository version mismatch: expected {expected_version}, found {state.pyproject}")
+        raise ValueError(
+            "Repository version mismatch: "
+            f"expected {expected_version}, found {state.pyproject}"
+        )
     return state.pyproject
 
 
@@ -103,7 +106,7 @@ def _replace_matching_line(line: str, pattern: re.Pattern[str], version: str) ->
     match = pattern.match(line_body)
     if match is None:
         return line
-    return f"{match.group('prefix')}{version}{match.group('suffix')}{line_ending}"
+    return f'{match.group("prefix")}{version}{match.group("suffix")}{line_ending}'
 
 
 def _replace_project_version(path: Path, version: str) -> tuple[str, bool]:
@@ -121,8 +124,9 @@ def _replace_project_version(path: Path, version: str) -> tuple[str, bool]:
             break
         if not in_project_table:
             continue
-        if PYPROJECT_VERSION_LINE_PATTERN.match(line.rstrip("\r\n")) is not None:
-            lines[index] = _replace_matching_line(line, PYPROJECT_VERSION_LINE_PATTERN, version)
+        replaced_line = _replace_matching_line(line, PYPROJECT_VERSION_LINE_PATTERN, version)
+        if replaced_line != line:
+            lines[index] = replaced_line
             project_version_index = index
             break
 
@@ -139,8 +143,9 @@ def _replace_module_version(path: Path, version: str) -> tuple[str, bool]:
     module_version_index: int | None = None
 
     for index, line in enumerate(lines):
-        if MODULE_VERSION_LINE_PATTERN.match(line.rstrip("\r\n")) is not None:
-            lines[index] = _replace_matching_line(line, MODULE_VERSION_LINE_PATTERN, version)
+        replaced_line = _replace_matching_line(line, MODULE_VERSION_LINE_PATTERN, version)
+        if replaced_line != line:
+            lines[index] = replaced_line
             module_version_index = index
             break
 

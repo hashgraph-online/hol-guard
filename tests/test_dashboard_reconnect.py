@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import stat
-import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -139,18 +138,7 @@ def test_dashboard_reconnect_survives_restart_and_consumes_each_proof_once(tmp_p
     finally:
         original.stop()
 
-    restart_deadline = time.monotonic() + 30.0
-    while True:
-        try:
-            restarted = GuardDaemonServer(store, host="127.0.0.1", port=0)
-            break
-        except RuntimeError as error:
-            if (
-                str(error) != "A previous Guard daemon remains quarantined after unconfirmed containment."
-                or time.monotonic() >= restart_deadline
-            ):
-                raise
-            time.sleep(0.05)
+    restarted = GuardDaemonServer(store, host="127.0.0.1", port=0)
     restarted.start()
     try:
         status, challenge_payload = _challenge(restarted, authorization)

@@ -191,6 +191,7 @@ def test_platform_backend_runs_path_pinned_node_or_fails_closed(tmp_path: Path) 
     (
         ("vitest", ("--no-install", "vitest", "run", "src/example.test.ts"), "test"),
         ("eslint", ("--no-install", "eslint", "--no-cache", "src/example.ts"), "lint"),
+        ("tsx", ("tsx", "src/example.ts"), "diagnostic"),
     ),
 )
 def test_exact_runner_routes_through_central_contained_decision(

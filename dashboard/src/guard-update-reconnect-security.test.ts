@@ -144,14 +144,19 @@ assert(
 
 type FetchMode = "prepare" | "shape-only" | "authenticated";
 let mode: FetchMode = "prepare";
-const fetchEvents: Array<{ url: string; credentialed: boolean; redirect: RequestRedirect | undefined }> = [];
+const fetchEvents: Array<{
+  url: string;
+  credentialed: boolean;
+  cache: RequestCache | undefined;
+  redirect: RequestRedirect | undefined;
+}> = [];
 let clientProofAccepted = false;
 
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = String(input);
   const headers = new Headers(init?.headers);
   const credentialed = headers.has("X-Guard-Dashboard-Session") || headers.has("Authorization");
-  fetchEvents.push({ url, credentialed, redirect: init?.redirect });
+  fetchEvents.push({ url, credentialed, cache: init?.cache, redirect: init?.redirect });
 
   if (url.endsWith("/v1/update/reconnect/prepare")) {
     assert(credentialed, "prepare must use the already authenticated dashboard session");
@@ -245,6 +250,7 @@ assert(
   fetchEvents[0]?.url === "http://127.0.0.1:4781/v1/update/status",
   "a hostile daemon fragment must not replace the origin bound to a stored dashboard credential",
 );
+assert(fetchEvents[0]?.cache === "no-store", "update status must not reuse a stale release channel response");
 const authorization = await prepareGuardDaemonReconnect();
 assert(
   authorization.verifier === authorizationRaw.verifier,

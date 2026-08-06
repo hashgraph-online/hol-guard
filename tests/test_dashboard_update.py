@@ -41,10 +41,6 @@ def _use_legacy_status_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
         "codex_plugin_scanner.guard.cli.update_commands._status_installed_distribution",
         build_legacy_status_distribution,
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.manager._guard_daemon_process_inventory_for_guard_home",
-        lambda _guard_home: [],
-    )
 
 
 def _store(tmp_path: Path) -> GuardStore:
@@ -291,10 +287,16 @@ def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monke
         status, payload = _post_json_body(daemon, "/v1/update/channel", {"update_channel": "alpha"})
         assert status == 200
         assert payload["release_channel"] == "alpha"
-        refreshed_payload, refreshed_headers = _get_json_with_headers(daemon, "/v1/update/status")
-        status, payload = _post_json(daemon, "/v1/update")
     finally:
         daemon.stop()
+
+    restarted_daemon = GuardDaemonServer(GuardStore(store.guard_home), host="127.0.0.1", port=0)
+    restarted_daemon.start()
+    try:
+        refreshed_payload, refreshed_headers = _get_json_with_headers(restarted_daemon, "/v1/update/status")
+        status, payload = _post_json(restarted_daemon, "/v1/update")
+    finally:
+        restarted_daemon.stop()
 
     assert status == 200
     assert payload["scheduled"] is True

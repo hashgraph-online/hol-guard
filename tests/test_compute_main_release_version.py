@@ -15,9 +15,9 @@ from scripts.compute_main_release_version import compute_main_release_version, l
         ("2.0.1117", ["2.0.1116"], "2.0.1117"),
         ("2.0.1117", ["2.0.1117"], "2.0.1118"),
         ("2.0.1117", ["2.0.1120"], "2.0.1121"),
-        ("2.0.1117", ["2.0.1117.dev4", "2.2.0a1", "3.0.0a5"], "2.0.1117"),
-        ("2.1.0", ["2.1.0a30", "2.1.0a31", "3.0.0a5"], "2.1.0"),
-        ("3.0.0", ["2.0.2000", "3.0.0a5"], "3.0.0"),
+        ("2.0.1117", ["2.0.1117.dev4", "2.2.0a1", "3.1.0a5"], "2.0.1117"),
+        ("2.1.0", ["2.1.0a30", "2.1.0a31", "3.1.0a5"], "2.1.0"),
+        ("3.1.0", ["2.0.2000", "3.1.0a5"], "3.1.0"),
     ],
 )
 def test_computes_monotonic_version_for_repository_release_line(
@@ -34,13 +34,14 @@ def test_rejects_noncanonical_repository_versions(base: str) -> None:
         compute_main_release_version(base, [])
 
 
-def test_ignores_invalid_or_noncanonical_registry_versions() -> None:
-    assert compute_main_release_version("2.0.1", ["2.0.01", "invalid", "2.0.0+local"]) == "2.0.1"
+def test_rejects_noncanonical_registry_versions() -> None:
+    with pytest.raises(ValueError, match="Registry version"):
+        compute_main_release_version("2.0.1", ["2.0.01"])
 
 
 def test_reports_latest_stable_version_for_source_monotonicity() -> None:
-    assert latest_main_release_version("2.0.1117", ["2.0.1116", "2.0.1117.dev4", "3.0.0a5"]) == "2.0.1116"
-    assert latest_main_release_version("2.0.1117", ["2.2.0a1", "3.0.0a5"]) is None
+    assert latest_main_release_version("2.0.1117", ["2.0.1116", "2.0.1117.dev4", "3.1.0a5"]) == "2.0.1116"
+    assert latest_main_release_version("2.0.1117", ["2.2.0a1", "3.1.0a5"]) is None
 
 
 def test_cli_reports_latest_existing_stable(
@@ -51,7 +52,7 @@ def test_cli_reports_latest_existing_stable(
         "argv",
         ["compute_main_release_version.py", "--base-version", "2.0.1117", "--latest-existing"],
     )
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(["2.0.1116", "3.0.0a5"])))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(["2.0.1116", "3.1.0a5"])))
 
     assert main() == 0
     assert capsys.readouterr().out == "2.0.1116\n"

@@ -20,6 +20,8 @@ _GITHUB_PERMISSION_IDS = {
     "command.github.permission.read-local",
     "command.github.permission.read-remote",
     "command.github.permission.propose-remote",
+    "command.github.permission.routine-merge-remote",
+    "command.github.permission.routine-review-thread-remote",
     "command.github.permission.write-local",
     "command.github.permission.maintain-remote",
     "command.github.permission.content-remote",
@@ -38,6 +40,8 @@ _GITHUB_CAPABILITIES: set[GitHubCommandCapability] = {
     "read_local",
     "read_remote",
     "propose_remote",
+    "routine_merge_remote",
+    "routine_review_thread_remote",
     "write_local",
     "maintain_remote",
     "content_remote",
@@ -93,8 +97,10 @@ def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -
 
     admin = registry.permission_for_typed_capability("admin_merge_remote")
     ordinary = registry.permission_for_typed_capability("merge_remote")
+    routine = registry.permission_for_typed_capability("routine_merge_remote")
     assert admin is not None
     assert ordinary is not None
+    assert routine is not None
     assert admin.permission_id == "command.github.permission.merge-admin"
     assert admin.rule_ids == ("command.github.admin-merge",)
     assert admin.action_classes == ("GitHub administrator pull-request merge command",)
@@ -110,6 +116,9 @@ def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -
     assert ordinary.permission_id == "command.github.permission.merge-remote"
     assert ordinary.rule_ids == ("command.github.merge",)
     assert ordinary.baseline_floor == "require-reapproval"
+    assert routine.rule_ids == ()
+    assert routine.action_classes == ()
+    assert routine.baseline_floor == "allow"
 
 
 @pytest.mark.parametrize("lookup", ["rule", "action", "capability"])
@@ -137,7 +146,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "74434c8faa7e40161e2b20bbf3e6ffa82a71fb90c8f329524ac2f44edfd1c1c0"
+    assert registry.catalog_digest == "21b1b2bb410114e1f7852e45efc7dedc1f74217e176a05401eb103338851816c"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )

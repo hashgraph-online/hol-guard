@@ -31,26 +31,22 @@ def _install_evaluator_packages() -> None:
         ("codex_plugin_scanner.guard.runtime", package_root / "guard" / "runtime"),
     )
     for name, path in packages:
-        if name in sys.modules:
-            continue
-        package_path = path / "__init__.py"
-        spec = importlib.util.spec_from_file_location(
-            name,
-            package_path,
-            submodule_search_locations=[str(path)],
-        )
-        if spec is None:
-            raise RuntimeError(f"could not create package spec for {name}")
-        package = types.ModuleType(name)
-        package.__dict__.update(
-            {
-                "__file__": str(package_path),
-                "__package__": name,
-                "__path__": [str(path)],
-                "__spec__": spec,
-            }
-        )
-        sys.modules[name] = package
+        package = sys.modules.get(name)
+        if package is None:
+            init_path = path / "__init__.py"
+            spec = importlib.util.spec_from_file_location(
+                name,
+                init_path if init_path.is_file() else None,
+                submodule_search_locations=[str(path)],
+            )
+            package = importlib.util.module_from_spec(spec) if spec is not None else types.ModuleType(name)
+            package.__dict__["__path__"] = [str(path)]
+            sys.modules[name] = package
+        parent_name, separator, child_name = name.rpartition(".")
+        if separator:
+            parent = sys.modules.get(parent_name)
+            if parent is not None:
+                setattr(parent, child_name, package)
 
 
 _install_evaluator_packages()

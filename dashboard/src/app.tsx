@@ -9,7 +9,6 @@ import {
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
-  fetchMcpPolicyRequest,
   fetchApprovalPage,
   fetchAllPendingRequests,
   fetchInboxState,
@@ -19,13 +18,15 @@ import {
   guardAwareHref,
   bulkAllowReadOnce,
   repairApprovalCenter,
+  repairProtectionCheck,
+  runHarnessAction,
   resolveRequestWithQueueResult,
   retryResume,
 } from "./guard-api";
 import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
 import type { AppView } from "./approval-center-primitives";
 import { buildClearPayload } from "./clear-policy-payload";
-import { normalizeHarnessSlug } from "./approval-center-utils";
+import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
@@ -33,9 +34,6 @@ import { useRouteFocus } from "./use-route-focus";
 const HomeWorkspace = lazy(() => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazy(() => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = lazy(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
-const ExtensionsWorkspace = lazy(() =>
-  import("./extensions-workspace").then((module) => ({ default: module.ExtensionsWorkspace }))
-);
 const AppDetailWorkspace = lazy(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazy(() =>
@@ -43,9 +41,6 @@ const SupplyChainHubWorkspace = lazy(() =>
 );
 const PolicyWorkspacePage = lazy(() =>
   import("./policy-workspace-page").then((m) => ({ default: m.PolicyWorkspacePage }))
-);
-const McpPolicyRequestPanel = lazy(() =>
-  import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 const AboutWorkspace = lazy(() =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
@@ -67,7 +62,7 @@ import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardInventoryItem,
-  DecisionScope,
+  GuardApprovalResolutionInput,
 } from "./guard-types";
 
 type RequestState =
@@ -86,8 +81,7 @@ type DetailState =
       diff: GuardArtifactDiff | null;
       receipt: GuardReceipt | null;
       policy: GuardPolicyDecision[];
-    }
-  | { kind: "mcp-policy"; requestId: string };
+    };
 
 type ReceiptsState =
   | { kind: "loading" }
@@ -171,9 +165,6 @@ export function resolveView(pathname: string): AppView {
   if (pathname.startsWith("/apps/")) {
     return "fleet";
   }
-  if (pathname === "/extensions") {
-    return "extensions";
-  }
   if (pathname === "/settings") {
     return "settings";
   }
@@ -222,18 +213,6 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("404")) {
-      // VPC045-047/056: a 404 on /v1/requests/<id> may mean this is a staged
-      // MCP policy creation request rather than a regular approval. Probe the
-      // MCP endpoint; if it exists, render the MCP panel. Otherwise fall back
-      // to the stale state so the inbox shows an honest "gone" message.
-      try {
-        const mcpRequest = await fetchMcpPolicyRequest(requestId);
-        if (mcpRequest !== null) {
-          return { kind: "mcp-policy", requestId };
-        }
-      } catch {
-        // Swallow — the original 404 is the source of truth here.
-      }
       return { kind: "stale" };
     }
     return {
@@ -333,7 +312,11 @@ export function App() {
       const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
       let pendingRequests: Promise<void>;
       if (needsFullQueue) {
-        pendingRequests = fetchAllPendingRequests()
+        pendingRequests = fetchAllPendingRequests((items) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            setRequests({ kind: "ready", items });
+          }
+        })
           .then((items) => {
             if (!cancelled && !resolutionInFlight.current) {
               setRequests({ kind: "ready", items });
@@ -520,7 +503,7 @@ export function App() {
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
-  const handleOpenSettings = useCallback(() => navigate("/settings"), []);
+  const handleOpenSettings = useCallback((pathname = "/settings") => navigate(pathname), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
@@ -657,18 +640,7 @@ export function App() {
     setReceipts({ kind: "ready", items: [] });
   }, [setReceipts]);
 
-  const handleResolve = useCallback(async (payload: {
-    requestId: string;
-    action: "allow" | "block";
-    scope: DecisionScope;
-    workspace?: string;
-    reason: string;
-    approval_password?: string;
-    approval_totp_code?: string;
-    approval_gate_use_cooldown?: boolean;
-    scope_contract_version?: string;
-    scope_contract_digest?: string;
-  }) => {
+  const handleResolve = useCallback(async (payload: GuardApprovalResolutionInput) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
     try {
@@ -780,6 +752,32 @@ export function App() {
       navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
     }
   }, []);
+
+  const handleRepairProtection = useCallback(async (harnesses: string[]) => {
+    const failures: string[] = [];
+    try {
+      await repairApprovalCenter();
+    } catch {
+      failures.push("local runtime");
+    }
+    for (const harness of harnesses) {
+      try {
+        await runHarnessAction({ harness, action: "repair", dryRun: false });
+      } catch {
+        failures.push(`${harnessDisplayName(harness)} hooks`);
+      }
+    }
+    try {
+      await repairProtectionCheck("all");
+    } catch (error: unknown) {
+      failures.push(error instanceof Error ? error.message : "integrity protection");
+    }
+    await refreshStateAfterAction();
+    if (failures.length > 0) {
+      throw new Error(`Repair paused at ${failures.join(", ")}. Retry repair to continue from this page.`);
+    }
+    return "Automatic repairs completed. Guard rechecked every protection layer below.";
+  }, [refreshStateAfterAction]);
 
   const appDetailContent = useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
@@ -905,6 +903,7 @@ export function App() {
               onConnectHarness={handleConnectHarness}
               onTestHarness={handleTestHarness}
               onRepairHarness={handleRepairHarness}
+              onRepairProtection={handleRepairProtection}
               onOpenAppDetail={handleOpenAppDetail}
             />
           </Suspense>
@@ -916,11 +915,6 @@ export function App() {
             {appDetailContent}
           </Suspense>
         </ErrorBoundary>
-      }
-      extensionsContent={
-        <Suspense fallback={<LazyFallback />}>
-          <ExtensionsWorkspace />
-        </Suspense>
       }
       settingsContent={
         <Suspense fallback={<LazyFallback />}>

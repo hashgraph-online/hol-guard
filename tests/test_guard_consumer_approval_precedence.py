@@ -202,7 +202,7 @@ def test_guard_run_launch_environment_hash_is_canonical_and_value_sensitive() ->
     assert len(first) == 64
 
 
-def test_unchanged_raw_interpreted_tool_action_preserves_exact_approval_boundary(tmp_path: Path) -> None:
+def test_unchanged_raw_interpreted_tool_action_reuses_exact_approval(tmp_path: Path) -> None:
     script = tmp_path / "consumer_action.py"
     script.write_text("print('unchanged')\n", encoding="utf-8")
     artifact = _raw_interpreted_artifact(tmp_path, script)
@@ -224,17 +224,8 @@ def test_unchanged_raw_interpreted_tool_action_preserves_exact_approval_boundary
     result = evaluate_detection(detection, store, config, persist=False)
 
     assert result["artifacts"][0]["approval_context_hash"] == context_hash
-    evaluated = result["artifacts"][0]
-    if evaluated["policy_action"] == "allow":
-        assert evaluated["approval_reuse_status"] == "accepted"
-        assert evaluated["approval_reuse_reason_code"] == "approval_reuse_accepted"
-    else:
-        assert evaluated["policy_action"] == "require-reapproval"
-        assert evaluated["approval_reuse_status"] == "rejected"
-        assert evaluated["approval_reuse_reason_code"] in {
-            "approval_reuse_identity_changed",
-            "approval_reuse_reapproval_required",
-        }
+    assert result["artifacts"][0]["approval_reuse_status"] == "accepted"
+    assert result["artifacts"][0]["approval_reuse_reason_code"] == "approval_reuse_accepted"
 
 
 def test_raw_interpreted_tool_action_entrypoint_mutation_rejects_exact_approval(tmp_path: Path) -> None:
@@ -1160,7 +1151,8 @@ def test_guard_run_redetects_interpreted_entrypoint_after_claim_before_launch(
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir(parents=True)
-    entrypoint = _write_test_executable(workspace / "claimed-entrypoint", "#!/bin/sh\nexit 0\n")
+    entrypoint = workspace / "claimed_entrypoint.py"
+    entrypoint.write_text("print('approved')\n", encoding="utf-8")
     artifact = GuardArtifact(
         artifact_id="codex:project:claim-time-entrypoint",
         name="claim-time-entrypoint",
@@ -1168,8 +1160,8 @@ def test_guard_run_redetects_interpreted_entrypoint_after_claim_before_launch(
         artifact_type="tool_action_request",
         source_scope="project",
         config_path=str(workspace / ".codex" / "config.toml"),
-        command=str(entrypoint),
-        args=(),
+        command=sys.executable,
+        args=(str(entrypoint),),
         publisher="trusted-publisher",
         metadata={
             "guard_default_action": "review",
@@ -1193,7 +1185,7 @@ def test_guard_run_redetects_interpreted_entrypoint_after_claim_before_launch(
     def claim_then_mutate(decisions, **kwargs) -> bool:
         claimed = original_claim(decisions, **kwargs)
         if claimed:
-            entrypoint.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+            entrypoint.write_text("print('changed after claim')\n", encoding="utf-8")
         return claimed
 
     monkeypatch.setattr(guard_runner_module, "detect_harness", detect_current)

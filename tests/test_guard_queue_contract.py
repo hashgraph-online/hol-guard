@@ -327,7 +327,9 @@ def test_duplicate_resolution_leaves_terminal_and_contract_invalid_rows_pending(
 
     statuses = {
         str(row["request_id"]): str(row["status"])
-        for row in connection.execute("select request_id, status from approval_requests order by request_id").fetchall()
+        for row in connection.execute(
+            "select request_id, status from approval_requests order by request_id"
+        ).fetchall()
     }
     assert result["resolved"] is True
     assert result["resolved_duplicate_ids"] == []

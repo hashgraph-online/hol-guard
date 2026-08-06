@@ -44,41 +44,9 @@ from tests.shim_execution_helpers import write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
 from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler
 
-PACKAGE_SHIM_GUARD_CASES = (
-    ("bun", ("add", "minimist@1.2.9"), True),
-    ("bun", ("run", "build"), True),
-    ("bun", ("run", "build", "--watch"), True),
-    ("bun", ("run", "dev"), True),
-    ("bun", ("pm", "ls", "--all"), True),
-    ("bun", ("script.ts",), True),
-    ("bun", ("--version",), False),
-    ("brew", ("install", "jq"), True),
-    ("brew", ("install", "--cask", "firefox"), True),
-    ("brew", ("tap", "user/repository"), True),
-    ("brew", ("bundle", "install"), True),
-    ("brew", ("info", "jq"), False),
-    ("pip", ("install", "requests==2.32.3"), True),
-    ("pip", ("--isolated", "install", "requests==2.32.3"), True),
-    ("npm", ("install", "minimist@1.2.9"), True),
-    ("npm", ("--registry=https://registry.example.com", "install", "minimist@1.2.9"), True),
-    ("npm", ("run", "dev"), False),
-    ("pnpm", ("add", "minimist@1.2.9"), True),
-    ("pnpm", ("--dir", ".", "add", "minimist@1.2.9"), True),
-    ("pnpm", ("install",), True),
-    ("pnpm", ("--dir", ".", "run", "dev"), False),
-    ("pnpm", ("run", "dev"), False),
-    ("yarn", ("add", "minimist@1.2.9"), True),
-    ("yarn", ("--cwd", ".", "add", "minimist@1.2.9"), True),
-)
-
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
-    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
-
-    Also installs a test-only resolver override so sync-path exercises stay hermetic
-    (no OAuth token refresh against the network). Tests that need real sync against a
-    local server pass sync_url=<url>.
-    """
+    """Seed OAuth credentials and a hermetic test-only sync resolver override."""
     from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
     from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
@@ -515,6 +483,54 @@ def test_enable_wal_mode_uses_bounded_busy_timeout(monkeypatch: pytest.MonkeyPat
     assert sleep_calls == [guard_store_module._SQLITE_LOCK_RETRY_DELAY_SECONDS]
 
 
+def test_enable_wal_mode_shrinks_attempt_timeout_to_remaining_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = 0.0
+
+    class _Cursor:
+        def __init__(self, row):
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class _Connection:
+        def __init__(self) -> None:
+            self.busy_timeout_ms = 1_500
+            self.wal_attempts = 0
+            self.attempt_timeouts: list[int] = []
+
+        def execute(self, sql: str):
+            nonlocal clock
+            if sql == "pragma busy_timeout":
+                return _Cursor((self.busy_timeout_ms,))
+            if sql.startswith("pragma busy_timeout="):
+                self.busy_timeout_ms = int(sql.split("=", 1)[1])
+                return _Cursor(None)
+            if sql == "pragma journal_mode=WAL":
+                self.wal_attempts += 1
+                self.attempt_timeouts.append(self.busy_timeout_ms)
+                if self.wal_attempts == 1:
+                    clock += 0.8
+                    raise sqlite3.OperationalError("database is locked")
+                return _Cursor(("wal",))
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    monkeypatch.setattr(guard_store_module.time, "monotonic", lambda: clock)
+
+    def advance_clock(seconds: float) -> None:
+        nonlocal clock
+        clock += seconds
+
+    monkeypatch.setattr(guard_store_module.time, "sleep", advance_clock)
+    connection = _Connection()
+
+    guard_store_module.GuardStore._enable_wal_mode(connection)
+
+    assert connection.attempt_timeouts[0] == guard_store_module.SQLITE_WAL_BUSY_TIMEOUT_MS
+    assert 0 < connection.attempt_timeouts[1] < guard_store_module.SQLITE_WAL_BUSY_TIMEOUT_MS
+    assert connection.busy_timeout_ms == 1_500
+
+
 def test_guard_protect_does_not_prime_policy_integrity_or_hold_sqlite_writer(tmp_path: Path) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -673,6 +689,210 @@ def test_guard_protect_requires_reapproval_for_untrusted_package_sources_without
     assert payload["verdict"]["action"] == expected_action
 
 
+@pytest.mark.parametrize("legacy_local_replay", (False, True))
+def test_guard_protect_executes_exact_package_request_after_fresh_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+    legacy_local_replay: bool,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    install_dir = tmp_path / "agent" / "npm"
+    workspace_dir.mkdir(parents=True)
+    install_dir.mkdir(parents=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker_path = tmp_path / "npm-approved.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    command = [
+        "npm",
+        "install",
+        "guard-github@git+https://example.com/guard.git",
+        "--prefix",
+        str(install_dir),
+        "--legacy-peer-deps",
+    ]
+    store = GuardStore(home_dir)
+
+    initial_exit_code = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            *command,
+        ]
+    )
+    initial_payload = json.loads(capsys.readouterr().out)
+
+    assert initial_exit_code == 2
+    assert initial_payload["verdict"]["action"] == "require-reapproval"
+    request_id = str(initial_payload["primary_approval_request_id"])
+    apply_approval_resolution(
+        store=store,
+        request_id=request_id,
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="reviewed",
+    )
+    receipt = initial_payload["receipt"]
+    assert isinstance(receipt, dict)
+    if legacy_local_replay:
+        created_at = datetime.now(timezone.utc).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+        approval_id = store.record_local_once_approval(
+            request_id=request_id,
+            harness="guard-cli",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=str(receipt["artifact_hash"]),
+            workspace=None,
+            publisher=None,
+            action="allow",
+            created_at=created_at,
+            expires_at=expires_at,
+        )
+        assert approval_id is not None
+        with sqlite3.connect(home_dir / "guard.db") as connection:
+            connection.execute(
+                "delete from policy_decisions where source = 'approval-gate' and artifact_id = ?",
+                (str(receipt["artifact_id"]),),
+            )
+
+    preflight_exit_code = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            *command,
+        ]
+    )
+    preflight_payload = json.loads(capsys.readouterr().out)
+
+    assert preflight_exit_code == 0, json.dumps(preflight_payload, sort_keys=True)
+    assert preflight_payload["executed"] is False
+    assert preflight_payload["verdict"]["action"] == "allow"
+    assert not marker_path.exists()
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        preflight_local_rows = connection.execute(
+            "select claimed_at from guard_local_once_approvals where request_id = ?",
+            (request_id,),
+        ).fetchall()
+    if legacy_local_replay:
+        assert preflight_local_rows == [(None,)]
+    else:
+        assert preflight_local_rows == []
+
+    retry_exit_code = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            *command,
+        ]
+    )
+    retry_payload = json.loads(capsys.readouterr().out)
+
+    assert retry_exit_code == 0, json.dumps(retry_payload, sort_keys=True)
+    assert retry_payload["executed"] is True
+    assert retry_payload["verdict"]["action"] == "allow"
+    assert marker_path.exists()
+    marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
+    assert marker_payload["argv"][1:] == command[1:]
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        local_approval_rows = connection.execute(
+            "select claimed_at from guard_local_once_approvals where request_id = ?",
+            (request_id,),
+        ).fetchall()
+        approval_gate_rows = connection.execute(
+            "select count(*) from policy_decisions where source = 'approval-gate' and artifact_id = ?",
+            (str(receipt["artifact_id"]),),
+        ).fetchone()
+    if legacy_local_replay:
+        assert len(local_approval_rows) == 1
+        assert local_approval_rows[0][0] is not None
+    else:
+        assert local_approval_rows == []
+    assert approval_gate_rows == (0,)
+
+    replay_exit_code = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            *command,
+        ]
+    )
+    replay_output = capsys.readouterr()
+    assert replay_output.out, replay_output.err
+    replay_payload = json.loads(replay_output.out)
+
+    assert replay_exit_code == 2
+    assert replay_payload["executed"] is False
+    assert replay_payload["verdict"]["action"] == "require-reapproval"
+
+
+def test_legacy_package_approval_rejects_non_package_request() -> None:
+    class _Store:
+        @staticmethod
+        def get_approval_request(_request_id: str) -> dict[str, object]:
+            return {
+                "artifact_type": "tool_action",
+                "status": "resolved",
+                "resolution_action": "allow",
+                "resolution_scope": "artifact",
+                "artifact_id": "artifact-1",
+                "artifact_hash": "hash-1",
+            }
+
+    decision = {
+        "approval_id": "approval-1",
+        "request_id": "request-1",
+        "workspace": None,
+        "artifact_id": "artifact-1",
+        "artifact_hash": "hash-1",
+    }
+
+    assert not local_supply_chain_module._is_legacy_package_local_approval(decision, store=_Store())
+
+
+def test_legacy_package_approval_fails_closed_on_request_lookup_error() -> None:
+    class _Store:
+        @staticmethod
+        def get_approval_request(_request_id: str) -> dict[str, object]:
+            raise sqlite3.OperationalError("database unavailable")
+
+    decision = {
+        "approval_id": "approval-1",
+        "request_id": "request-1",
+        "workspace": None,
+        "artifact_id": "artifact-1",
+        "artifact_hash": "hash-1",
+    }
+
+    assert not local_supply_chain_module._is_legacy_package_local_approval(decision, store=_Store())
+
+
 def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -794,45 +1014,47 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     assert "database is locked" not in result.stderr
 
 
-@pytest.mark.parametrize(
-    ("manager", "argv", "expected"),
-    [
-        ("bun", ("add", "minimist@1.2.9"), True),
-        ("bun", ("run", "build"), True),
-        ("bun", ("run", "build", "--watch"), True),
-        ("bun", ("run", "dev"), True),
-        ("bun", ("pm", "ls", "--all"), True),
-        ("bun", ("script.ts",), True),
-        ("bun", ("--version",), False),
-        ("brew", ("install", "jq"), True),
-        ("brew", ("install", "--cask", "firefox"), True),
-        ("brew", ("tap", "user/repository"), True),
-        ("brew", ("bundle", "install"), True),
-        ("brew", ("info", "jq"), False),
-        ("pip", ("install", "requests==2.32.3"), True),
-        ("pip", ("--isolated", "install", "requests==2.32.3"), True),
-        ("npm", ("install", "minimist@1.2.9"), True),
-        ("npm", ("--registry=https://registry.example.com", "install", "minimist@1.2.9"), True),
-        ("npm", ("run", "dev"), False),
-        ("pnpm", ("add", "minimist@1.2.9"), True),
-        ("pnpm", ("--dir", ".", "add", "minimist@1.2.9"), True),
-        ("pnpm", ("install",), True),
-        ("pnpm", ("--dir", ".", "run", "dev"), False),
-        ("pnpm", ("run", "dev"), False),
-        ("yarn", ("add", "minimist@1.2.9"), True),
-        ("yarn", ("--cwd", ".", "add", "minimist@1.2.9"), True),
-    ],
+PACKAGE_SHIM_GUARD_CASES = (
+    ("bun", ("add", "minimist@1.2.9"), True),
+    ("bun", ("run", "build"), True),
+    ("bun", ("run", "build", "--watch"), True),
+    ("bun", ("run", "dev"), True),
+    ("bun", ("pm", "ls", "--all"), True),
+    ("bun", ("script.ts",), True),
+    ("bun", ("--version",), False),
+    ("brew", ("install", "jq"), True),
+    ("brew", ("install", "--cask", "firefox"), True),
+    ("brew", ("tap", "user/repository"), True),
+    ("brew", ("bundle", "install"), True),
+    ("brew", ("info", "jq"), False),
+    ("pip", ("install", "requests==2.32.3"), True),
+    ("pip", ("--isolated", "install", "requests==2.32.3"), True),
+    ("npm", ("install", "minimist@1.2.9"), True),
+    ("npm", ("--registry=https://registry.example.com", "install", "minimist@1.2.9"), True),
+    ("npm", ("run", "dev"), False),
+    ("pnpm", ("add", "minimist@1.2.9"), True),
+    ("pnpm", ("--dir", ".", "add", "minimist@1.2.9"), True),
+    ("pnpm", ("install",), True),
+    ("pnpm", ("--dir", ".", "run", "dev"), False),
+    ("pnpm", ("run", "dev"), False),
+    ("yarn", ("add", "minimist@1.2.9"), True),
+    ("yarn", ("--cwd", ".", "add", "minimist@1.2.9"), True),
 )
+
+
 def test_package_shim_command_requires_guard_for_supply_chain_or_bun_execution(
     tmp_path: Path,
-    manager: str,
-    argv: tuple[str, ...],
-    expected: bool,
 ) -> None:
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
-
-    assert package_shim_command_requires_guard(manager, argv, workspace=workspace_dir) is expected
+    failures: list[str] = []
+    for case_id, (manager, argv, expected) in enumerate(PACKAGE_SHIM_GUARD_CASES, start=1):
+        actual = package_shim_command_requires_guard(manager, argv, workspace=workspace_dir)
+        if actual is not expected:
+            failures.append(
+                f"package-shim-{case_id:03}: manager={manager!r}, argv={argv!r}; expected {expected!r}, got {actual!r}"
+            )
+    assert not failures, "\n".join(failures)
 
 
 @pytest.mark.parametrize(
@@ -1589,6 +1811,82 @@ def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_lo
     assert store.list_approval_requests(limit=None) == []
 
 
+def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_auth_expired(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="@openai/codex",
+        evaluate_status=401,
+    )
+    try:
+        monkeypatch.setattr(
+            supply_chain_package_eval_module,
+            "_registry_resolved_target_version",
+            lambda **_kwargs: "1.2.3",
+        )
+        _seed_bundle_cache_only(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="allow",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        store = GuardStore(home_dir)
+
+        payload, exit_code = build_protect_payload(
+            command=["bun", "install", "-g", "@openai/codex@latest"],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=True,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    assert exit_code == 0
+    assert payload["verdict"]["action"] == "allow"
+    assert payload["supply_chain_evaluation"]["policy_action"] == "allow"
+    assert any(reason["code"] == "cloud_auth_error" for reason in payload["supply_chain_evaluation"]["reasons"])
+    assert payload["supply_chain_evaluation"]["user_copy"]["next_step"] == "hol-guard connect"
+    assert "hol-guard connect" in payload["supply_chain_evaluation"]["user_copy"]["harness_message"]
+    assert store.list_approval_requests(limit=None) == []
+
+
+def test_cloud_reconnect_copy_preserves_existing_package_remediation() -> None:
+    evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
+        decision="ask",
+        policy_action="require-reapproval",
+        enforcement="premium_cloud",
+        entitlement_state="premium",
+        cache_status="cloud-error",
+        package_intent_hash="a" * 64,
+        policy_version="local:none",
+        bundle_version=None,
+        workspace_fingerprint=None,
+        reasons=(),
+        packages=(),
+        risk_summary="Guard paused the package request for review.",
+        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
+            title="Review required",
+            summary="A safer package version is required.",
+            next_step="npm install example@2.0.0",
+            dashboard_url=None,
+            harness_message="Install the safer package version.",
+        ),
+    )
+
+    updated = supply_chain_package_eval_module._with_cloud_auth_reconnect_copy(evaluation)
+
+    assert updated.user_copy.next_step == "npm install example@2.0.0"
+    assert "hol-guard connect" in updated.user_copy.harness_message
+
+
 def test_guard_protect_probe_skips_local_approval_queue_on_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1780,6 +2078,9 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
     assert "cloud_validation_error" in reason_codes
     assert "saved_package_block" not in reason_codes
     assert "saved package policy" not in payload["supply_chain_evaluation"]["user_copy"]["harness_message"]
+    pending = GuardStore(home_dir).list_approval_requests(limit=None)
+    assert len(pending) == 1
+    assert pending[0]["decision_v2_json"]["package_review_cloud_reason_code"] == "cloud_validation_error"
 
 
 def test_guard_protect_ignores_ecosystem_scoped_policy_bundle_family_block(

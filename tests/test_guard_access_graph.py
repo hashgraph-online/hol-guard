@@ -1,5 +1,3 @@
-import pytest
-
 from codex_plugin_scanner.guard.adapters.mcp_servers import (
     ManagedMcpServer,
     proxy_cli_args,
@@ -363,57 +361,6 @@ def test_tool_call_risk_categories_match_snake_case_network_tokens() -> None:
     categories = tool_call_risk_categories(artifact, {"mode": "fetch_remote"})
 
     assert categories == ("outbound_network",)
-
-
-@pytest.mark.parametrize(
-    ("arguments", "expected_categories"),
-    [
-        ({"code": "socket.create_connection(('192.0.2.1', 443))"}, {"outbound_network"}),
-        ({"code": "socket.sendto(data, ('2001:db8::1', 53))"}, {"outbound_network"}),
-        ({"code": "net.connect('8.8.8.8', 443)"}, {"outbound_network"}),
-        ({"code": "urllib.request.urlopen(target)"}, {"outbound_network"}),
-        ({"code": "http.client.HTTPSConnection(host)"}, {"outbound_network"}),
-        ({"code": "dns.lookup(host)"}, {"outbound_network"}),
-        ({"code": "connect('2606:4700:4700::1111')"}, {"outbound_network"}),
-        ({"code": "subprocess.run(['client', 'example.test'])"}, {"command_execution"}),
-        (
-            {"code": "child_process.spawn('client', ['--proxy', 'socks://example.test'])"},
-            {"command_execution", "outbound_network"},
-        ),
-    ],
-)
-def test_tool_call_risk_categories_detect_network_and_process_bypass_shapes(
-    arguments: dict[str, str],
-    expected_categories: set[str],
-) -> None:
-    artifact = build_tool_call_artifact(
-        harness="codex",
-        server_name="calculator",
-        tool_name="calculate",
-        source_scope="user",
-        config_path="/Users/alice/.codex/config.toml",
-        transport="stdio",
-    )
-
-    assert expected_categories.issubset(set(tool_call_risk_categories(artifact, arguments)))
-
-
-def test_tool_call_risk_categories_ignore_benign_network_vocabulary() -> None:
-    artifact = build_tool_call_artifact(
-        harness="codex",
-        server_name="calculator",
-        tool_name="calculate",
-        source_scope="user",
-        config_path="/Users/alice/.codex/config.toml",
-        transport="stdio",
-    )
-
-    categories = tool_call_risk_categories(
-        artifact,
-        {"prompt": "Calculate the area of a socket gasket from the attached diagram."},
-    )
-
-    assert "outbound_network" not in categories
 
 
 def test_tool_call_risk_categories_match_snake_case_privileged_tokens() -> None:

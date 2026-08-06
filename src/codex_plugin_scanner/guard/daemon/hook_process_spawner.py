@@ -36,12 +36,8 @@ def spawn_hook_worker(guard_home: Path | None) -> HookWorkerSlot:
 def hook_worker_became_isolated(slot: HookWorkerSlot, timeout: float) -> bool:
     if timeout <= 0:
         return False
-    deadline = time.monotonic() + timeout
-    if not slot.handshake_lock.acquire(timeout=timeout):
-        return False
     try:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0 or not slot.connection.poll(remaining):
+        if not slot.connection.poll(timeout):
             return False
         message = slot.connection.recv()
         if message == ("isolation_failed", None):
@@ -62,30 +58,21 @@ def hook_worker_became_isolated(slot: HookWorkerSlot, timeout: float) -> bool:
         return True
     except (EOFError, OSError):
         return False
-    finally:
-        slot.handshake_lock.release()
 
 
 def hook_worker_became_ready(slot: HookWorkerSlot, timeout: float) -> bool:
     if timeout <= 0:
         return False
     deadline = time.monotonic() + timeout
-    if not slot.handshake_lock.acquire(timeout=timeout):
+    if not slot.isolation_ready and not hook_worker_became_isolated(slot, timeout):
+        return False
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
         return False
     try:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return False
-        if not slot.isolation_ready and not hook_worker_became_isolated(slot, remaining):
-            return False
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return False
         return slot.connection.poll(remaining) and slot.connection.recv() == ("ready", None)
     except (EOFError, OSError):
         return False
-    finally:
-        slot.handshake_lock.release()
 
 
 __all__ = [

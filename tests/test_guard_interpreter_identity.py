@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
+from codex_plugin_scanner.guard.runtime import secret_file_requests
 from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_validation_reason,
     build_approval_context_token,
@@ -20,26 +21,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _strip_venv_from_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Resolve bare `python3` against the system PATH, not the active venv.
-
-    Under `uv run` the venv's ``bin`` directory is prepended to ``PATH`` so a
-    bare ``python3`` resolves into ``$HOME/.venv`` and is classified as
-    ``user_controlled``. These tests assert the trusted-system-interpreter
-    contract, so resolve ``python3`` as it would resolve on a system PATH.
-    """
-
-    path = os.environ.get("PATH", "")
-    parts = path.split(os.pathsep) if path else []
-    venv = os.environ.get("VIRTUAL_ENV")
-    if not venv:
-        return
-    venv_bin = os.path.join(venv, "bin")
-    cleaned = [part for part in parts if os.path.normpath(part) != os.path.normpath(venv_bin)]
-    monkeypatch.setenv("PATH", os.pathsep.join(cleaned))
-
-
 def _write_interpreter(path: Path, body: bytes = b"#!/bin/sh\nexit 0\n", *, executable: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(body)
@@ -48,6 +29,18 @@ def _write_interpreter(path: Path, body: bytes = b"#!/bin/sh\nexit 0\n", *, exec
 
 def _request(command: str, *, cwd: Path):
     return extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=cwd, home_dir=Path.home())
+
+
+def _trust_system_python(monkeypatch: pytest.MonkeyPatch) -> None:
+    def trust_system_python(path: Path, *, cwd: Path | None, home_dir: Path | None) -> bool:
+        del cwd, home_dir
+        return path == Path("/usr/bin/python3")
+
+    monkeypatch.setattr(
+        secret_file_requests,
+        "is_trusted_absolute_command_path",
+        trust_system_python,
+    )
 
 
 def _interpreter_evidence(command: str, *, cwd: Path) -> dict[str, object]:
@@ -214,19 +207,27 @@ def test_same_directory_guard_interpreter_alias_is_trusted_but_workspace_alias_i
 
 
 @pytest.mark.skipif(not Path("/usr/bin/python3").is_file(), reason="trusted system Python is unavailable")
-def test_verified_system_interpreter_keeps_normal_read_only_path_prompt_free(tmp_path: Path) -> None:
+def test_verified_system_interpreter_keeps_normal_read_only_path_prompt_free(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     command = "/usr/bin/python3 -c \"print('fixture')\""
+    _trust_system_python(monkeypatch)
 
     assert _request(command, cwd=workspace) is None
 
 
 @pytest.mark.skipif(not Path("/usr/bin/python3").is_file(), reason="trusted system Python is unavailable")
-def test_bare_interpreter_uses_effective_path_and_keeps_trusted_resolution_prompt_free(tmp_path: Path) -> None:
+def test_bare_interpreter_uses_effective_path_and_keeps_trusted_resolution_prompt_free(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     command = f"PATH=/usr/bin{os.pathsep}/bin python3 -c \"print('fixture')\""
+    _trust_system_python(monkeypatch)
 
     assert _request(command, cwd=workspace) is None
     assert is_explicitly_benign_tool_action_request(

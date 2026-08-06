@@ -33,6 +33,28 @@ const GUARD_TASKKILL_PATH = __GUARD_TASKKILL_PATH__;
 const INTERCEPT_TOOLS = new Set(__INTERCEPT_TOOLS__);
 const GUARD_HOOK_TIMEOUT_MS = 30_000;
 const GUARD_WINDOWS_JOB_MARKER = "HOL_GUARD_WINDOWS_JOB_CONTAINED\\n";
+type GuardStderrMarkerState = {
+  pending: string;
+  contained: boolean;
+};
+
+function consumeGuardStderrChunk(
+  state: GuardStderrMarkerState,
+  chunk: string,
+  flush: boolean,
+): string {
+  state.pending += chunk;
+  if (state.pending.includes(GUARD_WINDOWS_JOB_MARKER)) {
+    state.contained = true;
+    state.pending = state.pending.replaceAll(GUARD_WINDOWS_JOB_MARKER, "");
+  }
+  const retainedChars = flush
+    ? 0
+    : Math.min(state.pending.length, GUARD_WINDOWS_JOB_MARKER.length - 1);
+  const emitted = state.pending.slice(0, state.pending.length - retainedChars);
+  state.pending = state.pending.slice(state.pending.length - retainedChars);
+  return emitted;
+}
 let fallbackInFlight = false;
 let fallbackContainmentFailed = false;
 
@@ -319,17 +341,15 @@ export async function spawnGuardProcess(options: {
     let stdout = "";
     let stderr = "";
     let windowsJobContained = false;
+    const stderrMarkerState: GuardStderrMarkerState = { pending: "", contained: false };
     proc.stdout?.setEncoding("utf8");
     proc.stderr?.setEncoding("utf8");
     proc.stdout?.on("data", (chunk: string) => {
       stdout += chunk;
     });
     proc.stderr?.on("data", (chunk: string) => {
-      if (chunk.includes(GUARD_WINDOWS_JOB_MARKER)) {
-        windowsJobContained = true;
-        chunk = chunk.replaceAll(GUARD_WINDOWS_JOB_MARKER, "");
-      }
-      stderr += chunk;
+      stderr += consumeGuardStderrChunk(stderrMarkerState, chunk, false);
+      windowsJobContained = stderrMarkerState.contained;
     });
     proc.on("error", (error) => {
       if (timedOut) return;
@@ -337,6 +357,7 @@ export async function spawnGuardProcess(options: {
     });
     proc.on("close", (code: number | null) => {
       if (timedOut) return;
+      stderr += consumeGuardStderrChunk(stderrMarkerState, "", true);
       finish({ kind: "resolve", value: { exitCode: code ?? 1, stdout, stderr } });
     });
     timer = setTimeout(() => {
@@ -371,6 +392,10 @@ async function runGuardHook(
   deadlineMs: number,
 ) {
   const workspace = directory?.trim() || process.cwd();
+  const guardedPayload = {
+    ...payload,
+    guard_remaining_ms: Math.min(60_000, Math.max(1, deadlineMs - Date.now())),
+  };
   const guardArgv = [
     "guard",
     "hook",
@@ -387,7 +412,7 @@ async function runGuardHook(
     cwd: GUARD_HOME,
     deadlineMs,
     env: hookProcessEnv(guardArgv),
-    stdin: JSON.stringify(payload),
+    stdin: JSON.stringify(guardedPayload),
   });
 }
 
@@ -512,8 +537,42 @@ export const HolGuardPretoolPlugin = async ({
           },
           deadlineMs,
         );
+        const firstPayload = parseGuardPayload(result.stdout);
+        if (firstPayload?.reason_code === "transient_overload") {
+          const retryAfter = typeof firstPayload.retry_after_ms === "number"
+            ? Math.min(75, Math.max(25, Math.floor(firstPayload.retry_after_ms)))
+            : 25;
+          const estimatedService = typeof firstPayload.estimated_service_ms === "number"
+            ? Math.min(2_800, Math.max(100, Math.floor(firstPayload.estimated_service_ms)))
+            : 750;
+          const jitterMs = Math.max(retryAfter, 25 + Math.floor(Math.random() * 51));
+          if (deadlineMs - Date.now() >= jitterMs + estimatedService + 100) {
+            await new Promise((resolve) => setTimeout(resolve, jitterMs));
+            result = await runGuardHook(
+              directory,
+              {
+                hook_event_name: "PreToolUse",
+                event: "PreToolUse",
+                tool_name: input.tool,
+                tool_input: { command },
+                cwd: workspace,
+                source_scope: directory?.trim() ? "project" : "global",
+              },
+              deadlineMs,
+            );
+          }
+          if (parseGuardPayload(result.stdout)?.reason_code === "transient_overload") {
+            throw new Error(
+              "HOL Guard is temporarily saturated and kept this action blocked. " +
+                "No approval was requested; retry the action.",
+            );
+          }
+        }
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
+        if (detail.startsWith("HOL Guard is temporarily saturated")) {
+          throw new Error(detail);
+        }
         throw new Error(
           `HOL Guard could not review this ${input.tool} command (${detail}). ` +
             "Re-run `hol-guard install opencode` and ensure the Guard CLI is available.",

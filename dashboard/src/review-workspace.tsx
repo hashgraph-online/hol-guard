@@ -9,7 +9,7 @@ import type {
   GuardPolicyDecision,
   GuardReceipt,
   GuardRuntimeSnapshot,
-  DecisionScope,
+  GuardApprovalResolutionInput,
 } from "./guard-types";
 import {
   filterQueueByCategory,
@@ -56,18 +56,7 @@ export type ReviewWorkspaceProps = {
   approvalGate?: GuardApprovalGatePublicConfig | null;
   onRetryResume?: () => void;
   onOpenRequest: (requestId: string) => void;
-  onResolve: (payload: {
-    requestId: string;
-    action: "allow" | "block";
-    scope: DecisionScope;
-    workspace?: string;
-    reason: string;
-    approval_password?: string;
-    approval_totp_code?: string;
-    approval_gate_use_cooldown?: boolean;
-    scope_contract_version?: string;
-    scope_contract_digest?: string;
-  }) => Promise<void> | void;
+  onResolve: (payload: GuardApprovalResolutionInput) => Promise<void> | void;
   onGoHome: () => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
 };

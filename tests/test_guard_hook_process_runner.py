@@ -451,7 +451,8 @@ def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denia
         runner.close()
 
     failures = [result.reason_code for result in results if result.payload is None]
-    assert set(failures) <= {"daemon_hook_process_not_ready"}, runner.stats()
+    assert failures == [], runner.stats()
+    assert all(result.reason_code is None for result in results)
     assert scheduler.stats()["completed"] == 48
     assert scheduler.stats()["rejected"] == {}
 
@@ -1010,32 +1011,6 @@ def test_close_retains_worker_when_guardian_identity_is_lost(tmp_path: Path) -> 
     slot.isolation_ready = False
     slot.pre_isolation_contained = True
     assert runner.close_contained()
-
-
-def test_close_waits_for_inflight_worker_isolation_before_retirement(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=0.5)
-    runner.start()
-    assert runner.wait_for_capacity(minimum_workers=1, timeout_seconds=10)
-    slot = runner._slots.get_nowait()  # pyright: ignore[reportPrivateUsage]
-    runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
-    slot.isolation_ready = False
-    slot.pre_isolation_contained = False
-    isolation_waits: list[float] = []
-
-    def complete_isolation(candidate: HookWorkerSlot, timeout: float) -> bool:
-        isolation_waits.append(timeout)
-        candidate.isolation_ready = True
-        return True
-
-    monkeypatch.setattr(hook_runner_module, "hook_worker_became_isolated", complete_isolation)
-
-    assert runner.close_contained()
-    assert len(isolation_waits) == 1
-    assert 0 < isolation_waits[0] <= hook_runner_module._HOOK_PROCESS_READY_TIMEOUT_SECONDS
-    assert runner.stats()["workers"] == 0
 
 
 def test_close_retains_uncontained_worker_for_retry(

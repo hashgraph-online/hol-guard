@@ -784,7 +784,10 @@ class StoreReceiptsRuntimeMixin:
 
         bounded_timeout = min(max(timeout_seconds, 0.0), 1.0)
         try:
-            with closing(sqlite3.connect(self.path, timeout=bounded_timeout)) as connection:
+            with (
+                self._hold_storage_gate(exclusive=False),
+                closing(sqlite3.connect(self.path, timeout=bounded_timeout)) as connection,
+            ):
                 connection.execute(f"pragma busy_timeout={int(bounded_timeout * 1000)}")
                 connection.execute(
                     """

@@ -357,39 +357,36 @@ def test_guard_codex_native_hook_state_rejects_manifest_copied_from_another_guar
     assert second_manifest.read_bytes() == foreign_manifest
 
 
-def test_guard_codex_install_and_uninstall_reject_manifest_from_another_workspace(tmp_path: Path) -> None:
+def test_guard_codex_install_migrates_authenticated_manifest_to_another_workspace(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     first_context = HarnessContext(
         home_dir=home_dir,
         workspace_dir=tmp_path / "first-workspace",
         guard_home=guard_home,
-        workspace_override_explicit=True,
     )
     second_context = HarnessContext(
         home_dir=home_dir,
         workspace_dir=tmp_path / "second-workspace",
         guard_home=guard_home,
-        workspace_override_explicit=True,
     )
     adapter = CodexHarnessAdapter()
     adapter.install(first_context)
     config_path = CodexHarnessAdapter._hook_config_path(first_context)
     state = codex_adapter.codex_native_hook_state(first_context)
     manifest_path = Path(str(state["manifest_path"]))
-    original_config = config_path.read_bytes()
     original_manifest = manifest_path.read_bytes()
 
-    with pytest.raises(CodexHookIntegrityError) as install_error:
-        adapter.install(second_context)
-    with pytest.raises(CodexHookIntegrityError) as uninstall_error:
-        adapter.uninstall(second_context)
+    installed = adapter.install(second_context)
+    migrated_manifest = manifest_path.read_bytes()
+    state = codex_adapter.codex_native_hook_state(second_context)
+    uninstalled = adapter.uninstall(second_context)
 
-    assert install_error.value.reason == "codex_hook_manifest_baseline_untrusted"
-    assert uninstall_error.value.reason == "codex_hook_manifest_baseline_untrusted"
-    assert config_path.read_bytes() == original_config
-    assert manifest_path.read_bytes() == original_manifest
-    assert codex_adapter.codex_native_hook_state(first_context)["protection_active"] is True
+    assert installed["active"] is True
+    assert migrated_manifest != original_manifest
+    assert state["protection_active"] is True
+    assert uninstalled["active"] is False
+    assert config_path.exists() is False
 
 
 def test_guard_codex_install_refuses_missing_manifest_when_modern_secret_remains(tmp_path: Path) -> None:
@@ -1034,6 +1031,34 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert (home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh").exists() is False
     assert (home_dir / "managed" / "codex" / "codex-bashenv-guard.bash").exists() is False
     assert (home_dir / "managed" / "codex" / "codex-fish-guard.fish").exists() is False
+
+
+def test_guard_install_codex_does_not_bind_global_hooks_to_inferred_workspace(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(workspace_dir / "pyproject.toml", "[project]\nname = 'fixture'\nversion = '0'\n")
+    monkeypatch.chdir(workspace_dir)
+    monkeypatch.setattr(codex_adapter, "_command_available", lambda _command: True)
+
+    install_rc = main(["guard", "install", "codex", "--home", str(home_dir), "--json"])
+    install_payload = json.loads(capsys.readouterr().out)
+    doctor_rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--json"])
+    doctor_payload = json.loads(capsys.readouterr().out)
+    config_payload = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    hook_command = config_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+    assert install_rc == 0
+    assert install_payload["managed_install"]["workspace"] == str(workspace_dir)
+    assert "--workspace" not in shlex.split(hook_command)
+    assert doctor_rc == 0
+    assert doctor_payload["setup_status"] == "active"
+    assert doctor_payload["native_hook_state"]["protection_active"] is True
+    assert not any("managed Codex hooks are missing" in warning for warning in doctor_payload["warnings"])
 
 
 def test_guard_install_codex_detects_wrapped_servers_without_rewrapping(tmp_path, capsys):

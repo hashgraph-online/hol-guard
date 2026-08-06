@@ -160,7 +160,7 @@ def test_manifest_binds_generator_oracle_fixtures_counts_and_budgets() -> None:
     assert manifest["oracle_source_sha256"] == {path.name: _sha256(path) for path in oracle_paths}
     assert manifest["pairs_sha256"] == _sha256(PAIRS_PATH)
     assert manifest["known_gaps_sha256"] == _sha256(KNOWN_GAPS_PATH)
-    assert manifest["evaluation_budget_seconds"] == 45
+    assert manifest["evaluation_budget_seconds"] == 30
     assert manifest["evaluation_rss_budget_mib"] == 512
     assert MANIFEST_PATH.stat().st_size < 24_000
 

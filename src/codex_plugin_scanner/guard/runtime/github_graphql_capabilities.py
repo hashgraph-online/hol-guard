@@ -8,6 +8,20 @@ from .github_capability_contract import GitHubCommandAssessment, GitHubCommandCa
 
 _GRAPHQL_NAME = re.compile(r"\b[_A-Za-z][_0-9A-Za-z]*\b")
 _GRAPHQL_ALIAS = re.compile(r"\b(?P<name>[_A-Za-z][_0-9A-Za-z]*)\s*:")
+_ROUTINE_REVIEW_THREAD_ID = r"PRRT_[A-Za-z0-9_-]{8,}"
+_ROUTINE_REVIEW_THREAD_LITERAL = re.compile(
+    rf'''\A\s*mutation\s*\{{\s*
+    resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*"{_ROUTINE_REVIEW_THREAD_ID}"\s*\}}\s*\)\s*
+    \{{\s*thread\s*\{{\s*isResolved\s*\}}\s*\}}\s*\}}\s*\Z''',
+    re.VERBOSE | re.ASCII,
+)
+_ROUTINE_REVIEW_THREAD_VARIABLE = re.compile(
+    r"""\A\s*mutation\s*\(\s*\$threadId\s*:\s*ID!\s*\)\s*\{\s*
+    resolveReviewThread\s*\(\s*input\s*:\s*\{\s*threadId\s*:\s*\$threadId\s*\}\s*\)\s*
+    \{\s*thread\s*\{\s*isResolved\s*\}\s*\}\s*\}\s*\Z""",
+    re.VERBOSE | re.ASCII,
+)
+_ROUTINE_REVIEW_THREAD_VALUE = re.compile(rf"\A{_ROUTINE_REVIEW_THREAD_ID}\Z", re.ASCII)
 _MAINTENANCE_MUTATIONS = frozenset(
     {
         "minimizeComment",
@@ -139,6 +153,26 @@ def _graphql_mutation_capabilities(field: str) -> tuple[GitHubCommandCapability,
     if "release" in lowered:
         capabilities.append("publish_remote")
     return tuple(capabilities) or ("mutate_remote",)
+
+
+def is_routine_review_thread_resolution(
+    document: str,
+    fields: tuple[tuple[str, str], ...],
+) -> bool:
+    """Accept only one idempotent review-thread resolution with a static target."""
+
+    query_fields = [value for name, value in fields if name == "query"]
+    if len(query_fields) != 1 or query_fields[0] != document:
+        return False
+    if _ROUTINE_REVIEW_THREAD_LITERAL.fullmatch(document) is not None:
+        return len(fields) == 1
+    thread_ids = [value for name, value in fields if name == "threadId"]
+    return (
+        _ROUTINE_REVIEW_THREAD_VARIABLE.fullmatch(document) is not None
+        and len(fields) == 2
+        and len(thread_ids) == 1
+        and _ROUTINE_REVIEW_THREAD_VALUE.fullmatch(thread_ids[0]) is not None
+    )
 
 
 def _graphql_reason(capability: GitHubCommandCapability) -> str:

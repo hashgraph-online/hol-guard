@@ -50,7 +50,6 @@ def test_guard_action_envelope_round_trips_to_dict() -> None:
         "workspace_hash": "workspace-hash",
         "tool_name": "Bash",
         "command": "printf ok",
-        "command_category": None,
         "prompt_excerpt": None,
         "prompt_text": None,
         "target_paths": ["package.json"],
@@ -59,6 +58,7 @@ def test_guard_action_envelope_round_trips_to_dict() -> None:
         "mcp_tool": None,
         "package_manager": None,
         "package_name": None,
+        "command_category": None,
         "package_intent_kind": None,
         "package_targets": [],
         "pre_execution_result": None,
@@ -246,7 +246,9 @@ def test_normalize_codex_pre_tool_bash_payload(tmp_path: Path) -> None:
 
 
 def test_normalize_codex_apply_patch_as_file_write(tmp_path: Path) -> None:
-    patch_path = "../../../../../workspace/src/codex_plugin_scanner/guard/runtime/secret_file_requests.py"
+    patch_path = (
+        "../../../../../private/tmp/hol-guard-p01/src/codex_plugin_scanner/guard/runtime/secret_file_requests.py"
+    )
     patch = f"""*** Begin Patch
 *** Update File: {patch_path}
 @@
@@ -263,6 +265,24 @@ def test_normalize_codex_apply_patch_as_file_write(tmp_path: Path) -> None:
 
     assert envelope.action_type == "file_write"
     assert envelope.target_paths == (patch_path,)
+
+
+def test_normalize_codex_apply_patch_command_extracts_patch_target_paths(tmp_path: Path) -> None:
+    patch = """*** Begin Patch
+*** Add File: docs/patch-notes.md
++Routine patch content.
+*** End Patch"""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {"command": patch},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "file_write"
+    assert envelope.command == patch
+    assert envelope.target_paths == ("docs/patch-notes.md",)
 
 
 def test_normalize_codex_prompt_payload_extracts_prompt_excerpt(tmp_path: Path) -> None:

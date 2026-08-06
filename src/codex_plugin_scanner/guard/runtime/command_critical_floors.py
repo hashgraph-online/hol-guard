@@ -135,8 +135,8 @@ def _command_critical_floor_factors(
             segment,
             index,
             executable,
-            authorized_action_class=authorized_action_class,
             indirect=depth > 0 or str(segment.executable or "").lower().endswith(".exe"),
+            authorized_action_class=authorized_action_class,
         )
         if github_factor is not None:
             factors.append(github_factor)
@@ -170,8 +170,8 @@ def _github_factor(
     index: int,
     executable: str,
     *,
-    authorized_action_class: str | None,
     indirect: bool,
+    authorized_action_class: str | None,
 ) -> DecisionFactor | None:
     if executable != "gh":
         return None
@@ -187,7 +187,12 @@ def _github_factor(
     action_floor = assessment.action_floor
     if indirect and action_floor != "block":
         action_floor = "require-reapproval"
-    return _factor(command, index, action_floor, "critical.github-cli")
+    return _factor(
+        command,
+        index,
+        action_floor,
+        f"github-capability.{assessment.capability.replace('_', '-')}",
+    )
 
 
 def _critical_floor(

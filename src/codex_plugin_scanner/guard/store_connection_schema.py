@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from typing import ClassVar
 from uuid import uuid4
 
-from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_profile import (
     SQLiteMigrationGateReport,
     SQLiteProfiler,
@@ -649,11 +648,6 @@ class StoreConnectionSchemaMixin:
               owner text,
               source text not null default 'local',
               expires_at text,
-              policy_document_schema_version text,
-              policy_document_id text,
-              policy_document_digest text,
-              policy_rule_id text,
-              policy_provenance_json text,
               updated_at text not null
             )
             """,
@@ -963,7 +957,6 @@ class StoreConnectionSchemaMixin:
             ensure_extension_control_authority_schema(connection)
             ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
-            ensure_mcp_policy_request_schema(connection)
             if not self._schema_version_applied(connection, version=4):
                 self._record_schema_version(connection, version=4)
             for idx_stmt in supply_chain_index_statements():
@@ -981,11 +974,6 @@ class StoreConnectionSchemaMixin:
             self._ensure_policy_column(connection, "payload_mac", "text")
             self._ensure_policy_column(connection, "integrity_key_id", "text")
             self._ensure_policy_column(connection, "signed_at", "text")
-            self._ensure_policy_column(connection, "policy_document_schema_version", "text")
-            self._ensure_policy_column(connection, "policy_document_id", "text")
-            self._ensure_policy_column(connection, "policy_document_digest", "text")
-            self._ensure_policy_column(connection, "policy_rule_id", "text")
-            self._ensure_policy_column(connection, "policy_provenance_json", "text")
             for index_statement in _POLICY_INDEX_STATEMENTS:
                 connection.execute(index_statement)
             self._ensure_column(connection, "guard_local_once_approvals", "integrity_version", "integer")

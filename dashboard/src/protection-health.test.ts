@@ -118,5 +118,9 @@ const reviewStatesSource = readFileSync(new URL("./review-states.tsx", import.me
 assert.match(appDetailSource, /Install state" value=\{active \? "Installed"/);
 assert.match(appDetailSource, /protectionHealthFor\(runtime, harness\)/);
 assert.match(fleetSource, /resolveAppStatus\(install, appProtection,/);
+assert.match(fleetSource, /check\.check_id === "harness_hooks"/);
 assert.match(fleetSource, /hookCheck\?\.status === "fail"/);
+assert.match(fleetSource, /protectionHealth\.state === "protected"/);
+assert.match(fleetSource, /protectionHealth\.state === "partial"/);
+assert.match(fleetSource, /#protection-recovery/);
 assert.match(reviewStatesSource, /protectedAppsCount = protectionHealth\.apps\.filter/);

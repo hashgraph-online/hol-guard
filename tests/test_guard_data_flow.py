@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.runtime.detectors import (
     register_default_detectors,
 )
 
+
 _GITHUB_TOKEN_FIXTURE = "ghp_" + "123456789012345678901234567890123456"
 
 

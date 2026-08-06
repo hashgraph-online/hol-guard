@@ -1,10 +1,8 @@
-"""Phase 11 JavaScript semver regression tests.
-
-Representative truth cases were checked against npm ``semver@7.7.3``; the
-production matcher remains self-contained and does not require Node.
-"""
+"""JavaScript semver regressions checked against npm semver 7.7.3 truth cases."""
 
 from __future__ import annotations
+
+from hashlib import sha256
 
 import pytest
 
@@ -17,6 +15,19 @@ from codex_plugin_scanner.guard.runtime.js_semver import (
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     _exact_version,  # pyright: ignore[reportPrivateUsage]
 )
+
+
+def _assert_semver_match_cases(case_group: str, cases: tuple[tuple[str, str, bool], ...]) -> None:
+    failures: list[str] = []
+    for version, selector, expected in cases:
+        case_digest = sha256((version + "\0" + selector).encode()).hexdigest()[:12]
+        case_id = f"{case_group}-{case_digest}"
+        actual = version_matches_js_selector(version, selector)
+        if actual is not expected:
+            failures.append(
+                f"{case_id}: version={version!r}, selector={selector!r}; expected={expected!r}, got={actual!r}"
+            )
+    assert not failures, "\n".join(failures)
 
 SEMVER_ORDINARY_RANGE_CASES = (
     ("1.2.3-beta.1", "^1.2.0", False),
@@ -33,6 +44,11 @@ SEMVER_ORDINARY_RANGE_CASES = (
     ("2.0.0+linux.x64", "latest", True),
 )
 
+
+def test_ordinary_ranges_do_not_admit_prereleases() -> None:
+    _assert_semver_match_cases("ordinary-range", SEMVER_ORDINARY_RANGE_CASES)
+
+
 SEMVER_PRERELEASE_BASE_CASES = (
     ("1.2.3-beta.1", "1.2.3-beta.1", True),
     ("1.2.3-beta.1+build.9", "=1.2.3-beta.1+build.2", True),
@@ -47,12 +63,22 @@ SEMVER_PRERELEASE_BASE_CASES = (
     ("2.0.0-beta.1", "^1.2.3-beta.1", False),
 )
 
+
+def test_explicit_prerelease_comparator_only_admits_the_same_base() -> None:
+    _assert_semver_match_cases("prerelease-base", SEMVER_PRERELEASE_BASE_CASES)
+
+
 SEMVER_OR_CLAUSE_CASES = (
     ("1.2.3-beta.2", ">=1.2.3-beta.1 <1.2.3 || >=2.0.0 <3.0.0", True),
     ("2.1.0-alpha.2", ">=1.2.3-beta.1 <1.2.3 || >=2.0.0 <3.0.0", False),
     ("2.1.0-alpha.2", ">=1.2.3-beta.1 <1.2.3 || >=2.1.0-alpha.1 <3.0.0", True),
     ("3.1.0-alpha.1", ">=1.2.3-beta.1 <2.0.0 || >=3.0.0 <4.0.0", False),
 )
+
+
+def test_prerelease_admission_is_local_to_each_or_clause() -> None:
+    _assert_semver_match_cases("or-clause", SEMVER_OR_CLAUSE_CASES)
+
 
 SEMVER_ZERO_MAJOR_CASES = (
     ("0.2.9", "^0.2.3", True),
@@ -65,6 +91,11 @@ SEMVER_ZERO_MAJOR_CASES = (
     ("0.0.8", "^0.0", True),
     ("0.1.0", "^0.0", False),
 )
+
+
+def test_zero_major_caret_ranges_match_npm_boundaries() -> None:
+    _assert_semver_match_cases("zero-major", SEMVER_ZERO_MAJOR_CASES)
+
 
 SEMVER_SUPPORTED_RANGE_CASES = (
     ("1.2.9", "~1.2.3", True),
@@ -87,106 +118,8 @@ SEMVER_SUPPORTED_RANGE_CASES = (
 )
 
 
-@pytest.mark.parametrize(
-    ("version", "selector", "expected"),
-    [
-        ("1.2.3-beta.1", "^1.2.0", False),
-        ("1.2.3-beta.1", "~1.2.0", False),
-        ("1.2.3-beta.1", ">=1.2.0 <2.0.0", False),
-        ("1.2.3-beta.1", "*", False),
-        ("1.3.0-beta.1", "^1.2.3", False),
-        ("1.2.3-beta.1", "", False),
-        ("1.2.3-beta.1", "latest", False),
-        ("1.2.3", "^1.2.0", True),
-        ("1.9.9", ">=1.2.0 <2.0.0", True),
-        ("2.0.0", "*", True),
-        ("2.0.0", "", True),
-        ("2.0.0+linux.x64", "latest", True),
-    ],
-)
-def test_ordinary_ranges_do_not_admit_prereleases(version: str, selector: str, expected: bool) -> None:
-    assert version_matches_js_selector(version, selector) is expected
-
-
-@pytest.mark.parametrize(
-    ("version", "selector", "expected"),
-    [
-        ("1.2.3-beta.1", "1.2.3-beta.1", True),
-        ("1.2.3-beta.1+build.9", "=1.2.3-beta.1+build.2", True),
-        ("1.2.3-beta.2", ">=1.2.3-beta.1 <2.0.0", True),
-        ("1.2.3-rc.1", "^1.2.3-beta.1", True),
-        ("1.2.3-beta.2", "~1.2.3-beta.1", True),
-        ("0.0.0-beta.2", ">=0.0.0-alpha.1 >=0.0.0", True),
-        ("0.0.0-beta.2", "0 >=0.0.0-alpha.1", True),
-        ("1.2.3", ">=1.2.3-beta.1 <2.0.0", True),
-        ("1.2.4-beta.1", ">=1.2.3-beta.1 <2.0.0", False),
-        ("1.3.0-beta.1", "~1.2.3-beta.1", False),
-        ("2.0.0-beta.1", "^1.2.3-beta.1", False),
-    ],
-)
-def test_explicit_prerelease_comparator_only_admits_the_same_base(
-    version: str,
-    selector: str,
-    expected: bool,
-) -> None:
-    assert version_matches_js_selector(version, selector) is expected
-
-
-@pytest.mark.parametrize(
-    ("version", "selector", "expected"),
-    [
-        ("1.2.3-beta.2", ">=1.2.3-beta.1 <1.2.3 || >=2.0.0 <3.0.0", True),
-        ("2.1.0-alpha.2", ">=1.2.3-beta.1 <1.2.3 || >=2.0.0 <3.0.0", False),
-        ("2.1.0-alpha.2", ">=1.2.3-beta.1 <1.2.3 || >=2.1.0-alpha.1 <3.0.0", True),
-        ("3.1.0-alpha.1", ">=1.2.3-beta.1 <2.0.0 || >=3.0.0 <4.0.0", False),
-    ],
-)
-def test_prerelease_admission_is_local_to_each_or_clause(version: str, selector: str, expected: bool) -> None:
-    assert version_matches_js_selector(version, selector) is expected
-
-
-@pytest.mark.parametrize(
-    ("version", "selector", "expected"),
-    [
-        ("0.2.9", "^0.2.3", True),
-        ("0.3.0", "^0.2.3", False),
-        ("0.2.3-beta.2", "^0.2.3-beta.1", True),
-        ("0.2.4-beta.1", "^0.2.3-beta.1", False),
-        ("0.2.4", "^0.2.3-beta.1", True),
-        ("0.0.3", "^0.0.3", True),
-        ("0.0.4", "^0.0.3", False),
-        ("0.0.8", "^0.0", True),
-        ("0.1.0", "^0.0", False),
-    ],
-)
-def test_zero_major_caret_ranges_match_npm_boundaries(version: str, selector: str, expected: bool) -> None:
-    assert version_matches_js_selector(version, selector) is expected
-
-
-@pytest.mark.parametrize(
-    ("version", "selector", "expected"),
-    [
-        ("1.2.9", "~1.2.3", True),
-        ("1.3.0", "~1.2.3", False),
-        ("1.8.0", "~1", True),
-        ("2.0.0", "~1", False),
-        ("1.2.9", "1.2.x", True),
-        ("1.2.9", "1.2", True),
-        ("1.9.0", "1.x", True),
-        ("2.0.0", "1.x", False),
-        ("1.2.9", ">1.2", False),
-        ("1.3.0", ">1.2", True),
-        ("1.2.9", "<=1.2", True),
-        ("1.3.0", "<=1.2", False),
-        ("1.2.3", "1.2.3 - 2.3.4", True),
-        ("2.3.4", "1.2.3 - 2.3.4", True),
-        ("2.3.5", "1.2.3 - 2.3.4", False),
-        ("2.3.9", "1.2 - 2.3", True),
-        ("2.4.0", "1.2 - 2.3", False),
-    ],
-)
-def test_supported_npm_range_forms_use_npm_boundaries(version: str, selector: str, expected: bool) -> None:
-    assert version_matches_js_selector(version, selector) is expected
+def test_supported_npm_range_forms_use_npm_boundaries() -> None:
+    _assert_semver_match_cases("supported-range", SEMVER_SUPPORTED_RANGE_CASES)
 
 
 @pytest.mark.parametrize(

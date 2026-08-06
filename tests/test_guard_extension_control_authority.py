@@ -8,10 +8,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import store_extension_control_authority_schema as authority_schema
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
-from codex_plugin_scanner.guard.config import load_guard_config, update_guard_settings
-from codex_plugin_scanner.guard.extension_control_events import extension_control_change_payload
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -30,11 +27,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_proof import (
-    ExtensionControlEnrollment,
-    ExtensionControlEnrollmentProof,
     ExtensionControlMutation,
     ExtensionControlProof,
-    issue_extension_control_enrollment_proof,
     issue_extension_control_proof,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -70,20 +64,7 @@ class MemorySecretStore:
         self.values.pop(secret_id, None)
 
 
-@pytest.fixture(autouse=True)
-def _allow_local_terminal_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
-    )
-
-
-def _store(
-    tmp_path: Path,
-    secrets: MemorySecretStore,
-    *,
-    enroll: bool = True,
-) -> GuardStore:
+def _store(tmp_path: Path, secrets: MemorySecretStore) -> GuardStore:
     store = GuardStore(tmp_path, prime_policy_integrity=False)
     update_settings(
         tmp_path,
@@ -95,42 +76,7 @@ def _store(
         },
     )
     store._extension_control_authority_secret_store = secrets
-    if enroll:
-        _enroll(store)
     return store
-
-
-def _enrollment_proof(
-    store: GuardStore,
-    *,
-    actor_id: str = "local-admin",
-    nonce: str = "enrollment-nonce",
-) -> ExtensionControlEnrollmentProof:
-    enrollment = ExtensionControlEnrollment(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        actor_id=actor_id,
-        nonce=nonce,
-    )
-    return issue_extension_control_enrollment_proof(
-        store.guard_home,
-        enrollment,
-        approval_gate_input=ApprovalGateInput(password=_PASSWORD),
-        session_nonce=f"session-{nonce}",
-    )
-
-
-def _enroll(
-    store: GuardStore,
-    *,
-    actor_id: str = "local-admin",
-    nonce: str = "enrollment-nonce",
-) -> ExtensionControlAuthorityView:
-    return store.enroll_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        actor_id=actor_id,
-        nonce=nonce,
-        proof=_enrollment_proof(store, actor_id=actor_id, nonce=nonce),
-    )
 
 
 def _disabled_layer() -> ExtensionControlLayer:
@@ -198,42 +144,35 @@ def _commit(
     )
 
 
-def test_first_enrollment_requires_one_trusted_local_proof(tmp_path: Path) -> None:
+def test_bootstrap_occurs_only_when_database_and_anchor_are_both_absent(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
-    store = _store(tmp_path, secrets, enroll=False)
-    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store = _store(tmp_path, secrets)
 
-    initial = store.read_extension_control_authority(catalog_digest=digest)
-    assert initial.health is AuthorityHealth.UNENROLLED
+    initial = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    assert initial.health is AuthorityHealth.PROTECTED
     assert initial.revision == 0
     assert initial.layers == ()
-    assert secrets.values == {}
 
-    proof = _enrollment_proof(store)
-    enrolled = store.enroll_extension_control_authority(
-        catalog_digest=digest,
-        actor_id="local-admin",
-        nonce="enrollment-nonce",
-        proof=proof,
+    with store._connect() as connection:
+        connection.execute("delete from extension_control_authority_snapshot")
+    missing_database = store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     )
-    assert enrolled.health is AuthorityHealth.PROTECTED
-    persisted_database = (tmp_path / "guard.db").read_bytes()
-    for private_value in (
-        proof.proof_id,
-        proof.grant.grant_id,
-        proof.actor_id,
-        proof.nonce,
-        proof.session_nonce,
-    ):
-        assert private_value.encode() not in persisted_database
+    assert missing_database.health is AuthorityHealth.TAMPERED
+    assert missing_database.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
 
-    with pytest.raises(ExtensionControlAuthorityError, match="already enrolled"):
-        store.enroll_extension_control_authority(
-            catalog_digest=digest,
-            actor_id="local-admin",
-            nonce="second-enrollment",
-            proof=_enrollment_proof(store, nonce="second-enrollment"),
-        )
+    second_secrets = MemorySecretStore()
+    second_store = _store(tmp_path / "both-missing", second_secrets)
+    second_store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    anchor_ref = next(secret_id for secret_id in second_secrets.values if secret_id.endswith(":anchor"))
+    del second_secrets.values[anchor_ref]
+    with second_store._connect() as connection:
+        connection.execute("delete from extension_control_authority_snapshot")
+    missing_both_with_existing_key = second_store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+    assert missing_both_with_existing_key.health is AuthorityHealth.TAMPERED
+    assert anchor_ref not in second_secrets.values
 
 
 def test_authenticated_snapshot_transition_and_anchor_detect_sqlite_tamper(tmp_path: Path) -> None:
@@ -347,19 +286,22 @@ def test_unavailable_system_keyring_never_silently_falls_back(tmp_path: Path, mo
     assert view.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
 
 
-def test_macos_extension_authority_default_never_probes_keychain(
+def test_macos_extension_authority_never_probes_keychain(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def forbid_keychain_probe(self: SystemKeyringSecretStore) -> bool:
-        raise AssertionError("keychain probe")
-
     monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(SystemKeyringSecretStore, "_is_available", forbid_keychain_probe)
-
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_is_available",
+        classmethod(lambda cls: (_ for _ in ()).throw(AssertionError("macOS authority must not probe Keychain"))),
+    )
     store = GuardStore(tmp_path, prime_policy_integrity=False)
 
-    assert isinstance(store._secret_store(), EncryptedFileSecretStore)
+    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+
+    assert view.health is AuthorityHealth.PROTECTED
+    assert isinstance(store._extension_control_authority_secret_store, EncryptedFileSecretStore)
 
 
 def test_explicit_macos_extension_authority_migration_enables_passive_vault_reads(
@@ -498,10 +440,6 @@ def test_idempotent_retry_after_prepared_transition_commits_once(tmp_path: Path)
     assert retried.revision == 1
     with store._connect() as connection:
         count = connection.execute("select count(*) from extension_control_authority_transition").fetchone()[0]
-        event_count = connection.execute(
-            "select count(*) from guard_cloud_events where event_type = 'policy.changed'"
-        ).fetchone()[0]
-    assert event_count == 1
     assert count == 1
 
 
@@ -512,11 +450,6 @@ def test_recovery_finalizes_database_commit_when_final_anchor_write_failed(tmp_p
     secrets.fail_anchor_set_number = secrets.anchor_set_count + 2
     with pytest.raises(ExtensionControlAuthorityError, match="final anchor"):
         _commit(store)
-    with store._connect() as connection:
-        premature_events = connection.execute(
-            "select count(*) from guard_cloud_events where event_type = 'policy.changed'"
-        ).fetchone()[0]
-    assert premature_events == 0
 
     interrupted = store.read_extension_control_authority(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
@@ -528,11 +461,6 @@ def test_recovery_finalizes_database_commit_when_final_anchor_write_failed(tmp_p
     assert recovered.health is AuthorityHealth.PROTECTED
     assert recovered.revision == 1
     assert recovered.layers == (_disabled_layer(),)
-    with store._connect() as connection:
-        recovered_events = connection.execute(
-            "select count(*) from guard_cloud_events where event_type = 'policy.changed'"
-        ).fetchone()[0]
-    assert recovered_events == 1
 
 
 def test_transition_records_are_purpose_separated_and_replay_safe(tmp_path: Path) -> None:
@@ -572,65 +500,13 @@ def test_transition_records_are_purpose_separated_and_replay_safe(tmp_path: Path
     assert tampered.health is AuthorityHealth.TAMPERED
 
 
-def test_v1_install_migrates_without_enrolling_or_changing_behavior(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    checksum_v1 = cast(str, vars(authority_schema)["_SCHEMA_CHECKSUM_V1"])
-    with sqlite3.connect(guard_home / "guard.db") as connection:
-        connection.execute(
-            """
-            create table extension_control_schema_migration (
-                singleton integer primary key check (singleton = 1),
-                version integer not null,
-                checksum text not null
-            )
-            """
-        )
-        connection.execute(
-            "insert into extension_control_schema_migration (singleton, version, checksum) values (1, 1, ?)",
-            (checksum_v1,),
-        )
-    store = GuardStore(guard_home)
-
-    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-    with store._connect() as connection:
-        version = connection.execute(
-            "select version from extension_control_schema_migration where singleton = 1"
-        ).fetchone()[0]
-        snapshots = connection.execute("select count(*) from extension_control_authority_snapshot").fetchone()[0]
-
-    assert version == authority_schema.EXTENSION_CONTROL_SCHEMA_VERSION
-    assert snapshots == 0
-    assert view.health is AuthorityHealth.UNENROLLED
-
-
-def test_existing_settings_survive_authority_schema_migration_and_enrollment(tmp_path: Path) -> None:
-    update_guard_settings(tmp_path, {"mode": "enforce"})
-    before = load_guard_config(tmp_path)
-    assert not (tmp_path / "guard.db").exists()
-
-    store = _store(tmp_path, MemorySecretStore())
-    _commit(store)
-    after = load_guard_config(tmp_path)
-    authority = store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
-
-    assert after.mode == before.mode
-    assert authority.health is AuthorityHealth.PROTECTED
-    assert authority.revision == 1
-
-
 def test_extension_control_schema_rejects_future_or_gapped_versions(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     with store._connect() as connection:
         connection.execute("update extension_control_schema_migration set version = 99 where singleton = 1")
-    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-
-    assert view.health is AuthorityHealth.TAMPERED
-    assert view.layers == ()
-    assert view.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
+    with pytest.raises(ExtensionControlAuthorityError, match="schema"):
+        store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
 
 
 def test_non_protected_authority_requires_exact_trusted_surface_enum() -> None:
@@ -873,58 +749,3 @@ def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) ->
         proof=proof,
     )
     assert committed.revision == 1
-
-
-def test_control_change_queues_privacy_safe_append_only_cloud_event(tmp_path: Path) -> None:
-    secrets = MemorySecretStore()
-    store = _store(tmp_path, secrets)
-
-    _commit(store, actor_id="private-admin-identity")
-
-    with store._connect() as connection:
-        rows = connection.execute(
-            "select event_type, payload_json from guard_cloud_events where event_type = 'policy.changed'"
-        ).fetchall()
-    assert len(rows) == 1
-    envelope = json.loads(str(rows[0]["payload_json"]))
-    assert envelope["source"] == "policy"
-    payload = envelope["payload"]
-    assert payload["schema"] == "guard.extension-control-authority-change.v1"
-    assert payload["revision"] == 1
-    assert payload["previousRevision"] == 0
-    assert payload["disabledExtensionCount"] == 1
-    assert payload["blockSource"] == "extension-control-authority"
-    serialized = json.dumps(envelope)
-    assert "private-admin-identity" not in serialized
-    assert "nonce-change-1" not in serialized
-    assert _PASSWORD not in serialized
-
-
-def test_control_change_payload_counts_extension_and_permission_blocks() -> None:
-    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0]
-    permission = extension.permissions[0]
-    layer = ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.LOCAL_ADMIN,
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        global_lockdown=False,
-        controls=(
-            ExtensionControl(
-                ControlTarget(ControlTargetKind.EXTENSION, extension.extension_id),
-                ControlState.DISABLED,
-            ),
-            ExtensionControl(
-                ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id),
-                ControlState.DISABLED,
-            ),
-        ),
-    )
-
-    payload = extension_control_change_payload(
-        revision=2,
-        previous_revision=1,
-        layers=(layer,),
-    )
-
-    assert payload["disabledExtensionCount"] == 1
-    assert payload["disabledPermissionCount"] == 1

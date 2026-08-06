@@ -6,11 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
-    import tomli as tomllib
+import tomllib
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.codex_config import dump_toml

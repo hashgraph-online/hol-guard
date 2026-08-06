@@ -139,8 +139,105 @@ def launch_search_path(environment: Mapping[str, str]) -> str:
     return search_path if isinstance(search_path, str) else os.defpath
 
 
-def launch_environment_scope_is_ambiguous(wrappers: tuple[str, ...], segment_count: int) -> bool:
-    return segment_count > 1 and any(wrapper in _SCRIPT_SCOPE_WRAPPERS for wrapper in wrappers)
+_SHELL_LIST_OPERATORS = frozenset({"&&", "||", ";", "|", "&"})
+_SHELL_LIST_OPERATOR_CHARS = frozenset({";", "|", "&"})
+
+
+def _script_payload_has_list_operators(script: str) -> bool:
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(script):
+        character = script[index]
+        if quote == "'":
+            if character == "'":
+                quote = None
+            index += 1
+            continue
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if character == "\\":
+            escaped = True
+            index += 1
+            continue
+        if quote == '"':
+            if character == '"':
+                quote = None
+            elif character == "`" or (character == "$" and index + 1 < len(script) and script[index + 1] == "("):
+                return True
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif (
+            character == "`"
+            or character in {"\n", "\r"}
+            or character in _SHELL_LIST_OPERATOR_CHARS
+            or (character == "$" and index + 1 < len(script) and script[index + 1] == "(")
+        ):
+            return True
+        index += 1
+    return quote is not None or escaped
+
+
+def _is_script_command_flag(token: str) -> bool:
+    return token.startswith("-") and not token.startswith("--") and "=" not in token and "c" in token[1:]
+
+
+def _script_command_payloads(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    """Extract ``-c`` payloads belonging to script-scope shells in raw tokens.
+
+    Scans the raw command text for ``<script-shell> ... -c <payload>`` shapes
+    regardless of how the parser attributed the wrapper, so path spellings
+    that drop the shell from the normalized wrapper chain still surface the
+    payload. Flag-values and option-terminators are respected well enough
+    for wrapper chains (``env``/``command``) that precede the shell.
+    """
+
+    payloads: list[str] = []
+    for index, token in enumerate(tokens[:-1]):
+        if not _is_script_command_flag(token):
+            continue
+        # Walk backwards to the nearest script-scope shell before this -c,
+        # stopping at list operators that would end the wrapper chain.
+        for back in range(index - 1, -1, -1):
+            candidate = tokens[back]
+            if candidate in _SHELL_LIST_OPERATORS:
+                break
+            name = candidate.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].lower()
+            if name in _SCRIPT_SCOPE_WRAPPERS:
+                payload = tokens[index + 1]
+                if payload:
+                    payloads.append(payload)
+                break
+    return tuple(payloads)
+
+
+def launch_environment_scope_is_ambiguous(
+    wrappers: tuple[str, ...],
+    segment_count: int,
+    *,
+    script_payloads: tuple[str, ...] = (),
+) -> bool:
+    """Whether wrapper scope defies a reusable launch observation.
+
+    Multi-segment commands behind a script-scope wrapper (sh/bash/dash/...)
+    are always ambiguous. A single extracted segment is still ambiguous when
+    the wrapper's ``-c`` payload itself contains shell list operators — the
+    embedded ``&&``/``;``/``|`` chain executes additional executables whose
+    environments the observation cannot bind. The parser may or may not
+    split that payload into top-level segments depending on interpreter path
+    spellings, so payload inspection must not rely on segment count.
+    """
+
+    if segment_count > 1 and any(wrapper in _SCRIPT_SCOPE_WRAPPERS for wrapper in wrappers):
+        return True
+    # Payload evidence alone is sufficient: a script shell carrying -c with
+    # list operators executes extra executables even when the normalized
+    # wrapper chain lost the shell (e.g. /usr/bin/sh path spellings).
+    return any(_script_payload_has_list_operators(payload) for payload in script_payloads)
 
 
 def unresolved_launch_observation(segment_index: str) -> dict[str, object]:

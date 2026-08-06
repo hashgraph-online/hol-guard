@@ -156,7 +156,7 @@ def test_latest_alpha_version_stays_in_current_major_and_skips_yanked(
                 "2.1.0a35": [{"yanked": False}],
                 "2.2.0a1": [{"yanked": True}],
                 "2.2.0b1": [{"yanked": False}],
-                "3.0.0a9": [{"yanked": False}],
+                "3.1.0a9": [{"yanked": False}],
             }
         },
     )

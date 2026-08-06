@@ -21,6 +21,8 @@ _EXPECTED_FLOORS = {
     "read_local": "allow",
     "read_remote": "allow",
     "propose_remote": "allow",
+    "routine_merge_remote": "allow",
+    "routine_review_thread_remote": "allow",
     "write_local": "review",
     "maintain_remote": "review",
     "content_remote": "review",
@@ -46,12 +48,23 @@ _EXPECTED_FLOORS = {
                 "api",
                 "graphql",
                 "-f",
+                'query=mutation{resolveReviewThread(input:{threadId:"PRRT_kwDOQGomAs6T6b-G"}){thread{isResolved}}}',
+            ),
+            ("routine_review_thread_remote",),
+            False,
+        ),
+        (
+            (
+                "api",
+                "graphql",
+                "-f",
                 'query=mutation { resolveReviewThread(input: {threadId: "T"}) { thread { id } } }',
             ),
             ("maintain_remote",),
             True,
         ),
         (("pr", "review", "17", "--approve"), ("content_remote",), False),
+        (("pr", "merge", "17", "--squash"), ("routine_merge_remote",), False),
         (("pr", "merge", "17"), ("merge_remote",), False),
         (("pr", "merge", "17", "--delete-branch"), ("merge_remote", "delete_remote"), False),
         (("api", "repos/o/r/pulls/17/merge", "-X", "PUT"), ("merge_remote",), False),
@@ -109,7 +122,10 @@ def test_every_capability_has_an_explicit_floor(capability: GitHubCommandCapabil
     assert assessment.action_floor == expected
 
 
-@pytest.mark.parametrize("capability", ("read_local", "read_remote", "propose_remote"))
+@pytest.mark.parametrize(
+    "capability",
+    ("read_local", "read_remote", "propose_remote", "routine_merge_remote", "routine_review_thread_remote"),
+)
 def test_prompt_free_capabilities_cannot_be_rendered_as_review_actions(capability: GitHubCommandCapability) -> None:
     assessment = github_assessment(capability, "test.read", "test read")
 
@@ -122,6 +138,24 @@ def test_admin_merge_action_class_is_preserved_with_branch_deletion() -> None:
 
     assert assessment.capabilities == ("admin_merge_remote", "delete_remote")
     assert github_capability_action_class(assessment) == "GitHub administrator pull-request merge command"
+
+
+def test_routine_squash_merge_is_prompt_free() -> None:
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "gh pr merge 4615 --squash"},
+    )
+
+    assert match is None
+
+
+def test_routine_squash_merge_with_static_repository_is_prompt_free() -> None:
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": ("gh pr merge 4751 --repo example/project --squash")},
+    )
+
+    assert match is None
 
 
 @pytest.mark.parametrize(
@@ -186,7 +220,9 @@ def test_redirection_retains_the_underlying_remote_capability(
     "command",
     (
         "gh pr review 17 --approve",
-        "gh pr merge 17 --squash",
+        "gh pr merge 17",
+        "gh pr merge 17 --squash --delete-branch",
+        "gh pr merge 17 --squash --auto",
         "gh release create v1 --notes-file notes.md",
         "gh workflow run ci.yml",
         "gh repo sync --force",

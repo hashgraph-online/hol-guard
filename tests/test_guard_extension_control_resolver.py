@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.runtime.effect_decision import EffectDecisionReq
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
-    ControlResolverFailure,
     ControlState,
     ControlSurface,
     ControlTarget,
@@ -173,19 +172,16 @@ def test_disabled_extension_permission_dependency_and_implied_permission_each_bl
             (owner.extension_id,),
             (),
             _control(ControlTargetKind.EXTENSION, owner.extension_id, ControlState.DISABLED),
-            "control.disabled-extension",
         ),
         (
             (),
             (owner_permission.permission_id,),
             _control(ControlTargetKind.PERMISSION, owner_permission.permission_id, ControlState.DISABLED),
-            "control.disabled-permission",
         ),
         (
             (owner.extension_id,),
             (),
             _control(ControlTargetKind.EXTENSION, dependency.extension_id, ControlState.DISABLED),
-            "control.disabled-extension",
         ),
         (
             (),
@@ -195,11 +191,10 @@ def test_disabled_extension_permission_dependency_and_implied_permission_each_bl
                 dependency_permission.permission_id,
                 ControlState.DISABLED,
             ),
-            "control.disabled-permission",
         ),
     )
 
-    for extension_ids, permission_ids, control, expected_reason in scenarios:
+    for extension_ids, permission_ids, control in scenarios:
         layer = ExtensionControlLayer(
             schema_version=CONTROL_SCHEMA_VERSION,
             kind=ControlLayerKind.LOCAL_ADMIN,
@@ -216,7 +211,6 @@ def test_disabled_extension_permission_dependency_and_implied_permission_each_bl
         )
         assert resolution.blocked is True
         assert evaluate_effect_decision(EffectDecisionRequest(resolution.factors)).action == "block"
-        assert resolution.factors[0].reason_code == expected_reason
 
 
 def test_resolver_failures_are_typed_privacy_safe_and_fail_closed() -> None:
@@ -334,30 +328,3 @@ def test_resolver_input_limits_fail_closed_at_boundary() -> None:
     assert accepted.blocked is False
     assert rejected.blocked is True
     assert rejected.failures[0].code is ResolverFailureCode.INPUT_LIMIT_EXCEEDED
-
-
-def test_authority_failure_blocks_command_evaluation_but_not_trusted_proof() -> None:
-    extension_id, _ = _catalog_subjects()
-    command = resolve_extension_controls(
-        (),
-        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-        extension_ids=(extension_id,),
-        permission_ids=(),
-        observations=("classified",),
-        surface=ControlSurface.COMMAND_EVALUATION,
-        authority_failure=ResolverFailureCode.AUTHORITY_TAMPERED,
-    )
-    trusted_proof = resolve_extension_controls(
-        (),
-        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-        extension_ids=(extension_id,),
-        permission_ids=(),
-        observations=("classified",),
-        surface=ControlSurface.TRUSTED_LOCAL_PROOF,
-        authority_failure=ResolverFailureCode.AUTHORITY_TAMPERED,
-    )
-
-    assert command.blocked is True
-    assert command.failures == (ControlResolverFailure(ResolverFailureCode.AUTHORITY_TAMPERED),)
-    assert trusted_proof.blocked is False
-    assert trusted_proof.failures == ()

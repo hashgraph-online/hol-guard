@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 
 from ...models import GuardArtifact
-from ..benign_dx_guard import classify_benign_command
 from ..command_decision_adapter import effect_decision_to_dict
 from ..command_evaluation import evaluate_command
 from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
@@ -75,10 +74,6 @@ def is_explicitly_benign_tool_action_request(
             ).normalized_command
         stripped_command = command_text.strip()
         if not stripped_command:
-            continue
-        is_prompt_free, _reason_code = classify_benign_command(stripped_command)
-        if is_prompt_free:
-            found_benign_candidate = True
             continue
         parts = _split_shell_parts(stripped_command)
         if not parts:
@@ -214,7 +209,7 @@ def build_tool_action_request_artifact(
     *,
     config_path: str,
     source_scope: str,
-    extension_control_layers: tuple[ExtensionControlLayer, ...] | None = None,
+    extension_control_layers: tuple[ExtensionControlLayer, ...] = (),
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 

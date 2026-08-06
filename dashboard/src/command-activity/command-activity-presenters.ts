@@ -176,7 +176,7 @@ export function homeCommandActivityModel(analytics: CommandActivityAnalytics): {
 
 export function commandHealthCopy(analytics: CommandActivityAnalytics): string | null {
   if (analytics.health.status === "healthy") return null;
-  return "Command activity evidence is degraded. Counts may be incomplete.";
+  return "Guard could not record some recent command activity. Counts may be incomplete. Guard retries automatically; check again after the next command.";
 }
 
 export function commandWindowLabel(analytics: CommandActivityAnalytics): string {

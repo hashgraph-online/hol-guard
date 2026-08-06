@@ -340,15 +340,8 @@ def test_untrusted_fallback_timeout_kills_descendants(tmp_path: Path) -> None:
 def test_bridge_script_cold_start_stays_below_hook_budget(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
-    daemon_thread_started = threading.Event()
-
-    def serve_daemon() -> None:
-        daemon_thread_started.set()
-        daemon.serve_forever()
-
-    daemon_thread = threading.Thread(target=serve_daemon, daemon=True)
+    daemon_thread = threading.Thread(target=daemon.serve_forever, daemon=True)
     daemon_thread.start()
-    assert daemon_thread_started.wait(timeout=1)
     port = daemon.server_address[1]
     _write_authenticated_daemon_files(guard_home, port)
     config = _bridge_config(guard_home, port)
@@ -390,13 +383,9 @@ except SystemExit:
     assert all(result.returncode == 0 for result in results), [
         (result.returncode, result.stdout, result.stderr) for result in results
     ]
-    responses = [json.loads(result.stdout) for result in results]
-    assert all(
-        response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
-        for response in responses
-    )
+    assert all(json.loads(result.stdout) == {} for result in results)
     elapsed_samples = [float(result.stderr.rsplit("bridge-elapsed=", 1)[1]) for result in results]
     # The process timeout enforces the hard two-second wall-clock budget. The
     # in-process sample retains the one-second bridge budget without charging
     # interpreter startup and runner dispatch to bridge execution.
-    assert min(elapsed_samples) < 1.5
+    assert min(elapsed_samples) < 1.0

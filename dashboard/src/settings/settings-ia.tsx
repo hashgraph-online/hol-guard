@@ -5,7 +5,6 @@ import {
   HiMiniCircleStack,
   HiMiniLockClosed,
   HiMiniShieldCheck,
-  HiMiniWindow,
 } from "react-icons/hi2";
 
 export type LocalSettingsTabKey =
@@ -13,7 +12,6 @@ export type LocalSettingsTabKey =
   | "approval"
   | "notifications"
   | "rules"
-  | "tray"
   | "maintenance";
 
 export type LocalSettingsNavGroupKey = "local";
@@ -45,7 +43,6 @@ const ICON_PROTECTION = <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true
 const ICON_APPROVAL = <HiMiniLockClosed className="h-4 w-4" aria-hidden="true" />;
 const ICON_NOTIFICATIONS = <HiMiniBellAlert className="h-4 w-4" aria-hidden="true" />;
 const ICON_RISK = <HiMiniAdjustmentsHorizontal className="h-4 w-4" aria-hidden="true" />;
-const ICON_TRAY = <HiMiniWindow className="h-4 w-4" aria-hidden="true" />;
 const ICON_MAINTENANCE = <HiMiniCircleStack className="h-4 w-4" aria-hidden="true" />;
 
 export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
@@ -82,14 +79,6 @@ export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
     icon: ICON_RISK,
   },
   {
-    key: "tray",
-    label: "Tray icon",
-    mobileLabel: "Tray",
-    summary: "Menu-bar icon for opening the dashboard without a terminal.",
-    group: "local",
-    icon: ICON_TRAY,
-  },
-  {
     key: "maintenance",
     label: "Data & repair",
     mobileLabel: "Data",
@@ -109,7 +98,6 @@ export const localSettingsTabLabels: Record<LocalSettingsTabKey, string> = {
   approval: "Approval gate",
   notifications: "Notifications",
   rules: "Protection rules",
-  tray: "Tray icon",
   maintenance: "Data & repair",
 };
 
@@ -119,7 +107,6 @@ export function isLocalSettingsTabKey(value: string): value is LocalSettingsTabK
     || value === "approval"
     || value === "notifications"
     || value === "rules"
-    || value === "tray"
     || value === "maintenance"
   );
 }

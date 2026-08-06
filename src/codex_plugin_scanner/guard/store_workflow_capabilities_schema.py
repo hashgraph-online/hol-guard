@@ -70,6 +70,8 @@ _SCHEMA_STATEMENTS: Final = (
     on guard_workflow_capabilities (revoked_at, expires_at, capability_id)""",
     """create index if not exists idx_guard_workflow_receipt_capability
     on guard_workflow_capability_receipts (capability_id, use_number)""",
+    """create index if not exists idx_guard_workflow_receipt_event
+    on guard_workflow_capability_receipts (event_id)""",
     """create trigger if not exists trg_guard_workflow_capability_claim_immutable
     before update of capability_id, approval_provenance_id, nonce, signed_claim_json, key_id,
       issued_at, not_before, expires_at, max_uses on guard_workflow_capabilities
@@ -137,6 +139,7 @@ _OBJECT_NAMES: Final = (
     ("table", "guard_workflow_capability_authority_transitions"),
     ("index", "idx_guard_workflow_capability_expiry"),
     ("index", "idx_guard_workflow_receipt_capability"),
+    ("index", "idx_guard_workflow_receipt_event"),
     ("trigger", "trg_guard_workflow_capability_claim_immutable"),
     ("trigger", "trg_guard_workflow_capability_no_delete"),
     ("trigger", "trg_guard_workflow_receipt_immutable_update"),

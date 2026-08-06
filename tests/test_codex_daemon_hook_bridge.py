@@ -162,13 +162,7 @@ def test_main_posts_to_authenticated_daemon(
     assert captured_hook_payload == hook_payload
     assert json.loads(str(_DaemonHandler.captured_hook_body))["tool_input"]["command"] == complete_command
     assert _ProxyHandler.captured_paths == []
-    response = json.loads(capsys.readouterr().out)
-    if response == {}:
-        pass
-    elif "hookSpecificOutput" in response:
-        assert response["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    else:
-        assert response["continue"] is False
+    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
 
 
 @pytest.mark.parametrize(
@@ -376,8 +370,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
 
     response = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    if "could not authenticate the local daemon" in json.dumps(response).lower():
-        assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "could not authenticate the local daemon" not in json.dumps(response).lower()
 
 
 def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
@@ -413,8 +406,7 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
         daemon.stop()
 
     assert exit_code == 0
-    response = json.loads(capsys.readouterr().out)
-    assert response == {} or response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert json.loads(capsys.readouterr().out) == {}
 
 
 def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
@@ -451,8 +443,4 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
         daemon.stop()
 
     assert exit_code == 0
-    response = json.loads(capsys.readouterr().out)
-    if "hookSpecificOutput" in response:
-        assert response == {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
-    else:
-        assert response["continue"] is False
+    assert json.loads(capsys.readouterr().out) == {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}

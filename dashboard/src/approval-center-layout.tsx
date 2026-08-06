@@ -1,15 +1,11 @@
-import { lazy, Suspense, useCallback, useState } from "react";
 import type { ReactNode } from "react";
+import { useCallback, useState } from "react";
 import { ShellFooter } from "./shell-footer";
 import { ShellHeader, ShellSidebar } from "./approval-center-primitives";
 import type { AppView } from "./approval-center-primitives";
 import { ReceiptsWorkspace } from "./receipts-workspace";
 import { ReviewWorkspace } from "./review-workspace";
 import { QueueConnectionError } from "./queue-connection-error";
-
-const McpPolicyRequestPanel = lazy(() =>
-  import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
-);
 import type { BulkGateCredentials } from "./approval-gate-utils";
 import type {
   GuardApprovalGatePublicConfig,
@@ -20,7 +16,7 @@ import type {
   GuardPolicyDecision,
   GuardReceipt,
   GuardRuntimeSnapshot,
-  DecisionScope,
+  GuardApprovalResolutionInput,
 } from "./guard-types";
 import { useGuardUpdate } from "./guard-update-panel";
 
@@ -40,8 +36,7 @@ type DetailState =
       diff: GuardArtifactDiff | null;
       receipt: GuardReceipt | null;
       policy: GuardPolicyDecision[];
-    }
-  | { kind: "mcp-policy"; requestId: string };
+    };
 
 type ReceiptsState =
   | { kind: "loading" }
@@ -69,7 +64,6 @@ type LayoutProps = {
   homeContent: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
-  extensionsContent: ReactNode;
   appDetailContent: ReactNode;
   supplyChainHubContent?: ReactNode;
   policyContent?: ReactNode;
@@ -78,18 +72,7 @@ type LayoutProps = {
   onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
   onRetry?: () => void;
-  onResolve: (payload: {
-    requestId: string;
-    action: "allow" | "block";
-    scope: DecisionScope;
-    workspace?: string;
-    reason: string;
-    approval_password?: string;
-    approval_totp_code?: string;
-    approval_gate_use_cooldown?: boolean;
-    scope_contract_version?: string;
-    scope_contract_digest?: string;
-  }) => void;
+  onResolve: (payload: GuardApprovalResolutionInput) => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;
@@ -116,24 +99,6 @@ function renderInboxContent(props: LayoutProps): ReactNode {
         onRetry={props.onRetry}
         onRepair={props.onRepair}
       />
-    );
-  }
-  if (props.detail.kind === "mcp-policy") {
-    return (
-      <Suspense
-        fallback={
-          <div className="space-y-4" aria-busy="true" aria-live="polite">
-            <div className="guard-skeleton h-8 w-72" />
-            <div className="guard-skeleton h-24 w-full" />
-            <div className="guard-skeleton h-40 w-full" />
-          </div>
-        }
-      >
-        <McpPolicyRequestPanel
-          requestId={props.detail.requestId}
-          approvalGate={props.approvalGate ?? null}
-        />
-      </Suspense>
     );
   }
   return (
@@ -182,9 +147,6 @@ function renderViewContent(props: LayoutProps): ReactNode {
   }
   if (props.view === "app-detail") {
     return props.appDetailContent;
-  }
-  if (props.view === "extensions") {
-    return props.extensionsContent;
   }
   if (props.view === "settings") {
     return props.settingsContent;
@@ -245,6 +207,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     updatePhase,
     onUpdateGuard,
     onReinstallGuard,
+    onSetUpdateChannel,
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
 
   return (
@@ -269,6 +232,8 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         updatePhase={updatePhase}
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
+        onSetUpdateChannel={onSetUpdateChannel}
+        approvalGate={props.approvalGate ?? null}
         cloudUserProfile={
           props.runtime.kind === "ready"
             ? props.runtime.snapshot.cloud_user_profile

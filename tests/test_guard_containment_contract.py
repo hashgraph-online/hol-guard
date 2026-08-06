@@ -11,7 +11,6 @@ from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentAttestation,
     ContainmentBackend,
     ContainmentFailure,
-    ContainmentNetworkMode,
     ContainmentPolicy,
     ContainmentRequest,
 )
@@ -63,44 +62,6 @@ def _health(attestation: ContainmentAttestation) -> ContainmentHealthEvidence:
         probe_at="2026-07-19T15:00:00+00:00",
         probe_enforced=True,
     )
-
-
-def test_containment_network_mode_is_offline_by_default(tmp_path: Path) -> None:
-    policy = ContainmentPolicy(str(tmp_path), ())
-
-    assert policy.network_mode is ContainmentNetworkMode.OFFLINE
-    assert policy.proxy_endpoint_digest is None
-
-
-def test_guarded_proxy_mode_requires_a_bound_endpoint(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="endpoint digest"):
-        _ = ContainmentPolicy(
-            str(tmp_path),
-            (),
-            network_mode=ContainmentNetworkMode.GUARDED_PROXY,
-        )
-    with pytest.raises(ValueError, match="verifier key digest"):
-        _ = ContainmentPolicy(
-            str(tmp_path),
-            (),
-            network_mode=ContainmentNetworkMode.GUARDED_PROXY,
-            proxy_endpoint_digest="a" * 64,
-        )
-
-    policy = ContainmentPolicy(
-        str(tmp_path),
-        (),
-        network_mode=ContainmentNetworkMode.GUARDED_PROXY,
-        proxy_endpoint_digest="a" * 64,
-        proxy_verifier_key_digest="b" * 64,
-    )
-    assert policy.network_mode is ContainmentNetworkMode.GUARDED_PROXY
-    assert policy.proxy_verifier_key_digest == "b" * 64
-
-
-def test_offline_mode_rejects_proxy_endpoint(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="offline"):
-        _ = ContainmentPolicy(str(tmp_path), (), proxy_endpoint_digest="a" * 64)
 
 
 def test_contract_binds_paths_environment_policy_and_executable(tmp_path: Path) -> None:
