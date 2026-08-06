@@ -135,6 +135,11 @@ def test_backend_receipt_payload_excludes_signature_but_binds_authority() -> Non
             {
                 BackendCapability.RECEIPTS,
                 BackendCapability.TCP_DESTINATION,
+                BackendCapability.DENY_ALL,
+                BackendCapability.ATOMIC_POLICY,
+                BackendCapability.FORCED_BROKER_ROUTING,
+                BackendCapability.RESOLVER_ROUTE_ATTESTATION,
+                BackendCapability.DOH_CLASSIFICATION_OR_APP_INTENT,
                 BackendCapability.UDP_DESTINATION,
                 BackendCapability.DNS_CORRELATION,
                 BackendCapability.PROCESS_TREE,
