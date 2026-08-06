@@ -239,6 +239,17 @@ def test_remove_requires_artifact_absence(tmp_path: Path) -> None:
         _ = remove_linux_artifact(state)
 
 
+def test_remove_rejects_tampered_identity_after_artifact_absence(tmp_path: Path) -> None:
+    state, path, _ = _install(tmp_path)
+    assert state.active is not None
+    Path(path).unlink()
+    tampered = replace(state.active)
+    object.__setattr__(tampered, "_provenance_seal", b"0" * 32)
+
+    with pytest.raises(LinuxArtifactLifecycleError, match="identity-provenance-invalid"):
+        _ = remove_linux_artifact(LinuxArtifactLifecycleState(active=tampered))
+
+
 def test_repair_verifies_healthy_state_without_changing_identity(tmp_path: Path) -> None:
     state, path, metadata = _install(tmp_path)
     repaired = repair_linux_artifact(

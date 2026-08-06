@@ -75,6 +75,25 @@ def test_linux_observer_scopes_procfs_to_owned_sockets_and_pseudonymizes(tmp_pat
     assert "8.8.8.8" not in repr(observation)
 
 
+def test_linux_observer_accepts_kernel_new_syn_recv_state(tmp_path: Path) -> None:
+    process_root = _prepare_process(tmp_path, 42)
+    _ = os.symlink("socket:[77]", process_root / "fd" / "3")
+    _write_rows(
+        tmp_path,
+        42,
+        "tcp",
+        ["0: 0100007F:1234 08080808:01BB 0C 0:0 0:0 00:0 0 1000 0 77"],
+    )
+
+    observation = observe_linux_sockets(
+        proc_root=tmp_path,
+        target=LinuxProcessIdentity(42, 123),
+        rotation_key=_KEY,
+    )[0]
+
+    assert observation.tcp_state == 12
+
+
 def test_linux_observer_fails_closed_on_malformed_row(tmp_path: Path) -> None:
     _ = _prepare_process(tmp_path, 42)
     _write_rows(tmp_path, 42, "udp", ["malformed"])

@@ -101,6 +101,9 @@ def test_rejects_latency_size_and_dropped_event_breaches() -> None:
     report = _assess(evidence, budgets=budgets)
 
     assert not report.accepted
+    assert "compile-p95-exceeded" in report.reasons
+    assert "decision-p95-exceeded" in report.reasons
+    assert "observation-p95-exceeded" in report.reasons
     assert "dropped-events" in report.reasons
     assert "operation-max-exceeded" in report.reasons
     assert "evidence-size-exceeded" in report.reasons

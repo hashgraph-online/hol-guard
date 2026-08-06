@@ -601,6 +601,8 @@ def remove_linux_artifact(state: LinuxArtifactLifecycleState) -> LinuxArtifactLi
         raise LinuxArtifactLifecycleError("remove-requires-active-artifact")
     previous = state.active
     identities = (previous,) if state.rollback is None else (previous, state.rollback)
+    for identity in identities:
+        _validate_identity_provenance(identity)
     if any(os.path.lexists(identity.path) for identity in identities):
         raise LinuxArtifactLifecycleError("remove-requires-artifact-absence")
     return _transition(

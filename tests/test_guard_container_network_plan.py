@@ -1,6 +1,8 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from codex_plugin_scanner.guard.runtime.container_network_plan import (
     ContainerNetworkPlanError,
@@ -47,6 +49,24 @@ def _oci_plan(
     )
 
 
+def _proxy_controls(
+    *,
+    oci_plan_digest: str = "a" * 64,
+    namespace_identity_digest: str = "d" * 64,
+    signing_key: Ed25519PrivateKey,
+) -> ExclusiveProxyEgressControls:
+    unsigned = ExclusiveProxyEgressControls(
+        oci_plan_digest=oci_plan_digest,
+        proxy_endpoint_digest="b" * 64,
+        namespace_identity_digest=namespace_identity_digest,
+        route_attestation_digest="c" * 64,
+        direct_egress_denied=True,
+        proxy_only=True,
+        verifier_signature="0" * 128,
+    )
+    return replace(unsigned, verifier_signature=signing_key.sign(unsigned.digest.encode()).hex())
+
+
 def test_offline_plan_binds_verified_namespace_to_policy(tmp_path: Path) -> None:
     policy = ContainmentPolicy(str(tmp_path), ())
 
@@ -87,17 +107,13 @@ def test_proxy_only_plan_requires_digest_bound_exclusive_controls(tmp_path: Path
     with pytest.raises(ContainerNetworkPlanError, match="exclusive proxy egress controls"):
         build_verified_container_network_plan(oci_plan=oci_plan, containment_policy=policy)
 
-    controls = ExclusiveProxyEgressControls(
-        oci_plan_digest=oci_plan.plan_digest,
-        proxy_endpoint_digest="b" * 64,
-        route_attestation_digest="c" * 64,
-        direct_egress_denied=True,
-        proxy_only=True,
-    )
+    signing_key = Ed25519PrivateKey.generate()
+    controls = _proxy_controls(signing_key=signing_key)
     plan = build_verified_container_network_plan(
         oci_plan=oci_plan,
         containment_policy=policy,
         proxy_egress_controls=controls,
+        control_verifier_public_key=signing_key.public_key(),
     )
 
     assert plan.mode is ContainmentNetworkMode.GUARDED_PROXY
@@ -114,18 +130,32 @@ def test_proxy_only_plan_rejects_mismatched_control_binding(tmp_path: Path) -> N
         proxy_endpoint_digest="b" * 64,
     )
     oci_plan = _oci_plan(network_mode="bridge", loopback_only=False)
-    controls = ExclusiveProxyEgressControls(
-        oci_plan_digest="d" * 64,
-        proxy_endpoint_digest="b" * 64,
-        route_attestation_digest="c" * 64,
-        direct_egress_denied=True,
-        proxy_only=True,
-    )
+    signing_key = Ed25519PrivateKey.generate()
+    controls = _proxy_controls(oci_plan_digest="d" * 64, signing_key=signing_key)
     with pytest.raises(ContainerNetworkPlanError, match="do not match the OCI plan"):
         build_verified_container_network_plan(
             oci_plan=oci_plan,
             containment_policy=policy,
             proxy_egress_controls=controls,
+            control_verifier_public_key=signing_key.public_key(),
+        )
+
+
+def test_proxy_only_plan_rejects_forged_control_attestation(tmp_path: Path) -> None:
+    policy = ContainmentPolicy(
+        str(tmp_path),
+        (),
+        network_mode=ContainmentNetworkMode.GUARDED_PROXY,
+        proxy_endpoint_digest="b" * 64,
+    )
+    controls = _proxy_controls(signing_key=Ed25519PrivateKey.generate())
+
+    with pytest.raises(ContainerNetworkPlanError, match="attestation is invalid"):
+        build_verified_container_network_plan(
+            oci_plan=_oci_plan(network_mode="bridge", loopback_only=False),
+            containment_policy=policy,
+            proxy_egress_controls=controls,
+            control_verifier_public_key=Ed25519PrivateKey.generate().public_key(),
         )
 
 

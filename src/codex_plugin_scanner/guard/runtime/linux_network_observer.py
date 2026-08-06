@@ -132,7 +132,7 @@ def _decode_tcp_state(value: str) -> int:
     if len(value) != 2 or any(character not in "0123456789ABCDEF" for character in value):
         raise LinuxNetworkObservationError("invalid procfs TCP state")
     state = int(value, 16)
-    if state not in range(1, 12):
+    if state not in range(1, 13):
         raise LinuxNetworkObservationError("invalid procfs TCP state")
     return state
 

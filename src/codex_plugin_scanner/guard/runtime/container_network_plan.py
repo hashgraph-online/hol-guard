@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentNetworkMode,
     ContainmentPolicy,
@@ -34,22 +37,31 @@ def _require_digest(value: object, field: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class ExclusiveProxyEgressControls:
-    """Attested control commitment proving that only the guarded proxy is reachable."""
+    """Verifier-signed evidence that only the guarded proxy is reachable."""
 
     oci_plan_digest: str
     proxy_endpoint_digest: str
+    namespace_identity_digest: str
     route_attestation_digest: str
     direct_egress_denied: bool
     proxy_only: bool
+    verifier_signature: str
 
     def __post_init__(self) -> None:
         _ = _require_digest(self.oci_plan_digest, "control OCI plan digest")
         _ = _require_digest(self.proxy_endpoint_digest, "control proxy endpoint digest")
+        _ = _require_digest(self.namespace_identity_digest, "control namespace identity digest")
         _ = _require_digest(self.route_attestation_digest, "control route attestation digest")
         if self.direct_egress_denied is not True or self.proxy_only is not True:
             raise ContainerNetworkPlanError(
                 "proxy egress controls must deny direct egress and enforce proxy-only routing"
             )
+        if (
+            type(self.verifier_signature) is not str
+            or len(self.verifier_signature) != 128
+            or any(character not in "0123456789abcdef" for character in self.verifier_signature)
+        ):
+            raise ContainerNetworkPlanError("control verifier signature must be lowercase Ed25519 evidence")
 
     @property
     def digest(self) -> str:
@@ -58,6 +70,7 @@ class ExclusiveProxyEgressControls:
             {
                 "oci_plan_digest": self.oci_plan_digest,
                 "proxy_endpoint_digest": self.proxy_endpoint_digest,
+                "namespace_identity_digest": self.namespace_identity_digest,
                 "route_attestation_digest": self.route_attestation_digest,
                 "direct_egress_denied": self.direct_egress_denied,
                 "proxy_only": self.proxy_only,
@@ -74,6 +87,7 @@ class VerifiedContainerNetworkPlan:
     oci_plan_digest: str
     proxy_endpoint_digest: str | None
     proxy_egress_controls_digest: str | None
+    namespace_identity_digest: str | None
     containment_policy_digest: str
     loopback_only: bool
     plan_digest: str
@@ -102,6 +116,11 @@ def issue_container_network_receipt(
         character not in "0123456789abcdef" for character in namespace_identity_digest
     ):
         raise ContainerNetworkPlanError("namespace identity must be a lowercase SHA-256 digest")
+    if (
+        plan.mode is ContainmentNetworkMode.GUARDED_PROXY
+        and namespace_identity_digest != plan.namespace_identity_digest
+    ):
+        raise ContainerNetworkPlanError("receipt namespace does not match verified proxy controls")
     if observed_at_epoch_ms < 0:
         raise ContainerNetworkPlanError("receipt timestamp must be non-negative")
     fields: dict[str, object] = {
@@ -126,6 +145,7 @@ def build_verified_container_network_plan(
     oci_plan: OCIExecutionPlan,
     containment_policy: ContainmentPolicy,
     proxy_egress_controls: ExclusiveProxyEgressControls | None = None,
+    control_verifier_public_key: Ed25519PublicKey | None = None,
 ) -> VerifiedContainerNetworkPlan:
     """Verify the OCI network boundary and bind it to the containment policy."""
     _ = _require_digest(oci_plan.plan_digest, "OCI plan digest")
@@ -144,17 +164,28 @@ def build_verified_container_network_plan(
             raise ContainerNetworkPlanError("offline container must be loopback-only")
         proxy_endpoint_digest = None
         proxy_controls_digest = None
+        namespace_identity_digest = None
     elif mode is ContainmentNetworkMode.GUARDED_PROXY:
         if network.loopback_only or network.mode != "bridge":
             raise ContainerNetworkPlanError("proxy-only container requires an isolated bridge")
         if type(proxy_egress_controls) is not ExclusiveProxyEgressControls:
             raise ContainerNetworkPlanError("proxy-only container requires exclusive proxy egress controls")
+        if not isinstance(control_verifier_public_key, Ed25519PublicKey):
+            raise ContainerNetworkPlanError("proxy-only container requires a trusted control verifier")
         if proxy_egress_controls.oci_plan_digest != oci_plan.plan_digest:
             raise ContainerNetworkPlanError("proxy egress controls do not match the OCI plan")
         if proxy_egress_controls.proxy_endpoint_digest != containment_policy.proxy_endpoint_digest:
             raise ContainerNetworkPlanError("proxy egress controls do not match the containment policy")
+        try:
+            control_verifier_public_key.verify(
+                bytes.fromhex(proxy_egress_controls.verifier_signature),
+                proxy_egress_controls.digest.encode(),
+            )
+        except (InvalidSignature, ValueError) as error:
+            raise ContainerNetworkPlanError("proxy egress control attestation is invalid") from error
         proxy_endpoint_digest = proxy_egress_controls.proxy_endpoint_digest
         proxy_controls_digest = proxy_egress_controls.digest
+        namespace_identity_digest = proxy_egress_controls.namespace_identity_digest
     else:
         raise ContainerNetworkPlanError("unsupported containment network mode")
 
@@ -166,6 +197,7 @@ def build_verified_container_network_plan(
         "loopback_only": network.loopback_only,
         "proxy_endpoint_digest": proxy_endpoint_digest or "",
         "proxy_egress_controls_digest": proxy_controls_digest or "",
+        "namespace_identity_digest": namespace_identity_digest or "",
     }
     return VerifiedContainerNetworkPlan(
         mode=mode,
@@ -174,6 +206,7 @@ def build_verified_container_network_plan(
         containment_policy_digest=containment_policy.digest,
         loopback_only=network.loopback_only,
         proxy_egress_controls_digest=proxy_controls_digest,
+        namespace_identity_digest=namespace_identity_digest,
         proxy_endpoint_digest=proxy_endpoint_digest,
         plan_digest=framed_digest("guard.container-network-plan.v1", fields),
     )

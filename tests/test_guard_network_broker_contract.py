@@ -154,6 +154,13 @@ def test_backend_receipt_payload_excludes_signature_but_binds_authority() -> Non
         **{**{field: getattr(receipt, field) for field in receipt.__dataclass_fields__}, "signature": "other-signature"}
     )
     assert receipt.signed_payload_digest == changed_signature.signed_payload_digest
+    changed_capabilities = BackendReceipt(
+        **{
+            **{field: getattr(receipt, field) for field in receipt.__dataclass_fields__},
+            "capabilities": receipt.capabilities | {BackendCapability.OBSERVE},
+        }
+    )
+    assert receipt.signed_payload_digest != changed_capabilities.signed_payload_digest
     assert not receipt_authority_current(receipt, None, now_epoch_ms=_NOW)
     unverified = ReceiptVerification(
         canonical_digest(receipt),
