@@ -60,6 +60,9 @@ def _manifest_digest(
     observation_ns: tuple[int, ...],
     payload: bytes,
     dropped_events: int,
+    subject_digest: str,
+    challenge: str,
+    expires_at_epoch_seconds: int,
 ) -> str:
     return canonical_digest(
         {
@@ -68,6 +71,9 @@ def _manifest_digest(
             "observation_ns": observation_ns,
             "payload_sha256": hashlib.sha256(payload).hexdigest(),
             "dropped_events": dropped_events,
+            "subject_digest": subject_digest,
+            "challenge": challenge,
+            "expires_at_epoch_seconds": expires_at_epoch_seconds,
         }
     )
 
@@ -81,6 +87,9 @@ class LinuxPerformanceEvidence:
     dropped_events: int
     manifest_digest: str
     collector_signature: bytes = field(repr=False, compare=False)
+    subject_digest: str
+    challenge: str
+    expires_at_epoch_seconds: int
 
     def __post_init__(self) -> None:
         _require_samples(self.compile_ns, "compile-ns")
@@ -92,8 +101,25 @@ class LinuxPerformanceEvidence:
             raise LinuxPerformanceAcceptanceError("invalid-evidence-payload")
         if type(self.dropped_events) is not int or self.dropped_events < 0:
             raise LinuxPerformanceAcceptanceError("invalid-dropped-events")
+        if (
+            type(self.subject_digest) is not str
+            or len(self.subject_digest) != 64
+            or any(character not in "0123456789abcdef" for character in self.subject_digest)
+            or type(self.challenge) is not str
+            or not self.challenge
+            or not 1 <= len(self.challenge) <= 256
+            or type(self.expires_at_epoch_seconds) is not int
+        ):
+            raise LinuxPerformanceAcceptanceError("invalid-evidence-binding")
         expected_digest = _manifest_digest(
-            self.compile_ns, self.decision_ns, self.observation_ns, self.payload, self.dropped_events
+            self.compile_ns,
+            self.decision_ns,
+            self.observation_ns,
+            self.payload,
+            self.dropped_events,
+            self.subject_digest,
+            self.challenge,
+            self.expires_at_epoch_seconds,
         )
         if self.manifest_digest != expected_digest:
             raise LinuxPerformanceAcceptanceError("manifest-digest-mismatch")
@@ -122,7 +148,10 @@ def capture_linux_network_performance(
     sample_count: int,
     payload: bytes,
     dropped_events: int,
-    collector_private_key: Ed25519PrivateKey,
+    collector_private_key: object,
+    subject_digest: str,
+    challenge: str,
+    expires_at_epoch_seconds: int,
 ) -> LinuxPerformanceEvidence:
     """Measure paired real operations and seal their evidence in this process."""
     if type(sample_count) is not int or sample_count <= 0 or sample_count > MAX_PERFORMANCE_SAMPLES:
@@ -132,6 +161,15 @@ def capture_linux_network_performance(
         or len(payload) > MAX_PERFORMANCE_PAYLOAD_BYTES
         or type(dropped_events) is not int
         or dropped_events < 0
+        or not isinstance(collector_private_key, Ed25519PrivateKey)
+        or type(subject_digest) is not str
+        or len(subject_digest) != 64
+        or any(character not in "0123456789abcdef" for character in subject_digest)
+        or type(challenge) is not str
+        or not 1 <= len(challenge) <= 256
+        or type(expires_at_epoch_seconds) is not int
+        or expires_at_epoch_seconds <= 0
+        or expires_at_epoch_seconds <= int(time.time())
     ):
         raise LinuxPerformanceAcceptanceError("invalid-collector-input")
     vectors: list[list[int]] = [[], [], []]
@@ -143,7 +181,18 @@ def capture_linux_network_performance(
             _ = operation()
             vector.append(time.perf_counter_ns() - started)
     compile_ns, decision_ns, observation_ns = (tuple(vector) for vector in vectors)
-    digest = _manifest_digest(compile_ns, decision_ns, observation_ns, payload, dropped_events)
+    if expires_at_epoch_seconds <= int(time.time()):
+        raise LinuxPerformanceAcceptanceError("performance-evidence-expired")
+    digest = _manifest_digest(
+        compile_ns,
+        decision_ns,
+        observation_ns,
+        payload,
+        dropped_events,
+        subject_digest,
+        challenge,
+        expires_at_epoch_seconds,
+    )
     return LinuxPerformanceEvidence(
         compile_ns=compile_ns,
         decision_ns=decision_ns,
@@ -152,6 +201,9 @@ def capture_linux_network_performance(
         dropped_events=dropped_events,
         manifest_digest=digest,
         collector_signature=collector_private_key.sign(digest.encode()),
+        subject_digest=subject_digest,
+        challenge=challenge,
+        expires_at_epoch_seconds=expires_at_epoch_seconds,
     )
 
 
@@ -162,13 +214,43 @@ def _percentile_95(samples: tuple[int, ...]) -> int:
 
 def assess_linux_network_performance(
     evidence: LinuxPerformanceEvidence,
-    collector_public_key: Ed25519PublicKey,
+    collector_public_key: object,
     *,
+    expected_subject_digest: str,
+    expected_challenge: str,
+    now_epoch_seconds: int,
     budgets: LinuxPerformanceBudgets = DEFAULT_LINUX_PERFORMANCE_BUDGETS,
 ) -> LinuxPerformanceAcceptanceReport:
     """Evaluate sealed hot-path measurements against explicit inclusive budgets."""
-    if type(evidence) is not LinuxPerformanceEvidence or type(budgets) is not LinuxPerformanceBudgets:
+    if (
+        type(evidence) is not LinuxPerformanceEvidence
+        or type(budgets) is not LinuxPerformanceBudgets
+        or not isinstance(collector_public_key, Ed25519PublicKey)
+        or type(expected_subject_digest) is not str
+        or len(expected_subject_digest) != 64
+        or any(character not in "0123456789abcdef" for character in expected_subject_digest)
+        or type(expected_challenge) is not str
+        or not 1 <= len(expected_challenge) <= 256
+        or type(now_epoch_seconds) is not int
+        or now_epoch_seconds < 0
+    ):
         raise LinuxPerformanceAcceptanceError("invalid-performance-input")
+    if (
+        type(evidence.subject_digest) is not str
+        or len(evidence.subject_digest) != 64
+        or any(character not in "0123456789abcdef" for character in evidence.subject_digest)
+        or type(evidence.challenge) is not str
+        or not 1 <= len(evidence.challenge) <= 256
+        or type(evidence.expires_at_epoch_seconds) is not int
+        or evidence.expires_at_epoch_seconds <= 0
+    ):
+        raise LinuxPerformanceAcceptanceError("invalid-evidence-binding")
+    if (
+        evidence.subject_digest != expected_subject_digest
+        or evidence.challenge != expected_challenge
+        or evidence.expires_at_epoch_seconds <= now_epoch_seconds
+    ):
+        raise LinuxPerformanceAcceptanceError("performance-evidence-binding-invalid")
     compile_ns = evidence.compile_ns
     decision_ns = evidence.decision_ns
     observation_ns = evidence.observation_ns
@@ -184,12 +266,21 @@ def assess_linux_network_performance(
         raise LinuxPerformanceAcceptanceError("invalid-evidence-payload")
     if type(dropped_events) is not int or dropped_events < 0:
         raise LinuxPerformanceAcceptanceError("invalid-dropped-events")
-    manifest_digest = _manifest_digest(compile_ns, decision_ns, observation_ns, payload, dropped_events)
+    manifest_digest = _manifest_digest(
+        compile_ns,
+        decision_ns,
+        observation_ns,
+        payload,
+        dropped_events,
+        evidence.subject_digest,
+        evidence.challenge,
+        evidence.expires_at_epoch_seconds,
+    )
     if manifest_digest != evidence.manifest_digest:
         raise LinuxPerformanceAcceptanceError("manifest-digest-mismatch")
     try:
         collector_public_key.verify(signature, manifest_digest.encode())
-    except InvalidSignature as error:
+    except (InvalidSignature, TypeError, ValueError) as error:
         raise LinuxPerformanceAcceptanceError("collector-attestation-invalid") from error
     if not compile_ns:
         raise LinuxPerformanceAcceptanceError("empty-performance-evidence")

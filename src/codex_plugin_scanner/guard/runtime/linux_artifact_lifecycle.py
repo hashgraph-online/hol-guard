@@ -496,6 +496,8 @@ def _validate_supply_chain_receipt(
     trusted_public_keys: dict[str, str],
     revoked_key_ids: frozenset[str],
 ) -> None:
+    if type(receipt) is not LinuxArtifactSupplyChainReceipt:
+        raise LinuxArtifactLifecycleError("supply-chain-receipt-invalid")
     if (
         receipt.component_id != metadata.component_id
         or receipt.version != metadata.version

@@ -106,7 +106,7 @@ def test_optional_tetragon_unavailability_preserves_procfs_observer(tmp_path: Pa
             policy=_tetragon_policy(),
             target=TetragonTargetIdentity(42, 123, 99),
             rotation_key=_ROTATION_KEY,
-            replay_ledger=TetragonReplayLedger(sqlite3.connect(":memory:")),
+            replay_ledger=TetragonReplayLedger(sqlite3.connect(":memory:", isolation_level=None)),
         )
         == ()
     )
@@ -135,7 +135,7 @@ def test_compromised_tetragon_evidence_fails_closed() -> None:
             policy=_tetragon_policy(),
             target=TetragonTargetIdentity(42, 123, 99),
             rotation_key=_ROTATION_KEY,
-            replay_ledger=TetragonReplayLedger(sqlite3.connect(":memory:")),
+            replay_ledger=TetragonReplayLedger(sqlite3.connect(":memory:", isolation_level=None)),
         )
 
 

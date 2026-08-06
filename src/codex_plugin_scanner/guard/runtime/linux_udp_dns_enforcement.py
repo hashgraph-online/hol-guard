@@ -496,6 +496,7 @@ def evaluate_linux_udp_dns_artifact(
         artifact.resolver_route.tcp_port if protocol is NetworkProtocol.TCP else artifact.resolver_route.udp_port
     )
     route_address = ipaddress.ip_address(artifact.resolver_route.address)
+    on_attested_resolver_route = address == route_address and remote_port == route_port
     actions: set[NetworkAction] = set()
     actions.update(
         entry.action
@@ -507,11 +508,15 @@ def evaluate_linux_udp_dns_artifact(
     )
     if NetworkAction.DENY in actions:
         return NetworkAction.DENY
-    if remote_port in (53, 853):
+    if remote_port in (53, 853) and not on_attested_resolver_route:
         return NetworkAction.DENY
-    if remote_port == 443 and application_intent_digest != artifact.resolver_route.doh_boundary_digest:
+    if (
+        on_attested_resolver_route
+        and remote_port == 443
+        and application_intent_digest != artifact.resolver_route.doh_boundary_digest
+    ):
         return NetworkAction.DENY
-    if address == route_address and remote_port == route_port:
+    if on_attested_resolver_route:
         actions.add(NetworkAction.ALLOW)
     if (
         binding is not None

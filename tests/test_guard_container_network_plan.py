@@ -5,6 +5,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime.container_network_plan import (
     ContainerNetworkPlanError,
     ContainerNetworkReceiptOutcome,
+    ExclusiveProxyEgressControls,
     build_verified_container_network_plan,
     issue_container_network_receipt,
 )
@@ -74,22 +75,58 @@ def test_offline_plan_fails_closed(oci_plan: OCIExecutionPlan, message: str, tmp
         )
 
 
-def test_proxy_only_plan_binds_endpoint_digest(tmp_path: Path) -> None:
+def test_proxy_only_plan_requires_digest_bound_exclusive_controls(tmp_path: Path) -> None:
     policy = ContainmentPolicy(
         str(tmp_path),
         (),
         network_mode=ContainmentNetworkMode.GUARDED_PROXY,
         proxy_endpoint_digest="b" * 64,
     )
+    oci_plan = _oci_plan(network_mode="bridge", loopback_only=False)
 
+    with pytest.raises(ContainerNetworkPlanError, match="exclusive proxy egress controls"):
+        build_verified_container_network_plan(oci_plan=oci_plan, containment_policy=policy)
+
+    controls = ExclusiveProxyEgressControls(
+        oci_plan_digest=oci_plan.plan_digest,
+        proxy_endpoint_digest="b" * 64,
+        route_attestation_digest="c" * 64,
+        direct_egress_denied=True,
+        proxy_only=True,
+    )
     plan = build_verified_container_network_plan(
-        oci_plan=_oci_plan(network_mode="bridge", loopback_only=False),
+        oci_plan=oci_plan,
         containment_policy=policy,
+        proxy_egress_controls=controls,
     )
 
     assert plan.mode is ContainmentNetworkMode.GUARDED_PROXY
     assert plan.proxy_endpoint_digest == "b" * 64
+    assert plan.proxy_egress_controls_digest == controls.digest
     assert plan.loopback_only is False
+
+
+def test_proxy_only_plan_rejects_mismatched_control_binding(tmp_path: Path) -> None:
+    policy = ContainmentPolicy(
+        str(tmp_path),
+        (),
+        network_mode=ContainmentNetworkMode.GUARDED_PROXY,
+        proxy_endpoint_digest="b" * 64,
+    )
+    oci_plan = _oci_plan(network_mode="bridge", loopback_only=False)
+    controls = ExclusiveProxyEgressControls(
+        oci_plan_digest="d" * 64,
+        proxy_endpoint_digest="b" * 64,
+        route_attestation_digest="c" * 64,
+        direct_egress_denied=True,
+        proxy_only=True,
+    )
+    with pytest.raises(ContainerNetworkPlanError, match="do not match the OCI plan"):
+        build_verified_container_network_plan(
+            oci_plan=oci_plan,
+            containment_policy=policy,
+            proxy_egress_controls=controls,
+        )
 
 
 def test_proxy_only_plan_rejects_unrouted_network(tmp_path: Path) -> None:

@@ -428,6 +428,15 @@ def test_public_evidence_rejects_contradictory_outcome_and_state(tmp_path: Path)
 def test_lifecycle_rejects_forged_and_mismatched_supply_chain_receipts(tmp_path: Path) -> None:
     path, metadata = _artifact(tmp_path)
     receipt = _receipt(path, metadata)
+    with pytest.raises(LinuxArtifactLifecycleError, match="supply-chain-receipt-invalid"):
+        _ = install_linux_artifact(
+            LinuxArtifactLifecycleState(),
+            path,
+            metadata,
+            cast(LinuxArtifactSupplyChainReceipt, object()),
+            expected_uid=os.getuid(),
+            **_TRUST,
+        )
 
     with pytest.raises(ValueError, match="receipt provenance is invalid"):
         _ = replace(receipt, artifact_digest="0" * 64)

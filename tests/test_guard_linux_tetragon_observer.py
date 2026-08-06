@@ -60,7 +60,7 @@ def _envelope(
 
 
 def _ledger(connection: sqlite3.Connection | None = None) -> TetragonReplayLedger:
-    return TetragonReplayLedger(connection or sqlite3.connect(":memory:"))
+    return TetragonReplayLedger(connection or sqlite3.connect(":memory:", isolation_level=None))
 
 
 def test_tetragon_adapter_authenticates_and_pseudonymizes() -> None:
@@ -98,7 +98,7 @@ def test_tetragon_adapter_rejects_untrusted_signer_and_wrong_binding() -> None:
 
 
 def test_tetragon_adapter_durably_rejects_replay() -> None:
-    connection = sqlite3.connect(":memory:")
+    connection = sqlite3.connect(":memory:", isolation_level=None)
     _ = observe_tetragon_events(
         [_envelope()],
         policy=_POLICY,

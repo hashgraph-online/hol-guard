@@ -16,6 +16,10 @@ from codex_plugin_scanner.guard.runtime.linux_performance_acceptance import (
 
 PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
 PUBLIC_KEY = PRIVATE_KEY.public_key()
+SUBJECT_DIGEST = "a" * 64
+CHALLENGE = "challenge-2026-08-05"
+EXPIRES_AT = 2_000_000_000
+NOW = 1_900_000_000
 
 
 def _capture(*, samples: int = 100, payload: bytes = b"evidence", dropped: int = 0) -> LinuxPerformanceEvidence:
@@ -27,13 +31,31 @@ def _capture(*, samples: int = 100, payload: bytes = b"evidence", dropped: int =
         payload=payload,
         dropped_events=dropped,
         collector_private_key=PRIVATE_KEY,
+        subject_digest=SUBJECT_DIGEST,
+        challenge=CHALLENGE,
+        expires_at_epoch_seconds=EXPIRES_AT,
+    )
+
+
+def _assess(
+    evidence: LinuxPerformanceEvidence,
+    *,
+    budgets: LinuxPerformanceBudgets | None = None,
+):
+    kwargs = {} if budgets is None else {"budgets": budgets}
+    return assess_linux_network_performance(
+        evidence,
+        PUBLIC_KEY,
+        expected_subject_digest=SUBJECT_DIGEST,
+        expected_challenge=CHALLENGE,
+        now_epoch_seconds=NOW,
+        **kwargs,
     )
 
 
 def _boundary_budgets(evidence: LinuxPerformanceEvidence) -> LinuxPerformanceBudgets:
-    report = assess_linux_network_performance(
+    report = _assess(
         evidence,
-        PUBLIC_KEY,
         budgets=LinuxPerformanceBudgets(
             minimum_samples=1,
             compile_p95_ns=10**12,
@@ -56,8 +78,8 @@ def _boundary_budgets(evidence: LinuxPerformanceEvidence) -> LinuxPerformanceBud
 def test_accepts_measured_exact_boundaries_with_deterministic_digest() -> None:
     evidence = _capture()
     budgets = _boundary_budgets(evidence)
-    first = assess_linux_network_performance(evidence, PUBLIC_KEY, budgets=budgets)
-    second = assess_linux_network_performance(evidence, PUBLIC_KEY, budgets=budgets)
+    first = _assess(evidence, budgets=budgets)
+    second = _assess(evidence, budgets=budgets)
 
     assert first.accepted
     assert first.reasons == ()
@@ -76,7 +98,7 @@ def test_rejects_latency_size_and_dropped_event_breaches() -> None:
         operation_max_ns=max(1, boundary.operation_max_ns - 1),
         evidence_max_bytes=len(evidence.payload) - 1,
     )
-    report = assess_linux_network_performance(evidence, PUBLIC_KEY, budgets=budgets)
+    report = _assess(evidence, budgets=budgets)
 
     assert not report.accepted
     assert "dropped-events" in report.reasons
@@ -86,9 +108,8 @@ def test_rejects_latency_size_and_dropped_event_breaches() -> None:
 
 def test_rejects_insufficient_samples() -> None:
     evidence = _capture(samples=1)
-    report = assess_linux_network_performance(
+    report = _assess(
         evidence,
-        PUBLIC_KEY,
         budgets=LinuxPerformanceBudgets(minimum_samples=2),
     )
     assert report.reasons == ("insufficient-samples",)
@@ -96,9 +117,9 @@ def test_rejects_insufficient_samples() -> None:
 
 def test_rejects_malformed_or_unattested_evidence() -> None:
     with pytest.raises(LinuxPerformanceAcceptanceError, match="invalid-compile-ns"):
-        _ = LinuxPerformanceEvidence((True,), (1,), (1,), b"x", 0, "0" * 64, b"")
+        _ = LinuxPerformanceEvidence((True,), (1,), (1,), b"x", 0, "0" * 64, b"", SUBJECT_DIGEST, CHALLENGE, EXPIRES_AT)
     with pytest.raises(LinuxPerformanceAcceptanceError, match="mismatched-sample-counts"):
-        _ = LinuxPerformanceEvidence((1,), (1, 2), (1,), b"x", 0, "0" * 64, b"")
+        _ = LinuxPerformanceEvidence((1,), (1, 2), (1,), b"x", 0, "0" * 64, b"", SUBJECT_DIGEST, CHALLENGE, EXPIRES_AT)
     with pytest.raises(LinuxPerformanceAcceptanceError, match="collector-attestation-invalid"):
         measured = _capture(samples=1)
         tampered = LinuxPerformanceEvidence(
@@ -109,8 +130,11 @@ def test_rejects_malformed_or_unattested_evidence() -> None:
             measured.dropped_events,
             measured.manifest_digest,
             measured.collector_signature[:-1] + b"0",
+            subject_digest=measured.subject_digest,
+            challenge=measured.challenge,
+            expires_at_epoch_seconds=measured.expires_at_epoch_seconds,
         )
-        _ = assess_linux_network_performance(tampered, PUBLIC_KEY)
+        _ = _assess(tampered)
 
 
 def test_revalidates_snapshot_after_frozen_evidence_is_mutated() -> None:
@@ -118,7 +142,7 @@ def test_revalidates_snapshot_after_frozen_evidence_is_mutated() -> None:
     object.__setattr__(evidence, "payload", b"mutated")
 
     with pytest.raises(LinuxPerformanceAcceptanceError, match="manifest-digest-mismatch"):
-        _ = assess_linux_network_performance(evidence, PUBLIC_KEY)
+        _ = _assess(evidence)
 
 
 def test_rejects_resource_inputs_above_hard_limits() -> None:
@@ -131,6 +155,9 @@ def test_rejects_resource_inputs_above_hard_limits() -> None:
             payload=b"",
             dropped_events=0,
             collector_private_key=PRIVATE_KEY,
+            subject_digest=SUBJECT_DIGEST,
+            challenge=CHALLENGE,
+            expires_at_epoch_seconds=EXPIRES_AT,
         )
     with pytest.raises(LinuxPerformanceAcceptanceError, match="invalid-compile-ns"):
         _ = LinuxPerformanceEvidence(
@@ -141,6 +168,9 @@ def test_rejects_resource_inputs_above_hard_limits() -> None:
             0,
             "0" * 64,
             b"",
+            SUBJECT_DIGEST,
+            CHALLENGE,
+            EXPIRES_AT,
         )
     with pytest.raises(LinuxPerformanceAcceptanceError, match="invalid-evidence-payload"):
         _ = LinuxPerformanceEvidence(
@@ -151,6 +181,9 @@ def test_rejects_resource_inputs_above_hard_limits() -> None:
             0,
             "0" * 64,
             b"",
+            SUBJECT_DIGEST,
+            CHALLENGE,
+            EXPIRES_AT,
         )
 
 
@@ -164,6 +197,58 @@ def test_rejects_invalid_collector_and_budget_values() -> None:
             payload=b"",
             dropped_events=0,
             collector_private_key=PRIVATE_KEY,
+            subject_digest=SUBJECT_DIGEST,
+            challenge=CHALLENGE,
+            expires_at_epoch_seconds=EXPIRES_AT,
         )
     with pytest.raises(LinuxPerformanceAcceptanceError, match="invalid-minimum-samples"):
         _ = LinuxPerformanceBudgets(minimum_samples=0)
+
+
+def test_rejects_replayed_stale_and_wrong_key_evidence() -> None:
+    evidence = _capture(samples=1)
+    with pytest.raises(LinuxPerformanceAcceptanceError, match="performance-evidence-binding-invalid"):
+        _ = assess_linux_network_performance(
+            evidence,
+            PUBLIC_KEY,
+            expected_subject_digest="b" * 64,
+            expected_challenge=CHALLENGE,
+            now_epoch_seconds=NOW,
+        )
+    with pytest.raises(LinuxPerformanceAcceptanceError, match="performance-evidence-binding-invalid"):
+        _ = assess_linux_network_performance(
+            evidence,
+            PUBLIC_KEY,
+            expected_subject_digest=SUBJECT_DIGEST,
+            expected_challenge="different-challenge",
+            now_epoch_seconds=NOW,
+        )
+    with pytest.raises(LinuxPerformanceAcceptanceError, match="performance-evidence-binding-invalid"):
+        _ = assess_linux_network_performance(
+            evidence,
+            PUBLIC_KEY,
+            expected_subject_digest=SUBJECT_DIGEST,
+            expected_challenge=CHALLENGE,
+            now_epoch_seconds=EXPIRES_AT,
+        )
+    with pytest.raises(LinuxPerformanceAcceptanceError, match="invalid-performance-input"):
+        _ = assess_linux_network_performance(
+            evidence,
+            object(),  # type: ignore[arg-type]
+            expected_subject_digest=SUBJECT_DIGEST,
+            expected_challenge=CHALLENGE,
+            now_epoch_seconds=NOW,
+        )
+
+
+def test_rejects_tampered_signed_binding() -> None:
+    evidence = _capture(samples=1)
+    object.__setattr__(evidence, "challenge", "tampered-challenge")
+    with pytest.raises(LinuxPerformanceAcceptanceError, match="manifest-digest-mismatch"):
+        _ = assess_linux_network_performance(
+            evidence,
+            PUBLIC_KEY,
+            expected_subject_digest=SUBJECT_DIGEST,
+            expected_challenge="tampered-challenge",
+            now_epoch_seconds=NOW,
+        )

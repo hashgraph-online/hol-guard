@@ -76,6 +76,7 @@ def observe_linux_sockets(
             if inode not in owned_inodes:
                 continue
             address, port = _decode_endpoint(fields[2], width=width)
+            tcp_state = _decode_tcp_state(fields[3]) if protocol is NetworkProtocol.TCP else None
             observations.append(
                 LinuxSocketObservation(
                     protocol=protocol,
@@ -84,7 +85,7 @@ def observe_linux_sockets(
                     ).hex(),
                     remote_port=port,
                     socket_inode=inode,
-                    tcp_state=int(fields[3], 16) if protocol is NetworkProtocol.TCP else None,
+                    tcp_state=tcp_state,
                 )
             )
     _require_start_time(process_root, target.start_time_ticks)
@@ -115,6 +116,8 @@ def _read_owned_socket_inodes(process_root: Path) -> frozenset[int]:
     for entry in entries:
         try:
             target = os.readlink(entry)
+        except FileNotFoundError:
+            continue
         except OSError as error:
             raise LinuxNetworkObservationError("cannot inspect process descriptor") from error
         if not target.startswith("socket:["):
@@ -125,15 +128,32 @@ def _read_owned_socket_inodes(process_root: Path) -> frozenset[int]:
     return frozenset(inodes)
 
 
+def _decode_tcp_state(value: str) -> int:
+    if len(value) != 2 or any(character not in "0123456789ABCDEF" for character in value):
+        raise LinuxNetworkObservationError("invalid procfs TCP state")
+    state = int(value, 16)
+    if state not in range(1, 12):
+        raise LinuxNetworkObservationError("invalid procfs TCP state")
+    return state
+
+
 def _decode_endpoint(value: str, *, width: int) -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, int]:
     try:
         encoded_address, encoded_port = value.split(":", 1)
-        packed = bytes.fromhex(encoded_address)
-        if len(packed) != width:
+        if (
+            len(encoded_address) != width * 2
+            or any(character not in "0123456789ABCDEF" for character in encoded_address)
+            or len(encoded_port) != 4
+            or any(character not in "0123456789ABCDEF" for character in encoded_port)
+        ):
             raise ValueError
+        packed = bytes.fromhex(encoded_address)
         packed = packed[::-1] if width == 4 else b"".join(packed[index : index + 4][::-1] for index in range(0, 16, 4))
-        return ipaddress.ip_address(packed), int(encoded_port, 16)
-    except ValueError as error:
+        port = int(encoded_port, 16)
+        if not 0 <= port <= 65535:
+            raise ValueError
+        return ipaddress.ip_address(packed), port
+    except (OSError, ValueError) as error:
         raise LinuxNetworkObservationError("invalid procfs socket endpoint") from error
 
 

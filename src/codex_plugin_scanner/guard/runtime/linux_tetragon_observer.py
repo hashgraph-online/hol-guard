@@ -9,6 +9,7 @@ import json
 import sqlite3
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import cast, final
 
 from cryptography.exceptions import InvalidSignature
@@ -66,9 +67,15 @@ class TetragonSocketObservation:
 
 @final
 class TetragonReplayLedger:
-    """Durable monotonic high-water ledger backed by a caller-owned SQLite database."""
+    """Durable monotonic high-water ledger backed by a dedicated SQLite connection."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
+        if (
+            type(connection) is not sqlite3.Connection
+            or connection.isolation_level is not None
+            or connection.in_transaction
+        ):
+            raise TetragonObservationError("replay ledger requires a dedicated autocommit connection")
         self._connection: sqlite3.Connection = connection
         _ = connection.execute(
             """
@@ -81,25 +88,35 @@ class TetragonReplayLedger:
             )
             """
         )
-        connection.commit()
 
-    def advance(self, policy: TetragonCollectorPolicy, sequence: int) -> None:
+    def advance_batch(self, policy: TetragonCollectorPolicy, sequences: Iterable[int]) -> None:
+        batch = tuple(sequences)
+        if any(current <= previous for previous, current in pairwise(batch)):
+            raise TetragonObservationError("Tetragon envelope sequence was replayed")
+        if not batch:
+            return
+        if self._connection.in_transaction:
+            raise TetragonObservationError("replay ledger connection is already in use")
+        transaction_started = False
         try:
             _ = self._connection.execute("BEGIN IMMEDIATE")
-            cursor = self._connection.execute(
-                """
-                INSERT INTO tetragon_replay_high_water VALUES (?, ?, ?, ?)
-                ON CONFLICT(collector_id, node_id, stream_id)
-                DO UPDATE SET sequence=excluded.sequence
-                WHERE tetragon_replay_high_water.sequence < excluded.sequence
-                """,
-                (policy.collector_id, policy.node_id, policy.stream_id, sequence),
-            )
-            if cursor.rowcount != 1:
-                raise TetragonObservationError("Tetragon envelope sequence was replayed")
-            self._connection.commit()
+            transaction_started = True
+            for sequence in batch:
+                cursor = self._connection.execute(
+                    """
+                    INSERT INTO tetragon_replay_high_water VALUES (?, ?, ?, ?)
+                    ON CONFLICT(collector_id, node_id, stream_id)
+                    DO UPDATE SET sequence=excluded.sequence
+                    WHERE tetragon_replay_high_water.sequence < excluded.sequence
+                    """,
+                    (policy.collector_id, policy.node_id, policy.stream_id, sequence),
+                )
+                if cursor.rowcount != 1:
+                    raise TetragonObservationError("Tetragon envelope sequence was replayed")
+            _ = self._connection.execute("COMMIT")
         except BaseException:
-            self._connection.rollback()
+            if transaction_started and self._connection.in_transaction:
+                _ = self._connection.execute("ROLLBACK")
             raise
 
 
@@ -141,7 +158,7 @@ def observe_tetragon_events(
         raise TetragonObservationError("observer trust inputs are invalid")
     if type(rotation_key) is not bytes or len(rotation_key) < 32:
         raise TetragonObservationError("rotation key must contain at least 32 bytes")
-    observations: list[TetragonSocketObservation] = []
+    projected: list[tuple[int, TetragonSocketObservation]] = []
     for line in envelopes:
         envelope = _json_object(line)
         signature = _nonempty_string(envelope.get("signature"), "signature")
@@ -180,18 +197,21 @@ def observe_tetragon_events(
             raise TetragonObservationError("Tetragon process binding mismatch")
         exec_id = _nonempty_string(process.get("exec_id"), "process_connect.process.exec_id")
         address = _ip_address(event.get("destination_ip"))
-        replay_ledger.advance(policy, sequence)
-        observations.append(
-            TetragonSocketObservation(
-                protocol=_protocol(event.get("protocol")),
-                process_id=target.process_id,
-                process_exec_id_pseudonym=_pseudonym(rotation_key, b"tetragon.exec-id", exec_id.encode()),
-                remote_address_pseudonym=_pseudonym(rotation_key, b"tetragon.remote-address", address.packed),
-                remote_port=_port(event.get("destination_port")),
-                observed_at=_nonempty_string(event_envelope.get("time"), "time"),
+        projected.append(
+            (
+                sequence,
+                TetragonSocketObservation(
+                    protocol=_protocol(event.get("protocol")),
+                    process_id=target.process_id,
+                    process_exec_id_pseudonym=_pseudonym(rotation_key, b"tetragon.exec-id", exec_id.encode()),
+                    remote_address_pseudonym=_pseudonym(rotation_key, b"tetragon.remote-address", address.packed),
+                    remote_port=_port(event.get("destination_port")),
+                    observed_at=_nonempty_string(event_envelope.get("time"), "time"),
+                ),
             )
         )
-    return tuple(observations)
+    replay_ledger.advance_batch(policy, (sequence for sequence, _ in projected))
+    return tuple(observation for _, observation in projected)
 
 
 def _pseudonym(key: bytes, domain: bytes, value: bytes) -> str:
