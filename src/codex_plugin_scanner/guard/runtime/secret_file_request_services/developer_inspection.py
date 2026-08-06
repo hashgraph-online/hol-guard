@@ -360,7 +360,7 @@ def _read_only_lookup_search_uses_file_input(args: list[str]) -> bool:
             return True
         if arg.startswith(("--file=", "--ignore-file=")):
             return True
-        if arg.startswith("-f") and not arg.startswith("--"):
+        if arg.startswith("-") and not arg.startswith("--") and "f" in arg[1:]:
             return True
     return False
 
