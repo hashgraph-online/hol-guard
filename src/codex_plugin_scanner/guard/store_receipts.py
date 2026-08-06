@@ -670,6 +670,35 @@ class StoreReceiptsRuntimeMixin:
             row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
 
+    def receipt_summary_between(self, *, start_at: str, before_at: str) -> dict[str, object]:
+        with self._connect() as connection:
+            if receipt_rollups_need_backfill(connection):
+                backfill_receipt_rollups(connection)
+            else:
+                reconcile_dirty_receipt_rollups(connection)
+            row = connection.execute(
+                """
+                select
+                  count(*) as total,
+                  coalesce(sum(case when s.policy_decision = 'block' then 1 else 0 end), 0) as blocked,
+                  coalesce(sum(case when s.policy_decision in ('allow', 'warn') then 1 else 0 end), 0) as approved,
+                  (select max(timestamp) from runtime_receipts) as latest_at
+                from runtime_receipts r
+                join receipt_rollup_actions s on s.receipt_id = r.receipt_id
+                where r.timestamp >= ? and r.timestamp < ?
+                """,
+                (start_at, before_at),
+            ).fetchone()
+        if row is None:
+            return {"total": 0, "blocked": 0, "approved": 0, "latest_at": None}
+        latest_at = row["latest_at"]
+        return {
+            "total": int(row["total"]),
+            "blocked": int(row["blocked"]),
+            "approved": int(row["approved"]),
+            "latest_at": str(latest_at) if isinstance(latest_at, str) and latest_at else None,
+        }
+
     def receipt_analytics(
         self,
         *,

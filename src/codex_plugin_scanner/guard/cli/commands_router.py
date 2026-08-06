@@ -41,6 +41,7 @@ _COMMON_HANDLERS = {
     "dashboard": "_run_guard_dashboard_command",
     "admin": "_run_guard_dashboard_command",
     "bootstrap": "_run_guard_bootstrap_command",
+    "desktop": "_run_guard_desktop_command",
     "detect": "_run_guard_detect_command",
     "apps": "_run_guard_apps_command",
     "install": "_run_guard_install_command",

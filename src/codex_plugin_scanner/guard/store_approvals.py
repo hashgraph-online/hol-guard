@@ -668,6 +668,8 @@ def count_approval_requests(
     status: str | None = "pending",
     harness: str | None = None,
     search: str | None = None,
+    resolved_at_from: str | None = None,
+    resolved_at_before: str | None = None,
 ) -> int:
     clauses = []
     params: list[object] = []
@@ -681,6 +683,12 @@ def count_approval_requests(
         search_clause, search_params = _approval_search_clause(search)
         clauses.append(search_clause)
         params.extend(search_params)
+    if resolved_at_from is not None:
+        clauses.append("resolved_at >= ?")
+        params.append(resolved_at_from)
+    if resolved_at_before is not None:
+        clauses.append("resolved_at < ?")
+        params.append(resolved_at_before)
     where_clause = f"where {' and '.join(clauses)}" if clauses else ""
     row = connection.execute(f"select count(*) as total from approval_requests {where_clause}", params).fetchone()
     return int(row["total"]) if row is not None else 0

@@ -1470,7 +1470,7 @@ def test_package_shim_tries_owned_containment_before_guard_review(tmp_path: Path
     package_script_index = shim_source.index("try_execute_contained_package_script")
     typescript_index = shim_source.index("try_execute_contained_typescript")
     node_index = shim_source.index("try_execute_contained_node_command")
-    guard_index = shim_source.index("guard_process = subprocess.run")
+    guard_index = shim_source.index("guard_process = _run_guard_with_store_lock_retry")
     assert package_script_index < typescript_index < node_index < guard_index
     assert "if contained_result is None:" in shim_source
     assert "except Exception:\n        contained_result = None" in shim_source
