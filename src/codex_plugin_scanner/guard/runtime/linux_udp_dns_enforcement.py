@@ -532,7 +532,6 @@ def evaluate_linux_udp_dns_artifact(
         return NetworkAction.DENY
     if (
         not on_attested_resolver_route
-        and protocol is NetworkProtocol.TCP
         and remote_port == 443
         and not binding_is_valid
         and application_intent_digest != artifact.resolver_route.doh_boundary_digest

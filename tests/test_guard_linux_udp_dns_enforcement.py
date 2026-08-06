@@ -185,13 +185,23 @@ def test_udp_hooks_force_dns_to_attested_route_and_cover_sendmsg() -> None:
     )
 
 
-def test_external_https_requires_authenticated_dns_or_doh_intent() -> None:
+@pytest.mark.parametrize(
+    ("protocol", "hook"),
+    (
+        (NetworkProtocol.TCP, LinuxSocketHook.CONNECT4),
+        (NetworkProtocol.UDP, LinuxSocketHook.UDP4_SENDMSG),
+    ),
+)
+def test_external_https_requires_authenticated_dns_or_doh_intent(
+    protocol: NetworkProtocol,
+    hook: LinuxSocketHook,
+) -> None:
     https = NetworkRule(
         "allow.https",
         PolicyOwner.LOCAL,
         NetworkAction.ALLOW,
         (Destination(DestinationKind.IP, "203.0.113.7"),),
-        (NetworkProtocol.TCP,),
+        (protocol,),
         (PortRange(443, 443),),
     )
     artifact = _compile(https)
@@ -202,8 +212,8 @@ def test_external_https_requires_authenticated_dns_or_doh_intent() -> None:
             _tree(),
             installed_artifact_digest=artifact.digest,
             cgroup_id=42,
-            hook=LinuxSocketHook.CONNECT4,
-            protocol=NetworkProtocol.TCP,
+            hook=hook,
+            protocol=protocol,
             remote_address="203.0.113.7",
             remote_port=443,
             now_epoch_seconds=1,
