@@ -36,6 +36,7 @@ _COMMON_HANDLERS = {
     "protect": "_run_guard_protect_command",
     "start": "_run_guard_start_command",
     "status": "_run_guard_status_command",
+    "network": "_run_guard_network_command",
     "init": "_run_guard_init_command",
     "dashboard": "_run_guard_dashboard_command",
     "admin": "_run_guard_dashboard_command",

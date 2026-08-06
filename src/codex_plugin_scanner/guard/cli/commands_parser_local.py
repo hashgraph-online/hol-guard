@@ -27,6 +27,23 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(status_parser)
     status_parser.add_argument("--json", action="store_true")
 
+    network_parser = guard_subparsers.add_parser(
+        "network",
+        help="Inspect local network protection capabilities",
+    )
+    _add_guard_common_args(network_parser)
+    network_parser.add_argument("--json", action="store_true")
+    network_subparsers = network_parser.add_subparsers(
+        dest="network_command",
+        parser_class=FriendlyArgumentParser,
+    )
+    network_status_parser = network_subparsers.add_parser(
+        "status",
+        help="Show verified network mediation backends and grades",
+    )
+    _add_guard_common_args(network_status_parser, suppress_defaults=True)
+    network_status_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+
     dashboard_parser = guard_subparsers.add_parser(
         "dashboard",
         help="Open the local Guard dashboard in your browser",

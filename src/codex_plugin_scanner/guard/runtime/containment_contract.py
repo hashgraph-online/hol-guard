@@ -34,6 +34,11 @@ class ContainmentBackend(str, Enum):
     LINUX_BWRAP = "linux-bwrap"
 
 
+class ContainmentNetworkMode(str, Enum):
+    OFFLINE = "offline"
+    GUARDED_PROXY = "guarded-proxy"
+
+
 class ContainmentFailure(str, Enum):
     UNSUPPORTED_PLATFORM = "unsupported-platform"
     BACKEND_UNAVAILABLE = "backend-unavailable"
@@ -75,15 +80,25 @@ class ContainmentPolicy:
 
     workspace: str
     allowed_write_paths: tuple[str, ...]
-    network_allowed: bool = False
+    network_mode: ContainmentNetworkMode = ContainmentNetworkMode.OFFLINE
+    proxy_endpoint_digest: str | None = None
+    proxy_verifier_key_digest: str | None = None
     policy_version: str = CONTAINMENT_POLICY_VERSION
 
     def __post_init__(self) -> None:
         if self.policy_version != CONTAINMENT_POLICY_VERSION:
             raise ValueError("unsupported containment policy version")
         workspace = _canonical_directory(self.workspace, "workspace")
-        if self.network_allowed:
-            raise ValueError("routine containment cannot allow network access")
+        if self.network_mode is ContainmentNetworkMode.OFFLINE:
+            if self.proxy_endpoint_digest is not None or self.proxy_verifier_key_digest is not None:
+                raise ValueError("offline containment cannot declare proxy trust material")
+        elif self.network_mode is ContainmentNetworkMode.GUARDED_PROXY:
+            if self.proxy_endpoint_digest is None or _SHA256.fullmatch(self.proxy_endpoint_digest) is None:
+                raise ValueError("guarded-proxy containment requires an endpoint digest")
+            if self.proxy_verifier_key_digest is None or _SHA256.fullmatch(self.proxy_verifier_key_digest) is None:
+                raise ValueError("guarded-proxy containment requires a verifier key digest")
+        else:
+            raise ValueError("unsupported containment network mode")
         writes = _canonical_paths(self.allowed_write_paths, workspace=workspace)
         if any(_is_protected(path, workspace=workspace) for path in writes):
             raise ValueError("allowed write paths cannot include protected Guard, VCS, or secret paths")
@@ -98,7 +113,9 @@ class ContainmentPolicy:
                 "policy_version": self.policy_version,
                 "workspace": _path_digest(self.workspace),
                 "allowed_write_paths": [_path_digest(path) for path in self.allowed_write_paths],
-                "network_allowed": self.network_allowed,
+                "network_mode": self.network_mode.value,
+                "proxy_endpoint_digest": self.proxy_endpoint_digest,
+                "proxy_verifier_key_digest": self.proxy_verifier_key_digest,
                 "secret_reads": "deny",
                 "external_writes": "deny",
                 "guard_controls": "deny",

@@ -169,6 +169,8 @@ from ..runtime.containment_health import containment_health_signals
 from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.local_temp_paths import trusted_temporary_root_for_path
+from ..runtime.network_status import build_network_status, project_network_supervisor_health
+from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.protection_health import ProtectionCheckStatus
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -502,6 +504,7 @@ class _GuardDaemonHttpServer(HTTPServer):
     containment_health_cache: dict[str, object] | None
     containment_health_cache_monotonic: float
     containment_health_cache_lock: threading.Lock
+    network_supervisor: NetworkSupervisor
     active_hook_requests: int
     rejected_hook_requests: int
     hook_harness_active: dict[str, int]
@@ -602,6 +605,7 @@ class _GuardDaemonHttpServer(HTTPServer):
         self.containment_health_cache = None
         self.containment_health_cache_monotonic = 0.0
         self.containment_health_cache_lock = threading.Lock()
+        self.network_supervisor = NetworkSupervisor()
         self.active_hook_requests = 0
         self.rejected_hook_requests = 0
         self.hook_harness_active = {}
@@ -2056,6 +2060,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
+            return
+        if parsed.path == "/v1/network/status":
+            self._write_json(
+                build_network_status(
+                    supervisor_health=self._daemon_server().network_supervisor.health(
+                        now_epoch_ms=int(time.time() * 1000)
+                    )
+                ),
+                extra_headers={"Cache-Control": "no-store"},
+            )
             return
         if parsed.path == "/v1/runtime/containment-health":
             self._write_json(
@@ -7251,6 +7265,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 ),
                 "schema_version": activity_health.schema_version,
             },
+            "network_protection": project_network_supervisor_health(
+                daemon_server.network_supervisor.health(now_epoch_ms=int(time.time() * 1000))
+            ),
             "hook_capacity": hook_capacity,
             "hook_load": {
                 "state": load_state,

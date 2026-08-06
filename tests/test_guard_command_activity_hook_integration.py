@@ -16,12 +16,12 @@ from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
     record_post_hook_command_activity_best_effort,
     record_pre_hook_command_activity_best_effort,
 )
+from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityAnalyticsQuery
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     COMMAND_ACTIVITY_HARNESSES,
     ActivityDecisionReason,
     CommandExecutionStatus,
 )
-from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityAnalyticsQuery
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     derive_proven_request_correlation,
     load_or_create_installation_correlation_key,

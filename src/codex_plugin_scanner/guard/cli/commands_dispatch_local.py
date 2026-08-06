@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 
 
+from codex_plugin_scanner.guard.runtime.network_status import build_network_status
+
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -330,6 +332,27 @@ def _run_guard_status_command(
     config = _require_guard_config(config)
     payload = importlib.import_module(".product", __package__).build_guard_status_payload(context, store, config)
     _emit("status", payload, getattr(args, "json", False))
+    return 0
+
+
+def _run_guard_network_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    command = getattr(args, "network_command", None) or "status"
+    if command != "status":
+        raise ValueError(f"unsupported network command: {command}")
+    payload = build_network_status(
+        legacy_domain_action=config.new_network_domain_action if config is not None else None
+    )
+    _emit("network", payload, getattr(args, "json", False))
     return 0
 
 def _run_guard_init_command(
@@ -742,6 +765,7 @@ __all__ = [
     "_run_guard_init_command",
     "_run_guard_install_command",
     "_run_guard_mcp_command",
+    "_run_guard_network_command",
     "_run_guard_preflight_command",
     "_run_guard_protect_command",
     "_run_guard_pytest_contained_command",

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import sys
 import time
@@ -32,8 +33,23 @@ def _install_evaluator_packages() -> None:
     for name, path in packages:
         if name in sys.modules:
             continue
+        package_path = path / "__init__.py"
+        spec = importlib.util.spec_from_file_location(
+            name,
+            package_path,
+            submodule_search_locations=[str(path)],
+        )
+        if spec is None:
+            raise RuntimeError(f"could not create package spec for {name}")
         package = types.ModuleType(name)
-        package.__dict__["__path__"] = [str(path)]
+        package.__dict__.update(
+            {
+                "__file__": str(package_path),
+                "__package__": name,
+                "__path__": [str(path)],
+                "__spec__": spec,
+            }
+        )
         sys.modules[name] = package
 
 
