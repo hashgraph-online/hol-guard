@@ -184,7 +184,7 @@ def negotiate_capability(
         return EnforcementGrade.UNAVAILABLE
     if not grade_required_capabilities(requirement.minimum_grade).issubset(profile.capabilities):
         return EnforcementGrade.UNAVAILABLE
-    if _grade_rank(profile.maximum_grade) < _grade_rank(requirement.minimum_grade):
+    if enforcement_grade_rank(profile.maximum_grade) < enforcement_grade_rank(requirement.minimum_grade):
         return EnforcementGrade.UNAVAILABLE
     return profile.maximum_grade
 
@@ -264,7 +264,7 @@ def default_platform_profiles() -> tuple[PlatformCapabilityProfile, ...]:
     )
 
 
-def _grade_rank(value: EnforcementGrade) -> int:
+def enforcement_grade_rank(value: EnforcementGrade) -> int:
     return {
         EnforcementGrade.UNAVAILABLE: 0,
         EnforcementGrade.OBSERVE: 1,

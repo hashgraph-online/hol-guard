@@ -8,22 +8,10 @@ from codex_plugin_scanner.guard.runtime.network_capability_contract import (
     CapabilityRequirement,
     PlatformCapabilityProfile,
     PlatformFamily,
+    enforcement_grade_rank,
     negotiate_capability,
 )
 from codex_plugin_scanner.guard.runtime.network_policy_contract import EnforcementGrade
-
-_GRADE_RANK = {
-    EnforcementGrade.UNAVAILABLE: 0,
-    EnforcementGrade.OBSERVE: 1,
-    EnforcementGrade.DENY_ALL: 2,
-    EnforcementGrade.PROXY_ONLY: 3,
-    EnforcementGrade.TCP_IP_DESTINATION_ENFORCED: 4,
-    EnforcementGrade.UDP_DNS_DESTINATION_ENFORCED: 5,
-    EnforcementGrade.DESTINATION_ENFORCED: 6,
-}
-
-if set(_GRADE_RANK) != set(EnforcementGrade):
-    raise RuntimeError("_GRADE_RANK must cover every EnforcementGrade")
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,5 +55,5 @@ class NetworkBackendRegistry:
             return None
         return min(
             selections,
-            key=lambda selection: (-_GRADE_RANK[selection.achieved_grade], selection.profile.backend_id),
+            key=lambda selection: (-enforcement_grade_rank(selection.achieved_grade), selection.profile.backend_id),
         )
