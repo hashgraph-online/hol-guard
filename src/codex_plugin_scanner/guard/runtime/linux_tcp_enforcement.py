@@ -89,7 +89,7 @@ def compile_linux_tcp_policy(
             if destination.kind is DestinationKind.HOST:
                 if policy.required_grade is EnforcementGrade.UDP_DNS_DESTINATION_ENFORCED:
                     continue
-                raise ValueError("host destinations require authenticated DNS correlation")
+                raise ValueError("host destinations require authenticated DNS correlation before TCP lowering")
             if destination.kind is DestinationKind.PRIVATE_CLASS:
                 raise ValueError("private classes must be expanded before native lowering")
             network = ipaddress.ip_network(destination.value, strict=False)

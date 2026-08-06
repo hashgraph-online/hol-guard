@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import re
-import secrets
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, replace
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -18,7 +16,6 @@ _SIGNATURE_PATTERN = re.compile(r"[0-9a-f]{128}\Z")
 _IDENTIFIER_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?\Z")
 _SCHEMA_VERSION = 1
 _SIGNATURE_DOMAIN = b"hol-guard-linux-artifact-manifest-v1\0"
-_RECEIPT_SEAL_KEY = secrets.token_bytes(32)
 
 
 class LinuxArtifactSupplyChainError(ValueError):
@@ -83,13 +80,14 @@ class LinuxArtifactSupplyChainReceipt:
     builder_id: str
     key_id: str
     manifest_digest: str
-    manifest: LinuxArtifactSupplyChainManifest = field(repr=False, compare=False)
-    _provenance_seal: bytes = field(default=b"", repr=False, compare=False)
+    signer_public_key: str
+    manifest: LinuxArtifactSupplyChainManifest
 
     def __post_init__(self) -> None:
         self.validate_provenance()
 
     def validate_provenance(self) -> None:
+        manifest = self.manifest
         string_fields = (
             self.component_id,
             self.version,
@@ -99,17 +97,31 @@ class LinuxArtifactSupplyChainReceipt:
             self.builder_id,
             self.key_id,
             self.manifest_digest,
+            self.signer_public_key,
         )
+        if any(type(value) is not str for value in string_fields) or type(self.release_sequence) is not int:
+            raise LinuxArtifactSupplyChainError("receipt provenance is invalid")
+        if type(manifest) is not LinuxArtifactSupplyChainManifest:
+            raise LinuxArtifactSupplyChainError("receipt provenance is invalid")
         if (
-            any(type(value) is not str for value in string_fields)
-            or type(self.release_sequence) is not int
-            or type(self.manifest) is not LinuxArtifactSupplyChainManifest
-            or type(self._provenance_seal) is not bytes
+            self.component_id != manifest.component_id
+            or self.version != manifest.version
+            or self.release_sequence != manifest.release_sequence
+            or self.artifact_digest != manifest.artifact_digest
+            or self.sbom_digest != manifest.sbom_digest
+            or self.source_digest != manifest.source_digest
+            or self.builder_id != manifest.builder_id
+            or self.key_id != manifest.key_id
+            or self.manifest_digest != manifest.digest
         ):
             raise LinuxArtifactSupplyChainError("receipt provenance is invalid")
-        expected_seal = _receipt_seal(self)
-        if not hmac.compare_digest(self._provenance_seal, expected_seal):
-            raise LinuxArtifactSupplyChainError("receipt provenance is invalid")
+        try:
+            Ed25519PublicKey.from_public_bytes(bytes.fromhex(self.signer_public_key)).verify(
+                bytes.fromhex(manifest.signature),
+                _signature_payload(manifest),
+            )
+        except (InvalidSignature, ValueError) as error:
+            raise LinuxArtifactSupplyChainError("receipt provenance is invalid") from error
 
 
 def create_linux_artifact_supply_chain_manifest(
@@ -184,17 +196,6 @@ def verify_linux_artifact_supply_chain(
         public_key.verify(bytes.fromhex(manifest.signature), _signature_payload(manifest))
     except (InvalidSignature, ValueError) as error:
         raise LinuxArtifactSupplyChainError("manifest signature is invalid") from error
-    receipt_fields = {
-        "artifact_digest": manifest.artifact_digest,
-        "builder_id": manifest.builder_id,
-        "component_id": manifest.component_id,
-        "release_sequence": manifest.release_sequence,
-        "key_id": manifest.key_id,
-        "manifest_digest": manifest.digest,
-        "sbom_digest": manifest.sbom_digest,
-        "source_digest": manifest.source_digest,
-        "version": manifest.version,
-    }
     return LinuxArtifactSupplyChainReceipt(
         component_id=manifest.component_id,
         release_sequence=manifest.release_sequence,
@@ -206,7 +207,7 @@ def verify_linux_artifact_supply_chain(
         key_id=manifest.key_id,
         manifest=manifest,
         manifest_digest=manifest.digest,
-        _provenance_seal=_receipt_seal_fields(receipt_fields),
+        signer_public_key=public_key_hex,
     )
 
 
@@ -215,26 +216,6 @@ def validate_linux_artifact_supply_chain_receipt(receipt: LinuxArtifactSupplyCha
     if type(receipt) is not LinuxArtifactSupplyChainReceipt:
         raise LinuxArtifactSupplyChainError("receipt provenance is invalid")
     receipt.validate_provenance()
-
-
-def _receipt_seal(receipt: LinuxArtifactSupplyChainReceipt) -> bytes:
-    return _receipt_seal_fields(
-        {
-            "artifact_digest": receipt.artifact_digest,
-            "builder_id": receipt.builder_id,
-            "component_id": receipt.component_id,
-            "release_sequence": receipt.release_sequence,
-            "key_id": receipt.key_id,
-            "manifest_digest": receipt.manifest_digest,
-            "sbom_digest": receipt.sbom_digest,
-            "source_digest": receipt.source_digest,
-            "version": receipt.version,
-        }
-    )
-
-
-def _receipt_seal_fields(fields: Mapping[str, object]) -> bytes:
-    return hmac.new(_RECEIPT_SEAL_KEY, _canonical_json(fields), hashlib.sha256).digest()
 
 
 def revalidate_linux_artifact_supply_chain_receipt(

@@ -56,6 +56,9 @@ def _proxy_controls(
     oci_plan_digest: str = "a" * 64,
     namespace_identity_digest: str = "d" * 64,
     signing_key: Ed25519PrivateKey,
+    observation_nonce: str = "e" * 64,
+    observed_at_epoch_ms: int = 100,
+    expires_at_epoch_ms: int = 5_100,
 ) -> ExclusiveProxyEgressControls:
     unsigned = ExclusiveProxyEgressControls(
         oci_plan_digest=oci_plan_digest,
@@ -64,6 +67,9 @@ def _proxy_controls(
         route_attestation_digest="c" * 64,
         direct_egress_denied=True,
         proxy_only=True,
+        observation_nonce=observation_nonce,
+        observed_at_epoch_ms=observed_at_epoch_ms,
+        expires_at_epoch_ms=expires_at_epoch_ms,
         verifier_signature="0" * 128,
     )
     return replace(unsigned, verifier_signature=signing_key.sign(unsigned.digest.encode()).hex())
@@ -124,7 +130,7 @@ def test_proxy_only_plan_requires_digest_bound_exclusive_controls(tmp_path: Path
 
     assert plan.mode is ContainmentNetworkMode.GUARDED_PROXY
     assert plan.proxy_endpoint_digest == "b" * 64
-    assert plan.proxy_egress_controls_digest == controls.digest
+    assert plan.proxy_egress_controls_digest == controls.control_state_digest
     assert plan.loopback_only is False
 
 
@@ -200,6 +206,52 @@ def test_proxy_only_plan_rejects_unrouted_network(tmp_path: Path) -> None:
 
     with pytest.raises(ContainerNetworkPlanError, match="isolated bridge"):
         build_verified_container_network_plan(oci_plan=_oci_plan(), containment_policy=policy)
+
+
+def test_proxy_receipt_requires_fresh_nonce_bound_observation(tmp_path: Path) -> None:
+    signing_key = Ed25519PrivateKey.generate()
+    policy = ContainmentPolicy(
+        str(tmp_path),
+        (),
+        network_mode=ContainmentNetworkMode.GUARDED_PROXY,
+        proxy_endpoint_digest="b" * 64,
+        proxy_verifier_key_digest=_key_digest(signing_key),
+    )
+    controls = _proxy_controls(signing_key=signing_key)
+    plan = build_verified_container_network_plan(
+        oci_plan=_oci_plan(network_mode="bridge", loopback_only=False),
+        containment_policy=policy,
+        proxy_egress_controls=controls,
+        control_verifier_public_key=signing_key.public_key(),
+    )
+
+    def observe(nonce: str) -> ExclusiveProxyEgressControls:
+        return _proxy_controls(
+            signing_key=signing_key,
+            observation_nonce=nonce,
+            observed_at_epoch_ms=1_000,
+            expires_at_epoch_ms=6_000,
+        )
+
+    receipt = issue_container_network_receipt(
+        plan=plan,
+        namespace_identity_digest="d" * 64,
+        observed_at_epoch_ms=1_001,
+        outcome=ContainerNetworkReceiptOutcome.ENFORCED,
+        control_observer=observe,
+        control_verifier_public_key=signing_key.public_key(),
+    )
+    assert receipt.outcome is ContainerNetworkReceiptOutcome.ENFORCED
+
+    with pytest.raises(ContainerNetworkPlanError, match="live proxy controls"):
+        issue_container_network_receipt(
+            plan=plan,
+            namespace_identity_digest="d" * 64,
+            observed_at_epoch_ms=1_001,
+            outcome=ContainerNetworkReceiptOutcome.ENFORCED,
+            control_observer=lambda _nonce: controls,
+            control_verifier_public_key=signing_key.public_key(),
+        )
 
 
 def test_container_receipt_binds_plan_namespace_and_outcome(tmp_path: Path) -> None:
