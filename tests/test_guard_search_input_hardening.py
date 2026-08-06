@@ -59,3 +59,5 @@ def test_verified_search_keeps_plain_local_reads_benign(monkeypatch: pytest.Monk
 
     assert is_explicitly_benign_tool_action_request("bash", {"command": "rg GuardStore src"})
     assert is_explicitly_benign_tool_action_request("bash", {"command": "grep GuardStore src/file.py"})
+    assert is_explicitly_benign_tool_action_request("bash", {"command": "rg -g'*.foo' needle ."})
+    assert is_explicitly_benign_tool_action_request("bash", {"command": "rg needle -- -f"})
