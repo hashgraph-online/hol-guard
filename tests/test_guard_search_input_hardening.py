@@ -40,6 +40,20 @@ def test_verified_ripgrep_rejects_ambient_config(monkeypatch: pytest.MonkeyPatch
     assert is_explicitly_benign_tool_action_request("bash", {"command": "rg --no-config GuardStore src"})
 
 
+def test_verified_ripgrep_rejects_command_scoped_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("RIPGREP_CONFIG_PATH", raising=False)
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash", {"command": "RIPGREP_CONFIG_PATH=/tmp/rg.conf rg GuardStore src"}
+    )
+    assert not is_explicitly_benign_tool_action_request(
+        "bash", {"command": "env RIPGREP_CONFIG_PATH=/tmp/rg.conf rg GuardStore src"}
+    )
+    assert is_explicitly_benign_tool_action_request(
+        "bash", {"command": "RIPGREP_CONFIG_PATH=/tmp/rg.conf rg --no-config GuardStore src"}
+    )
+
+
 def test_verified_search_keeps_plain_local_reads_benign(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("RIPGREP_CONFIG_PATH", raising=False)
 
