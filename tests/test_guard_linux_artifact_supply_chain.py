@@ -3,6 +3,7 @@ from dataclasses import replace
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from typing_extensions import override
 
 from codex_plugin_scanner.guard.runtime.linux_artifact_supply_chain import (
     LinuxArtifactSupplyChainError,
@@ -39,6 +40,7 @@ def _manifest() -> LinuxArtifactSupplyChainManifest:
     return create_linux_artifact_supply_chain_manifest(
         component_id="guard-linux-ebpf",
         version="3.0.0",
+        release_sequence=1,
         artifact=_ARTIFACT,
         sbom=_SBOM,
         source_digest=_SOURCE_DIGEST,
@@ -54,6 +56,7 @@ def test_linux_artifact_supply_chain_accepts_signed_installed_bytes() -> None:
     receipt = verify_linux_artifact_supply_chain(
         manifest,
         artifact=_ARTIFACT,
+        expected_release_sequence=1,
         sbom=_SBOM,
         expected_component_id="guard-linux-ebpf",
         trusted_public_keys={"release-2026": _PUBLIC_KEY},
@@ -84,6 +87,7 @@ def test_linux_artifact_supply_chain_rejects_tampered_inputs(
         _ = verify_linux_artifact_supply_chain(
             _manifest(),
             artifact=artifact,
+            expected_release_sequence=1,
             sbom=sbom,
             expected_component_id="guard-linux-ebpf",
             trusted_public_keys={"release-2026": _PUBLIC_KEY},
@@ -100,6 +104,7 @@ def test_linux_artifact_supply_chain_rejects_manifest_mutation() -> None:
         _ = verify_linux_artifact_supply_chain(
             forged,
             artifact=_ARTIFACT,
+            expected_release_sequence=1,
             sbom=_SBOM,
             expected_component_id="guard-linux-ebpf",
             trusted_public_keys={"release-2026": _PUBLIC_KEY},
@@ -122,6 +127,7 @@ def test_linux_artifact_supply_chain_enforces_signer_trust_and_revocation(
         _ = verify_linux_artifact_supply_chain(
             _manifest(),
             artifact=_ARTIFACT,
+            expected_release_sequence=1,
             sbom=_SBOM,
             expected_component_id="guard-linux-ebpf",
             trusted_public_keys=trusted_keys,
@@ -137,6 +143,7 @@ def test_linux_artifact_supply_chain_binds_component_identity() -> None:
         _ = verify_linux_artifact_supply_chain(
             _manifest(),
             artifact=_ARTIFACT,
+            expected_release_sequence=1,
             sbom=_SBOM,
             expected_component_id="guard-linux-systemd-unit",
             trusted_public_keys={"release-2026": _PUBLIC_KEY},
@@ -160,6 +167,7 @@ def test_linux_artifact_supply_chain_rejects_rollback_and_provenance_substitutio
         _ = verify_linux_artifact_supply_chain(
             _manifest(),
             artifact=_ARTIFACT,
+            expected_release_sequence=1,
             sbom=_SBOM,
             expected_component_id="guard-linux-ebpf",
             expected_version=expected_version,
@@ -167,3 +175,28 @@ def test_linux_artifact_supply_chain_rejects_rollback_and_provenance_substitutio
             trusted_builder_ids=trusted_builder_ids,
             trusted_public_keys={"release-2026": _PUBLIC_KEY},
         )
+
+
+def test_linux_artifact_supply_chain_rejects_scalar_subclasses() -> None:
+    class LyingString(str):
+        @override
+        def __ne__(self, value: object) -> bool:
+            return False
+
+    manifest = _manifest()
+    with pytest.raises(LinuxArtifactSupplyChainError, match="invalid component_id"):
+        _ = replace(manifest, component_id=LyingString(manifest.component_id))
+
+    receipt = verify_linux_artifact_supply_chain(
+        manifest,
+        artifact=_ARTIFACT,
+        expected_release_sequence=1,
+        sbom=_SBOM,
+        expected_component_id="guard-linux-ebpf",
+        trusted_public_keys={"release-2026": _PUBLIC_KEY},
+        expected_version="3.0.0",
+        expected_source_digest=_SOURCE_DIGEST,
+        trusted_builder_ids=frozenset({"github-actions-release"}),
+    )
+    with pytest.raises(LinuxArtifactSupplyChainError, match="receipt provenance is invalid"):
+        _ = replace(receipt, component_id=LyingString(receipt.component_id))

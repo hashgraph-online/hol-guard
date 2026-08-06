@@ -263,7 +263,9 @@ def create_dns_binding_lease(
     )
 
 
-def _resolver_route_is_attested(route: LinuxResolverRoute) -> bool:
+def _resolver_route_is_attested(route: LinuxResolverRoute, trusted_resolver_public_key: str) -> bool:
+    if route.resolver_public_key != trusted_resolver_public_key:
+        return False
     digest = _resolver_route_manifest_digest(route)
     if digest != route.route_attestation_digest:
         return False
@@ -275,6 +277,19 @@ def _resolver_route_is_attested(route: LinuxResolverRoute) -> bool:
     except (InvalidSignature, ValueError):
         return False
     return True
+
+
+def _canonical_trusted_resolver_public_key(public_key: str) -> str:
+    if len(public_key) != 64:
+        raise ValueError("trusted resolver public key is not valid Ed25519 evidence")
+    try:
+        key_bytes = bytes.fromhex(public_key)
+        _ = Ed25519PublicKey.from_public_bytes(key_bytes)
+    except ValueError as error:
+        raise ValueError("trusted resolver public key is not valid Ed25519 evidence") from error
+    if public_key != key_bytes.hex():
+        raise ValueError("trusted resolver public key must use canonical lowercase hex")
+    return public_key
 
 
 def _binding_is_attested(binding: DnsBindingLease, resolver_public_key: str) -> bool:
@@ -301,6 +316,7 @@ class LinuxUdpDnsPolicyArtifact:
     process_tree: ProcessTreeIdentity
     workload_cgroup_id: int
     resolver_route: LinuxResolverRoute
+    trusted_resolver_public_key: str
     l4_entries: tuple[LinuxL4RuleEntry, ...]
     host_entries: tuple[LinuxHostRuleEntry, ...]
     default_action: NetworkAction = NetworkAction.DENY
@@ -324,6 +340,7 @@ def compile_linux_udp_dns_policy(
     *,
     workload_cgroup_id: int,
     resolver_route: LinuxResolverRoute,
+    trusted_resolver_public_key: str,
 ) -> LinuxUdpDnsPolicyArtifact:
     """Lower bounded UDP rules; runtime activation remains privileged and separate."""
 
@@ -341,7 +358,8 @@ def compile_linux_udp_dns_policy(
         or tcp_artifact.process_tree.digest != tcp_artifact.process_tree_digest
     ):
         raise ValueError("TCP artifact does not match policy generation and process tree")
-    if not _resolver_route_is_attested(resolver_route):
+    trusted_resolver_public_key = _canonical_trusted_resolver_public_key(trusted_resolver_public_key)
+    if not _resolver_route_is_attested(resolver_route, trusted_resolver_public_key):
         raise ValueError("resolver route attestation is invalid")
     l4_entries: list[LinuxL4RuleEntry] = []
     host_entries: list[LinuxHostRuleEntry] = []
@@ -427,6 +445,7 @@ def compile_linux_udp_dns_policy(
         process_tree_snapshot,
         workload_cgroup_id,
         resolver_route,
+        trusted_resolver_public_key,
         tuple(l4_entries),
         tuple(host_entries),
     )
@@ -448,10 +467,11 @@ def evaluate_linux_udp_dns_artifact(
 ) -> NetworkAction:
     """Evaluate trusted installation state and signed resolver evidence."""
 
+    artifact_trusted_key = _canonical_trusted_resolver_public_key(artifact.trusted_resolver_public_key)
     if artifact.digest != installed_artifact_digest:
         raise ValueError("Linux UDP/DNS policy artifact digest does not match installation")
     if (
-        not _resolver_route_is_attested(artifact.resolver_route)
+        not _resolver_route_is_attested(artifact.resolver_route, artifact_trusted_key)
         or artifact.schema_version != LINUX_UDP_DNS_SCHEMA_VERSION
         or artifact.decision_semantics != "all-matches-deny-wins"
         or artifact.resolver_semantics != "deny-external-53-853-attested-route-only"
@@ -495,7 +515,7 @@ def evaluate_linux_udp_dns_artifact(
         actions.add(NetworkAction.ALLOW)
     if (
         binding is not None
-        and _binding_is_attested(binding, artifact.resolver_route.resolver_public_key)
+        and _binding_is_attested(binding, artifact_trusted_key)
         and _binding_matches(
             artifact,
             process_tree,

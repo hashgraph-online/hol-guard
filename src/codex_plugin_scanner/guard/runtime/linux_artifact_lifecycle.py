@@ -11,15 +11,22 @@ import hmac
 import os
 import re
 import secrets
+import sqlite3
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import PurePosixPath
+from typing import cast, final
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import framed_digest
 from codex_plugin_scanner.guard.runtime.linux_artifact_ownership import (
     LinuxArtifactMetadata,
     LinuxArtifactOwnershipReceipt,
     verify_linux_artifact_ownership,
+)
+from codex_plugin_scanner.guard.runtime.linux_artifact_supply_chain import (
+    LinuxArtifactSupplyChainError,
+    LinuxArtifactSupplyChainReceipt,
+    revalidate_linux_artifact_supply_chain_receipt,
 )
 
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
@@ -63,6 +70,52 @@ def _require_text(value: object, label: str) -> str:
     if type(value) is not str or not value or value != value.strip():
         raise LinuxArtifactLifecycleError(f"invalid-{label}")
     return value
+
+
+@final
+class LinuxArtifactReleaseLedger:
+    """Durable component release high-water authority owned by the lifecycle service."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection: sqlite3.Connection = connection
+        _ = connection.execute(
+            """CREATE TABLE IF NOT EXISTS linux_artifact_release_high_water (
+            component_id TEXT PRIMARY KEY, release_sequence INTEGER NOT NULL)"""
+        )
+        connection.commit()
+
+    def accept(self, component_id: str, release_sequence: int, *, allow_equal: bool) -> None:
+        try:
+            _ = self._connection.execute("BEGIN IMMEDIATE")
+            row = cast(
+                tuple[int] | None,
+                self._connection.execute(
+                    "SELECT release_sequence FROM linux_artifact_release_high_water WHERE component_id=?",
+                    (component_id,),
+                ).fetchone(),
+            )
+            if row is not None:
+                high_water = row[0]
+                if release_sequence < high_water or (release_sequence == high_water and not allow_equal):
+                    raise LinuxArtifactLifecycleError("release-sequence-replay")
+            cursor = self._connection.execute(
+                """INSERT INTO linux_artifact_release_high_water VALUES (?, ?)
+                ON CONFLICT(component_id) DO UPDATE SET release_sequence=excluded.release_sequence
+                WHERE linux_artifact_release_high_water.release_sequence < excluded.release_sequence""",
+                (component_id, release_sequence),
+            )
+            if row is None and cursor.rowcount != 1:
+                raise LinuxArtifactLifecycleError("release-sequence-replay")
+            self._connection.commit()
+        except Exception:
+            self._connection.rollback()
+            raise
+
+
+def _require_release_ledger(release_ledger: LinuxArtifactReleaseLedger) -> None:
+    """Enforce the lifecycle service's exact, non-substitutable ledger authority type."""
+    if type(cast(object, release_ledger)) is not LinuxArtifactReleaseLedger:
+        raise LinuxArtifactLifecycleError("release-ledger-invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +164,13 @@ class LinuxArtifactIdentity:
             raise LinuxArtifactLifecycleError("identity-provenance-invalid")
         if self.identity_digest != _identity_digest(self):
             raise LinuxArtifactLifecycleError("artifact-identity-digest-mismatch")
+
+
+def _validate_identity_provenance(identity: LinuxArtifactIdentity) -> None:
+    """Revalidate sealed identity fields without reopening potentially damaged bytes."""
+    if type(cast(object, identity)) is not LinuxArtifactIdentity:
+        raise LinuxArtifactLifecycleError("identity-provenance-invalid")
+    identity.__post_init__()
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +244,7 @@ class LinuxArtifactLifecycleReceipt:
             valid_shape = (
                 self.before_identity_digest is not None
                 and self.after_identity_digest is None
-                and self.rollback_identity_digest is None
+                and self.rollback_identity_digest != self.before_identity_digest
             )
         elif self.outcome is LinuxArtifactLifecycleOutcome.VERIFIED:
             valid_shape = (
@@ -224,9 +284,14 @@ class LinuxArtifactLifecycleTransition:
             raise LinuxArtifactLifecycleError("invalid-transition-receipt")
         active_digest = self.state.active.identity_digest if self.state.active is not None else None
         rollback_digest = self.state.rollback.identity_digest if self.state.rollback is not None else None
-        if (
-            self.receipt.after_identity_digest != active_digest
-            or self.receipt.rollback_identity_digest != rollback_digest
+        receipt_rollback_matches_state = self.receipt.rollback_identity_digest == rollback_digest
+        removal_records_cleared_rollback = (
+            self.receipt.operation is LinuxArtifactLifecycleOperation.REMOVE
+            and self.state.active is None
+            and self.state.rollback is None
+        )
+        if self.receipt.after_identity_digest != active_digest or not (
+            receipt_rollback_matches_state or removal_records_cleared_rollback
         ):
             raise LinuxArtifactLifecycleError("transition-state-mismatch")
         if self.state.active is not None and self.receipt.component_id != self.state.active.component_id:
@@ -396,9 +461,11 @@ def _transition(
     component_id: str,
     before: LinuxArtifactIdentity | None,
     state: LinuxArtifactLifecycleState,
+    rollback_evidence: LinuxArtifactIdentity | None = None,
 ) -> LinuxArtifactLifecycleTransition:
     after = state.active.identity_digest if state.active is not None else None
-    rollback = state.rollback.identity_digest if state.rollback is not None else None
+    rollback_identity = state.rollback if state.rollback is not None else rollback_evidence
+    rollback = rollback_identity.identity_digest if rollback_identity is not None else None
     before_digest = before.identity_digest if before is not None else None
     receipt_digest = _receipt_digest(
         operation=operation,
@@ -421,19 +488,61 @@ def _transition(
     return LinuxArtifactLifecycleTransition(state=state, receipt=receipt)
 
 
+def _validate_supply_chain_receipt(
+    artifact_digest: str,
+    metadata: LinuxArtifactMetadata,
+    receipt: LinuxArtifactSupplyChainReceipt,
+    trusted_builder_ids: frozenset[str],
+    trusted_public_keys: dict[str, str],
+    revoked_key_ids: frozenset[str],
+) -> None:
+    if (
+        receipt.component_id != metadata.component_id
+        or receipt.version != metadata.version
+        or receipt.release_sequence != metadata.release_sequence
+        or receipt.artifact_digest != metadata.expected_sha256
+    ):
+        raise LinuxArtifactLifecycleError("supply-chain-receipt-mismatch")
+    try:
+        revalidate_linux_artifact_supply_chain_receipt(
+            receipt,
+            artifact_digest=artifact_digest,
+            trusted_builder_ids=trusted_builder_ids,
+            trusted_public_keys=trusted_public_keys,
+            revoked_key_ids=revoked_key_ids,
+        )
+    except LinuxArtifactSupplyChainError as error:
+        raise LinuxArtifactLifecycleError("supply-chain-receipt-invalid") from error
+
+
 def install_linux_artifact(
     state: LinuxArtifactLifecycleState,
     path: str,
     metadata: LinuxArtifactMetadata,
+    supply_chain_receipt: LinuxArtifactSupplyChainReceipt,
     *,
     expected_uid: int,
+    trusted_builder_ids: frozenset[str],
+    trusted_public_keys: dict[str, str],
+    release_ledger: LinuxArtifactReleaseLedger,
     trusted_ancestor_uids: frozenset[int] | None = None,
+    revoked_key_ids: frozenset[str] | None = None,
 ) -> LinuxArtifactLifecycleTransition:
+    _require_release_ledger(release_ledger)
     if type(state) is not LinuxArtifactLifecycleState:
         raise LinuxArtifactLifecycleError("invalid-lifecycle-state")
     if state.active is not None:
         raise LinuxArtifactLifecycleError("install-requires-absent-artifact")
     artifact = _verify_artifact(path, metadata, expected_uid, trusted_ancestor_uids)
+    _validate_supply_chain_receipt(
+        artifact.sha256,
+        metadata,
+        supply_chain_receipt,
+        trusted_builder_ids,
+        trusted_public_keys,
+        revoked_key_ids if revoked_key_ids is not None else frozenset(),
+    )
+    release_ledger.accept(metadata.component_id, metadata.release_sequence, allow_equal=False)
     return _transition(
         operation=LinuxArtifactLifecycleOperation.INSTALL,
         outcome=LinuxArtifactLifecycleOutcome.ACTIVATED,
@@ -447,13 +556,27 @@ def upgrade_linux_artifact(
     state: LinuxArtifactLifecycleState,
     path: str,
     metadata: LinuxArtifactMetadata,
+    supply_chain_receipt: LinuxArtifactSupplyChainReceipt,
     *,
     expected_uid: int,
+    trusted_builder_ids: frozenset[str],
+    release_ledger: LinuxArtifactReleaseLedger,
+    trusted_public_keys: dict[str, str],
     trusted_ancestor_uids: frozenset[int] | None = None,
+    revoked_key_ids: frozenset[str] | None = None,
 ) -> LinuxArtifactLifecycleTransition:
+    _require_release_ledger(release_ledger)
     if type(state) is not LinuxArtifactLifecycleState or state.active is None:
         raise LinuxArtifactLifecycleError("upgrade-requires-active-artifact")
     artifact = _verify_artifact(path, metadata, expected_uid, trusted_ancestor_uids)
+    _validate_supply_chain_receipt(
+        artifact.sha256,
+        metadata,
+        supply_chain_receipt,
+        trusted_builder_ids,
+        trusted_public_keys,
+        revoked_key_ids if revoked_key_ids is not None else frozenset(),
+    )
     previous = _reverify_identity(state.active, trusted_ancestor_uids, expected_uid)
     if artifact.component_id != previous.component_id:
         raise LinuxArtifactLifecycleError("upgrade-component-mismatch")
@@ -461,6 +584,7 @@ def upgrade_linux_artifact(
         raise LinuxArtifactLifecycleError("upgrade-requires-newer-release")
     if artifact.identity_digest == previous.identity_digest:
         raise LinuxArtifactLifecycleError("upgrade-requires-different-artifact")
+    release_ledger.accept(metadata.component_id, metadata.release_sequence, allow_equal=False)
     return _transition(
         operation=LinuxArtifactLifecycleOperation.UPGRADE,
         outcome=LinuxArtifactLifecycleOutcome.UPGRADED,
@@ -474,13 +598,15 @@ def remove_linux_artifact(state: LinuxArtifactLifecycleState) -> LinuxArtifactLi
     if type(state) is not LinuxArtifactLifecycleState or state.active is None:
         raise LinuxArtifactLifecycleError("remove-requires-active-artifact")
     previous = state.active
-    if os.path.lexists(previous.path):
+    identities = (previous,) if state.rollback is None else (previous, state.rollback)
+    if any(os.path.lexists(identity.path) for identity in identities):
         raise LinuxArtifactLifecycleError("remove-requires-artifact-absence")
     return _transition(
         operation=LinuxArtifactLifecycleOperation.REMOVE,
         outcome=LinuxArtifactLifecycleOutcome.REMOVED,
         component_id=previous.component_id,
         before=previous,
+        rollback_evidence=state.rollback,
         state=LinuxArtifactLifecycleState(),
     )
 
@@ -489,18 +615,38 @@ def repair_linux_artifact(
     state: LinuxArtifactLifecycleState,
     path: str,
     metadata: LinuxArtifactMetadata,
+    supply_chain_receipt: LinuxArtifactSupplyChainReceipt,
     *,
     expected_uid: int,
+    trusted_builder_ids: frozenset[str],
+    release_ledger: LinuxArtifactReleaseLedger,
+    trusted_public_keys: dict[str, str],
     trusted_ancestor_uids: frozenset[int] | None = None,
+    revoked_key_ids: frozenset[str] | None = None,
 ) -> LinuxArtifactLifecycleTransition:
+    _require_release_ledger(release_ledger)
     if type(state) is not LinuxArtifactLifecycleState or state.active is None:
         raise LinuxArtifactLifecycleError("repair-requires-active-artifact")
     expected = _verify_artifact(path, metadata, expected_uid, trusted_ancestor_uids)
+    _validate_supply_chain_receipt(
+        expected.sha256,
+        metadata,
+        supply_chain_receipt,
+        trusted_builder_ids,
+        trusted_public_keys,
+        revoked_key_ids if revoked_key_ids is not None else frozenset(),
+    )
     before = state.active
+    _validate_identity_provenance(before)
     if before.component_id != expected.component_id:
         raise LinuxArtifactLifecycleError("repair-component-mismatch")
-    if expected.release_sequence != before.release_sequence:
+    if (
+        expected.release_sequence != before.release_sequence
+        or expected.version != before.version
+        or expected.sha256 != before.sha256
+    ):
         raise LinuxArtifactLifecycleError("repair-requires-same-release")
+    release_ledger.accept(metadata.component_id, metadata.release_sequence, allow_equal=True)
     unchanged = before.identity_digest == expected.identity_digest
     outcome = LinuxArtifactLifecycleOutcome.VERIFIED if unchanged else LinuxArtifactLifecycleOutcome.RESTORED
     return _transition(
@@ -520,6 +666,7 @@ __all__ = [
     "LinuxArtifactLifecycleReceipt",
     "LinuxArtifactLifecycleState",
     "LinuxArtifactLifecycleTransition",
+    "LinuxArtifactReleaseLedger",
     "install_linux_artifact",
     "remove_linux_artifact",
     "repair_linux_artifact",

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from codex_plugin_scanner.guard.runtime.linux_tcp_enforcement import (
@@ -32,6 +33,14 @@ from codex_plugin_scanner.guard.runtime.network_policy_contract import (
 )
 
 RESOLVER_PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+TRUSTED_RESOLVER_PUBLIC_KEY = (
+    RESOLVER_PRIVATE_KEY.public_key()
+    .public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    .hex()
+)
 
 
 def _tree() -> ProcessTreeIdentity:
@@ -67,6 +76,7 @@ def _compile(*rules: NetworkRule):
         compile_linux_tcp_policy(policy, _tree()),
         workload_cgroup_id=42,
         resolver_route=_route(),
+        trusted_resolver_public_key=TRUSTED_RESOLVER_PUBLIC_KEY,
     )
 
 
@@ -389,6 +399,27 @@ def test_udp_dns_rejects_tampered_resolver_attestations() -> None:
             compile_linux_tcp_policy(policy, _tree()),
             workload_cgroup_id=42,
             resolver_route=route,
+            trusted_resolver_public_key=TRUSTED_RESOLVER_PUBLIC_KEY,
+        )
+
+    attacker_private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
+    attacker_route = create_linux_resolver_route(
+        "127.0.0.1",
+        5353,
+        5354,
+        99,
+        "b" * 64,
+        "d" * 64,
+        attacker_private_key,
+    )
+    with pytest.raises(ValueError, match="resolver route attestation"):
+        _ = compile_linux_udp_dns_policy(
+            policy,
+            _tree(),
+            compile_linux_tcp_policy(policy, _tree()),
+            workload_cgroup_id=42,
+            resolver_route=attacker_route,
+            trusted_resolver_public_key=TRUSTED_RESOLVER_PUBLIC_KEY,
         )
 
     host = NetworkRule(
@@ -442,4 +473,5 @@ def test_udp_dns_lowering_rejects_direct_dns_and_grade_overclaim() -> None:
             tcp_artifact,
             workload_cgroup_id=42,
             resolver_route=_route(),
+            trusted_resolver_public_key=TRUSTED_RESOLVER_PUBLIC_KEY,
         )

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from codex_plugin_scanner.guard.runtime.linux_tcp_enforcement import (
@@ -30,6 +31,14 @@ from codex_plugin_scanner.guard.runtime.network_policy_contract import (
 )
 
 RESOLVER_PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+TRUSTED_RESOLVER_PUBLIC_KEY = (
+    RESOLVER_PRIVATE_KEY.public_key()
+    .public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    .hex()
+)
 
 
 def _tree() -> ProcessTreeIdentity:
@@ -77,6 +86,7 @@ def _artifacts(tree: ProcessTreeIdentity | None = None):
         tcp,
         workload_cgroup_id=42,
         resolver_route=_route(),
+        trusted_resolver_public_key=TRUSTED_RESOLVER_PUBLIC_KEY,
     )
     return tcp, udp
 

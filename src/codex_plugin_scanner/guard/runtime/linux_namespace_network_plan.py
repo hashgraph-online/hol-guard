@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import ipaddress
+from dataclasses import asdict, dataclass, replace
 from enum import Enum
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentNetworkMode, ContainmentPolicy
 from codex_plugin_scanner.guard.runtime.network_policy_contract import (
@@ -24,17 +29,105 @@ class LinuxProxyNamespaceRoute:
     broker_port: int
     broker_cgroup_id: int
     broker_executable_digest: str
-    endpoint_digest: str
+    broker_public_key: str
+    route_attestation_digest: str
+    route_signature: str
+
+    @property
+    def digest(self) -> str:
+        return _proxy_route_manifest_digest(self)
 
     def __post_init__(self) -> None:
-        if not 1 <= self.broker_port <= 65535 or self.broker_cgroup_id <= 0:
+        try:
+            workload_address = ipaddress.ip_address(self.workload_address)
+            broker_address = ipaddress.ip_address(self.broker_address)
+        except (TypeError, ValueError) as error:
+            raise ValueError("proxy route requires valid namespace endpoints") from error
+        if workload_address.version != broker_address.version or workload_address == broker_address:
+            raise ValueError("proxy route requires distinct same-family namespace endpoints")
+        object.__setattr__(self, "workload_address", workload_address.compressed)
+        object.__setattr__(self, "broker_address", broker_address.compressed)
+        if (
+            type(self.broker_port) is not int
+            or type(self.broker_cgroup_id) is not int
+            or not 1 <= self.broker_port <= 65535
+            or self.broker_cgroup_id <= 0
+        ):
             raise ValueError("proxy route requires a valid port and broker cgroup")
-        for digest in (self.broker_executable_digest, self.endpoint_digest):
-            if len(digest) != 64:
-                raise ValueError("proxy route digests must be SHA-256")
-            _ = bytes.fromhex(digest)
-        if self.workload_address == self.broker_address:
-            raise ValueError("proxy route requires distinct namespace endpoints")
+        for name, value, expected_size in (
+            ("executable digest", self.broker_executable_digest, 32),
+            ("attestation digest", self.route_attestation_digest, 32),
+            ("public key", self.broker_public_key, 32),
+            ("signature", self.route_signature, 64),
+        ):
+            try:
+                decoded = bytes.fromhex(value)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"proxy route {name} is invalid") from error
+            if len(decoded) != expected_size or value != decoded.hex():
+                raise ValueError(f"proxy route {name} must use canonical hex")
+
+
+def _proxy_route_manifest_digest(route: LinuxProxyNamespaceRoute) -> str:
+    payload = asdict(route)
+    del payload["route_attestation_digest"]
+    del payload["route_signature"]
+    return canonical_digest(payload)
+
+
+def create_linux_proxy_namespace_route(
+    workload_address: str,
+    broker_address: str,
+    broker_port: int,
+    broker_cgroup_id: int,
+    broker_executable_digest: str,
+    broker_private_key: Ed25519PrivateKey,
+) -> LinuxProxyNamespaceRoute:
+    public_key = (
+        broker_private_key.public_key()
+        .public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+        .hex()
+    )
+    provisional = LinuxProxyNamespaceRoute(
+        workload_address,
+        broker_address,
+        broker_port,
+        broker_cgroup_id,
+        broker_executable_digest,
+        public_key,
+        "0" * 64,
+        "0" * 128,
+    )
+    digest = _proxy_route_manifest_digest(provisional)
+    return replace(
+        provisional,
+        route_attestation_digest=digest,
+        route_signature=broker_private_key.sign(bytes.fromhex(digest)).hex(),
+    )
+
+
+def _proxy_route_is_attested(route: LinuxProxyNamespaceRoute, trusted_broker_public_key: str) -> bool:
+    try:
+        trusted_key = bytes.fromhex(trusted_broker_public_key)
+        if (
+            len(trusted_key) != 32
+            or trusted_broker_public_key != trusted_key.hex()
+            or route.broker_public_key != trusted_broker_public_key
+        ):
+            return False
+        digest = _proxy_route_manifest_digest(route)
+        if digest != route.route_attestation_digest:
+            return False
+        Ed25519PublicKey.from_public_bytes(trusted_key).verify(
+            bytes.fromhex(route.route_signature),
+            bytes.fromhex(digest),
+        )
+    except (InvalidSignature, ValueError):
+        return False
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +157,7 @@ def build_linux_namespace_network_plan(
     *,
     workload_owner_uid: int,
     proxy_route: LinuxProxyNamespaceRoute | None = None,
+    trusted_broker_public_key: str | None = None,
 ) -> LinuxNamespaceNetworkPlan:
     """Lower containment mode to an inactive, fail-closed namespace plan."""
     if workload_owner_uid <= 0:
@@ -73,8 +167,13 @@ def build_linux_namespace_network_plan(
             raise ValueError("offline namespace cannot declare a proxy route")
         loopback_up = True
     elif policy.network_mode is ContainmentNetworkMode.GUARDED_PROXY:
-        if proxy_route is None or proxy_route.endpoint_digest != policy.proxy_endpoint_digest:
-            raise ValueError("proxy namespace route must match the containment endpoint")
+        if (
+            proxy_route is None
+            or trusted_broker_public_key is None
+            or not _proxy_route_is_attested(proxy_route, trusted_broker_public_key)
+            or proxy_route.digest != policy.proxy_endpoint_digest
+        ):
+            raise ValueError("proxy namespace route must match the trusted containment endpoint")
         loopback_up = True
     else:
         raise ValueError("unsupported containment network mode")
@@ -96,4 +195,5 @@ __all__ = [
     "LinuxNamespaceNetworkPlan",
     "LinuxProxyNamespaceRoute",
     "build_linux_namespace_network_plan",
+    "create_linux_proxy_namespace_route",
 ]
