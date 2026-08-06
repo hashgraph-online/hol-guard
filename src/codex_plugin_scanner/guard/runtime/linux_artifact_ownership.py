@@ -29,6 +29,7 @@ class LinuxArtifactMetadata:
     source: str
     license_id: str
     expected_sha256: str
+    release_sequence: int = 0
 
     def __post_init__(self) -> None:
         for label, value in (
@@ -44,6 +45,8 @@ class LinuxArtifactMetadata:
             or _SHA256_PATTERN.fullmatch(self.expected_sha256) is None
         ):
             raise LinuxArtifactOwnershipError("invalid-metadata:expected_sha256")
+        if type(self.release_sequence) is not int or self.release_sequence < 0:
+            raise LinuxArtifactOwnershipError("invalid-metadata:release_sequence")
 
 
 @dataclass(frozen=True, slots=True)
