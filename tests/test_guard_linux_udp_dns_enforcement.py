@@ -185,6 +185,33 @@ def test_udp_hooks_force_dns_to_attested_route_and_cover_sendmsg() -> None:
     )
 
 
+def test_external_https_requires_authenticated_dns_or_doh_intent() -> None:
+    https = NetworkRule(
+        "allow.https",
+        PolicyOwner.LOCAL,
+        NetworkAction.ALLOW,
+        (Destination(DestinationKind.IP, "203.0.113.7"),),
+        (NetworkProtocol.TCP,),
+        (PortRange(443, 443),),
+    )
+    artifact = _compile(https)
+
+    assert (
+        evaluate_linux_udp_dns_artifact(
+            artifact,
+            _tree(),
+            installed_artifact_digest=artifact.digest,
+            cgroup_id=42,
+            hook=LinuxSocketHook.CONNECT4,
+            protocol=NetworkProtocol.TCP,
+            remote_address="203.0.113.7",
+            remote_port=443,
+            now_epoch_seconds=1,
+        )
+        is NetworkAction.DENY
+    )
+
+
 def test_resolver_route_is_protocol_and_port_specific() -> None:
     artifact = _compile()
 

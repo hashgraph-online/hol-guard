@@ -497,6 +497,20 @@ def evaluate_linux_udp_dns_artifact(
     )
     route_address = ipaddress.ip_address(artifact.resolver_route.address)
     on_attested_resolver_route = address == route_address and remote_port == route_port
+    binding_is_valid = (
+        binding is not None
+        and _binding_is_attested(binding, artifact_trusted_key)
+        and _binding_matches(
+            artifact,
+            process_tree,
+            cgroup_id=cgroup_id,
+            address=address.compressed,
+            port=remote_port,
+            now_epoch_seconds=now_epoch_seconds,
+            protocol=protocol,
+            binding=binding,
+        )
+    )
     actions: set[NetworkAction] = set()
     actions.update(
         entry.action
@@ -516,22 +530,17 @@ def evaluate_linux_udp_dns_artifact(
         and application_intent_digest != artifact.resolver_route.doh_boundary_digest
     ):
         return NetworkAction.DENY
+    if (
+        not on_attested_resolver_route
+        and protocol is NetworkProtocol.TCP
+        and remote_port == 443
+        and not binding_is_valid
+        and application_intent_digest != artifact.resolver_route.doh_boundary_digest
+    ):
+        return NetworkAction.DENY
     if on_attested_resolver_route:
         actions.add(NetworkAction.ALLOW)
-    if (
-        binding is not None
-        and _binding_is_attested(binding, artifact_trusted_key)
-        and _binding_matches(
-            artifact,
-            process_tree,
-            cgroup_id=cgroup_id,
-            address=address.compressed,
-            port=remote_port,
-            now_epoch_seconds=now_epoch_seconds,
-            protocol=protocol,
-            binding=binding,
-        )
-    ):
+    if binding_is_valid and binding is not None:
         actions.update(
             entry.action
             for entry in artifact.host_entries
