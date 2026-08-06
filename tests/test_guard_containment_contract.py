@@ -79,14 +79,23 @@ def test_guarded_proxy_mode_requires_a_bound_endpoint(tmp_path: Path) -> None:
             (),
             network_mode=ContainmentNetworkMode.GUARDED_PROXY,
         )
+    with pytest.raises(ValueError, match="verifier key digest"):
+        _ = ContainmentPolicy(
+            str(tmp_path),
+            (),
+            network_mode=ContainmentNetworkMode.GUARDED_PROXY,
+            proxy_endpoint_digest="a" * 64,
+        )
 
     policy = ContainmentPolicy(
         str(tmp_path),
         (),
         network_mode=ContainmentNetworkMode.GUARDED_PROXY,
         proxy_endpoint_digest="a" * 64,
+        proxy_verifier_key_digest="b" * 64,
     )
     assert policy.network_mode is ContainmentNetworkMode.GUARDED_PROXY
+    assert policy.proxy_verifier_key_digest == "b" * 64
 
 
 def test_offline_mode_rejects_proxy_endpoint(tmp_path: Path) -> None:

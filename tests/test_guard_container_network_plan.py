@@ -1,8 +1,10 @@
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from codex_plugin_scanner.guard.runtime.container_network_plan import (
     ContainerNetworkPlanError,
@@ -67,6 +69,10 @@ def _proxy_controls(
     return replace(unsigned, verifier_signature=signing_key.sign(unsigned.digest.encode()).hex())
 
 
+def _key_digest(signing_key: Ed25519PrivateKey) -> str:
+    return sha256(signing_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)).hexdigest()
+
+
 def test_offline_plan_binds_verified_namespace_to_policy(tmp_path: Path) -> None:
     policy = ContainmentPolicy(str(tmp_path), ())
 
@@ -96,18 +102,18 @@ def test_offline_plan_fails_closed(oci_plan: OCIExecutionPlan, message: str, tmp
 
 
 def test_proxy_only_plan_requires_digest_bound_exclusive_controls(tmp_path: Path) -> None:
+    signing_key = Ed25519PrivateKey.generate()
     policy = ContainmentPolicy(
         str(tmp_path),
         (),
         network_mode=ContainmentNetworkMode.GUARDED_PROXY,
         proxy_endpoint_digest="b" * 64,
+        proxy_verifier_key_digest=_key_digest(signing_key),
     )
     oci_plan = _oci_plan(network_mode="bridge", loopback_only=False)
 
     with pytest.raises(ContainerNetworkPlanError, match="exclusive proxy egress controls"):
         build_verified_container_network_plan(oci_plan=oci_plan, containment_policy=policy)
-
-    signing_key = Ed25519PrivateKey.generate()
     controls = _proxy_controls(signing_key=signing_key)
     plan = build_verified_container_network_plan(
         oci_plan=oci_plan,
@@ -123,14 +129,15 @@ def test_proxy_only_plan_requires_digest_bound_exclusive_controls(tmp_path: Path
 
 
 def test_proxy_only_plan_rejects_mismatched_control_binding(tmp_path: Path) -> None:
+    signing_key = Ed25519PrivateKey.generate()
     policy = ContainmentPolicy(
         str(tmp_path),
         (),
         network_mode=ContainmentNetworkMode.GUARDED_PROXY,
         proxy_endpoint_digest="b" * 64,
+        proxy_verifier_key_digest=_key_digest(signing_key),
     )
     oci_plan = _oci_plan(network_mode="bridge", loopback_only=False)
-    signing_key = Ed25519PrivateKey.generate()
     controls = _proxy_controls(oci_plan_digest="d" * 64, signing_key=signing_key)
     with pytest.raises(ContainerNetworkPlanError, match="do not match the OCI plan"):
         build_verified_container_network_plan(
@@ -141,12 +148,34 @@ def test_proxy_only_plan_rejects_mismatched_control_binding(tmp_path: Path) -> N
         )
 
 
-def test_proxy_only_plan_rejects_forged_control_attestation(tmp_path: Path) -> None:
+def test_proxy_only_plan_rejects_untrusted_control_verifier(tmp_path: Path) -> None:
+    trusted_key = Ed25519PrivateKey.generate()
+    attacker_key = Ed25519PrivateKey.generate()
     policy = ContainmentPolicy(
         str(tmp_path),
         (),
         network_mode=ContainmentNetworkMode.GUARDED_PROXY,
         proxy_endpoint_digest="b" * 64,
+        proxy_verifier_key_digest=_key_digest(trusted_key),
+    )
+
+    with pytest.raises(ContainerNetworkPlanError, match="trusted containment policy"):
+        build_verified_container_network_plan(
+            oci_plan=_oci_plan(network_mode="bridge", loopback_only=False),
+            containment_policy=policy,
+            proxy_egress_controls=_proxy_controls(signing_key=attacker_key),
+            control_verifier_public_key=attacker_key.public_key(),
+        )
+
+
+def test_proxy_only_plan_rejects_forged_control_attestation(tmp_path: Path) -> None:
+    verifier_key = Ed25519PrivateKey.generate()
+    policy = ContainmentPolicy(
+        str(tmp_path),
+        (),
+        network_mode=ContainmentNetworkMode.GUARDED_PROXY,
+        proxy_endpoint_digest="b" * 64,
+        proxy_verifier_key_digest=_key_digest(verifier_key),
     )
     controls = _proxy_controls(signing_key=Ed25519PrivateKey.generate())
 
@@ -155,16 +184,18 @@ def test_proxy_only_plan_rejects_forged_control_attestation(tmp_path: Path) -> N
             oci_plan=_oci_plan(network_mode="bridge", loopback_only=False),
             containment_policy=policy,
             proxy_egress_controls=controls,
-            control_verifier_public_key=Ed25519PrivateKey.generate().public_key(),
+            control_verifier_public_key=verifier_key.public_key(),
         )
 
 
 def test_proxy_only_plan_rejects_unrouted_network(tmp_path: Path) -> None:
+    signing_key = Ed25519PrivateKey.generate()
     policy = ContainmentPolicy(
         str(tmp_path),
         (),
         network_mode=ContainmentNetworkMode.GUARDED_PROXY,
         proxy_endpoint_digest="b" * 64,
+        proxy_verifier_key_digest=_key_digest(signing_key),
     )
 
     with pytest.raises(ContainerNetworkPlanError, match="isolated bridge"):

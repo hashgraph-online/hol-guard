@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -36,7 +37,12 @@ def _route() -> LinuxProxyNamespaceRoute:
 
 def _policy(tmp_path: Path, mode: ContainmentNetworkMode) -> ContainmentPolicy:
     endpoint = _route().digest if mode is ContainmentNetworkMode.GUARDED_PROXY else None
-    return ContainmentPolicy(str(tmp_path), (), mode, endpoint)
+    verifier_digest = (
+        sha256(bytes.fromhex(TRUSTED_BROKER_PUBLIC_KEY)).hexdigest()
+        if mode is ContainmentNetworkMode.GUARDED_PROXY
+        else None
+    )
+    return ContainmentPolicy(str(tmp_path), (), mode, endpoint, verifier_digest)
 
 
 def test_offline_namespace_has_no_external_or_host_route(tmp_path: Path) -> None:
@@ -96,6 +102,7 @@ def test_namespace_plan_rejects_root_and_endpoint_mismatch(tmp_path: Path) -> No
         (),
         ContainmentNetworkMode.GUARDED_PROXY,
         attacker_route.digest,
+        sha256(bytes.fromhex(TRUSTED_BROKER_PUBLIC_KEY)).hexdigest(),
     )
     with pytest.raises(ValueError, match="trusted containment endpoint"):
         _ = build_linux_namespace_network_plan(

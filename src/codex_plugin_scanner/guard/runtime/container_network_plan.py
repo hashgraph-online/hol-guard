@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from hashlib import sha256
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentNetworkMode,
@@ -176,6 +178,11 @@ def build_verified_container_network_plan(
             raise ContainerNetworkPlanError("proxy egress controls do not match the OCI plan")
         if proxy_egress_controls.proxy_endpoint_digest != containment_policy.proxy_endpoint_digest:
             raise ContainerNetworkPlanError("proxy egress controls do not match the containment policy")
+        verifier_key_digest = sha256(
+            control_verifier_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+        ).hexdigest()
+        if verifier_key_digest != containment_policy.proxy_verifier_key_digest:
+            raise ContainerNetworkPlanError("control verifier does not match trusted containment policy")
         try:
             control_verifier_public_key.verify(
                 bytes.fromhex(proxy_egress_controls.verifier_signature),

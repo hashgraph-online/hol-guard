@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 from dataclasses import asdict, dataclass, replace
 from enum import Enum
+from hashlib import sha256
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -170,6 +171,7 @@ def build_linux_namespace_network_plan(
         if (
             proxy_route is None
             or trusted_broker_public_key is None
+            or sha256(bytes.fromhex(trusted_broker_public_key)).hexdigest() != policy.proxy_verifier_key_digest
             or not _proxy_route_is_attested(proxy_route, trusted_broker_public_key)
             or proxy_route.digest != policy.proxy_endpoint_digest
         ):
