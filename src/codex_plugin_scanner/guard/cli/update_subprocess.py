@@ -347,7 +347,7 @@ class _WindowsJobObjectBasicLimitInformation(ctypes.Structure):
         ("maximum_working_set_size", ctypes.c_size_t),
         ("active_process_limit", wintypes.DWORD),
         ("affinity", ctypes.c_size_t),
-        ("priority_class", ctypes.c_size_t),
+        ("priority_class", wintypes.DWORD),
         ("scheduling_class", wintypes.DWORD),
     ]
 
