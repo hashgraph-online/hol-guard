@@ -1,26 +1,24 @@
-name: Ruff format probe
+name: Ruff format apply
 
 on:
-  pull_request:
-    paths:
-      - "src/codex_plugin_scanner/guard/package_shim_status.py"
-      - "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py"
-      - ".github/workflows/ruff-format-probe.yml"
+  push:
+    branches:
+      - fix/main-publish-yanked-release-anchor
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  probe:
+  apply:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          persist-credentials: false
+          ref: fix/main-publish-yanked-release-anchor
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
-      - name: Print exact Ruff formatter diff
+      - name: Apply exact Ruff formatter output
         run: |
           uvx --from ruff==0.15.17 ruff format \
             src/codex_plugin_scanner/guard/package_shim_status.py \
@@ -28,7 +26,16 @@ jobs:
           uvx --from ruff==0.15.17 ruff check \
             src/codex_plugin_scanner/guard/package_shim_status.py \
             src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py
-          git diff -- \
+          if git diff --quiet -- \
+            src/codex_plugin_scanner/guard/package_shim_status.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py; then
+            echo "Ruff formatting already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
             src/codex_plugin_scanner/guard/package_shim_status.py \
             src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py
-          test -z "$(git status --short -- src/codex_plugin_scanner/guard/package_shim_status.py src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py)"
+          git commit -m "style(ci): apply Ruff formatter output"
+          git push origin HEAD:fix/main-publish-yanked-release-anchor
