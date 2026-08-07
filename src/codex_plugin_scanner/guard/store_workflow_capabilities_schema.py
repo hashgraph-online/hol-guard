@@ -152,11 +152,22 @@ _OBJECT_NAMES: Final = (
     ("trigger", "trg_guard_workflow_transition_require_parents"),
 )
 
+# Schema objects created by prior schema versions that the current schema no
+# longer manages. Such orphans would otherwise make the strict owned-object
+# equality check fail on databases created under an older release. They are
+# inert (none can weaken the immutability triggers or authority tables), so
+# they are dropped before validation so an upgrade can re-run. Add a name here
+# only when a schema change retires a previously registered owned object.
+_LEGACY_OWNED_OBJECT_NAMES: Final = (
+    ("index", "idx_guard_workflow_receipt_event"),
+)
+
 
 def ensure_workflow_capability_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
     """Apply migration 14 atomically and validate every owned schema object."""
     connection.execute("savepoint workflow_capability_schema_v14")
     try:
+        _drop_legacy_owned_objects(connection)
         for statement in _SCHEMA_STATEMENTS:
             connection.execute(statement)
         _validate_schema_objects(connection)
@@ -179,6 +190,19 @@ def ensure_workflow_capability_schema(connection: sqlite3.Connection, *, applied
         connection.execute("release workflow_capability_schema_v14")
         raise
     connection.execute("release workflow_capability_schema_v14")
+
+
+def _drop_legacy_owned_objects(connection: sqlite3.Connection) -> None:
+    """Drop schema objects a prior version registered but the current schema no longer manages.
+
+    Validation enforces strict equality between expected and actual owned objects, so an
+    orphan left behind by an older release would otherwise raise ``owned_objects`` on every
+    upgrade. Only explicitly enumerated legacy names are dropped; unknown extras remain a hard
+    failure so the equality check still detects tampering.
+    """
+
+    for _object_type, name in _LEGACY_OWNED_OBJECT_NAMES:
+        connection.execute("drop index if exists " + name)
 
 
 def _validate_schema_objects(connection: sqlite3.Connection) -> None:
