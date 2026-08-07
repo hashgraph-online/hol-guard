@@ -359,21 +359,27 @@ def test_legacy_owned_schema_object_is_reaped_on_reopen(tmp_path) -> None:
     _issue(store, claim)
     # A database created under an older schema version may own an object the
     # current schema no longer creates or registers (a real regression hit on
-    # upgrade). The schema ensure step must reap the enumerated legacy object so
-    # the strict owned-object equality check passes and the store reopens.
+    # upgrade). Simulate that legacy state by installing the retired index, then
+    # confirm the schema ensure step reaps it so the strict owned-object equality
+    # check passes and the store reopens.
     with sqlite3.connect(store.path) as connection:
+        connection.execute("drop index if exists idx_guard_workflow_receipt_event")
         connection.execute(
             "create index idx_guard_workflow_receipt_event "
             "on guard_workflow_capability_receipts (event_id)"
         )
+        present_before = connection.execute(
+            "select count(*) from sqlite_master where name = 'idx_guard_workflow_receipt_event'"
+        ).fetchone()[0]
+    assert present_before == 1
     reopened = _store(tmp_path)
     _claim_capability(reopened, claim, invocation_id="invocation-after-reopen")
     reopened.lookup_workflow_capability(claim.capability_id)
     with sqlite3.connect(reopened.path) as connection:
-        present = connection.execute(
+        present_after = connection.execute(
             "select count(*) from sqlite_master where name = 'idx_guard_workflow_receipt_event'"
         ).fetchone()[0]
-    assert present == 0
+    assert present_after == 0
 
 
 def test_expired_denial_commits_monotonic_time_high_water(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
