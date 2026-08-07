@@ -152,22 +152,25 @@ _OBJECT_NAMES: Final = (
     ("trigger", "trg_guard_workflow_transition_require_parents"),
 )
 
-# Schema objects created by prior schema versions that the current schema no
-# longer manages. Such orphans would otherwise make the strict owned-object
-# equality check fail on databases created under an older release. They are
-# inert (none can weaken the immutability triggers or authority tables), so
-# they are dropped before validation so an upgrade can re-run. Add a name here
-# only when a schema change retires a previously registered owned object.
-_LEGACY_OWNED_OBJECT_NAMES: Final = (
-    ("index", "idx_guard_workflow_receipt_event"),
-)
+# One-time follow-up migration that drops an index the workflow-capability
+# schema owned and registered in an earlier release (it backed receipt-by-event
+# lookups). The index was later retired from the schema, but databases created
+# under the older version still own it, and the strict owned-object equality
+# check then raises ``owned_objects`` on every reopen. This is a discrete
+# migration step with its own ``schema_migrations`` version, not an ongoing
+# compatibility surface: the drop is idempotent (``if exists``) so it runs on
+# every schema ensure without effect on databases that never owned the index,
+# while the strict tamper-detection guarantee (set(actual) == set(expected))
+# stays intact.
+WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION: Final = 15
+WORKFLOW_CAPABILITY_RETIRED_RECEIPT_EVENT_INDEX: Final = "idx_guard_workflow_receipt_event"
 
 
 def ensure_workflow_capability_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
-    """Apply migration 14 atomically and validate every owned schema object."""
+    """Apply the workflow-capability schema migrations and validate owned objects."""
     connection.execute("savepoint workflow_capability_schema_v14")
     try:
-        _drop_legacy_owned_objects(connection)
+        _drop_retired_receipt_event_index_once(connection, applied_at=applied_at)
         for statement in _SCHEMA_STATEMENTS:
             connection.execute(statement)
         _validate_schema_objects(connection)
@@ -192,17 +195,20 @@ def ensure_workflow_capability_schema(connection: sqlite3.Connection, *, applied
     connection.execute("release workflow_capability_schema_v14")
 
 
-def _drop_legacy_owned_objects(connection: sqlite3.Connection) -> None:
-    """Drop schema objects a prior version registered but the current schema no longer manages.
+def _drop_retired_receipt_event_index_once(connection: sqlite3.Connection, *, applied_at: str) -> None:
+    """Drop the retired receipt-event index so the owned-object equality check passes.
 
-    Validation enforces strict equality between expected and actual owned objects, so an
-    orphan left behind by an older release would otherwise raise ``owned_objects`` on every
-    upgrade. Only explicitly enumerated legacy names are dropped; unknown extras remain a hard
-    failure so the equality check still detects tampering.
+    ``drop index if exists`` is idempotent and a no-op on databases that never owned the
+    index, so it runs on every schema ensure. The distinct ``schema_migrations`` row records
+    that this migration step exists; only the drop itself is what keeps validation strict on
+    every reopen, because nothing in the current schema re-creates the index.
     """
 
-    for _object_type, name in _LEGACY_OWNED_OBJECT_NAMES:
-        connection.execute("drop index if exists " + name)
+    connection.execute(f"drop index if exists {WORKFLOW_CAPABILITY_RETIRED_RECEIPT_EVENT_INDEX}")
+    connection.execute(
+        "insert or ignore into schema_migrations (version, applied_at) values (?, ?)",
+        (WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION, applied_at),
+    )
 
 
 def _validate_schema_objects(connection: sqlite3.Connection) -> None:
