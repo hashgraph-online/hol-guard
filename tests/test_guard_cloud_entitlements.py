@@ -21,6 +21,7 @@ def test_parses_full_solo_effective_entitlements_and_ignores_unknown_fields() ->
             "retentionDays": 30,
             "cloudStorageBytes": 1_073_741_824,
             "cloudStorageUsedBytes": 12_345,
+            "supplyChainFirewall": False,
             "features": {
                 "guard.cloud.receipt_sync": True,
                 "guard.cloud.history.basic": True,
@@ -46,6 +47,7 @@ def test_parses_full_solo_effective_entitlements_and_ignores_unknown_fields() ->
             "guard.cloud.receipt_sync": True,
             "guard.cloud.history.basic": True,
             "guard.cloud.alerts.slack": False,
+            "guard.cloud.supply_chain_firewall": False,
         },
     )
     assert guard_cloud_history_copy(parsed) == "30-day Cloud history"
@@ -95,6 +97,18 @@ def test_preserves_explicit_zero_values_for_free_plan() -> None:
     assert guard_cloud_history_copy(parsed) == "Cloud history is not included on this plan."
 
 
+def test_legacy_storage_gb_fallback_matches_canonical_guard_binary_bytes() -> None:
+    parsed = parse_guard_cloud_entitlements(
+        {
+            "planId": "solo",
+            "includedStorageGb": 1,
+        }
+    )
+
+    assert parsed is not None
+    assert parsed.cloud_storage_bytes == 1_073_741_824
+
+
 def test_rejects_unknown_plan_identity() -> None:
     assert parse_guard_cloud_entitlements({"planId": "starter"}) is None
     assert parse_guard_cloud_entitlements({"retentionDays": 30}) is None
@@ -127,6 +141,7 @@ def test_normalizes_device_limit_without_affecting_local_protection() -> None:
     assert error.manage_url == "/guard/settings/devices"
     assert "still protected" in guard_cloud_status_copy(error)
     assert "Solo includes Cloud sync for two devices" in guard_cloud_status_copy(error)
+    assert "upgrade to Pro" in guard_cloud_status_copy(error)
     assert "$" not in guard_cloud_status_copy(error)
 
 
@@ -139,6 +154,7 @@ def test_device_limit_copy_does_not_mislabel_other_plans_as_solo() -> None:
                 "planId": "team",
                 "limit": 25,
                 "current": 25,
+                "upgradePlanId": "enterprise",
             }
         },
         http_status=409,
@@ -148,6 +164,7 @@ def test_device_limit_copy_does_not_mislabel_other_plans_as_solo() -> None:
     copy = guard_cloud_status_copy(error)
     assert "still protected" in copy
     assert "25 devices" in copy
+    assert "upgrade to Enterprise" in copy
     assert "Solo" not in copy
 
 
@@ -180,21 +197,44 @@ def test_normalizes_billing_trial_paused_and_outage_separately() -> None:
     assert "Local protection" in guard_cloud_status_copy(outage)
 
 
-def test_rejects_untrusted_action_urls() -> None:
+def test_rejects_untrusted_action_urls_and_nonstandard_origins() -> None:
+    for manage_url, upgrade_url in (
+        ("https://evil.example/manage", "//evil.example/upgrade"),
+        ("/\\evil.example/manage", "/guard/pricing\\@evil.example"),
+        ("https://hol.org:8443/manage", "https://www.hol.org:8080/upgrade"),
+        ("https://user@hol.org/manage", "https://user:pass@www.hol.org/upgrade"),
+    ):
+        error = parse_guard_cloud_plan_error(
+            {
+                "error": {
+                    "code": "feature_not_in_plan",
+                    "manageUrl": manage_url,
+                    "upgradeUrl": upgrade_url,
+                }
+            },
+            http_status=403,
+        )
+
+        assert error is not None
+        assert error.manage_url is None
+        assert error.upgrade_url is None
+
+
+def test_accepts_relative_and_standard_https_hol_action_urls() -> None:
     error = parse_guard_cloud_plan_error(
         {
             "error": {
-                "code": "feature_not_in_plan",
-                "manageUrl": "https://evil.example/manage",
-                "upgradeUrl": "//evil.example/upgrade",
+                "code": "device_limit_reached",
+                "manageUrl": "/guard/settings/devices",
+                "upgradeUrl": "https://hol.org/guard/pricing?from=device_limit",
             }
         },
-        http_status=403,
+        http_status=409,
     )
 
     assert error is not None
-    assert error.manage_url is None
-    assert error.upgrade_url is None
+    assert error.manage_url == "/guard/settings/devices"
+    assert error.upgrade_url == "https://hol.org/guard/pricing?from=device_limit"
 
 
 def test_known_plan_error_registry_is_explicit() -> None:
