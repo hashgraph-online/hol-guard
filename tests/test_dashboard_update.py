@@ -1322,7 +1322,7 @@ def test_status_payload_blocks_python_incompatible_latest_release(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._latest_compatible_release_version",
-        lambda current, runtime: None,
+        lambda current, runtime, **_kwargs: None,
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_commands._runtime_python_version",
