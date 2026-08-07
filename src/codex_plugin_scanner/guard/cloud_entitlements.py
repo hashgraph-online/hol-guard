@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, cast
 from urllib.parse import urlparse
 
 GuardPlanId = Literal["free", "solo", "pro", "team", "enterprise"]
@@ -44,6 +44,7 @@ _TRIAL_CODES = frozenset({"trial_expired"})
 _SYNC_PAUSED_CODES = frozenset({"cloud_sync_paused_plan_limit"})
 _KNOWN_PLAN_ERROR_CODES = _PLAN_LIMIT_CODES | _BILLING_CODES | _TRIAL_CODES | _SYNC_PAUSED_CODES
 _ALLOWED_FEATURE_VALUE_TYPES = (bool, str, int, float, type(None))
+_ALLOWED_ACTION_HOSTS = frozenset({"hol.org", "www.hol.org"})
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,9 @@ def _plan_id(value: object) -> GuardPlanId | None:
     if normalized is None:
         return None
     lowered = normalized.lower()
-    return lowered if lowered in _GUARD_PLAN_IDS else None  # type: ignore[return-value]
+    if lowered not in _GUARD_PLAN_IDS:
+        return None
+    return cast(GuardPlanId, lowered)
 
 
 def _subscription_status(value: object) -> GuardSubscriptionStatus | None:
@@ -124,7 +127,9 @@ def _subscription_status(value: object) -> GuardSubscriptionStatus | None:
     if normalized is None:
         return None
     lowered = normalized.lower()
-    return lowered if lowered in _GUARD_SUBSCRIPTION_STATUSES else None  # type: ignore[return-value]
+    if lowered not in _GUARD_SUBSCRIPTION_STATUSES:
+        return None
+    return cast(GuardSubscriptionStatus, lowered)
 
 
 def _feature_values(value: object) -> dict[str, bool | str | int | float | None]:
@@ -142,14 +147,22 @@ def _feature_values(value: object) -> dict[str, bool | str | int | float | None]
 
 def _safe_action_url(value: object) -> str | None:
     url = _optional_string(value)
-    if url is None:
+    if url is None or "\\" in url:
         return None
     if url.startswith("/") and not url.startswith("//"):
         return url
     parsed = urlparse(url)
-    if parsed.scheme == "https" and parsed.hostname in {"hol.org", "www.hol.org"}:
-        return url
-    return None
+    if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_ACTION_HOSTS:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if port not in {None, 443}:
+        return None
+    return url
 
 
 def parse_guard_cloud_entitlements(payload: object) -> GuardCloudEntitlements | None:
@@ -174,7 +187,7 @@ def parse_guard_cloud_entitlements(payload: object) -> GuardCloudEntitlements | 
     features = _feature_values(_first_value(source, "features"))
     if not features:
         features = _feature_values(_first_value(source, "cloudValueGates", "cloud_value_gates"))
-    supply_chain_firewall = source.get("supply_chain_firewall")
+    supply_chain_firewall = _first_value(source, "supplyChainFirewall", "supply_chain_firewall")
     if isinstance(supply_chain_firewall, bool):
         features.setdefault("guard.cloud.supply_chain_firewall", supply_chain_firewall)
 
@@ -184,6 +197,8 @@ def parse_guard_cloud_entitlements(payload: object) -> GuardCloudEntitlements | 
     if cloud_storage_bytes is None:
         storage_gb = _first_value(source, "includedStorageGb", "included_storage_gb")
         if isinstance(storage_gb, (int, float)) and not isinstance(storage_gb, bool) and storage_gb >= 0:
+            # Guard's canonical plan contract defines displayed GB storage in
+            # binary byte units (Solo 1 GB == 1_073_741_824 bytes).
             cloud_storage_bytes = int(float(storage_gb) * 1024 * 1024 * 1024)
 
     return GuardCloudEntitlements(
@@ -273,15 +288,18 @@ def guard_cloud_status_copy(error: GuardCloudPlanError) -> str:
     """Human copy that never implies a Cloud problem disabled local Guard."""
 
     if error.code == "device_limit_reached":
+        upgrade_target = error.upgrade_plan_id.capitalize() if error.upgrade_plan_id is not None else None
         if error.plan_id == "solo" and error.limit == 2:
+            upgrade_copy = f"upgrade to {upgrade_target}" if upgrade_target is not None else "change plans"
             return (
                 "Your machine is still protected. Solo includes Cloud sync for two devices. "
-                "Choose a device to replace or upgrade to Pro to sync all your personal machines."
+                f"Choose a device to replace or {upgrade_copy} to sync more personal machines."
             )
         limit_copy = f" ({error.limit} devices)" if error.limit is not None else ""
+        upgrade_copy = f"upgrade to {upgrade_target}" if upgrade_target is not None else "change plans"
         return (
             f"Your machine is still protected. Guard Cloud reached this plan's synced-device limit{limit_copy}. "
-            "Manage your synced devices or change plans to resume Cloud sync."
+            f"Manage your synced devices or {upgrade_copy} to resume Cloud sync."
         )
     if error.code == "cloud_sync_paused_plan_limit":
         return "Cloud sync is paused by your plan limit. Local protection is active."
