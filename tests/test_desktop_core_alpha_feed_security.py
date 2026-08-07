@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import runpy
@@ -10,6 +11,8 @@ import sys
 from pathlib import Path
 
 import yaml
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "desktop-core-alpha-feed.yml"
@@ -143,8 +146,56 @@ def test_manifest_signature_is_required_and_uses_independent_update_key() -> Non
     assert "HOL_GUARD_CORE_UPDATE_PRIVATE_KEY_PASSWORD" in text
     assert "HOL_GUARD_CORE_UPDATE_PUBLIC_KEY" in text
     assert "bunx @tauri-apps/cli@2.11.4 signer sign" in text
+    assert "verify-minisign" in text
+    assert '--public-key "$CORE_UPDATE_PUBLIC_KEY"' in text
     assert 'test -s "$MANIFEST.sig"' in text
     assert ".json.sig" in text
+
+
+def test_manifest_signature_verification_binds_bytes_and_public_key(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    signature_path = tmp_path / "manifest.json.sig"
+    manifest.write_text('{"version":"3.0.0a1"}\n', encoding="utf-8")
+    private_key = Ed25519PrivateKey.generate()
+    public_key = private_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    key_id = b"guardkey"
+    encoded_key = base64.b64encode(b"Ed" + key_id + public_key).decode()
+    message = hashlib.blake2b(manifest.read_bytes(), digest_size=64).digest()
+    signature = b"ED" + key_id + private_key.sign(message)
+    trusted_comment = "release manifest"
+    global_signature = private_key.sign(signature + trusted_comment.encode())
+    signature_path.write_text(
+        "untrusted comment: signature from minisign secret key\n"
+        f"{base64.b64encode(signature).decode()}\n"
+        f"trusted comment: {trusted_comment}\n"
+        f"{base64.b64encode(global_signature).decode()}\n",
+        encoding="utf-8",
+    )
+    command = [
+        sys.executable,
+        "-I",
+        str(TOOL),
+        "verify-minisign",
+        "--file",
+        str(manifest),
+        "--signature",
+        str(signature_path),
+        "--public-key",
+        encoded_key,
+    ]
+    verified = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert verified.returncode == 0, verified.stderr
+
+    manifest.write_text('{"version":"3.0.0a2"}\n', encoding="utf-8")
+    tampered = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert tampered.returncode != 0
+    assert "signature verification failed" in tampered.stderr
+
+    wrong_key = Ed25519PrivateKey.generate().public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    wrong_key_command = [*command[:-1], base64.b64encode(b"Ed" + b"wrongkey" + wrong_key).decode()]
+    rejected = subprocess.run(wrong_key_command, capture_output=True, text=True, check=False)
+    assert rejected.returncode != 0
+    assert "key ID does not match" in rejected.stderr
 
 
 def test_complete_hardened_asset_set_is_attested_together() -> None:

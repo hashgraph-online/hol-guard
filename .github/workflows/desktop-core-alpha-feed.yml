@@ -413,11 +413,12 @@ jobs:
           MANIFEST="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json"
           bunx @tauri-apps/cli@2.11.4 signer sign "$MANIFEST"
           test -s "$MANIFEST.sig"
-      - name: Require signed update manifest
+      - name: Verify update manifest signature
         if: steps.release.outputs.available == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
-        run: test -s "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json.sig"
+          CORE_UPDATE_PUBLIC_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PUBLIC_KEY }}
+        run: python3 -I scripts/release/desktop_core_alpha_feed.py verify-minisign --file "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json" --signature "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json.sig" --public-key "$CORE_UPDATE_PUBLIC_KEY"
       - name: Create or validate immutable marker
         if: steps.release.outputs.available == 'true'
         env:

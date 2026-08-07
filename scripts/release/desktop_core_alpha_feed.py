@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
 import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 MANIFEST_SCHEMA = "hol-guard-core-update.v1"
@@ -15,6 +20,41 @@ MARKER_SCHEMA = "hol-guard-core-attestation.v2"
 SUPPORTED_TRAINS = frozenset({"3.0"})
 _ALPHA_TAG = re.compile(r"^alpha/v(3\.(\d+)\.(\d+)a(\d+))$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _decode_minisign_line(value: str, *, label: str) -> bytes:
+    try:
+        return base64.b64decode(value, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise SystemExit(f"Invalid Minisign {label}") from error
+
+
+def verify_minisign(file_path: Path, signature_path: Path, public_key_value: str) -> None:
+    public_key_lines = [line.strip() for line in public_key_value.splitlines() if line.strip()]
+    public_key = _decode_minisign_line(public_key_lines[-1] if public_key_lines else "", label="public key")
+    if len(public_key) != 42 or public_key[:2] != b"Ed":
+        raise SystemExit("Invalid Minisign public key")
+
+    signature_lines = signature_path.read_text(encoding="utf-8").splitlines()
+    if len(signature_lines) != 4 or not signature_lines[0].startswith("untrusted comment: "):
+        raise SystemExit("Invalid Minisign signature envelope")
+    if not signature_lines[2].startswith("trusted comment: "):
+        raise SystemExit("Invalid Minisign trusted comment")
+    signature = _decode_minisign_line(signature_lines[1], label="signature")
+    global_signature = _decode_minisign_line(signature_lines[3], label="global signature")
+    if len(signature) != 74 or len(global_signature) != 64 or signature[:2] != b"ED":
+        raise SystemExit("Invalid Minisign signature")
+    if signature[2:10] != public_key[2:10]:
+        raise SystemExit("Minisign signature key ID does not match configured public key")
+
+    message = hashlib.blake2b(file_path.read_bytes(), digest_size=64).digest()
+    verifier = Ed25519PublicKey.from_public_bytes(public_key[10:])
+    try:
+        verifier.verify(signature[10:], message)
+        trusted_comment = signature_lines[2].removeprefix("trusted comment: ")
+        verifier.verify(global_signature, signature + trusted_comment.encode())
+    except InvalidSignature as error:
+        raise SystemExit("Minisign signature verification failed") from error
 
 
 def _sha256(path: Path) -> str:
@@ -296,6 +336,11 @@ def main() -> int:
     bootstrap.add_argument("--version", required=True)
     bootstrap.add_argument("--subject", required=True)
 
+    verify_signature = subparsers.add_parser("verify-minisign")
+    verify_signature.add_argument("--file", type=Path, required=True)
+    verify_signature.add_argument("--signature", type=Path, required=True)
+    verify_signature.add_argument("--public-key", required=True)
+
     for name in ("create-manifest", "validate-manifest"):
         command = subparsers.add_parser(name)
         _asset_arguments(command)
@@ -317,6 +362,8 @@ def main() -> int:
         inspect_assets(args.assets, args.base)
     elif args.command == "verify-bootstrap":
         verify_bootstrap(args.payload, args.version, args.subject)
+    elif args.command == "verify-minisign":
+        verify_minisign(args.file, args.signature, args.public_key)
     elif args.command in {"create-manifest", "validate-manifest"}:
         kwargs = {
             "version": args.version,
