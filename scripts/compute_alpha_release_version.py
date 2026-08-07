@@ -11,7 +11,7 @@ from typing import cast
 
 from packaging.version import InvalidVersion, Version
 
-SUPPORTED_TRAINS = {"2.2": (2, 2, 0)}
+SUPPORTED_TRAINS = {"2.2": (2, 2, 0), "3.0": (3, 0, 0)}
 
 
 def _alpha_versions(release_train: str, existing_versions: Iterable[str]) -> list[int]:

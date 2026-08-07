@@ -39,9 +39,9 @@ def test_desktop_core_feed_wake_is_narrow_and_least_privilege() -> None:
         "github.event.issue.author_association == 'MEMBER' || "
         "github.event.issue.author_association == 'COLLABORATOR') && "
         "startsWith(github.event.issue.title, '[desktop-core-feed]')) || "
-        "(github.event_name == 'release' && startsWith(github.event.release.tag_name, 'alpha/v3.')) || "
+        "(github.event_name == 'release' && startsWith(github.event.release.tag_name, 'alpha/v3.0.')) || "
         "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && "
-        "github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'release/3.'))"
+        "github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'release/3.0')"
     )
     dispatch_steps = [step for step in wake["steps"] if step.get("name") == "Dispatch feed producer"]
     assert len(dispatch_steps) == 1
