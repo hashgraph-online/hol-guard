@@ -55,9 +55,10 @@ _TRUSTED_SCRIPT_BOOTSTRAP = (
 _TRUSTED_MODULE_BOOTSTRAP = (
     "import json,runpy,sys; "
     "import_paths=json.loads(sys.argv.pop(1)); "
+    "extra_import_paths=json.loads(sys.argv.pop(1)); "
     "module=sys.argv.pop(1); "
-    "module == 'pip' and __import__('site').main(); "
     "sys.path[:0]=import_paths; "
+    "sys.path.extend(extra_import_paths); "
     "sys.argv[0]=module; "
     "runpy.run_module(module, run_name='__main__', alter_sys=True)"
 )
@@ -433,6 +434,7 @@ class TrustedUpdateContext:
     environment: Mapping[str, str]
     install_prefix: Path
     python_import_paths: tuple[Path, ...]
+    pipx_shared_import_path: Path | None
     neutral_identities: tuple[FilesystemIdentity, ...]
     python_import_identities: tuple[FilesystemIdentity, ...]
     ca_bundle_identity: FilesystemIdentity | None
@@ -454,6 +456,11 @@ class TrustedUpdateContext:
     def python_module_command(self, module: str, *args: str) -> list[str]:
         if not module or not all(part.isidentifier() for part in module.split(".")):
             raise UpdateSubprocessError("update_installer_command_invalid")
+        extra_import_paths = (
+            [str(self.pipx_shared_import_path)]
+            if module == "pip" and self.pipx_shared_import_path is not None
+            else []
+        )
         return [
             str(self.python.launch_path),
             *_trusted_python_flags(),
@@ -461,6 +468,7 @@ class TrustedUpdateContext:
             "-c",
             _TRUSTED_MODULE_BOOTSTRAP,
             self._python_import_paths_json(),
+            json.dumps(extra_import_paths, separators=(",", ":")),
             module,
             *args,
         ]
@@ -721,6 +729,9 @@ def build_trusted_update_context(
         )
     install_prefix = Path(sys.prefix).expanduser().resolve()
     python_import_paths = _trusted_python_import_paths()
+    pipx_shared_import_identity = (
+        _trusted_pipx_shared_import_identity(python_import_paths) if installer_kind == "pipx" else None
+    )
     environment = _trusted_environment(
         path=trusted_search_path,
         neutral_home=neutral_home,
@@ -756,6 +767,8 @@ def build_trusted_update_context(
         )
         for path in python_import_paths
     )
+    if pipx_shared_import_identity is not None:
+        python_import_identities = (*python_import_identities, pipx_shared_import_identity)
     ca_bundle_identity = (
         FilesystemIdentity.capture(
             Path(environment["SSL_CERT_FILE"]),
@@ -776,6 +789,9 @@ def build_trusted_update_context(
         environment=MappingProxyType(environment),
         install_prefix=install_prefix,
         python_import_paths=python_import_paths,
+        pipx_shared_import_path=(
+            pipx_shared_import_identity.canonical_path if pipx_shared_import_identity is not None else None
+        ),
         neutral_identities=neutral_identities,
         python_import_identities=python_import_identities,
         ca_bundle_identity=ca_bundle_identity,
@@ -1395,6 +1411,59 @@ def _trusted_python_import_paths() -> tuple[Path, ...]:
     if not paths:
         raise UpdateSubprocessError("update_python_untrusted")
     return tuple(paths)
+
+
+def _trusted_pipx_shared_import_identity(
+    python_import_paths: tuple[Path, ...],
+) -> FilesystemIdentity | None:
+    """Resolve pipx's one shared-library path without executing any .pth hooks."""
+
+    candidates: list[Path] = []
+    for import_path in python_import_paths:
+        candidate = import_path / "pipx_shared.pth"
+        try:
+            _ = candidate.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise UpdateSubprocessError("update_installer_untrusted") from error
+        candidates.append(candidate)
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        raise UpdateSubprocessError("update_installer_untrusted")
+    try:
+        snapshot = _inspect_filesystem_path(candidates[0], kind="file")
+    except (OSError, RuntimeError, ValueError) as error:
+        raise UpdateSubprocessError("update_installer_untrusted") from error
+    if not 0 < snapshot.size <= 4096 or snapshot.prefix is None:
+        raise UpdateSubprocessError("update_installer_untrusted")
+    try:
+        content = snapshot.prefix.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise UpdateSubprocessError("update_installer_untrusted") from error
+    lines = content.splitlines()
+    if len(lines) != 1 or not lines[0] or lines[0] != lines[0].strip():
+        raise UpdateSubprocessError("update_installer_untrusted")
+    shared_path = Path(lines[0])
+    if not shared_path.is_absolute():
+        raise UpdateSubprocessError("update_installer_untrusted")
+    try:
+        pipx_home, _pipx_bin = _manager_home_from_prefix("pipx")
+        shared_root = (pipx_home / "shared").resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise UpdateSubprocessError("update_installer_untrusted") from error
+    shared_identity = FilesystemIdentity.capture(
+        shared_path,
+        kind="directory",
+        failure_reason="update_installer_untrusted",
+    )
+    if shared_identity.canonical_path == shared_root or not _path_is_within(
+        shared_identity.canonical_path,
+        shared_root,
+    ):
+        raise UpdateSubprocessError("update_installer_untrusted")
+    return shared_identity
 
 
 def _manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]:
