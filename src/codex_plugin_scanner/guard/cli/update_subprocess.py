@@ -457,9 +457,7 @@ class TrustedUpdateContext:
         if not module or not all(part.isidentifier() for part in module.split(".")):
             raise UpdateSubprocessError("update_installer_command_invalid")
         extra_import_paths = (
-            [str(self.pipx_shared_import_path)]
-            if module == "pip" and self.pipx_shared_import_path is not None
-            else []
+            [str(self.pipx_shared_import_path)] if module == "pip" and self.pipx_shared_import_path is not None else []
         )
         return [
             str(self.python.launch_path),
@@ -730,9 +728,7 @@ def build_trusted_update_context(
     install_prefix = Path(sys.prefix).expanduser().resolve()
     python_import_paths = _trusted_python_import_paths()
     pipx_shared_import_identity = (
-        _trusted_pipx_shared_import_identity(python_import_paths)
-        if installer_kind == "pipx"
-        else None
+        _trusted_pipx_shared_import_identity(python_import_paths) if installer_kind == "pipx" else None
     )
     environment = _trusted_environment(
         path=trusted_search_path,
@@ -795,9 +791,7 @@ def build_trusted_update_context(
         install_prefix=install_prefix,
         python_import_paths=python_import_paths,
         pipx_shared_import_path=(
-            pipx_shared_import_identity.canonical_path
-            if pipx_shared_import_identity is not None
-            else None
+            pipx_shared_import_identity.canonical_path if pipx_shared_import_identity is not None else None
         ),
         neutral_identities=neutral_identities,
         python_import_identities=python_import_identities,
