@@ -341,6 +341,8 @@ def test_scan_plugin_ignores_symlinked_skill_files_outside_plugin_root(tmp_path)
 
     assert analyzable_check.applicable is False
     assert "outside the plugin root" in analyzable_check.message
+
+
 def test_cisco_skill_scanner_rejects_shadowed_import_from_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A skill_scanner module shadowed in the CWD must not be imported during sync."""
     from codex_plugin_scanner.integrations.cisco_skill_scanner import _is_safe_sys_path_entry
@@ -361,11 +363,12 @@ def test_cisco_skill_scanner_rejects_shadowed_import_from_cwd(tmp_path: Path, mo
     parent = str(Path.cwd().resolve().parent)
     assert _is_safe_sys_path_entry(parent) is False
 
+
 def test_cisco_skill_scanner_validates_import_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """_validate_skill_scanner_import must reject modules originating from CWD."""
-    from codex_plugin_scanner.integrations import cisco_skill_scanner as scanner_mod
-    from codex_plugin_scanner.integrations.cisco_skill_scanner import _validate_skill_scanner_import
     import importlib.util
+
+    from codex_plugin_scanner.integrations.cisco_skill_scanner import _validate_skill_scanner_import
 
     # When skill_scanner is not installed and not in sys.modules, it should raise ImportError
     monkeypatch.delitem(sys.modules, "skill_scanner", raising=False)

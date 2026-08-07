@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.daemon.server import (
     GuardDaemonServer,
     _GuardDaemonHttpServer,
 )
-from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_override, sqlite_connect_timeout_seconds
+from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_seconds
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -257,13 +257,6 @@ def test_internal_hook_sqlite_timeout_is_bounded_without_changing_default() -> N
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "10000"}) == 0.25
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "invalid"}) == 30.0
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "0"}) == 30.0
-
-
-def test_sqlite_timeout_override_is_scoped_to_current_context() -> None:
-    assert sqlite_connect_timeout_seconds({}) == 30.0
-    with sqlite_connect_timeout_override(0.05):
-        assert sqlite_connect_timeout_seconds({}) == 0.05
-    assert sqlite_connect_timeout_seconds({}) == 30.0
 
 
 def test_unclassified_watchdog_distinguishes_complete_headers_from_trickle() -> None:

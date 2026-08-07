@@ -27,6 +27,23 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(status_parser)
     status_parser.add_argument("--json", action="store_true")
 
+    network_parser = guard_subparsers.add_parser(
+        "network",
+        help="Inspect local network protection capabilities",
+    )
+    _add_guard_common_args(network_parser)
+    network_parser.add_argument("--json", action="store_true")
+    network_subparsers = network_parser.add_subparsers(
+        dest="network_command",
+        parser_class=FriendlyArgumentParser,
+    )
+    network_status_parser = network_subparsers.add_parser(
+        "status",
+        help="Show verified network mediation backends and grades",
+    )
+    _add_guard_common_args(network_status_parser, suppress_defaults=True)
+    network_status_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+
     dashboard_parser = guard_subparsers.add_parser(
         "dashboard",
         help="Open the local Guard dashboard in your browser",
@@ -70,7 +87,7 @@ def _configure_guard_local_parsers(
         app_parser.add_argument("harness")
         _add_guard_common_args(app_parser, suppress_defaults=True)
         app_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
-        app_parser.add_argument("--surface", choices=("editor", "cli"))
+        app_parser.add_argument("--surface", choices=("editor", "cli", "auto", "hooks", "plugin", "all"))
         if app_command in {"connect", "repair"}:
             app_parser.add_argument("--dry-run", action="store_true")
         if app_command == "disconnect":
@@ -265,6 +282,51 @@ def _configure_guard_local_parsers(
     setup_parser.add_argument("--detect", action="store_true", required=True)
     setup_parser.add_argument("--workspace", default=".")
     setup_parser.add_argument("--json", action="store_true")
+    controls_parser = command_subparsers.add_parser(
+        "controls",
+        help="Inspect or change extension controls",
+    )
+    controls_subparsers = controls_parser.add_subparsers(
+        dest="controls_command",
+        required=True,
+    )
+    controls_subparsers.add_parser("status", help="Show authority status")
+    controls_subparsers.add_parser("list", help="List catalog extensions")
+    controls_show = controls_subparsers.add_parser("show", help="Show one catalog target")
+    controls_show.add_argument("target_id")
+    for action in ("preview", "apply"):
+        mutation_parser = controls_subparsers.add_parser(action, help=f"{action.title()} a control")
+        mutation_parser.add_argument("target_id")
+        mutation_parser.add_argument(
+            "--target-kind",
+            choices=("extension", "permission"),
+            default="extension",
+        )
+        mutation_parser.add_argument(
+            "--state",
+            choices=("enabled", "disabled"),
+            required=True,
+        )
+    for action in ("global-preview", "global-apply"):
+        global_parser = controls_subparsers.add_parser(action, help=f"{action.title()} lockdown")
+        global_parser.add_argument(
+            "--state",
+            choices=("enabled", "disabled"),
+            required=True,
+        )
+    enroll_parser = controls_subparsers.add_parser(
+        "enroll",
+        help="Enroll this local authority using direct terminal confirmation",
+    )
+    enroll_parser.add_argument("--actor", default="local-admin")
+    controls_subparsers.add_parser(
+        "recover-authority",
+        help="Authenticate and recover interrupted local authority state",
+    )
+    controls_subparsers.add_parser(
+        "acknowledge-degraded",
+        help="Authenticate and acknowledge degraded local authority mode",
+    )
 
     preflight_parser = guard_subparsers.add_parser(
         "preflight",

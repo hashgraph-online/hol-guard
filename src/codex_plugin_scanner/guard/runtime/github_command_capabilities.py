@@ -16,7 +16,6 @@ from .github_capability_contract import (
     github_assessment,
 )
 from .github_rest_capabilities import classify_github_api
-from .github_routine_merge import ROUTINE_SQUASH_MERGE_DETAIL, is_routine_squash_merge
 
 _READ_ONLY_SUBCOMMANDS: dict[str, frozenset[str]] = {
     "issue": frozenset({"list", "status", "view"}),
@@ -185,12 +184,6 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "The command deletes GitHub-hosted state.",
             )
         if top_level == "pr" and subcommand == "merge":
-            if is_routine_squash_merge(tail):
-                return _assessment(
-                    "routine_merge_remote",
-                    "github.command.pr-routine-squash-merge",
-                    ROUTINE_SQUASH_MERGE_DETAIL,
-                )
             admin_state = _boolean_option_state(tail, "--admin")
             if admin_state == "invalid":
                 return _assessment(

@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import secrets
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,11 +22,186 @@ from .extension_control_contract import ExtensionControlLayer
 
 EXTENSION_CONTROL_PREVIEW_SCHEMA = "guard.extension-control-preview.v1"
 EXTENSION_CONTROL_PROOF_ACTION = "commit-layers"
+EXTENSION_CONTROL_ENROLLMENT_SCHEMA = "guard.extension-control-enrollment.v1"
+EXTENSION_CONTROL_ENROLLMENT_ACTION = "enroll-authority"
 _MAX_IDENTITY_LENGTH = 256
+_ENROLLMENT_CONFIRMATION_PREFIX = "ENROLL EXTENSION CONTROL"
+_REMOTE_TERMINAL_ENVIRONMENT = ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY")
 
 
 class ExtensionControlProofError(PermissionError):
     """Raised when an extension-control proof is malformed or mismatched."""
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionControlEnrollment:
+    catalog_digest: str
+    actor_id: str
+    nonce: str
+
+    def __post_init__(self) -> None:
+        if len(self.catalog_digest) != 64 or any(
+            character not in "0123456789abcdef" for character in self.catalog_digest
+        ):
+            raise ExtensionControlProofError("invalid catalog digest")
+        for value in (self.actor_id, self.nonce):
+            if not value.strip() or len(value) > _MAX_IDENTITY_LENGTH:
+                raise ExtensionControlProofError("invalid enrollment identity")
+
+    @property
+    def canonical_digest(self) -> str:
+        payload = {
+            "action": EXTENSION_CONTROL_ENROLLMENT_ACTION,
+            "actor_id": self.actor_id,
+            "catalog_digest": self.catalog_digest,
+            "nonce": self.nonce,
+            "schema_version": EXTENSION_CONTROL_ENROLLMENT_SCHEMA,
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+        framed = f"{EXTENSION_CONTROL_ENROLLMENT_SCHEMA}\x00{len(canonical)}\x00{canonical}"
+        return hashlib.sha256(framed.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionControlEnrollmentProof:
+    proof_id: str
+    grant: ApprovalGateGrant
+    actor_id: str
+    catalog_digest: str
+    enrollment_digest: str
+    nonce: str
+    session_nonce: str
+
+    def __repr__(self) -> str:
+        return "ExtensionControlEnrollmentProof(<redacted>)"
+
+
+def _current_login_name() -> str | None:
+    try:
+        import pwd
+
+        return pwd.getpwuid(os.getuid()).pw_name
+    except (ImportError, KeyError, OSError):
+        return None
+
+
+def _terminal_session_is_local(terminal_name: str) -> bool:
+    """Require an OS login record for this TTY with no remote host."""
+
+    expected_user = _current_login_name()
+    if expected_user is None:
+        return False
+    try:
+        completed = subprocess.run(
+            ("/usr/bin/who",),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            env={"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    terminal_id = Path(terminal_name).name
+    for line in completed.stdout.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or fields[0] != expected_user or fields[1] != terminal_id:
+            continue
+        return not (fields[-1].startswith("(") and fields[-1].endswith(")"))
+    return False
+
+
+def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
+    if any(os.environ.get(name) for name in _REMOTE_TERMINAL_ENVIRONMENT):
+        raise ExtensionControlProofError("extension control enrollment requires a local terminal")
+    try:
+        descriptor = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY | getattr(os, "O_CLOEXEC", 0))
+    except OSError as exc:
+        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
+    try:
+        if not os.isatty(descriptor) or not _terminal_session_is_local(os.ttyname(descriptor)):
+            raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+        expected = f"{_ENROLLMENT_CONFIRMATION_PREFIX} {enrollment.actor_id}"
+        with os.fdopen(os.dup(descriptor), "w", encoding="utf-8") as terminal_output:
+            terminal_output.write(f'Type "{expected}" to confirm first enrollment: ')
+            terminal_output.flush()
+        with os.fdopen(os.dup(descriptor), "r", encoding="utf-8") as terminal_input:
+            entered = terminal_input.readline().rstrip("\r\n")
+        if not hmac.compare_digest(entered, expected):
+            raise ExtensionControlProofError("extension control enrollment confirmation did not match")
+    finally:
+        os.close(descriptor)
+
+
+def issue_extension_control_enrollment_proof(
+    guard_home: Path,
+    enrollment: ExtensionControlEnrollment,
+    *,
+    approval_gate_input: ApprovalGateInput | None,
+    session_nonce: str,
+    now: str | None = None,
+) -> ExtensionControlEnrollmentProof:
+    """Issue a one-shot enrollment proof after direct local-terminal confirmation."""
+
+    _require_local_terminal_confirmation(enrollment)
+    if not session_nonce.strip() or len(session_nonce) > _MAX_IDENTITY_LENGTH:
+        raise ExtensionControlProofError("invalid proof session nonce")
+    digest = enrollment.canonical_digest
+    grant = require_extension_control(
+        guard_home,
+        approval_gate_input=approval_gate_input,
+        action=EXTENSION_CONTROL_ENROLLMENT_ACTION,
+        subject=digest,
+        session_nonce=session_nonce,
+        now=now,
+    )
+    return ExtensionControlEnrollmentProof(
+        proof_id=secrets.token_hex(32),
+        grant=grant,
+        actor_id=enrollment.actor_id,
+        catalog_digest=enrollment.catalog_digest,
+        enrollment_digest=digest,
+        nonce=enrollment.nonce,
+        session_nonce=session_nonce,
+    )
+
+
+def validate_extension_control_enrollment_proof(
+    proof: ExtensionControlEnrollmentProof,
+    enrollment: ExtensionControlEnrollment,
+) -> None:
+    """Validate every immutable first-enrollment binding."""
+
+    _validate_proof_identifier(proof.proof_id)
+    observed = (proof.actor_id, proof.catalog_digest, proof.nonce)
+    expected = (enrollment.actor_id, enrollment.catalog_digest, enrollment.nonce)
+    if observed != expected or not hmac.compare_digest(proof.enrollment_digest, enrollment.canonical_digest):
+        raise ExtensionControlProofError("extension control enrollment proof does not match enrollment")
+
+
+def consume_extension_control_enrollment_proof(
+    guard_home: Path,
+    proof: ExtensionControlEnrollmentProof,
+    enrollment: ExtensionControlEnrollment,
+    *,
+    now: str | None = None,
+) -> None:
+    """Consume one exact first-enrollment proof."""
+
+    validate_extension_control_enrollment_proof(proof, enrollment)
+    consume_extension_control_grant(
+        guard_home,
+        proof.grant,
+        action=EXTENSION_CONTROL_ENROLLMENT_ACTION,
+        subject=proof.enrollment_digest,
+        session_nonce=proof.session_nonce,
+        now=now,
+    )
+
+
+def _validate_proof_identifier(proof_id: str) -> None:
+    if len(proof_id) != 64 or any(character not in "0123456789abcdef" for character in proof_id):
+        raise ExtensionControlProofError("invalid extension control proof identifier")
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +275,9 @@ class ExtensionControlProof:
     nonce: str
     session_nonce: str
 
+    def __repr__(self) -> str:
+        return "ExtensionControlProof(<redacted>)"
+
 
 def issue_extension_control_proof(
     guard_home: Path,
@@ -140,8 +320,7 @@ def validate_extension_control_proof(
 ) -> None:
     """Validate every immutable proof binding without consuming its grant."""
 
-    if len(proof.proof_id) != 64 or any(character not in "0123456789abcdef" for character in proof.proof_id):
-        raise ExtensionControlProofError("invalid extension control proof identifier")
+    _validate_proof_identifier(proof.proof_id)
     expected = (
         mutation.actor_id,
         mutation.previous_revision,

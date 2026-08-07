@@ -64,6 +64,12 @@ RELEASE_TRAINS: Final[Mapping[str, ReleaseTrain]] = MappingProxyType(
             minor=0,
             stable_enabled=False,
         ),
+        "refs/heads/release/3.1": ReleaseTrain(
+            git_ref="refs/heads/release/3.1",
+            major=3,
+            minor=1,
+            stable_enabled=False,
+        ),
     }
 )
 ALPHA_BRANCHES: Final[tuple[str, ...]] = tuple(RELEASE_TRAINS)

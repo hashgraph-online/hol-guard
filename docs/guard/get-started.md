@@ -274,7 +274,7 @@ explicit native trust setup once to recover available Keychain material into the
 local vault:
 
 ```bash
-hol-guard trust setup --backend macos-native
+hol-guard guard trust setup --backend macos-native
 ```
 
 Move to `enforce` with an explicit migration after reviewing the listed rows:

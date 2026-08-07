@@ -380,7 +380,7 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     assert hook_output["hookEventName"] == "PreToolUse"
     assert hook_output["permissionDecision"] == "deny"
     assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
-    assert "retry" in str(hook_output["permissionDecisionReason"]).lower()
+    assert "terminal policy decision" in str(hook_output["permissionDecisionReason"]).lower()
 
 
 def test_gr081b_codex_package_install_pretooluse_is_live_wait_candidate() -> None:

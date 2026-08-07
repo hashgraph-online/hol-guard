@@ -1135,3 +1135,4 @@ export type GuardUpdateScheduleResult = {
 };
 
 export type GuardUpdatePhase = "idle" | "checking" | "updating" | "reconnecting" | "error";
+

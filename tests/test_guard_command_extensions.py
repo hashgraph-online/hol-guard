@@ -13,10 +13,18 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.command_inspection import command_extensions_payload, inspect_command
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
     ExtensionControlLayer,
+)
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
+    ExtensionControlRuntimeSnapshot,
+    use_extension_control_snapshot,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     ToolActionRequestMatch,
@@ -514,6 +522,46 @@ def test_runtime_artifact_applies_global_extension_lockdown(tmp_path: Path) -> N
     assert isinstance(decision_plane, dict)
     assert decision_plane["action"] == "block"
     assert any(reason["source"] == "control" for reason in decision_plane["reasons"] if isinstance(reason, dict))
+
+
+def test_runtime_artifact_uses_active_extension_control_authority(tmp_path: Path) -> None:
+    command = "rm -rf ./build"
+    request = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    layer = ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        global_lockdown=True,
+        controls=(),
+    )
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(
+            health=AuthorityHealth.PROTECTED,
+            revision=1,
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            layers=(layer,),
+        )
+    )
+
+    assert request is not None
+    with use_extension_control_snapshot(snapshot):
+        artifact = build_tool_action_request_artifact(
+            "codex",
+            request,
+            config_path="config.toml",
+            source_scope="project",
+        )
+
+    assert artifact.metadata["command_action_floor"] == "block"
+    assert artifact.metadata["extension_control_resolution"] == {
+        "blocked": True,
+        "failures": [],
+    }
 
 
 def test_inspection_and_runtime_artifact_share_canonical_wrapper_evidence(tmp_path: Path) -> None:

@@ -29,18 +29,8 @@ _API_OPTIONS_WITH_VALUES = frozenset(
     }
 )
 _API_BOOLEAN_OPTIONS = frozenset({"--include", "--paginate", "--silent", "--slurp", "--verbose", "-i"})
-_API_OUTPUT_FORMAT_OPTIONS = frozenset({"--jq", "--template"})
 _METHOD_OVERRIDE_HEADER = re.compile(r"\Ax-http-method-override\s*:", re.IGNORECASE)
-_STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=?&-]+\Z")
-_PR_HEAD_OID_ENDPOINT = re.compile(
-    "".join(
-        (
-            r"\Arepos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commits/",
-            r"\$\(gh pr view [1-9][0-9]* --json headRefOid --jq \.headRefOid\)",
-            r"/check-runs(?:\?[A-Za-z0-9_.=&-]+)?\Z",
-        )
-    )
-)
+_STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=-]+\Z")
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,9 +47,7 @@ def classify_github_api(args: Sequence[str]) -> GitHubCommandAssessment:
     parsed = _parse_api_arguments(args)
     if isinstance(parsed, GitHubCommandAssessment):
         return parsed
-    if (
-        not _STATIC_ENDPOINT.fullmatch(parsed.endpoint) and not _PR_HEAD_OID_ENDPOINT.fullmatch(parsed.endpoint)
-    ) or parsed.endpoint.startswith("-"):
+    if not _STATIC_ENDPOINT.fullmatch(parsed.endpoint) or parsed.endpoint.startswith("-"):
         return github_assessment(
             "unknown",
             "github.api.dynamic-endpoint",
@@ -85,7 +73,7 @@ def classify_github_api(args: Sequence[str]) -> GitHubCommandAssessment:
         )
     method = parsed.method.upper() if parsed.method is not None else None
     if parsed.endpoint.lower() == "graphql":
-        return _classify_graphql(parsed, method=method, raw_args=args)
+        return _classify_graphql(parsed, method=method)
     if any(_field_value_is_external(value, allow_graphql_variables=False) for _name, value in parsed.fields):
         return github_assessment(
             "unknown",
@@ -249,7 +237,7 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
                 has_dynamic_option_value = has_dynamic_option_value or _value_is_dynamic(value)
             elif option_name == "--input":
                 has_input = True
-            elif option_name not in _API_OUTPUT_FORMAT_OPTIONS and _value_is_dynamic(value):
+            elif _value_is_dynamic(value):
                 has_dynamic_option_value = True
             index += consumed
             continue
@@ -269,12 +257,7 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
     )
 
 
-def _classify_graphql(
-    parsed: GitHubApiArguments,
-    *,
-    method: str | None,
-    raw_args: Sequence[str],
-) -> GitHubCommandAssessment:
+def _classify_graphql(parsed: GitHubApiArguments, *, method: str | None) -> GitHubCommandAssessment:
     if method is not None:
         return github_assessment(
             "unknown",
@@ -294,49 +277,9 @@ def _classify_graphql(
             "github.graphql.external-value",
             "GraphQL query or variable data loaded from an external source cannot be classified statically.",
         )
-    from .github_graphql_capabilities import classify_graphql_document, is_routine_review_thread_resolution
-
-    if (
-        not parsed.headers
-        and _routine_review_thread_arguments_are_static(raw_args)
-        and is_routine_review_thread_resolution(query_values[0], parsed.fields)
-    ):
-        return github_assessment(
-            "routine_review_thread_remote",
-            "github.graphql.routine-review-thread-resolution",
-            "The command resolves one statically bounded pull-request review thread.",
-        )
+    from .github_graphql_capabilities import classify_graphql_document
 
     return classify_graphql_document(query_values[0])
-
-
-def _routine_review_thread_arguments_are_static(args: Sequence[str]) -> bool:
-    if not args or args[0].lower() != "graphql":
-        return False
-    index = 1
-    field_names: list[str] = []
-    while index < len(args):
-        token = args[index]
-        option_name, separator, attached_value = token.partition("=")
-        if not separator and len(token) > 2 and token[:2] == "-f":
-            option_name = "-f"
-            separator = "attached"
-            attached_value = token[2:]
-        if option_name not in {"-f", "--field", "--raw-field"}:
-            return False
-        if separator:
-            value = attached_value
-            index += 1
-        elif index + 1 < len(args):
-            value = args[index + 1]
-            index += 2
-        else:
-            return False
-        name, field_separator, _field_value = value.partition("=")
-        if not field_separator or name not in {"query", "threadId"}:
-            return False
-        field_names.append(name)
-    return field_names.count("query") == 1 and field_names.count("threadId") in {0, 1}
 
 
 def _field_value_is_external(value: str, *, allow_graphql_variables: bool) -> bool:

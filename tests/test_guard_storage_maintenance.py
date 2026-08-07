@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -203,98 +200,6 @@ def test_storage_maintenance_uses_bounded_batches(tmp_path: Path) -> None:
     assert second.completed is False
 
 
-def test_storage_maintenance_queries_use_time_and_reference_indexes(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
-        old = "2025-01-01T00:00:00+00:00"
-        connection.executemany(
-            "insert into guard_events (event_name, payload_json, occurred_at) values ('plan', '{}', ?)",
-            [(old,)] * 100,
-        )
-        connection.execute(
-            """
-            insert into guard_workflow_capabilities (
-              capability_id, approval_provenance_id, nonce, signed_claim_json, key_id,
-              issued_at, not_before, expires_at, max_uses
-            ) values ('plan-capability', 'approval', 'plan-nonce', '{}', 'key', ?, ?, ?, 50)
-            """,
-            (old, old, "2027-01-01T00:00:00+00:00"),
-        )
-        event_ids = [int(row["event_id"]) for row in connection.execute("select event_id from guard_events limit 50")]
-        connection.executemany(
-            """
-            insert into guard_workflow_capability_receipts (
-              receipt_id, capability_id, task_id, invocation_id, approval_provenance_id,
-              signed_receipt_json, claimed_at, use_number, event_id
-            ) values (?, 'plan-capability', 'task', ?, 'approval', '{}', ?, ?, ?)
-            """,
-            [
-                (f"receipt-{index}", f"invocation-{index}", old, index + 1, event_id)
-                for index, event_id in enumerate(event_ids)
-            ],
-        )
-        connection.execute("analyze")
-        receipt_plan = connection.execute(
-            """
-            explain query plan
-            select receipt_id from runtime_receipts
-            where timestamp < ?
-            order by timestamp
-            limit 500
-            """,
-            ("2026-01-01T00:00:00+00:00",),
-        ).fetchall()
-        event_plan = connection.execute(
-            """
-            explain query plan
-            select event.event_id
-            from guard_events as event
-            where event.occurred_at < ?
-              and not exists (
-                select 1 from guard_workflow_capability_receipts as receipt
-                where receipt.event_id = event.event_id
-              )
-            order by event.occurred_at
-            limit 500
-            """,
-            ("2026-01-01T00:00:00+00:00",),
-        ).fetchall()
-        cloud_plan = connection.execute(
-            """
-            explain query plan
-            select event_id from guard_cloud_events
-            where uploaded_at is not null and uploaded_at < ?
-            order by uploaded_at, occurred_at
-            limit 500
-            """,
-            ("2026-01-01T00:00:00+00:00",),
-        ).fetchall()
-
-    assert "idx_receipts_timestamp_desc" in " ".join(str(row["detail"]) for row in receipt_plan)
-    assert "idx_guard_workflow_receipt_event" in " ".join(str(row["detail"]) for row in event_plan)
-    assert "idx_guard_cloud_events_sync" in " ".join(str(row["detail"]) for row in cloud_plan)
-
-
-def test_storage_maintenance_yields_quickly_to_hook_writer(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    writer = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
-    writer.execute("pragma journal_mode=wal")
-    writer.execute("begin immediate")
-    started = time.monotonic()
-    try:
-        with pytest.raises(sqlite3.OperationalError, match="locked"):
-            store.maintain_storage(
-                now=datetime(2026, 7, 25, tzinfo=timezone.utc),
-                detail_retain_days=30,
-            )
-    finally:
-        elapsed = time.monotonic() - started
-        writer.rollback()
-        writer.close()
-
-    assert elapsed < 0.25
-
-
 def test_fresh_store_uses_incremental_auto_vacuum(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
     with sqlite3.connect(store.path) as connection:
@@ -333,139 +238,11 @@ def test_current_schema_probe_treats_lock_contention_as_unknown(
     assert store._schema_is_current() is False  # pyright: ignore[reportPrivateUsage]
 
 
-def test_schema_initialization_does_not_poll_while_holding_migration_lock(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    schema_checks = 0
-    initializes = 0
-
-    def schema_is_current() -> bool:
-        nonlocal schema_checks
-        schema_checks += 1
-        return False
-
-    def initialize() -> None:
-        nonlocal initializes
-        initializes += 1
-
-    store._daemon_managed_schema = True  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(store, "_schema_is_current", schema_is_current)
-    monkeypatch.setattr(store, "_initialize_schema", initialize)
-    monkeypatch.setattr(store, "_hold_advisory_file_lock", lambda **_kwargs: nullcontext())
-
-    store._initialize_serialized()  # pyright: ignore[reportPrivateUsage]
-
-    assert schema_checks == 2
-    assert initializes == 1
-
-
-def test_schema_initialization_releases_process_lock_before_policy_priming(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    schema_initialized = False
-
-    def initialize_schema() -> None:
-        nonlocal schema_initialized
-        schema_initialized = True
-
-    def initialize_policy_integrity() -> None:
-        assert schema_initialized is True
-        path_key = str(store.path.absolute())
-        assert path_key not in store._schema_initialization_states  # pyright: ignore[reportPrivateUsage]
-
-    monkeypatch.setattr(store, "_initialize_schema", initialize_schema)
-    monkeypatch.setattr(store, "_initialize_policy_integrity", initialize_policy_integrity)
-
-    store._initialize_serialized()  # pyright: ignore[reportPrivateUsage]
-
-
-def test_schema_initialization_wait_is_bounded_and_preserves_leader_state(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    path_key = str(store.path.absolute())
-    leader_lock = threading.Lock()
-    leader_lock.acquire()
-    leader_state = store_connection_schema._SchemaInitializationState(  # pyright: ignore[reportPrivateUsage]
-        lock=leader_lock,
-        references=1,
-    )
-    with store._schema_initialization_locks_guard:  # pyright: ignore[reportPrivateUsage]
-        store._schema_initialization_states[path_key] = leader_state  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(store_connection_schema, "sqlite_connect_timeout_seconds", lambda: 0.01)
-
-    try:
-        with pytest.raises(TimeoutError, match="schema migration lock"):
-            store._initialize_serialized()  # pyright: ignore[reportPrivateUsage]
-        assert leader_state.references == 1
-    finally:
-        leader_lock.release()
-        with store._schema_initialization_locks_guard:  # pyright: ignore[reportPrivateUsage]
-            del store._schema_initialization_states[path_key]  # pyright: ignore[reportPrivateUsage]
-
-
-def test_schema_initialization_waiter_retries_after_leader_failure(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    leader_started = threading.Event()
-    release_leader = threading.Event()
-    call_count = 0
-
-    def initialize_schema() -> None:
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            leader_started.set()
-            assert release_leader.wait(timeout=1.0)
-            raise RuntimeError("leader failed")
-
-    monkeypatch.setattr(store, "_initialize_schema", initialize_schema)
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        leader = executor.submit(store._initialize_serialized)  # pyright: ignore[reportPrivateUsage]
-        assert leader_started.wait(timeout=1.0)
-        waiter = executor.submit(store._initialize_serialized)  # pyright: ignore[reportPrivateUsage]
-        release_leader.set()
-        with pytest.raises(RuntimeError, match="leader failed"):
-            leader.result()
-        waiter.result()
-
-    assert call_count == 2
-    assert store._schema_initialization_states == {}  # pyright: ignore[reportPrivateUsage]
-
-
-def test_version_21_upgrade_adds_workflow_event_index(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard"
-    store = GuardStore(guard_home, prime_policy_integrity=False)
-    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
-        connection.execute("drop index idx_guard_workflow_receipt_event")
-        connection.execute("delete from schema_migrations where version = 21")
-
-    GuardStore(guard_home, prime_policy_integrity=False)
-
-    with sqlite3.connect(store.path) as connection:
-        index = connection.execute(
-            """
-            select 1 from sqlite_master
-            where type = 'index' and name = 'idx_guard_workflow_receipt_event'
-            """
-        ).fetchone()
-        migration = connection.execute("select 1 from schema_migrations where version = 21").fetchone()
-    assert index is not None
-    assert migration is not None
-
-
 def test_schema_upgrade_is_serialized_across_store_processes(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard"
     store = GuardStore(guard_home, prime_policy_integrity=False)
     with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
-        connection.execute("delete from schema_migrations where version = 21")
+        connection.execute("delete from schema_migrations where version = 20")
         connection.execute("drop table guard_storage_maintenance")
 
     def reopen_store(_index: int) -> GuardStore:
@@ -481,4 +258,4 @@ def test_schema_upgrade_is_serialized_across_store_processes(tmp_path: Path) -> 
 
     assert all(reopened.path == store.path for reopened in stores)
     with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
-        assert connection.execute("select count(*) from schema_migrations where version = 21").fetchone()[0] == 1
+        assert connection.execute("select count(*) from schema_migrations where version = 20").fetchone()[0] == 1

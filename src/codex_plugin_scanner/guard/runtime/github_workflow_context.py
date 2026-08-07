@@ -22,6 +22,7 @@ from typing import Final, cast
 
 from ..workflow_capabilities import WorkflowCapabilityRuleBinding, canonical_framed_payload
 from .command_model import parse_shell_command
+from .extension_control_runtime import extension_control_policy_version
 from .github_workflow_authorization import GitHubWorkflowBindingContext, github_repository_sha256
 from .github_workflow_operations import (
     GitHubWorkflowOperation,
@@ -177,7 +178,7 @@ def build_github_workflow_descriptor(
             lockfile_sha256=_workspace_files_sha256(root, ("uv.lock", "bun.lock", "bun.lockb")),
             sandbox_sha256=_digest("github-sandbox", sandbox),
             policy_id="guard.command-policy",
-            policy_version="policy.v1",
+            policy_version=extension_control_policy_version("policy.v1"),
             effect_id="github.maintain-remote",
             effect_version="effect.v1",
             decision_id="github.workflow-authorized",

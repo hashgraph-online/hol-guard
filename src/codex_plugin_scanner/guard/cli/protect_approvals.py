@@ -346,7 +346,7 @@ def _suppress_package_shim_allow_output(args: argparse.Namespace, response_paylo
         return False
     verdict = response_payload.get("verdict")
     action = _optional_string(verdict.get("action")) if isinstance(verdict, dict) else None
-    return action == "allow"
+    return action in {"allow", "warn"}
 
 
 def _optional_string(value: object | None) -> str | None:

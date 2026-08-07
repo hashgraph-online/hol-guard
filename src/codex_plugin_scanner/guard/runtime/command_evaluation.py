@@ -34,6 +34,11 @@ from .effect_decision import (
 )
 from .extension_control_contract import ControlResolution, ControlSurface, ExtensionControlLayer
 from .extension_control_resolver import resolve_extension_controls
+from .extension_control_runtime import (
+    ExtensionControlDecisionEvidence,
+    ExtensionControlRuntimeSnapshot,
+    current_extension_control_snapshot,
+)
 from .github_workflow_authorization import (
     GitHubWorkflowAuthorization,
     github_workflow_authorization_evidence,
@@ -80,6 +85,7 @@ class CompositeCommandEvaluation:
     baseline_factors: tuple[DecisionFactor, ...]
     baseline_uncertainties: tuple[UncertaintyKind, ...]
     control_resolution: ControlResolution
+    private_control_evidence: ExtensionControlDecisionEvidence | None
 
     @property
     def risk_classes(self) -> tuple[str, ...]:
@@ -115,9 +121,17 @@ def evaluate_command(
     home_dir: Path | None = None,
     workflow_authorization: GitHubWorkflowAuthorization | None = None,
     registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    extension_control_layers: tuple[ExtensionControlLayer, ...] = (),
+    extension_control_layers: tuple[ExtensionControlLayer, ...] | None = None,
+    extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
 ) -> CompositeCommandEvaluation:
     """Evaluate every built-in rule without executing or persisting the command."""
+
+    if extension_control_layers is not None and extension_control_snapshot is not None:
+        raise ValueError("provide extension control layers or a runtime snapshot, not both")
+    runtime_snapshot = extension_control_snapshot
+    if extension_control_layers is None and runtime_snapshot is None:
+        runtime_snapshot = current_extension_control_snapshot()
+    control_layers = runtime_snapshot.layers if runtime_snapshot is not None else (extension_control_layers or ())
 
     command = canonical_command or parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
     observations = registry.observations(command)
@@ -248,7 +262,7 @@ def evaluate_command(
         )
     )
     control_resolution = resolve_extension_controls(
-        extension_control_layers,
+        control_layers,
         registry,
         extension_ids=extension_ids,
         permission_ids=permission_ids,
@@ -256,6 +270,7 @@ def evaluate_command(
         observations=tuple(
             f"{observation.extension.extension_id}:{observation.rule.rule_id}" for observation in observations
         ),
+        authority_failure=runtime_snapshot.authority_failure if runtime_snapshot is not None else None,
     )
     if control_resolution.blocked:
         minimum_action = _stronger_floor(minimum_action, "block")
@@ -284,6 +299,7 @@ def evaluate_command(
         baseline_factors=baseline_factors,
         baseline_uncertainties=baseline_uncertainties,
         control_resolution=control_resolution,
+        private_control_evidence=runtime_snapshot.private_evidence if runtime_snapshot is not None else None,
     )
 
 

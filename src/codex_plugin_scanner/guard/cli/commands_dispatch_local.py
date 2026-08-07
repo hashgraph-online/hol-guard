@@ -11,12 +11,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
     from .commands_support_connect import _refresh_cloud_policy_bundle, _synced_policy_payload
-    from .commands_support_hook_payload import _open_approval_center
     from .commands_support_interaction import _emit, _run_apps_command, _run_consumer_scan_with_mode
     from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
     from .commands_support_workspace import _run_init_command
     from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 
+
+from codex_plugin_scanner.guard.runtime.network_status import build_network_status
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -85,6 +86,11 @@ def _run_guard_command_inspection_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
+    if str(getattr(args, "command_command", "")) == "controls":
+        from .extension_controls_commands import run_extension_controls_command
+
+        guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
+        return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
     from ..runtime.command_inspection import command_extensions_payload, inspect_command
 
     command_command = str(getattr(args, "command_command", ""))
@@ -328,6 +334,27 @@ def _run_guard_status_command(
     _emit("status", payload, getattr(args, "json", False))
     return 0
 
+
+def _run_guard_network_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    command = getattr(args, "network_command", None) or "status"
+    if command != "status":
+        raise ValueError(f"unsupported network command: {command}")
+    payload = build_network_status(
+        legacy_domain_action=config.new_network_domain_action if config is not None else None
+    )
+    _emit("network", payload, getattr(args, "json", False))
+    return 0
+
 def _run_guard_init_command(
     args: argparse.Namespace,
     *,
@@ -359,41 +386,28 @@ def _run_guard_dashboard_command(
         raise RuntimeError("Guard home is required")
     store = _require_guard_store(store)
     config = _require_guard_config(config)
-    try:
-        approval_center_url = ensure_guard_daemon(guard_home)
-    except RuntimeError as error:
-        if getattr(args, "json", False):
-            _emit(
-                "dashboard",
-                {
-                    "generated_at": _now(),
-                    "opened": False,
-                    "error": str(error),
-                },
-                True,
-            )
-        else:
-            print(str(error), file=sys.stderr)
-        return 1
-    open_result = _open_approval_center(
-        approval_center_url,
+    from ..dashboard_launcher import open_dashboard
+
+    result = open_dashboard(
+        guard_home=guard_home,
         store=store,
         config=config,
-        open_key="dashboard",
         force_open=True,
+        open_key="dashboard",
     )
     _emit(
         "dashboard",
         {
             "generated_at": _now(),
-            "approval_center_url": approval_center_url,
-            "browser_url": open_result.get("browser_url"),
-            "opened": bool(open_result.get("opened")),
-            "reason": str(open_result.get("reason") or "unknown"),
+            "approval_center_url": result.approval_center_url,
+            "browser_url": result.browser_url,
+            "opened": result.opened,
+            "reason": result.reason,
+            **({"error": result.error} if result.error else {}),
         },
         getattr(args, "json", False),
     )
-    return 0
+    return 0 if result.opened or result.reason in {"policy-disabled", "already-opened", "live-client"} else 1
 
 def _run_guard_bootstrap_command(
     args: argparse.Namespace,
@@ -520,6 +534,16 @@ def _run_guard_mcp_command(
     server = GuardMCPServer(guard_home=guard_home)
     return server.run_stdio()
 
+
+def _guard_package_version() -> str:
+    """Return the installed guard package version, or empty string."""
+    try:
+        from importlib.metadata import version
+
+        return version("codex-plugin-scanner")
+    except Exception:
+        return ""
+
 __all__ = [
     "_run_guard_apps_command",
     "_run_guard_bootstrap_command",
@@ -529,6 +553,7 @@ __all__ = [
     "_run_guard_init_command",
     "_run_guard_install_command",
     "_run_guard_mcp_command",
+    "_run_guard_network_command",
     "_run_guard_preflight_command",
     "_run_guard_protect_command",
     "_run_guard_pytest_contained_command",

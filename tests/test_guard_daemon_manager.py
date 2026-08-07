@@ -136,163 +136,6 @@ def test_malformed_process_command_only_blocks_proven_daemon_launchers() -> None
     assert daemon_manager_module._malformed_command_may_launch_guard(daemon_command)
 
 
-def test_recovery_reservation_is_token_bound_and_coalesces(
-    tmp_path: Path,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-
-    first_token = daemon_manager_module._claim_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
-
-    assert first_token is not None
-    assert daemon_manager_module._claim_guard_daemon_recovery_reservation(guard_home) is None  # pyright: ignore[reportPrivateUsage]
-    assert not daemon_manager_module.clear_guard_daemon_recovery_reservation(
-        guard_home,
-        token="other-token",
-    )
-    assert daemon_manager_module.clear_guard_daemon_recovery_reservation(
-        guard_home,
-        token=first_token,
-    )
-    assert daemon_manager_module._claim_guard_daemon_recovery_reservation(guard_home) is not None  # pyright: ignore[reportPrivateUsage]
-
-
-def test_recovery_reservation_coalesces_across_processes(
-    tmp_path: Path,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    token = daemon_manager_module._claim_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
-    assert token is not None
-    script = (
-        "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon.manager import _claim_guard_daemon_recovery_reservation;"
-        f"print(_claim_guard_daemon_recovery_reservation(Path({str(guard_home)!r})) is None)"
-    )
-
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "True"
-
-
-def test_schedule_guard_daemon_recovery_is_reserved(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    spawned: list[tuple[list[str], dict[str, object]]] = []
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_claim_guard_daemon_recovery_reservation",
-        lambda _home: "recovery-token",
-    )
-    monkeypatch.setattr(
-        daemon_manager_module.subprocess,
-        "Popen",
-        lambda command, **kwargs: spawned.append((list(command), dict(kwargs))) or SimpleNamespace(pid=123),
-    )
-
-    daemon_manager_module.schedule_guard_daemon_recovery(
-        guard_home,
-        home_dir=tmp_path,
-        failure_kind="transport-failure",
-    )
-    daemon_manager_module.schedule_guard_daemon_recovery(
-        guard_home,
-        home_dir=tmp_path,
-        failure_kind="transport-failure",
-    )
-
-    assert len(spawned) == 2
-    command, kwargs = spawned[0]
-    assert command[-4:] == [
-        str(guard_home),
-        str(tmp_path),
-        "transport-failure",
-        "recovery-token",
-    ]
-    assert kwargs["cwd"] == tmp_path
-    assert kwargs.get("start_new_session") is (os.name != "nt")
-
-
-def test_schedule_guard_daemon_recovery_suppresses_duplicate_claim(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_claim_guard_daemon_recovery_reservation",
-        lambda _home: None,
-    )
-    monkeypatch.setattr(
-        daemon_manager_module.subprocess,
-        "Popen",
-        lambda *_args, **_kwargs: pytest.fail("duplicate recovery must not spawn"),
-    )
-
-    daemon_manager_module.schedule_guard_daemon_recovery(tmp_path / "guard-home")
-
-
-def test_schedule_guard_daemon_recovery_clears_claim_after_spawn_failure(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    cleared: list[tuple[Path, str]] = []
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_claim_guard_daemon_recovery_reservation",
-        lambda _home: "recovery-token",
-    )
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "clear_guard_daemon_recovery_reservation",
-        lambda home, *, token: cleared.append((home, token)) or True,
-    )
-    monkeypatch.setattr(
-        daemon_manager_module.subprocess,
-        "Popen",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("spawn failed")),
-    )
-
-    daemon_manager_module.schedule_guard_daemon_recovery(
-        guard_home,
-        home_dir=tmp_path,
-    )
-
-    assert cleared == [(guard_home, "recovery-token")]
-
-
-def test_windows_recovery_worker_can_break_away_from_harness_job(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    spawned: list[dict[str, object]] = []
-    monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_claim_guard_daemon_recovery_reservation",
-        lambda _home: "recovery-token",
-    )
-    monkeypatch.setattr(
-        daemon_manager_module.subprocess,
-        "Popen",
-        lambda _command, **kwargs: spawned.append(dict(kwargs)) or SimpleNamespace(pid=123),
-    )
-
-    daemon_manager_module.schedule_guard_daemon_recovery(
-        tmp_path / "guard-home",
-        home_dir=tmp_path,
-    )
-
-    assert spawned[0]["creationflags"] & daemon_manager_module._WINDOWS_CREATE_BREAKAWAY_FROM_JOB  # pyright: ignore[reportPrivateUsage, reportOperatorIssue]
-
-
 def test_schedule_guard_daemon_ensure_is_reserved_and_nonblocking(
     tmp_path,
     monkeypatch,
@@ -333,8 +176,11 @@ def test_schedule_guard_daemon_ensure_is_reserved_and_nonblocking(
     assert kwargs["stdin"] == daemon_manager_module.subprocess.DEVNULL
     assert kwargs["stdout"] == daemon_manager_module.subprocess.DEVNULL
     assert kwargs["stderr"] == daemon_manager_module.subprocess.DEVNULL
-    assert kwargs["cwd"] == tmp_path
-    assert kwargs.get("start_new_session") is (os.name != "nt")
+    if os.name == "nt":
+        assert "start_new_session" not in kwargs
+        assert isinstance(kwargs.get("creationflags"), int)
+    else:
+        assert kwargs.get("start_new_session") is True
 
 
 def test_schedule_guard_daemon_ensure_suppresses_duplicate_reservation(
@@ -565,7 +411,7 @@ def test_hook_failure_restarts_an_older_unresponsive_daemon(tmp_path, monkeypatc
     monkeypatch.setattr(
         daemon_manager_module,
         "ensure_guard_daemon",
-        lambda _home, *, home_dir=None: "http://127.0.0.1:5475",
+        lambda _home, *, home_dir=None, **_kwargs: "http://127.0.0.1:5475",
     )
 
     recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(guard_home)
@@ -1134,71 +980,6 @@ def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_p
     assert state_payload["pid"] == 111
 
 
-@pytest.mark.parametrize(
-    ("package_version", "runtime_fingerprint", "expected"),
-    [
-        (
-            daemon_manager_module.__version__,
-            daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
-            True,
-        ),
-        ("older-release", daemon_manager_module._current_guard_daemon_runtime_fingerprint(), False),
-        (daemon_manager_module.__version__, "older-runtime", False),
-        (None, None, False),
-    ],
-)
-def test_daemon_adoption_requires_exact_installed_runtime(
-    package_version: object,
-    runtime_fingerprint: object,
-    expected: bool,
-) -> None:
-    assert (
-        daemon_manager_module._daemon_healthz_details_match_current_runtime(
-            {
-                "package_version": package_version,
-                "runtime_fingerprint": runtime_fingerprint,
-            }
-        )
-        is expected
-    )
-
-
-def test_initialize_existing_guard_daemon_rejects_stale_runtime(tmp_path, monkeypatch) -> None:
-    guard_home = tmp_path / "guard-home"
-
-    class FakeResponse:
-        status = 200
-
-        def __enter__(self) -> FakeResponse:
-            return self
-
-        def __exit__(self, exc_type, exc, tb) -> None:
-            return None
-
-        def read(self) -> bytes:
-            return json.dumps(
-                {
-                    "ok": True,
-                    "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                }
-            ).encode("utf-8")
-
-    monkeypatch.setattr(daemon_manager_module.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_daemon_healthz_details_payload",
-        lambda _url, _token: {
-            "guard_home": str(guard_home.resolve()),
-            "package_version": daemon_manager_module.__version__,
-            "runtime_fingerprint": "older-runtime",
-            "pid": 111,
-        },
-    )
-
-    assert daemon_manager_module._initialize_existing_guard_daemon(guard_home, 5474) is None
-
-
 def test_adopt_existing_guard_daemon_skips_scan_on_windows(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
 
@@ -1474,7 +1255,6 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     responses = iter((None, None, "http://127.0.0.1:5412"))
     captured_command: list[str] = []
     captured_env: dict[str, str] = {}
-    captured_cwd: list[Path] = []
 
     _disable_daemon_adoption(monkeypatch)
     _disable_duplicate_retire(monkeypatch)
@@ -1485,7 +1265,6 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     def fake_popen(command, **kwargs):
         captured_command.extend(command)
         captured_env.update(kwargs.get("env", {}))
-        captured_cwd.append(kwargs["cwd"])
         return SimpleNamespace(poll=lambda: None)
 
     monkeypatch.setenv("PYTHONPATH", str(tmp_path / "poisoned-pythonpath"))
@@ -1511,7 +1290,6 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     assert captured_command[bootstrap_index + 4] == "codex_plugin_scanner.cli"
     assert captured_command[captured_command.index("--home") + 1] == str(home_dir.resolve())
     assert captured_env["HOME"] == str(home_dir.resolve())
-    assert captured_cwd == [home_dir.resolve()]
     if os.name == "nt":
         assert captured_env["USERPROFILE"] == str(home_dir.resolve())
     rendered_command = daemon_manager_module.shlex.join(captured_command)
@@ -2992,6 +2770,7 @@ def test_windows_daemon_inventory_is_bounded_strict_and_guard_home_scoped(tmp_pa
     assert "ConvertTo-Json" in query_commands[0][-1]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
 def test_daemon_inventory_ignores_malformed_unrelated_process_with_guard_text(tmp_path, monkeypatch) -> None:
     command_line = '/Applications/Host UI.app/Contents/MacOS/Host turn-ended {"prompt":"guard daemon --serve'
     monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
@@ -3004,6 +2783,7 @@ def test_daemon_inventory_ignores_malformed_unrelated_process_with_guard_text(tm
     assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) == []
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")
 def test_daemon_inventory_fails_closed_for_malformed_python_guard_process(tmp_path, monkeypatch) -> None:
     command_line = '/usr/bin/python3 -m codex_plugin_scanner.cli guard daemon --serve "'
     monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")

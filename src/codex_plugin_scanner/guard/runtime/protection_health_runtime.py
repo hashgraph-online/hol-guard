@@ -26,9 +26,6 @@ class CommandActivityHealth(Protocol):
     @property
     def persistence_error_count(self) -> int: ...
 
-    @property
-    def active_error_count(self) -> int: ...
-
 
 class ProtectionHealthStore(Protocol):
     def count_command_activities(self) -> int: ...
@@ -51,12 +48,13 @@ def _hook_signals(
             continue
         if install.get("active") is not True:
             continue
-        if hook_verification is None or harness not in hook_verification:
-            candidate = _signal(ProtectionCheckStatus.UNKNOWN, "hook_verification_unavailable")
-        elif hook_verification[harness]:
+        verified = hook_verification.get(harness) if hook_verification is not None else None
+        if verified is True:
             candidate = _signal(ProtectionCheckStatus.PASS, "hooks_verified")
+        elif verified is False:
+            candidate = _signal(ProtectionCheckStatus.FAIL, "hook_verification_failed")
         else:
-            candidate = _signal(ProtectionCheckStatus.FAIL, "hooks_verification_failed")
+            candidate = _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
         existing = result.get(harness)
         result[harness] = (
             _signal(ProtectionCheckStatus.FAIL, "hooks_inactive")
@@ -74,15 +72,10 @@ def _global_hook_signal(harness_signals: Mapping[str, ProtectionSignal]) -> Prot
         return _signal(ProtectionCheckStatus.FAIL, "one_or_more_hooks_inactive")
     if all(signal.status is ProtectionCheckStatus.PASS for signal in harness_signals.values()):
         return _signal(ProtectionCheckStatus.PASS, "hooks_verified")
-    return _signal(ProtectionCheckStatus.UNKNOWN, "hook_verification_unavailable")
+    return _signal(ProtectionCheckStatus.UNKNOWN, "hook_attestation_unavailable")
 
 
-def _rule_pack_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
-    remembered = trust_status.get("remembered_rules")
-    if remembered == "enforced":
-        return _signal(ProtectionCheckStatus.PASS, "rule_packs_enforced")
-    if remembered == "disabled_degraded":
-        return _signal(ProtectionCheckStatus.FAIL, "rule_packs_disabled")
+def _rule_pack_signal() -> ProtectionSignal:
     return _signal(ProtectionCheckStatus.UNKNOWN, "rule_pack_runtime_proof_unavailable")
 
 
@@ -126,22 +119,22 @@ def daemon_runtime_is_current(
 def _decision_stream_signal(store: ProtectionHealthStore) -> ProtectionSignal:
     try:
         health = store.get_command_activity_persistence_health()
-        active_errors = health.active_error_count
+        dropped = health.dropped_event_count
+        errors = health.persistence_error_count
         activity_count = store.count_command_activities()
     except (AttributeError, RuntimeError, TypeError, ValueError):
         return _signal(ProtectionCheckStatus.FAIL, "decision_stream_health_unavailable")
-    if active_errors > 0:
+    if dropped > 0 or errors > 0:
         return _signal(ProtectionCheckStatus.FAIL, "decision_stream_degraded")
-    return _signal(
-        ProtectionCheckStatus.PASS,
-        "decision_stream_ready" if activity_count == 0 else "decision_stream_healthy",
-    )
+    if activity_count == 0:
+        return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_not_observed")
+    return _signal(ProtectionCheckStatus.UNKNOWN, "decision_stream_completeness_unavailable")
 
 
 def _tamper_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
     runtime_protection = trust_status.get("runtime_protection")
     if runtime_protection == "protected":
-        return _signal(ProtectionCheckStatus.PASS, "runtime_protection_trusted")
+        return _signal(ProtectionCheckStatus.UNKNOWN, "general_tamper_proof_unavailable")
     if runtime_protection == "degraded":
         return _signal(ProtectionCheckStatus.FAIL, "tamper_checks_failed")
     return _signal(ProtectionCheckStatus.UNKNOWN, "tamper_proof_unavailable")
@@ -156,7 +149,7 @@ def build_runtime_protection_health(
     trust_status: Mapping[str, object],
     now: datetime,
 ) -> dict[str, object]:
-    """Build current health using only operational runtime and trust proof."""
+    """Build current health without treating configuration as runtime proof."""
 
     harness_signals = _hook_signals(managed_installs, hook_verification)
     containment_signals = containment_health_signals(
@@ -167,7 +160,7 @@ def build_runtime_protection_health(
         "harness_hooks": _global_hook_signal(harness_signals),
         "daemon": _daemon_signal(runtime_state, now=now),
         "policy_engine": containment_signals["policy_engine"],
-        "rule_packs": _rule_pack_signal(trust_status),
+        "rule_packs": _rule_pack_signal(),
         "decision_plane_compatibility": containment_signals["decision_plane_compatibility"],
         "containment_compatibility": containment_signals["containment_compatibility"],
         "sandbox": containment_signals["sandbox"],

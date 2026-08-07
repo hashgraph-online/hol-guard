@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentBackend,
     ContainmentFailure,
     ContainmentInput,
+    ContainmentNetworkMode,
     ContainmentRequest,
 )
 from codex_plugin_scanner.guard.runtime.containment_executor import ContainmentExecutionResult, file_sha256
@@ -210,7 +211,7 @@ def test_exact_bun_script_runs_through_central_contained_decision(
     assert request.argv[0] == str(bun)
     assert request.argv[1].startswith("node_modules/")
     assert request.policy.allowed_write_paths == ()
-    assert request.policy.network_allowed is False
+    assert request.policy.network_mode is ContainmentNetworkMode.OFFLINE
     assert "GITHUB_TOKEN" not in request.environment_dict()
     assert {"package.json", "package-lock.json", "src/example.ts"} <= {item.snapshot_path for item in request.inputs}
 
@@ -385,7 +386,7 @@ def test_untrusted_runner_is_contained_without_minting_dependency_provenance(
     shim, _bun = _manager(tmp_path, monkeypatch)
 
     def execute(request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        assert request.policy.network_allowed is False
+        assert request.policy.network_mode is ContainmentNetworkMode.OFFLINE
         assert request.policy.allowed_write_paths == ()
         assert "GITHUB_TOKEN" not in request.environment_dict()
         return _result(request)

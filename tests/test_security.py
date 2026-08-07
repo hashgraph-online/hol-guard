@@ -183,17 +183,13 @@ class TestNoHardcodedSecrets:
             pem_header = "-----BEGIN " + "RSA PRIVATE KEY-----"
             pem_footer = "-----END " + "RSA PRIVATE KEY-----"
             (root / "README.md").write_text(
-                "Example:\n"
-                f"{pem_header}\n"
-                "MIIE...\n",
+                f"Example:\n{pem_header}\nMIIE...\n",
                 encoding="utf-8",
             )
             assert check_no_hardcoded_secrets(root).passed is True
 
             (root / "README.md").write_text(
-                f"{pem_header}\n"
-                "MIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n"
-                f"{pem_footer}\n",
+                f"{pem_header}\nMIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n{pem_footer}\n",
                 encoding="utf-8",
             )
 
@@ -240,8 +236,7 @@ class TestNoHardcodedSecrets:
             root = Path(tmpdir)
             pem_header = "-----BEGIN " + "RSA PRIVATE KEY-----"
             (root / "README.md").write_text(
-                f"{pem_header}\n"
-                "MIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n",
+                f"{pem_header}\nMIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n",
                 encoding="utf-8",
             )
 

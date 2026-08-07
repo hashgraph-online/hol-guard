@@ -27,8 +27,37 @@ def _configure_guard_mdm_parsers(
     status.add_argument("--machine-root", help="Machine runtime root override for test and remediation scripts")
     _add_json(status)
 
+    integrity_snapshot = commands.add_parser(
+        "integrity-snapshot", help="Read a fail-honest local machine integrity snapshot"
+    )
+    integrity_snapshot.add_argument("--scope", required=True, choices=("machine",))
+    integrity_snapshot.add_argument(
+        "--json", required=True, action="store_true", help="Emit the versioned JSON automation contract"
+    )
+
+    health_report = commands.add_parser("health-report", help=argparse.SUPPRESS)
+    health_report.add_argument("--scope", required=True, choices=("machine",))
+    health_report.add_argument(
+        "--json", required=True, action="store_true", help="Emit the versioned JSON automation contract"
+    )
+
+    for name in ("supervisor-install", "supervisor-remove"):
+        supervisor = commands.add_parser(name, help=argparse.SUPPRESS)
+        _add_json(supervisor)
+
+    for name in ("device-key-provision", "device-key-status", "device-key-rotate", "device-key-revoke"):
+        device_key = commands.add_parser(name, help=argparse.SUPPRESS)
+        _add_json(device_key)
+
+    continuity = commands.add_parser("continuity-provision", help=argparse.SUPPRESS)
+    _add_json(continuity)
+
     for name in ("activate", "repair"):
         command = commands.add_parser(name, help=f"Idempotently {name} Guard for one user")
+        _add_user(command, require_user=True)
+
+    for name in ("harness-coverage-register", "harness-coverage-unregister"):
+        command = commands.add_parser(name, help=argparse.SUPPRESS)
         _add_user(command, require_user=True)
 
     deactivate = commands.add_parser("deactivate", help="Restore Guard-owned user integrations")
@@ -39,6 +68,8 @@ def _configure_guard_mdm_parsers(
         "authorize-deactivation", help="Create a short-lived machine-owned user removal authorization"
     )
     _add_user(authorize, require_user=True)
+    authorize.add_argument("--actor", required=True, help="Auditable MDM actor identity")
+    authorize.add_argument("--reason", required=True, help="Bounded removal reason")
     authorize.add_argument("--token-name", help="Machine-state token filename selected by the MDM wrapper")
 
     network = commands.add_parser("network-diagnose", help="Test managed DNS, proxy, and TLS without prompts")

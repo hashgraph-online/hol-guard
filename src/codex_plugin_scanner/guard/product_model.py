@@ -44,6 +44,7 @@ CANONICAL_HARNESS_VALUES = (
     "opencode",
     "copilot",
     "cursor",
+    "cline",
     "gemini",
     "hermes",
     "openclaw",

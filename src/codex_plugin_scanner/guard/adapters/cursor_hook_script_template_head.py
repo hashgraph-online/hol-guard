@@ -10,7 +10,6 @@ import hashlib
 import hmac
 import json
 import os
-import secrets
 import shlex
 import subprocess
 import sys
@@ -32,10 +31,6 @@ GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
 GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _FALLBACK_LOCK = threading.Lock()
-_OVERLOAD_REASON = (
-    "HOL Guard is temporarily saturated and kept this action blocked. "
-    "No approval was requested; retry the action."
-)
 
 
 def _remaining_seconds(deadline_monotonic: float) -> float:
@@ -205,10 +200,6 @@ def _daemon_hook_result(
         return (None, "authenticated-control-plane-failure")
     if hook_env_overlay:
         request_payload["hook_env"] = dict(hook_env_overlay)
-    request_payload["guard_remaining_ms"] = min(
-        60_000,
-        max(1, int(_remaining_seconds(deadline_monotonic) * 1000)),
-    )
     query = urllib.parse.urlencode(params)
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/hooks/cursor?{query}",
@@ -227,26 +218,9 @@ def _daemon_hook_result(
             body = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         try:
-            detail = error.read().decode("utf-8", errors="replace")
+            detail = error.read().decode("utf-8", errors="replace").lower()
         except OSError:
             detail = ""
-        try:
-            overload_payload = json.loads(detail)
-        except ValueError:
-            overload_payload = {}
-        if isinstance(overload_payload, dict) and overload_payload.get("reason_code") == "transient_overload":
-            retry_after = overload_payload.get("retry_after_ms", 25)
-            estimated_service = overload_payload.get("estimated_service_ms", 750)
-            if (
-                isinstance(retry_after, int)
-                and not isinstance(retry_after, bool)
-                and isinstance(estimated_service, int)
-                and not isinstance(estimated_service, bool)
-            ):
-                retry_after = min(75, max(25, retry_after))
-                estimated_service = min(2_800, max(100, estimated_service))
-                return (None, f"transient_overload:{retry_after}:{estimated_service}")
-        detail = detail.lower()
         if error.code in {429, 503} or any(
             marker in detail for marker in ("capacity", "overload", "too_many", "too many", "busy")
         ):

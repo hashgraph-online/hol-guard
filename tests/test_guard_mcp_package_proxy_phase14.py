@@ -45,7 +45,7 @@ def test_package_decision_v2_ignores_malformed_reason_items() -> None:
 
     decision = RuntimeMcpGuardProxy._package_decision_v2(evaluation, "require-reapproval")
 
-    assert decision["package_review_cloud_reason_code"] == "cloud_timeout"
+    assert [signal["signal_id"] for signal in decision["signals"]] == ["supply-chain.cloud_timeout"]
 
 
 def test_package_resolution_helpers_ignore_malformed_reason_items() -> None:

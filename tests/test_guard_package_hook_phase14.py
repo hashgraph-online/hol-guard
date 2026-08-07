@@ -6,6 +6,7 @@ import base64
 import hashlib
 import io
 import json
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
@@ -460,3 +462,49 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert "/requests/" not in decision["harness_message"]
     assert "Review this request in HOL Guard, then retry." not in decision["harness_message"]
     assert "guard/inbox" not in decision["harness_message"]
+
+
+def test_phase14_claude_compatibility_hook_queues_package_install_without_node(tmp_path: Path) -> None:
+    """Claude compatibility hooks must not depend on Node for supply-chain enforcement."""
+    from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=guard_home,
+    )
+    _seed_review_bundle(guard_home, harness_selector="claude-code")
+    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+
+    adapter = ClaudeCodeHarnessAdapter()
+    command = adapter._daemon_hook_command_parts(context)
+    bridge_config = json.loads(command[-1])
+    fallback_command = bridge_config["fallback_command"]
+    assert isinstance(fallback_command, list)
+    assert all(isinstance(part, str) for part in fallback_command)
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm install minimist@1.2.8"},
+        "cwd": str(workspace_dir),
+    }
+    result = subprocess.run(
+        fallback_command,
+        input=json.dumps(event),
+        text=True,
+        capture_output=True,
+        timeout=40,
+        check=False,
+    )
+    payload = json.loads(result.stdout)
+
+    assert result.returncode == 0
+    assert "minimist@1.2.8" in result.stderr
+    assert "minimist@1.2.8" in result.stdout
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "minimist@1.2.8" in payload["hookSpecificOutput"]["permissionDecisionReason"]

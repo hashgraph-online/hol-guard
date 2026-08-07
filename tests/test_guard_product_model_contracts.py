@@ -73,6 +73,7 @@ def test_canonical_harnesses_match_launch_harnesses_and_existing_contracts() -> 
         "opencode",
         "copilot",
         "cursor",
+        "cline",
         "gemini",
         "hermes",
         "openclaw",

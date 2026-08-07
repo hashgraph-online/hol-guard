@@ -1,52 +1,17 @@
 from __future__ import annotations
 
-from hashlib import sha256
 from pathlib import Path
 from typing import Final
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
 from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
-from codex_plugin_scanner.guard.runtime.github_pr_body_file import static_markdown_pr_edit_body_file_operand
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    extract_sensitive_tool_action_request,
-)
+from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 
 def _text(*parts: str) -> str:
     return "".join(parts)
-
-
-def test_static_markdown_pr_edit_body_file_operand_accepts_bounded_edit() -> None:
-    assert (
-        static_markdown_pr_edit_body_file_operand(
-            (
-                "1905",
-                "--repo",
-                "hashgraph-online/hol-guard",
-                "--body-file",
-                "~/.omp/agent/sessions/workspace/session/local/hol-guard-pr-body.md",
-            )
-        )
-        == "~/.omp/agent/sessions/workspace/session/local/hol-guard-pr-body.md"
-    )
-
-
-@pytest.mark.parametrize(
-    "args",
-    (
-        ("$PR", "--body-file", "pr-body.md"),
-        ("1905", "--repo", "$REPO", "--body-file", "pr-body.md"),
-        ("1905", "--title", "changed", "--body-file", "pr-body.md"),
-        ("1905", "--body", "changed"),
-        ("1905", "--body-file", "pr-body.md", "--body-file", "other-pr-body.md"),
-        ("1905", "--body-file", "~/other/pr-body.md~"),
-        ("1905", "--body-file", "pr-body.txt"),
-        ("https://github.com/example/repo/pull/1905", "--body-file", "pr-body.md"),
-    ),
-)
-def test_static_markdown_pr_edit_body_file_operand_rejects_unbounded_edit(args: tuple[str, ...]) -> None:
-    assert static_markdown_pr_edit_body_file_operand(args) is None
 
 
 GITHUB_CAPABILITY_CASES = (
@@ -327,240 +292,6 @@ GITHUB_CAPABILITY_CASES = (
     (("project-alias",), "unknown", "github.command.extension-or-alias"),
 )
 
-
-def test_classify_github_cli_capabilities() -> None:
-    failures: list[str] = []
-    for args, capability, reason_code in GITHUB_CAPABILITY_CASES:
-        assessment = classify_github_cli(args)
-        case_id = sha256("\0".join(args).encode()).hexdigest()[:12]
-        if assessment.capability != capability or assessment.reason_code != reason_code:
-            failures.append(
-                f"github-capability-{case_id}: {args!r}; expected=({capability!r}, {reason_code!r}); "
-                f"actual=({assessment.capability!r}, {assessment.reason_code!r})"
-            )
-
-    assert not failures, "\n".join(failures)
-
-
-@pytest.mark.parametrize(
-    "args",
-    (
-        ("api", "graphql", "-f", "query=query A { viewer { login } } query B { viewer { login } }"),
-        ("api", "graphql", "-f", "query={ viewer { login } } { viewer { login } }"),
-        ("api", "graphql", "-f", "query=query { mutationResult: viewer { login } }"),
-        ("api", "graphql", "-F", "query=@query.graphql"),
-        ("api", "graphql", "-f", "query=query { viewer { login } }", "-F", "owner=@owner.txt"),
-        (
-            "api",
-            "graphql",
-            "-f",
-            "query=query { viewer { login } }",
-            "-H",
-            "X-HTTP-Method-Override: POST",
-        ),
-        ("api", "graphql", "-X", "GET", "-f", "query=query { viewer { login } }"),
-    ),
-)
-def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args: tuple[str, ...]) -> None:
-    assessment = classify_github_cli(args)
-
-    assert assessment.capability == "unknown"
-
-
-@pytest.mark.parametrize(
-    "args",
-    (
-        (
-            "api",
-            "graphql",
-            "-f",
-            'query=mutation{resolveReviewThread(input:{threadId:"PRRT_kwDOQGomAs6T6b-G"}){thread{id}}}',
-        ),
-        (
-            "api",
-            "graphql",
-            "-f",
-            'query=mutation{resolveReviewThread(input:{threadId:"PRRT_kwDOQGomAs6T6b-G"}){thread{isResolved}}}',
-            "-f",
-            "extra=value",
-        ),
-        (
-            "api",
-            "graphql",
-            "--repo",
-            "owner/repository",
-            "-f",
-            'query=mutation{resolveReviewThread(input:{threadId:"PRRT_kwDOQGomAs6T6b-G"}){thread{isResolved}}}',
-        ),
-        (
-            "api",
-            "graphql",
-            "-f",
-            'query=mutation{resolveReviewThread(input:{threadId:"PRRT_kwDOQGomAs6T6b-G"}){thread{isResolved}}}',
-            "--jq",
-            ".data",
-        ),
-    ),
-)
-def test_routine_review_thread_resolution_rejects_noncanonical_variants(args: tuple[str, ...]) -> None:
-    assessment = classify_github_cli(args)
-
-    assert assessment.capabilities != ("routine_review_thread_remote",)
-
-
-def test_guard_keeps_exact_review_thread_resolution_prompt_free() -> None:
-    command = (
-        "gh api graphql -f "
-        "'query=mutation{resolveReviewThread(input:{threadId:\"PRRT_kwDOQGomAs6T6b-G\"}){thread{isResolved}}}'"
-    )
-
-    match = extract_sensitive_tool_action_request("Bash", {"command": command})
-
-    assert match is None
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "gh pr view 17",
-        "gh pr view ${PR_NUMBER}",
-        "gh issue list --limit 10",
-        "gh issue list --repo ${REPO}",
-        "gh ssh-key list",
-        "gh gpg-key list",
-        "gh api repos/example/project -X GET -f per_page=1 --jq '.name'",
-        "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
-        (
-            "gh api graphql -f 'query=query { viewer { login } }' 2>&1 | "
-            "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
-        ),
-    ),
-)
-def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: str) -> None:
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is None
-
-
-def test_guard_keeps_github_read_with_stderr_discard_prompt_free(tmp_path: Path) -> None:
-    command = "gh api repos/example/project/actions/jobs/123/logs 2>/dev/null | head -20"
-
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is None
-
-
-def test_guard_keeps_nested_same_pr_check_run_reads_prompt_free(tmp_path: Path) -> None:
-    command = (
-        "gh pr view 1999 --json commits --jq '.commits[-1].oid'; "
-        'gh api "repos/hashgraph-online/hol-guard/commits/'
-        '$(gh pr view 1999 --json headRefOid --jq .headRefOid)/check-runs?per_page=50" '
-        "--jq '.check_runs[] | \"\\(.name): \\(.status)/\\(.conclusion)\"' "
-        "2>&1 | sort | uniq -c | sort -rn | head -8"
-    )
-
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is None
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        ('gh api "repos/hashgraph-online/hol-guard/commits/$(gh pr merge 1999 --admin)/check-runs?per_page=50"'),
-        (
-            'gh api "repos/hashgraph-online/hol-guard/commits/'
-            '$(gh pr view 1999 --json headRefOid --jq .headRefOid)/check-runs?per_page=50" '
-            "--method DELETE"
-        ),
-        ('gh api "repos/hashgraph-online/hol-guard/commits/$(cat .env)/check-runs?per_page=50"'),
-    ),
-)
-def test_guard_keeps_unsafe_dynamic_check_run_requests_reviewable(
-    tmp_path: Path,
-    command: str,
-) -> None:
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is not None
-
-
-def test_guard_keeps_github_read_output_write_reviewable(tmp_path: Path) -> None:
-    command = "gh api repos/example/project/actions/jobs/123/logs > output.zip"
-
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is not None
-
-
-def test_guard_keeps_static_graphql_query_with_jq_bindings_prompt_free(tmp_path: Path) -> None:
-    command = _text(
-        "gh api graphql -f query='query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo)",
-        '{pullRequests(last:100,baseRefName:"release/3.1"){nodes{number files(first:100){nodes{path}}}}}}\' ',
-        "-f owner=hashgraph-online -f repo=hol-guard --jq ",
-        "'[.data.repository.pullRequests.nodes[] | select(.number==1778 or .number==1816) | .number as $n | ",
-        ".files.nodes[] | select(.path|test(",
-        '"(^|/)(\\.claude|\\.codex|research|planning|local://|continuity)";"i")) ',
-        "| {number:$n,path}]'",
-    )
-
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is None
-
-
-def test_guard_preserves_graphql_mutation_floor_with_jq_bindings(tmp_path: Path) -> None:
-    command = _text(
-        "gh api graphql -f query='mutation($id:ID!){deleteProjectV2(input:{projectV2Id:$id})",
-        "{projectV2{id}}}' -f id=PVT_example --jq '.data as $result | $result'",
-    )
-
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is not None
-    assert match.action_class == "GitHub delete command"
-
-
-def test_guard_keeps_leading_home_cd_and_github_read_prompt_free_without_cwd(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    destination = home / "projects" / "review-worktree"
-    destination.mkdir(parents=True)
-
-    match = extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": "cd ~/projects/review-worktree && gh pr view 17 --json state,mergedAt,mergeCommit 2>&1"},
-        cwd=None,
-        home_dir=home,
-    )
-
-    assert match is None
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "echo before && cd ~/projects/review-worktree && gh pr view 17 --json state",
-        "cd $TARGET && gh pr view 17 --json state",
-        "cd ~/projects/review-worktree && gh pr merge 17 --admin",
-    ),
-)
-def test_guard_does_not_relax_unproven_home_cd_github_compositions(
-    tmp_path: Path,
-    command: str,
-) -> None:
-    home = tmp_path / "home"
-    (home / "projects" / "review-worktree").mkdir(parents=True)
-
-    match = extract_sensitive_tool_action_request(
-        "Bash",
-        {"command": command},
-        cwd=None,
-        home_dir=home,
-    )
-
-    assert match is not None
-
-
 GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
     (
         _text(
@@ -747,28 +478,503 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
 )
 
 
-def _github_review_floor_case_id(command: str) -> str:
-    """Provide a stable opaque ID alongside the exact command retained in failure diagnostics."""
-
-    return f"github-review-floor-{sha256(command.encode('utf-8')).hexdigest()[:16]}"
 
 
-def test_github_review_floor_case_ids_are_unique() -> None:
-    case_ids = {_github_review_floor_case_id(command) for command, _action_class in GITHUB_REVIEW_FLOORS}
+@pytest.mark.parametrize(
+    ("args", "capability", "reason_code"),
+    (
+        (("pr", "view", "17"), "read_remote", "github.command.proven-read"),
+        (
+            ("pr", "create", "--title", "Ready", "--body", "Static summary"),
+            "propose_remote",
+            "github.command.pr-proposal",
+        ),
+        (
+            ("pr", "create", "--title", "Ready", "--body", "- Added focused coverage"),
+            "propose_remote",
+            "github.command.pr-proposal",
+        ),
+        (("pr", "create", "--title", "Ready"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "--fill"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "-f"), "content_remote", "github.command.content-mutation"),
+        (
+            ("pr", "create", "--title", "Ready", "--body", "Static", "-df"),
+            "content_remote",
+            "github.command.content-mutation",
+        ),
+        (("pr", "create", "-e"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "--recover", "input"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "--web"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "-w"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "--body-file", "body.md"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "-Fbody.md"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "--template", "body.md"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "--template=body.md"), "content_remote", "github.command.content-mutation"),
+        (("pr", "create", "-Tbody.md"), "content_remote", "github.command.content-mutation"),
+        (("issue", "list"), "read_remote", "github.command.proven-read"),
+        (("auth", "status"), "read_local", "github.command.local-auth-read"),
+        (("auth", "token"), "secret_remote", "github.command.auth-token-read"),
+        (("auth", "status", "--show-token"), "secret_remote", "github.command.auth-token-read"),
+        (("auth", "status", "-t"), "secret_remote", "github.command.auth-token-read"),
+        (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
+        (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
+        (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
+        (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
+        (
+            ("--repo", "example/project", "workflow", "view", "release.yml"),
+            "read_remote",
+            "github.command.proven-read",
+        ),
+        (("api", "repos/example/project"), "read_remote", "github.api.proven-get"),
+        (
+            ("api", "repos/example/project", "-X", "GET", "-f", "per_page=1"),
+            "read_remote",
+            "github.api.proven-get",
+        ),
+        (
+            ("api", "graphql", "-f", "query=query { viewer { login } }"),
+            "read_remote",
+            "github.graphql.proven-query",
+        ),
+        (
+            (
+                "api",
+                "graphql",
+                "-f",
+                "query=mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}",
+                "-f",
+                "threadId=PRRT_example",
+            ),
+            "maintain_remote",
+            "github.graphql.maintain",
+        ),
+        (("pr", "merge", "17", "--squash", "--delete-branch"), "delete_remote", "github.command.pr-merge"),
+        (("pr", "merge", "17", "--admin"), "admin_merge_remote", "github.command.pr-admin-merge"),
+        (("pr", "edit", "17", "--title", "updated"), "content_remote", "github.command.content-mutation"),
+        (("issue", "close", "17"), "content_remote", "github.command.content-mutation"),
+        (("issue", "delete", "17"), "delete_remote", "github.command.delete-mutation"),
+        (("cache", "delete", "123"), "delete_remote", "github.command.delete-mutation"),
+        (("release", "create", "v1.2.3"), "publish_remote", "github.command.release-publication"),
+        (("release", "delete", "v1.2.3"), "delete_remote", "github.command.delete-mutation"),
+        (("repo", "edit", "--visibility", "private"), "access_remote", "github.command.repository-access-mutation"),
+        (("repo", "sync", "--force"), "force_remote", "github.command.force-mutation"),
+        (("secret", "set", "TOKEN"), "secret_remote", "github.command.secret-mutation"),
+        (
+            ("api", "repos/example/project", "-f", "name=updated"),
+            "mutate_remote",
+            "github.api.mutate",
+        ),
+        (
+            ("api", "repos/example/project", "-X", "PATCH", "-f", "visibility=private"),
+            "access_remote",
+            "github.api.access",
+        ),
+        (
+            ("api", "graphql", "-f", "query=mutation { updateThing(input: {}) { id } }"),
+            "mutate_remote",
+            "github.graphql.mutate",
+        ),
+        (
+            ("api", "graphql", "-f", "query=mutation { closeIssue(input: {}) { issue { id } } }"),
+            "content_remote",
+            "github.graphql.content",
+        ),
+        (
+            (
+                "api",
+                "graphql",
+                "-f",
+                _text(
+                    'query=fragment Maint on Mutation { resolveReviewThread(input: {threadId: "T_1"}) ',
+                    '{ thread { id } } } mutation { deleteRepository(input: {repositoryId: "R_1"}) ',
+                    "{ repository { id } } }",
+                ),
+            ),
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+        ),
+        (
+            ("api", "graphql", "-f", "query=subscription { eventStream { id } }"),
+            "mutate_remote",
+            "github.graphql.remote-mutation",
+        ),
+        (
+            ("api", "repos/example/project", "-X", "DELETE"),
+            "delete_remote",
+            "github.api.delete",
+        ),
+        (
+            ("api", "repos/example/project/git/refs/heads/main", "-X", "PATCH", "-f", "force=true"),
+            "force_remote",
+            "github.api.force",
+        ),
+        (
+            (
+                "api",
+                "repos/example/project/contents/.github/workflows/ci.yml",
+                "-X",
+                "PUT",
+                "-f",
+                "message=update workflow",
+                "-f",
+                "content=ZWNobyBvaw==",
+            ),
+            "workflow_remote",
+            "github.api.workflow",
+        ),
+        (
+            ("api", "graphql", "-f", "query=mutation { updateRepository(input: {}) { repository { id } } }"),
+            "access_remote",
+            "github.graphql.access",
+        ),
+        (
+            ("api", "graphql", "-f", "query=mutation { createDeployKey(input: {}) { clientMutationId } }"),
+            "access_remote",
+            "github.graphql.access",
+        ),
+        (
+            ("api", "graphql", "-f", "query=mutation { createRef(input: {}) { ref { id } } }"),
+            "mutate_remote",
+            "github.graphql.mutate",
+        ),
+        (
+            ("api", "graphql", "-f", "query=mutation { deleteIssue(input: {}) { clientMutationId } }"),
+            "delete_remote",
+            "github.graphql.delete",
+        ),
+        (
+            (
+                "api",
+                "graphql",
+                "-f",
+                "query=mutation { removeOutsideCollaborator(input: {}) { clientMutationId } }",
+            ),
+            "access_remote",
+            "github.graphql.mixed-mutation",
+        ),
+        (
+            ("api", "repos/example/project/issues/comments/123", "-X", "DELETE"),
+            "delete_remote",
+            "github.api.mixed-mutation",
+        ),
+        (
+            ("api", "orgs/example/memberships/alice", "-X", "PUT", "-f", "role=admin"),
+            "access_remote",
+            "github.api.access",
+        ),
+        (
+            ("api", "repos/example/project/pages", "-X", "POST", "-f", "source=main"),
+            "mutate_remote",
+            "github.api.mutate",
+        ),
+        (
+            ("api", "repos/example/project/actions/runners/registration-token", "-X", "POST"),
+            "secret_remote",
+            "github.api.secret",
+        ),
+        (
+            ("api", "repos/example/project/actions/runs/123/rerun", "-X", "POST"),
+            "workflow_remote",
+            "github.api.workflow",
+        ),
+        (
+            ("api", "repos/example/project/issues/17/lock", "-X", "PUT"),
+            "maintain_remote",
+            "github.api.maintain",
+        ),
+        (
+            ("api", "repos/example/project/issues/17/lock", "-X", "DELETE"),
+            "maintain_remote",
+            "github.api.maintain",
+        ),
+        (
+            ("api", "repos/example/project/issues/17/lock", "-X", "POST"),
+            "mutate_remote",
+            "github.api.mutate",
+        ),
+        (
+            ("api", "repos/example/project/issues/17/lock", "-X", "PATCH"),
+            "mutate_remote",
+            "github.api.mutate",
+        ),
+        (
+            ("api", "repos/example/project/actions/threads/17/resolve", "-X", "POST"),
+            "mutate_remote",
+            "github.api.mutate",
+        ),
+        (
+            (
+                "api",
+                "graphql",
+                "-f",
+                _text(
+                    'query=mutation { resolveReviewThread(input: {threadId: "T_1"}) { thread { id } } ',
+                    'deleteRepository(input: {repositoryId: "R_1"}) { repository { id } } }',
+                ),
+            ),
+            "access_remote",
+            "github.graphql.mixed-mutation",
+        ),
+        (("api", "graphql", "--input", "-"), "unknown", "github.api.input-body"),
+        (
+            ("api", "repos/example/project/issues/17/comments", "-X", "POST", "-F", "body=@body.md"),
+            "unknown",
+            "github.api.external-field-value",
+        ),
+        (("project-alias",), "unknown", "github.command.extension-or-alias"),
+    ),
+)
+def test_classify_github_cli_capabilities(
+    args: tuple[str, ...], capability: GitHubCommandCapability, reason_code: str
+) -> None:
+    assessment = classify_github_cli(args)
 
-    assert len(case_ids) == len(GITHUB_REVIEW_FLOORS)
+    assert assessment.capability == capability
+    assert assessment.reason_code == reason_code
 
 
-def test_guard_requires_confirmation_for_github_mutations_and_unverified_compositions(tmp_path: Path) -> None:
-    failures: list[str] = []
-    for command, expected_action_class in GITHUB_REVIEW_FLOORS:
-        match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-        actual_action_class = match.action_class if match is not None else None
-        includes_confirmation = match is not None and "confirm" in match.reason.lower()
-        if actual_action_class != expected_action_class or not includes_confirmation:
-            failures.append(
-                f"{_github_review_floor_case_id(command)}: expected action={expected_action_class!r} "
-                f"and confirmation=True, got action={actual_action_class!r} "
-                f"and confirmation={includes_confirmation!r}; command={command!r}"
-            )
-    assert not failures, "\n".join(failures)
+@pytest.mark.parametrize(
+    "args",
+    (
+        ("api", "graphql", "-f", "query=query A { viewer { login } } query B { viewer { login } }"),
+        ("api", "graphql", "-f", "query={ viewer { login } } { viewer { login } }"),
+        ("api", "graphql", "-f", "query=query { mutationResult: viewer { login } }"),
+        ("api", "graphql", "-F", "query=@query.graphql"),
+        ("api", "graphql", "-f", "query=query { viewer { login } }", "-F", "owner=@owner.txt"),
+        (
+            "api",
+            "graphql",
+            "-f",
+            "query=query { viewer { login } }",
+            "-H",
+            "X-HTTP-Method-Override: POST",
+        ),
+        ("api", "graphql", "-X", "GET", "-f", "query=query { viewer { login } }"),
+    ),
+)
+def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args: tuple[str, ...]) -> None:
+    assessment = classify_github_cli(args)
+
+    assert assessment.capability == "unknown"
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "gh pr view 17",
+        "gh pr view ${PR_NUMBER}",
+        "gh issue list --limit 10",
+        "gh issue list --repo ${REPO}",
+        "gh ssh-key list",
+        "gh gpg-key list",
+        "gh api repos/example/project -X GET -f per_page=1 --jq '.name'",
+        "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
+        (
+            "gh api graphql -f 'query=query { viewer { login } }' 2>&1 | "
+            "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
+        ),
+    ),
+)
+def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: str) -> None:
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is None
+
+
+@pytest.mark.parametrize(
+    ("command", "action_class"),
+    (
+        (
+            _text(
+                'gh api graphql -f \'query=mutation { deleteRepository(input: {repositoryId: "R_1"}) ',
+                "{ clientMutationId } }' | jq -r '.data'",
+            ),
+            "GitHub access mutation command",
+        ),
+        (
+            _text(
+                "gh api graphql -f ",
+                "'query=mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}} ",
+                "deleteRepository(input:{repositoryId:$threadId}){repository{id}}}' -f threadId=R_123",
+            ),
+            "GitHub access mutation command",
+        ),
+        (
+            _text(
+                "gh api graphql -f ",
+                "'query=mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' ",
+                "-f threadId=PRRT_example",
+            ),
+            "GitHub bounded maintenance command",
+        ),
+        ("gh pr edit 17 --title updated", "GitHub content mutation command"),
+        ("gh issue close 17", "GitHub content mutation command"),
+        ("gh release create v1.2.3 --notes 'release notes'", "GitHub release publication command"),
+        ("gh api repos/example/project/issues/17/comments -f body='looks good'", "GitHub content mutation command"),
+        ("gh pr merge 17 --repo example/project --squash --delete-branch", "GitHub delete command"),
+        ("gh pr merge 17 --admin", "GitHub administrator pull-request merge command"),
+        ("gh workflow run ci.yml", "GitHub workflow mutation command"),
+        ("gh repo sync --force", "GitHub force mutation command"),
+        ("gh repo delete example/project --yes", "GitHub delete command"),
+        ("gh issue delete 17 --yes", "GitHub delete command"),
+        ("gh release delete v1.2.3 --yes", "GitHub delete command"),
+        ("gh secret set TOKEN --body value", "GitHub secret mutation command"),
+        ("gh secret set TOKEN --body --help", "GitHub secret mutation command"),
+        ("gh pr edit 17 --title --help", "GitHub content mutation command"),
+        ("gh auth token", "GitHub secret mutation command"),
+        ("gh auth status --show-token", "GitHub secret mutation command"),
+        ("gh repo edit --visibility private", "GitHub access mutation command"),
+        ("gh ssh-key delete 123 --yes", "GitHub access mutation command"),
+        ("gh repo set-default o/r", "GitHub local configuration write"),
+        ("gh pr lock 1; gh repo delete o/r --yes", "GitHub delete command"),
+        (
+            _text(
+                "gh api graphql -f 'query=mutation { resolveReviewThread(input: {}) { thread { id } } }'; ",
+                "gh secret set TOKEN --body value",
+            ),
+            "GitHub secret mutation command",
+        ),
+        ("gh api repos/example/project -X DELETE", "GitHub delete command"),
+        ("gh project-alias | jq -r '.'", "Unverified GitHub command capability"),
+        ("gh pr view 17 | tee result.json", "destructive shell command"),
+        ("gh pr view 17 > result.json", "destructive shell command"),
+        ("GH=gh; $GH repo delete example/project --yes", "Unverified GitHub command capability"),
+        ('GH=gh; "$GH" secret set TOKEN --body value', "Unverified GitHub command capability"),
+        ("${GH:-gh} repo delete example/project --yes", "Unverified GitHub command capability"),
+        ("env GH=gh sh -c '$GH repo delete example/project --yes'", "Unverified GitHub command capability"),
+        ("TOOL=gh; $TOOL repo delete example/project --yes", "Unverified GitHub command capability"),
+        ("TOOL=/usr/local/bin/gh; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("${TOOL:-/usr/local/bin/gh} repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("${TOOL:-gh.exe} repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("${TOOL-gh} repo delete o/r --yes", "Unverified GitHub command capability"),
+        ('echo "$(gh repo delete o/r --yes)"', "GitHub delete command"),
+        ("TOOL=gh; echo $($TOOL repo delete o/r --yes)", "Unverified GitHub command capability"),
+        ("exec gh repo delete o/r --yes", "GitHub delete command"),
+        ("printf o/r | xargs gh repo delete --yes", "Unverified GitHub command capability"),
+        ("timeout 5 gh repo delete o/r --yes", "GitHub delete command"),
+        ("watch gh repo delete o/r --yes", "GitHub delete command"),
+        ("builtin command gh repo delete o/r --yes", "GitHub delete command"),
+        ("echo gh repo delete o/r --yes | sh", "Unverified GitHub command capability"),
+        ("eval 'gh repo delete o/r --yes'", "unresolved shell execution context"),
+        ("eval gh repo delete o/r --yes", "unresolved shell execution context"),
+        ("f(){ gh repo delete o/r --yes; }; f", "Unverified GitHub command capability"),
+        ("g() { gh repo delete o/r --yes; }; g", "Unverified GitHub command capability"),
+        ("g () { gh repo delete o/r --yes; }; g", "Unverified GitHub command capability"),
+        ("g() ( gh repo delete o/r --yes ); g", "Unverified GitHub command capability"),
+        ("function g { gh secret set TOKEN --body value; }; g", "Unverified GitHub command capability"),
+        ("function f() { gh repo delete o/r --yes; }; f", "Unverified GitHub command capability"),
+        ("function f () { $GH repo delete o/r --yes; }; f", "Unverified GitHub command capability"),
+        ("function f() ( /usr/local/bin/gh repo delete o/r --yes ); f", "Unverified GitHub command capability"),
+        ("if true; then gh repo delete o/r --yes; fi", "GitHub delete command"),
+        ("for item in one; do gh repo delete o/r --yes; done", "GitHub delete command"),
+        ("case one in one) gh repo delete o/r --yes;; esac", "GitHub delete command"),
+        ("{ gh repo delete o/r --yes; }", "GitHub delete command"),
+        ("( gh repo delete o/r --yes )", "GitHub delete command"),
+        ("! gh repo delete o/r --yes", "GitHub delete command"),
+        ("coproc gh repo delete o/r --yes", "GitHub delete command"),
+        ("coproc JOB { gh repo delete o/r --yes; }", "GitHub delete command"),
+        ("coproc JOB ( gh repo delete o/r --yes )", "GitHub delete command"),
+        ("trap 'gh repo delete o/r --yes' EXIT", "GitHub delete command"),
+        ('trap "gh repo delete o/r --yes" 0', "GitHub delete command"),
+        ("if ( gh repo delete o/r --yes ); then :; fi", "GitHub delete command"),
+        (
+            "case x in y) echo no;; x) gh repo delete o/r --yes;; esac",
+            "GitHub delete command",
+        ),
+        ("alias zap='gh repo delete o/r --yes'; zap", "Unverified GitHub command capability"),
+        ("TOOL=$(command -v gh); $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("export TOOL=gh; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("readonly TOOL=gh; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("declare TOOL=gh; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("typeset TOOL=gh; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("export TOOL=$(command -v gh); $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("g(){ local TOOL=gh; $TOOL repo delete o/r --yes; }; g", "Unverified GitHub command capability"),
+        ("export TOOL=gh; sh -c '$TOOL repo delete o/r --yes'", "Unverified GitHub command capability"),
+        ("TOOL=gh; false && TOOL=python; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("TOOL=gh; true || TOOL=python; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("TOOL=gh; false && unset TOOL; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        (
+            "TOOL=gh; if false; then TOOL=python; fi; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=gh; if maybe; then TOOL=python; fi; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=python; case x in x) TOOL=gh;; esac; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "CMD='echo ok'; case x in x) CMD='gh repo delete o/r --yes';; esac; eval \"$CMD\"",
+            "unresolved shell execution context",
+        ),
+        (
+            "TOOL=gh; while false; do TOOL=python; done; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=gh; until true; do TOOL=python; done; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "TOOL=gh; for item in; do TOOL=python; done; $TOOL repo delete o/r --yes",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "f(){ local TOOL=python; case x in x) TOOL=gh;; esac; $TOOL repo delete o/r --yes; }; f",
+            "Unverified GitHub command capability",
+        ),
+        (
+            "f(){ local TOOL=gh; while false; do TOOL=python; done; $TOOL repo delete o/r --yes; }; f",
+            "Unverified GitHub command capability",
+        ),
+        ("case x in x) : ;& y) gh repo delete o/r --yes;; esac", "GitHub delete command"),
+        ("case x in x) : ;;& x) gh repo delete o/r --yes;; esac", "GitHub delete command"),
+        (
+            "CMD='gh repo delete o/r --yes'; false && CMD='echo ok'; eval \"$CMD\"",
+            "unresolved shell execution context",
+        ),
+        (
+            "CMD='gh repo delete o/r --yes'; true || CMD='echo ok'; sh -c \"$CMD\"",
+            "Unverified GitHub command capability",
+        ),
+        ('TOOL="$(command -v gh)"; "$TOOL" repo delete o/r --yes', "Unverified GitHub command capability"),
+        ('TOOL="$(which gh)"; "$TOOL" repo delete o/r --yes', "Unverified GitHub command capability"),
+        ('CMD="gh repo delete o/r --yes"; eval "$CMD"', "unresolved shell execution context"),
+        ('CMD="/usr/local/bin/gh repo delete o/r --yes"; eval "$CMD"', "unresolved shell execution context"),
+        ('CMD=\'"gh" repo delete o/r --yes\'; eval "$CMD"', "unresolved shell execution context"),
+        ('CMD="gh secret set TOKEN --body x"; sh -c "$CMD"', "Unverified GitHub command capability"),
+        ('CMD="gh repo delete o/r --yes"; echo "$CMD" | sh', "Unverified GitHub command capability"),
+        ("f(){ $GH repo delete o/r --yes; }; f", "Unverified GitHub command capability"),
+        ("TOOL=gh; f(){ $TOOL repo delete o/r --yes; }; f", "Unverified GitHub command capability"),
+        ("alias zap='$GH repo delete o/r --yes'; zap", "Unverified GitHub command capability"),
+        ("TOOL=gh; alias zap='$TOOL repo delete o/r --yes'; zap", "Unverified GitHub command capability"),
+        ("f(){ /usr/local/bin/gh repo delete o/r --yes; }; f", "Unverified GitHub command capability"),
+        ("alias zap='/usr/local/bin/gh repo delete o/r --yes'; zap", "Unverified GitHub command capability"),
+        ("exec /usr/local/bin/gh repo delete o/r --yes", "GitHub delete command"),
+        ("timeout 5 /usr/local/bin/gh repo delete o/r --yes", "GitHub delete command"),
+        ("exec 'C:\\tools\\gh.exe' repo delete o/r --yes", "GitHub delete command"),
+        ("timeout 5 'C:\\tools\\gh.exe' repo delete o/r --yes", "GitHub delete command"),
+        ("TOOL='C:\\tools\\gh.exe'; $TOOL repo delete o/r --yes", "Unverified GitHub command capability"),
+        ("CMD='C:\\tools\\gh.exe repo delete o/r --yes'; eval \"$CMD\"", "unresolved shell execution context"),
+        ('gh api repos/o/r --hostname "$HOST"', "Unverified GitHub command capability"),
+        ('gh api repos/o/r --hostname "$(cat host.txt)"', "Unverified GitHub command capability"),
+        ('gh api repos/o/r -H "Authorization: Bearer $TOKEN"', "Unverified GitHub command capability"),
+        ("gh api repos/o/r --cache '$TTL'", "Unverified GitHub command capability"),
+        ("gh api repos/o/r --preview '$FEATURE'", "Unverified GitHub command capability"),
+        ('gh issue lock "$ISSUE" --repo "$REPO"', "Unverified GitHub command capability"),
+        ('gh pr ready "$(cat number)" -R "$REPO"', "Unverified GitHub command capability"),
+        ('gh issue pin "${NUMBER}"', "Unverified GitHub command capability"),
+    ),
+)
+def test_guard_requires_confirmation_for_github_mutations_and_unverified_compositions(
+    tmp_path: Path,
+    command: str,
+    action_class: str,
+) -> None:
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == action_class
+    assert "confirm" in match.reason.lower()

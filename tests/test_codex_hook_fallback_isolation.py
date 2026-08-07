@@ -36,7 +36,6 @@ def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], 
         workspace_dir=workspace,
         guard_home=tmp_path / "Guard home with spaces",
         home_override_explicit=True,
-        workspace_override_explicit=True,
     )
     CodexHarnessAdapter().install(context)
     bridge_command = codex_adapter._hook_command_parts(context)
@@ -139,8 +138,7 @@ def test_verified_fallback_ignores_workspace_and_ambient_python_imports(
     assert trusted.cwd == Path(str(config["manifest_path"])).parent.resolve(strict=True)
     assert trusted.cwd != workspace.resolve()
     assert {"PYTHONPATH", "PYTHONSTARTUP", "VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT"}.isdisjoint(trusted.environment)
-    workspace_index = fallback_command.index("--workspace")
-    assert fallback_command[workspace_index + 1] == str(workspace)
+    assert "--workspace" not in fallback_command
     assert fallback_command[:3] == [str(Path(sys.executable).absolute()), "-I", "-c"]
     assert not marker.exists()
 

@@ -22,9 +22,13 @@ from .runtime.extension_control_authority import (
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
 from .runtime.extension_control_proof import (
+    ExtensionControlEnrollment,
+    ExtensionControlEnrollmentProof,
     ExtensionControlMutation,
     ExtensionControlProof,
+    consume_extension_control_enrollment_proof,
     consume_extension_control_proof,
+    validate_extension_control_enrollment_proof,
     validate_extension_control_proof,
 )
 from .store_base import SecretStore
@@ -49,11 +53,32 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         self._extension_control_last_catalog_digest = catalog_digest
         try:
             with self._extension_control_authority_lock():
-                return self._read_extension_control_authority_locked(catalog_digest, bootstrap=True)
+                return self._read_extension_control_authority_locked(catalog_digest)
         except ExtensionControlAuthorityError:
-            raise
+            return self._tampered_view(catalog_digest)
         except Exception:
             return self._degraded_view(catalog_digest)
+
+    def enroll_extension_control_authority(
+        self,
+        *,
+        catalog_digest: str,
+        actor_id: str,
+        nonce: str,
+        proof: ExtensionControlEnrollmentProof,
+    ) -> ExtensionControlAuthorityView:
+        enrollment = ExtensionControlEnrollment(
+            catalog_digest=catalog_digest,
+            actor_id=actor_id,
+            nonce=nonce,
+        )
+        validate_extension_control_enrollment_proof(proof, enrollment)
+        with self._extension_control_authority_lock():
+            current = self._read_extension_control_authority_locked(catalog_digest)
+            if current.health is not AuthorityHealth.UNENROLLED:
+                raise ExtensionControlAuthorityError("extension control authority already enrolled")
+            consume_extension_control_enrollment_proof(self.guard_home, proof, enrollment)
+            return self._bootstrap_extension_control_authority(catalog_digest, key=None)
 
     def commit_extension_control_layers(
         self,
@@ -86,7 +111,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         layers_json = layers_to_json(layers)
         self._validate_serialized_layers(layers_json)
         with self._extension_control_authority_lock():
-            current = self._read_extension_control_authority_locked(catalog_digest, bootstrap=True)
+            current = self._read_extension_control_authority_locked(catalog_digest)
             key = self._authority_key(required=True)
             assert key is not None
             actor_hash = _private_hash(actor_id, key=key, purpose="actor")
@@ -166,7 +191,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                             (proof_hash,),
                         )
                         proof_already_consumed = True
-                    current = self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
+                    current = self._read_extension_control_authority_locked(catalog_digest)
             if current.health is not AuthorityHealth.PROTECTED:
                 raise ExtensionControlAuthorityError("extension control authority unavailable")
             with self._connect() as connection:
@@ -316,7 +341,15 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                 )
             except Exception as exc:
                 raise ExtensionControlAuthorityError("extension control authority final anchor unavailable") from exc
-            return self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
+            with self._connect() as connection:
+                self._queue_extension_control_change_event(
+                    connection,
+                    revision=revision,
+                    previous_revision=current.revision,
+                    layers_json=layers_json,
+                    occurred_at=created_at,
+                )
+            return self._read_extension_control_authority_locked(catalog_digest)
 
     def recover_extension_control_authority(self, *, catalog_digest: str) -> ExtensionControlAuthorityView:
         with self._extension_control_authority_lock():
@@ -377,16 +410,29 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                             ),
                             key=key,
                         )
-                    return self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
+                    if current_revision > 0:
+                        committed = connection.execute(
+                            """select previous_revision, layers_json, created_at
+                               from extension_control_authority_transition where revision = ? and phase = ?""",
+                            (current_revision, AuthorityPhase.COMMITTED.value),
+                        ).fetchone()
+                        if committed is None:
+                            return self._tampered_view(catalog_digest)
+                        self._queue_extension_control_change_event(
+                            connection,
+                            revision=current_revision,
+                            previous_revision=_row_int(committed, "previous_revision"),
+                            layers_json=_row_str(committed, "layers_json"),
+                            occurred_at=_row_str(committed, "created_at"),
+                        )
+                    return self._read_extension_control_authority_locked(catalog_digest)
             return self._tampered_view(catalog_digest)
 
     def acknowledge_extension_control_degraded_mode(self) -> ExtensionControlAuthorityView:
         self._extension_control_degraded_acknowledged = True
         return self._degraded_view(self._extension_control_last_catalog_digest)
 
-    def _read_extension_control_authority_locked(
-        self, catalog_digest: str, *, bootstrap: bool
-    ) -> ExtensionControlAuthorityView:
+    def _read_extension_control_authority_locked(self, catalog_digest: str) -> ExtensionControlAuthorityView:
         with self._connect() as connection:
             ensure_extension_control_authority_schema(connection)
             row = connection.execute(
@@ -397,8 +443,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             anchor = self._read_anchor(key=key) if key is not None else None
         except Exception:
             return self._degraded_view(catalog_digest)
-        if row is None and anchor is None and key is None and bootstrap:
-            return self._bootstrap_extension_control_authority(catalog_digest, key=None)
+        if row is None and anchor is None:
+            return ExtensionControlAuthorityView(AuthorityHealth.UNENROLLED, 0, catalog_digest, ())
         if row is None or key is None or anchor is None:
             return self._tampered_view(catalog_digest)
         try:

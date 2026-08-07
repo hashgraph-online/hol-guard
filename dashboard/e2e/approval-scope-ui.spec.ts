@@ -21,15 +21,15 @@ const request: GuardApprovalRequest = {
   publisher: "codex-local",
   policy_action: "require-reapproval",
   recommended_scope: "artifact",
-  allowed_scopes: ["artifact", "workspace", "harness", "global"],
-  scope_contract_version: "guard.approval-scopes.v4",
+  allowed_scopes: ["artifact"],
+  scope_contract_version: "guard.approval-scopes.v2",
   scope_contract_digest: "scope-contract-digest",
   allowed_scopes_by_action: {
-    allow: ["artifact", "workspace", "harness", "global"],
+    allow: ["artifact"],
     block: ["artifact", "workspace", "publisher", "harness", "global"],
   },
   recommended_scope_by_action: { allow: "artifact", block: "artifact" },
-  scope_restrictions: ["reusable_allow_is_action_bound", "task_capability_not_enabled"],
+  scope_restrictions: ["broad_allow_requires_positive_proof", "task_capability_not_enabled"],
   task_capability_eligibility: {
     eligible: false,
     reason_codes: ["task_capability_not_enabled"],
@@ -113,11 +113,7 @@ test("approval review renders action-eligible scopes and binds the selected cont
 
   await expect(page.getByRole("heading", { name: "Run workspace command" })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Approve once/ })).toBeVisible();
-  await page.getByText("Save for project or app", { exact: true }).click();
-  await expect(page.getByRole("radio", { name: /Remember for project/ })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /This app/ })).toBeVisible();
-  await page.getByText("Advanced: save everywhere on this machine", { exact: true }).click();
-  await expect(page.getByRole("radio", { name: /Everywhere/ })).toBeVisible();
+  await expect(page.getByText("Everywhere", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Task access is not available/)).toBeVisible();
 
   await page.getByText("Block matching actions", { exact: true }).first().click();
@@ -128,7 +124,7 @@ test("approval review renders action-eligible scopes and binds the selected cont
   expect(resolutionBodies[0]).toMatchObject({
     action: "block",
     scope: "global",
-    scope_contract_version: "guard.approval-scopes.v4",
+    scope_contract_version: "guard.approval-scopes.v2",
     scope_contract_digest: "scope-contract-digest",
   });
 });
@@ -149,10 +145,11 @@ test("non-overridable actions disable approval while preserving eligible block s
   await mountApprovalFixture(page, resolutionBodies, blockedRequest);
   await page.goto(`/requests/${blockedRequest.request_id}?${DAEMON}`);
 
-  await expect(page.getByText("This decision cannot be overridden")).toBeVisible();
-  await expect(page.getByText(/Policy terminally blocked this action/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Approve once" })).toHaveCount(0);
-  await expect(page.getByText("Block matching actions", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("This action cannot be approved under its current Guard policy.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve once" })).toBeDisabled();
+  await expect(page.getByText(/Task access cannot override/)).toBeVisible();
+  await page.getByText("Block matching actions", { exact: true }).first().click();
+  await expect(page.getByRole("radio", { name: /Block everywhere/ })).toBeVisible();
   expect(resolutionBodies).toHaveLength(0);
 });
 
@@ -198,46 +195,4 @@ test("keyboard approval uses gate settings that arrive after request detail", as
 
   await expect(page.getByRole("dialog", { name: "Approval password required" })).toBeVisible();
   expect(resolutionBodies).toHaveLength(0);
-});
-
-test("browser MCP review offers bounded capability access on mobile", async ({ page }) => {
-  const resolutionBodies: Array<Record<string, unknown>> = [];
-  const browserRequest: GuardApprovalRequest = {
-    ...request,
-    request_id: "browser-mcp-e2e",
-    artifact_id: "codex:project:mcp-tool-call:chrome-devtools:new-page",
-    artifact_name: "chrome-devtools:new_page",
-    artifact_type: "mcp_tool_call",
-    launch_target: "chrome-devtools new_page hol.org",
-    changed_fields: ["runtime_browser_tool_call"],
-    policy_action: "review",
-    temporary_mcp_approval: {
-      eligible: true,
-      server_name: "chrome-devtools",
-      server_identity_hash: "sha256:browser-e2e",
-      category: "browser_navigation",
-      target_label: "hol.org",
-      allowed_targets: ["exact", "category", "server"],
-      allowed_durations: ["once", "15m", "1h", "5h"],
-      hard_risk_exclusions: ["browser_privileged", "browser_transfer"],
-    },
-  };
-  await page.setViewportSize({ width: 390, height: 844 });
-  await mountApprovalFixture(page, resolutionBodies, browserRequest);
-  await page.goto(`/requests/${browserRequest.request_id}?${DAEMON}`);
-
-  await expect(page.getByRole("heading", { name: "chrome-devtools:new_page" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: "1 hour" })).toBeChecked();
-  await expect(page.getByRole("radio", { name: "This browser capability" })).toBeChecked();
-  await expect(page.getByText(/Privileged browser access.*still require review/)).toBeVisible();
-  await page.getByText("5 hours", { exact: true }).click();
-  await page.getByRole("button", { name: "Allow for 5 hours" }).click();
-
-  await expect.poll(() => resolutionBodies.length).toBe(1);
-  expect(resolutionBodies[0]).toMatchObject({
-    action: "allow",
-    scope: "artifact",
-    mcp_grant_target: "category",
-    mcp_grant_duration: "5h",
-  });
 });

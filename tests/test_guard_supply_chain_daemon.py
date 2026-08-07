@@ -582,7 +582,7 @@ def test_daemon_retains_blocked_aibom_refresh_thread_during_shutdown(
 
     def _blocked_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         entered.set()
-        release.wait(timeout=5)
+        release.wait()
         return {"synced": True}
 
     monkeypatch.setattr(guard_daemon_module, "sync_aibom_snapshots_if_due", _blocked_sync)
@@ -600,11 +600,14 @@ def test_daemon_retains_blocked_aibom_refresh_thread_during_shutdown(
 
     daemon.stop()
     refresh_thread = daemon._aibom_refresh_thread
+    try:
+        assert refresh_thread is not None
+        assert refresh_thread.is_alive()
+        with pytest.raises(RuntimeError, match="still stopping"):
+            daemon.start()
+    finally:
+        release.set()
+        if refresh_thread is not None:
+            refresh_thread.join(timeout=1)
     assert refresh_thread is not None
-    assert refresh_thread.is_alive()
-    with pytest.raises(RuntimeError, match="still stopping"):
-        daemon.start()
-
-    release.set()
-    refresh_thread.join(timeout=1)
     assert not refresh_thread.is_alive()

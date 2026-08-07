@@ -677,3 +677,34 @@ def test_install_native_contract_output_prefers_native_hooks_for_supported_harne
     assert managed_install["native_hooks"] is True
     assert managed_install["primary_integration"] == "native_hooks"
     assert managed_install["manifest"]["mode"] == "codex-mcp-proxy"
+
+def test_success_status_treats_uv_pin_noop_as_current() -> None:
+    payload = {
+        "current_version": "3.0.0a9",
+        "resulting_version": "3.0.0a9",
+        "stdout": "",
+        "stderr": (
+            "Nothing to upgrade\n\n"
+            "hint: `hol-guard` is pinned to `3.0.0a9` "
+            "(installed with an exact version pin); reinstall with "
+            "`uv tool install hol-guard@latest` to upgrade to a new version."
+        ),
+        "version_check": {
+            "update_available": False,
+            "latest_version": "3.0.0a9",
+        },
+    }
+    assert update_commands._success_status(payload) == "current"
+    assert update_commands._version_changed("3.0.0a9", "3.0.0a9") is False
+
+
+def test_success_status_marks_equal_versions_current_without_installer_hints() -> None:
+    payload = {
+        "current_version": "3.0.0a9",
+        "resulting_version": "3.0.0a9",
+        "stdout": "some installer chatter",
+        "stderr": "",
+        "version_check": {"update_available": False, "latest_version": "3.0.0a9"},
+    }
+    assert update_commands._success_status(payload) == "current"
+

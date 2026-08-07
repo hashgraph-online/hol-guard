@@ -444,25 +444,6 @@ def test_cursor_hook_authenticated_overload_skips_recovery(
     assert not recovery_marker.exists()
 
 
-def test_cursor_managed_hook_carries_deadline_and_typed_single_retry_contract(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
-
-    source = cursor_hook_script_source(
-        HarnessContext(
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard",
-            workspace_dir=tmp_path / "workspace",
-        ),
-        guard_cli=[sys.executable, "-c", "print('{}')"],
-        recovery_command=[sys.executable, "-c", "raise SystemExit(0)"],
-    )
-
-    assert 'request_payload["guard_remaining_ms"]' in source
-    assert 'overload_payload.get("reason_code") == "transient_overload"' in source
-    assert source.count("25 + secrets.randbelow(51)") == 1
-    assert "No approval was requested" in source
-
-
 def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 

@@ -491,9 +491,29 @@ class StoreApprovalsMixin:
         status: str | None = "pending",
         harness: str | None = None,
         search: str | None = None,
+        resolved_at_from: str | None = None,
+        resolved_at_before: str | None = None,
     ) -> int:
         with self._connect() as connection:
-            return count_pending_approval_requests(connection, status=status, harness=harness, search=search)
+            return count_pending_approval_requests(
+                connection,
+                status=status,
+                harness=harness,
+                search=search,
+                resolved_at_from=resolved_at_from,
+                resolved_at_before=resolved_at_before,
+            )
+
+    def oldest_approval_request_created_at(self, *, status: str = "pending") -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "select min(created_at) as oldest_created_at from approval_requests where status = ?",
+                (status,),
+            ).fetchone()
+        if row is None:
+            return None
+        value = row["oldest_created_at"]
+        return str(value) if isinstance(value, str) and value else None
 
     def count_pending_requests(self, *, harness: str | None = None, search: str | None = None) -> int:
         return self.count_approval_requests(status="pending", harness=harness, search=search)

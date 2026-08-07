@@ -352,6 +352,22 @@ def _read_only_lookup_search_args_are_safe(
     *,
     home_dir: Path | None = None,
 ) -> bool:
+    option_args = args[: args.index("--")] if "--" in args else args
+    if command == "rg" and os.environ.get("RIPGREP_CONFIG_PATH", "").strip() and "--no-config" not in option_args:
+        return False
+    file_backed_flags = {
+        "rg": frozenset({"-f", "--file", "--ignore-file", "--config-path"}),
+        "grep": frozenset({"-f", "--file"}),
+        "egrep": frozenset({"-f", "--file"}),
+        "fgrep": frozenset({"-f", "--file"}),
+    }.get(command, frozenset())
+    if any(
+        arg in file_backed_flags
+        or any(arg.startswith(f"{flag}=") for flag in file_backed_flags if flag.startswith("--"))
+        or any(arg.startswith(flag) and arg != flag for flag in file_backed_flags if flag.startswith("-"))
+        for arg in option_args
+    ):
+        return False
     execution_flags = _READ_ONLY_SEARCH_EXECUTION_FLAGS.get(command, frozenset())
     if any(arg in execution_flags or any(arg.startswith(f"{flag}=") for flag in execution_flags) for arg in args):
         return False

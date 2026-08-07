@@ -22,7 +22,6 @@ from .command_tokens import shell_tokens
 from .effect_contract import ProofRequirement, UncertaintyKind, maximum_action_floor
 from .launch_identity_environment import (
     LaunchEnvironmentPlan,
-    _script_command_payloads,
     environment_observation_material,
     inherited_launch_environment,
     launch_environment_scope_is_ambiguous,
@@ -251,16 +250,7 @@ def observe_launch_identity_binding(
         (index for index, segment in enumerate(command.segments) if segment.execution_context.startswith("top:")),
         None,
     )
-    # Scan raw tokens directly: the parser may attribute a script wrapper
-    # (sh/bash/...) to the embedded-command scope instead of the top-level
-    # wrapper chain depending on interpreter path spellings, so payloads must
-    # be discovered from the raw command text, not the normalized chain.
-    script_payloads = _script_command_payloads(raw_tokens)
-    script_scope_ambiguous = launch_environment_scope_is_ambiguous(
-        normalization_wrappers,
-        len(command.segments),
-        script_payloads=script_payloads,
-    )
+    script_scope_ambiguous = launch_environment_scope_is_ambiguous(normalization_wrappers, len(command.segments))
     planned_segments = tuple(
         plan_command_segment_environment(
             segment,

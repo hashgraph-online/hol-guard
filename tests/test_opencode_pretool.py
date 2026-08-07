@@ -276,10 +276,6 @@ def test_pretool_plugin_source_bounds_and_serializes_fallback(tmp_path: Path) ->
     assert "fallback containment could not be confirmed" in source
     assert 'process.kill(-processGroupId, "SIGKILL")' in source
     assert "return false;" in source
-    assert "guard_remaining_ms:" in source
-    assert 'firstPayload?.reason_code === "transient_overload"' in source
-    assert source.count("25 + Math.floor(Math.random() * 51)") == 1
-    assert "No approval was requested" in source
 
 
 def test_pretool_plugin_rejects_overlapping_fallback_in_process(tmp_path: Path) -> None:
@@ -307,32 +303,6 @@ console.log(overlap);
 
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip() == "HOL Guard fallback review is already in progress"
-
-
-def test_pretool_plugin_detects_split_windows_job_marker(tmp_path: Path) -> None:
-    completed = _run_generated_spawn_script(
-        tmp_path,
-        """
-const result = await spawnGuardProcess({
-  args: [
-    "-c",
-    "import sys,time;sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONT');"
-      + "sys.stderr.flush();time.sleep(0.05);"
-      + "sys.stderr.write('AINED\\\\nvisible');sys.stderr.flush()",
-  ],
-  cwd: process.cwd(),
-  deadlineMs: Date.now() + 2_000,
-  env: {},
-  stdin: "",
-});
-console.log(JSON.stringify(result));
-""",
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
-    assert result["exitCode"] == 0
-    assert result["stderr"] == "visible"
 
 
 def test_pretool_plugin_cleanup_failure_settles_and_latches(tmp_path: Path) -> None:
@@ -751,12 +721,9 @@ def test_refresh_opencode_pretool_plugin_rewrites_stale_plugin(tmp_path: Path) -
     refreshed = stale_path.read_text(encoding="utf-8")
     assert "Bun" not in refreshed
     assert 'import { spawn as nodeSpawn } from "node:child_process"' in refreshed
-    assert "guard_remaining_ms:" in refreshed
-    assert 'reason_code === "transient_overload"' in refreshed
     refreshed_managed = managed_plugin_path(ctx).read_text(encoding="utf-8")
     assert "Bun" not in refreshed_managed
     assert 'import { spawn as nodeSpawn } from "node:child_process"' in refreshed_managed
-    assert "guard_remaining_ms:" in refreshed_managed
 
 
 def test_refresh_opencode_pretool_plugin_handles_runtime_error(

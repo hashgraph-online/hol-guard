@@ -15,16 +15,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15, windows-2022, windows-2025]
-        python: ['3.12']
+        include:
+          - os: ubuntu-22.04
+            suites: ""
+          - os: ubuntu-24.04
+            suites: ""
+          - os: macos-14
+            suites: ""
+          - os: macos-15
+            suites: ""
+          - os: windows-2022
+            suites: "--suite adapter-contract --suite enterprise-network"
+          - os: windows-2025
+            suites: "--suite adapter-contract --suite enterprise-network"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
-      - run: uv sync --frozen --extra dev --python ${{ matrix.python }}
-      - run: uv run --no-sync pytest tests/test_guard_mdm_*.py --tb=short
+      - run: uv sync --frozen --extra dev --python 3.12
+      - run: uv run --no-sync python scripts/mdm/run-local-lab.py ${{ matrix.suites }}
       - run: uv run --no-sync basedpyright --level error
-      - run: uv run --no-sync ruff check src/ tests/test_guard_mdm_*.py scripts/mdm/generate-release-manifest.py
+      - run: uv run --no-sync python -c "import glob, subprocess, sys; raise SystemExit(subprocess.call([sys.executable, '-m', 'ruff', 'check', 'src/', *glob.glob('tests/test_guard_mdm_*.py'), 'scripts/mdm/generate-release-manifest.py']))"
 
   unsigned-artifact:
     needs: tests
@@ -63,8 +74,11 @@ jobs:
         run: |
           $binary = 'dist/mdm/windows/runtime/hol-guard/hol-guard.exe'
           & $binary --version
-          & $binary mdm status --scope machine --machine-root 'dist/mdm/windows/runtime' --json
-          if ($LASTEXITCODE -eq 0) { throw 'Unsigned fixture must not report healthy.' }
+          $status = Start-Process -FilePath $binary -ArgumentList @(
+            'mdm', 'status', '--scope', 'machine',
+            '--machine-root', 'dist/mdm/windows/runtime', '--json'
+          ) -Wait -PassThru -NoNewWindow
+          if ($status.ExitCode -eq 0) { throw 'Unsigned fixture must not report healthy.' }
       - uses: actions/upload-artifact@v4
         with:
           name: hol-guard-${{ matrix.platform }}-unsigned-${{ inputs.build_id }}

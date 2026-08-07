@@ -33,9 +33,11 @@ from . import commands_verified_read as _commands_verified_read
 from . import commands_contained_write as _commands_contained_write
 from . import commands_preflight as _commands_preflight
 from . import commands_dispatch_local as _commands_dispatch_local
+from . import commands_dispatch_desktop as _commands_dispatch_desktop
 from . import commands_dispatch_mdm as _commands_dispatch_mdm
 from . import commands_dispatch_proxy as _commands_dispatch_proxy
 from . import commands_dispatch_records as _commands_dispatch_records
+from . import commands_dispatch_policy_document as _commands_dispatch_policy_document
 from . import commands_dispatch_trust as _commands_dispatch_trust
 from . import commands_dispatch_admin as _commands_dispatch_admin
 from . import commands_dispatch_cloud as _commands_dispatch_cloud
@@ -48,7 +50,7 @@ from . import commands_hook_runtime_finish as _commands_hook_runtime_finish
 from . import commands_hook_generic as _commands_hook_generic
 from . import commands_hook as _commands_hook
 from . import commands_router as _commands_router
-
+from . import commands_isolation as _commands_isolation
 _SOURCE_MODULES: tuple[ModuleType, ...] = (
     __commands_shared,
     _commands_support_workspace,
@@ -73,9 +75,11 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_contained_write,
     _commands_preflight,
     _commands_dispatch_local,
+    _commands_dispatch_desktop,
     _commands_dispatch_mdm,
     _commands_dispatch_proxy,
     _commands_dispatch_records,
+    _commands_dispatch_policy_document,
     _commands_dispatch_trust,
     _commands_dispatch_admin,
     _commands_dispatch_cloud,
@@ -88,6 +92,7 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_hook_generic,
     _commands_hook,
     _commands_router,
+    _commands_isolation,
 )
 
 

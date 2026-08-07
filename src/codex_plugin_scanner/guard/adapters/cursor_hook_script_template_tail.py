@@ -252,28 +252,7 @@ def main() -> int:
         workspace=workspace,
         hook_env_overlay=_daemon_hook_env_overlay(guard_env),
     )
-    if daemon_result is None and isinstance(daemon_failure_kind, str) and daemon_failure_kind.startswith(
-        "transient_overload:"
-    ):
-        try:
-            _, retry_after_text, estimated_service_text = daemon_failure_kind.split(":", 2)
-            retry_after_ms = max(int(retry_after_text), 25 + secrets.randbelow(51))
-            estimated_service_ms = int(estimated_service_text)
-        except ValueError:
-            pass
-        else:
-            remaining_ms = int(_remaining_seconds(deadline_monotonic) * 1000)
-            if remaining_ms >= retry_after_ms + estimated_service_ms + 100:
-                time.sleep(retry_after_ms / 1000)
-                daemon_result, daemon_failure_kind = _daemon_hook_result(
-                    payload_json,
-                    deadline_monotonic=deadline_monotonic,
-                    workspace=workspace,
-                    hook_env_overlay=_daemon_hook_env_overlay(guard_env),
-                )
-    if daemon_result is None and daemon_failure_kind not in {None, "overload"} and not (
-        isinstance(daemon_failure_kind, str) and daemon_failure_kind.startswith("transient_overload:")
-    ):
+    if daemon_result is None and daemon_failure_kind not in {None, "overload"}:
         _run_guard_recovery(
             daemon_failure_kind,
             guard_env=guard_env,
@@ -285,18 +264,6 @@ def main() -> int:
             workspace=workspace,
             hook_env_overlay=_daemon_hook_env_overlay(guard_env),
         )
-    if daemon_result is None and (
-        daemon_failure_kind in {"overload"}
-        or (
-            isinstance(daemon_failure_kind, str)
-            and daemon_failure_kind.startswith("transient_overload:")
-        )
-    ):
-        if hook_event_name.strip().lower() in {"aftershellexecution", "aftermcpexecution"}:
-            print("{}")
-            return 0
-        print(json.dumps({"permission": "deny", "user_message": _OVERLOAD_REASON}))
-        return 2
     try:
         if daemon_result is not None:
             proc = subprocess.CompletedProcess(

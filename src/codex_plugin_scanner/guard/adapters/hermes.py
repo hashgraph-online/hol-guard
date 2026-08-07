@@ -398,7 +398,14 @@ class HermesHarnessAdapter(HarnessAdapter):
                     )
 
         # Discover MCP servers from both config.yaml and mcp_servers.json.
-        artifacts.extend(self._scan_mcp_servers(hermes_home, found_paths, warnings))
+        artifacts.extend(
+            self._scan_mcp_servers(
+                hermes_home,
+                found_paths,
+                warnings,
+                managed_names=frozenset(_read_managed_server_names(context)),
+            )
+        )
 
         # Container fallback: use an explicit or persisted host-home mirror
         # when the sandbox has only empty skills and trivial config.
@@ -602,6 +609,8 @@ class HermesHarnessAdapter(HarnessAdapter):
         hermes_home: Path,
         found_paths: list[str],
         warnings: list[str],
+        *,
+        managed_names: frozenset[str] = frozenset(),
     ) -> list[GuardArtifact]:
         """Read MCP server configs from config.yaml and mcp_servers.json."""
         artifacts: list[GuardArtifact] = []
@@ -612,7 +621,11 @@ class HermesHarnessAdapter(HarnessAdapter):
             found_paths.append(str(yaml_path))
             inspection = inspect_hermes_config(yaml_path, syntax="yaml")
             if inspection.complete and inspection.payload is not None:
-                yaml_servers = _mcp_servers_from_payload(inspection.payload)
+                yaml_servers = {
+                    name: config
+                    for name, config in _mcp_servers_from_payload(inspection.payload).items()
+                    if name not in managed_names
+                }
                 artifacts.extend(self._mcp_artifacts(yaml_servers, str(yaml_path), source="yaml"))
             else:
                 artifacts.append(_config_failure_artifact(yaml_path, source="yaml", inspection=inspection))

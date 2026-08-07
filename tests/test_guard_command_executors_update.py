@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
-
-import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.runtime.command_executors import (
@@ -148,9 +145,11 @@ class TestAutoUpdateThrottle:
             "update_available": True,
             "blocked_reason": None,
         }
-        with patch.object(auto_update, "build_guard_update_status_payload", return_value=status):
-            with patch.object(auto_update, "run_guard_update", return_value=({"changed": True}, 0)) as mock_update:
-                auto_update.maybe_auto_update(store, context)
+        with (
+            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
+            patch.object(auto_update, "run_guard_update", return_value=({"changed": True}, 0)) as mock_update,
+        ):
+            auto_update.maybe_auto_update(store, context)
         mock_update.assert_called_once()
 
     def test_auto_update_skipped_when_not_auto_updatable(self, tmp_path: Path) -> None:
@@ -165,9 +164,11 @@ class TestAutoUpdateThrottle:
             "update_available": True,
             "blocked_reason": "This install was set up from local source code.",
         }
-        with patch.object(auto_update, "build_guard_update_status_payload", return_value=status):
-            with patch.object(auto_update, "run_guard_update") as mock_update:
-                auto_update.maybe_auto_update(store, context)
+        with (
+            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
+            patch.object(auto_update, "run_guard_update") as mock_update,
+        ):
+            auto_update.maybe_auto_update(store, context)
         mock_update.assert_not_called()
 
     def test_auto_update_skipped_when_no_update_available(self, tmp_path: Path) -> None:
@@ -182,9 +183,11 @@ class TestAutoUpdateThrottle:
             "update_available": False,
             "blocked_reason": None,
         }
-        with patch.object(auto_update, "build_guard_update_status_payload", return_value=status):
-            with patch.object(auto_update, "run_guard_update") as mock_update:
-                auto_update.maybe_auto_update(store, context)
+        with (
+            patch.object(auto_update, "build_guard_update_status_payload", return_value=status),
+            patch.object(auto_update, "run_guard_update") as mock_update,
+        ):
+            auto_update.maybe_auto_update(store, context)
         mock_update.assert_not_called()
 
     def test_auto_update_handles_malformed_state(self, tmp_path: Path) -> None:

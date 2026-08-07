@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard import package_firewall_entitlement as package_firewall_entitlement_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
@@ -572,6 +573,11 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         )
 
     monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", unavailable_first_sync)
+    monkeypatch.setattr(
+        daemon_server,
+        "resolve_package_firewall_entitlement_with_refresh",
+        package_firewall_entitlement_module.resolve_package_firewall_entitlement,
+    )
     connect_started = threading.Event()
     connect_finalized = threading.Event()
     connect_failure_details: list[str] = []
@@ -3727,7 +3733,18 @@ def test_headless_remote_once_rejects_a_replayed_receipt_after_daemon_restart(
         daemon.stop()
 
     restarted_store = GuardStore(home)
-    restarted_daemon = GuardDaemonServer(restarted_store, host="127.0.0.1", port=0)
+    restart_deadline = time.monotonic() + 30.0
+    while True:
+        try:
+            restarted_daemon = GuardDaemonServer(restarted_store, host="127.0.0.1", port=0)
+            break
+        except RuntimeError as error:
+            if (
+                str(error) != "A previous Guard daemon remains quarantined after unconfirmed containment."
+                or time.monotonic() >= restart_deadline
+            ):
+                raise
+            time.sleep(0.05)
     restarted_daemon.start()
     try:
         replay_status, replay_payload = _read_json_response(

@@ -189,6 +189,68 @@ def test_inspects_exact_release_without_exposing_urls_in_cli(capsys: pytest.Capt
     assert "pythonhosted.org" not in output
 
 
+def test_inspect_release_ignores_valid_publish_attestation_sidecars() -> None:
+    attestation = f"{WHEEL}.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {
+            WHEEL: (WHEEL_BYTES, None),
+            SDIST: (SDIST_BYTES, None),
+            attestation: (b"signed-attestation", None),
+        },
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    inspection = inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+    assert {item.filename for item in inspection.files} == {WHEEL, SDIST}
+
+
+def test_inspect_release_ignores_nested_publish_attestation_sidecars() -> None:
+    nested_attestation = f"{WHEEL}.publish.attestation.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {
+            WHEEL: (b"wheel", hashlib.sha256(b"wheel").hexdigest()),
+            SDIST: (b"sdist", hashlib.sha256(b"sdist").hexdigest()),
+            nested_attestation: (b"attestation", None),
+        },
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    inspection = inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+    assert {item.filename for item in inspection.files} == {WHEEL, SDIST}
+
+
+def test_inspect_release_rejects_release_with_only_publish_attestation_sidecars() -> None:
+    attestation = f"{WHEEL}.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {attestation: (b"attestation", None)},
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    with pytest.raises(RegistryVerificationError, match="no distribution files"):
+        inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+
+
+def test_rejects_publish_attestation_for_invalid_distribution(tmp_path: Path) -> None:
+    attestation = "not-a-distribution.publish.attestation"
+    payload = _release_payload(
+        Registry.TESTPYPI,
+        {attestation: (b"signed-attestation", None)},
+    )
+    fetcher = FakeFetcher({_release_url(Registry.TESTPYPI): payload})
+
+    with pytest.raises(RegistryVerificationError, match="Invalid distribution filename"):
+        inspect_release(Registry.TESTPYPI, VERSION, fetcher=fetcher)
+    dist = _local_dist(tmp_path)
+    (dist / attestation).write_bytes(b"invalid")
+    with pytest.raises(RegistryVerificationError, match="Invalid distribution filename"):
+        compute_local_distribution_hashes(dist, VERSION)
+
+
 def test_inspect_release_rejects_an_invalid_distribution_port() -> None:
     document = json.loads(
         _release_payload(
@@ -206,7 +268,8 @@ def test_inspect_release_rejects_an_invalid_distribution_port() -> None:
 def test_computes_local_guard_wheel_and_sdist_hashes(tmp_path: Path) -> None:
     dist = _local_dist(tmp_path)
     (dist / f"plugin_scanner-{VERSION}-py3-none-any.whl").write_bytes(b"scanner")
-
+    (dist / f"{WHEEL}.publish.attestation").write_bytes(b"wheel-attestation")
+    (dist / f"{SDIST}.publish.attestation.publish.attestation").write_bytes(b"nested-sdist-attestation")
     assert compute_local_distribution_hashes(dist, VERSION) == {
         SDIST: _sha(SDIST_BYTES),
         WHEEL: _sha(WHEEL_BYTES),

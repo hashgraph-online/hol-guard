@@ -1,0 +1,122 @@
+name: Desktop contract CI
+
+on:
+  pull_request:
+    paths:
+      - src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser.py
+      - src/codex_plugin_scanner/guard/cli/commands_router.py
+      - src/codex_plugin_scanner/guard/cli/commands_support.py
+      - src/codex_plugin_scanner/guard/cli/product.py
+      - src/codex_plugin_scanner/guard/store_approvals.py
+      - src/codex_plugin_scanner/guard/store_approval_facade.py
+      - src/codex_plugin_scanner/guard/store_receipts.py
+      - tests/test_guard_desktop_contract.py
+      - tests/fixtures/guard-command-corpus/decision-diff-report.json
+      - ci/test-suite-ratchet-baseline.json
+      - docs/guard/desktop-bootstrap-contract.md
+      - .github/workflows/desktop-contract-ci.yml
+  push:
+    branches:
+      - release/3.0
+    paths:
+      - src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py
+      - src/codex_plugin_scanner/guard/cli/commands_parser.py
+      - src/codex_plugin_scanner/guard/cli/commands_router.py
+      - src/codex_plugin_scanner/guard/cli/commands_support.py
+      - src/codex_plugin_scanner/guard/cli/product.py
+      - src/codex_plugin_scanner/guard/store_approvals.py
+      - src/codex_plugin_scanner/guard/store_approval_facade.py
+      - src/codex_plugin_scanner/guard/store_receipts.py
+      - tests/test_guard_desktop_contract.py
+      - tests/fixtures/guard-command-corpus/decision-diff-report.json
+      - ci/test-suite-ratchet-baseline.json
+      - docs/guard/desktop-bootstrap-contract.md
+      - .github/workflows/desktop-contract-ci.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev --python 3.12
+
+      - name: Validate formatting and lint
+        run: |
+          uv run --no-sync python -m ruff format --check \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser.py \
+            src/codex_plugin_scanner/guard/store_approvals.py \
+            src/codex_plugin_scanner/guard/store_approval_facade.py \
+            src/codex_plugin_scanner/guard/store_receipts.py \
+            tests/test_guard_desktop_contract.py
+          uv run --no-sync python -m ruff check \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser_desktop.py \
+            src/codex_plugin_scanner/guard/cli/commands_parser.py \
+            src/codex_plugin_scanner/guard/store_approvals.py \
+            src/codex_plugin_scanner/guard/store_approval_facade.py \
+            src/codex_plugin_scanner/guard/store_receipts.py \
+            tests/test_guard_desktop_contract.py
+
+      - name: Run Desktop contract tests
+        run: uv run --no-sync pytest tests/test_guard_desktop_contract.py --tb=short
+
+      - name: Validate source-bound decision evidence
+        run: uv run --no-sync python tests/guard_command_decision_diff.py --check
+
+      - name: Validate test-suite ratchet
+        run: |
+          uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
+          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
+            --baseline ci/test-suite-ratchet-baseline.json \
+            --inventory test-inventory.json
+
+      - name: Smoke test CLI projection
+        run: |
+          export HOL_GUARD_HOME="$RUNNER_TEMP/guard-home"
+          mkdir -p "$HOL_GUARD_HOME"
+          uv run --no-sync hol-guard desktop bootstrap --json > "$RUNNER_TEMP/desktop-bootstrap.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "desktop-bootstrap.json"
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          assert payload["schema"] == "guard-desktop-bootstrap.v1"
+          assert payload["status"] in {
+              "ready",
+              "attention_required",
+              "setup_required",
+              "runtime_unavailable",
+              "incompatible",
+          }
+          PY

@@ -36,6 +36,7 @@ class DecisionFactorSource(str, Enum):
     POLICY = "policy"
     CONTAINMENT = "containment"
     AUTHORIZATION = "authorization"
+    ASSURANCE = "assurance"
 
     CONTROL = "control"
 

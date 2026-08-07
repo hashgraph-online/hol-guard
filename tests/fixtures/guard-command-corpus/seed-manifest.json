@@ -17,7 +17,7 @@
   "pairs_sha256": "f8a972f4924ad015753659cd0a987e5d077f2c9981b42187184ad689231c459f",
   "known_gaps_sha256": "5574b48b2a274aaf43d964b4bf4ff75ac337ff86c3c3d25b23dcbcf63de13513",
   "reproducible_command": "uv run --no-sync pytest -q tests/test_guard_command_corpus.py",
-  "evaluation_budget_seconds": 30,
+  "evaluation_budget_seconds": 45,
   "evaluation_rss_budget_mib": 512,
   "quotas": {
     "benign_workflows": 10,

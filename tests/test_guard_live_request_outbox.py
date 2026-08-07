@@ -84,6 +84,7 @@ def _request(
     summary: str = "Review test action",
     action_identity: str | None = None,
     queue_group_id: str | None = None,
+    workspace: str | None = None,
 ) -> GuardApprovalRequest:
     return GuardApprovalRequest(
         request_id=request_id,
@@ -102,6 +103,7 @@ def _request(
         queue_group_id=queue_group_id or request_id,
         trigger_summary=summary,
         last_seen_at=_NOW,
+        workspace=workspace,
     )
 
 
@@ -553,7 +555,7 @@ def test_legacy_outbox_reassignment_requires_exact_operator_confirmation(tmp_pat
         _oauth_state("workspace-default"),
         _NOW,
     )
-    store.add_approval_request(_request("request-legacy"), _NOW)
+    store.add_approval_request(_request("request-legacy", workspace="workspace-default"), _NOW)
     _replace_outbox_with_legacy_row(
         store,
         request_id="request-legacy",
@@ -588,6 +590,44 @@ def test_legacy_outbox_reassignment_requires_exact_operator_confirmation(tmp_pat
     assert len(rows) == 1
     assert rows[0]["oauth_source"] == "default"
     assert migrated_store.get_approval_request("request-legacy")["oauth_source"] == "default"
+
+
+def test_legacy_outbox_reassignment_rejects_cross_workspace_rows(tmp_path) -> None:
+    guard_home = tmp_path / "guard"
+    store = GuardStore(guard_home)
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        _oauth_state("workspace-default"),
+        _NOW,
+    )
+    store.add_approval_request(_request("request-default", workspace="workspace-default"), _NOW)
+    store.add_approval_request(_request("request-other", workspace="workspace-other"), _NOW)
+    _replace_outbox_with_legacy_row(
+        store,
+        request_id="request-default",
+        workspace_id="workspace-previously-assumed",
+    )
+    _replace_outbox_with_legacy_row(
+        store,
+        request_id="request-other",
+        workspace_id="workspace-previously-assumed",
+    )
+
+    migrated_store = GuardStore(guard_home)
+
+    assert (
+        migrated_store.reassign_quarantined_live_request_outbox(
+            approved_source="default",
+            approved_workspace_id="workspace-default",
+        )
+        == 1
+    )
+    default_request = migrated_store.get_approval_request("request-default")
+    other_request = migrated_store.get_approval_request("request-other")
+    assert default_request is not None
+    assert other_request is not None
+    assert default_request["oauth_source"] == "default"
+    assert other_request["oauth_source"] is None
 
 
 def test_newer_mutation_preserves_retry_backoff(tmp_path) -> None:

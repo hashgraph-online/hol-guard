@@ -1,0 +1,10 @@
+{
+  "hookName": "PreToolUse",
+  "taskId": "fixture-legacy-pretool",
+  "preToolUse": {
+    "toolName": "run_commands",
+    "parameters": {
+      "commands": "[\"printf fixture-safe\"]"
+    }
+  }
+}

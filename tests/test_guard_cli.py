@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shlex
 import sqlite3
 import subprocess
 import sys
@@ -907,25 +906,6 @@ class TestGuardCli:
         output = capsys.readouterr().out
         assert "usage: hol-guard" in output
         assert "Run `hol-guard --help`" not in output
-
-    def test_hol_guard_routes_flat_commands_without_nested_guard_alias(self, monkeypatch, capsys) -> None:
-        called: dict[str, object] = {}
-
-        def _fake_run_guard_command(args):
-            called["guard_command"] = args.guard_command
-            return 7
-
-        monkeypatch.setattr(sys, "argv", ["hol-guard"])
-        monkeypatch.setattr("codex_plugin_scanner.cli.run_guard_command", _fake_run_guard_command)
-
-        assert main(["status"]) == 7
-        assert called == {"guard_command": "status"}
-
-        with pytest.raises(SystemExit) as exc_info:
-            main(["guard", "status"])
-
-        assert exc_info.value.code == 2
-        assert "invalid choice: 'guard'" in capsys.readouterr().err
 
     def test_plugin_guard_program_routes_directly_to_guard_mode(self, monkeypatch) -> None:
         called: dict[str, object] = {}
@@ -4121,7 +4101,15 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert output["installer"] == "uv"
         assert commands == [
-            ["uv", "tool", "install", "--force", "--refresh-package", "hol-guard", "hol-guard==2.0.1092"]
+            [
+                "uv",
+                "tool",
+                "install",
+                "--force",
+                "--refresh-package",
+                "hol-guard",
+                "hol-guard==2.0.1092",
+            ]
         ]
         assert output["resulting_version"] == "2.0.1092"
         assert output["status"] == "updated"
@@ -4248,21 +4236,16 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_update_ignores_malformed_guard_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(home_dir / "config.toml", "[broken\n")
-        captured_alpha: list[object] = []
         monkeypatch.setattr(
             guard_commands_module,
             "run_guard_update",
-            lambda **kwargs: (
-                captured_alpha.append(kwargs.get("include_alpha")) or {"status": "updated", "message": "ok"},
-                0,
-            ),
+            lambda **_: ({"status": "updated", "message": "ok"}, 0),
         )
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert captured_alpha == [False]
         assert output["status"] == "updated"
         assert output["message"] == "ok"
 
@@ -4310,47 +4293,6 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert captured_wheels == ["dist"]
-        assert output["status"] == "planned"
-
-    def test_guard_update_forwards_alpha_opt_in(self, tmp_path, monkeypatch, capsys):
-        home_dir = tmp_path / "home"
-        captured_alpha: list[object] = []
-
-        monkeypatch.setattr(
-            guard_commands_module,
-            "run_guard_update",
-            lambda **kwargs: (
-                captured_alpha.append(kwargs.get("include_alpha")) or {"status": "planned", "message": "ok"},
-                0,
-            ),
-        )
-
-        rc = main(["guard", "update", "--home", str(home_dir), "--alpha", "--json"])
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 0
-        assert captured_alpha == [True]
-        assert output["status"] == "planned"
-
-    def test_guard_update_uses_persisted_alpha_channel(self, tmp_path, monkeypatch, capsys):
-        home_dir = tmp_path / "home"
-        _write_text(home_dir / "config.toml", 'update_channel = "alpha"\n')
-        captured_alpha: list[object] = []
-
-        monkeypatch.setattr(
-            guard_commands_module,
-            "run_guard_update",
-            lambda **kwargs: (
-                captured_alpha.append(kwargs.get("include_alpha")) or {"status": "planned", "message": "ok"},
-                0,
-            ),
-        )
-
-        rc = main(["guard", "update", "--home", str(home_dir), "--json"])
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 0
-        assert captured_alpha == [True]
         assert output["status"] == "planned"
 
     def test_guard_update_repairs_stale_codex_native_hooks(self, tmp_path, monkeypatch, capsys):
@@ -4630,9 +4572,7 @@ args = ["workspace-skill.js", "--changed"]
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
 
-    def test_guard_update_keeps_unauthenticated_legacy_codex_workspace_record_global(
-        self, tmp_path, monkeypatch, capsys
-    ):
+    def test_guard_update_repairs_workspace_codex_install_in_recorded_workspace(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         GuardStore(home_dir).set_managed_install(
@@ -4671,33 +4611,7 @@ args = ["workspace-skill.js", "--changed"]
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
-        hook_command = hooks_payload["PreToolUse"][0]["hooks"][0]["command"]
-        bridge_config = json.loads(shlex.split(hook_command)[3])
-        assert "--workspace" not in bridge_config["fallback_command"]
         assert (workspace_dir / ".codex" / "config.toml").exists() is False
-
-    def test_codex_repair_preserves_authenticated_legacy_workspace_binding(self, tmp_path, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = (tmp_path / "workspace").resolve()
-        context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir)
-        managed_install = {
-            "harness": "codex",
-            "workspace": str(workspace_dir),
-            "manifest": {},
-        }
-        monkeypatch.setattr(
-            guard_update_commands_module,
-            "load_authenticated_hook_manifest",
-            lambda *_args: {"context": {"workspace_dir": str(workspace_dir)}},
-        )
-
-        repair_context, repair_workspace = guard_update_commands_module._repair_context_from_managed_install(
-            context,
-            managed_install,
-        )
-
-        assert repair_context.workspace_override_explicit is True
-        assert repair_workspace == str(workspace_dir)
 
     def test_guard_update_fails_closed_on_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -5449,9 +5363,9 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         reason = output["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "Open HOL Guard to approve or keep this blocked" in reason
-        assert "http://127.0.0.1:" in reason
-        assert "Approve it in HOL Guard, then retry." not in reason
+        assert "HOL Guard blocked this action" in reason
+        assert "http://127.0.0.1:" not in reason
+        assert "approve" not in reason.lower()
 
     def test_guard_codex_hook_emits_json_denial_in_actual_codex_runtime(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -5485,9 +5399,9 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         reason = output["hookSpecificOutput"]["permissionDecisionReason"]
         assert "destructive shell command" in reason
-        assert "Open HOL Guard to approve or keep this blocked" in reason
-        assert "http://127.0.0.1:" in reason
-        assert "Approve it in HOL Guard, then retry." not in reason
+        assert "HOL Guard blocked this action" in reason
+        assert "http://127.0.0.1:" not in reason
+        assert "approve" not in reason.lower()
 
     def test_guard_codex_hook_observe_mode_does_not_pause_risky_tool_use(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -5553,9 +5467,9 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         reason = output["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "Open HOL Guard to approve or keep this blocked" in reason
-        assert "http://127.0.0.1:" in reason
-        assert "Approve it in HOL Guard, then retry." not in reason
+        assert "HOL Guard blocked this action" in reason
+        assert "http://127.0.0.1:" not in reason
+        assert "approve" not in reason.lower()
 
     def test_guard_codex_hook_blocks_curl_upload_file_path(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -8462,35 +8376,33 @@ url = http://127.0.0.1:8787/guard-canary
 
     def test_guard_dashboard_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        opened_urls: list[str] = []
-        open_keys: list[str | None] = []
-        force_open_flags: list[bool] = []
+        from unittest.mock import MagicMock
+
+        from codex_plugin_scanner.guard import dashboard_launcher
 
         monkeypatch.setattr(
-            guard_commands_module,
+            dashboard_launcher,
             "ensure_guard_daemon",
             lambda guard_home: "http://127.0.0.1:5474",
         )
         monkeypatch.setattr(
-            guard_commands_module,
-            "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
-                opened_urls.append(approval_center_url),
-                open_keys.append(open_key),
-                force_open_flags.append(force_open),
-                {"opened": True, "reason": "opened", "browser_url": approval_center_url},
-            )[-1],
+            dashboard_launcher,
+            "load_guard_daemon_auth_token",
+            lambda guard_home: "fake-token",
         )
+        mock_surface = MagicMock()
+        mock_surface.ensure_surface.return_value = {
+            "opened": True,
+            "reason": "opened",
+            "browser_url": "http://127.0.0.1:5474",
+        }
+        monkeypatch.setattr(dashboard_launcher, "GuardSurfaceRuntime", lambda store: mock_surface)
 
         rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert opened_urls == ["http://127.0.0.1:5474"]
-        assert open_keys == ["dashboard"]
-        assert force_open_flags == [True]
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
-        assert output["browser_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is True
         assert output["reason"] == "opened"
         assert "notification_setup_started" not in output
@@ -8658,7 +8570,12 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert rc == 0
         assert output["mode"] == "auto_approved"
-        assert [step["decision"] for step in output["plan"]] == ["approved", "approved", "approved", "approved"]
+        assert [step["decision"] for step in output["plan"]] == [
+            "approved",
+            "approved",
+            "approved",
+            "approved",
+        ]
         assert dashboard_calls == [("http://127.0.0.1:5474", "init", True)]
         assert install_calls == [("install", None, True)]
         assert output["dashboard"]["opened"] is True
@@ -8970,7 +8887,6 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_init_skip_flags_do_not_run_install_cloud_or_notifications(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
-
         monkeypatch.setattr(
             guard_commands_module,
             "ensure_guard_daemon",
@@ -9027,43 +8943,42 @@ url = http://127.0.0.1:8787/guard-canary
 
     def test_guard_admin_alias_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        opened_urls: list[str] = []
-        open_keys: list[str | None] = []
-        force_open_flags: list[bool] = []
+        from unittest.mock import MagicMock
+
+        from codex_plugin_scanner.guard import dashboard_launcher
 
         monkeypatch.setattr(
-            guard_commands_module,
+            dashboard_launcher,
             "ensure_guard_daemon",
             lambda guard_home: "http://127.0.0.1:5474",
         )
         monkeypatch.setattr(
-            guard_commands_module,
-            "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
-                opened_urls.append(approval_center_url),
-                open_keys.append(open_key),
-                force_open_flags.append(force_open),
-                {"opened": False, "reason": "policy-disabled", "browser_url": approval_center_url},
-            )[-1],
+            dashboard_launcher,
+            "load_guard_daemon_auth_token",
+            lambda guard_home: "fake-token",
         )
+        mock_surface = MagicMock()
+        mock_surface.ensure_surface.return_value = {
+            "opened": False,
+            "reason": "policy-disabled",
+            "browser_url": "http://127.0.0.1:5474",
+        }
+        monkeypatch.setattr(dashboard_launcher, "GuardSurfaceRuntime", lambda store: mock_surface)
 
         rc = main(["guard", "admin", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert opened_urls == ["http://127.0.0.1:5474"]
-        assert open_keys == ["dashboard"]
-        assert force_open_flags == [True]
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
-        assert output["browser_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is False
         assert output["reason"] == "policy-disabled"
 
     def test_guard_dashboard_returns_error_when_daemon_start_fails(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
+        from codex_plugin_scanner.guard import dashboard_launcher
 
         monkeypatch.setattr(
-            guard_commands_module,
+            dashboard_launcher,
             "ensure_guard_daemon",
             lambda guard_home: (_ for _ in ()).throw(RuntimeError("dashboard_unavailable")),
         )

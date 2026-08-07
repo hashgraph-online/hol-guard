@@ -1,0 +1,13 @@
+{
+  "hookName": "PostToolUse",
+  "taskId": "fixture-legacy-posttool",
+  "postToolUse": {
+    "toolName": "read_files",
+    "parameters": {
+      "paths": "[\"README.md\"]"
+    },
+    "result": "fixture output",
+    "success": true,
+    "executionTimeMs": 1
+  }
+}

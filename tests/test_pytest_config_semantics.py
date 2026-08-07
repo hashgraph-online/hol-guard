@@ -271,10 +271,13 @@ def test_pytest_runner_skips_option_values_before_wrapped_command(tmp_path: Path
 
 
 def test_pytest_runner_does_not_treat_dependency_or_payload_argument_as_executable() -> None:
-    assert _pytest_args_from_segment(
-        ["uv", "run", "--with", "pytest", "echo", "pytest", "tests"],
-        0,
-    ) is None
+    assert (
+        _pytest_args_from_segment(
+            ["uv", "run", "--with", "pytest", "echo", "pytest", "tests"],
+            0,
+        )
+        is None
+    )
 
 
 def test_non_applicable_pyproject_does_not_hide_later_tox_config(tmp_path: Path) -> None:

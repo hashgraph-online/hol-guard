@@ -12,6 +12,7 @@ import argparse
 from ...argparse_utils import FriendlyArgumentParser
 from ._commands_shared import _GUARD_HELP_GROUPS
 from .commands_parser_cloud import _configure_guard_cloud_parsers
+from .commands_parser_desktop import _configure_guard_desktop_parser
 from .commands_parser_helpers import (
     _add_aibom_cli_args,
     _add_guard_cisco_mode_arg,
@@ -59,6 +60,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         ),
     )
     _configure_guard_local_parsers(guard_subparsers)
+    _configure_guard_desktop_parser(guard_subparsers)
     _configure_guard_mdm_parsers(guard_subparsers)
     _configure_guard_policy_parsers(guard_subparsers)
     _configure_guard_cloud_parsers(guard_subparsers)
