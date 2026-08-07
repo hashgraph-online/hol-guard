@@ -26,55 +26,36 @@ jobs:
           path = Path("src/codex_plugin_scanner/guard/cli/update_subprocess.py")
           text = path.read_text(encoding="utf-8")
 
-          old_bootstrap = '''_TRUSTED_MODULE_BOOTSTRAP = (
-              "import json,runpy,sys; "
-              "import_paths=json.loads(sys.argv.pop(1)); "
-              "extra_import_paths=json.loads(sys.argv.pop(1)); "
-              "module=sys.argv.pop(1); "
-              "sys.path[:0]=import_paths; "
-              "sys.path.extend(extra_import_paths); "
-              "sys.argv[0]=module; "
-              "runpy.run_module(module, run_name='__main__', alter_sys=True)"
-          )'''
-          new_bootstrap = '''_TRUSTED_MODULE_BOOTSTRAP = (
-              "import json,runpy,sys; "
-              "import_paths=json.loads(sys.argv.pop(1)); "
-              "extra_import_paths=json.loads(sys.argv.pop(1)) if sys.argv[1].startswith('[') else []; "
-              "module=sys.argv.pop(1); "
-              "sys.path[:0]=import_paths; "
-              "sys.path.extend(extra_import_paths); "
-              "sys.argv[0]=module; "
-              "runpy.run_module(module, run_name='__main__', alter_sys=True)"
-          )'''
+          old_bootstrap_line = '    "extra_import_paths=json.loads(sys.argv.pop(1)); "\n'
+          new_bootstrap_line = '    "extra_import_paths=json.loads(sys.argv.pop(1)) if sys.argv[1].startswith(\'[\') else []; "\n'
+          if old_bootstrap_line not in text:
+              raise SystemExit("trusted module bootstrap line not found")
+          text = text.replace(old_bootstrap_line, new_bootstrap_line, 1)
 
-          old_command = '''        return [
-              str(self.python.launch_path),
-              *_trusted_python_flags(),
-              "-S",
-              "-c",
-              _TRUSTED_MODULE_BOOTSTRAP,
-              self._python_import_paths_json(),
-              json.dumps(extra_import_paths, separators=(",", ":")),
-              module,
-              *args,
-          ]'''
-          new_command = '''        command = [
-              str(self.python.launch_path),
-              *_trusted_python_flags(),
-              "-S",
-              "-c",
-              _TRUSTED_MODULE_BOOTSTRAP,
-              self._python_import_paths_json(),
-          ]
-          if extra_import_paths:
-              command.append(json.dumps(extra_import_paths, separators=(",", ":")))
-          return [*command, module, *args]'''
-
-          if old_bootstrap not in text:
-              raise SystemExit("trusted module bootstrap block not found")
-          if old_command not in text:
-              raise SystemExit("python_module_command block not found")
-          text = text.replace(old_bootstrap, new_bootstrap, 1).replace(old_command, new_command, 1)
+          start = text.index("    def python_module_command")
+          end = text.index("    def _python_import_paths_json", start)
+          method = text[start:end]
+          if "        return [\n" not in method:
+              raise SystemExit("python_module_command return not found")
+          method = method.replace("        return [\n", "        command = [\n", 1)
+          old_tail = (
+              '            self._python_import_paths_json(),\n'
+              '            json.dumps(extra_import_paths, separators=(",", ":")),\n'
+              '            module,\n'
+              '            *args,\n'
+              '        ]\n\n'
+          )
+          new_tail = (
+              '            self._python_import_paths_json(),\n'
+              '        ]\n'
+              '        if extra_import_paths:\n'
+              '            command.append(json.dumps(extra_import_paths, separators=(",", ":")))\n'
+              '        return [*command, module, *args]\n\n'
+          )
+          if old_tail not in method:
+              raise SystemExit("python_module_command tail not found")
+          method = method.replace(old_tail, new_tail, 1)
+          text = text[:start] + method + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
           python -m pip install --disable-pip-version-check ruff==0.15.17
