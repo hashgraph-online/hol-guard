@@ -730,7 +730,9 @@ def build_trusted_update_context(
     install_prefix = Path(sys.prefix).expanduser().resolve()
     python_import_paths = _trusted_python_import_paths()
     pipx_shared_import_identity = (
-        _trusted_pipx_shared_import_identity(python_import_paths) if installer_kind == "pipx" else None
+        _trusted_pipx_shared_import_identity(python_import_paths)
+        if installer_kind == "pipx"
+        else None
     )
     environment = _trusted_environment(
         path=trusted_search_path,
@@ -768,7 +770,10 @@ def build_trusted_update_context(
         for path in python_import_paths
     )
     if pipx_shared_import_identity is not None:
-        python_import_identities = (*python_import_identities, pipx_shared_import_identity)
+        python_import_identities = (
+            *python_import_identities,
+            pipx_shared_import_identity,
+        )
     ca_bundle_identity = (
         FilesystemIdentity.capture(
             Path(environment["SSL_CERT_FILE"]),
@@ -790,7 +795,9 @@ def build_trusted_update_context(
         install_prefix=install_prefix,
         python_import_paths=python_import_paths,
         pipx_shared_import_path=(
-            pipx_shared_import_identity.canonical_path if pipx_shared_import_identity is not None else None
+            pipx_shared_import_identity.canonical_path
+            if pipx_shared_import_identity is not None
+            else None
         ),
         neutral_identities=neutral_identities,
         python_import_identities=python_import_identities,
