@@ -126,7 +126,29 @@ def test_normalizes_device_limit_without_affecting_local_protection() -> None:
     assert error.local_protection_affected is False
     assert error.manage_url == "/guard/settings/devices"
     assert "still protected" in guard_cloud_status_copy(error)
+    assert "Solo includes Cloud sync for two devices" in guard_cloud_status_copy(error)
     assert "$" not in guard_cloud_status_copy(error)
+
+
+def test_device_limit_copy_does_not_mislabel_other_plans_as_solo() -> None:
+    error = parse_guard_cloud_plan_error(
+        {
+            "error": {
+                "code": "device_limit_reached",
+                "message": "Device limit reached.",
+                "planId": "team",
+                "limit": 25,
+                "current": 25,
+            }
+        },
+        http_status=409,
+    )
+
+    assert error is not None
+    copy = guard_cloud_status_copy(error)
+    assert "still protected" in copy
+    assert "25 devices" in copy
+    assert "Solo" not in copy
 
 
 def test_normalizes_billing_trial_paused_and_outage_separately() -> None:
