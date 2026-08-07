@@ -150,7 +150,8 @@ _RECEIPT_WARN_ROLLUP_MIGRATION_VERSION = 16
 # Include the workflow-capability retired-index migration so a database created under an
 # earlier schema version (which still owns the retired index) is not treated as current and
 # is forced through ``_initialize_schema`` on the next open, where the index is reaped.
-_REQUIRED_SCHEMA_MIGRATION_VERSIONS = tuple(range(2, STORAGE_QUERY_INDEX_MIGRATION_VERSION + 1)) + (
+_REQUIRED_SCHEMA_MIGRATION_VERSIONS = (
+    *range(2, STORAGE_QUERY_INDEX_MIGRATION_VERSION + 1),
     WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,
 )
 _FATAL_SQLITE_ERROR_MARKERS = (
