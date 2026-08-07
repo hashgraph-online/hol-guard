@@ -1,4 +1,4 @@
-"""Regression coverage for local-protection hotfix paths."""
+"""Regression coverage for local-protection hotfix contracts."""
 
 from __future__ import annotations
 
