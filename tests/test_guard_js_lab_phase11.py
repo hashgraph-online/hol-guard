@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.package_intent import build_package_requ
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_js_supply_chain_phase11 import WORKSPACE_ID, _bundle_response, _package, _write_text
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +192,7 @@ def test_guard_js_offline_fake_registry_lab_covers_safe_vulnerable_malware_yanke
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)

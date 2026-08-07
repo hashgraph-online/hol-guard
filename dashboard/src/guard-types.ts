@@ -454,6 +454,7 @@ export type PackageManagerProtection = {
   shell_profile_path: string | null;
   shim_dir: string;
   supported_managers: string[];
+  detected_managers?: string[];
   installed_managers: string[];
   active_managers: string[];
   missing_shims: string[];

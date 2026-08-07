@@ -40,6 +40,14 @@ const phase11Payload = normalizePackageFirewallStatus({
 
 assert(phase11Payload.detected_managers.length === 2, "SCSR151: detected managers surface on status response");
 assert(
+  phase11Payload.protection?.detected_managers?.join(",") === "npm,pnpm",
+  "SCSR151: firewall protection forwards detected managers",
+);
+assert(
+  phase11Payload.protection?.unprotected_managers.join(",") === "pnpm",
+  "SCSR151: firewall protection excludes supported-but-undetected managers from remediation",
+);
+assert(
   phase11Payload.last_audit_proof_at === "2026-06-07T12:00:00Z",
   "SCSR151: last audit proof timestamp surfaces on status response",
 );
@@ -151,6 +159,14 @@ assert(
 assert(
   hiddenManagerPayload.package_shims[0]?.manager === "npm",
   "SCSR151: only detected managers render in shim list",
+);
+assert(
+  hiddenManagerPayload.protection?.detected_managers?.join(",") === "npm",
+  "SCSR151: hidden support-matrix managers do not enter protection coverage",
+);
+assert(
+  hiddenManagerPayload.protection?.unprotected_managers.join(",") === "npm",
+  "SCSR151: only detected unprotected managers require remediation",
 );
 
 console.log("scsr-phase09-package-firewall-status.test.ts: all assertions passed");

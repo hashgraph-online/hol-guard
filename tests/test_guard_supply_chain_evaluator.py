@@ -44,7 +44,15 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+def _seed_guard_cloud(
+    store,
+    *,
+    workspace_id=None,
+    sync_url=None,
+    token="demo-token",
+    now="2026-05-19T00:00:00Z",
+    plan_id="free",
+):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
 
     Also installs a test-only resolver override so sync-path exercises stay hermetic
@@ -64,6 +72,9 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
         grant_id="grant-1",
         machine_id="machine-1",
+        supply_chain_entitlement_expires_at=("2099-01-01T00:00:00Z" if plan_id != "free" else None),
+        supply_chain_firewall=plan_id != "free",
+        supply_chain_plan_id=plan_id,
         workspace_id=workspace_id,
         now=now,
     )
@@ -84,6 +95,18 @@ def _force_cloud_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
         raise TimeoutError("cloud unreachable")
 
     monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", cloud_timeout)
+
+
+def _force_unpaid_entitlement(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        evaluator_module,
+        "resolve_package_firewall_entitlement",
+        lambda _store: {
+            "allowed": False,
+            "reason": "paid_guard_cloud_required",
+            "tier": "free",
+        },
+    )
 
 
 def _iso(value: datetime) -> str:
@@ -926,6 +949,7 @@ def test_evaluate_package_request_artifact_skips_cached_eval_when_workspace_fing
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    _force_unpaid_entitlement(monkeypatch)
     response = _bundle_response(
         packages=[
             _package(
@@ -1050,6 +1074,52 @@ def test_evaluate_package_request_artifact_handles_upgrade_required_with_premium
     assert "upgrade" in result.user_copy.title.lower()
 
 
+def test_free_cloud_entitlement_may_fallback_to_local_package_intelligence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="free")
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+                normalized_severity="low",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                risk_score=220,
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    def raise_http_error(*_args: object, **_kwargs: object) -> object:
+        raise urllib.error.HTTPError(
+            "https://hol.org/guard/supply-chain/evaluate",
+            400,
+            "cloud evaluation unavailable",
+            {},
+            None,
+        )
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_http_error)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement == "offline_cached"
+    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
+
+
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404])
 def test_evaluate_package_request_artifact_distinguishes_auth_from_validation_http_errors(
     tmp_path: Path,
@@ -1057,7 +1127,7 @@ def test_evaluate_package_request_artifact_distinguishes_auth_from_validation_ht
     status_code: int,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
     response = _bundle_response(
         packages=[
             _package(
@@ -1096,14 +1166,9 @@ def test_evaluate_package_request_artifact_distinguishes_auth_from_validation_ht
 
     expected_code = "cloud_auth_error" if status_code in {401, 403} else "cloud_validation_error"
     assert any(reason["code"] == expected_code for reason in result.reasons)
-    if status_code == 401:
-        assert result.decision == "monitor"
-        assert result.policy_action == "allow"
-        assert result.enforcement == "offline_cached"
-    else:
-        assert result.decision == "ask"
-        assert result.policy_action == "require-reapproval"
-        assert result.enforcement == "premium_cloud"
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert result.enforcement == "premium_cloud"
 
 
 def test_evaluate_package_request_artifact_refreshes_expired_cloud_access_token(
@@ -1158,8 +1223,8 @@ def test_evaluate_package_request_artifact_refreshes_expired_cloud_access_token(
 @pytest.mark.parametrize(
     ("refreshed_error", "expected_code", "expected_action"),
     [
-        (TimeoutError("refresh timed out"), "cloud_timeout", "require-reapproval"),
-        (ValueError("invalid response"), "cloud_validation_error", "require-reapproval"),
+        (TimeoutError("refresh timed out"), "cloud_validation_error", "block"),
+        (ValueError("invalid response"), "cloud_validation_error", "block"),
     ],
 )
 def test_cloud_access_token_refresh_failure_returns_safe_evaluation(
@@ -1170,7 +1235,7 @@ def test_cloud_access_token_refresh_failure_returns_safe_evaluation(
     expected_action: str,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
 
     auth_resolutions = 0
 
@@ -1216,7 +1281,7 @@ def test_unavailable_configured_credentials_use_complete_signed_bundle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
     response = _bundle_response(
         packages=[
             _package(
@@ -1246,8 +1311,8 @@ def test_unavailable_configured_credentials_use_complete_signed_bundle(
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "monitor"
-    assert result.policy_action == "allow"
+    assert result.decision == "block"
+    assert result.policy_action == "block"
     assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
 
 
@@ -1258,7 +1323,7 @@ def test_untrusted_stored_oauth_issuer_cannot_use_bundle_fallback(
     from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
     response = _bundle_response(
         packages=[
             _package(
@@ -1296,8 +1361,8 @@ def test_untrusted_stored_oauth_issuer_cannot_use_bundle_fallback(
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
+    assert result.decision == "block"
+    assert result.policy_action == "block"
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
@@ -1306,7 +1371,7 @@ def test_malformed_auth_context_without_sync_url_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
 
     monkeypatch.setattr(
         evaluator_module,
@@ -1321,8 +1386,8 @@ def test_malformed_auth_context_without_sync_url_fails_closed(
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
+    assert result.decision == "block"
+    assert result.policy_action == "block"
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
@@ -1406,6 +1471,7 @@ def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_befo
     _seed_guard_cloud(
         store,
         workspace_id=WORKSPACE_ID,
+        plan_id="team",
         sync_url="https://evil.example/api/guard/receipts/sync",
         token="demo-token",
     )
@@ -1437,8 +1503,8 @@ def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_befo
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
+    assert result.decision == "block"
+    assert result.policy_action == "block"
     assert result.enforcement == "premium_cloud"
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
@@ -1576,7 +1642,7 @@ def test_evaluate_package_request_artifact_fails_closed_on_invalid_cloud_respons
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID, plan_id="team")
     response = _bundle_response(
         packages=[
             _package(
@@ -1605,8 +1671,8 @@ def test_evaluate_package_request_artifact_fails_closed_on_invalid_cloud_respons
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
+    assert result.decision == "block"
+    assert result.policy_action == "block"
     assert result.enforcement == "premium_cloud"
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
@@ -1847,6 +1913,7 @@ def test_evaluate_package_request_artifact_respects_policy_severity_threshold(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    _force_unpaid_entitlement(monkeypatch)
     response = _bundle_response(
         packages=[
             _package(
@@ -2510,6 +2577,7 @@ def test_evaluate_package_request_artifact_handles_unreadable_transitive_lockfil
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    _force_unpaid_entitlement(monkeypatch)
     response = _bundle_response(
         packages=[
             _package(
@@ -2726,6 +2794,9 @@ def test_evaluate_package_request_artifact_uses_stale_bundle_when_cloud_auth_exp
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
         grant_id="grant-1",
         machine_id="machine-1",
+        supply_chain_entitlement_expires_at=None,
+        supply_chain_firewall=False,
+        supply_chain_plan_id="free",
         workspace_id=WORKSPACE_ID,
         now="2026-05-19T00:00:00Z",
     )
@@ -2785,6 +2856,9 @@ def test_evaluate_unlisted_registry_package_uses_local_intelligence_when_cloud_a
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
         grant_id="grant-1",
         machine_id="machine-1",
+        supply_chain_entitlement_expires_at=None,
+        supply_chain_firewall=False,
+        supply_chain_plan_id="free",
         workspace_id=WORKSPACE_ID,
         now="2026-05-19T00:00:00Z",
     )
@@ -2831,6 +2905,9 @@ def test_evaluate_unlisted_package_still_requires_review_when_registry_identity_
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
         grant_id="grant-1",
         machine_id="machine-1",
+        supply_chain_entitlement_expires_at=None,
+        supply_chain_firewall=False,
+        supply_chain_plan_id="free",
         workspace_id=WORKSPACE_ID,
         now="2026-05-19T00:00:00Z",
     )
@@ -2884,8 +2961,8 @@ def test_evaluate_unlisted_package_fails_closed_on_unexpected_auth_context_error
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
+    assert result.decision == "block"
+    assert result.policy_action == "block"
     assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
 
 

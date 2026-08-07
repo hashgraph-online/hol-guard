@@ -24,6 +24,7 @@ from tests.test_guard_js_supply_chain_phase11 import (
     _package,
     _write_text,
 )
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 
 @pytest.mark.parametrize(
@@ -349,6 +350,7 @@ def test_late_incomplete_lockfile_result_is_not_deduplicated_against_direct_pack
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()

@@ -20,6 +20,7 @@ from tests.test_guard_supply_chain_evaluator import (
     _artifact_for_targets,
     _bundle_response,
     _force_cloud_fallback,
+    _force_unpaid_entitlement,
     _package,
 )
 
@@ -107,6 +108,7 @@ def test_strict_mode_timeout_blocks_with_cloud_validation_error(
 def test_local_fallback_disclosure_reason_surfaces_after_cloud_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
@@ -124,6 +126,7 @@ def test_local_fallback_disclosure_reason_surfaces_after_cloud_timeout(
 def test_stale_bundle_disclosure_reason_surfaces_in_final_evaluation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)

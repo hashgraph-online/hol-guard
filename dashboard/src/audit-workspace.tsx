@@ -29,7 +29,10 @@ import type {
 } from "./guard-types";
 import { isSupplyChainAuditEvidence } from "./guard-types";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
-import { resolveManagerCoverageStatus } from "./supply-chain-protection-stats";
+import {
+  resolveManagerCoverageManagers,
+  resolveManagerCoverageStatus,
+} from "./supply-chain-protection-stats";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import type { SupplyChainAuditSession } from "./use-supply-chain-audit-session";
 import { isBlockedGuardAction } from "./guard-action";
@@ -169,7 +172,7 @@ export function deriveFrontendAuditResults(
 
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (protection) {
-    const managersNeedingAttention = protection.supported_managers.filter(
+    const managersNeedingAttention = resolveManagerCoverageManagers(protection).filter(
       (manager) => resolveManagerCoverageStatus(protection, manager) !== "protected",
     );
     for (const mgr of managersNeedingAttention) {

@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as package_eval_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -254,6 +255,7 @@ def test_guard_hook_blocks_js_exec_flows_before_subprocess(
 def test_guard_hook_requires_review_for_repository_local_vitest_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()

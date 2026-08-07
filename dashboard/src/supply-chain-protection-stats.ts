@@ -2,6 +2,15 @@ import type { GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-typ
 
 export type ManagerCoverageStatus = "protected" | "restart_required" | "path_repair" | "unprotected";
 
+export function resolveManagerCoverageManagers(
+  protection: PackageManagerProtection | undefined,
+): string[] {
+  if (protection === undefined) {
+    return [];
+  }
+  return protection.detected_managers ?? [];
+}
+
 export function resolveManagerCoverageStatus(
   protection: PackageManagerProtection | undefined,
   manager: string,
@@ -34,17 +43,17 @@ export function buildSupplyChainStats(
 } {
   const managedInstalls = snapshot.managed_installs ?? [];
   const protection = snapshot.supply_chain?.package_manager_protection;
-  const supportedManagers = protection?.supported_managers ?? [];
-  const protectedManagers = supportedManagers.filter(
+  const coverageManagers = resolveManagerCoverageManagers(protection);
+  const protectedManagers = coverageManagers.filter(
     (manager) => resolveManagerCoverageStatus(protection, manager) === "protected",
   ).length;
-  const stagedManagers = supportedManagers.filter(
+  const stagedManagers = coverageManagers.filter(
     (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required",
   ).length;
-  const repairRequiredManagers = supportedManagers.filter(
+  const repairRequiredManagers = coverageManagers.filter(
     (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair",
   ).length;
-  const unprotectedManagers = supportedManagers.filter(
+  const unprotectedManagers = coverageManagers.filter(
     (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected",
   ).length;
   return {

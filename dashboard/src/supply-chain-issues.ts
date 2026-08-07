@@ -1,6 +1,10 @@
 import { resolveFeedStaleness } from "./feed-health-workspace";
 import { resolveHomeProtectionStatus } from "./home-protection-module";
-import { buildSupplyChainStats } from "./supply-chain-protection-stats";
+import {
+  buildSupplyChainStats,
+  resolveManagerCoverageManagers,
+  resolveManagerCoverageStatus,
+} from "./supply-chain-protection-stats";
 import { resolveSupplyChainCloudDegradedState } from "./supply-chain-evidence-rail";
 import type { GuardRuntimeSnapshot } from "./guard-types";
 
@@ -25,6 +29,9 @@ export function resolveSupplyChainIssues(snapshot: GuardRuntimeSnapshot): Supply
   const protection = snapshot.supply_chain?.package_manager_protection;
   const stats = buildSupplyChainStats(snapshot);
   const protectionStatus = resolveHomeProtectionStatus(snapshot);
+  const unprotectedManagers = resolveManagerCoverageManagers(protection).filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected",
+  );
   const cloudDegraded = resolveSupplyChainCloudDegradedState(snapshot);
 
   if (cloudDegraded.active) {
@@ -52,10 +59,12 @@ export function resolveSupplyChainIssues(snapshot: GuardRuntimeSnapshot): Supply
       action: { kind: "firewall_unprotected" },
     });
   } else if (stats.repairRequiredManagers > 0) {
+    const coverageManagers = new Set(resolveManagerCoverageManagers(protection));
     const managers =
       protection !== undefined
         ? protection.installed_managers.filter(
-            (manager) => !protection.protected_managers.includes(manager),
+            (manager) =>
+              coverageManagers.has(manager) && !protection.protected_managers.includes(manager),
           )
         : [];
     const managerLabel = managers.length > 0 ? managers.join(", ") : "installed tools";
@@ -81,27 +90,22 @@ export function resolveSupplyChainIssues(snapshot: GuardRuntimeSnapshot): Supply
 
   if (
     protectionStatus === "partial" &&
-    protection !== undefined &&
-    protection.protected_managers.length > 0 &&
-    protection.unprotected_managers.length > 0
+    stats.protectedManagers > 0 &&
+    unprotectedManagers.length > 0
   ) {
     issues.push({
       id: "partial_protection",
       title: "Some package tools are still open",
-      detail: `${protection.protected_managers.length} protected, ${protection.unprotected_managers.length} still open: ${protection.unprotected_managers.join(", ")}.`,
+      detail: `${stats.protectedManagers} protected, ${unprotectedManagers.length} still open: ${unprotectedManagers.join(", ")}.`,
       tone: "attention",
       actionLabel: "Review open tools",
       action: { kind: "firewall_unprotected" },
     });
-  } else if (
-    protectionStatus === "unprotected" &&
-    protection !== undefined &&
-    protection.unprotected_managers.length > 0
-  ) {
+  } else if (protectionStatus === "unprotected" && unprotectedManagers.length > 0) {
     issues.push({
       id: "unprotected_tools",
       title: "Package installs are not protected yet",
-      detail: `Turn on protection for ${protection.unprotected_managers.join(", ")} to block risky installs before they run.`,
+      detail: `Turn on protection for ${unprotectedManagers.join(", ")} to block risky installs before they run.`,
       tone: "attention",
       actionLabel: "Protect package tools",
       action: { kind: "firewall_unprotected" },

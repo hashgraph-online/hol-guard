@@ -1,6 +1,6 @@
 import { j as jsxRuntimeExports, ak as Tag, t as formatRelativeTime, r as reactExports, A as ActionButton, bO as HiMiniChevronLeft, c as HiMiniChevronRight, aU as IconActionButton, x as HiMiniXMark, aZ as GuardModalLayer, bP as HiMiniFunnel, al as HiMiniMagnifyingGlass, bQ as HiMiniArrowDown, bR as HiMiniArrowUp, S as SectionLabel, aI as HiMiniArrowPath, aY as HiMiniBugAnt, k as EmptyState, a0 as HiMiniAdjustmentsHorizontal, a_ as ConnectFlowCard, K as HiMiniExclamationTriangle, bS as runAuditRemediation, M as Badge, bK as isBlockedGuardAction, aN as isSupplyChainAuditEvidence, m as HiMiniCheckCircle, U as HiMiniXCircle, e as harnessDisplayName, bj as HiMiniDocumentText, bi as guardAwareHref, q as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, b as sortPackageWorkbenchFindings, u as useResolvedApprovalGate, i as isApprovalGateRequiredError, A as ApprovalProofModal } from "./supply-chain-hub-workspace.js";
-import { r as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
+import { r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 const STEPS = [
   { id: "preparing", label: "Prepare workspace" },
   { id: "scanning", label: "Scan manifests and lockfiles" },
@@ -991,7 +991,7 @@ function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (protection) {
-    const managersNeedingAttention = protection.supported_managers.filter(
+    const managersNeedingAttention = resolveManagerCoverageManagers(protection).filter(
       (manager) => resolveManagerCoverageStatus(protection, manager) !== "protected"
     );
     for (const mgr of managersNeedingAttention) {

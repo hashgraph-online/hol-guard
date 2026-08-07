@@ -3038,12 +3038,16 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
     active_managers = sorted(set(_string_items(status.get("active_managers"))))
     missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
     supported_managers = list(package_shim_supported_managers())
+    detected_managers = sorted(set(_string_items(status.get("detected_managers"))))
     protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
     protected_set = set(protected_managers)
     path_status = str(status.get("path_status") or "missing_from_path")
-    staged_managers = set(installed_managers) if path_status == "restart_required" else set()
+    coverage_managers = set(detected_managers)
+    staged_managers = (
+        set(installed_managers).intersection(coverage_managers) if path_status == "restart_required" else set()
+    )
     unprotected_managers = [
-        manager for manager in supported_managers if manager not in protected_set and manager not in staged_managers
+        manager for manager in detected_managers if manager not in protected_set and manager not in staged_managers
     ]
     return {
         "path_status": path_status,
@@ -3055,6 +3059,7 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
         "shell_profile_path": status.get("shell_profile_path"),
         "shim_dir": str(shim_dir),
         "supported_managers": supported_managers,
+        "detected_managers": detected_managers,
         "installed_managers": installed_managers,
         "active_managers": active_managers,
         "missing_shims": missing_shims,

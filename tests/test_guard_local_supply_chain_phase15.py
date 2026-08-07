@@ -445,6 +445,10 @@ def test_supply_chain_posture_reports_package_shim_path_and_unprotected_managers
         json.dumps({"installed_managers": ["npm", "pnpm"], "shim_dir": str(shim_dir)}, sort_keys=True),
         encoding="utf-8",
     )
+    for manager in ("npm", "pnpm"):
+        real_manager = tmp_path / manager
+        real_manager.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        real_manager.chmod(0o755)
     monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{tmp_path}")
 
     posture = local_supply_chain_module.build_local_supply_chain_posture(
@@ -481,6 +485,9 @@ def test_supply_chain_posture_marks_shim_path_missing_from_environment(
         json.dumps({"installed_managers": ["npm"], "shim_dir": str(shim_dir)}, sort_keys=True),
         encoding="utf-8",
     )
+    real_npm = tmp_path / "npm"
+    real_npm.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    real_npm.chmod(0o755)
     monkeypatch.setenv("PATH", str(tmp_path))
 
     posture = local_supply_chain_module.build_local_supply_chain_posture(
@@ -799,3 +806,60 @@ def test_guard_protect_returns_controlled_execution_error_for_install_subprocess
     assert isinstance(execution, dict)
     assert execution["returncode"] == -1
     assert expected_fragment in str(execution["stderr"]).lower()
+
+
+def test_package_manager_protection_scopes_health_to_detected_managers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    supported = (
+        "npm",
+        "npx",
+        "pnpm",
+        "brew",
+        "bun",
+        "bundle",
+        "bunx",
+        "cargo",
+        "composer",
+        "go",
+        "gradle",
+        "mvn",
+        "pipenv",
+        "poetry",
+        "uv",
+        "uvx",
+        "yarn",
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "package_shim_supported_managers",
+        lambda: supported,
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "package_shim_status",
+        lambda _context: {
+            "shim_dir": str(tmp_path / "shims"),
+            "detected_managers": ["npm", "npx", "pnpm"],
+            "installed_managers": ["npm", "npx"],
+            "active_managers": ["npm", "npx"],
+            "protected_managers": ["npm", "npx"],
+            "missing_managers": ["pnpm"],
+            "path_status": "in_path",
+            "path_contains_shim_dir": True,
+            "restart_shell_required": False,
+            "process_path_status": "in_path",
+            "process_restart_required": False,
+            "shell_profile_configured": True,
+            "shell_profile_path": str(tmp_path / ".bashrc"),
+        },
+    )
+
+    protection = local_supply_chain_module._build_package_manager_protection(GuardStore(tmp_path / "guard-home"))
+
+    assert protection["supported_managers"] == list(supported)
+    assert protection["detected_managers"] == ["npm", "npx", "pnpm"]
+    assert protection["protected_managers"] == ["npm", "npx"]
+    assert protection["unprotected_managers"] == ["pnpm"]
+    assert "brew" not in protection["unprotected_managers"]

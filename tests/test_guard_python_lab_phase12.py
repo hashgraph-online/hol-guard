@@ -18,6 +18,7 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 from .guard_python_phase12_support import (
     WORKSPACE_ID,
@@ -94,6 +95,7 @@ def test_python_simple_index_lab_blocks_vulnerable_version_and_serves_safe_wheel
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     index_root = tmp_path / "simple-index"
     dist_dir = index_root / "packages"
     dist_dir.mkdir(parents=True)

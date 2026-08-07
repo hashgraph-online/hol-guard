@@ -9,6 +9,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 from .guard_python_phase12_support import (
     WORKSPACE_ID,
@@ -54,6 +55,7 @@ def test_evaluate_package_request_artifact_ignores_cross_ecosystem_bundle_matche
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()

@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 from .guard_tier2_phase13_support import (
     WORKSPACE_ID,
@@ -103,6 +104,7 @@ def test_tier2_fixture_labs_cover_safe_and_vulnerable_paths(
     blocked_version: str,
     expected_decision: str,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     shutil.copytree(FIXTURES / fixture_name, workspace_dir)

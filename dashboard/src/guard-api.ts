@@ -1550,6 +1550,7 @@ function normalizePackageManagerProtection(raw: unknown): PackageManagerProtecti
     shell_profile_path: isStringOrNull(raw["shell_profile_path"]) ? raw["shell_profile_path"] : null,
     shim_dir: shimDir,
     supported_managers: normalizeStringArray(raw["supported_managers"]),
+    detected_managers: normalizeStringArray(raw["detected_managers"]),
     installed_managers: normalizeStringArray(raw["installed_managers"]),
     active_managers: normalizeStringArray(raw["active_managers"]),
     missing_shims: normalizeStringArray(raw["missing_shims"]),
@@ -3748,11 +3749,12 @@ export function normalizePackageFirewallStatus(value: unknown): PackageFirewallS
     shell_profile_path: isStringOrNull(shellProfilePath) ? (shellProfilePath as string | null) : null,
     shim_dir: stringValue(readPackageShimField(shimStatus, "shim_dir", "shimDir")) ?? "",
     supported_managers: supportedManagers,
+    detected_managers: detectedManagers,
     installed_managers: installedManagers,
     active_managers: activeManagers,
     missing_shims: missingManagers,
     protected_managers: protectedManagers,
-    unprotected_managers: supportedManagers.filter((manager) => !protectedSet.has(manager)),
+    unprotected_managers: detectedManagers.filter((manager) => !protectedSet.has(manager)),
   };
   return {
     actions: normalizePackageFirewallActions(record.actions),

@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import test_guard_js_supply_chain_phase11 as support
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 
 @pytest.mark.parametrize(
@@ -30,6 +31,7 @@ def test_policy_range_matches_resolved_npm_version(
     expected_decision: str,
     expected_rule_id: str | None,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()

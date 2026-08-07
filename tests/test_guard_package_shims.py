@@ -42,7 +42,7 @@ from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_b
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.shim_execution_helpers import write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
-from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler
+from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler, _force_unpaid_entitlement
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -1815,6 +1815,7 @@ def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_a
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -1998,9 +1999,10 @@ def test_guard_protect_pnpm_install_alias_renders_wrapped_review_link_for_cloud_
     output = capsys.readouterr().out
 
     assert rc == 2
-    assert "approve or keep this blocked" in output
-    assert "http://127.0.0.1:5474/requests/" in output
-    assert "review.. Open HOL Guard" not in output
+    normalized_output = " ".join(output.lower().split())
+    assert "blocked" in normalized_output
+    assert "approve or keep this blocked" not in normalized_output
+    assert "http://127.0.0.1:5474/requests/" not in output
 
 
 def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
@@ -2008,6 +2010,7 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
     monkeypatch: pytest.MonkeyPatch,
     capsys,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -2504,14 +2507,9 @@ def test_guard_protect_cached_validation_error_still_requires_current_package_ga
         assert rc == 2
 
         store = GuardStore(home_dir)
-        apply_approval_resolution(
-            store=store,
-            request_id=str(payload["primary_approval_request_id"]),
-            action="allow",
-            scope="artifact",
-            workspace=None,
-            reason="reviewed",
-        )
+        assert payload["verdict"]["action"] == "block"
+        assert "primary_approval_request_id" not in payload
+        assert store.list_approval_requests(limit=None) == []
 
         _stop_cloud_eval_server(server, thread)
         server = None
@@ -2530,17 +2528,9 @@ def test_guard_protect_cached_validation_error_still_requires_current_package_ga
 
     assert retry_exit_code == 2
     assert retry_payload["executed"] is False
-    assert retry_payload["verdict"]["action"] in {"block", "review"}
-    assert any(
-        isinstance(reason, dict)
-        and reason.get("code")
-        in {
-            "approval_reuse_current_block",
-            "approval_reuse_policy_changed",
-            "approval_reuse_reapproval_required",
-        }
-        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
-    )
+    assert retry_payload["verdict"]["action"] == "block"
+    assert "primary_approval_request_id" not in retry_payload
+    assert store.list_approval_requests(limit=None) == []
     assert marker_path.exists() is False
     assert store.list_approval_requests(status="pending", limit=None) == []
 
@@ -2838,13 +2828,15 @@ def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpin
         )
         _seed_workspace_sync_credentials(home_dir, sync_url)
 
-        first_payload, first_exit_code = build_protect_payload(
-            command=["npm", "install", package_name],
-            store=store,
-            workspace_dir=workspace_dir,
-            dry_run=True,
-            now="2026-05-19T00:00:00Z",
-        )
+        with monkeypatch.context() as unpaid_context:
+            _force_unpaid_entitlement(unpaid_context)
+            first_payload, first_exit_code = build_protect_payload(
+                command=["npm", "install", package_name],
+                store=store,
+                workspace_dir=workspace_dir,
+                dry_run=True,
+                now="2026-05-19T00:00:00Z",
+            )
 
         assert first_exit_code == 0
         assert first_payload["verdict"]["action"] == "allow"

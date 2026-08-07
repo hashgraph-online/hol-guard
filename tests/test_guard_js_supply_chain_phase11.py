@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 )
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 WORKSPACE_ID = "workspace-alpha"
 
@@ -182,6 +183,7 @@ def test_evaluate_package_request_artifact_allows_recommended_safe_npm_version(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -776,6 +778,7 @@ def test_evaluate_package_request_artifact_ignores_wildcard_scope_only_confusion
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -818,6 +821,7 @@ def test_evaluate_package_request_artifact_matches_js_package_names_exactly_for_
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -871,6 +875,7 @@ def test_evaluate_package_request_artifact_avoids_scoped_package_name_collisions
     bundle_namespace: str | None,
     command: str,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -1001,6 +1006,7 @@ def test_scoped_recommended_fix_does_not_use_unscoped_record(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_unpaid_entitlement(monkeypatch)
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
