@@ -115,7 +115,7 @@ def _pypi_release_state(version_text: str) -> PyPIReleaseState:
     if not isinstance(urls, list):
         raise ValueError("PyPI release metadata is missing the release files")
     if not urls:
-        return "yanked"
+        raise ValueError("PyPI release metadata is missing the release files")
 
     yanked_flags: list[bool] = []
     for item in urls:
