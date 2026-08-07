@@ -400,6 +400,98 @@ def test_prewarmed_runner_does_not_hide_a_second_worker_queue(tmp_path: Path) ->
     assert elapsed < 1.0
 
 
+def _transient_not_ready_test_runner(tmp_path: Path, responses: list[object]) -> tuple[HookProcessRunner, MagicMock]:
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=1)
+    runner._started = True  # pyright: ignore[reportPrivateUsage]
+    process = MagicMock()
+    process.pid = 4242
+    process.is_alive.return_value = True
+    connection = MagicMock()
+    connection.poll.return_value = True
+    connection.recv.side_effect = responses
+    slot = HookWorkerSlot(process=process, connection=connection)
+    runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
+    runner._ready_slot_ids.add(process.pid)  # pyright: ignore[reportPrivateUsage]
+    return runner, connection
+
+
+def test_idempotent_review_retries_transient_evaluator_not_ready(tmp_path: Path) -> None:
+    runner, connection = _transient_not_ready_test_runner(
+        tmp_path,
+        [
+            ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
+            ("result", {"payload": {"decision": "allow"}, "reason_code": None}),
+        ],
+    )
+
+    result = runner.review(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_call_id": "stable-call",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status --short"},
+        },
+        harness="pi",
+        home_dir=tmp_path,
+        guard_home=tmp_path,
+        workspace=tmp_path,
+        hook_env={},
+        deadline=time.monotonic() + 1,
+    )
+
+    assert result == HookProcessReview({"decision": "allow"}, None)
+    assert connection.send.call_count == 2
+    assert runner._slots.qsize() == 1  # pyright: ignore[reportPrivateUsage]
+
+
+def test_non_idempotent_review_does_not_retry_transient_evaluator_not_ready(tmp_path: Path) -> None:
+    runner, connection = _transient_not_ready_test_runner(
+        tmp_path,
+        [("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"})],
+    )
+
+    result = runner.review(
+        payload={"hook_event_name": "SessionStart"},
+        harness="pi",
+        home_dir=tmp_path,
+        guard_home=tmp_path,
+        workspace=tmp_path,
+        hook_env={},
+        deadline=time.monotonic() + 1,
+    )
+
+    assert result == HookProcessReview(None, "daemon_hook_process_not_ready")
+    assert connection.send.call_count == 1
+
+
+def test_idempotent_review_retries_transient_not_ready_only_once(tmp_path: Path) -> None:
+    runner, connection = _transient_not_ready_test_runner(
+        tmp_path,
+        [
+            ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
+            ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
+        ],
+    )
+
+    result = runner.review(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_call_id": "stable-call",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status --short"},
+        },
+        harness="pi",
+        home_dir=tmp_path,
+        guard_home=tmp_path,
+        workspace=tmp_path,
+        hook_env={},
+        deadline=time.monotonic() + 1,
+    )
+
+    assert result == HookProcessReview(None, "daemon_hook_process_not_ready")
+    assert connection.send.call_count == 2
+
+
 def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial(
     tmp_path: Path,
 ) -> None:

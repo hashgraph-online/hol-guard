@@ -166,6 +166,7 @@ class HookProcessRunner:
         workspace: Path | None,
         hook_env: Mapping[str, str],
         deadline: float | None = None,
+        _retry_transient_not_ready: bool = True,
     ) -> HookProcessReview:
         with self._state_lock:
             if self._closed:
@@ -288,6 +289,22 @@ class HookProcessRunner:
         reason_code = typed_result.get("reason_code")
         response = typed_result.get("payload")
         if response is None:
+            if (
+                _retry_transient_not_ready
+                and reason_code == "daemon_hook_process_not_ready"
+                and _runtime_hook_review_is_idempotent(payload)
+                and time.monotonic() < review_deadline
+            ):
+                return self.review(
+                    payload=payload,
+                    harness=harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    hook_env=hook_env,
+                    deadline=review_deadline,
+                    _retry_transient_not_ready=False,
+                )
             return HookProcessReview(
                 None,
                 reason_code if isinstance(reason_code, str) else "daemon_hook_process_failed",
