@@ -30,9 +30,7 @@ GuardCloudErrorCategory = Literal[
 ]
 
 _GUARD_PLAN_IDS = frozenset({"free", "solo", "pro", "team", "enterprise"})
-_GUARD_SUBSCRIPTION_STATUSES = frozenset(
-    {"free", "trialing", "active", "past_due", "canceled"}
-)
+_GUARD_SUBSCRIPTION_STATUSES = frozenset({"free", "trialing", "active", "past_due", "canceled"})
 _PLAN_LIMIT_CODES = frozenset(
     {
         "feature_not_in_plan",
@@ -44,9 +42,7 @@ _PLAN_LIMIT_CODES = frozenset(
 _BILLING_CODES = frozenset({"subscription_past_due"})
 _TRIAL_CODES = frozenset({"trial_expired"})
 _SYNC_PAUSED_CODES = frozenset({"cloud_sync_paused_plan_limit"})
-_KNOWN_PLAN_ERROR_CODES = (
-    _PLAN_LIMIT_CODES | _BILLING_CODES | _TRIAL_CODES | _SYNC_PAUSED_CODES
-)
+_KNOWN_PLAN_ERROR_CODES = _PLAN_LIMIT_CODES | _BILLING_CODES | _TRIAL_CODES | _SYNC_PAUSED_CODES
 _ALLOWED_FEATURE_VALUE_TYPES = (bool, str, int, float, type(None))
 _ALLOWED_ACTION_HOSTS = frozenset({"hol.org", "www.hol.org"})
 
@@ -190,40 +186,24 @@ def parse_guard_cloud_entitlements(payload: object) -> GuardCloudEntitlements | 
 
     features = _feature_values(_first_value(source, "features"))
     if not features:
-        features = _feature_values(
-            _first_value(source, "cloudValueGates", "cloud_value_gates")
-        )
-    supply_chain_firewall = _first_value(
-        source, "supplyChainFirewall", "supply_chain_firewall"
-    )
+        features = _feature_values(_first_value(source, "cloudValueGates", "cloud_value_gates"))
+    supply_chain_firewall = _first_value(source, "supplyChainFirewall", "supply_chain_firewall")
     if isinstance(supply_chain_firewall, bool):
         features.setdefault("guard.cloud.supply_chain_firewall", supply_chain_firewall)
 
-    cloud_storage_bytes = _optional_nonnegative_int(
-        _first_value(source, "cloudStorageBytes", "cloud_storage_bytes")
-    )
+    cloud_storage_bytes = _optional_nonnegative_int(_first_value(source, "cloudStorageBytes", "cloud_storage_bytes"))
     if cloud_storage_bytes is None:
         storage_gb = _first_value(source, "includedStorageGb", "included_storage_gb")
-        if (
-            isinstance(storage_gb, (int, float))
-            and not isinstance(storage_gb, bool)
-            and storage_gb >= 0
-        ):
+        if isinstance(storage_gb, (int, float)) and not isinstance(storage_gb, bool) and storage_gb >= 0:
             # Guard's canonical plan contract defines displayed GB storage in
             # binary byte units (Solo 1 GB == 1_073_741_824 bytes).
             cloud_storage_bytes = int(float(storage_gb) * 1024 * 1024 * 1024)
 
     return GuardCloudEntitlements(
         plan_id=plan_id,
-        plan_version=_optional_string(
-            _first_value(source, "planVersion", "plan_version")
-        ),
-        subscription_status=_subscription_status(
-            _first_value(source, "subscriptionStatus", "subscription_status")
-        ),
-        current_period_end=_optional_string(
-            _first_value(source, "currentPeriodEnd", "current_period_end")
-        ),
+        plan_version=_optional_string(_first_value(source, "planVersion", "plan_version")),
+        subscription_status=_subscription_status(_first_value(source, "subscriptionStatus", "subscription_status")),
+        current_period_end=_optional_string(_first_value(source, "currentPeriodEnd", "current_period_end")),
         trial_end=_optional_string(_first_value(source, "trialEnd", "trial_end")),
         max_synced_devices=_optional_nonnegative_int(
             _first_value(
@@ -237,9 +217,7 @@ def parse_guard_cloud_entitlements(payload: object) -> GuardCloudEntitlements | 
         active_synced_devices=_optional_nonnegative_int(
             _first_value(source, "activeSyncedDevices", "active_synced_devices")
         ),
-        retention_days=_optional_nonnegative_int(
-            _first_value(source, "retentionDays", "retention_days")
-        ),
+        retention_days=_optional_nonnegative_int(_first_value(source, "retentionDays", "retention_days")),
         cloud_storage_bytes=cloud_storage_bytes,
         cloud_storage_used_bytes=_optional_nonnegative_int(
             _first_value(
@@ -292,13 +270,9 @@ def parse_guard_cloud_plan_error(
         plan_id=_plan_id(_first_value(source, "planId", "plan_id")),
         limit=_optional_nonnegative_int(source.get("limit")),
         current=_optional_nonnegative_int(source.get("current")),
-        upgrade_plan_id=_plan_id(
-            _first_value(source, "upgradePlanId", "upgrade_plan_id")
-        ),
+        upgrade_plan_id=_plan_id(_first_value(source, "upgradePlanId", "upgrade_plan_id")),
         manage_url=_safe_action_url(_first_value(source, "manageUrl", "manage_url")),
-        upgrade_url=_safe_action_url(
-            _first_value(source, "upgradeUrl", "upgrade_url")
-        ),
+        upgrade_url=_safe_action_url(_first_value(source, "upgradeUrl", "upgrade_url")),
     )
 
 
@@ -306,27 +280,15 @@ def guard_cloud_status_copy(error: GuardCloudPlanError) -> str:
     """Human copy that never implies a Cloud problem disabled local Guard."""
 
     if error.code == "device_limit_reached":
-        upgrade_target = (
-            error.upgrade_plan_id.capitalize()
-            if error.upgrade_plan_id is not None
-            else None
-        )
+        upgrade_target = error.upgrade_plan_id.capitalize() if error.upgrade_plan_id is not None else None
         if error.plan_id == "solo" and error.limit == 2:
-            upgrade_copy = (
-                f"upgrade to {upgrade_target}"
-                if upgrade_target is not None
-                else "change plans"
-            )
+            upgrade_copy = f"upgrade to {upgrade_target}" if upgrade_target is not None else "change plans"
             return (
                 "Your machine is still protected. Solo includes Cloud sync for two devices. "
                 f"Choose a device to replace or {upgrade_copy} to sync more personal machines."
             )
         limit_copy = f" ({error.limit} devices)" if error.limit is not None else ""
-        upgrade_copy = (
-            f"upgrade to {upgrade_target}"
-            if upgrade_target is not None
-            else "change plans"
-        )
+        upgrade_copy = f"upgrade to {upgrade_target}" if upgrade_target is not None else "change plans"
         return (
             f"Your machine is still protected. Guard Cloud reached this plan's synced-device limit{limit_copy}. "
             f"Manage your synced devices or {upgrade_copy} to resume Cloud sync."
@@ -334,10 +296,7 @@ def guard_cloud_status_copy(error: GuardCloudPlanError) -> str:
     if error.code == "cloud_sync_paused_plan_limit":
         return "Cloud sync is paused by your plan limit. Local protection is active."
     if error.code == "storage_limit_reached":
-        return (
-            "Cloud sync is paused because your Cloud storage limit was reached. "
-            "Local protection continues."
-        )
+        return "Cloud sync is paused because your Cloud storage limit was reached. Local protection continues."
     if error.code == "subscription_past_due":
         return "Guard Cloud billing needs attention. Local protection remains active."
     if error.code == "trial_expired":
