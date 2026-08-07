@@ -55,7 +55,7 @@ _TRUSTED_SCRIPT_BOOTSTRAP = (
 _TRUSTED_MODULE_BOOTSTRAP = (
     "import json,runpy,sys; "
     "import_paths=json.loads(sys.argv.pop(1)); "
-    "extra_import_paths=json.loads(sys.argv.pop(1)); "
+    "extra_import_paths=json.loads(sys.argv.pop(1)) if sys.argv[1].startswith('[') else []; "
     "module=sys.argv.pop(1); "
     "sys.path[:0]=import_paths; "
     "sys.path.extend(extra_import_paths); "
@@ -459,17 +459,17 @@ class TrustedUpdateContext:
         extra_import_paths = (
             [str(self.pipx_shared_import_path)] if module == "pip" and self.pipx_shared_import_path is not None else []
         )
-        return [
+        command = [
             str(self.python.launch_path),
             *_trusted_python_flags(),
             "-S",
             "-c",
             _TRUSTED_MODULE_BOOTSTRAP,
             self._python_import_paths_json(),
-            json.dumps(extra_import_paths, separators=(",", ":")),
-            module,
-            *args,
         ]
+        if extra_import_paths:
+            command.append(json.dumps(extra_import_paths, separators=(",", ":")))
+        return [*command, module, *args]
 
     def _python_import_paths_json(self) -> str:
         return json.dumps([str(path) for path in self.python_import_paths], separators=(",", ":"))
