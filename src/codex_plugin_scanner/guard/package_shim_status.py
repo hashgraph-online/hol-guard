@@ -126,9 +126,7 @@ def enrich_package_shim_status_payload(
         active_managers = sorted(set(_string_list(status.get("active_managers"))).union(recovered_managers))
         manager_details = _dict_list(status.get("manager_details"))
         detailed_managers = {
-            str(item.get("manager"))
-            for item in manager_details
-            if isinstance(item.get("manager"), str)
+            str(item.get("manager")) for item in manager_details if isinstance(item.get("manager"), str)
         }
         detected_managers = set(_string_list(status.get("detected_managers")))
         shim_dir = str(status.get("shim_dir") or "")
