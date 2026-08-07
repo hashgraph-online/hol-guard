@@ -8,6 +8,7 @@ export function resolveManagerCoverageManagers(
   if (protection === undefined) {
     return [];
   }
+  // Local health is detection-scoped; supported_managers is capability metadata only.
   return protection.detected_managers ?? [];
 }
 
