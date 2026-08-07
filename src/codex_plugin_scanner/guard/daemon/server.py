@@ -3601,6 +3601,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_supply_chain_repair(self, payload: dict[str, object]) -> None:
         if not self._enforce_package_firewall_rate_limit("repair", payload):
             return
+
+        try:
+            require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="supply_chain_firewall",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+
         entitlement = self._supply_chain_entitlement()
         context = self._supply_chain_context(payload)
         current_status = package_shim_status(context)
@@ -3620,16 +3631,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=status,
             )
             return
-        try:
-            require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="supply_chain_firewall",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-
         result = coordinate_supply_chain_repair(
             repair_package_shims=lambda: _repair_detected_package_shims(context),
             activate_runtime=lambda: _activate_package_firewall_runtime(context),

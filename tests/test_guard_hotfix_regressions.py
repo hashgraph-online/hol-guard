@@ -7,6 +7,8 @@ import json
 from io import StringIO
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_preflight, commands_router
@@ -99,12 +101,14 @@ def test_expired_cloud_entitlement_does_not_block_existing_local_repair() -> Non
     assert package_firewall_operation_allowed(entitlement, "test", has_installed_managers=True) is False
 
 
-def test_omp_managed_install_proof_is_recognized_as_live_hook(tmp_path: Path) -> None:
+def test_omp_managed_install_proof_is_recognized_as_live_hook(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    hook_path = tmp_path / "home" / ".omp" / "agent" / "extensions" / "hol-guard.ts"
+    home_dir = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    hook_path = home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
     hook_path.parent.mkdir(parents=True)
     hook_path.write_text("export const guard = true;\n", encoding="utf-8")
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=store.guard_home)
+    context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=store.guard_home)
     manifest = bind_managed_install_proof({"config_path": str(hook_path)}, context)
 
     assert approvals_module._live_hook_verification(

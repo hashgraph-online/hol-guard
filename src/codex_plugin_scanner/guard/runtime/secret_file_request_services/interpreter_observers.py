@@ -26,6 +26,7 @@ from .destructive_shell_detection import (
 from .developer_inspection import (
     _is_read_only_observer_interpreter_command,
     _read_only_lookup_primary_segment_is_safe,
+    _ripgrep_config_is_disabled,
     _static_shell_segment_is_safe,
 )
 from .github_pr_body_safety import _shell_heredoc_payloads
@@ -62,19 +63,32 @@ def _looks_like_safe_read_only_lookup_command(
     for index, segment in enumerate(segments):
         if not segment:
             return False
-        command = Path(segment[0]).name.lower()
-        if "/" in segment[0] or "\\" in segment[0]:
+        command, command_index = _shell_segment_primary_command(segment)
+        if command is None or command_index is None:
             return False
+        command_token = segment[command_index]
+        args = segment[command_index + 1 :]
+        if "/" in command_token or "\\" in command_token:
+            return False
+        if command_index > 0:
+            direct_config_prefix = segment[:command_index]
+            if (
+                index != 0
+                or command != "rg"
+                or not _ripgrep_config_is_disabled(args)
+                or any(_shell_env_assignment_key(token) != "RIPGREP_CONFIG_PATH" for token in direct_config_prefix)
+            ):
+                return False
         if index > 0 and command not in _READ_ONLY_LOOKUP_FILTERS:
             return False
         if index == 0:
             if command not in _READ_ONLY_LOOKUP_COMMANDS:
                 return False
-            if command == "rg" and _ripgrep_args_expand_hidden_files(segment[1:]):
+            if command == "rg" and _ripgrep_args_expand_hidden_files(args):
                 return False
-            if not _read_only_lookup_primary_segment_is_safe(command, segment[1:], home_dir=home_dir):
+            if not _read_only_lookup_primary_segment_is_safe(command, args, home_dir=home_dir):
                 return False
-        elif not _read_only_lookup_filter_segment_is_safe(command, segment[1:], home_dir=home_dir):
+        elif not _read_only_lookup_filter_segment_is_safe(command, args, home_dir=home_dir):
             return False
     return True
 

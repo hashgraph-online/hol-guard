@@ -190,7 +190,9 @@ def enrich_package_shim_status_payload(
     enriched["activeManagers"] = _string_list(status.get("active_managers"))
     enriched["missingManagers"] = _string_list(status.get("missing_managers"))
     enriched["undetectedManagers"] = _string_list(status.get("undetected_managers"))
-    enriched["recoveredManagers"] = _string_list(status.get("recovered_managers"))
+    recovered_managers = _string_list(status.get("recovered_managers"))
+    enriched["recovered_managers"] = recovered_managers
+    enriched["recoveredManagers"] = recovered_managers
     enriched["last_audit_proof_at"] = normalized_last_audit
     enriched["lastAuditProofAt"] = normalized_last_audit
     return enriched
