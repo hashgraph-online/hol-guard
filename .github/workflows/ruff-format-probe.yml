@@ -1,0 +1,34 @@
+name: Ruff format probe
+
+on:
+  pull_request:
+    paths:
+      - "src/codex_plugin_scanner/guard/package_shim_status.py"
+      - "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py"
+      - ".github/workflows/ruff-format-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+      - name: Print exact Ruff formatter diff
+        run: |
+          uvx --from ruff==0.15.17 ruff format \
+            src/codex_plugin_scanner/guard/package_shim_status.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py
+          uvx --from ruff==0.15.17 ruff check \
+            src/codex_plugin_scanner/guard/package_shim_status.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py
+          git diff -- \
+            src/codex_plugin_scanner/guard/package_shim_status.py \
+            src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py
+          test -z "$(git status --short -- src/codex_plugin_scanner/guard/package_shim_status.py src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py)"
