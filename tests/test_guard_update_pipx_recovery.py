@@ -8,12 +8,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.cli.update_subprocess import _TRUSTED_MODULE_BOOTSTRAP
+import pytest
+
+from codex_plugin_scanner.guard.cli import update_subprocess as update_subprocess_module
+from codex_plugin_scanner.guard.cli.update_subprocess import (
+    _TRUSTED_MODULE_BOOTSTRAP,
+    FilesystemIdentity,
+    UpdateSubprocessError,
+)
 from codex_plugin_scanner.guard.shims import _trusted_python_flags
 
 
-def _pipx_style_venv(tmp_path: Path) -> tuple[Path, Path, Path]:
-    venv_dir = tmp_path / "hol-guard"
+def _pipx_style_venv(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    pipx_home = tmp_path / "pipx"
+    venv_dir = pipx_home / "venvs" / "hol-guard"
     subprocess.run(
         [sys.executable, "-m", "venv", "--without-pip", str(venv_dir)],
         check=True,
@@ -27,15 +35,29 @@ def _pipx_style_venv(tmp_path: Path) -> tuple[Path, Path, Path]:
             text=True,
         ).strip()
     )
-    shared_packages = tmp_path / "shared"
-    shared_packages.mkdir()
+    shared_packages = pipx_home / "shared" / "lib" / "guard-test" / "site-packages"
+    shared_packages.mkdir(parents=True)
     (site_packages / "pipx_shared.pth").write_text(f"{shared_packages}\n", encoding="utf-8")
-    return python, site_packages, shared_packages
+    return python, site_packages, shared_packages, pipx_home
+
+
+def _resolve_shared_identity(
+    site_packages: Path,
+    pipx_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> FilesystemIdentity | None:
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_manager_home_from_prefix",
+        lambda _installer_kind: (pipx_home, pipx_home.parent / "bin"),
+    )
+    return update_subprocess_module._trusted_pipx_shared_import_identity((site_packages,))
 
 
 def _run_trusted_module(
     python: Path,
     site_packages: Path,
+    extra_import_paths: tuple[Path, ...],
     module: str,
     *args: str,
 ) -> subprocess.CompletedProcess[str]:
@@ -51,6 +73,7 @@ def _run_trusted_module(
             "-c",
             _TRUSTED_MODULE_BOOTSTRAP,
             json.dumps([str(site_packages)], separators=(",", ":")),
+            json.dumps([str(path) for path in extra_import_paths], separators=(",", ":")),
             module,
             *args,
         ],
@@ -61,8 +84,11 @@ def _run_trusted_module(
     )
 
 
-def test_trusted_pip_bootstrap_processes_pipx_shared_path(tmp_path: Path) -> None:
-    python, site_packages, shared_packages = _pipx_style_venv(tmp_path)
+def test_trusted_pip_bootstrap_uses_validated_pipx_shared_path_without_site_hooks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    python, site_packages, shared_packages, pipx_home = _pipx_style_venv(tmp_path)
     pip_package = shared_packages / "pip"
     pip_package.mkdir()
     (pip_package / "__init__.py").write_text("", encoding="utf-8")
@@ -70,10 +96,20 @@ def test_trusted_pip_bootstrap_processes_pipx_shared_path(tmp_path: Path) -> Non
         "import json, sys\nprint(json.dumps({'marker': 'pipx-shared-pip', 'argv': sys.argv[1:]}))\n",
         encoding="utf-8",
     )
+    hook_marker = tmp_path / "pth-hook-ran"
+    (site_packages / "hostile.pth").write_text(
+        f"import pathlib; pathlib.Path({str(hook_marker)!r}).write_text('ran')\n",
+        encoding="utf-8",
+    )
 
+    shared_identity = _resolve_shared_identity(site_packages, pipx_home, monkeypatch)
+
+    assert shared_identity is not None
+    assert shared_identity.canonical_path == shared_packages.resolve()
     result = _run_trusted_module(
         python,
         site_packages,
+        (shared_identity.canonical_path,),
         "pip",
         "install",
         "--dry-run",
@@ -84,16 +120,34 @@ def test_trusted_pip_bootstrap_processes_pipx_shared_path(tmp_path: Path) -> Non
     payload = json.loads(result.stdout)
     assert payload["marker"] == "pipx-shared-pip"
     assert payload["argv"] == ["install", "--dry-run", "hol-guard==2.2.15"]
+    assert not hook_marker.exists()
 
 
-def test_trusted_module_bootstrap_does_not_enable_site_for_other_modules(tmp_path: Path) -> None:
-    python, site_packages, shared_packages = _pipx_style_venv(tmp_path)
-    probe_package = shared_packages / "guard_site_probe"
-    probe_package.mkdir()
-    (probe_package / "__init__.py").write_text("", encoding="utf-8")
-    (probe_package / "__main__.py").write_text("print('unexpected')\n", encoding="utf-8")
+def test_pipx_shared_path_rejects_executable_pth_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _python, site_packages, _shared_packages, pipx_home = _pipx_style_venv(tmp_path)
+    hook_marker = tmp_path / "pth-hook-ran"
+    (site_packages / "pipx_shared.pth").write_text(
+        f"import pathlib; pathlib.Path({str(hook_marker)!r}).write_text('ran')\n",
+        encoding="utf-8",
+    )
 
-    result = _run_trusted_module(python, site_packages, "guard_site_probe")
+    with pytest.raises(UpdateSubprocessError, match="update_installer_untrusted"):
+        _resolve_shared_identity(site_packages, pipx_home, monkeypatch)
 
-    assert result.returncode != 0
-    assert "No module named guard_site_probe" in result.stderr
+    assert not hook_marker.exists()
+
+
+def test_pipx_shared_path_rejects_target_outside_shared_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _python, site_packages, _shared_packages, pipx_home = _pipx_style_venv(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (site_packages / "pipx_shared.pth").write_text(f"{outside}\n", encoding="utf-8")
+
+    with pytest.raises(UpdateSubprocessError, match="update_installer_untrusted"):
+        _resolve_shared_identity(site_packages, pipx_home, monkeypatch)
