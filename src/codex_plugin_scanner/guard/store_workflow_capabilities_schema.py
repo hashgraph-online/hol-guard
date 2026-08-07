@@ -162,7 +162,7 @@ _OBJECT_NAMES: Final = (
 # every schema ensure without effect on databases that never owned the index,
 # while the strict tamper-detection guarantee (set(actual) == set(expected))
 # stays intact.
-WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION: Final = 15
+WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION: Final = 22
 WORKFLOW_CAPABILITY_RETIRED_RECEIPT_EVENT_INDEX: Final = "idx_guard_workflow_receipt_event"
 
 
