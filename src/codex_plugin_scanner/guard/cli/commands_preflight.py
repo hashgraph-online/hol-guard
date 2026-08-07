@@ -75,7 +75,9 @@ def _run_guard_safe_preflight_command(
             print(f"Error: {message}", file=sys.stderr)
         return 2
     if _unsafe_broad_preflight_target(target, home_dir=Path.home()):
-        message = "Choose a project directory or file instead of scanning your entire home directory or filesystem root."
+        message = (
+            "Choose a project directory or file instead of scanning your entire home directory or filesystem root."
+        )
         if json_output:
             print(
                 json.dumps(
