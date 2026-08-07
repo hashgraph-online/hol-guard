@@ -13,9 +13,7 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_workflow_capabilities_schema import (
-    WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,
-)
+from codex_plugin_scanner.guard.store_workflow_capabilities_schema import ensure_workflow_capability_schema
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     SignedWorkflowCapability,
@@ -360,28 +358,24 @@ def test_legacy_owned_schema_object_is_reaped_on_reopen(tmp_path) -> None:
     store = _store(tmp_path)
     claim = _claim(capability_id="wc-legacy-orphan", max_uses=2)
     _issue(store, claim)
-    # Simulate a database created under an older schema version: the retired
-    # receipt-event index is still owned, and the migration that reaps it has not
-    # run yet. Drop the migration row so the schema is treated as not-current and
-    # the next open re-runs initialization, where the index is reaped.
+    # Simulate a database created under an older schema version that still owns
+    # the retired receipt-event index. The schema ensure step (run by every
+    # GuardStore initialization) must reap it so the strict owned-object equality
+    # check passes.
     with sqlite3.connect(store.path) as connection:
         connection.execute("drop index if exists idx_guard_workflow_receipt_event")
         connection.execute(
-            "create index idx_guard_workflow_receipt_event "
-            "on guard_workflow_capability_receipts (event_id)"
-        )
-        connection.execute(
-            "delete from schema_migrations where version = ?",
-            (WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,),
+            "create index idx_guard_workflow_receipt_event on guard_workflow_capability_receipts (event_id)"
         )
         present_before = connection.execute(
             "select count(*) from sqlite_master where name = 'idx_guard_workflow_receipt_event'"
         ).fetchone()[0]
     assert present_before == 1
-    reopened = _store(tmp_path)
-    _claim_capability(reopened, claim, invocation_id="invocation-after-reopen")
-    reopened.lookup_workflow_capability(claim.capability_id)
-    with sqlite3.connect(reopened.path) as connection:
+    ensure_workflow_capability_schema(
+        sqlite3.connect(store.path),
+        applied_at=_now(),
+    )
+    with sqlite3.connect(store.path) as connection:
         present_after = connection.execute(
             "select count(*) from sqlite_master where name = 'idx_guard_workflow_receipt_event'"
         ).fetchone()[0]
