@@ -1212,16 +1212,19 @@ def _latest_version_from_pypi() -> str | None:
 
 
 def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
+    """Return the newest non-yanked alpha on PyPI, including newer majors.
+
+    ``current_version`` is retained for call-site compatibility. Alpha channel
+    intentionally tracks the global newest alpha so ``hol-guard update --alpha``
+    can move installs across major lines (for example 2.x stable -> 3.0.0aN).
+    """
+    _ = current_version
     _ = _latest_version_from_pypi()
     payload = _last_pypi_payload
     if not isinstance(payload, dict):
         return None
     releases = payload.get("releases")
     if not isinstance(releases, dict):
-        return None
-    try:
-        current_major = Version(current_version).major
-    except InvalidVersion:
         return None
     candidates: list[tuple[Version, str]] = []
     for version_text, files in releases.items():
@@ -1231,7 +1234,7 @@ def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
             parsed_version = Version(version_text)
         except InvalidVersion:
             continue
-        if parsed_version.major != current_major or parsed_version.pre is None or parsed_version.pre[0] != "a":
+        if parsed_version.pre is None or parsed_version.pre[0] != "a":
             continue
         if _release_has_non_yanked_file(files):
             candidates.append((parsed_version, version_text.strip()))
