@@ -273,9 +273,15 @@ def guard_cloud_status_copy(error: GuardCloudPlanError) -> str:
     """Human copy that never implies a Cloud problem disabled local Guard."""
 
     if error.code == "device_limit_reached":
+        if error.plan_id == "solo" and error.limit == 2:
+            return (
+                "Your machine is still protected. Solo includes Cloud sync for two devices. "
+                "Choose a device to replace or upgrade to Pro to sync all your personal machines."
+            )
+        limit_copy = f" ({error.limit} devices)" if error.limit is not None else ""
         return (
-            "Your machine is still protected. Solo includes Cloud sync for two devices. "
-            "Choose a device to replace or upgrade to Pro to sync all your personal machines."
+            f"Your machine is still protected. Guard Cloud reached this plan's synced-device limit{limit_copy}. "
+            "Manage your synced devices or change plans to resume Cloud sync."
         )
     if error.code == "cloud_sync_paused_plan_limit":
         return "Cloud sync is paused by your plan limit. Local protection is active."
