@@ -1145,10 +1145,15 @@ def _version_check_payload(
     required_python_requirements = _latest_version_python_requirements(latest_version)
     runtime_python = _runtime_python_version()
     if update_available and not _python_requirements_satisfied(required_python_requirements, runtime_python):
-        compatible_version = _latest_compatible_release_version(current_version, runtime_python)
+        compatible_version = _latest_compatible_release_version(
+            current_version,
+            runtime_python,
+            alpha_only=include_alpha,
+        )
         if compatible_version is not None:
             return {
                 "source": "pypi",
+                **({"release_channel": "alpha"} if include_alpha else {}),
                 "status": "stale",
                 "current_version": current_version,
                 "latest_version": compatible_version,
@@ -1160,6 +1165,7 @@ def _version_check_payload(
             }
         return {
             "source": "pypi",
+            **({"release_channel": "alpha"} if include_alpha else {}),
             "status": "python_incompatible",
             "current_version": current_version,
             "latest_version": latest_version,
@@ -1274,7 +1280,12 @@ def _read_bounded_pypi_response(response: object, *, deadline: float) -> bytes:
             return bytes(payload)
 
 
-def _latest_compatible_release_version(current_version: str, runtime_python: str) -> str | None:
+def _latest_compatible_release_version(
+    current_version: str,
+    runtime_python: str,
+    *,
+    alpha_only: bool = False,
+) -> str | None:
     payload = _last_pypi_payload
     if not isinstance(payload, dict):
         return None
@@ -1289,6 +1300,8 @@ def _latest_compatible_release_version(current_version: str, runtime_python: str
             parsed_version = Version(version_text)
         except InvalidVersion:
             continue
+        if alpha_only and (parsed_version.pre is None or parsed_version.pre[0] != "a"):
+            continue
         if _is_newer_version(version_text, current_version) is not True:
             continue
         if not _release_has_non_yanked_file(files):
@@ -1298,6 +1311,8 @@ def _latest_compatible_release_version(current_version: str, runtime_python: str
             candidates.append((parsed_version, version_text.strip()))
     if not candidates:
         return None
+    if alpha_only:
+        return max(candidates, key=lambda candidate: candidate[0])[1]
     stable_candidates = [candidate for candidate in candidates if not candidate[0].is_prerelease]
     return max(stable_candidates or candidates, key=lambda candidate: candidate[0])[1]
 
