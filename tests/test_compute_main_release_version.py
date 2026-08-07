@@ -6,7 +6,13 @@ import sys
 
 import pytest
 
-from scripts.compute_main_release_version import compute_main_release_version, latest_main_release_version, main
+import scripts.compute_main_release_version as version_module
+from scripts.compute_main_release_version import (
+    compute_main_release_version,
+    latest_main_release_version,
+    latest_unyanked_main_release_version,
+    main,
+)
 
 
 @pytest.mark.parametrize(
@@ -44,6 +50,55 @@ def test_reports_latest_stable_version_for_source_monotonicity() -> None:
     assert latest_main_release_version("2.0.1117", ["2.2.0a1", "3.1.0a5"]) is None
 
 
+def test_publication_anchor_skips_fully_yanked_pypi_releases() -> None:
+    states: dict[str, version_module.PyPIReleaseState] = {
+        "2.2.8": "active",
+        "2.2.9": "yanked",
+        "2.2.10": "yanked",
+    }
+
+    assert (
+        latest_unyanked_main_release_version(
+            "2.2.0",
+            ["2.2.8", "2.2.9", "2.2.10", "3.1.0a5"],
+            release_state_loader=states.__getitem__,
+        )
+        == "2.2.8"
+    )
+
+
+def test_publication_anchor_keeps_absent_current_candidate() -> None:
+    states: dict[str, version_module.PyPIReleaseState] = {
+        "2.2.13": "active",
+        "2.2.14": "absent",
+    }
+
+    assert (
+        latest_unyanked_main_release_version(
+            "2.2.0",
+            ["2.2.13", "2.2.14"],
+            release_state_loader=states.__getitem__,
+        )
+        == "2.2.14"
+    )
+
+
+def test_publication_anchor_keeps_active_release_even_if_git_tag_is_missing() -> None:
+    states: dict[str, version_module.PyPIReleaseState] = {
+        "2.2.9": "active",
+        "2.2.10": "active",
+    }
+
+    assert (
+        latest_unyanked_main_release_version(
+            "2.2.0",
+            ["2.2.9", "2.2.10"],
+            release_state_loader=states.__getitem__,
+        )
+        == "2.2.10"
+    )
+
+
 def test_cli_reports_latest_existing_stable(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -53,6 +108,11 @@ def test_cli_reports_latest_existing_stable(
         ["compute_main_release_version.py", "--base-version", "2.0.1117", "--latest-existing"],
     )
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(["2.0.1116", "3.1.0a5"])))
+    monkeypatch.setattr(
+        version_module,
+        "latest_unyanked_main_release_version",
+        lambda _base, _versions: "2.0.1116",
+    )
 
     assert main() == 0
     assert capsys.readouterr().out == "2.0.1116\n"
