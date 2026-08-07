@@ -30,8 +30,9 @@ Available without a Cloud subscription or sign-in:
   let an operator detect unsigned, unknown-key, or tampered local policy rows
   and move to enforce mode deliberately.
 - **Cloud-outage independence** — if Guard Cloud is unavailable, you are signed
-  out, or never connected, local interception, policy, blocking, receipts, and
-  approvals continue on the machine.
+  out, your trial ends, a subscription is past due or canceled, or you never
+  connected, local interception, policy, blocking, receipts, and approvals
+  continue on the machine.
 
 Guard does not meter local safety features. You can detect harnesses, install
 launchers, diff changes, prompt for approval, and inspect receipts without
@@ -46,22 +47,51 @@ when optional Cloud receipt sync is enabled.
 Guard Cloud is a personal AI safety cockpit and memory layer. It does not gate
 baseline local protection.
 
-Paid Cloud value for a solo developer or vibe coder includes:
+### Solo
 
-- **Synced history** across sessions, devices, and hosted or local agents
-- **Searchable activity** — blocked actions, approvals, package installs,
-  MCP/Skill changes, and risky activity in one timeline
-- **Decision memory and policy suggestions** — safe repeated choices stop
-  becoming repeated interruptions
-- **MCP/Skill drift visibility over time** — changed schemas, commands,
-  transports, scopes, and dependencies stay visible after first trust
-- **Incident-style summaries** — what happened, why it mattered, and what to
-  do next without digging through raw logs
-- **Cloud Firewall UI** — package risk, feed freshness, remediation guidance,
-  and safer fix paths on top of local enforcement
-- **Exports and shareable records** — audit-ready evidence packages when you
-  need to show what Guard handled
-- **Digests and notifications** — calm routing for what needs attention
+Solo is the personal continuity tier for one developer. It adds Cloud value
+without changing what Guard can protect locally:
+
+- Cloud receipt and decision-memory sync for **two Cloud-connected devices**
+- **30 days** of searchable Cloud history
+- **1 GB** of Cloud storage
+- basic history search
+- a weekly personal security digest
+- matched critical advisory email
+- individual receipt download and a retained-history basic CSV/JSON export
+
+The two-device limit is a Cloud-sync limit only. A third machine still installs,
+intercepts, prompts, blocks, and writes local receipts normally. If the Portal
+returns `device_limit_reached` or `cloud_sync_paused_plan_limit`, the client must
+report Cloud sync as limited while continuing to report local protection
+accurately.
+
+### Pro
+
+Pro remains the personal power-user tier. Portal-provided entitlements are the
+source of truth, but the product boundary includes longer history and storage,
+all supported personal-device Cloud continuity subject to the current service
+policy, real-time alerting, policy version history, advanced search, and full
+evidence export. The local client does not hardcode plan prices or use plan
+names as enforcement logic.
+
+### Cloud error contract
+
+Cloud clients consume machine-actionable plan errors rather than parsing human
+messages. Known normal plan boundaries include:
+
+- `feature_not_in_plan`
+- `device_limit_reached`
+- `retention_limit_reached`
+- `storage_limit_reached`
+- `subscription_past_due`
+- `trial_expired`
+- `cloud_sync_paused_plan_limit`
+
+These codes describe Cloud state only. A network outage, billing state, trial
+state, retention limit, storage limit, or device limit must never be translated
+into “protection expired,” “device blocked,” or another claim that local Guard
+stopped working.
 
 Optional Cloud pairing commands:
 
@@ -109,16 +139,18 @@ on top of the individual Cloud value:
 
 ## Quick comparison
 
-| Capability | Local Guard | Guard Cloud |
-| --- | --- | --- |
-| Launch interception and local policy | Included | Included |
-| Local blocking/warnings on supported actions | Included | Included |
-| Local receipts and approvals | Included | Included |
-| Works when Cloud is offline | Yes | Local protection continues; sync pauses |
-| Cross-device history and search | Device-local only | Included on paid plans |
-| Decision memory across machines | No | Included on paid plans |
-| Cloud Firewall UI and exports | No | Included on paid plans |
-| Team RBAC, routing, and shared policy | No | Team plans |
+| Capability | Local Guard | Solo Cloud | Pro Cloud | Team Cloud |
+| --- | --- | --- | --- | --- |
+| Launch interception and local policy | Included | Included | Included | Included |
+| Local blocking/warnings on supported actions | Included | Included | Included | Included |
+| Local receipts and approvals | Included | Included | Included | Included |
+| Works when Cloud is offline | Yes | Local protection continues; sync pauses | Local protection continues; sync pauses | Local protection continues; sync pauses |
+| Cloud-connected personal devices | None required | 2 | Portal entitlement | Managed by workspace |
+| Cloud history | None required | 30 days | Portal entitlement | Workspace policy |
+| Decision memory across machines | No | Included | Included | Included |
+| Real-time Cloud activity alerts | No | Not included | Portal entitlement | Team routing |
+| Full evidence bundles | Local export only | Not included | Portal entitlement | Team evidence |
+| Team RBAC, routing, and shared policy | No | No | No | Included |
 
 ## Related docs
 
