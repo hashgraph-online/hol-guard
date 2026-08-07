@@ -193,6 +193,7 @@ def test_default_publication_anchor_returns_none_when_all_stables_are_yanked(
     ("payload", "match"),
     [
         (b"not-json", "invalid JSON"),
+        (b'{"info":{"version":"2.2.10"},"urls":[]}', "missing the release files"),
         (json.dumps({"info": {"version": "2.2.9"}, "urls": [{"yanked": False}]}).encode(), "wrong version"),
     ],
 )
