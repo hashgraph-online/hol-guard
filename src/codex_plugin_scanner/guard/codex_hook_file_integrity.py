@@ -35,6 +35,28 @@ def split_hook_command(command: object) -> list[str] | None:
         return None
 
 
+def _owner_is_only_group_member(owner_uid: int, group_gid: int) -> bool:
+    """Return whether a POSIX group is provably private to one file owner.
+
+    Linux distributions commonly create one primary group per user and pair it
+    with a 0002 umask, which produces user-owned 0664 config files.  The group
+    write bit is safe only when NSS can prove that no other account belongs to
+    that group.  Lookup failures remain fail-closed.
+    """
+
+    try:
+        import grp
+        import pwd
+
+        owner = pwd.getpwuid(owner_uid)
+        group = grp.getgrgid(group_gid)
+        member_names = set(group.gr_mem)
+        member_names.update(entry.pw_name for entry in pwd.getpwall() if entry.pw_gid == group_gid)
+    except (ImportError, KeyError, OSError):
+        return False
+    return member_names == {owner.pw_name}
+
+
 def canonical_path(path: Path) -> str:
     """Return the non-strict canonical absolute spelling used in identities."""
 
@@ -252,7 +274,15 @@ def validate_regular_file(path: Path, *, role: str, executable_required: bool) -
             # root:root layout.
             or (metadata.st_uid == 0 and metadata.st_gid == 0)
         )
-        unsafe_group_write = bool(mode & stat.S_IWGRP) and not trusted_interpreter_group_write
+        trusted_config_group_write = (
+            role == "config_target"
+            and current_uid is not None
+            and metadata.st_uid == current_uid
+            and _owner_is_only_group_member(current_uid, metadata.st_gid)
+        )
+        unsafe_group_write = bool(mode & stat.S_IWGRP) and not (
+            trusted_interpreter_group_write or trusted_config_group_write
+        )
         if mode & stat.S_IWOTH or unsafe_group_write:
             raise CodexHookIntegrityError(
                 f"codex_hook_{role}_permissions_unsafe",
