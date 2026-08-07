@@ -33,6 +33,47 @@ def test_build_oauth_package_firewall_entitlement_preserves_team_tier() -> None:
     }
 
 
+def test_build_oauth_package_firewall_entitlement_consumes_solo_plan_identity() -> None:
+    entitlement = build_oauth_package_firewall_entitlement(
+        {
+            "guard_local_entitlement": {
+                "plan_id": "solo",
+                "tier": "solo",
+                "supply_chain_firewall": False,
+                "expires_at": "2026-09-07T00:00:00.000Z",
+            }
+        },
+        now=datetime(2026, 8, 7, tzinfo=timezone.utc),
+    )
+
+    assert entitlement == {
+        "plan_id": "solo",
+        "supply_chain_entitlement_expires_at": "2026-09-07T00:00:00.000Z",
+        "supply_chain_firewall": False,
+        "supply_chain_plan_id": "solo",
+    }
+
+
+def test_build_oauth_package_firewall_entitlement_keeps_legacy_paid_alias_compatible() -> None:
+    entitlement = build_oauth_package_firewall_entitlement(
+        {
+            "guard_local_entitlement": {
+                "plan_id": "paid",
+                "tier": "paid",
+                "expires_at": "2026-09-07T00:00:00.000Z",
+            }
+        },
+        now=datetime(2026, 8, 7, tzinfo=timezone.utc),
+    )
+
+    assert entitlement == {
+        "plan_id": "paid",
+        "supply_chain_entitlement_expires_at": "2026-09-07T00:00:00.000Z",
+        "supply_chain_firewall": True,
+        "supply_chain_plan_id": "paid",
+    }
+
+
 def test_reconcile_connect_state_clears_stale_sync_not_available_for_paid_oauth(
     tmp_path: Path,
 ) -> None:
