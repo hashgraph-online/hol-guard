@@ -54,8 +54,10 @@ _TRUSTED_SCRIPT_BOOTSTRAP = (
 )
 _TRUSTED_MODULE_BOOTSTRAP = (
     "import json,runpy,sys; "
-    "sys.path[:0]=json.loads(sys.argv.pop(1)); "
+    "import_paths=json.loads(sys.argv.pop(1)); "
     "module=sys.argv.pop(1); "
+    "module == 'pip' and __import__('site').main(); "
+    "sys.path[:0]=import_paths; "
     "sys.argv[0]=module; "
     "runpy.run_module(module, run_name='__main__', alter_sys=True)"
 )
@@ -345,7 +347,7 @@ class _WindowsJobObjectBasicLimitInformation(ctypes.Structure):
         ("maximum_working_set_size", ctypes.c_size_t),
         ("active_process_limit", wintypes.DWORD),
         ("affinity", ctypes.c_size_t),
-        ("priority_class", wintypes.DWORD),
+        ("priority_class", ctypes.c_size_t),
         ("scheduling_class", wintypes.DWORD),
     ]
 
