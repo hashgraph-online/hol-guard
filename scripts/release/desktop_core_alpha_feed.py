@@ -11,9 +11,6 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
 BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 MANIFEST_SCHEMA = "hol-guard-core-update.v1"
 MARKER_SCHEMA = "hol-guard-core-attestation.v2"
@@ -30,6 +27,9 @@ def _decode_minisign_line(value: str, *, label: str) -> bytes:
 
 
 def verify_minisign(file_path: Path, signature_path: Path, public_key_value: str) -> None:
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
     public_key_lines = [line.strip() for line in public_key_value.splitlines() if line.strip()]
     public_key = _decode_minisign_line(public_key_lines[-1] if public_key_lines else "", label="public key")
     if len(public_key) != 42 or public_key[:2] != b"Ed":

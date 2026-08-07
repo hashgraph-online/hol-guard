@@ -172,12 +172,12 @@ jobs:
           python3 -I scripts/release/desktop_core_alpha_feed.py inspect-assets \
             --assets "$RUNNER_TEMP/release-assets.txt" --base "$BASE" >> "$GITHUB_OUTPUT"
       - name: Set up Python
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true'
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
       - name: Set up uv
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
@@ -418,7 +418,7 @@ jobs:
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_UPDATE_PUBLIC_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PUBLIC_KEY }}
-        run: python3 -I scripts/release/desktop_core_alpha_feed.py verify-minisign --file "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json" --signature "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json.sig" --public-key "$CORE_UPDATE_PUBLIC_KEY"
+        run: uv run --no-project --with cryptography==50.0.0 python -I scripts/release/desktop_core_alpha_feed.py verify-minisign --file "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json" --signature "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json.sig" --public-key "$CORE_UPDATE_PUBLIC_KEY"
       - name: Create or validate immutable marker
         if: steps.release.outputs.available == 'true'
         env:

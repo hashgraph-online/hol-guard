@@ -142,11 +142,14 @@ def test_apple_verification_pins_identity_team_and_notarized_gatekeeper_source()
 
 def test_manifest_signature_is_required_and_uses_independent_update_key() -> None:
     text = workflow_text()
+    helper_prefix = TOOL.read_text(encoding="utf-8").split("def verify_minisign", maxsplit=1)[0]
+    assert "cryptography" not in helper_prefix
     assert "HOL_GUARD_CORE_UPDATE_PRIVATE_KEY" in text
     assert "HOL_GUARD_CORE_UPDATE_PRIVATE_KEY_PASSWORD" in text
     assert "HOL_GUARD_CORE_UPDATE_PUBLIC_KEY" in text
     assert "bunx @tauri-apps/cli@2.11.4 signer sign" in text
     assert "verify-minisign" in text
+    assert "uv run --no-project --with cryptography==50.0.0" in text
     assert '--public-key "$CORE_UPDATE_PUBLIC_KEY"' in text
     assert 'test -s "$MANIFEST.sig"' in text
     assert ".json.sig" in text
