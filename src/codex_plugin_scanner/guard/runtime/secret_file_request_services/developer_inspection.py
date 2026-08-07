@@ -29,7 +29,7 @@ from .constants_core import (
     _SAFE_STATIC_SHELL_COMMANDS,
 )
 from .constants_patterns import _FIND_PATH_VALUE_PREDICATES
-from .docker_requests import _which_for_execution_cwd, shell_execution_context_starts_with_literal_cd
+from .docker_requests import shell_execution_context_starts_with_literal_cd, _which_for_execution_cwd
 from .github_shell_capabilities import classify_github_shell_capabilities
 from .local_read_operands import _local_read_operands_resolve_safely, _search_file_operand_tokens
 from .read_only_filters import (
