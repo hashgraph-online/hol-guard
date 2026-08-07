@@ -84,6 +84,16 @@ def _mapping(value: object) -> Mapping[str, object] | None:
     return value if isinstance(value, Mapping) else None
 
 
+def _first_value(source: Mapping[str, object], *keys: str) -> object | None:
+    """Return the first present non-None value without dropping 0/False."""
+
+    for key in keys:
+        value = source.get(key)
+        if value is not None:
+            return value
+    return None
+
+
 def _optional_string(value: object) -> str | None:
     if not isinstance(value, str):
         return None
@@ -157,53 +167,59 @@ def parse_guard_cloud_entitlements(payload: object) -> GuardCloudEntitlements | 
     nested = _mapping(root.get("guard_local_entitlement"))
     source = nested or root
 
-    plan_id = _plan_id(source.get("planId") or source.get("plan_id") or source.get("tier"))
+    plan_id = _plan_id(_first_value(source, "planId", "plan_id", "tier"))
     if plan_id is None:
         return None
 
-    features = _feature_values(source.get("features"))
+    features = _feature_values(_first_value(source, "features"))
     if not features:
-        features = _feature_values(source.get("cloudValueGates") or source.get("cloud_value_gates"))
+        features = _feature_values(_first_value(source, "cloudValueGates", "cloud_value_gates"))
     supply_chain_firewall = source.get("supply_chain_firewall")
     if isinstance(supply_chain_firewall, bool):
         features.setdefault("guard.cloud.supply_chain_firewall", supply_chain_firewall)
 
     cloud_storage_bytes = _optional_nonnegative_int(
-        source.get("cloudStorageBytes") or source.get("cloud_storage_bytes")
+        _first_value(source, "cloudStorageBytes", "cloud_storage_bytes")
     )
     if cloud_storage_bytes is None:
-        storage_gb = source.get("includedStorageGb") or source.get("included_storage_gb")
+        storage_gb = _first_value(source, "includedStorageGb", "included_storage_gb")
         if isinstance(storage_gb, (int, float)) and not isinstance(storage_gb, bool) and storage_gb >= 0:
             cloud_storage_bytes = int(float(storage_gb) * 1024 * 1024 * 1024)
 
     return GuardCloudEntitlements(
         plan_id=plan_id,
-        plan_version=_optional_string(source.get("planVersion") or source.get("plan_version")),
+        plan_version=_optional_string(_first_value(source, "planVersion", "plan_version")),
         subscription_status=_subscription_status(
-            source.get("subscriptionStatus") or source.get("subscription_status")
+            _first_value(source, "subscriptionStatus", "subscription_status")
         ),
         current_period_end=_optional_string(
-            source.get("currentPeriodEnd") or source.get("current_period_end")
+            _first_value(source, "currentPeriodEnd", "current_period_end")
         ),
-        trial_end=_optional_string(source.get("trialEnd") or source.get("trial_end")),
+        trial_end=_optional_string(_first_value(source, "trialEnd", "trial_end")),
         max_synced_devices=_optional_nonnegative_int(
-            source.get("maxSyncedDevices")
-            or source.get("max_synced_devices")
-            or source.get("deviceLimit")
-            or source.get("device_limit")
+            _first_value(
+                source,
+                "maxSyncedDevices",
+                "max_synced_devices",
+                "deviceLimit",
+                "device_limit",
+            )
         ),
         active_synced_devices=_optional_nonnegative_int(
-            source.get("activeSyncedDevices") or source.get("active_synced_devices")
+            _first_value(source, "activeSyncedDevices", "active_synced_devices")
         ),
         retention_days=_optional_nonnegative_int(
-            source.get("retentionDays") or source.get("retention_days")
+            _first_value(source, "retentionDays", "retention_days")
         ),
         cloud_storage_bytes=cloud_storage_bytes,
         cloud_storage_used_bytes=_optional_nonnegative_int(
-            source.get("cloudStorageUsedBytes")
-            or source.get("cloud_storage_used_bytes")
-            or source.get("storageUsedBytes")
-            or source.get("storage_used_bytes")
+            _first_value(
+                source,
+                "cloudStorageUsedBytes",
+                "cloud_storage_used_bytes",
+                "storageUsedBytes",
+                "storage_used_bytes",
+            )
         ),
         features=features,
     )
@@ -244,12 +260,12 @@ def parse_guard_cloud_plan_error(
         category=category,
         message=message,
         http_status=http_status,
-        plan_id=_plan_id(source.get("planId") or source.get("plan_id")),
+        plan_id=_plan_id(_first_value(source, "planId", "plan_id")),
         limit=_optional_nonnegative_int(source.get("limit")),
         current=_optional_nonnegative_int(source.get("current")),
-        upgrade_plan_id=_plan_id(source.get("upgradePlanId") or source.get("upgrade_plan_id")),
-        manage_url=_safe_action_url(source.get("manageUrl") or source.get("manage_url")),
-        upgrade_url=_safe_action_url(source.get("upgradeUrl") or source.get("upgrade_url")),
+        upgrade_plan_id=_plan_id(_first_value(source, "upgradePlanId", "upgrade_plan_id")),
+        manage_url=_safe_action_url(_first_value(source, "manageUrl", "manage_url")),
+        upgrade_url=_safe_action_url(_first_value(source, "upgradeUrl", "upgrade_url")),
     )
 
 
