@@ -89,7 +89,7 @@ def test_update_detects_uv_tool_install_and_pins_latest_version(monkeypatch: pyt
     assert payload["binary_diagnostics"]["path_status"] == "uv_tool_shim_detected"
 
 
-def test_update_alpha_pins_latest_alpha_in_installed_major(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_alpha_pins_latest_alpha_release(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands.sys, "prefix", "/opt/pipx/venvs/hol-guard")
     monkeypatch.setattr(update_commands.shutil, "which", lambda name: f"/opt/bin/{name}")
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.1127")
@@ -143,7 +143,7 @@ def test_update_command_allows_prerelease_for_alpha_pins() -> None:
     ) == ["uv", "tool", "install", "--force", "--refresh-package", "hol-guard", "hol-guard==2.0.1127"]
 
 
-def test_latest_alpha_version_stays_in_current_major_and_skips_yanked(
+def test_latest_alpha_version_selects_newest_alpha_across_majors_and_skips_yanked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.1127")
@@ -156,12 +156,43 @@ def test_latest_alpha_version_stays_in_current_major_and_skips_yanked(
                 "2.1.0a35": [{"yanked": False}],
                 "2.2.0a1": [{"yanked": True}],
                 "2.2.0b1": [{"yanked": False}],
-                "3.1.0a9": [{"yanked": False}],
+                "3.0.0a9": [{"yanked": False}],
+                "3.1.0a1": [{"yanked": False}],
             }
         },
     )
 
-    assert update_commands._latest_alpha_version_from_pypi("2.0.1127") == "2.1.0a35"
+    assert update_commands._latest_alpha_version_from_pypi("2.0.1127") == "3.1.0a1"
+    assert update_commands._latest_alpha_version_from_pypi("2.2.15") == "3.1.0a1"
+
+
+def test_alpha_python_fallback_stays_on_alpha_channel(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.20")
+    monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.12.0")
+    monkeypatch.setattr(
+        update_commands,
+        "_last_pypi_payload",
+        {
+            "releases": {
+                "2.2.20": [{"yanked": False, "requires_python": ">=3.10"}],
+                "3.0.0a8": [{"yanked": False, "requires_python": ">=3.10"}],
+                "3.0.0a9": [{"yanked": False, "requires_python": ">=3.13"}],
+            }
+        },
+    )
+    monkeypatch.setattr(
+        update_commands,
+        "_latest_alpha_version_from_pypi",
+        lambda _current: "3.0.0a9",
+    )
+
+    payload = update_commands._version_check_payload("2.2.15", include_alpha=True)
+
+    assert payload["release_channel"] == "alpha"
+    assert payload["status"] == "stale"
+    assert payload["latest_version"] == "3.0.0a8"
+    assert payload["pypi_latest_version"] == "3.0.0a9"
+    assert payload["pypi_latest_python_incompatible"] is True
 
 
 def test_update_version_check_marks_stale_local_install(monkeypatch: pytest.MonkeyPatch) -> None:

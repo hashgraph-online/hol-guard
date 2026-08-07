@@ -527,7 +527,7 @@ def test_build_guard_install_surface_payload_stays_local(monkeypatch: pytest.Mon
 def test_version_check_reports_python_incompatible_latest_release(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.807")
     monkeypatch.setattr(update_commands, "_latest_version_python_requirements", lambda latest: (">=3.10,<3.14",))
-    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime: None)
+    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime, **_kwargs: None)
     monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
 
     payload = update_commands._version_check_payload("2.0.789")
@@ -594,7 +594,7 @@ def test_update_blocks_python_incompatible_latest_release(monkeypatch: pytest.Mo
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.789")
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.807")
     monkeypatch.setattr(update_commands, "_latest_version_python_requirements", lambda latest: (">=3.10,<3.14",))
-    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime: None)
+    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime, **_kwargs: None)
     monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
@@ -625,7 +625,7 @@ def test_update_requested_local_wheel_bypasses_python_incompatible_latest_releas
     monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.0.790")
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.807")
     monkeypatch.setattr(update_commands, "_latest_version_python_requirements", lambda latest: (">=3.10,<3.14",))
-    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime: None)
+    monkeypatch.setattr(update_commands, "_latest_compatible_release_version", lambda current, runtime, **_kwargs: None)
     monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.14.0")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")

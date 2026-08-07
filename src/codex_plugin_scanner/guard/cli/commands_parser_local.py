@@ -112,7 +112,7 @@ def _configure_guard_local_parsers(
     update_parser.add_argument(
         "--alpha",
         action="store_true",
-        help="Update to the newest alpha release in the installed major version",
+        help="Update to the newest alpha release on PyPI (may cross major versions)",
     )
     update_parser.add_argument(
         "--wheel",
