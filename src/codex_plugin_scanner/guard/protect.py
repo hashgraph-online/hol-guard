@@ -165,7 +165,9 @@ def build_protect_payload(
                 context = refresh_state.get("additional_context")
                 return (
                     "block",
-                    context if isinstance(context, dict) else {
+                    context
+                    if isinstance(context, dict)
+                    else {
                         "available": False,
                         "status": "authority_refresh_failed",
                         "version": 1,
