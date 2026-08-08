@@ -8,7 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.protect_approvals import _protect_approval_item
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.decisions import GuardDecisionV2
+from codex_plugin_scanner.guard.runtime.decisions import GuardDecisionV2, authoritative_decision_from_artifact
 
 
 def _artifact(workspace: Path) -> GuardArtifact:
@@ -141,6 +141,28 @@ def test_protect_approval_supplies_nonempty_reason_when_scanners_have_no_copy(tm
     assert isinstance(decision_payload, dict)
     decision = GuardDecisionV2.from_dict(decision_payload)
     assert decision.reason == "package_supply_chain_review"
+
+
+def test_protect_approval_projects_watch_only_envelope_to_observed_action(tmp_path: Path) -> None:
+    response = _response(verdict_action="allow", supply_action="require-reapproval")
+    receipt = response["receipt"]
+    assert isinstance(receipt, dict)
+    receipt["action_envelope_json"] = {
+        "policy_action": "allow",
+        "observe_mode": True,
+        "observed_policy_action": "require-reapproval",
+        "package_manager": "npm",
+    }
+
+    item = _protect_approval_item(response, workspace=tmp_path, artifact=_artifact(tmp_path))
+
+    assert item is not None
+    assert receipt["action_envelope_json"]["policy_action"] == "allow"
+    assert item["action_envelope_json"] == {
+        "policy_action": "require-reapproval",
+        "package_manager": "npm",
+    }
+    assert authoritative_decision_from_artifact(item).action == "require-reapproval"
 
 
 def test_strict_decision_parser_still_rejects_the_old_partial_protect_shape() -> None:
