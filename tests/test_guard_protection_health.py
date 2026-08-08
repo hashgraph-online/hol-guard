@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import itertools
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -7,6 +8,11 @@ from typing import cast
 
 from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.models import GuardRuntimeState
+from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
+from codex_plugin_scanner.guard.runtime.containment_health import (
+    CONTAINMENT_POLICY_CONTRACT_DIGEST,
+    ContainmentHealthEvidence,
+)
 from codex_plugin_scanner.guard.runtime.protection_health import (
     PROTECTION_CHECK_IDS,
     PROTECTION_HEALTH_SCHEMA_VERSION,
@@ -51,6 +57,19 @@ class _Store:
         return self._health
 
 
+def _containment_evidence() -> dict[str, object]:
+    fingerprint = hashlib.sha256(b"stable").hexdigest()
+    return ContainmentHealthEvidence(
+        backend=ContainmentBackend.MACOS_SANDBOX,
+        backend_digest=hashlib.sha256(b"backend").hexdigest(),
+        policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
+        daemon_fingerprint=fingerprint,
+        runtime_fingerprint=fingerprint,
+        probe_at=_NOW.isoformat(),
+        probe_enforced=True,
+    ).to_dict()
+
+
 def _payload(
     *,
     installs: list[dict[str, object]] | None = None,
@@ -62,6 +81,11 @@ def _payload(
     runtime_state: dict[str, object] | None = None,
     hook_verification: dict[str, bool] | None = None,
 ) -> dict[str, object]:
+    if runtime_state is None:
+        runtime_state = {
+            "last_heartbeat_at": _NOW.isoformat(),
+            "containment_health": _containment_evidence(),
+        }
     return build_runtime_protection_health(
         store=_Store(
             count=activity_count,
@@ -69,7 +93,7 @@ def _payload(
             errors=errors,
             active_errors=(1 if dropped > 0 or errors > 0 else 0) if active_errors is None else active_errors,
         ),
-        runtime_state={"last_heartbeat_at": _NOW.isoformat()} if runtime_state is None else runtime_state,
+        runtime_state=runtime_state,
         managed_installs=installs or [],
         hook_verification=hook_verification,
         trust_status=trust or {},
@@ -78,15 +102,18 @@ def _payload(
 
 
 def test_missing_positive_proofs_never_claim_protected_or_partial() -> None:
-    for runtime_protection, remembered_rules, active_errors in itertools.product(
-        ("degraded", "unknown"),
-        ("disabled_degraded", "unknown"),
+    for active, runtime_protection, remembered_rules, dropped, errors in itertools.product(
+        (False, True),
+        ("protected", "degraded", "unknown"),
+        ("enforced", "disabled_degraded", "unknown"),
+        (0, 1),
         (0, 1),
     ):
         payload = _payload(
-            installs=[{"harness": "codex", "active": True}],
+            installs=[{"harness": "codex", "active": active}],
             trust={"runtime_protection": runtime_protection, "remembered_rules": remembered_rules},
-            active_errors=active_errors,
+            dropped=dropped,
+            errors=errors,
         )
         assert payload["state"] == "degraded"
         assert payload["label"] == "Degraded"
@@ -112,6 +139,7 @@ def test_repaired_live_state_ignores_historical_evidence_errors() -> None:
         "reason_code": "decision_stream_healthy",
     }
     assert by_id["tamper_checks"]["status"] == "pass"
+    assert payload["state"] == "protected"
 
 
 def test_canonical_managed_install_supersedes_legacy_alias() -> None:
@@ -145,9 +173,8 @@ def test_report_distinguishes_failed_and_unproven_facts() -> None:
     assert by_id["daemon"]["status"] == "pass"
     assert by_id["harness_hooks"]["status"] == "unknown"
     assert by_id["harness_hooks"]["reason_code"] == "hook_attestation_unavailable"
-    assert by_id["decision_plane_compatibility"]["status"] == "fail"
-    assert by_id["decision_plane_compatibility"]["reason_code"] == "containment_health_invalid"
-    assert by_id["sandbox"]["status"] == "fail"
+    assert by_id["decision_plane_compatibility"]["status"] == "pass"
+    assert by_id["sandbox"]["status"] == "pass"
 
     degraded = _payload(
         installs=[{"harness": "codex", "active": False}],
@@ -194,9 +221,10 @@ def test_inactive_historical_rows_do_not_degrade_verified_active_hooks() -> None
         hook_verification={"cursor": True},
     )
 
-    assert payload["state"] == "degraded"
+    assert payload["state"] == "protected"
     apps = cast(list[dict[str, object]], payload["apps"])
     assert [app["harness"] for app in apps] == ["cursor"]
+    assert apps[0]["state"] == "protected"
     checks = cast(list[dict[str, str]], apps[0]["checks"])
     assert checks[0] == {
         "check_id": "harness_hooks",
