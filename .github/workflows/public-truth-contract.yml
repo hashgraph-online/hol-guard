@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install focused test dependency
+        run: python -m pip install --disable-pip-version-check 'pytest>=9.0.3,<10'
       - name: Validate public truth contract
         run: python scripts/seo/check_public_truth_contract.py
       - name: Run contract tests
