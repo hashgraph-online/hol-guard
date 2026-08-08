@@ -32,10 +32,12 @@ _ACTION_ENVELOPE_ACTION_FIELDS = frozenset(
         "action_type",
         "policy_action",
         "pre_execution_result",
+        "observed_policy_action",
         "actionId",
         "actionType",
         "policyAction",
         "preExecutionResult",
+        "observedPolicyAction",
     }
 )
 
@@ -80,7 +82,12 @@ def canonical_receipt_decision(
     *,
     reject_contradiction: bool,
 ) -> CanonicalReceiptDecision:
-    """Synchronize final-action fields in a receipt-owned envelope."""
+    """Synchronize final-action fields in a receipt-owned envelope.
+
+    ``observed_policy_action`` is explicit Watch-only evidence, not execution
+    authority. It must still be a recognized Guard action, but it may differ
+    from the final receipt decision by design.
+    """
 
     normalization = normalize_guard_action_result(
         policy_decision,
@@ -98,6 +105,7 @@ def canonical_receipt_decision(
             ("action_type", "actionType"),
             ("policy_action", "policyAction"),
             ("pre_execution_result", "preExecutionResult"),
+            ("observed_policy_action", "observedPolicyAction"),
         )
     )
     candidates: list[GuardAction] = _action_candidates(envelope, unknown_action_fields)
@@ -119,6 +127,16 @@ def canonical_receipt_decision(
                 candidates.append(candidate.action)
                 if not candidate.recognized or candidate.action != projected_action:
                     contradiction = True
+        for field in ("observed_policy_action", "observedPolicyAction"):
+            raw_observed_action = envelope.get(field)
+            if raw_observed_action is None:
+                continue
+            observed = normalize_guard_action_result(
+                raw_observed_action,
+                unknown_action="require-reapproval",
+            )
+            if not observed.recognized:
+                contradiction = True
 
     if reject_contradiction and (invalid_payload or contradiction):
         raise ValueError(AUTHORITATIVE_DECISION_INCONSISTENT)
@@ -322,7 +340,11 @@ def _resolved_approval_envelope(
         if isinstance(key, str) and is_action_bearing_key(key) and key not in _ACTION_ENVELOPE_ACTION_FIELDS:
             envelope.pop(key, None)
             contract_error = AUTHORITATIVE_DECISION_INCONSISTENT
-    for snake_key, camel_key in (("action_id", "actionId"), ("action_type", "actionType")):
+    for snake_key, camel_key in (
+        ("action_id", "actionId"),
+        ("action_type", "actionType"),
+        ("observed_policy_action", "observedPolicyAction"),
+    ):
         if _aliases_conflict(envelope, snake_key, camel_key):
             envelope.pop(camel_key, None)
             contract_error = AUTHORITATIVE_DECISION_INCONSISTENT
