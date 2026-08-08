@@ -536,6 +536,7 @@ def _generic_hook_approval_reuse(
 
 def _should_relax_configured_default(
     *,
+    action_envelope: GuardActionEnvelope | None = None,
     configured_action: GuardAction,
     harness: str = "codex",
     has_narrow_override: bool,
@@ -578,6 +579,17 @@ def _should_relax_configured_default(
             payload=dict(payload),
             cwd=runtime_workspace,
             home_dir=home_dir,
+        )
+    if (
+        event_name == "PreToolUse"
+        and runtime_artifact_checked
+        and _canonical_harness_name(harness) == "codex"
+        and str(payload.get("tool_name", "")).strip().lower() == "apply_patch"
+    ):
+        return (
+            action_envelope is not None
+            and action_envelope.action_type == "file_write"
+            and bool(action_envelope.target_paths)
         )
     return event_name == "PreToolUse" and is_explicitly_benign_tool_action_request(
         payload.get("tool_name"),
@@ -638,12 +650,13 @@ def _run_hook_generic_payload(
             cwd=runtime_workspace or Path.cwd(),
             home_dir=home_dir,
         )
-    verified_benign_classifier = (
-        "_codex_post_tool_command_is_read_only_source_inspection"
-        if hook_event_name == "PostToolUse"
-        else "is_explicitly_benign_tool_action_request"
-    )
+    verified_benign_classifier = "is_explicitly_benign_tool_action_request"
+    if hook_event_name == "PostToolUse":
+        verified_benign_classifier = "_codex_post_tool_command_is_read_only_source_inspection"
+    elif hook_event_name == "PreToolUse" and str(payload_map.get("tool_name", "")).strip().lower() == "apply_patch":
+        verified_benign_classifier = "runtime_artifact_verified_non_sensitive_apply_patch"
     verified_benign_default = _should_relax_configured_default(
+        action_envelope=action_envelope,
         configured_action=configured_policy_normalization.action,
         harness=args.harness,
         has_narrow_override=configured_narrow_override is not None,
