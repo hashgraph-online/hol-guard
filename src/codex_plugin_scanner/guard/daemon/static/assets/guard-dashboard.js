@@ -16241,7 +16241,7 @@ async function fetchCommandActivityApi(input, init) {
   return fetchWithGuardAuth(input, init);
 }
 async function fetchExtensionControlApi(input, init) {
-  const approvedPath = typeof input === "string" && /^\/v1\/extension-controls\/(?:catalog|effective|preview|apply|refresh)$/.test(input);
+  const approvedPath = typeof input === "string" && /^\/v1\/extension-controls\/(?:catalog|effective|preview|apply|refresh|recover-authority)$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid extension-control API path");
   }

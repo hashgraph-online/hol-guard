@@ -5304,6 +5304,10 @@
       }
     }
 
+    .hover\:bg-red-800:hover {
+      background-color: var(--color-red-800);
+    }
+
     .hover\:bg-slate-50:hover {
       background-color: var(--color-slate-50);
     }

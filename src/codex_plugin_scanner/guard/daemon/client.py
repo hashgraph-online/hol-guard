@@ -165,6 +165,9 @@ class GuardSurfaceDaemonClient:
     def refresh_extension_controls(self) -> dict[str, object]:
         return self._post("/v1/extension-controls/refresh", {})
 
+    def recover_extension_control_authority(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._post("/v1/extension-controls/recover-authority", payload)
+
     def acknowledge_degraded_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/acknowledge-degraded", payload)
 

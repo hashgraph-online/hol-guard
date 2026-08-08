@@ -2461,6 +2461,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/extension-controls/preview",
             "/v1/extension-controls/apply",
             "/v1/extension-controls/refresh",
+            "/v1/extension-controls/recover-authority",
             "/v1/extension-controls/acknowledge-degraded",
         }
         if parsed.path in extension_control_paths and not self._header_token_is_valid():
@@ -2549,6 +2550,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     response = self._daemon_server().extension_control_api.apply(payload)
                 elif parsed.path.endswith("/acknowledge-degraded"):
                     response = self._daemon_server().extension_control_api.acknowledge_degraded(payload)
+                elif parsed.path.endswith("/recover-authority"):
+                    response = self._daemon_server().extension_control_api.recover_authority(payload)
                 else:
                     response = self._daemon_server().extension_control_api.refresh()
             except ExtensionControlApiError as error:
@@ -7102,6 +7105,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/extension-controls/preview",
             "/v1/extension-controls/apply",
             "/v1/extension-controls/refresh",
+            "/v1/extension-controls/recover-authority",
             "/v1/harnesses",
             "/v1/notifications/setup",
             "/v1/policy",

@@ -151,6 +151,34 @@ class ExtensionControlApiService:
         _ = self._runtime.refresh(view)
         return self.effective()
 
+    def recover_authority(self, payload: dict[str, object]) -> dict[str, object]:
+        current = self._store.read_extension_control_authority(catalog_digest=self._registry.catalog_digest)
+        if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
+            raise ExtensionControlApiError(409, "authority_not_recoverable")
+        session_nonce = self._required_string(payload, "session_nonce")
+        action = "recover-authority"
+        subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
+        try:
+            grant = require_extension_control(
+                self._store.guard_home,
+                approval_gate_input=input_from_mapping(payload),
+                action=action,
+                subject=subject,
+                session_nonce=session_nonce,
+            )
+            consume_extension_control_grant(
+                self._store.guard_home,
+                grant,
+                action=action,
+                subject=subject,
+                session_nonce=session_nonce,
+            )
+        except ApprovalGateError as exc:
+            raise ExtensionControlApiError(exc.status, exc.code) from exc
+        view = self._store.recover_extension_control_authority(catalog_digest=self._registry.catalog_digest)
+        _ = self._runtime.refresh(view)
+        return self.effective()
+
     def acknowledge_degraded(self, payload: dict[str, object]) -> dict[str, object]:
         if self._runtime.current().health is not AuthorityHealth.DEGRADED_UNACKNOWLEDGED:
             raise ExtensionControlApiError(409, "authority_not_degraded")

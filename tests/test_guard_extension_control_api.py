@@ -162,6 +162,58 @@ def test_degraded_acknowledgement_rejects_missing_daemon_approval(tmp_path: Path
     assert service.effective()["health"] == AuthorityHealth.DEGRADED_UNACKNOWLEDGED.value
 
 
+def test_authority_recovery_consumes_daemon_bound_approval_before_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    tampered = ExtensionControlAuthorityView(
+        AuthorityHealth.TAMPERED,
+        4,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    protected = replace(tampered, health=AuthorityHealth.PROTECTED, revision=5)
+    service = ExtensionControlApiService(
+        store=store,
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        runtime=ExtensionControlRuntime(tampered),
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(store, "read_extension_control_authority", lambda **_kwargs: tampered)
+    monkeypatch.setattr(
+        store,
+        "recover_extension_control_authority",
+        lambda **_kwargs: calls.append("recover") or protected,
+    )
+    monkeypatch.setattr(
+        extension_control_api_module,
+        "require_extension_control",
+        lambda *_args, **_kwargs: calls.append("require") or object(),
+    )
+    monkeypatch.setattr(
+        extension_control_api_module,
+        "consume_extension_control_grant",
+        lambda *_args, **_kwargs: calls.append("consume"),
+    )
+
+    effective = service.recover_authority({"approval_password": "secret", "session_nonce": "nonce"})
+
+    assert effective["health"] == AuthorityHealth.PROTECTED.value
+    assert effective["revision"] == 5
+    assert calls == ["require", "consume", "recover"]
+
+
+def test_authority_recovery_rejects_healthy_authority(tmp_path: Path) -> None:
+    service = _service(GuardStore(tmp_path / "guard-home"))
+
+    with pytest.raises(ExtensionControlApiError) as denied:
+        service.recover_authority({"session_nonce": "nonce"})
+
+    assert denied.value.status == 409
+    assert denied.value.code == "authority_not_recoverable"
+
+
 def test_legacy_extension_aliases_migrate_to_canonical_catalog_ids(tmp_path: Path) -> None:
     legacy_id = "command.legacy-control-id"
     first = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0]
@@ -367,6 +419,10 @@ def test_http_routes_authenticate_before_reading_sensitive_post_body(tmp_path: P
         client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{daemon.port}", auth_token)
         refreshed = client.refresh_extension_controls()
         assert refreshed["health"] == "unenrolled"
+        with pytest.raises(GuardDaemonRequestError) as not_recoverable:
+            client.recover_extension_control_authority({"session_nonce": "nonce"})
+        assert not_recoverable.value.status == 409
+        assert not_recoverable.value.code == "authority_not_recoverable"
         with pytest.raises(GuardDaemonRequestError) as not_degraded:
             client.acknowledge_degraded_extension_controls({})
         assert not_degraded.value.status == 409

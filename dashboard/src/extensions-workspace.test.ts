@@ -34,10 +34,12 @@ const recoveryMarkup = renderToStaticMarkup(createElement(ExtensionStatusBanner,
     failures: [{ code: "anchor_mismatch", detail: "Authority anchor does not match." }],
     layers: [],
   },
+  onRecover: () => undefined,
   onRetry: () => undefined,
 }));
 assert.match(recoveryMarkup, /hol-guard guard command controls recover-authority/);
 assert.match(recoveryMarkup, /Copy repair command/);
+assert.match(recoveryMarkup, /Repair now/);
 assert.match(recoveryMarkup, /Check again/);
 
 const state = {

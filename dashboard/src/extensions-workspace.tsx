@@ -19,6 +19,7 @@ import {
   fetchEffectiveExtensionControls,
   fetchExtensionCatalog,
   previewExtensionMutation,
+  recoverExtensionControlAuthority,
   type EffectiveExtensionControls,
   type ExtensionCatalogItem,
   type ExtensionCatalogResponse,
@@ -111,7 +112,13 @@ function effectiveState(effective: EffectiveExtensionControls, extension: Extens
   return extension.required || control?.state !== "disabled";
 }
 
-export function ExtensionStatusBanner(props: { effective: EffectiveExtensionControls; onRetry: () => void }) {
+export function ExtensionStatusBanner(props: {
+  busy?: boolean;
+  effective: EffectiveExtensionControls;
+  error?: string | null;
+  onRecover?: () => void;
+  onRetry: () => void;
+}) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const recovery = extensionRecoveryAction(props.effective.health);
   const handleCopy = useCallback(async () => {
@@ -142,6 +149,12 @@ export function ExtensionStatusBanner(props: { effective: EffectiveExtensionCont
           <p className="mt-1 text-sm leading-6 text-slate-700">{recovery?.description}</p>
           <code className="mt-3 block overflow-x-auto rounded-lg bg-slate-950 px-3 py-2 text-xs text-white">{recovery?.command}</code>
           <div className="mt-3 flex flex-wrap items-center gap-2">
+            {tampered && props.onRecover ? (
+              <button type="button" disabled={props.busy} onClick={props.onRecover} className="inline-flex items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60">
+                {props.busy ? <HiMiniArrowPath className="size-4 animate-spin" aria-hidden="true" /> : <HiMiniShieldCheck className="size-4" aria-hidden="true" />}
+                {props.busy ? "Repairing…" : "Repair now"}
+              </button>
+            ) : null}
             <button type="button" onClick={handleCopy} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
               {copyState === "copied" ? <HiMiniClipboardDocumentCheck className="size-4" aria-hidden="true" /> : <HiMiniClipboard className="size-4" aria-hidden="true" />}
               {copyState === "copied" ? "Copied" : recovery?.copyLabel}
@@ -152,6 +165,7 @@ export function ExtensionStatusBanner(props: { effective: EffectiveExtensionCont
             </button>
             {copyState === "failed" ? <span role="status" className="text-sm text-red-700">Copy failed. Select the command above.</span> : null}
           </div>
+          {props.error ? <p role="alert" className="mt-3 text-sm font-medium text-red-800">{props.error}</p> : null}
         </div>
       </div>
     </div>
@@ -250,11 +264,47 @@ function ReviewModal(props: {
   );
 }
 
+function AuthorityRecoveryModal(props: {
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: (password: string, totp: string) => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
+  const handlePasswordChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(event.target.value);
+  }, []);
+  const handleTotpChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setTotp(event.target.value);
+  }, []);
+  const handleSubmit = useCallback((event: React.FormEvent) => {
+    event.preventDefault();
+    props.onConfirm(password, totp);
+  }, [password, props, totp]);
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" role="presentation">
+      <form onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-labelledby="authority-recovery-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-blue">Local approval required</p>
+        <h2 id="authority-recovery-title" className="mt-2 text-xl font-semibold text-slate-950">Repair extension controls</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Authenticate this repair on your device. Guard uses the proof once and does not store it.</p>
+        <label className="mt-5 block text-sm font-medium text-slate-700">Approval password<input autoFocus type="password" autoComplete="current-password" value={password} onChange={handlePasswordChange} className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100" /></label>
+        <label className="mt-4 block text-sm font-medium text-slate-700">Authenticator code<input inputMode="numeric" autoComplete="one-time-code" value={totp} onChange={handleTotpChange} className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100" /></label>
+        {props.error ? <p role="alert" className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{props.error}</p> : null}
+        <div className="mt-6 flex justify-end gap-3"><button type="button" disabled={props.busy} onClick={props.onCancel} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button><button type="submit" disabled={props.busy} className="rounded-xl bg-red-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60">{props.busy ? "Repairing…" : "Authenticate and repair"}</button></div>
+      </form>
+    </div>
+  );
+}
+
 export function ExtensionsWorkspace() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [pending, setPending] = useState<PendingChange | null>(null);
   const [busy, setBusy] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [recoveryApprovalOpen, setRecoveryApprovalOpen] = useState(false);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [provenanceOpen, setProvenanceOpen] = useState(false);
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -289,6 +339,25 @@ export function ExtensionsWorkspace() {
       setMutationError(`${error instanceof Error ? error.message : "Change failed"}${recovery ? ` · ${recovery}` : ""}`);
     } finally { setBusy(false); }
   }, [load, pending, state]);
+  const recoverAuthority = useCallback(async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
+    setRecoveryBusy(true); setRecoveryError(null);
+    try {
+      const effective = await recoverExtensionControlAuthority(credentials);
+      if (state.kind === "ready") setState({ ...state, effective });
+      setRecoveryApprovalOpen(false);
+    } catch (error) {
+      if (credentials === undefined && error instanceof ExtensionControlApiError && error.code === "approval_required") {
+        setRecoveryApprovalOpen(true);
+      } else {
+        setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
+      }
+    } finally { setRecoveryBusy(false); }
+  }, [state]);
+  const handleRecover = useCallback(() => { void recoverAuthority(); }, [recoverAuthority]);
+  const handleRecoveryConfirm = useCallback((password: string, totp: string) => {
+    void recoverAuthority({ approval_password: password, approval_totp_code: totp });
+  }, [recoverAuthority]);
+  const handleRecoveryCancel = useCallback(() => { if (!recoveryBusy) setRecoveryApprovalOpen(false); }, [recoveryBusy]);
   const toggleProvenance = useCallback(() => setProvenanceOpen((value) => !value), []);
   const toggleLockdown = useCallback(() => { if (state.kind === "ready") handleChange({ globalLockdown: !state.effective.global_lockdown }); }, [handleChange, state]);
 
@@ -301,11 +370,12 @@ export function ExtensionsWorkspace() {
         <div><p className="text-xs font-bold uppercase tracking-[0.22em] text-brand-blue">Command safety</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Extensions</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Inspect and govern the capabilities Guard uses to understand development commands.</p></div>
         <button type="button" onClick={toggleLockdown} disabled={locked} className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${state.effective.global_lockdown ? "bg-red-700 text-white" : "border border-slate-300 bg-white text-slate-700"} disabled:opacity-50`}><HiMiniLockClosed className="size-4" />{state.effective.global_lockdown ? "Disable lockdown" : "Enable lockdown"}</button>
       </header>
-      <div className="mt-6"><ExtensionStatusBanner effective={state.effective} onRetry={load} /></div>
+      <div className="mt-6"><ExtensionStatusBanner busy={recoveryBusy} effective={state.effective} error={recoveryError} onRecover={handleRecover} onRetry={load} /></div>
       {state.effective.global_lockdown ? <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white"><HiMiniLockClosed className="size-5" /><span><strong>Global lockdown active.</strong> Optional extensions remain disabled regardless of individual settings.</span></div> : null}
       <section aria-labelledby="installed-extensions" className="mt-8"><div className="flex items-center justify-between"><h2 id="installed-extensions" className="text-lg font-semibold text-slate-950">Installed extensions</h2><span className="text-sm text-slate-500">{sortedExtensions.length} available</span></div><div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{sortedExtensions.map((extension) => <ExtensionCard key={extension.extension_id} extension={extension} enabled={effectiveState(state.effective, extension)} locked={locked || state.effective.global_lockdown} onChange={handleChange} />)}</div></section>
       <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white"><button type="button" onClick={toggleProvenance} aria-expanded={provenanceOpen} className="flex w-full items-center justify-between p-5 text-left"><span><span className="block font-semibold text-slate-950">Policy provenance</span><span className="mt-1 block text-sm text-slate-500">Catalog {state.catalog.catalog_digest.slice(0, 12)}… · {state.effective.layers.length} authority layer{state.effective.layers.length === 1 ? "" : "s"}</span></span>{provenanceOpen ? <HiMiniChevronUp className="size-5" /> : <HiMiniChevronDown className="size-5" />}</button>{provenanceOpen ? <div className="border-t border-slate-200 p-5"><div className="grid gap-3 sm:grid-cols-2">{state.effective.layers.map((layer: ExtensionControlLayer) => <div key={`${layer.kind}-${layer.catalog_digest}`} className="rounded-2xl bg-slate-50 p-4"><div className="flex items-center gap-2"><HiMiniCheckCircle className="size-5 text-emerald-600" /><strong className="text-sm text-slate-900">{layer.kind === "local-admin" ? "Local administrator" : "Signed cloud policy"}</strong></div><p className="mt-2 text-xs text-slate-500">{layer.controls.length} explicit controls · catalog {layer.catalog_digest.slice(0, 12)}…</p></div>)}</div></div> : null}</section>
       {pending ? <ReviewModal change={pending} busy={busy} error={mutationError} onCancel={handleCancel} onConfirm={handleConfirm} /> : null}
+      {recoveryApprovalOpen ? <AuthorityRecoveryModal busy={recoveryBusy} error={recoveryError} onCancel={handleRecoveryCancel} onConfirm={handleRecoveryConfirm} /> : null}
     </main>
   );
 }

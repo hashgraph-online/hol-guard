@@ -1,4 +1,4 @@
-import { an as fetchExtensionControlApi, r as reactExports, j as jsxRuntimeExports, o as HiMiniShieldCheck, J as HiMiniExclamationTriangle, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, ao as HiMiniArrowPath, Z as HiMiniLockClosed, x as HiMiniChevronUp, y as HiMiniChevronDown, l as HiMiniCheckCircle, ap as HiMiniPuzzlePiece, w as HiMiniXMark } from "../guard-dashboard.js";
+import { an as fetchExtensionControlApi, r as reactExports, j as jsxRuntimeExports, o as HiMiniShieldCheck, J as HiMiniExclamationTriangle, ao as HiMiniArrowPath, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, Z as HiMiniLockClosed, x as HiMiniChevronUp, y as HiMiniChevronDown, l as HiMiniCheckCircle, ap as HiMiniPuzzlePiece, w as HiMiniXMark } from "../guard-dashboard.js";
 class ExtensionControlApiError extends Error {
   constructor(message, status, code, recoveryAction) {
     super(message);
@@ -29,6 +29,16 @@ function fetchExtensionCatalog() {
 }
 function fetchEffectiveExtensionControls() {
   return request("/v1/extension-controls/effective");
+}
+function recoverExtensionControlAuthority(credentials) {
+  return request("/v1/extension-controls/recover-authority", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_nonce: crypto.randomUUID().replaceAll("-", ""),
+      ...credentials
+    })
+  });
 }
 function previewExtensionMutation(payload) {
   return request("/v1/extension-controls/preview", {
@@ -134,6 +144,10 @@ function ExtensionStatusBanner(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-slate-700", children: recovery?.description }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-3 block overflow-x-auto rounded-lg bg-slate-950 px-3 py-2 text-xs text-white", children: recovery?.command }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: [
+        tampered && props.onRecover ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: props.busy, onClick: props.onRecover, className: "inline-flex items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60", children: [
+          props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4", "aria-hidden": "true" }),
+          props.busy ? "Repairing…" : "Repair now"
+        ] }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: handleCopy, className: "inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800", children: [
           copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
           copyState === "copied" ? "Copied" : recovery?.copyLabel
@@ -143,7 +157,8 @@ function ExtensionStatusBanner(props) {
           "Check again"
         ] }),
         copyState === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", className: "text-sm text-red-700", children: "Copy failed. Select the command above." }) : null
-      ] })
+      ] }),
+      props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm font-medium text-red-800", children: props.error }) : null
     ] })
   ] }) });
 }
@@ -238,11 +253,46 @@ function ReviewModal(props) {
     ] })
   ] }) });
 }
+function AuthorityRecoveryModal(props) {
+  const [password, setPassword] = reactExports.useState("");
+  const [totp, setTotp] = reactExports.useState("");
+  const handlePasswordChange = reactExports.useCallback((event) => {
+    setPassword(event.target.value);
+  }, []);
+  const handleTotpChange = reactExports.useCallback((event) => {
+    setTotp(event.target.value);
+  }, []);
+  const handleSubmit = reactExports.useCallback((event) => {
+    event.preventDefault();
+    props.onConfirm(password, totp);
+  }, [password, props, totp]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", role: "presentation", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, role: "dialog", "aria-modal": "true", "aria-labelledby": "authority-recovery-title", className: "w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Local approval required" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "authority-recovery-title", className: "mt-2 text-xl font-semibold text-slate-950", children: "Repair extension controls" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-600", children: "Authenticate this repair on your device. Guard uses the proof once and does not store it." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-5 block text-sm font-medium text-slate-700", children: [
+      "Approval password",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { autoFocus: true, type: "password", autoComplete: "current-password", value: password, onChange: handlePasswordChange, className: "mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 block text-sm font-medium text-slate-700", children: [
+      "Authenticator code",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { inputMode: "numeric", autoComplete: "one-time-code", value: totp, onChange: handleTotpChange, className: "mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100" })
+    ] }),
+    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700", children: props.error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, className: "rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100", children: "Cancel" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: props.busy, className: "rounded-xl bg-red-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60", children: props.busy ? "Repairing…" : "Authenticate and repair" })
+    ] })
+  ] }) });
+}
 function ExtensionsWorkspace() {
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [pending, setPending] = reactExports.useState(null);
   const [busy, setBusy] = reactExports.useState(false);
   const [mutationError, setMutationError] = reactExports.useState(null);
+  const [recoveryApprovalOpen, setRecoveryApprovalOpen] = reactExports.useState(false);
+  const [recoveryBusy, setRecoveryBusy] = reactExports.useState(false);
+  const [recoveryError, setRecoveryError] = reactExports.useState(null);
   const [provenanceOpen, setProvenanceOpen] = reactExports.useState(false);
   const load = reactExports.useCallback(async () => {
     setState({ kind: "loading" });
@@ -287,6 +337,32 @@ function ExtensionsWorkspace() {
       setBusy(false);
     }
   }, [load, pending, state]);
+  const recoverAuthority = reactExports.useCallback(async (credentials) => {
+    setRecoveryBusy(true);
+    setRecoveryError(null);
+    try {
+      const effective = await recoverExtensionControlAuthority(credentials);
+      if (state.kind === "ready") setState({ ...state, effective });
+      setRecoveryApprovalOpen(false);
+    } catch (error) {
+      if (credentials === void 0 && error instanceof ExtensionControlApiError && error.code === "approval_required") {
+        setRecoveryApprovalOpen(true);
+      } else {
+        setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
+      }
+    } finally {
+      setRecoveryBusy(false);
+    }
+  }, [state]);
+  const handleRecover = reactExports.useCallback(() => {
+    void recoverAuthority();
+  }, [recoverAuthority]);
+  const handleRecoveryConfirm = reactExports.useCallback((password, totp) => {
+    void recoverAuthority({ approval_password: password, approval_totp_code: totp });
+  }, [recoverAuthority]);
+  const handleRecoveryCancel = reactExports.useCallback(() => {
+    if (!recoveryBusy) setRecoveryApprovalOpen(false);
+  }, [recoveryBusy]);
   const toggleProvenance = reactExports.useCallback(() => setProvenanceOpen((value) => !value), []);
   const toggleLockdown = reactExports.useCallback(() => {
     if (state.kind === "ready") handleChange({ globalLockdown: !state.effective.global_lockdown });
@@ -309,7 +385,7 @@ function ExtensionsWorkspace() {
         state.effective.global_lockdown ? "Disable lockdown" : "Enable lockdown"
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionStatusBanner, { effective: state.effective, onRetry: load }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionStatusBanner, { busy: recoveryBusy, effective: state.effective, error: recoveryError, onRecover: handleRecover, onRetry: load }) }),
     state.effective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "size-5" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
@@ -355,7 +431,8 @@ function ExtensionsWorkspace() {
         ] })
       ] }, `${layer.kind}-${layer.catalog_digest}`)) }) }) : null
     ] }),
-    pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewModal, { change: pending, busy, error: mutationError, onCancel: handleCancel, onConfirm: handleConfirm }) : null
+    pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewModal, { change: pending, busy, error: mutationError, onCancel: handleCancel, onConfirm: handleConfirm }) : null,
+    recoveryApprovalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(AuthorityRecoveryModal, { busy: recoveryBusy, error: recoveryError, onCancel: handleRecoveryCancel, onConfirm: handleRecoveryConfirm }) : null
   ] });
 }
 export {

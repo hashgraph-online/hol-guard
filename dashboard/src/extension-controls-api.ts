@@ -96,6 +96,20 @@ export function fetchEffectiveExtensionControls(): Promise<EffectiveExtensionCon
   return request("/v1/extension-controls/effective");
 }
 
+export function recoverExtensionControlAuthority(credentials?: {
+  approval_password?: string;
+  approval_totp_code?: string;
+}): Promise<EffectiveExtensionControls> {
+  return request("/v1/extension-controls/recover-authority", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_nonce: crypto.randomUUID().replaceAll("-", ""),
+      ...credentials,
+    }),
+  });
+}
+
 export function previewExtensionMutation(payload: ExtensionMutationPayload): Promise<Record<string, unknown>> {
   return request("/v1/extension-controls/preview", {
     method: "POST",
