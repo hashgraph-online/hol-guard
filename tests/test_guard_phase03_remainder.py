@@ -677,3 +677,61 @@ def test_install_native_contract_output_prefers_native_hooks_for_supported_harne
     assert managed_install["native_hooks"] is True
     assert managed_install["primary_integration"] == "native_hooks"
     assert managed_install["manifest"]["mode"] == "codex-mcp-proxy"
+
+
+def test_success_status_same_version_force_reinstall_is_current() -> None:
+    payload = {
+        "current_version": "2.2.31",
+        "resulting_version": "2.2.31",
+        "stdout": "Successfully installed hol-guard-2.2.31 rich-14.3.4",
+        "stderr": "",
+        "version_check": {
+            "status": "current",
+            "update_available": False,
+            "latest_version": "2.2.31",
+        },
+        "upgrade_source": "pypi",
+    }
+    assert update_commands._success_status(payload) == "current"
+    assert update_commands._version_changed("2.2.31", "2.2.31") is False
+
+
+def test_success_status_same_version_explicit_recovery_is_updated() -> None:
+    payload = {
+        "current_version": "2.2.31",
+        "resulting_version": "2.2.31",
+        "stdout": "Successfully installed hol-guard-2.2.31",
+        "stderr": "",
+        "recovery_reinstall": True,
+        "version_check": {
+            "status": "current",
+            "update_available": False,
+            "latest_version": "2.2.31",
+        },
+        "upgrade_source": "pypi",
+    }
+    assert update_commands._success_status(payload) == "updated"
+    assert (
+        update_commands._success_message(
+            status="updated",
+            current_version="2.2.31",
+            resulting_version="2.2.31",
+        )
+        == "HOL Guard source was repaired successfully."
+    )
+
+
+def test_success_status_version_bump_is_updated() -> None:
+    payload = {
+        "current_version": "2.2.30",
+        "resulting_version": "2.2.31",
+        "stdout": "Successfully installed hol-guard-2.2.31",
+        "stderr": "",
+        "version_check": {
+            "status": "current",
+            "update_available": False,
+            "latest_version": "2.2.31",
+        },
+        "upgrade_source": "pypi",
+    }
+    assert update_commands._success_status(payload) == "updated"
