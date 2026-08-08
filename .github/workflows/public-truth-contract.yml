@@ -26,12 +26,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install focused test dependency
-        run: python -m pip install --disable-pip-version-check 'pytest>=9.0.3,<10'
       - name: Validate public truth contract
         run: python scripts/seo/check_public_truth_contract.py
-      - name: Run contract tests
-        run: python -m pytest tests/test_public_truth_contract.py -q
+      - name: Run lightweight contract assertions
+        run: python scripts/seo/test_public_truth_contract.py
       - name: Export stable and alpha publication snapshots
         run: |
           python scripts/seo/export_public_support_manifest.py --channel stable --output /tmp/guard-stable.json
