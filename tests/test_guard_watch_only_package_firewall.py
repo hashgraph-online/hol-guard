@@ -121,3 +121,27 @@ def test_watch_only_observes_cloud_validation_block_but_executes_package_install
     assert envelope["policy_action"] == "allow"
     assert envelope["observe_mode"] is True
     assert envelope["observed_policy_action"] == "block"
+
+    marker.unlink()
+
+    def failed_config_refresh() -> GuardConfig:
+        raise RuntimeError("simulated final authority refresh failure")
+
+    blocked_payload, blocked_exit_code = build_protect_payload(
+        command=["npm", "install", "@modelcontextprotocol/server-memory@latest"],
+        store=store,
+        workspace_dir=workspace,
+        dry_run=False,
+        now="2026-08-08T02:00:01Z",
+        config=config,
+        current_config_provider=failed_config_refresh,
+        unsafe_raw_output=False,
+    )
+
+    assert blocked_exit_code == 2
+    assert blocked_payload["executed"] is False
+    assert marker.exists() is False
+    blocked_verdict = blocked_payload["verdict"]
+    assert isinstance(blocked_verdict, dict)
+    assert blocked_verdict["action"] == "block"
+    assert blocked_verdict["blocking"] is True
