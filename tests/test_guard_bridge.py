@@ -121,7 +121,11 @@ def test_webhook_backend_redacts_artifact_details_by_default(monkeypatch):
         post_calls.append((url, json, timeout))
         return SimpleNamespace(status_code=200)
 
-    monkeypatch.setattr(guard_bridge_module.requests, "post", fake_post)
+    monkeypatch.setattr(
+        guard_bridge_module,
+        "managed_requests_session",
+        lambda: SimpleNamespace(post=fake_post),
+    )
 
     sent = backend.send_notification(request, "raw notification with artifact details")
 

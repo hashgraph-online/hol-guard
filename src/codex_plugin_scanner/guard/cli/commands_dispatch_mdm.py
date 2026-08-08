@@ -44,6 +44,7 @@ def _run_guard_mdm_command(
 ) -> int:
     del input_text, output_stream
     command = str(args.mdm_command)
+    force_json = command == "network-diagnose"
     payload: dict[str, object] | LocalIntegritySnapshot
     try:
         if command == "authorize-deactivation":
@@ -129,15 +130,16 @@ def _run_guard_mdm_command(
             else:
                 raise ValueError("mdm_command_invalid")
     except (OSError, RuntimeError, ValueError, PermissionError) as exc:
+        reason_code = "network_diagnose_failed" if force_json else str(exc)
         payload = {
             "schemaVersion": "hol-guard-mdm-status.v1",
             "operation": command,
             "healthy": False,
-            "reasonCodes": [str(exc)],
+            "reasonCodes": [reason_code],
         }
-        _emit_mdm(payload, bool(args.json))
+        _emit_mdm(payload, bool(args.json) or force_json)
         return 2
-    _emit_mdm(payload, bool(args.json))
+    _emit_mdm(payload, bool(args.json) or force_json)
     return 0 if payload.get("healthy", True) else 1
 
 

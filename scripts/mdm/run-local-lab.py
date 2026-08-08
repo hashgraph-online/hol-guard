@@ -31,6 +31,7 @@ class Result:
     outcome: str
     output_digest: str
     summary: str
+    failed_tests: tuple[str, ...]
 
 
 SUITES = (
@@ -71,8 +72,40 @@ SUITES = (
     ),
     Suite(
         "enterprise-network",
-        ("managed-policy", "proxy", "private-ca", "tls", "offline"),
-        ("tests/test_guard_mdm_network.py", "tests/test_guard_mdm_policy.py"),
+        (
+            "managed-policy",
+            "http-inventory",
+            "direct-network",
+            "proxy",
+            "system-proxy",
+            "explicit-proxy",
+            "authenticated-proxy",
+            "private-ca",
+            "tls",
+            "diagnostics",
+            "endpoint-manifest",
+            "guard-cloud-outage",
+            "internal-mirror",
+            "signed-cache",
+            "offline",
+            "offline-lifecycle",
+        ),
+        (
+            "tests/test_guard_mdm_network.py",
+            "tests/test_guard_mdm_network_integration.py",
+            "tests/test_guard_mdm_tls_policy.py",
+            "tests/test_guard_mdm_http_inventory.py",
+            "tests/test_guard_mdm_bridge_network.py",
+            "tests/test_guard_mdm_network_policy_contract.py",
+            "tests/test_guard_mdm_network_cli.py",
+            "tests/test_guard_mdm_network_cli_process.py",
+            "tests/test_guard_mdm_endpoint_manifest.py",
+            "tests/test_guard_mdm_policy.py",
+            "tests/test_guard_mdm_offline_lifecycle.py",
+            "tests/test_guard_cloud_local_sync.py",
+            "tests/test_guard_update_isolation.py",
+            "tests/test_guard_supply_chain_bundle.py",
+        ),
     ),
 )
 
@@ -93,6 +126,22 @@ def _summary(output: str) -> str:
     return (matches[-1] if matches else (lines[-1] if lines else "no output"))[:240]
 
 
+def _failed_tests(output: str) -> tuple[str, ...]:
+    """Return bounded repo-local node IDs without serializing assertion or exception text."""
+
+    failures: list[str] = []
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not (line.startswith("FAILED tests/") or line.startswith("ERROR tests/")):
+            continue
+        node_id = line.split(" - ", 1)[0].split(" ", 1)[1]
+        if node_id not in failures:
+            failures.append(node_id[:200])
+        if len(failures) == 20:
+            break
+    return tuple(failures)
+
+
 def run_suite(suite: Suite) -> Result:
     command = ("pytest", "-p", "no:cacheprovider", "--tb=short", "-q", *suite.paths)
     started = time.monotonic()
@@ -106,6 +155,7 @@ def run_suite(suite: Suite) -> Result:
         outcome="passed" if completed.returncode == 0 else "failed",
         output_digest=hashlib.sha256(output.encode()).hexdigest(),
         summary=_summary(output),
+        failed_tests=_failed_tests(output),
     )
 
 
@@ -127,6 +177,7 @@ def main() -> int:
                 **asdict(result),
                 "durationSeconds": result.duration_seconds,
                 "outputDigest": result.output_digest,
+                "failedTests": result.failed_tests,
             }
             for result in results
         ],
@@ -139,6 +190,7 @@ def main() -> int:
     for result in report["results"]:
         result.pop("duration_seconds")
         result.pop("output_digest")
+        result.pop("failed_tests")
     encoded = json.dumps(report, sort_keys=True, separators=(",", ":"))
     if args.output is not None:
         args.output.write_text(f"{encoded}\n", encoding="utf-8")

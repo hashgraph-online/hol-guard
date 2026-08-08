@@ -36,7 +36,8 @@ jobs:
           enable-cache: true
       - run: uv sync --python 3.12 --extra dev --frozen
       - run: uv run --python 3.12 --no-sync python scripts/mdm/run-local-lab.py --json --output mdm-local-conformance.json ${{ matrix.suites }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: mdm-local-conformance-${{ matrix.os }}
           path: mdm-local-conformance.json

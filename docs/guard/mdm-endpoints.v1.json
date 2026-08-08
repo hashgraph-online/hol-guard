@@ -4,25 +4,25 @@
     {
       "hostname": "hol.org",
       "port": 443,
-      "purpose": "Guard Cloud policy, identity, and evidence synchronization",
-      "required": false,
+      "purpose": "Guard Cloud policy, identity, OAuth, signed intelligence, and evidence synchronization",
+      "required": true,
       "methods": ["GET", "POST"],
-      "dataClass": "policy-and-security-evidence",
-      "offlineFallback": "Local enforcement continues with the last validated policy and freshness warning"
+      "dataClass": "policy-identity-and-security-evidence",
+      "offlineFallback": "Local enforcement continues with the last validated policy and signed cached intelligence; Cloud freshness is reported stale or unavailable"
+    },
+    {
+      "hostname": "api.github.com",
+      "port": 443,
+      "purpose": "Optional credential-free verified reads of public GitHub pull-request metadata",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-source-control-metadata",
+      "offlineFallback": "Verified public GitHub reads are unavailable; local enforcement remains active"
     },
     {
       "hostname": "pypi.org",
       "port": 443,
-      "purpose": "Optional package metadata intelligence for Python",
-      "required": false,
-      "methods": ["GET"],
-      "dataClass": "public-package-metadata",
-      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
-    },
-    {
-      "hostname": "registry.npmjs.org",
-      "port": 443,
-      "purpose": "Optional package metadata intelligence for npm",
+      "purpose": "Optional package metadata, provenance, and update intelligence for Python",
       "required": false,
       "methods": ["GET"],
       "dataClass": "public-package-metadata",
@@ -35,6 +35,24 @@
       "required": false,
       "methods": ["GET"],
       "dataClass": "public-package-artifact",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "registry.npmjs.org",
+      "port": 443,
+      "purpose": "Optional package metadata and provenance intelligence for npm",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "api.npmjs.org",
+      "port": 443,
+      "purpose": "Optional npm package intelligence API",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
       "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
     },
     {
@@ -56,9 +74,27 @@
       "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
     },
     {
+      "hostname": "static.crates.io",
+      "port": 443,
+      "purpose": "Optional Cargo package artifact intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-artifact",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
       "hostname": "rubygems.org",
       "port": 443,
-      "purpose": "Optional Ruby package metadata intelligence",
+      "purpose": "Optional Ruby package metadata and artifact intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "repo1.maven.org",
+      "port": 443,
+      "purpose": "Optional Maven package metadata and artifact intelligence",
       "required": false,
       "methods": ["GET"],
       "dataClass": "public-package-metadata",
@@ -67,7 +103,7 @@
     {
       "hostname": "repo.maven.apache.org",
       "port": 443,
-      "purpose": "Optional Maven package metadata intelligence",
+      "purpose": "Optional Maven package metadata and artifact intelligence",
       "required": false,
       "methods": ["GET"],
       "dataClass": "public-package-metadata",
@@ -76,7 +112,16 @@
     {
       "hostname": "proxy.golang.org",
       "port": 443,
-      "purpose": "Optional Go module metadata intelligence",
+      "purpose": "Optional Go module metadata and artifact intelligence",
+      "required": false,
+      "methods": ["GET"],
+      "dataClass": "public-package-metadata",
+      "offlineFallback": "Use signed cached intelligence or an approved internal mirror"
+    },
+    {
+      "hostname": "goproxy.io",
+      "port": 443,
+      "purpose": "Optional alternate Go module metadata and artifact intelligence",
       "required": false,
       "methods": ["GET"],
       "dataClass": "public-package-metadata",
