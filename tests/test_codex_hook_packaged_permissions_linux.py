@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,34 @@ def test_packaged_bridge_accepts_private_group_write_in_site_packages(
 
     assert metadata.st_uid == os.getuid()
     assert stat.S_IMODE(metadata.st_mode) == 0o664
+
+
+def test_packaged_bridge_accepts_files_under_imported_package_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Imported package tree is trusted even when sysconfig purelib differs."""
+
+    root, bridge = _packaged_file(tmp_path)
+    package_init = root / "codex_plugin_scanner" / "__init__.py"
+    package_init.parent.mkdir(parents=True, exist_ok=True)
+    package_init.write_text("# package\n", encoding="utf-8")
+    fake_package = type(sys)("codex_plugin_scanner")
+    fake_package.__file__ = str(package_init)
+    monkeypatch.setitem(sys.modules, "codex_plugin_scanner", fake_package)
+    monkeypatch.setattr(integrity.sysconfig, "get_paths", lambda: {})
+    monkeypatch.setattr(integrity.sys, "prefix", str(tmp_path / "other-prefix"))
+    monkeypatch.setattr(integrity.sys, "exec_prefix", str(tmp_path / "other-prefix"))
+    import site as site_module
+
+    monkeypatch.setattr(site_module, "getsitepackages", lambda: [])
+    monkeypatch.setattr(site_module, "getusersitepackages", lambda: "")
+    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda owner_uid, group_gid: True)
+
+    metadata = validate_regular_file(bridge, role="bridge", executable_required=False)
+
+    assert metadata.st_uid == os.getuid()
+    assert integrity._is_installed_python_package_file(bridge) is True
 
 
 def test_packaged_bridge_accepts_private_group_write_in_dist_packages(

@@ -73,7 +73,7 @@ def test_private_group_detection_counts_primary_and_explicit_members(
     owner = SimpleNamespace(pw_name="alice", pw_gid=1000)
     other = SimpleNamespace(pw_name="bob", pw_gid=2000)
     monkeypatch.setattr(pwd, "getpwuid", lambda uid: owner)
-    monkeypatch.setattr(grp, "getgrgid", lambda gid: SimpleNamespace(gr_mem=[]))
+    monkeypatch.setattr(grp, "getgrgid", lambda gid: SimpleNamespace(gr_name="alice", gr_mem=[]))
     monkeypatch.setattr(pwd, "getpwall", lambda: [owner, other])
 
     assert integrity._owner_is_only_group_member(1000, 1000) is True
@@ -82,5 +82,49 @@ def test_private_group_detection_counts_primary_and_explicit_members(
     assert integrity._owner_is_only_group_member(1000, 1000) is False
 
     monkeypatch.setattr(pwd, "getpwall", lambda: [owner, other])
-    monkeypatch.setattr(grp, "getgrgid", lambda gid: SimpleNamespace(gr_mem=["bob"]))
+    monkeypatch.setattr(grp, "getgrgid", lambda gid: SimpleNamespace(gr_name="alice", gr_mem=["bob"]))
+    assert integrity._owner_is_only_group_member(1000, 1000) is False
+
+
+def test_private_group_detection_accepts_classic_upg_when_account_listing_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import grp
+    import pwd
+
+    owner = SimpleNamespace(pw_name="alice", pw_gid=1000)
+    monkeypatch.setattr(pwd, "getpwuid", lambda uid: owner)
+    monkeypatch.setattr(grp, "getgrgid", lambda gid: SimpleNamespace(gr_name="alice", gr_mem=[]))
+    monkeypatch.setattr(pwd, "getpwall", lambda: [])
+
+    assert integrity._owner_is_only_group_member(1000, 1000) is True
+
+
+def test_private_group_detection_rejects_empty_account_listing_for_shared_named_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import grp
+    import pwd
+
+    owner = SimpleNamespace(pw_name="alice", pw_gid=1000)
+    monkeypatch.setattr(pwd, "getpwuid", lambda uid: owner)
+    monkeypatch.setattr(grp, "getgrgid", lambda gid: SimpleNamespace(gr_name="users", gr_mem=[]))
+    monkeypatch.setattr(pwd, "getpwall", lambda: [])
+
+    assert integrity._owner_is_only_group_member(1000, 1000) is False
+
+
+def test_private_group_detection_rejects_partial_account_listing_missing_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import grp
+    import pwd
+
+    owner = SimpleNamespace(pw_name="alice", pw_gid=1000)
+    unrelated = SimpleNamespace(pw_name="carol", pw_gid=2000)
+    monkeypatch.setattr(pwd, "getpwuid", lambda uid: owner)
+    monkeypatch.setattr(grp, "getgrgid", lambda gid: SimpleNamespace(gr_name="alice", gr_mem=[]))
+    # Incomplete NSS returned an unrelated account and omitted the file owner.
+    monkeypatch.setattr(pwd, "getpwall", lambda: [unrelated])
+
     assert integrity._owner_is_only_group_member(1000, 1000) is False
