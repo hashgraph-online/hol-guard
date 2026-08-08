@@ -67,8 +67,7 @@ def test_watch_only_observes_cloud_validation_block_but_executes_package_install
     executable_dir.mkdir()
     npm = executable_dir / "npm"
     npm.write_text(
-        "#!/bin/sh\n"
-        f"printf '%s' \"$*\" > {shlex.quote(str(marker))}\n",
+        f"#!/bin/sh\nprintf '%s' \"$*\" > {shlex.quote(str(marker))}\n",
         encoding="utf-8",
     )
     npm.chmod(0o755)
@@ -145,3 +144,87 @@ def test_watch_only_observes_cloud_validation_block_but_executes_package_install
     assert isinstance(blocked_verdict, dict)
     assert blocked_verdict["action"] == "block"
     assert blocked_verdict["blocking"] is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uses a POSIX package-manager fixture")
+def test_final_watch_only_refresh_preserves_unused_one_shot_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    guard_home = tmp_path / "guard-home"
+    executable_dir = tmp_path / "bin"
+    executable_dir.mkdir()
+    marker = tmp_path / "npm-ran.txt"
+    npm = executable_dir / "npm"
+    npm.write_text(f"#!/bin/sh\nprintf 'ran' > {shlex.quote(str(marker))}\n", encoding="utf-8")
+    npm.chmod(0o755)
+    monkeypatch.setenv("PATH", str(executable_dir))
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "evaluate_package_request_artifact",
+        lambda **_kwargs: replace(
+            _cloud_validation_block(),
+            decision="review",
+            policy_action="review",
+        ),
+    )
+    enforcing_config = GuardConfig(
+        guard_home=guard_home,
+        workspace=workspace,
+        security_level="custom",
+        risk_actions={"package_script": "allow", "cloud_advisory": "allow"},
+    )
+    watch_only_config = replace(enforcing_config, mode="observe")
+    store = GuardStore(guard_home)
+    command = ["npm", "install", "@modelcontextprotocol/server-memory@latest"]
+    blocked_payload, blocked_exit_code = build_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace,
+        dry_run=True,
+        now="2026-08-08T02:10:00Z",
+        config=enforcing_config,
+        unsafe_raw_output=False,
+    )
+    assert blocked_exit_code == 2
+    receipt = blocked_payload["receipt"]
+    assert isinstance(receipt, dict)
+    approval_id = store.record_local_once_approval(
+        request_id="watch-only-final-refresh",
+        harness="guard-cli",
+        artifact_id=str(receipt["artifact_id"]),
+        artifact_hash=str(receipt["artifact_hash"]),
+        workspace=None,
+        publisher=None,
+        action="allow",
+        created_at="2026-08-08T02:10:01Z",
+        expires_at="2026-08-09T02:10:00Z",
+    )
+    assert approval_id is not None
+
+    payload, exit_code = build_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace,
+        dry_run=False,
+        now="2026-08-08T02:10:02Z",
+        config=enforcing_config,
+        current_config_provider=lambda: watch_only_config,
+        unsafe_raw_output=False,
+    )
+
+    assert exit_code == 0
+    assert payload["executed"] is True
+    assert marker.read_text(encoding="utf-8") == "ran"
+    assert (
+        store.resolve_policy_decision(
+            "guard-cli",
+            str(receipt["artifact_id"]),
+            str(receipt["artifact_hash"]),
+            now="2026-08-08T02:10:03Z",
+            consume_one_shot=False,
+        )
+        is not None
+    )

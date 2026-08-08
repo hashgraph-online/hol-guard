@@ -1467,8 +1467,7 @@ def _build_package_protect_authority(
 def _final_package_protect_authority(
     *,
     initial: _PackageProtectAuthority,
-    saved_approval_claimed: bool,
-    saved_approval_claim_disposition: _PackageApprovalClaimDisposition | None,
+    saved_approval_pending: bool,
     command: Sequence[str],
     store: Any,
     workspace_dir: Path,
@@ -1477,7 +1476,7 @@ def _final_package_protect_authority(
     current_config_provider: Callable[[], GuardConfig] | None,
     additional_authority_provider: Callable[[], tuple[object | None, dict[str, object] | None]] | None,
 ) -> tuple[_PackageProtectAuthority, Any]:
-    """Rebuild all current authority after a claim and immediately before spawn."""
+    """Refresh mode, claim required approval, then rebuild authority before spawn."""
 
     additional_action: object | None = initial.additional_current_action
     additional_context: dict[str, object] | None = initial.additional_policy_context
@@ -1514,6 +1513,28 @@ def _final_package_protect_authority(
             "status": "authority_refresh_failed",
             "version": 1,
         }
+    saved_approval_claimed = False
+    saved_approval_claim_disposition: _PackageApprovalClaimDisposition | None = None
+    if (
+        saved_approval_pending
+        and not config_refresh_failed
+        and (current_config is None or current_config.mode != "observe")
+    ):
+        claimed_resolution = _resolve_stored_package_policy_override(
+            initial.evaluation,
+            store=store,
+            artifact=initial.artifact,
+            artifact_hash=initial.artifact_hash,
+            workspace_dir=workspace_dir,
+            now=now,
+            execution_context=initial.execution_context,
+            current_action=initial.current_action,
+            claim_saved_approval=True,
+        )
+        if not is_execution_permitted(_package_execution_policy_action(initial, claimed_resolution.evaluation)):
+            return initial, claimed_resolution.evaluation
+        saved_approval_claimed = True
+        saved_approval_claim_disposition = claimed_resolution.claim_disposition
     current = _build_package_protect_authority(
         command=command,
         store=store,
@@ -1544,6 +1565,8 @@ def _final_package_protect_authority(
         current.evaluation,
         current_action=current.current_action,
     )
+    if current.observe_mode:
+        return current, current_evaluation
     if saved_approval_claimed:
         if validation_reason is not None:
             reuse = evaluate_approval_reuse(
@@ -1806,7 +1829,6 @@ def build_package_protect_payload(
     sanitized_intent = authority.intent
     artifact = authority.artifact
     evaluation = authority.evaluation
-    current_evaluation = evaluation
     current_action = authority.current_action
     package_execution_context = authority.execution_context
     artifact_hash = authority.artifact_hash
@@ -1862,36 +1884,9 @@ def build_package_protect_payload(
             now,
         )
         return (payload, _package_execution_exit_code(execution_policy_action))
-    saved_approval_claimed = not authority.observe_mode and _evaluation_uses_saved_package_approval(evaluation)
-    saved_approval_claim_disposition: _PackageApprovalClaimDisposition | None = None
-    if saved_approval_claimed:
-        claimed_resolution = _resolve_stored_package_policy_override(
-            current_evaluation,
-            store=store,
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            workspace_dir=workspace_dir,
-            now=now,
-            execution_context=package_execution_context,
-            current_action=current_action,
-            claim_saved_approval=True,
-        )
-        claimed_evaluation = claimed_resolution.evaluation
-        claimed_execution_action = _package_execution_policy_action(authority, claimed_evaluation)
-        if not is_execution_permitted(claimed_execution_action):
-            return _package_protect_denied_after_final_boundary(
-                payload=payload,
-                authority=authority,
-                evaluation=claimed_evaluation,
-                command=command,
-                store=store,
-                now=now,
-            )
-        saved_approval_claim_disposition = claimed_resolution.claim_disposition
     final_authority, final_evaluation = _final_package_protect_authority(
         initial=authority,
-        saved_approval_claimed=saved_approval_claimed,
-        saved_approval_claim_disposition=saved_approval_claim_disposition,
+        saved_approval_pending=_evaluation_uses_saved_package_approval(evaluation),
         command=command,
         store=store,
         workspace_dir=workspace_dir,
