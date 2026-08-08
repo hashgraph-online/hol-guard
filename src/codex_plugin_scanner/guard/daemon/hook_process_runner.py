@@ -37,6 +37,8 @@ _HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 2.0
 _HOOK_PROCESS_BACKFILL_MAX_DEFERRAL_SECONDS = 5.0
 _HOOK_PROCESS_RETRY_MAX_SECONDS = 5.0
 _HOOK_PROCESS_RETRY_READY_SECONDS = 0.75
+_HOOK_PROCESS_TRANSIENT_NOT_READY_RETRIES = 2
+_HOOK_PROCESS_TRANSIENT_NOT_READY_BACKOFF_SECONDS = 0.025
 
 
 @final
@@ -166,7 +168,7 @@ class HookProcessRunner:
         workspace: Path | None,
         hook_env: Mapping[str, str],
         deadline: float | None = None,
-        _retry_transient_not_ready: bool = True,
+        _transient_not_ready_retries: int = _HOOK_PROCESS_TRANSIENT_NOT_READY_RETRIES,
     ) -> HookProcessReview:
         with self._state_lock:
             if self._closed:
@@ -290,11 +292,17 @@ class HookProcessRunner:
         response = typed_result.get("payload")
         if response is None:
             if (
-                _retry_transient_not_ready
+                _transient_not_ready_retries > 0
                 and reason_code == "daemon_hook_process_not_ready"
                 and _runtime_hook_review_is_idempotent(payload)
                 and time.monotonic() < review_deadline
             ):
+                time.sleep(
+                    min(
+                        _HOOK_PROCESS_TRANSIENT_NOT_READY_BACKOFF_SECONDS,
+                        max(0.0, review_deadline - time.monotonic()),
+                    )
+                )
                 return self.review(
                     payload=payload,
                     harness=harness,
@@ -303,7 +311,7 @@ class HookProcessRunner:
                     workspace=workspace,
                     hook_env=hook_env,
                     deadline=review_deadline,
-                    _retry_transient_not_ready=False,
+                    _transient_not_ready_retries=_transient_not_ready_retries - 1,
                 )
             return HookProcessReview(
                 None,

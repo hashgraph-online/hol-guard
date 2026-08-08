@@ -464,10 +464,11 @@ def test_non_idempotent_review_does_not_retry_transient_evaluator_not_ready(tmp_
     assert connection.send.call_count == 1
 
 
-def test_idempotent_review_retries_transient_not_ready_only_once(tmp_path: Path) -> None:
+def test_idempotent_review_bounds_transient_not_ready_retries(tmp_path: Path) -> None:
     runner, connection = _transient_not_ready_test_runner(
         tmp_path,
         [
+            ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
             ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
             ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
         ],
@@ -489,7 +490,7 @@ def test_idempotent_review_retries_transient_not_ready_only_once(tmp_path: Path)
     )
 
     assert result == HookProcessReview(None, "daemon_hook_process_not_ready")
-    assert connection.send.call_count == 2
+    assert connection.send.call_count == 3
 
 
 def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial(
