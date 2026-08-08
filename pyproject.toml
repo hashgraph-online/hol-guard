@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "hol-guard"
 version = "2.2.0"
-description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
+description = "AI agent runtime security with surface-specific pre-action controls and supply-chain inspection for MCP, skills, plugins, packages, and coding agents."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -67,6 +67,7 @@ cisco = [
 dev = [
     "basedpyright>=1.39.8",
     "build>=1.5.0",
+    "jsonschema>=4.26.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.15",
