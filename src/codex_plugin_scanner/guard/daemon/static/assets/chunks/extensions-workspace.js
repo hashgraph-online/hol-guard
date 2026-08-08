@@ -71,6 +71,9 @@ function extensionRecoveryAction(health) {
     command: "hol-guard guard command controls enroll"
   };
 }
+function requiresExtensionRecoveryApproval(error) {
+  return error instanceof ExtensionControlApiError && (error.code === "approval_required" || error.code?.startsWith("approval_gate_") === true);
+}
 function randomToken() {
   return crypto.randomUUID().replaceAll("-", "");
 }
@@ -345,7 +348,7 @@ function ExtensionsWorkspace() {
       if (state.kind === "ready") setState({ ...state, effective });
       setRecoveryApprovalOpen(false);
     } catch (error) {
-      if (credentials === void 0 && error instanceof ExtensionControlApiError && error.code === "approval_required") {
+      if (credentials === void 0 && requiresExtensionRecoveryApproval(error)) {
         setRecoveryApprovalOpen(true);
       } else {
         setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
@@ -439,5 +442,6 @@ export {
   ExtensionStatusBanner,
   ExtensionsWorkspace,
   buildExtensionMutation,
-  extensionRecoveryAction
+  extensionRecoveryAction,
+  requiresExtensionRecoveryApproval
 };

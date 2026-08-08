@@ -6,7 +6,9 @@ import {
   buildExtensionMutation,
   ExtensionStatusBanner,
   extensionRecoveryAction,
+  requiresExtensionRecoveryApproval,
 } from "./extensions-workspace";
+import { ExtensionControlApiError } from "./extension-controls-api";
 
 assert.equal(extensionRecoveryAction("protected"), null);
 assert.deepEqual(extensionRecoveryAction("unenrolled"), {
@@ -41,6 +43,14 @@ assert.match(recoveryMarkup, /hol-guard guard command controls recover-authority
 assert.match(recoveryMarkup, /Copy repair command/);
 assert.match(recoveryMarkup, /Repair now/);
 assert.match(recoveryMarkup, /Check again/);
+assert.equal(
+  requiresExtensionRecoveryApproval(new ExtensionControlApiError("approval_gate_required", 403, "approval_gate_required")),
+  true,
+);
+assert.equal(
+  requiresExtensionRecoveryApproval(new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable")),
+  false,
+);
 
 const state = {
   kind: "ready" as const,

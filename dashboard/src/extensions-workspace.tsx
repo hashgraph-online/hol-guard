@@ -63,6 +63,11 @@ export function extensionRecoveryAction(
   };
 }
 
+export function requiresExtensionRecoveryApproval(error: unknown): boolean {
+  return error instanceof ExtensionControlApiError &&
+    (error.code === "approval_required" || error.code?.startsWith("approval_gate_") === true);
+}
+
 function randomToken(): string {
   return crypto.randomUUID().replaceAll("-", "");
 }
@@ -346,7 +351,7 @@ export function ExtensionsWorkspace() {
       if (state.kind === "ready") setState({ ...state, effective });
       setRecoveryApprovalOpen(false);
     } catch (error) {
-      if (credentials === undefined && error instanceof ExtensionControlApiError && error.code === "approval_required") {
+      if (credentials === undefined && requiresExtensionRecoveryApproval(error)) {
         setRecoveryApprovalOpen(true);
       } else {
         setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
