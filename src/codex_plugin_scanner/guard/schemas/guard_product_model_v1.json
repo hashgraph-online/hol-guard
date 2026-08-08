@@ -337,6 +337,15 @@
             "writes_state": true
         },
         {
+            "route": "/extensions",
+            "persona": [
+                "solo",
+                "team_manager"
+            ],
+            "auth_required": true,
+            "writes_state": true
+        },
+        {
             "route": "/supply-chain",
             "persona": [
                 "solo",

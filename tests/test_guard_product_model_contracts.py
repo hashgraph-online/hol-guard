@@ -193,6 +193,7 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert routes["/protect"].writes_state is True
     assert routes["/apps/{slug}"].writes_state is True
     assert routes["/evidence"].writes_state is True
+    assert routes["/extensions"].writes_state is True
     assert routes["/supply-chain"].writes_state is True
     assert routes["/audit"].writes_state is True
     assert routes["/policy"].writes_state is True

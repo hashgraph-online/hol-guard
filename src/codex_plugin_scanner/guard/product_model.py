@@ -220,6 +220,7 @@ LOCAL_ROUTE_OWNERSHIP = (
         auth_required=True,
         writes_state=True,
     ),
+    RouteOwnership(route="/extensions", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
     RouteOwnership(route="/supply-chain", persona=("solo", "security_lead"), auth_required=True, writes_state=True),
     RouteOwnership(route="/audit", persona=("solo", "security_lead"), auth_required=True, writes_state=True),
     RouteOwnership(route="/policy", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
