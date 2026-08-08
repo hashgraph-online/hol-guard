@@ -36,6 +36,7 @@ from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpi
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
+    _build_request_payload,
     _evidence_id,
     _with_additional_reason,
     _workspace_fingerprint,
@@ -464,13 +465,14 @@ def test_evaluate_package_request_artifact_posts_cloud_request_and_maps_block_re
     assert request_payload["commandShape"]["packageManager"] == "npm"
     assert request_payload["commandShape"]["verb"] == "install"
     assert request_payload["lockfileContext"]["fileName"] == "package-lock.json"
+    # No package.json in the fixture workspace, so omit null manifestHash (Cloud zod rejects null).
     assert set(request_payload["lockfileContext"]) == {
         "dependencyCount",
         "fileName",
         "lockfileHash",
-        "manifestHash",
         "repository",
     }
+    assert "manifestHash" not in request_payload["lockfileContext"]
     assert request_payload["packages"][0]["name"] == "minimist"
     assert request_payload["packages"][0]["direct"] is True
     assert set(request_payload["packages"][0]) == {
@@ -3169,3 +3171,30 @@ def test_bundle_reason_message_uses_block_copy_for_stale_blocked_bundle() -> Non
 
     assert "blocked" in message.lower()
     assert "monitor mode" not in message
+
+
+def test_build_request_payload_includes_manifest_hash_when_package_json_present(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "package.json").write_text('{"name":"demo","version":"1.0.0"}', encoding="utf-8")
+    (workspace_dir / "package-lock.json").write_text(
+        '{"packages":{"node_modules/minimist":{"version":"1.2.8"}}}',
+        encoding="utf-8",
+    )
+    artifact = _artifact_for_targets(
+        "minimist@1.2.8",
+        lockfile_paths=("package-lock.json",),
+        manifest_paths=("package.json",),
+    )
+    targets = evaluator_module._evaluation_targets(artifact, workspace_dir)
+    payload = _build_request_payload(
+        artifact=artifact,
+        targets=targets,
+        workspace_dir=workspace_dir,
+        workspace_fingerprint="fp",
+        policy_version="policy-v1",
+    )
+    assert "manifestHash" in payload["lockfileContext"]
+    assert isinstance(payload["lockfileContext"]["manifestHash"], str)
+    assert payload["lockfileContext"]["manifestHash"]
+

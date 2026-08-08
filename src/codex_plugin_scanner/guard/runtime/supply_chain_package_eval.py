@@ -2407,10 +2407,13 @@ def _build_request_payload(
         "workspaceFingerprint": workspace_fingerprint,
     }
     if lockfile_context is not None:
+        # Guard Cloud zod schemas use .optional() (undefined), not .nullable().
+        # Explicit nulls (common when a lockfile exists without a package.json) make
+        # evaluate return HTTP 400 and fail-closed block paid/connected installs.
         payload["lockfileContext"] = {
-            key: lockfile_context[key]
+            key: value
             for key in ("dependencyCount", "fileName", "lockfileHash", "manifestHash", "repository")
-            if key in lockfile_context
+            if (value := lockfile_context.get(key)) is not None
         }
     return payload
 
