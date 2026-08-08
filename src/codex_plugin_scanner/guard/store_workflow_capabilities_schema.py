@@ -168,9 +168,13 @@ WORKFLOW_CAPABILITY_RETIRED_RECEIPT_EVENT_INDEX: Final = "idx_guard_workflow_rec
 
 def ensure_workflow_capability_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
     """Apply the workflow-capability schema migrations and validate owned objects."""
+    # Drop the retired receipt-event index before opening the validation savepoint. Doing the
+    # drop inside the savepoint was unsafe: if validation raised, the savepoint rollback undid
+    # the drop and the orphan index survived, failing every reopen on databases created under
+    # the older schema. Run it first so it survives a validation rollback.
+    _drop_retired_receipt_event_index_once(connection, applied_at=applied_at)
     connection.execute("savepoint workflow_capability_schema_v14")
     try:
-        _drop_retired_receipt_event_index_once(connection, applied_at=applied_at)
         for statement in _SCHEMA_STATEMENTS:
             connection.execute(statement)
         _validate_schema_objects(connection)
