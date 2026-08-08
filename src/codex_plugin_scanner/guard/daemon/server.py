@@ -7840,6 +7840,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/inbox",
             "/protect",
             "/evidence",
+            "/extensions",
             "/supply-chain",
             "/audit",
             "/policy",

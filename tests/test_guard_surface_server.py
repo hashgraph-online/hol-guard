@@ -482,6 +482,7 @@ class TestGuardSurfaceServer:
                 "/inbox",
                 "/protect",
                 "/evidence",
+                "/extensions",
                 "/supply-chain",
                 "/audit",
                 "/policy",
