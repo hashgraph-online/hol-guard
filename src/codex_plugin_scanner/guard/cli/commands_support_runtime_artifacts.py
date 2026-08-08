@@ -560,7 +560,7 @@ def _hook_runtime_artifact(
 ) -> GuardArtifact | None:
     harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
-    if harness in {"codex", "pi", "omp"} and event_name == "PostToolUse":
+    if harness in {"codex", "cline", "pi", "omp"} and event_name == "PostToolUse":
         output_artifact = _codex_post_tool_output_artifact(
             harness=harness,
             payload=payload,
@@ -850,7 +850,7 @@ def _codex_post_tool_output_artifact(
     home_dir: Path | None = None,
 ) -> GuardArtifact | None:
     canonical_harness = _canonical_harness_name(harness)
-    harness_label = {"pi": "Pi", "omp": "Oh My Pi"}.get(canonical_harness, "Codex")
+    harness_label = {"cline": "Cline", "pi": "Pi", "omp": "Oh My Pi"}.get(canonical_harness, "Codex")
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
     stdout_text = _optional_string(payload.get("stdout"))
     if stdout_text:

@@ -88,6 +88,18 @@ const PROOFS = {{
 function proof(name, outcome) {{
   try {{
     const target = PROOFS[name];
+    const durableOutcome = name === "pretool" ? "blocked" : name === "posttool" ? "replaced" : undefined;
+    if (durableOutcome && outcome !== durableOutcome) {{
+      try {{
+        const current = JSON.parse(readFileSync(target, "utf8"));
+        if (
+          current &&
+          current.source === "cline-plugin" &&
+          current.proof === name &&
+          current.outcome === durableOutcome
+        ) return;
+      }} catch {{}}
+    }}
     mkdirSync(dirname(target), {{ recursive: true }});
     const temporary = `${{target}}.tmp`;
     writeFileSync(temporary, JSON.stringify({{
@@ -384,6 +396,9 @@ def install_cline_plugin(context: HarnessContext) -> dict[str, object]:
         raise RuntimeError("Guard refused a symlinked Cline plugin destination")
     if index_path.exists() and not _is_managed_plugin(index_path):
         raise RuntimeError(f"Cline plugin path is user-owned; Guard will not overwrite {index_path}")
+    for proof_name in ("loaded", "pretool", "posttool"):
+        with suppress(OSError):
+            _proof_path(context, proof_name).unlink()
     attested = resolve_attested_guard_cli(context)
     source = _plugin_source(context, [*attested.command, "guard", "hook"])
     root.mkdir(parents=True, exist_ok=True)

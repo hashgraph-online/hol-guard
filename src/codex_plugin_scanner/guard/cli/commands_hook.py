@@ -85,6 +85,10 @@ def _run_guard_hook_command(
         input_text=input_text,
         harness=args.harness,
     )
+    if _canonical_harness_name(args.harness) == "cline":
+        from ..adapters.cline_hook_payload import prepare_cline_hook_payload
+
+        payload = _normalize_hook_payload(prepare_cline_hook_payload(payload), harness=args.harness)
     if _canonical_harness_name(args.harness) == "cursor":
         from ..adapters.cursor_hooks import prepare_cursor_hook_payload
 
