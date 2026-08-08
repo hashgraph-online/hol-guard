@@ -8,6 +8,7 @@ import {
   HiMiniClipboardDocumentCheck,
   HiMiniExclamationTriangle,
   HiMiniLockClosed,
+  HiMiniMagnifyingGlass,
   HiMiniPuzzlePiece,
   HiMiniShieldCheck,
   HiMiniXMark,
@@ -26,6 +27,19 @@ import {
   type ExtensionControlLayer,
   type ExtensionMutationPayload,
 } from "./extension-controls-api";
+import {
+  classifyDomain,
+  DOMAIN_LABELS,
+  EMPTY_EXTENSION_FILTERS,
+  type ExtensionFilterState,
+  filterExtensions,
+  hasActiveFilters,
+  isExtensionEnabled,
+  RISK_CLASS_LABELS,
+  RISK_CLASS_TONE,
+} from "./extensions-filters";
+import { ExtensionsFilterBar } from "./extensions-filter-bar";
+import { useDebounce } from "./use-debounce";
 
 type LoadState =
   | { kind: "loading" }
@@ -110,13 +124,6 @@ export function buildExtensionMutation(
   };
 }
 
-function effectiveState(effective: EffectiveExtensionControls, extension: ExtensionCatalogItem): boolean {
-  const control = effective.controls.find(
-    (candidate) => candidate.target.kind === "extension" && candidate.target.target_id === extension.extension_id,
-  );
-  return extension.required || control?.state !== "disabled";
-}
-
 export function ExtensionStatusBanner(props: {
   busy?: boolean;
   effective: EffectiveExtensionControls;
@@ -186,6 +193,8 @@ function ExtensionCard(props: {
   const handleChange = useCallback(() => {
     props.onChange({ extension: props.extension, enabled: !props.enabled });
   }, [props]);
+  const domain = classifyDomain(props.extension.extension_id);
+  const knownRisks = props.extension.risk_classes.filter((risk) => risk in RISK_CLASS_LABELS) as Array<keyof typeof RISK_CLASS_LABELS>;
   return (
     <article className="group flex min-h-52 flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_18px_45px_rgba(30,64,175,0.10)]">
       <div className="flex items-start justify-between gap-4">
@@ -209,8 +218,18 @@ function ExtensionCard(props: {
         {props.extension.required ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-blue">Required</span> : null}
       </div>
       <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">{props.extension.description}</p>
-      <div className="mt-auto flex items-center justify-between pt-4 text-xs text-slate-500">
-        <span>{props.extension.source}</span><span>v{props.extension.version}</span>
+      {knownRisks.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-1">
+          {knownRisks.map((risk) => (
+            <span key={risk} className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${RISK_CLASS_TONE[risk].label}`}>
+              {RISK_CLASS_LABELS[risk]}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-auto flex items-center justify-between gap-2 pt-4 text-xs text-slate-500">
+        <span className="truncate">{DOMAIN_LABELS[domain]} · {props.extension.source}</span>
+        <span className="shrink-0">v{props.extension.version}</span>
       </div>
     </article>
   );
@@ -311,6 +330,7 @@ export function ExtensionsWorkspace() {
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [provenanceOpen, setProvenanceOpen] = useState(false);
+  const [filters, setFilters] = useState<ExtensionFilterState>(EMPTY_EXTENSION_FILTERS);
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
@@ -322,7 +342,20 @@ export function ExtensionsWorkspace() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const locked = state.kind !== "ready" || state.effective.health !== "protected";
-  const sortedExtensions = useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((left, right) => left.name.localeCompare(right.name)) : [], [state]);
+  const catalogExtensions = useMemo(
+    () => (state.kind === "ready" ? [...state.catalog.extensions].sort((left, right) => left.name.localeCompare(right.name)) : []),
+    [state],
+  );
+  const debouncedQuery = useDebounce(filters.query, 120);
+  const effectiveFilters = useMemo<ExtensionFilterState>(() => ({ ...filters, query: debouncedQuery }), [filters, debouncedQuery]);
+  const filteredExtensions = useMemo(
+    () => (state.kind === "ready" ? filterExtensions(catalogExtensions, state.effective, effectiveFilters) : []),
+    [catalogExtensions, state, effectiveFilters],
+  );
+  const updateFilters = useCallback((patch: Partial<ExtensionFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+  }, []);
+  const clearFilters = useCallback(() => setFilters(EMPTY_EXTENSION_FILTERS), []);
   const handleChange = useCallback((change: PendingChange) => { setMutationError(null); setPending(change); }, []);
   const handleCancel = useCallback(() => { if (!busy) setPending(null); }, [busy]);
   const handleConfirm = useCallback(async (password: string, totp: string) => {
@@ -377,7 +410,32 @@ export function ExtensionsWorkspace() {
       </header>
       <div className="mt-6"><ExtensionStatusBanner busy={recoveryBusy} effective={state.effective} error={recoveryError} onRecover={handleRecover} onRetry={load} /></div>
       {state.effective.global_lockdown ? <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white"><HiMiniLockClosed className="size-5" /><span><strong>Global lockdown active.</strong> Optional extensions remain disabled regardless of individual settings.</span></div> : null}
-      <section aria-labelledby="installed-extensions" className="mt-8"><div className="flex items-center justify-between"><h2 id="installed-extensions" className="text-lg font-semibold text-slate-950">Installed extensions</h2><span className="text-sm text-slate-500">{sortedExtensions.length} available</span></div><div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{sortedExtensions.map((extension) => <ExtensionCard key={extension.extension_id} extension={extension} enabled={effectiveState(state.effective, extension)} locked={locked || state.effective.global_lockdown} onChange={handleChange} />)}</div></section>
+      <section aria-labelledby="installed-extensions" className="mt-8">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-4">
+            <h2 id="installed-extensions" className="text-lg font-semibold text-slate-950">Installed extensions</h2>
+            <span className="text-sm text-slate-500">{catalogExtensions.length} available</span>
+          </div>
+          <p className="text-sm text-slate-500">Search by name or command, or filter by risk, domain, or state to govern capabilities.</p>
+        </div>
+        <div className="mt-4"><ExtensionsFilterBar filters={effectiveFilters} onChange={updateFilters} onClear={clearFilters} extensions={catalogExtensions} effective={state.effective} /></div>
+        {filteredExtensions.length > 0 ? (
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filteredExtensions.map((extension) => (
+              <ExtensionCard key={extension.extension_id} extension={extension} enabled={isExtensionEnabled(state.effective, extension)} locked={locked || state.effective.global_lockdown} onChange={handleChange} />
+            ))}
+          </div>
+        ) : hasActiveFilters(effectiveFilters) ? (
+          <div className="mt-5 flex flex-col items-center gap-3 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+            <HiMiniMagnifyingGlass className="size-7 text-slate-300" aria-hidden="true" />
+            <h3 className="text-sm font-semibold text-slate-900">No extensions match these filters</h3>
+            <p className="max-w-sm text-sm text-slate-500">Try a different search term, or clear the active filters to see all {catalogExtensions.length} extensions.</p>
+            <button type="button" onClick={clearFilters} className="mt-1 rounded-xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">Clear filters</button>
+          </div>
+        ) : (
+          <div className="mt-5 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-sm text-slate-500">No extensions are registered.</div>
+        )}
+      </section>
       <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white"><button type="button" onClick={toggleProvenance} aria-expanded={provenanceOpen} className="flex w-full items-center justify-between p-5 text-left"><span><span className="block font-semibold text-slate-950">Policy provenance</span><span className="mt-1 block text-sm text-slate-500">Catalog {state.catalog.catalog_digest.slice(0, 12)}… · {state.effective.layers.length} authority layer{state.effective.layers.length === 1 ? "" : "s"}</span></span>{provenanceOpen ? <HiMiniChevronUp className="size-5" /> : <HiMiniChevronDown className="size-5" />}</button>{provenanceOpen ? <div className="border-t border-slate-200 p-5"><div className="grid gap-3 sm:grid-cols-2">{state.effective.layers.map((layer: ExtensionControlLayer) => <div key={`${layer.kind}-${layer.catalog_digest}`} className="rounded-2xl bg-slate-50 p-4"><div className="flex items-center gap-2"><HiMiniCheckCircle className="size-5 text-emerald-600" /><strong className="text-sm text-slate-900">{layer.kind === "local-admin" ? "Local administrator" : "Signed cloud policy"}</strong></div><p className="mt-2 text-xs text-slate-500">{layer.controls.length} explicit controls · catalog {layer.catalog_digest.slice(0, 12)}…</p></div>)}</div></div> : null}</section>
       {pending ? <ReviewModal change={pending} busy={busy} error={mutationError} onCancel={handleCancel} onConfirm={handleConfirm} /> : null}
       {recoveryApprovalOpen ? <AuthorityRecoveryModal busy={recoveryBusy} error={recoveryError} onCancel={handleRecoveryCancel} onConfirm={handleRecoveryConfirm} /> : null}

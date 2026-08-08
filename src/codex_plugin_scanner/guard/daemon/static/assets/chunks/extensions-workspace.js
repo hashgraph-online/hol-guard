@@ -1,4 +1,4 @@
-import { an as fetchExtensionControlApi, r as reactExports, j as jsxRuntimeExports, o as HiMiniShieldCheck, J as HiMiniExclamationTriangle, ao as HiMiniArrowPath, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, Z as HiMiniLockClosed, x as HiMiniChevronUp, y as HiMiniChevronDown, l as HiMiniCheckCircle, ap as HiMiniPuzzlePiece, w as HiMiniXMark } from "../guard-dashboard.js";
+import { an as fetchExtensionControlApi, r as reactExports, j as jsxRuntimeExports, $ as HiMiniAdjustmentsHorizontal, ak as HiMiniMagnifyingGlass, w as HiMiniXMark, o as HiMiniShieldCheck, J as HiMiniExclamationTriangle, ao as HiMiniArrowPath, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, Z as HiMiniLockClosed, x as HiMiniChevronUp, y as HiMiniChevronDown, l as HiMiniCheckCircle, ap as HiMiniPuzzlePiece } from "../guard-dashboard.js";
 class ExtensionControlApiError extends Error {
   constructor(message, status, code, recoveryAction) {
     super(message);
@@ -53,6 +53,427 @@ function applyExtensionMutation(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });
+}
+const EMPTY_EXTENSION_FILTERS = {
+  query: "",
+  risk: "all",
+  domain: "all",
+  state: "all",
+  required: "all"
+};
+const RISK_CLASS_ORDER = [
+  "destructive_shell",
+  "network_egress",
+  "supply_chain",
+  "local_secret_read",
+  "encoded_execution",
+  "policy_bypass",
+  "data_flow_exfiltration",
+  "credential_exfiltration",
+  "execution"
+];
+const RISK_CLASS_LABELS = {
+  destructive_shell: "Destructive shell",
+  network_egress: "Network egress",
+  supply_chain: "Supply chain",
+  local_secret_read: "Local secrets",
+  encoded_execution: "Encoded execution",
+  policy_bypass: "Policy bypass",
+  data_flow_exfiltration: "Data exfiltration",
+  credential_exfiltration: "Credential exfiltration",
+  execution: "Remote execution"
+};
+const RISK_CLASS_TONE = {
+  destructive_shell: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-amber-300 hover:bg-amber-50",
+    active: "border-amber-400 bg-amber-100 text-amber-900",
+    label: "bg-amber-50 text-amber-800 border-amber-200"
+  },
+  network_egress: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50",
+    active: "border-blue-400 bg-blue-100 text-blue-900",
+    label: "bg-blue-50 text-blue-800 border-blue-200"
+  },
+  supply_chain: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:bg-violet-50",
+    active: "border-violet-400 bg-violet-100 text-violet-900",
+    label: "bg-violet-50 text-violet-800 border-violet-200"
+  },
+  local_secret_read: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50",
+    active: "border-rose-400 bg-rose-100 text-rose-900",
+    label: "bg-rose-50 text-rose-800 border-rose-200"
+  },
+  encoded_execution: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-100",
+    active: "border-slate-500 bg-slate-200 text-slate-900",
+    label: "bg-slate-100 text-slate-700 border-slate-300"
+  },
+  policy_bypass: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-red-300 hover:bg-red-50",
+    active: "border-red-400 bg-red-100 text-red-900",
+    label: "bg-red-50 text-red-800 border-red-200"
+  },
+  data_flow_exfiltration: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-orange-300 hover:bg-orange-50",
+    active: "border-orange-400 bg-orange-100 text-orange-900",
+    label: "bg-orange-50 text-orange-800 border-orange-200"
+  },
+  credential_exfiltration: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-orange-300 hover:bg-orange-50",
+    active: "border-orange-400 bg-orange-100 text-orange-900",
+    label: "bg-orange-50 text-orange-800 border-orange-200"
+  },
+  execution: {
+    idle: "border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-teal-50",
+    active: "border-teal-400 bg-teal-100 text-teal-900",
+    label: "bg-teal-50 text-teal-800 border-teal-200"
+  }
+};
+const DOMAIN_LABELS = {
+  core: "Core protection",
+  package: "Package ecosystems",
+  cloud: "Cloud providers",
+  database: "Databases",
+  storage: "Storage",
+  backup: "Backup & sync",
+  remote: "Remote access",
+  cicd: "CI/CD pipelines",
+  platform: "Platform",
+  "managed-service": "Managed services",
+  "search-messaging": "Search & messaging",
+  "source-control": "Source control"
+};
+const DOMAIN_PREFIX_MAP = [
+  ["command.package.", "package"],
+  ["command.cloud.", "cloud"],
+  ["command.aws", "cloud"],
+  ["command.azure", "cloud"],
+  ["command.gcp", "cloud"],
+  ["command.database.", "database"],
+  ["command.storage.", "storage"],
+  ["command.backup.", "backup"],
+  ["command.remote.", "remote"],
+  ["command.cicd.", "cicd"],
+  ["command.platform.", "platform"],
+  ["command.managed-service.", "managed-service"],
+  ["command.search-messaging.", "search-messaging"],
+  ["command.github", "source-control"]
+];
+function classifyDomain(extensionId) {
+  const id = extensionId.toLowerCase();
+  for (const [prefix, domain] of DOMAIN_PREFIX_MAP) {
+    if (id.startsWith(prefix)) return domain;
+  }
+  return "core";
+}
+function isExtensionEnabled(effective, extension) {
+  if (extension.required) return true;
+  const control = effective.controls.find(
+    (candidate) => candidate.target.kind === "extension" && candidate.target.target_id === extension.extension_id
+  );
+  return control?.state !== "disabled";
+}
+function hasActiveFilters(filters) {
+  return filters.query.trim() !== "" || filters.risk !== "all" || filters.domain !== "all" || filters.state !== "all" || filters.required !== "all";
+}
+function searchHaystack(extension) {
+  const parts = [
+    extension.name,
+    extension.extension_id,
+    extension.description,
+    extension.source,
+    ...extension.action_classes,
+    ...extension.risk_classes,
+    classifyDomain(extension.extension_id)
+  ];
+  return parts.join(" ").toLowerCase();
+}
+function matchExtensionQuery(extension, query) {
+  const normalized = query.trim().toLowerCase();
+  if (normalized === "") return true;
+  const haystack = searchHaystack(extension);
+  return normalized.split(/\s+/).every((token) => haystack.includes(token));
+}
+function filterExtensions(extensions, effective, filters) {
+  const items = extensions.filter((extension) => {
+    if (!matchExtensionQuery(extension, filters.query)) return false;
+    if (filters.risk !== "all" && !extension.risk_classes.includes(filters.risk)) return false;
+    if (filters.domain !== "all" && classifyDomain(extension.extension_id) !== filters.domain) return false;
+    if (filters.required !== "all") {
+      const isRequired = extension.required;
+      if (filters.required === "required" && !isRequired) return false;
+      if (filters.required === "optional" && isRequired) return false;
+    }
+    if (filters.state !== "all") {
+      const enabled = isExtensionEnabled(effective, extension);
+      if (filters.state === "enabled" && !enabled) return false;
+      if (filters.state === "disabled" && enabled) return false;
+    }
+    return true;
+  });
+  items.sort((left, right) => left.name.localeCompare(right.name));
+  return items;
+}
+const SELECT_CLASS = "min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60";
+const DOMAIN_ORDER = [
+  "core",
+  "package",
+  "cloud",
+  "database",
+  "storage",
+  "backup",
+  "remote",
+  "cicd",
+  "platform",
+  "managed-service",
+  "search-messaging",
+  "source-control"
+];
+function SearchField(props) {
+  const handleChange = reactExports.useCallback(
+    (event) => props.onChange(event.target.value),
+    [props]
+  );
+  const handleClear = reactExports.useCallback(() => props.onChange(""), [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative flex flex-1 items-center", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search extensions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      HiMiniMagnifyingGlass,
+      {
+        className: "pointer-events-none absolute left-3 size-4 text-slate-400",
+        "aria-hidden": "true"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        ref: props.inputRef,
+        type: "search",
+        value: props.value,
+        onChange: handleChange,
+        placeholder: "Search by name, command, or risk (press /)",
+        className: "min-h-9 w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-9 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    ),
+    props.value ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: handleClear,
+        "aria-label": "Clear search",
+        className: "absolute right-2 flex size-5 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" })
+      }
+    ) : null
+  ] });
+}
+function RiskChips(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-1.5", role: "group", "aria-label": "Filter by risk class", children: RISK_CLASS_ORDER.map((risk) => {
+    const isActive = props.value === risk;
+    const tone = RISK_CLASS_TONE[risk];
+    const count = props.counts.get(risk) ?? 0;
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        onClick: () => props.onChange(isActive ? "all" : risk),
+        "aria-pressed": isActive,
+        className: `inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${isActive ? tone.active : tone.idle}`,
+        children: [
+          RISK_CLASS_LABELS[risk],
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: isActive ? "opacity-70" : "text-slate-400", "aria-hidden": "true", children: count })
+        ]
+      },
+      risk
+    );
+  }) });
+}
+function ActiveChip(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full bg-brand-blue/10 px-2.5 py-1 text-xs font-medium text-brand-blue", children: [
+    props.label,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onRemove,
+        "aria-label": `Remove filter: ${props.label}`,
+        className: "flex size-4 items-center justify-center rounded-full transition-colors hover:bg-brand-blue/20",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-3", "aria-hidden": "true" })
+      }
+    )
+  ] });
+}
+function ExtensionsFilterBar(props) {
+  const [showFacets, setShowFacets] = reactExports.useState(false);
+  const searchRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const handleKeyDown = (event) => {
+      const target = event.target;
+      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+      if (event.key === "/" && !typing) {
+        event.preventDefault();
+        searchRef.current?.focus();
+      } else if (event.key === "Escape" && document.activeElement === searchRef.current && props.filters.query) {
+        props.onChange({ query: "" });
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [props]);
+  const handleQuery = reactExports.useCallback((value) => props.onChange({ query: value }), [props]);
+  const handleRisk = reactExports.useCallback((risk) => props.onChange({ risk }), [props]);
+  const handleDomain = reactExports.useCallback(
+    (event) => props.onChange({ domain: event.target.value === "all" ? "all" : event.target.value }),
+    [props]
+  );
+  const handleState = reactExports.useCallback(
+    (event) => props.onChange({ state: event.target.value }),
+    [props]
+  );
+  const handleRequired = reactExports.useCallback(
+    (event) => props.onChange({ required: event.target.value }),
+    [props]
+  );
+  const toggleFacets = reactExports.useCallback(() => setShowFacets((prev) => !prev), []);
+  const riskCounts = reactExports.useMemo(
+    () => {
+      const counts = /* @__PURE__ */ new Map();
+      for (const risk of RISK_CLASS_ORDER) counts.set(risk, 0);
+      for (const extension of props.extensions) {
+        for (const risk of extension.risk_classes) {
+          if (risk in RISK_CLASS_LABELS) {
+            const key = risk;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+          }
+        }
+      }
+      return counts;
+    },
+    [props.extensions]
+  );
+  const totalCount = props.extensions.length;
+  const filteredCount = reactExports.useMemo(
+    () => filterExtensions(props.extensions, props.effective, props.filters).length,
+    [props.extensions, props.effective, props.filters]
+  );
+  const active = hasActiveFilters(props.filters);
+  const facetsActive = props.filters.domain !== "all" || props.filters.state !== "all" || props.filters.required !== "all";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", "aria-label": "Extension filters", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SearchField, { value: props.filters.query, onChange: handleQuery, inputRef: searchRef }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: toggleFacets,
+          "aria-expanded": showFacets,
+          "aria-label": "Toggle domain, state, and requirement filters",
+          className: `inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${showFacets || facetsActive ? "border-brand-blue bg-brand-blue/5 text-brand-blue" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "size-4", "aria-hidden": "true" }),
+            "Filters",
+            facetsActive ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex size-4 items-center justify-center rounded-full bg-brand-blue text-[10px] font-bold text-white", children: [props.filters.domain !== "all", props.filters.state !== "all", props.filters.required !== "all"].filter(Boolean).length }) : null
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(RiskChips, { value: props.filters.risk, onChange: handleRisk, counts: riskCounts }),
+    showFacets ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 rounded-xl bg-slate-50/70 p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          value: props.filters.domain,
+          onChange: handleDomain,
+          "aria-label": "Filter by domain",
+          className: SELECT_CLASS,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All domains" }),
+            DOMAIN_ORDER.map((domain) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: domain, children: DOMAIN_LABELS[domain] }, domain))
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          value: props.filters.state,
+          onChange: handleState,
+          "aria-label": "Filter by enabled state",
+          className: SELECT_CLASS,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All states" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "enabled", children: "Enabled" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "disabled", children: "Disabled" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          value: props.filters.required,
+          onChange: handleRequired,
+          "aria-label": "Filter by required status",
+          className: SELECT_CLASS,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "Required & optional" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "required", children: "Required only" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "optional", children: "Optional only" })
+          ]
+        }
+      )
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
+      active ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        props.filters.query ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActiveChip, { label: `“${props.filters.query}”`, onRemove: () => props.onChange({ query: "" }) }) : null,
+        props.filters.risk !== "all" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveChip,
+          {
+            label: RISK_CLASS_LABELS[props.filters.risk],
+            onRemove: () => props.onChange({ risk: "all" })
+          }
+        ) : null,
+        props.filters.domain !== "all" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveChip,
+          {
+            label: DOMAIN_LABELS[props.filters.domain],
+            onRemove: () => props.onChange({ domain: "all" })
+          }
+        ) : null,
+        props.filters.state !== "all" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveChip,
+          {
+            label: props.filters.state === "enabled" ? "Enabled" : "Disabled",
+            onRemove: () => props.onChange({ state: "all" })
+          }
+        ) : null,
+        props.filters.required !== "all" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveChip,
+          {
+            label: props.filters.required === "required" ? "Required only" : "Optional only",
+            onRemove: () => props.onChange({ required: "all" })
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: props.onClear,
+            className: "ml-1 text-xs font-medium text-brand-blue transition-colors hover:text-brand-dark",
+            children: "Clear all"
+          }
+        )
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto text-xs text-slate-500", "aria-live": "polite", children: active ? `${filteredCount} of ${totalCount} shown` : `${totalCount} total` })
+    ] })
+  ] });
+}
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = reactExports.useState(value);
+  reactExports.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
 }
 function extensionRecoveryAction(health) {
   if (health === "protected") return null;
@@ -111,12 +532,6 @@ function buildExtensionMutation(state, change) {
     nonce: randomToken()
   };
 }
-function effectiveState(effective, extension) {
-  const control = effective.controls.find(
-    (candidate) => candidate.target.kind === "extension" && candidate.target.target_id === extension.extension_id
-  );
-  return extension.required || control?.state !== "disabled";
-}
 function ExtensionStatusBanner(props) {
   const [copyState, setCopyState] = reactExports.useState("idle");
   const recovery = extensionRecoveryAction(props.effective.health);
@@ -169,6 +584,8 @@ function ExtensionCard(props) {
   const handleChange = reactExports.useCallback(() => {
     props.onChange({ extension: props.extension, enabled: !props.enabled });
   }, [props]);
+  const domain = classifyDomain(props.extension.extension_id);
+  const knownRisks = props.extension.risk_classes.filter((risk) => risk in RISK_CLASS_LABELS);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "group flex min-h-52 flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_18px_45px_rgba(30,64,175,0.10)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex size-11 items-center justify-center rounded-2xl bg-blue-50 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPuzzlePiece, { className: "size-6", "aria-hidden": "true" }) }),
@@ -191,9 +608,14 @@ function ExtensionCard(props) {
       props.extension.required ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-blue", children: "Required" }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 line-clamp-3 text-sm leading-6 text-slate-600", children: props.extension.description }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto flex items-center justify-between pt-4 text-xs text-slate-500", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: props.extension.source }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+    knownRisks.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-1", children: knownRisks.map((risk) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `rounded-full border px-2 py-0.5 text-[10px] font-medium ${RISK_CLASS_TONE[risk].label}`, children: RISK_CLASS_LABELS[risk] }, risk)) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto flex items-center justify-between gap-2 pt-4 text-xs text-slate-500", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "truncate", children: [
+        DOMAIN_LABELS[domain],
+        " · ",
+        props.extension.source
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shrink-0", children: [
         "v",
         props.extension.version
       ] })
@@ -297,6 +719,7 @@ function ExtensionsWorkspace() {
   const [recoveryBusy, setRecoveryBusy] = reactExports.useState(false);
   const [recoveryError, setRecoveryError] = reactExports.useState(null);
   const [provenanceOpen, setProvenanceOpen] = reactExports.useState(false);
+  const [filters, setFilters] = reactExports.useState(EMPTY_EXTENSION_FILTERS);
   const load = reactExports.useCallback(async () => {
     setState({ kind: "loading" });
     try {
@@ -310,7 +733,20 @@ function ExtensionsWorkspace() {
     void load();
   }, [load]);
   const locked = state.kind !== "ready" || state.effective.health !== "protected";
-  const sortedExtensions = reactExports.useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((left, right) => left.name.localeCompare(right.name)) : [], [state]);
+  const catalogExtensions = reactExports.useMemo(
+    () => state.kind === "ready" ? [...state.catalog.extensions].sort((left, right) => left.name.localeCompare(right.name)) : [],
+    [state]
+  );
+  const debouncedQuery = useDebounce(filters.query, 120);
+  const effectiveFilters = reactExports.useMemo(() => ({ ...filters, query: debouncedQuery }), [filters, debouncedQuery]);
+  const filteredExtensions = reactExports.useMemo(
+    () => state.kind === "ready" ? filterExtensions(catalogExtensions, state.effective, effectiveFilters) : [],
+    [catalogExtensions, state, effectiveFilters]
+  );
+  const updateFilters = reactExports.useCallback((patch) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+  }, []);
+  const clearFilters = reactExports.useCallback(() => setFilters(EMPTY_EXTENSION_FILTERS), []);
   const handleChange = reactExports.useCallback((change) => {
     setMutationError(null);
     setPending(change);
@@ -397,14 +833,27 @@ function ExtensionsWorkspace() {
       ] })
     ] }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "installed-extensions", className: "mt-8", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "installed-extensions", className: "text-lg font-semibold text-slate-950", children: "Installed extensions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-slate-500", children: [
-          sortedExtensions.length,
-          " available"
-        ] })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "installed-extensions", className: "text-lg font-semibold text-slate-950", children: "Installed extensions" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-slate-500", children: [
+            catalogExtensions.length,
+            " available"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Search by name or command, or filter by risk, domain, or state to govern capabilities." })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3", children: sortedExtensions.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionCard, { extension, enabled: effectiveState(state.effective, extension), locked: locked || state.effective.global_lockdown, onChange: handleChange }, extension.extension_id)) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsFilterBar, { filters: effectiveFilters, onChange: updateFilters, onClear: clearFilters, extensions: catalogExtensions, effective: state.effective }) }),
+      filteredExtensions.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3", children: filteredExtensions.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionCard, { extension, enabled: isExtensionEnabled(state.effective, extension), locked: locked || state.effective.global_lockdown, onChange: handleChange }, extension.extension_id)) }) : hasActiveFilters(effectiveFilters) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-col items-center gap-3 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "size-7 text-slate-300", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-slate-900", children: "No extensions match these filters" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "max-w-sm text-sm text-slate-500", children: [
+          "Try a different search term, or clear the active filters to see all ",
+          catalogExtensions.length,
+          " extensions."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: clearFilters, className: "mt-1 rounded-xl bg-brand-blue px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark", children: "Clear filters" })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-sm text-slate-500", children: "No extensions are registered." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: toggleProvenance, "aria-expanded": provenanceOpen, className: "flex w-full items-center justify-between p-5 text-left", children: [

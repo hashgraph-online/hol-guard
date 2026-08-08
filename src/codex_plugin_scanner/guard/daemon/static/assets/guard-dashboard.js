@@ -29725,6 +29725,7 @@ function viewTitle(view) {
   if (view === "policy") return "Policy";
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
+  if (view === "extensions") return "Extensions";
   return "App detail";
 }
 function parseAppDetail(pathname) {
