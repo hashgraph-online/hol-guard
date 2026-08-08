@@ -1467,6 +1467,7 @@ def _build_package_protect_authority(
 def _final_package_protect_authority(
     *,
     initial: _PackageProtectAuthority,
+    initial_saved_evaluation: Any,
     saved_approval_pending: bool,
     command: Sequence[str],
     store: Any,
@@ -1489,6 +1490,28 @@ def _final_package_protect_authority(
                 raise TypeError("current config provider returned an invalid value")
         except Exception:
             config_refresh_failed = True
+    saved_approval_claimed = False
+    saved_approval_claim_disposition: _PackageApprovalClaimDisposition | None = None
+    if (
+        saved_approval_pending
+        and not config_refresh_failed
+        and (current_config is None or current_config.mode != "observe")
+    ):
+        claimed_resolution = _resolve_stored_package_policy_override(
+            initial_saved_evaluation,
+            store=store,
+            artifact=initial.artifact,
+            artifact_hash=initial.artifact_hash,
+            workspace_dir=workspace_dir,
+            now=now,
+            execution_context=initial.execution_context,
+            current_action=initial.current_action,
+            claim_saved_approval=True,
+        )
+        if not is_execution_permitted(_package_execution_policy_action(initial, claimed_resolution.evaluation)):
+            return initial, claimed_resolution.evaluation
+        saved_approval_claimed = True
+        saved_approval_claim_disposition = claimed_resolution.claim_disposition
     if additional_authority_provider is not None:
         try:
             additional_action, additional_context = additional_authority_provider()
@@ -1513,28 +1536,6 @@ def _final_package_protect_authority(
             "status": "authority_refresh_failed",
             "version": 1,
         }
-    saved_approval_claimed = False
-    saved_approval_claim_disposition: _PackageApprovalClaimDisposition | None = None
-    if (
-        saved_approval_pending
-        and not config_refresh_failed
-        and (current_config is None or current_config.mode != "observe")
-    ):
-        claimed_resolution = _resolve_stored_package_policy_override(
-            initial.evaluation,
-            store=store,
-            artifact=initial.artifact,
-            artifact_hash=initial.artifact_hash,
-            workspace_dir=workspace_dir,
-            now=now,
-            execution_context=initial.execution_context,
-            current_action=initial.current_action,
-            claim_saved_approval=True,
-        )
-        if not is_execution_permitted(_package_execution_policy_action(initial, claimed_resolution.evaluation)):
-            return initial, claimed_resolution.evaluation
-        saved_approval_claimed = True
-        saved_approval_claim_disposition = claimed_resolution.claim_disposition
     current = _build_package_protect_authority(
         command=command,
         store=store,
@@ -1886,6 +1887,7 @@ def build_package_protect_payload(
         return (payload, _package_execution_exit_code(execution_policy_action))
     final_authority, final_evaluation = _final_package_protect_authority(
         initial=authority,
+        initial_saved_evaluation=evaluation,
         saved_approval_pending=_evaluation_uses_saved_package_approval(evaluation),
         command=command,
         store=store,
