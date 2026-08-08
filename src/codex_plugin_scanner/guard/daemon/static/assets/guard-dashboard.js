@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/harness-setup-target.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/harness-setup-target.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/extensions-workspace.js","assets/chunks/use-resolved-approval-gate.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -29672,12 +29672,12 @@ const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chun
 const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? [] : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([6,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([6,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
@@ -30484,7 +30484,7 @@ export {
   HiMiniLockClosed as Z,
   HiMiniBellAlert as _,
   EvidenceActivityHeatmapMini as a,
-  ApprovalProofInline as a$,
+  HiMiniCloudArrowDown as a$,
   HiMiniCircleStack as a0,
   TabBar as a1,
   resolveProtectionLevelCopy as a2,
@@ -30509,19 +30509,19 @@ export {
   formatHarnessCommand as aL,
   isSupplyChainAuditIncomplete as aM,
   isSupplyChainAuditEvidence as aN,
-  buildApprovalProofCredentials as aO,
-  isApprovalProofSubmitDisabled as aP,
-  ApprovalProofFieldInputs as aQ,
-  readString$1 as aR,
-  isRecord$2 as aS,
-  HiMiniClock as aT,
-  IconActionButton as aU,
-  HiMiniBeaker as aV,
-  ActivationSummary as aW,
-  ActionResultPanel as aX,
-  HiMiniBugAnt as aY,
-  GuardModalLayer as aZ,
-  ConnectFlowCard as a_,
+  readString$1 as aO,
+  isRecord$2 as aP,
+  HiMiniClock as aQ,
+  IconActionButton as aR,
+  HiMiniBeaker as aS,
+  ActivationSummary as aT,
+  ActionResultPanel as aU,
+  HiMiniBugAnt as aV,
+  buildApprovalProofCredentials as aW,
+  GuardModalLayer as aX,
+  ConnectFlowCard as aY,
+  ApprovalProofInline as aZ,
+  HiMiniArrowTopRightOnSquare as a_,
   importSettings as aa,
   resetSettings as ab,
   enrollApprovalGateTotp as ac,
@@ -30549,16 +30549,16 @@ export {
   computeMetrics as ay,
   CommandActivityWorkspace as az,
   HiMiniCommandLine as b,
-  HiMiniArrowTopRightOnSquare as b0,
-  HiMiniCloudArrowDown as b1,
-  fetchPackageFirewallStatus as b2,
-  runPackageAudit as b3,
-  resolveSupplyChainAuditFailure as b4,
-  runPackageSync as b5,
-  startPackageFirewallConnect as b6,
-  openPackageFirewallAuthorizeFallback as b7,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as b8,
-  repairSupplyChainProtection as b9,
+  fetchPackageFirewallStatus as b0,
+  runPackageAudit as b1,
+  resolveSupplyChainAuditFailure as b2,
+  runPackageSync as b3,
+  startPackageFirewallConnect as b4,
+  openPackageFirewallAuthorizeFallback as b5,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as b6,
+  repairSupplyChainProtection as b7,
+  runPackageFirewallAction as b8,
+  parseInterceptProofSnapshot as b9,
   PaginationControls as bA,
   HiMiniNoSymbol as bB,
   HiMiniCube as bC,
@@ -30581,13 +30581,13 @@ export {
   HiMiniArrowUp as bT,
   runAuditRemediation as bU,
   HiMiniSignal as bV,
-  runPackageFirewallAction as ba,
-  parseInterceptProofSnapshot as bb,
-  activatePackageFirewallRuntime as bc,
-  EntitlementNotice as bd,
-  fetchReceipts as be,
-  WorkspacePageHeader as bf,
-  __vitePreload as bg,
+  activatePackageFirewallRuntime as ba,
+  EntitlementNotice as bb,
+  fetchReceipts as bc,
+  WorkspacePageHeader as bd,
+  __vitePreload as be,
+  isApprovalProofSubmitDisabled as bf,
+  ApprovalProofFieldInputs as bg,
   scopeLabel as bh,
   guardAwareHref as bi,
   HiMiniDocumentText as bj,

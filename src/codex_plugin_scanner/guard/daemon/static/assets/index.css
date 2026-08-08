@@ -952,6 +952,11 @@
     height: calc(var(--spacing) * 7);
   }
 
+  .size-9 {
+    width: calc(var(--spacing) * 9);
+    height: calc(var(--spacing) * 9);
+  }
+
   .size-11 {
     width: calc(var(--spacing) * 11);
     height: calc(var(--spacing) * 11);
@@ -2898,7 +2903,17 @@
     }
   }
 
-  .bg-brand-dark, .bg-brand-dark\/45 {
+  .bg-brand-dark, .bg-brand-dark\/30 {
+    background-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-dark\/30 {
+      background-color: color-mix(in oklab, var(--brand-dark) 30%, transparent);
+    }
+  }
+
+  .bg-brand-dark\/45 {
     background-color: var(--brand-dark);
   }
 
@@ -3416,16 +3431,6 @@
 
   .bg-slate-950 {
     background-color: var(--color-slate-950);
-  }
-
-  .bg-slate-950\/40 {
-    background-color: #02061866;
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .bg-slate-950\/40 {
-      background-color: color-mix(in oklab, var(--color-slate-950) 40%, transparent);
-    }
   }
 
   .bg-slate-950\/45 {
@@ -5270,6 +5275,16 @@
       }
     }
 
+    .hover\:bg-brand-blue\/\[0\.05\]:hover {
+      background-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-blue\/\[0\.05\]:hover {
+        background-color: color-mix(in oklab, var(--brand-blue) 5%, transparent);
+      }
+    }
+
     .hover\:bg-brand-blue\/\[0\.06\]:hover {
       background-color: var(--brand-blue);
     }
@@ -5302,10 +5317,6 @@
       .hover\:bg-brand-purple\/90:hover {
         background-color: color-mix(in oklab, var(--brand-purple) 90%, transparent);
       }
-    }
-
-    .hover\:bg-red-800:hover {
-      background-color: var(--color-red-800);
     }
 
     .hover\:bg-slate-50:hover {
@@ -5374,10 +5385,6 @@
       .hover\:bg-slate-200\/50:hover {
         background-color: color-mix(in oklab, var(--color-slate-200) 50%, transparent);
       }
-    }
-
-    .hover\:bg-slate-800:hover {
-      background-color: var(--color-slate-800);
     }
 
     .hover\:bg-surface-1:hover {
