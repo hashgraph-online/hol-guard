@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
+      - tests/test_desktop_core_alpha_feed_security.py
+      - scripts/release/desktop_core_alpha_feed.py
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -20,24 +22,22 @@ jobs:
     name: Validate workflow
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version: "1.24.2"
           cache: false
-
       - name: Install Actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
-
       - name: Validate workflow syntax
-        run: |
-          "$(go env GOPATH)/bin/actionlint" .github/workflows/desktop-core-alpha-feed.yml
+        run: '"$(go env GOPATH)/bin/actionlint" .github/workflows/desktop-core-alpha-feed.yml'
 
   publish-macos-arm64:
     name: Publish signed macOS arm64 Core sidecar
@@ -54,53 +54,28 @@ jobs:
       RELEASE_TARGET: aarch64-apple-darwin
       MINIMUM_DESKTOP_VERSION: 0.1.0-alpha.0
     steps:
-      - name: Check out release automation
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-
-      - name: Verify runner architecture
-        run: test "$(uname -m)" = "arm64"
-
-      - name: Discover newest published Core 3.x alpha
-        id: release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Require trusted main workflow invocation
+        shell: bash
         run: |
           set -euo pipefail
-          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            > "$RUNNER_TEMP/release-pages.json"
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          pages = json.loads((Path(os.environ["RUNNER_TEMP"]) / "release-pages.json").read_text())
-          releases = [release for page in pages for release in page]
-          candidates = []
-          pattern = re.compile(r"^alpha/v(3\.(\d+)\.(\d+)a(\d+))$")
-          for release in releases:
-              match = pattern.fullmatch(str(release.get("tag_name") or ""))
-              if not match or release.get("draft") or not release.get("prerelease"):
-                  continue
-              order = (int(match.group(2)), int(match.group(3)), int(match.group(4)))
-              candidates.append((order, match.group(1), release["tag_name"]))
-          if not candidates:
-              print("available=false")
-              raise SystemExit(0)
-          _, version, tag = max(candidates)
-          print("available=true")
-          print(f"version={version}")
-          print(f"tag={tag}")
-          PY
-
-      - name: Stop when no Core alpha is published
-        if: steps.release.outputs.available != 'true'
-        run: echo "No published HOL Guard Core 3.x alpha release is available yet."
-
-      - name: Require Apple signing and notarization configuration
-        if: steps.release.outputs.available == 'true'
+          test "$GITHUB_REPOSITORY" = "hashgraph-online/hol-guard"
+          test "$GITHUB_REF" = "refs/heads/main"
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+      - name: Check out immutable release automation
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Bind automation checkout to workflow source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse 'HEAD^{commit}')" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+      - name: Verify runner architecture
+        run: test "$(uname -m)" = "arm64"
+      - name: Require signing, notarization, and update-key configuration
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -108,6 +83,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CORE_UPDATE_PRIVATE_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PRIVATE_KEY }}
+          CORE_UPDATE_PRIVATE_KEY_PASSWORD: ${{ secrets.HOL_GUARD_CORE_UPDATE_PRIVATE_KEY_PASSWORD }}
+          CORE_UPDATE_PUBLIC_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PUBLIC_KEY }}
         run: |
           set -euo pipefail
           test -n "$APPLE_CERTIFICATE"
@@ -116,93 +94,180 @@ jobs:
           test -n "$APPLE_ID"
           test -n "$APPLE_PASSWORD"
           test -n "$APPLE_TEAM_ID"
+          test -n "$CORE_UPDATE_PRIVATE_KEY"
+          test -n "$CORE_UPDATE_PRIVATE_KEY_PASSWORD"
+          test -n "$CORE_UPDATE_PUBLIC_KEY"
+      - name: Discover newest published Core 3.x alpha
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.draft == false and .prerelease == true) | .tag_name' \
+            > "$RUNNER_TEMP/release-tags.txt"
+          python3 -I scripts/release/desktop_core_alpha_feed.py discover-release \
+            --tags "$RUNNER_TEMP/release-tags.txt" >> "$GITHUB_OUTPUT"
+      - name: Stop when no Core alpha is published
+        if: steps.release.outputs.available != 'true'
+        run: echo "No published HOL Guard Core 3.x alpha release is available yet."
+      - name: Authorize exact Core source with release provenance
+        if: steps.release.outputs.available == 'true'
+        id: source
+        env:
+          CORE_TAG: ${{ steps.release.outputs.tag }}
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GIT_CONFIG_NOSYSTEM=1
+          export GIT_CONFIG_GLOBAL=/dev/null
+          export GIT_TERMINAL_PROMPT=0
+          TRUST_REPO="$RUNNER_TEMP/core-trust.git"
+          TRUST_ASSETS="$RUNNER_TEMP/core-trust-assets"
+          mkdir -p "$TRUST_ASSETS"
+          git init --bare "$TRUST_REPO"
+          git -C "$TRUST_REPO" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -C "$TRUST_REPO" fetch --force --no-recurse-submodules origin \
+            "+refs/tags/${CORE_TAG}:refs/tags/${CORE_TAG}" \
+            "+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+          SOURCE_SHA=$(git -C "$TRUST_REPO" rev-parse "refs/tags/${CORE_TAG}^{commit}")
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git -C "$TRUST_REPO" merge-base --is-ancestor \
+            "$SOURCE_SHA" "refs/remotes/origin/${RELEASE_BRANCH}"
 
-      - name: Inspect immutable asset state
+          gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "hol_guard-${CORE_VERSION}-*.whl" --dir "$TRUST_ASSETS"
+          gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "hol-guard-v${CORE_VERSION}.intoto.jsonl" --dir "$TRUST_ASSETS"
+          mapfile -t WHEELS < <(find "$TRUST_ASSETS" -maxdepth 1 -type f -name "hol_guard-${CORE_VERSION}-*.whl" -print)
+          test "${#WHEELS[@]}" -eq 1
+          BUNDLE="$TRUST_ASSETS/hol-guard-v${CORE_VERSION}.intoto.jsonl"
+          test -s "$BUNDLE"
+          gh attestation verify "${WHEELS[0]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --bundle "$BUNDLE" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
+            --signer-digest "$SOURCE_SHA" \
+            --source-digest "$SOURCE_SHA" \
+            --source-ref "refs/heads/${RELEASE_BRANCH}" \
+            --deny-self-hosted-runners >/dev/null
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+      - name: Inspect immutable Core asset state
         if: steps.release.outputs.available == 'true'
         id: existing
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           set -euo pipefail
           BASE="hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           gh release view "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
-            > "$RUNNER_TEMP/release-assets.json"
-          export BASE
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          import os
-          from pathlib import Path
-
-          payload = json.loads((Path(os.environ["RUNNER_TEMP"]) / "release-assets.json").read_text())
-          names = {asset["name"] for asset in payload.get("assets", [])}
-          base = os.environ["BASE"]
-          expected = {
-              "binary": base,
-              "manifest": f"{base}.json",
-              "attestation": f"{base}.attested.json",
-          }
-          for key, name in expected.items():
-              print(f"{key}_present={'true' if name in names else 'false'}")
-          if expected["binary"] not in names and (
-              expected["manifest"] in names or expected["attestation"] in names
-          ):
-              raise SystemExit("Metadata exists without its immutable Core binary")
-          if expected["attestation"] in names and not {
-              expected["binary"], expected["manifest"]
-          } <= names:
-              raise SystemExit("An attestation marker exists without its complete Core asset set")
-          PY
-
+            --jq '.assets[].name' > "$RUNNER_TEMP/release-assets.txt"
+          python3 -I scripts/release/desktop_core_alpha_feed.py inspect-assets \
+            --assets "$RUNNER_TEMP/release-assets.txt" --base "$BASE" >> "$GITHUB_OUTPUT"
       - name: Set up Python
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.attestation_present != 'true'
+        if: steps.release.outputs.available == 'true'
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-
       - name: Set up uv
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.attestation_present != 'true'
+        if: steps.release.outputs.available == 'true'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
-
-      - name: Fetch exact tagged Core source
-        if: steps.release.outputs.available == 'true'
-        id: source
+      - name: Set up Bun signer
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'verify_existing'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - name: Fetch exact authorized Core source
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
         run: |
           set -euo pipefail
+          export GIT_CONFIG_NOSYSTEM=1
+          export GIT_CONFIG_GLOBAL=/dev/null
+          export GIT_TERMINAL_PROMPT=0
           SOURCE="$RUNNER_TEMP/hol-guard-core"
           git init "$SOURCE"
           git -C "$SOURCE" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git -C "$SOURCE" fetch --depth=1 origin "refs/tags/$CORE_TAG"
-          git -C "$SOURCE" checkout --detach FETCH_HEAD
-          SOURCE_SHA=$(git -C "$SOURCE" rev-parse 'HEAD^{commit}')
-          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git -C "$SOURCE" fetch --depth=1 origin "refs/tags/${CORE_TAG}:refs/tags/${CORE_TAG}"
+          git -C "$SOURCE" checkout --detach "refs/tags/${CORE_TAG}^{commit}"
+          test "$(git -C "$SOURCE" rev-parse 'HEAD^{commit}')" = "$SOURCE_SHA"
           test -z "$(git -C "$SOURCE" status --porcelain)"
-          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Download existing immutable binary
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.binary_present == 'true'
+      - name: Download existing Core assets
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'build'
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
+          MODE: ${{ steps.existing.outputs.mode }}
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/dist"
-          gh release download "$CORE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}" \
-            --dir "$RUNNER_TEMP/dist"
-
-      - name: Build standalone Core executable
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.attestation_present != 'true' && steps.existing.outputs.binary_present != 'true'
+          DIST="$RUNNER_TEMP/dist"
+          BASE="hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
+          mkdir -p "$DIST"
+          gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE" --dir "$DIST"
+          gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.json" --dir "$DIST"
+          gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.attested.json" --dir "$DIST"
+          if [[ "$MODE" == "verify_existing" ]]; then
+            gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.json.sig" --dir "$DIST"
+          fi
+      - name: Verify prior feed provenance before reusing assets
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'build'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
+          CORE_TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          MODE: ${{ steps.existing.outputs.mode }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
+          if [[ "$MODE" == "repair_signature" ]]; then
+            for asset in "$BASE" "$BASE.json"; do
+              gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
+                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/desktop-core-alpha-feed.yml" \
+                --source-ref refs/heads/main --deny-self-hosted-runners >/dev/null
+            done
+            MARKER_SCHEMA=$(jq -r '.schema // empty' "$BASE.attested.json")
+            if [[ "$MARKER_SCHEMA" != "hol-guard-core-attestation.v2" ]]; then
+              echo "Only hardened v2 markers are eligible for signature repair; rebuild legacy assets instead" >&2
+              exit 1
+            fi
+            gh attestation verify "$BASE.attested.json" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/desktop-core-alpha-feed.yml" \
+              --source-ref refs/heads/main --deny-self-hosted-runners >/dev/null
+            python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker \
+              --base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
+              --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
+              --apple-team-id "$APPLE_TEAM_ID" --mode repair
+          else
+            for asset in "$BASE" "$BASE.json" "$BASE.json.sig" "$BASE.attested.json"; do
+              gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
+                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/desktop-core-alpha-feed.yml" \
+                --source-ref refs/heads/main --deny-self-hosted-runners >/dev/null
+            done
+          fi
+      - name: Build standalone Core executable
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        env:
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
         run: |
           set -euo pipefail
           SOURCE="$RUNNER_TEMP/hol-guard-core"
@@ -225,16 +290,9 @@ jobs:
           done < <(git -C "$SOURCE" diff --name-only)
           (
             cd "$SOURCE"
-            uv run --no-sync pyinstaller \
-              --clean \
-              --noconfirm \
-              --onefile \
-              --name hol-guard \
-              --collect-submodules codex_plugin_scanner \
-              --collect-data codex_plugin_scanner \
-              --distpath "$DIST" \
-              --workpath "$RUNNER_TEMP/pyinstaller" \
-              --specpath "$RUNNER_TEMP/spec" \
+            uv run --no-sync pyinstaller --clean --noconfirm --onefile --name hol-guard \
+              --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+              --distpath "$DIST" --workpath "$RUNNER_TEMP/pyinstaller" --specpath "$RUNNER_TEMP/spec" \
               scripts/mdm/hol-guard-entry.py
           )
           BUILT="$DIST/hol-guard"
@@ -244,34 +302,24 @@ jobs:
           export HOL_GUARD_HOME="$RUNNER_TEMP/smoke-home"
           mkdir -p "$HOL_GUARD_HOME"
           "$BUILT" desktop bootstrap --json > "$RUNNER_TEMP/bootstrap.json"
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          payload = json.loads((Path(os.environ["RUNNER_TEMP"]) / "bootstrap.json").read_text())
-          if payload.get("schema") != "guard-desktop-bootstrap.v1":
-              raise SystemExit("Standalone Core does not expose the Desktop bootstrap contract")
-          if payload.get("coreVersion") != os.environ["CORE_VERSION"]:
-              raise SystemExit("Standalone Core returned the wrong version")
-          PY
+          python3 -I scripts/release/desktop_core_alpha_feed.py verify-bootstrap \
+            --payload "$RUNNER_TEMP/bootstrap.json" --version "$CORE_VERSION" --subject "Standalone Core"
           mv "$BUILT" "$ASSET"
-
       - name: Import Apple signing identity
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.attestation_present != 'true' && steps.existing.outputs.binary_present != 'true'
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        shell: bash
         run: |
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/core-update.keychain-db"
           KEYCHAIN_PASSWORD=$(openssl rand -hex 24)
           export APPLE_CERTIFICATE
-          python3 - <<'PY'
+          python3 -I - <<'PY'
           import base64
           import os
           from pathlib import Path
-
           Path(os.environ["RUNNER_TEMP"], "certificate.p12").write_bytes(
               base64.b64decode(os.environ["APPLE_CERTIFICATE"], validate=True)
           )
@@ -282,216 +330,170 @@ jobs:
           security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN"
-
       - name: Sign and notarize new Core sidecar
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.attestation_present != 'true' && steps.existing.outputs.binary_present != 'true'
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
         run: |
           set -euo pipefail
           BINARY="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$BINARY"
-          codesign --verify --strict --verbose=2 "$BINARY"
+          codesign --verify --deep --strict --verbose=2 "$BINARY"
           ditto -c -k --keepParent "$BINARY" "$RUNNER_TEMP/core-update-notary.zip"
           xcrun notarytool submit "$RUNNER_TEMP/core-update-notary.zip" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait \
-            --output-format json > "$RUNNER_TEMP/notary-result.json"
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          payload = json.loads((Path(os.environ["RUNNER_TEMP"]) / "notary-result.json").read_text())
-          if payload.get("status") != "Accepted":
-              raise SystemExit(f"Apple notarization was not accepted: {payload.get('status', 'unknown')}")
-          PY
-
-      - name: Verify local immutable binary and Apple trust
+            --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
+            --wait --output-format json > "$RUNNER_TEMP/notary-result.json"
+          jq -e '.status == "Accepted"' "$RUNNER_TEMP/notary-result.json" >/dev/null || {
+            cat "$RUNNER_TEMP/notary-result.json" >&2
+            exit 1
+          }
+      - name: Verify exact Apple identity, notarization, and Core contract
         if: steps.release.outputs.available == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
         run: |
           set -euo pipefail
           BINARY="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           VERIFY="$RUNNER_TEMP/dist/hol-guard"
           chmod 0755 "$BINARY"
-          codesign --verify --strict --verbose=2 "$BINARY"
+          codesign --verify --deep --strict --verbose=2 "$BINARY"
           codesign --display --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/codesign.txt"
-          grep -F "Authority=Developer ID Application:" "$RUNNER_TEMP/codesign.txt"
+          grep -Fx "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/codesign.txt"
           grep -Fx "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/codesign.txt"
-          spctl --assess --type execute --verbose=4 "$BINARY"
+          if ! spctl --assess --type execute --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/spctl.txt"; then
+            cat "$RUNNER_TEMP/spctl.txt" >&2
+            exit 1
+          fi
+          grep -F "source=Notarized Developer ID" "$RUNNER_TEMP/spctl.txt"
+          file "$BINARY" | grep -F "Mach-O 64-bit executable arm64"
           cp "$BINARY" "$VERIFY"
           chmod 0755 "$VERIFY"
-          codesign --verify --strict --verbose=2 "$VERIFY"
           test "$("$VERIFY" --version | sed -E 's/^hol-guard[[:space:]]+//')" = "$CORE_VERSION"
           export HOL_GUARD_HOME="$RUNNER_TEMP/verify-home"
           mkdir -p "$HOL_GUARD_HOME"
           "$VERIFY" desktop bootstrap --json > "$RUNNER_TEMP/bootstrap.json"
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          payload = json.loads((Path(os.environ["RUNNER_TEMP"]) / "bootstrap.json").read_text())
-          if payload.get("schema") != "guard-desktop-bootstrap.v1":
-              raise SystemExit("Immutable Core does not expose the Desktop bootstrap contract")
-          if payload.get("coreVersion") != os.environ["CORE_VERSION"]:
-              raise SystemExit("Immutable Core returned the wrong version")
-          PY
+          python3 -I scripts/release/desktop_core_alpha_feed.py verify-bootstrap \
+            --payload "$RUNNER_TEMP/bootstrap.json" --version "$CORE_VERSION" --subject "Immutable Core"
           rm -f "$VERIFY"
-
-      - name: Download or create update manifest
+      - name: Create or validate update manifest
         if: steps.release.outputs.available == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
-          MANIFEST_PRESENT: ${{ steps.existing.outputs.manifest_present }}
-          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ steps.existing.outputs.mode }}
+        shell: bash
         run: |
           set -euo pipefail
-          DIST="$RUNNER_TEMP/dist"
-          BINARY="$DIST/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
+          BINARY="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           MANIFEST="$BINARY.json"
-          if [[ "$MANIFEST_PRESENT" == "true" ]]; then
-            gh release download "$CORE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --pattern "$(basename "$MANIFEST")" \
-              --dir "$DIST"
-          else
-            export BINARY MANIFEST
-            python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          from datetime import datetime, timezone
-          from pathlib import Path
-
-          binary = Path(os.environ["BINARY"])
-          payload = {
-              "schema": "hol-guard-core-update.v1",
-              "channel": "alpha",
-              "version": os.environ["CORE_VERSION"],
-              "sourceCommit": os.environ["SOURCE_SHA"],
-              "sourceTag": os.environ["CORE_TAG"],
-              "target": os.environ["RELEASE_TARGET"],
-              "artifact": binary.name,
-              "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-              "size": binary.stat().st_size,
-              "bootstrapSchema": "guard-desktop-bootstrap.v1",
-              "minimumDesktopVersion": os.environ["MINIMUM_DESKTOP_VERSION"],
-              "publishedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-          }
-          Path(os.environ["MANIFEST"]).write_text(json.dumps(payload, indent=2) + "\n")
-          PY
+          COMMON=(--base "$BINARY" --manifest "$MANIFEST" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
+            --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION")
+          if [[ "$MODE" == "build" ]]; then
+            python3 -I scripts/release/desktop_core_alpha_feed.py create-manifest "${COMMON[@]}"
           fi
-
-          export BINARY MANIFEST
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
-
-          binary = Path(os.environ["BINARY"])
-          payload = json.loads(Path(os.environ["MANIFEST"]).read_text())
-          expected = {
-              "schema": "hol-guard-core-update.v1",
-              "channel": "alpha",
-              "version": os.environ["CORE_VERSION"],
-              "sourceCommit": os.environ["SOURCE_SHA"],
-              "sourceTag": os.environ["CORE_TAG"],
-              "target": os.environ["RELEASE_TARGET"],
-              "artifact": binary.name,
-              "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-              "size": binary.stat().st_size,
-              "bootstrapSchema": "guard-desktop-bootstrap.v1",
-              "minimumDesktopVersion": os.environ["MINIMUM_DESKTOP_VERSION"],
-          }
-          for key, value in expected.items():
-              if payload.get(key) != value:
-                  raise SystemExit(f"Manifest mismatch for {key}")
-          PY
-
-      - name: Upload only missing immutable assets
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.attestation_present != 'true'
+          python3 -I scripts/release/desktop_core_alpha_feed.py validate-manifest "${COMMON[@]}"
+      - name: Sign missing update manifest
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'verify_existing'
+        env:
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.HOL_GUARD_CORE_UPDATE_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json"
+          bunx @tauri-apps/cli@2.11.4 signer sign "$MANIFEST"
+          test -s "$MANIFEST.sig"
+      - name: Verify update manifest signature
+        if: steps.release.outputs.available == 'true'
+        env:
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+          CORE_UPDATE_PUBLIC_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PUBLIC_KEY }}
+        run: uv run --no-project --with cryptography==50.0.0 python -I scripts/release/desktop_core_alpha_feed.py verify-minisign --file "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json" --signature "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json.sig" --public-key "$CORE_UPDATE_PUBLIC_KEY"
+      - name: Create or validate immutable marker
+        if: steps.release.outputs.available == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
-          BINARY_PRESENT: ${{ steps.existing.outputs.binary_present }}
-          MANIFEST_PRESENT: ${{ steps.existing.outputs.manifest_present }}
-          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          MODE: ${{ steps.existing.outputs.mode }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
         run: |
           set -euo pipefail
-          DIST="$RUNNER_TEMP/dist"
-          BASE="$DIST/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
-          if [[ "$BINARY_PRESENT" != "true" ]]; then
-            gh release upload "$CORE_TAG" "$BASE" --repo "$GITHUB_REPOSITORY"
+          BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
+          MARKER="$BASE.attested.json"
+          COMMON=(--base "$BASE" --marker "$MARKER" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
+            --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
+            --apple-team-id "$APPLE_TEAM_ID")
+          if [[ "$MODE" == "build" || "$MODE" == "repair_signature" ]]; then
+            python3 -I scripts/release/desktop_core_alpha_feed.py create-marker "${COMMON[@]}" --workflow-run "$GITHUB_RUN_ID"
+          else
+            python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker "${COMMON[@]}" --mode complete
           fi
-          if [[ "$MANIFEST_PRESENT" != "true" ]]; then
-            gh release upload "$CORE_TAG" "$BASE.json" --repo "$GITHUB_REPOSITORY"
-          fi
-          gh release view "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
-            > "$RUNNER_TEMP/final-assets.json"
-          export BASE
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          names = {
-              asset["name"]
-              for asset in json.loads((Path(os.environ["RUNNER_TEMP"]) / "final-assets.json").read_text()).get("assets", [])
-          }
-          base = Path(os.environ["BASE"]).name
-          expected = {base, f"{base}.json"}
-          missing = expected - names
-          if missing:
-              raise SystemExit(f"Missing release assets: {sorted(missing)}")
-          PY
-
-      - name: Attest Core sidecar provenance
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.attestation_present != 'true'
+      - name: Attest complete hardened Core asset set
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'verify_existing'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
         with:
           subject-path: |
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.json
-
-      - name: Record completed provenance
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.attestation_present != 'true'
+            ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.json.sig
+            ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.attested.json
+      - name: Publish new or repaired immutable assets
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'verify_existing'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          MODE: ${{ steps.existing.outputs.mode }}
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           set -euo pipefail
-          MARKER="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.attested.json"
-          export MARKER
-          python3 - <<'PY'
-          import json
-          import os
-          from datetime import datetime, timezone
-          from pathlib import Path
-
-          payload = {
-              "schema": "hol-guard-core-attestation.v1",
-              "version": os.environ["CORE_VERSION"],
-              "sourceCommit": os.environ["SOURCE_SHA"],
-              "sourceTag": os.environ["CORE_TAG"],
-              "target": os.environ["RELEASE_TARGET"],
-              "workflowRun": os.environ["GITHUB_RUN_ID"],
-              "attestedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-          }
-          Path(os.environ["MARKER"]).write_text(json.dumps(payload, indent=2) + "\n")
-          PY
-          gh release upload "$CORE_TAG" "$MARKER" --repo "$GITHUB_REPOSITORY"
+          BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
+          if [[ "$MODE" == "build" ]]; then
+            gh release upload "$CORE_TAG" "$BASE" "$BASE.json" "$BASE.json.sig" "$BASE.attested.json" \
+              --repo "$GITHUB_REPOSITORY"
+          elif [[ "$MODE" == "repair_signature" ]]; then
+            gh release upload "$CORE_TAG" "$BASE.json.sig" "$BASE.attested.json" --clobber \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            echo "Unexpected publication mode: $MODE" >&2
+            exit 1
+          fi
+      - name: Verify final release assets and provenance
+        if: steps.release.outputs.available == 'true'
+        env:
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+          CORE_TAG: ${{ steps.release.outputs.tag }}
+          MODE: ${{ steps.existing.outputs.mode }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
+          PUBLISHED="$RUNNER_TEMP/published-assets"
+          rm -rf "$PUBLISHED"
+          mkdir -p "$PUBLISHED"
+          gh release view "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
+            > "$RUNNER_TEMP/final-assets.txt"
+          for asset in "$BASE" "$BASE.json" "$BASE.json.sig" "$BASE.attested.json"; do
+            grep -Fx "$asset" "$RUNNER_TEMP/final-assets.txt"
+            gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$PUBLISHED"
+            test -f "$PUBLISHED/$asset"
+            gh attestation verify "$PUBLISHED/$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/desktop-core-alpha-feed.yml" \
+              --source-ref refs/heads/main \
+              --deny-self-hosted-runners >/dev/null
+          done
