@@ -8,7 +8,7 @@ import os
 import shlex
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -138,6 +138,70 @@ def build_protect_payload(
         current_verdict = evaluate_protect_request(request, store.list_cached_advisories(limit=None))
         return current_verdict.action, _cached_advisory_policy_context(current_verdict)
 
+    final_config_provider = current_config_provider
+    final_advisory_provider: Callable[[], tuple[object | None, dict[str, object] | None]] = (
+        current_cached_advisory_authority
+    )
+    if observe_mode:
+        refresh_state: dict[str, object] = {"additional_ready": False, "force_block": False}
+
+        def refresh_additional_authority() -> tuple[object | None, dict[str, object] | None]:
+            if not bool(refresh_state.get("additional_ready")):
+                try:
+                    action, context = current_cached_advisory_authority()
+                except Exception as error:
+                    refresh_state["force_block"] = True
+                    action = "block"
+                    context = {
+                        "available": False,
+                        "error": type(error).__name__,
+                        "status": "authority_refresh_failed",
+                        "version": 1,
+                    }
+                refresh_state["additional_action"] = action
+                refresh_state["additional_context"] = context
+                refresh_state["additional_ready"] = True
+            if bool(refresh_state.get("force_block")):
+                context = refresh_state.get("additional_context")
+                return (
+                    "block",
+                    context if isinstance(context, dict) else {
+                        "available": False,
+                        "status": "authority_refresh_failed",
+                        "version": 1,
+                    },
+                )
+            context = refresh_state.get("additional_context")
+            return refresh_state.get("additional_action"), context if isinstance(context, dict) else None
+
+        def refresh_current_config() -> GuardConfig:
+            current_config = config
+            if current_config_provider is not None:
+                try:
+                    candidate = current_config_provider()
+                    if not isinstance(candidate, GuardConfig):
+                        raise TypeError("current config provider returned an invalid value")
+                    current_config = candidate
+                except Exception as error:
+                    refresh_state["force_block"] = True
+                    refresh_state["additional_context"] = {
+                        "available": False,
+                        "error": type(error).__name__,
+                        "reason_code": "package_config_refresh_failed",
+                        "status": "authority_refresh_failed",
+                        "version": 1,
+                    }
+                    refresh_state["additional_ready"] = True
+            _ = refresh_additional_authority()
+            if bool(refresh_state.get("force_block")):
+                assert current_config is not None
+                return replace(current_config, mode="enforce")
+            assert current_config is not None
+            return current_config
+
+        final_config_provider = refresh_current_config
+        final_advisory_provider = refresh_additional_authority
+
     package_payload = build_package_protect_payload(
         command=command,
         store=store,
@@ -150,8 +214,8 @@ def build_protect_payload(
         timeout_seconds=_protect_command_timeout_seconds(),
         additional_current_action=cached_verdict.action,
         additional_policy_context=cached_policy_context,
-        current_config_provider=current_config_provider,
-        additional_authority_provider=current_cached_advisory_authority,
+        current_config_provider=final_config_provider,
+        additional_authority_provider=final_advisory_provider,
     )
     if package_payload is not None:
         current_cached_verdict = evaluate_protect_request(request, store.list_cached_advisories(limit=None))
