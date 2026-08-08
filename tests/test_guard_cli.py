@@ -4060,6 +4060,7 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/opt/guard-venv")
         monkeypatch.setattr(guard_update_commands_module.sys, "executable", "/opt/guard-venv/bin/python")
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.18")
         monkeypatch.setattr(
             guard_update_commands_module, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.0.18"
         )
@@ -4070,9 +4071,10 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["installer"] == "pip"
-        assert commands == [["/opt/guard-venv/bin/python", "-m", "pip", "install", "--upgrade", "hol-guard"]]
-        assert output["status"] == "updated"
-        assert output["stdout"] == "updated"
+        assert commands == []
+        assert output["status"] == "current"
+        assert output["changed"] is False
+        assert output["message"] == "HOL Guard is already current."
 
     def test_guard_update_uses_pipx_when_running_from_pipx(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -4085,6 +4087,7 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
         monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/mock-home/.local/pipx/venvs/hol-guard")
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.18")
         monkeypatch.setattr(
             guard_update_commands_module, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.0.18"
         )
@@ -4095,8 +4098,10 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["installer"] == "pipx"
-        assert commands == [["pipx", "upgrade", "hol-guard"]]
-        assert output["status"] == "updated"
+        assert commands == []
+        assert output["status"] == "current"
+        assert output["changed"] is False
+        assert output["message"] == "HOL Guard is already current."
 
     def test_guard_update_pins_detected_stable_release_from_uv_canary(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -4156,12 +4161,10 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["installer"] == "pipx"
-        assert commands == [["pipx", "upgrade", "hol-guard"]]
+        assert commands == []
         assert output["status"] == "current"
+        assert output["changed"] is False
         assert output["message"] == "HOL Guard is already current."
-        assert output["notes"] == ["upgrading shared libraries...", "upgrading hol-guard..."]
-        assert output["stdout"].startswith("hol-guard is already at latest version 2.0.36")
-        assert output["stderr"] == "upgrading shared libraries...\nupgrading hol-guard..."
 
     def test_guard_update_treats_first_install_as_updated_when_only_dependencies_are_current(
         self, tmp_path, monkeypatch, capsys
