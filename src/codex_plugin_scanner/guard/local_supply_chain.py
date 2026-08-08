@@ -1492,6 +1492,7 @@ def _final_package_protect_authority(
             config_refresh_failed = True
     saved_approval_claimed = False
     saved_approval_claim_disposition: _PackageApprovalClaimDisposition | None = None
+    saved_approval_claim_failure: Any | None = None
     if (
         saved_approval_pending
         and not config_refresh_failed
@@ -1508,10 +1509,12 @@ def _final_package_protect_authority(
             current_action=initial.current_action,
             claim_saved_approval=True,
         )
-        if not is_execution_permitted(_package_execution_policy_action(initial, claimed_resolution.evaluation)):
-            return initial, claimed_resolution.evaluation
-        saved_approval_claimed = True
-        saved_approval_claim_disposition = claimed_resolution.claim_disposition
+        claimed_action = _protect_action_for_policy_action(claimed_resolution.evaluation.policy_action)
+        if not is_execution_permitted(claimed_action):
+            saved_approval_claim_failure = claimed_resolution.evaluation
+        else:
+            saved_approval_claimed = True
+            saved_approval_claim_disposition = claimed_resolution.claim_disposition
     if additional_authority_provider is not None:
         try:
             additional_action, additional_context = additional_authority_provider()
@@ -1566,6 +1569,11 @@ def _final_package_protect_authority(
         current.evaluation,
         current_action=current.current_action,
     )
+    if saved_approval_claim_failure is not None:
+        return current, _package_evaluation_with_current_policy_action(
+            saved_approval_claim_failure,
+            current_action=current.current_action,
+        )
     if current.observe_mode:
         return current, current_evaluation
     if saved_approval_claimed:

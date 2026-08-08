@@ -228,3 +228,20 @@ def test_final_watch_only_refresh_preserves_unused_one_shot_package_approval(
         )
         is not None
     )
+
+    marker.unlink()
+    monkeypatch.setattr(store, "claim_local_once_approval", lambda *_args, **_kwargs: False)
+    denied_payload, denied_exit_code = build_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace,
+        dry_run=False,
+        now="2026-08-08T02:10:04Z",
+        config=watch_only_config,
+        current_config_provider=lambda: enforcing_config,
+        unsafe_raw_output=False,
+    )
+
+    assert denied_exit_code == 2
+    assert denied_payload["executed"] is False
+    assert marker.exists() is False
