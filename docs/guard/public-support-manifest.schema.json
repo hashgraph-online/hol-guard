@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/guard/schemas/public-support-manifest.v1.json",
+  "title": "HOL Guard Public Support Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "product", "generatedAt", "category", "decisionSemantics", "channels", "migrations"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "product": {"const": "HOL Guard"},
+    "generatedAt": {"type": "string", "format": "date"},
+    "category": {
+      "type": "object",
+      "required": ["primary", "aliases", "nonClaims"],
+      "properties": {
+        "primary": {"type": "string", "minLength": 1},
+        "aliases": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "nonClaims": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "decisionSemantics": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["id", "meaning"],
+        "properties": {"id": {"type": "string"}, "meaning": {"type": "string"}}
+      }
+    },
+    "channels": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "version", "sourceRef", "verifiedAt", "expiresAt", "harnesses", "surfaces", "limitations"],
+        "properties": {
+          "id": {"enum": ["stable", "alpha", "release-candidate", "planned", "retracted"]},
+          "status": {"enum": ["active", "planned", "retracted"]},
+          "version": {"type": "string"},
+          "sourceRef": {"type": "string"},
+          "verifiedAt": {"type": "string", "format": "date"},
+          "expiresAt": {"type": "string", "format": "date"},
+          "harnesses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "displayName", "support", "eventSurfaces", "nativeApproval", "browserFallback", "resumeSupport", "failBehavior", "limitations"],
+              "properties": {
+                "id": {"type": "string"},
+                "displayName": {"type": "string"},
+                "support": {"enum": ["supported", "partial", "unsupported", "planned", "retracted"]},
+                "eventSurfaces": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+                "nativeApproval": {"type": "boolean"},
+                "browserFallback": {"type": "boolean"},
+                "resumeSupport": {"type": "boolean"},
+                "failBehavior": {"enum": ["fail_open", "fail_closed", "surface_specific", "not_applicable"]},
+                "limitations": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          },
+          "surfaces": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "limitations": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "migrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "status", "guardSupport", "note"],
+        "properties": {
+          "from": {"type": "string"}, "to": {"type": "string"}, "status": {"type": "string"},
+          "guardSupport": {"enum": ["supported", "partial", "unsupported", "unverified", "retracted"]},
+          "note": {"type": "string"}
+        }
+      }
+    }
+  }
+}

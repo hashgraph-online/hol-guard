@@ -1,0 +1,38 @@
+name: Public truth contract
+
+on:
+  pull_request:
+    paths:
+      - 'docs/guard/public-support-manifest.v1.json'
+      - 'docs/guard/public-support-manifest.schema.json'
+      - 'src/codex_plugin_scanner/guard/adapters/contracts.py'
+      - 'scripts/seo/**'
+      - 'tests/test_public_truth_contract.py'
+  push:
+    branches: [main, 'release/3.0']
+    paths:
+      - 'docs/guard/public-support-manifest.v1.json'
+      - 'src/codex_plugin_scanner/guard/adapters/contracts.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate public truth contract
+        run: python scripts/seo/check_public_truth_contract.py
+      - name: Run contract tests
+        run: python -m pytest tests/test_public_truth_contract.py -q
+      - name: Export stable and alpha publication snapshots
+        run: |
+          python scripts/seo/export_public_support_manifest.py --channel stable --output /tmp/guard-stable.json
+          python scripts/seo/export_public_support_manifest.py --channel alpha --output /tmp/guard-alpha.json
+          test -s /tmp/guard-stable.json
+          test -s /tmp/guard-alpha.json

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0.0",
+  "product": "HOL Guard",
+  "generatedAt": "2026-08-08",
+  "category": {
+    "primary": "AI agent runtime security",
+    "aliases": ["AI agent security", "pre-action runtime guardrail", "AI supply-chain security", "AI firewall", "AI antivirus"],
+    "nonClaims": ["traditional endpoint antivirus", "universal model-level prompt-injection filter", "replacement for SCA or dependency scanning", "support for every action in every harness"]
+  },
+  "decisionSemantics": [
+    {"id": "allow", "meaning": "Policy permits the observed action to proceed without a Guard approval prompt."},
+    {"id": "observe", "meaning": "Watch-only policy records evidence without blocking the eligible action; this is not approval enforcement."},
+    {"id": "ask", "meaning": "Guard defers the action to a native harness approval surface, the local approval center, or terminal resolution when that surface supports deferral."},
+    {"id": "block", "meaning": "Guard denies the action before execution when an authoritative pre-action boundary exists."},
+    {"id": "unsupported", "meaning": "The action or surface is outside the current Guard interception contract and must not be described as protected."}
+  ],
+  "channels": [
+    {
+      "id": "stable",
+      "status": "active",
+      "version": "2.2.0",
+      "sourceRef": "main@31d7ff3abfdef935592591f953653024dca614b9",
+      "verifiedAt": "2026-08-08",
+      "expiresAt": "2026-09-08",
+      "harnesses": [
+        {"id":"codex","displayName":"Codex","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","tool_result"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["Inline edits without a tool call are outside the contract."]},
+        {"id":"claude-code","displayName":"Claude Code","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","tool_result"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["Background sessions without an active terminal may not surface hook events."]},
+        {"id":"opencode","displayName":"OpenCode","support":"supported","eventSurfaces":["shell","mcp_tool"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Prompt and direct file operations are not universally visible."]},
+        {"id":"copilot","displayName":"GitHub Copilot CLI","support":"partial","eventSurfaces":["shell","prompt"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["VS Code extension-host MCP interception is not claimed."]},
+        {"id":"cursor","displayName":"Cursor","support":"supported","eventSurfaces":["shell","mcp_tool","file_read"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Built-in terminal commands outside an agent session can bypass Guard."]},
+        {"id":"gemini","displayName":"Gemini CLI","support":"partial","eventSurfaces":["shell","mcp_tool"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Prompt submission and direct file operations are not universally observable."]},
+        {"id":"hermes","displayName":"Hermes","support":"partial","eventSurfaces":["shell","mcp_tool","prompt"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Early-access coverage depends on Hermes version."]},
+        {"id":"openclaw","displayName":"OpenClaw","support":"partial","eventSurfaces":["mcp_tool"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Shell and prompt events are not currently observable through the contract."]},
+        {"id":"antigravity","displayName":"Antigravity","support":"partial","eventSurfaces":["mcp_tool","prompt"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Shell actions are not currently observable through the Antigravity hook surface."]},
+        {"id":"kimi","displayName":"Kimi Code","support":"supported","eventSurfaces":["shell","prompt"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"fail_open","limitations":["Hook crashes or timeouts fail open."]},
+        {"id":"grok","displayName":"Grok Build","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"fail_open","limitations":["Hook crashes or timeouts fail open."]},
+        {"id":"pi","displayName":"Pi","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","tool_result"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["Package install and update flows occur outside the runtime extension bridge."]},
+        {"id":"omp","displayName":"Oh My Pi","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","tool_result"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["Package install and update flows occur outside the runtime extension bridge."]},
+        {"id":"zcode","displayName":"ZCode","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"fail_open","limitations":["Inline edits without a tool call are outside the contract."]}
+      ],
+      "surfaces": ["harness hooks", "MCP configuration and managed MCP calls", "package-manager intent", "skill and plugin artifacts", "protected secret-bearing files", "local approval center", "Guard receipts"],
+      "limitations": ["Coverage is harness- and event-specific.", "Scanning and runtime interception are separate controls.", "Guard does not claim universal model-level prompt filtering."]
+    },
+    {
+      "id": "alpha",
+      "status": "active",
+      "version": "3.0.0-alpha",
+      "sourceRef": "release/3.0@35adb652ef5a89f288883a7f010030ed2effc02e",
+      "verifiedAt": "2026-08-08",
+      "expiresAt": "2026-09-08",
+      "harnesses": [
+        {"id":"codex","displayName":"Codex","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","tool_result"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["Inline edits without a tool call are outside the contract."]},
+        {"id":"claude-code","displayName":"Claude Code","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","tool_result"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["Background sessions without an active terminal may not surface hook events."]},
+        {"id":"opencode","displayName":"OpenCode","support":"supported","eventSurfaces":["shell","mcp_tool"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Prompt and direct file operations are not universally visible."]},
+        {"id":"copilot","displayName":"GitHub Copilot CLI","support":"partial","eventSurfaces":["shell","prompt"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["VS Code extension-host MCP interception is not claimed."]},
+        {"id":"cursor","displayName":"Cursor","support":"supported","eventSurfaces":["shell","mcp_tool","file_read"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Built-in terminal commands outside an agent session can bypass Guard."]},
+        {"id":"cline","displayName":"Cline","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","file_write","tool_result","network_request"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["PostToolUse native hooks are observation-only; full output mediation requires the managed plugin transport."]},
+        {"id":"gemini","displayName":"Gemini CLI","support":"partial","eventSurfaces":["shell","mcp_tool"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Prompt submission and direct file operations are not universally observable."]},
+        {"id":"hermes","displayName":"Hermes","support":"partial","eventSurfaces":["shell","mcp_tool","prompt"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Early-access coverage depends on Hermes version."]},
+        {"id":"openclaw","displayName":"OpenClaw","support":"partial","eventSurfaces":["mcp_tool"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Shell and prompt events are not currently observable through the contract."]},
+        {"id":"antigravity","displayName":"Antigravity","support":"partial","eventSurfaces":["mcp_tool","prompt"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"surface_specific","limitations":["Shell actions are not currently observable through the Antigravity hook surface."]},
+        {"id":"kimi","displayName":"Kimi Code","support":"supported","eventSurfaces":["shell","prompt"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"fail_open","limitations":["Hook crashes or timeouts fail open."]},
+        {"id":"grok","displayName":"Grok Build","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"fail_open","limitations":["Hook crashes or timeouts fail open."]},
+        {"id":"pi","displayName":"Pi","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","tool_result"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["Package install and update flows occur outside the runtime extension bridge."]},
+        {"id":"omp","displayName":"Oh My Pi","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read","tool_result"],"nativeApproval":true,"browserFallback":true,"resumeSupport":true,"failBehavior":"surface_specific","limitations":["Package install and update flows occur outside the runtime extension bridge."]},
+        {"id":"zcode","displayName":"ZCode","support":"supported","eventSurfaces":["shell","prompt","mcp_tool","file_read"],"nativeApproval":false,"browserFallback":true,"resumeSupport":false,"failBehavior":"fail_open","limitations":["Inline edits without a tool call are outside the contract."]}
+      ],
+      "surfaces": ["harness hooks", "MCP configuration and managed MCP calls", "package-manager intent", "skill and plugin artifacts", "protected secret-bearing files", "local approval center", "Guard receipts", "Cline managed plugin transport"],
+      "limitations": ["Alpha capabilities must be labeled alpha on public pages.", "Coverage is harness- and event-specific.", "Guard does not claim universal model-level prompt filtering."]
+    }
+  ],
+  "migrations": [
+    {"from":"Windsurf","to":"Devin","status":"historical-name/product migration supplied by HOL product owner","guardSupport":"unverified","note":"No Devin harness contract exists in current stable or release/3.0 source. Public Guard surfaces must not claim Windsurf or Devin support until a Devin adapter and proof are added."}
+  ]
+}
