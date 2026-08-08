@@ -142,6 +142,24 @@ def test_repaired_live_state_ignores_historical_evidence_errors() -> None:
     assert payload["state"] == "protected"
 
 
+def test_fresh_evidence_store_is_ready_before_first_command() -> None:
+    payload = _payload(
+        installs=[{"harness": "codex", "active": True}],
+        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
+        active_errors=0,
+        activity_count=0,
+        hook_verification={"codex": True},
+    )
+    checks = cast(list[dict[str, str]], payload["checks"])
+    decision_stream = next(check for check in checks if check["check_id"] == "decision_stream")
+    assert decision_stream == {
+        "check_id": "decision_stream",
+        "status": "pass",
+        "reason_code": "decision_stream_ready",
+    }
+    assert payload["state"] == "protected"
+
+
 def test_canonical_managed_install_supersedes_legacy_alias() -> None:
     installs = [
         {"harness": "claude", "active": True, "manifest": {}},
