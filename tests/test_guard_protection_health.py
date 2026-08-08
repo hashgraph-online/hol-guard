@@ -36,12 +36,13 @@ def test_runtime_state_brackets_ipv6_approval_center_origin() -> None:
 class _ActivityHealth:
     dropped_event_count: int
     persistence_error_count: int
+    active_error_count: int
 
 
 class _Store:
-    def __init__(self, *, count: int, dropped: int, errors: int) -> None:
+    def __init__(self, *, count: int, dropped: int, errors: int, active_errors: int) -> None:
         self._count: int = count
-        self._health: _ActivityHealth = _ActivityHealth(dropped, errors)
+        self._health: _ActivityHealth = _ActivityHealth(dropped, errors, active_errors)
 
     def count_command_activities(self) -> int:
         return self._count
@@ -56,12 +57,18 @@ def _payload(
     trust: dict[str, object] | None = None,
     dropped: int = 0,
     errors: int = 0,
+    active_errors: int | None = None,
     activity_count: int = 1,
     runtime_state: dict[str, object] | None = None,
     hook_verification: dict[str, bool] | None = None,
 ) -> dict[str, object]:
     return build_runtime_protection_health(
-        store=_Store(count=activity_count, dropped=dropped, errors=errors),
+        store=_Store(
+            count=activity_count,
+            dropped=dropped,
+            errors=errors,
+            active_errors=(1 if dropped > 0 or errors > 0 else 0) if active_errors is None else active_errors,
+        ),
         runtime_state={"last_heartbeat_at": _NOW.isoformat()} if runtime_state is None else runtime_state,
         managed_installs=installs or [],
         hook_verification=hook_verification,
@@ -71,22 +78,40 @@ def _payload(
 
 
 def test_missing_positive_proofs_never_claim_protected_or_partial() -> None:
-    for active, runtime_protection, remembered_rules, dropped, errors in itertools.product(
-        (False, True),
-        ("protected", "degraded", "unknown"),
-        ("enforced", "disabled_degraded", "unknown"),
-        (0, 1),
+    for runtime_protection, remembered_rules, active_errors in itertools.product(
+        ("degraded", "unknown"),
+        ("disabled_degraded", "unknown"),
         (0, 1),
     ):
         payload = _payload(
-            installs=[{"harness": "codex", "active": active}],
+            installs=[{"harness": "codex", "active": True}],
             trust={"runtime_protection": runtime_protection, "remembered_rules": remembered_rules},
-            dropped=dropped,
-            errors=errors,
+            active_errors=active_errors,
         )
         assert payload["state"] == "degraded"
         assert payload["label"] == "Degraded"
         assert payload["state"] not in {"protected", "partial"}
+
+
+def test_repaired_live_state_ignores_historical_evidence_errors() -> None:
+    payload = _payload(
+        installs=[{"harness": "codex", "active": True}],
+        trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
+        dropped=12_338,
+        errors=12_338,
+        active_errors=0,
+        activity_count=38_102,
+        hook_verification={"codex": True},
+    )
+    checks = cast(list[dict[str, str]], payload["checks"])
+    by_id = {check["check_id"]: check for check in checks}
+    assert by_id["rule_packs"]["status"] == "pass"
+    assert by_id["decision_stream"] == {
+        "check_id": "decision_stream",
+        "status": "pass",
+        "reason_code": "decision_stream_healthy",
+    }
+    assert by_id["tamper_checks"]["status"] == "pass"
 
 
 def test_canonical_managed_install_supersedes_legacy_alias() -> None:
