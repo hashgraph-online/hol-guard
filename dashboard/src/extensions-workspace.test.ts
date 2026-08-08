@@ -9,6 +9,7 @@ import {
   requiresExtensionRecoveryApproval,
 } from "./extensions-workspace";
 import { ExtensionControlApiError } from "./extension-controls-api";
+import { ApprovalProofModal } from "./approval-proof-modal";
 
 assert.equal(extensionRecoveryAction("protected"), null);
 assert.deepEqual(extensionRecoveryAction("unenrolled"), {
@@ -21,7 +22,7 @@ assert.deepEqual(extensionRecoveryAction("tampered"), {
   title: "Repair extension controls",
   copyLabel: "Copy repair command",
   description:
-    "Guard locked these settings after detecting damaged authority data. Authenticate in this device's terminal to rebuild the trusted authority, then check again.",
+    "Guard locked these settings after detecting damaged authority data. Authenticate on this device to rebuild trusted authority.",
   command: "hol-guard guard command controls recover-authority",
 });
 
@@ -43,6 +44,31 @@ assert.match(recoveryMarkup, /hol-guard guard command controls recover-authority
 assert.match(recoveryMarkup, /Copy repair command/);
 assert.match(recoveryMarkup, /Repair now/);
 assert.match(recoveryMarkup, /Check again/);
+assert.doesNotMatch(recoveryMarkup, /bg-slate-950|bg-red-700|border-red-200/);
+
+const totpRecoveryMarkup = renderToStaticMarkup(createElement(ApprovalProofModal, {
+  title: "Repair extension controls",
+  detail: "Authenticate this repair on your device.",
+  confirmLabel: "Repair controls",
+  approvalGate: {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: true,
+    strict_all_decisions: false,
+    totp_enabled: true,
+  },
+  error: "That authenticator code was not accepted.",
+  onCancel: () => undefined,
+  onConfirm: () => undefined,
+}));
+assert.match(totpRecoveryMarkup, /Authenticator code/);
+assert.doesNotMatch(totpRecoveryMarkup, /Approval password/);
+assert.match(totpRecoveryMarkup, /That authenticator code was not accepted/);
+assert.match(totpRecoveryMarkup, /role="alert"/);
 assert.equal(
   requiresExtensionRecoveryApproval(new ExtensionControlApiError("approval_gate_required", 403, "approval_gate_required")),
   true,

@@ -27,6 +27,8 @@ import {
   type ExtensionControlLayer,
   type ExtensionMutationPayload,
 } from "./extension-controls-api";
+import { ApprovalProofModal } from "./approval-proof-modal";
+import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import {
   classifyDomain,
   DOMAIN_LABELS,
@@ -64,7 +66,7 @@ export function extensionRecoveryAction(
       title: "Repair extension controls",
       copyLabel: "Copy repair command",
       description:
-        "Guard locked these settings after detecting damaged authority data. Authenticate in this device's terminal to rebuild the trusted authority, then check again.",
+        "Guard locked these settings after detecting damaged authority data. Authenticate on this device to rebuild trusted authority.",
       command: "hol-guard guard command controls recover-authority",
     };
   }
@@ -153,31 +155,38 @@ export function ExtensionStatusBanner(props: {
   }
   const tampered = props.effective.health === "tampered";
   return (
-    <div className={`rounded-2xl border p-5 ${tampered ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
+    <div className={`rounded-2xl border p-5 ${tampered ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-amber-200 bg-amber-50"}`}>
       <div className="flex items-start gap-3">
-        <HiMiniExclamationTriangle className={`mt-0.5 size-6 shrink-0 ${tampered ? "text-red-600" : "text-amber-600"}`} aria-hidden="true" />
+        <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+          <HiMiniExclamationTriangle className="size-5" aria-hidden="true" />
+        </span>
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-slate-950">{recovery?.title}</h2>
+          <h2 className="font-semibold text-brand-dark">{recovery?.title}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-700">{recovery?.description}</p>
-          <code className="mt-3 block overflow-x-auto rounded-lg bg-slate-950 px-3 py-2 text-xs text-white">{recovery?.command}</code>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {tampered && props.onRecover ? (
-              <button type="button" disabled={props.busy} onClick={props.onRecover} className="inline-flex items-center gap-2 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60">
+              <button type="button" disabled={props.busy} onClick={props.onRecover} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:opacity-60">
                 {props.busy ? <HiMiniArrowPath className="size-4 animate-spin" aria-hidden="true" /> : <HiMiniShieldCheck className="size-4" aria-hidden="true" />}
                 {props.busy ? "Repairing…" : "Repair now"}
               </button>
             ) : null}
-            <button type="button" onClick={handleCopy} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
-              {copyState === "copied" ? <HiMiniClipboardDocumentCheck className="size-4" aria-hidden="true" /> : <HiMiniClipboard className="size-4" aria-hidden="true" />}
-              {copyState === "copied" ? "Copied" : recovery?.copyLabel}
-            </button>
             <button type="button" onClick={props.onRetry} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
               <HiMiniArrowPath className="size-4" aria-hidden="true" />
               Check again
             </button>
-            {copyState === "failed" ? <span role="status" className="text-sm text-red-700">Copy failed. Select the command above.</span> : null}
           </div>
-          {props.error ? <p role="alert" className="mt-3 text-sm font-medium text-red-800">{props.error}</p> : null}
+          <div className="mt-4 border-t border-brand-blue/10 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Command-line fallback</p>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <code className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-xs text-brand-dark">{recovery?.command}</code>
+              <button type="button" onClick={handleCopy} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-brand-blue/25 bg-white px-3 py-2 text-sm font-semibold text-brand-blue hover:bg-brand-blue/[0.05]">
+                {copyState === "copied" ? <HiMiniClipboardDocumentCheck className="size-4" aria-hidden="true" /> : <HiMiniClipboard className="size-4" aria-hidden="true" />}
+                {copyState === "copied" ? "Copied" : recovery?.copyLabel}
+              </button>
+            </div>
+            {copyState === "failed" ? <span role="status" className="mt-2 block text-sm text-brand-attention">Copy failed. Select the command above.</span> : null}
+          </div>
+          {props.error ? <p role="alert" className="mt-3 text-sm font-medium text-brand-attention">{props.error}</p> : null}
         </div>
       </div>
     </div>
@@ -288,39 +297,6 @@ function ReviewModal(props: {
   );
 }
 
-function AuthorityRecoveryModal(props: {
-  busy: boolean;
-  error: string | null;
-  onCancel: () => void;
-  onConfirm: (password: string, totp: string) => void;
-}) {
-  const [password, setPassword] = useState("");
-  const [totp, setTotp] = useState("");
-  const handlePasswordChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setPassword(event.target.value);
-  }, []);
-  const handleTotpChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setTotp(event.target.value);
-  }, []);
-  const handleSubmit = useCallback((event: React.FormEvent) => {
-    event.preventDefault();
-    props.onConfirm(password, totp);
-  }, [password, props, totp]);
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" role="presentation">
-      <form onSubmit={handleSubmit} role="dialog" aria-modal="true" aria-labelledby="authority-recovery-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-blue">Local approval required</p>
-        <h2 id="authority-recovery-title" className="mt-2 text-xl font-semibold text-slate-950">Repair extension controls</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Authenticate this repair on your device. Guard uses the proof once and does not store it.</p>
-        <label className="mt-5 block text-sm font-medium text-slate-700">Approval password<input autoFocus type="password" autoComplete="current-password" value={password} onChange={handlePasswordChange} className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100" /></label>
-        <label className="mt-4 block text-sm font-medium text-slate-700">Authenticator code<input inputMode="numeric" autoComplete="one-time-code" value={totp} onChange={handleTotpChange} className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100" /></label>
-        {props.error ? <p role="alert" className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{props.error}</p> : null}
-        <div className="mt-6 flex justify-end gap-3"><button type="button" disabled={props.busy} onClick={props.onCancel} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button><button type="submit" disabled={props.busy} className="rounded-xl bg-red-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60">{props.busy ? "Repairing…" : "Authenticate and repair"}</button></div>
-      </form>
-    </div>
-  );
-}
-
 export function ExtensionsWorkspace() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [pending, setPending] = useState<PendingChange | null>(null);
@@ -331,6 +307,7 @@ export function ExtensionsWorkspace() {
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [provenanceOpen, setProvenanceOpen] = useState(false);
   const [filters, setFilters] = useState<ExtensionFilterState>(EMPTY_EXTENSION_FILTERS);
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
@@ -385,15 +362,16 @@ export function ExtensionsWorkspace() {
       setRecoveryApprovalOpen(false);
     } catch (error) {
       if (credentials === undefined && requiresExtensionRecoveryApproval(error)) {
+        await resolveApprovalGate();
         setRecoveryApprovalOpen(true);
       } else {
         setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
       }
     } finally { setRecoveryBusy(false); }
-  }, [state]);
+  }, [resolveApprovalGate, state]);
   const handleRecover = useCallback(() => { void recoverAuthority(); }, [recoverAuthority]);
-  const handleRecoveryConfirm = useCallback((password: string, totp: string) => {
-    void recoverAuthority({ approval_password: password, approval_totp_code: totp });
+  const handleRecoveryConfirm = useCallback((credentials: { approval_password?: string; approval_totp_code?: string }) => {
+    void recoverAuthority(credentials);
   }, [recoverAuthority]);
   const handleRecoveryCancel = useCallback(() => { if (!recoveryBusy) setRecoveryApprovalOpen(false); }, [recoveryBusy]);
   const toggleProvenance = useCallback(() => setProvenanceOpen((value) => !value), []);
@@ -438,7 +416,7 @@ export function ExtensionsWorkspace() {
       </section>
       <section className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white"><button type="button" onClick={toggleProvenance} aria-expanded={provenanceOpen} className="flex w-full items-center justify-between p-5 text-left"><span><span className="block font-semibold text-slate-950">Policy provenance</span><span className="mt-1 block text-sm text-slate-500">Catalog {state.catalog.catalog_digest.slice(0, 12)}… · {state.effective.layers.length} authority layer{state.effective.layers.length === 1 ? "" : "s"}</span></span>{provenanceOpen ? <HiMiniChevronUp className="size-5" /> : <HiMiniChevronDown className="size-5" />}</button>{provenanceOpen ? <div className="border-t border-slate-200 p-5"><div className="grid gap-3 sm:grid-cols-2">{state.effective.layers.map((layer: ExtensionControlLayer) => <div key={`${layer.kind}-${layer.catalog_digest}`} className="rounded-2xl bg-slate-50 p-4"><div className="flex items-center gap-2"><HiMiniCheckCircle className="size-5 text-emerald-600" /><strong className="text-sm text-slate-900">{layer.kind === "local-admin" ? "Local administrator" : "Signed cloud policy"}</strong></div><p className="mt-2 text-xs text-slate-500">{layer.controls.length} explicit controls · catalog {layer.catalog_digest.slice(0, 12)}…</p></div>)}</div></div> : null}</section>
       {pending ? <ReviewModal change={pending} busy={busy} error={mutationError} onCancel={handleCancel} onConfirm={handleConfirm} /> : null}
-      {recoveryApprovalOpen ? <AuthorityRecoveryModal busy={recoveryBusy} error={recoveryError} onCancel={handleRecoveryCancel} onConfirm={handleRecoveryConfirm} /> : null}
+      {recoveryApprovalOpen ? <ApprovalProofModal title="Repair extension controls" detail="Authenticate this repair on your device. Guard uses the proof once and does not store it." confirmLabel="Repair controls" approvalGate={resolvedApprovalGate} busy={recoveryBusy} error={recoveryError} onCancel={handleRecoveryCancel} onConfirm={handleRecoveryConfirm} /> : null}
     </main>
   );
 }
