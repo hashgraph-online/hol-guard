@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import binascii
 import hashlib
 import json
 import re
@@ -13,48 +11,10 @@ from pathlib import Path
 
 BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 MANIFEST_SCHEMA = "hol-guard-core-update.v1"
-MARKER_SCHEMA = "hol-guard-core-attestation.v2"
-SUPPORTED_TRAINS = frozenset({"3.0"})
+MARKER_SCHEMA = "hol-guard-core-attestation.v3"
+SUPPORTED_TRAINS = frozenset({"3.0", "3.1"})
 _ALPHA_TAG = re.compile(r"^alpha/v(3\.(\d+)\.(\d+)a(\d+))$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-
-
-def _decode_minisign_line(value: str, *, label: str) -> bytes:
-    try:
-        return base64.b64decode(value, validate=True)
-    except (ValueError, binascii.Error) as error:
-        raise SystemExit(f"Invalid Minisign {label}") from error
-
-
-def verify_minisign(file_path: Path, signature_path: Path, public_key_value: str) -> None:
-    from cryptography.exceptions import InvalidSignature
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
-    public_key_lines = [line.strip() for line in public_key_value.splitlines() if line.strip()]
-    public_key = _decode_minisign_line(public_key_lines[-1] if public_key_lines else "", label="public key")
-    if len(public_key) != 42 or public_key[:2] != b"Ed":
-        raise SystemExit("Invalid Minisign public key")
-
-    signature_lines = signature_path.read_text(encoding="utf-8").splitlines()
-    if len(signature_lines) != 4 or not signature_lines[0].startswith("untrusted comment: "):
-        raise SystemExit("Invalid Minisign signature envelope")
-    if not signature_lines[2].startswith("trusted comment: "):
-        raise SystemExit("Invalid Minisign trusted comment")
-    signature = _decode_minisign_line(signature_lines[1], label="signature")
-    global_signature = _decode_minisign_line(signature_lines[3], label="global signature")
-    if len(signature) != 74 or len(global_signature) != 64 or signature[:2] != b"ED":
-        raise SystemExit("Invalid Minisign signature")
-    if signature[2:10] != public_key[2:10]:
-        raise SystemExit("Minisign signature key ID does not match configured public key")
-
-    message = hashlib.blake2b(file_path.read_bytes(), digest_size=64).digest()
-    verifier = Ed25519PublicKey.from_public_bytes(public_key[10:])
-    try:
-        verifier.verify(signature[10:], message)
-        trusted_comment = signature_lines[2].removeprefix("trusted comment: ")
-        verifier.verify(global_signature, signature + trusted_comment.encode())
-    except InvalidSignature as error:
-        raise SystemExit("Minisign signature verification failed") from error
 
 
 def _sha256(path: Path) -> str:
@@ -107,7 +67,6 @@ def inspect_assets(assets_file: Path, base: str) -> None:
     expected = {
         "binary": base,
         "manifest": f"{base}.json",
-        "signature": f"{base}.json.sig",
         "marker": f"{base}.attested.json",
     }
     present = {key for key, name in expected.items() if name in names}
@@ -115,13 +74,10 @@ def inspect_assets(assets_file: Path, base: str) -> None:
         _emit(f"{key}_present", key in present)
     if not present:
         _emit("mode", "build")
-    elif present == {"binary", "manifest", "marker"}:
-        _emit("mode", "repair_signature")
     elif present == set(expected):
         _emit("mode", "verify_existing")
     else:
         raise SystemExit(f"Refusing partial or ambiguous Core asset set: {sorted(present)}")
-
 
 def verify_bootstrap(payload_file: Path, version: str, subject: str) -> None:
     payload = json.loads(payload_file.read_text(encoding="utf-8"))
@@ -239,7 +195,6 @@ def create_marker(
     workflow_run: str,
 ) -> None:
     manifest = Path(f"{base}.json")
-    signature = Path(f"{base}.json.sig")
     payload: dict[str, object] = _marker_metadata(
         version=version,
         source_commit=source_commit,
@@ -252,7 +207,6 @@ def create_marker(
         {
             "binarySha256": _sha256(base),
             "manifestSha256": _sha256(manifest),
-            "signatureSha256": _sha256(signature),
             "workflowRun": workflow_run,
             "attestedAt": _utc_now(),
         }
@@ -270,7 +224,6 @@ def validate_marker(
     target: str,
     apple_signing_identity: str,
     apple_team_id: str,
-    mode: str,
 ) -> None:
     marker = json.loads(marker_path.read_text(encoding="utf-8"))
     expected = _marker_metadata(
@@ -286,24 +239,13 @@ def validate_marker(
             if key == "schema":
                 raise SystemExit(f"Unsupported marker schema: {marker.get(key)!r}")
             raise SystemExit(f"Marker mismatch for {key}")
-
     hashes = {
         "binarySha256": _sha256(base),
         "manifestSha256": _sha256(Path(f"{base}.json")),
     }
-    if mode == "complete":
-        hashes["signatureSha256"] = _sha256(Path(f"{base}.json.sig"))
-    elif mode == "repair":
-        prior_signature_hash = marker.get("signatureSha256")
-        if not isinstance(prior_signature_hash, str) or _SHA256.fullmatch(prior_signature_hash) is None:
-            raise SystemExit("Repair marker does not contain a valid prior signatureSha256")
-    else:
-        raise SystemExit(f"Unsupported marker validation mode: {mode}")
-
     for key, value in hashes.items():
         if marker.get(key) != value:
             raise SystemExit(f"Marker hash mismatch for {key}")
-
 
 def _asset_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--base", type=Path, required=True)
@@ -336,11 +278,6 @@ def main() -> int:
     bootstrap.add_argument("--version", required=True)
     bootstrap.add_argument("--subject", required=True)
 
-    verify_signature = subparsers.add_parser("verify-minisign")
-    verify_signature.add_argument("--file", type=Path, required=True)
-    verify_signature.add_argument("--signature", type=Path, required=True)
-    verify_signature.add_argument("--public-key", required=True)
-
     for name in ("create-manifest", "validate-manifest"):
         command = subparsers.add_parser(name)
         _asset_arguments(command)
@@ -353,7 +290,6 @@ def main() -> int:
 
     validate_marker_parser = subparsers.add_parser("validate-marker")
     _marker_arguments(validate_marker_parser)
-    validate_marker_parser.add_argument("--mode", choices=("repair", "complete"), required=True)
 
     args = parser.parse_args()
     if args.command == "discover-release":
@@ -362,8 +298,6 @@ def main() -> int:
         inspect_assets(args.assets, args.base)
     elif args.command == "verify-bootstrap":
         verify_bootstrap(args.payload, args.version, args.subject)
-    elif args.command == "verify-minisign":
-        verify_minisign(args.file, args.signature, args.public_key)
     elif args.command in {"create-manifest", "validate-manifest"}:
         kwargs = {
             "version": args.version,
@@ -388,7 +322,7 @@ def main() -> int:
         if args.command == "create-marker":
             create_marker(args.base, args.marker, workflow_run=args.workflow_run, **marker_kwargs)
         else:
-            validate_marker(args.base, args.marker, mode=args.mode, **marker_kwargs)
+            validate_marker(args.base, args.marker, **marker_kwargs)
     return 0
 
 
