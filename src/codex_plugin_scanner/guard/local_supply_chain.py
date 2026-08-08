@@ -1240,6 +1240,7 @@ class _PackageProtectAuthority:
     launch_environment: Mapping[str, str]
     additional_current_action: object | None
     additional_policy_context: dict[str, object] | None
+    observe_mode: bool
 
 
 _PackageApprovalClaimDisposition = Literal["consumed", "retained"]
@@ -1456,6 +1457,7 @@ def _build_package_protect_authority(
             launch_environment=launch_environment,
             additional_current_action=additional_current_action,
             additional_policy_context=additional_policy_context,
+            observe_mode=config is not None and config.mode == "observe",
         )
     except BaseException:
         _cleanup_external_archive_downloads(evaluation)
@@ -1563,18 +1565,10 @@ def _final_package_protect_authority(
             claim_saved_approval=False,
         )
         if _evaluation_uses_saved_package_approval(refreshed_saved_policy):
-            # Persistent and explicitly reusable approvals must still exist
-            # and match at the final boundary. The fresh resolver has already
-            # composed any newly inserted block or integrity failure.
             return current, refreshed_saved_policy
         if _package_approval_reuse_evidence(refreshed_saved_policy):
-            # A fresh saved-policy result exists but is no longer an accepted
-            # exact allow (for example, a new block or tampered authority).
             return current, refreshed_saved_policy
         if saved_approval_claim_disposition != "consumed":
-            # Retained package local-once and persistent policy grants remain
-            # authoritative after a successful claim. Their disappearance is
-            # a post-claim revocation, never evidence of one-shot consumption.
             reuse = evaluate_approval_reuse(
                 current.current_action,
                 "allow",
@@ -1582,9 +1576,6 @@ def _final_package_protect_authority(
                 validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
             )
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
-        # Only a consuming one-shot is expected to disappear at claim time.
-        # Carry its atomic proof after the fresh lookup establishes that no
-        # newer saved authority applies and every current context still matches.
         reuse = evaluate_approval_reuse(
             current.current_action,
             "allow",
@@ -1637,6 +1628,18 @@ def _final_package_protect_authority(
     return current, resolved
 
 
+def _package_execution_policy_action(
+    authority: _PackageProtectAuthority,
+    evaluation: Any,
+) -> GuardAction:
+    """Project package policy into execution without discarding watch-only evidence."""
+
+    observed_action = _protect_action_for_policy_action(evaluation.policy_action)
+    if not authority.observe_mode:
+        return observed_action
+    return "warn" if observed_action == "warn" else "allow"
+
+
 def _apply_package_protect_projection(
     *,
     payload: dict[str, object],
@@ -1645,6 +1648,7 @@ def _apply_package_protect_projection(
     command: Sequence[str],
     blocking: bool,
     executed: bool,
+    execution_policy_action: GuardAction | None = None,
 ) -> _PackageProtectProjection:
     """Project one authority/evaluation pair into every user and audit surface."""
 
@@ -1652,7 +1656,15 @@ def _apply_package_protect_projection(
     public_targets = [target.to_dict() for target in intent.targets]
     artifact = authority.artifact
     artifact_hash = authority.artifact_hash
-    verdict_action = _protect_action_for_policy_action(evaluation.policy_action)
+    observed_policy_action = _protect_action_for_policy_action(evaluation.policy_action)
+    verdict_action = execution_policy_action or observed_policy_action
+    observe_projected = authority.observe_mode and verdict_action != observed_policy_action
+    verdict_reason = evaluation.user_copy.summary
+    if observe_projected:
+        verdict_reason = (
+            f"Watch only observed a `{observed_policy_action}` package-policy decision. "
+            "HOL Guard allowed the install to continue."
+        )
     risk_signals = tuple(_evaluation_risk_signals(evaluation))
     approval_reuse_evidence = _package_approval_reuse_evidence(evaluation)
     receipt_policy_metadata: dict[str, object] = {
@@ -1664,6 +1676,9 @@ def _apply_package_protect_projection(
         "policy_version": evaluation.policy_version,
         "redacted_command": intent.redacted_command,
     }
+    if observe_projected:
+        receipt_policy_metadata["observe_mode"] = True
+        receipt_policy_metadata["observed_policy_action"] = observed_policy_action
     if evaluation.bundle_version is not None:
         receipt_policy_metadata["bundle_version"] = evaluation.bundle_version
     if authority.additional_policy_context is not None:
@@ -1675,7 +1690,7 @@ def _apply_package_protect_projection(
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact_hash,
         policy_decision=verdict_action,
-        capabilities_summary=evaluation.user_copy.summary,
+        capabilities_summary=verdict_reason,
         changed_capabilities=[
             target.package_name or str(public_target.get("raw_spec") or "")
             for target, public_target in zip(intent.targets, public_targets, strict=True)
@@ -1701,11 +1716,14 @@ def _apply_package_protect_projection(
     payload["targets"] = [_protect_target_payload(target) for target in intent.targets]
     payload["verdict"] = {
         "action": verdict_action,
-        "reason": evaluation.user_copy.summary,
+        "reason": verdict_reason,
         "risk_signals": list(risk_signals),
         "matched_advisories": matched_advisories,
         "blocking": blocking,
     }
+    if observe_projected:
+        payload["verdict"]["observe_mode"] = True
+        payload["verdict"]["observed_policy_action"] = observed_policy_action
     payload["receipt"] = {
         **receipt.to_dict(),
         "action_envelope_json": receipt_policy_metadata,
@@ -1807,7 +1825,8 @@ def build_package_protect_payload(
     effective_dry_run = dry_run and not (
         allow_saved_approval_execution and _evaluation_uses_saved_package_approval(evaluation)
     )
-    execution_permitted = is_execution_permitted(evaluation.policy_action)
+    execution_policy_action = _package_execution_policy_action(authority, evaluation)
+    execution_permitted = is_execution_permitted(execution_policy_action)
     payload: dict[str, object] = {
         "generated_at": now,
         "executed": False,
@@ -1820,6 +1839,7 @@ def build_package_protect_payload(
         command=command,
         blocking=not execution_permitted,
         executed=False,
+        execution_policy_action=execution_policy_action,
     )
     if config is not None:
         payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=now)
@@ -1841,13 +1861,10 @@ def build_package_protect_payload(
             },
             now,
         )
-        return (payload, _package_execution_exit_code(evaluation.policy_action))
-    saved_approval_claimed = _evaluation_uses_saved_package_approval(evaluation)
+        return (payload, _package_execution_exit_code(execution_policy_action))
+    saved_approval_claimed = not authority.observe_mode and _evaluation_uses_saved_package_approval(evaluation)
     saved_approval_claim_disposition: _PackageApprovalClaimDisposition | None = None
     if saved_approval_claimed:
-        # Claim the one-shot first, then rebuild every current input. Mutations
-        # performed while the store claim is in flight cannot inherit the old
-        # authorization at the subsequent launch boundary.
         claimed_resolution = _resolve_stored_package_policy_override(
             current_evaluation,
             store=store,
@@ -1860,7 +1877,8 @@ def build_package_protect_payload(
             claim_saved_approval=True,
         )
         claimed_evaluation = claimed_resolution.evaluation
-        if not is_execution_permitted(claimed_evaluation.policy_action):
+        claimed_execution_action = _package_execution_policy_action(authority, claimed_evaluation)
+        if not is_execution_permitted(claimed_execution_action):
             return _package_protect_denied_after_final_boundary(
                 payload=payload,
                 authority=authority,
@@ -1882,7 +1900,8 @@ def build_package_protect_payload(
         current_config_provider=current_config_provider,
         additional_authority_provider=additional_authority_provider,
     )
-    if not is_execution_permitted(final_evaluation.policy_action):
+    final_execution_action = _package_execution_policy_action(final_authority, final_evaluation)
+    if not is_execution_permitted(final_execution_action):
         denied = _package_protect_denied_after_final_boundary(
             payload=payload,
             authority=final_authority,
@@ -1951,6 +1970,7 @@ def build_package_protect_payload(
         command=command,
         blocking=False,
         executed=True,
+        execution_policy_action=final_execution_action,
     )
     verdict_action = final_projection.verdict_action
     risk_signals = final_projection.risk_signals
@@ -2322,8 +2342,6 @@ def package_saved_allow_validation_reason(
 
     if decision.get("action") != "allow":
         return None
-    # A matching legacy digest is still missing workspace, executable,
-    # capability, policy, and sandbox bindings. Require two valid v1 tokens.
     return approval_context_tokens_validation_reason(decision.get("artifact_hash"), artifact_hash)
 
 
@@ -2719,11 +2737,6 @@ def compose_current_package_policy_action(
         actions.append(additional_current_action)
     if config is not None:
         config_policy = _package_config_policy_context(artifact=artifact, config=config)
-        # Resolve specificity inside each configuration family first.  A
-        # harness risk action replaces its global risk action, and an exact
-        # artifact/publisher/harness action is one precedence chain.  The
-        # resulting configuration actions remain independent of the package
-        # feed/evaluator action and therefore cannot erase a feed block.
         for key in ("effective_package_script_action", "resolved_override"):
             action = config_policy.get(key)
             if action is not None:
