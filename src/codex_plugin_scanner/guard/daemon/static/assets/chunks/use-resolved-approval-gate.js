@@ -1,6 +1,6 @@
 import { r as reactExports, aW as buildApprovalProofCredentials, bf as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, bg as ApprovalProofFieldInputs, A as ActionButton, a3 as fetchSettings } from "../guard-dashboard.js";
 function ApprovalProofModal(props) {
-  const { title, detail, confirmLabel, approvalGate, busy = false, onCancel, onConfirm } = props;
+  const { title, detail, confirmLabel, approvalGate, busy = false, error = null, onCancel, onConfirm } = props;
   const [password, setPassword] = reactExports.useState("");
   const [totpCode, setTotpCode] = reactExports.useState("");
   const handlePasswordChange = reactExports.useCallback((event) => {
@@ -38,6 +38,7 @@ function ApprovalProofModal(props) {
             onApprovalTotpCodeChange: handleTotpChange
           }
         ) }),
+        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention", children: error }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onCancel, disabled: busy, children: "Cancel" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConfirm, disabled: confirmDisabled, children: busy ? "Repairing…" : confirmLabel })

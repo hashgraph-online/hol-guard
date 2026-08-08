@@ -61,11 +61,14 @@ const totpRecoveryMarkup = renderToStaticMarkup(createElement(ApprovalProofModal
     strict_all_decisions: false,
     totp_enabled: true,
   },
+  error: "That authenticator code was not accepted.",
   onCancel: () => undefined,
   onConfirm: () => undefined,
 }));
 assert.match(totpRecoveryMarkup, /Authenticator code/);
 assert.doesNotMatch(totpRecoveryMarkup, /Approval password/);
+assert.match(totpRecoveryMarkup, /That authenticator code was not accepted/);
+assert.match(totpRecoveryMarkup, /role="alert"/);
 assert.equal(
   requiresExtensionRecoveryApproval(new ExtensionControlApiError("approval_gate_required", 403, "approval_gate_required")),
   true,

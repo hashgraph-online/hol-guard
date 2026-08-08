@@ -411,7 +411,7 @@ function ExtensionsWorkspace() {
       ] }, `${layer.kind}-${layer.catalog_digest}`)) }) }) : null
     ] }),
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewModal, { change: pending, busy, error: mutationError, onCancel: handleCancel, onConfirm: handleConfirm }) : null,
-    recoveryApprovalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofModal, { title: "Repair extension controls", detail: "Authenticate this repair on your device. Guard uses the proof once and does not store it.", confirmLabel: "Repair controls", approvalGate: resolvedApprovalGate, busy: recoveryBusy, onCancel: handleRecoveryCancel, onConfirm: handleRecoveryConfirm }) : null
+    recoveryApprovalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofModal, { title: "Repair extension controls", detail: "Authenticate this repair on your device. Guard uses the proof once and does not store it.", confirmLabel: "Repair controls", approvalGate: resolvedApprovalGate, busy: recoveryBusy, error: recoveryError, onCancel: handleRecoveryCancel, onConfirm: handleRecoveryConfirm }) : null
   ] });
 }
 export {

@@ -10,12 +10,13 @@ type ApprovalProofModalProps = {
   confirmLabel: string;
   approvalGate: GuardApprovalGatePublicConfig | null;
   busy?: boolean;
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (credentials: { approval_password?: string; approval_totp_code?: string }) => void;
 };
 
 export function ApprovalProofModal(props: ApprovalProofModalProps) {
-  const { title, detail, confirmLabel, approvalGate, busy = false, onCancel, onConfirm } = props;
+  const { title, detail, confirmLabel, approvalGate, busy = false, error = null, onCancel, onConfirm } = props;
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
 
@@ -57,6 +58,11 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
             onApprovalTotpCodeChange={handleTotpChange}
           />
         </div>
+        {error ? (
+          <p role="alert" className="mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention">
+            {error}
+          </p>
+        ) : null}
         <div className="mt-5 flex justify-end gap-2">
           <ActionButton variant="outline" onClick={onCancel} disabled={busy}>
             Cancel
