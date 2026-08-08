@@ -34,11 +34,11 @@ jobs:
         github.event.issue.author_association == 'MEMBER' ||
         github.event.issue.author_association == 'COLLABORATOR') &&
        startsWith(github.event.issue.title, '[desktop-core-feed]')) ||
-      (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'alpha/v3.0.')) ||
+      (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'alpha/v3.')) ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'release/3.0')
+       startsWith(github.event.workflow_run.head_branch, 'release/3.'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
