@@ -418,7 +418,7 @@ export function ExtensionsWorkspace() {
           </div>
           <p className="text-sm text-slate-500">Search by name or command, or filter by risk, domain, or state to govern capabilities.</p>
         </div>
-        <div className="mt-4"><ExtensionsFilterBar filters={effectiveFilters} onChange={updateFilters} onClear={clearFilters} extensions={catalogExtensions} effective={state.effective} /></div>
+        <div className="mt-4"><ExtensionsFilterBar filters={filters} onChange={updateFilters} onClear={clearFilters} extensions={catalogExtensions} effective={state.effective} /></div>
         {filteredExtensions.length > 0 ? (
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredExtensions.map((extension) => (

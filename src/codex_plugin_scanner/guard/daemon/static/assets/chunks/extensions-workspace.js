@@ -843,7 +843,7 @@ function ExtensionsWorkspace() {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Search by name or command, or filter by risk, domain, or state to govern capabilities." })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsFilterBar, { filters: effectiveFilters, onChange: updateFilters, onClear: clearFilters, extensions: catalogExtensions, effective: state.effective }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsFilterBar, { filters, onChange: updateFilters, onClear: clearFilters, extensions: catalogExtensions, effective: state.effective }) }),
       filteredExtensions.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3", children: filteredExtensions.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionCard, { extension, enabled: isExtensionEnabled(state.effective, extension), locked: locked || state.effective.global_lockdown, onChange: handleChange }, extension.extension_id)) }) : hasActiveFilters(effectiveFilters) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-col items-center gap-3 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "size-7 text-slate-300", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-slate-900", children: "No extensions match these filters" }),
