@@ -16705,6 +16705,32 @@ function normalizeCloudCommandCapability(raw) {
     revoke_command: typeof raw["revoke_command"] === "string" ? raw["revoke_command"] : "hol-guard commands revoke --confirm revoke"
   };
 }
+function nonNegativeNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+function normalizeOperatorHealth(raw) {
+  if (!isRecord$1(raw)) {
+    return void 0;
+  }
+  const state = raw["state"];
+  const cause = raw["cause"];
+  const automaticRecovery = raw["automatic_recovery"];
+  if (!["healthy", "backlogged", "saturated", "store-contended"].includes(String(state)) || typeof cause !== "string" || typeof automaticRecovery !== "string") {
+    return void 0;
+  }
+  return {
+    state,
+    cause,
+    automatic_recovery: automaticRecovery,
+    repairable: raw["repairable"] === true,
+    queue_depth: nonNegativeNumber(raw["queue_depth"]),
+    queue_limit: nonNegativeNumber(raw["queue_limit"]),
+    oldest_wait_ms: nonNegativeNumber(raw["oldest_wait_ms"]),
+    workers_busy: nonNegativeNumber(raw["workers_busy"]),
+    workers_ready: nonNegativeNumber(raw["workers_ready"]),
+    workers_configured: nonNegativeNumber(raw["workers_configured"])
+  };
+}
 function normalizeRuntimeSnapshot(snapshot) {
   const protectionHealth = normalizeProtectionHealth(snapshot.protection_health);
   const runtimeState = normalizeRuntimeState(snapshot.runtime_state);
@@ -16724,6 +16750,7 @@ function normalizeRuntimeSnapshot(snapshot) {
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
     cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
+    operator_health: normalizeOperatorHealth(snapshot.operator_health),
     protection_health: protectionHealth
   };
 }
@@ -23903,15 +23930,33 @@ function Sparkline({ items, days = 7 }) {
       days,
       " days"
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-10 w-full items-end gap-1", children: buckets.map((count, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
-        className: "flex-1 rounded-sm bg-brand-blue/20 transition-all hover:bg-brand-blue/30",
-        style: { height: `${Math.max(count / max * 100, count > 0 ? 8 : 4)}%` },
-        title: `${count} action${count !== 1 ? "s" : ""}`
-      },
-      i
-    )) })
+        className: "flex h-14 w-full items-end gap-1",
+        role: "img",
+        "aria-label": `Guard activity over the last ${days} days`,
+        children: buckets.map((count, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "flex min-w-0 flex-1 flex-col items-center justify-end gap-1",
+            title: `${count} action${count !== 1 ? "s" : ""}`,
+            children: [
+              count > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold leading-none text-slate-500", children: count }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "div",
+                {
+                  className: "w-full rounded-sm bg-brand-blue/20 transition-all hover:bg-brand-blue/30",
+                  style: { height: `${Math.max(count / max * 32, count > 0 ? 4 : 2)}px` },
+                  "aria-hidden": "true"
+                }
+              )
+            ]
+          },
+          i
+        ))
+      }
+    )
   ] });
 }
 const PAGE_SIZE$1 = 50;

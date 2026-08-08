@@ -678,6 +678,7 @@ def test_pip_execution_argv_is_isolated_absolute_and_source_pinned(
         "-c",
         update_subprocess_module._TRUSTED_MODULE_BOOTSTRAP,
         json.dumps([str(path) for path in context.python_import_paths], separators=(",", ":")),
+        str(context.install_prefix),
         "pip",
         "--isolated",
         "--disable-pip-version-check",
@@ -711,6 +712,7 @@ def test_manager_recovery_pip_uses_authenticated_python_and_pinned_source(
         "-c",
         update_subprocess_module._TRUSTED_MODULE_BOOTSTRAP,
         json.dumps([str(path) for path in context.python_import_paths], separators=(",", ":")),
+        str(context.install_prefix),
         "pip",
         "--isolated",
         "--disable-pip-version-check",
@@ -870,7 +872,7 @@ def test_workspace_path_collision_is_excluded_and_never_executes(
 
 @pytest.mark.skipif(
     os.name == "nt",
-    reason="uses extensionless POSIX shebang files as the ambient and trusted manager fixtures",
+    reason="uses an extensionless POSIX shebang executable as the ambient and trusted manager fixtures",
 )
 def test_nonstandard_ambient_manager_path_is_rejected_without_workspace_context(
     tmp_path: Path,

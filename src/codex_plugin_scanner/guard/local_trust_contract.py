@@ -336,6 +336,9 @@ class TrustStatus:
         runtime_override = state.get("runtime_protection")
         if runtime_override in ("protected", "degraded", "unknown"):
             runtime_protection = runtime_override
+        remembered_rules_override = state.get("remembered_rules")
+        if remembered_rules_override in ("enforced", "disabled_degraded", "unknown"):
+            remembered_rules = remembered_rules_override
         cloud_override = state.get("cloud_policies")
         if cloud_override in ("available", "setup_unavailable", "unknown"):
             cloud_policies: CloudPoliciesStatus = cloud_override

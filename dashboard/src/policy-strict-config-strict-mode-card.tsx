@@ -121,7 +121,7 @@ export function PolicyStrictModeCard({
 
       {!isStrict && onOpenSettings ? (
         <div className="mt-3 border-t border-slate-100 pt-3">
-          <ActionButton variant="secondary" onClick={onOpenSettings}>
+          <ActionButton variant="secondary" onClick={() => onOpenSettings()}>
             Enable in Settings
           </ActionButton>
         </div>

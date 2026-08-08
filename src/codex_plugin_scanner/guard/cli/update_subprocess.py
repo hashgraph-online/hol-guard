@@ -56,6 +56,7 @@ _TRUSTED_MODULE_BOOTSTRAP = (
     "import json,runpy,sys; "
     "import_paths=json.loads(sys.argv.pop(1)); "
     "extra_import_paths=json.loads(sys.argv.pop(1)) if sys.argv[1].startswith('[') else []; "
+    "install_prefix=sys.argv.pop(1); sys.prefix=install_prefix; sys.exec_prefix=install_prefix; "
     "module=sys.argv.pop(1); "
     "sys.path[:0]=import_paths; "
     "sys.path.extend(extra_import_paths); "
@@ -469,7 +470,7 @@ class TrustedUpdateContext:
         ]
         if extra_import_paths:
             command.append(json.dumps(extra_import_paths, separators=(",", ":")))
-        return [*command, module, *args]
+        return [*command, str(self.install_prefix), module, *args]
 
     def _python_import_paths_json(self) -> str:
         return json.dumps([str(path) for path in self.python_import_paths], separators=(",", ":"))

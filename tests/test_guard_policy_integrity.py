@@ -3753,28 +3753,28 @@ def test_backup_policy_database_sets_private_mode_when_backup_fails(
     assert calls[-1][1] == 0o600
 
 
-def test_degraded_mode_persistent_local_allow_is_not_authoritative(
+def test_no_keyring_local_vault_keeps_persistent_local_allow_authoritative(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: False))
     store = _store(tmp_path)
     store.upsert_policy(
-        _decision(artifact_id="codex:project:degraded", artifact_hash="hash-degraded"),
+        _decision(artifact_id="codex:project:local-vault", artifact_hash="hash-local-vault"),
         "2026-06-14T00:00:00Z",
     )
 
     resolved = store.resolve_policy(
         "codex",
-        "codex:project:degraded",
-        "hash-degraded",
+        "codex:project:local-vault",
+        "hash-local-vault",
         now="2026-06-14T00:01:00Z",
     )
     verify = store.verify_policy_integrity()
 
-    assert resolved is None
-    assert verify["mode"] == "degraded"
-    assert verify["counts"]["degraded_mode"] == 1
+    assert resolved == "allow"
+    assert verify["mode"] == "protected"
+    assert verify["counts"]["valid"] == 1
 
 
 def test_symlinked_guard_home_forces_degraded_local_policy_authority(tmp_path: Path) -> None:

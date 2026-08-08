@@ -40,7 +40,7 @@ export function PolicyStrictConfigTab({
           </div>
           {onOpenSettings ? (
             <div className="shrink-0 sm:pt-1">
-              <ActionButton onClick={onOpenSettings} variant="primary">
+              <ActionButton onClick={() => onOpenSettings()} variant="primary">
                 <HiMiniAdjustmentsHorizontal className="mr-1.5 h-4 w-4" aria-hidden="true" />
                 Open protection rules
               </ActionButton>

@@ -112,7 +112,7 @@ export function FeedHealthWorkspace({ snapshot, onOpenSettings }: FeedHealthWork
           </p>
         </div>
         {onOpenSettings && (
-          <ActionButton variant="outline" onClick={onOpenSettings}>
+          <ActionButton variant="outline" onClick={() => onOpenSettings()}>
             Open Settings
           </ActionButton>
         )}
@@ -225,7 +225,7 @@ export function FeedHealthWorkspace({ snapshot, onOpenSettings }: FeedHealthWork
         </div>
         {onOpenSettings && snapshot.cloud_state === "local_only" && (
           <div className="mt-4">
-            <ActionButton variant="secondary" onClick={onOpenSettings}>
+            <ActionButton variant="secondary" onClick={() => onOpenSettings()}>
               Connect to cloud
             </ActionButton>
           </div>

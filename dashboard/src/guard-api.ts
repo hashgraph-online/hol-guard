@@ -157,6 +157,7 @@ type RuntimeSnapshotPayload = Omit<
   | "supply_chain"
   | "managed_installs"
   | "cloud_command_capability"
+  | "operator_health"
   | "protection_health"
   | "runtime_state"
   | "latest_receipts"
@@ -169,6 +170,7 @@ type RuntimeSnapshotPayload = Omit<
   supply_chain?: unknown;
   managed_installs?: unknown;
   cloud_command_capability?: unknown;
+  operator_health?: unknown;
   protection_health?: unknown;
   runtime_state?: unknown;
 };
@@ -1645,6 +1647,38 @@ function normalizeCloudCommandCapability(raw: unknown): GuardRuntimeSnapshot["cl
   };
 }
 
+function nonNegativeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+export function normalizeOperatorHealth(raw: unknown): GuardRuntimeSnapshot["operator_health"] {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+  const state = raw["state"];
+  const cause = raw["cause"];
+  const automaticRecovery = raw["automatic_recovery"];
+  if (
+    !["healthy", "backlogged", "saturated", "store-contended"].includes(String(state))
+    || typeof cause !== "string"
+    || typeof automaticRecovery !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    state: state as "healthy" | "backlogged" | "saturated" | "store-contended",
+    cause,
+    automatic_recovery: automaticRecovery,
+    repairable: raw["repairable"] === true,
+    queue_depth: nonNegativeNumber(raw["queue_depth"]),
+    queue_limit: nonNegativeNumber(raw["queue_limit"]),
+    oldest_wait_ms: nonNegativeNumber(raw["oldest_wait_ms"]),
+    workers_busy: nonNegativeNumber(raw["workers_busy"]),
+    workers_ready: nonNegativeNumber(raw["workers_ready"]),
+    workers_configured: nonNegativeNumber(raw["workers_configured"]),
+  };
+}
+
 export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): GuardRuntimeSnapshot {
   const protectionHealth = normalizeProtectionHealth(snapshot.protection_health);
   const runtimeState = normalizeRuntimeState(snapshot.runtime_state);
@@ -1664,6 +1698,7 @@ export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): Guar
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
     managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
     cloud_command_capability: normalizeCloudCommandCapability(snapshot.cloud_command_capability),
+    operator_health: normalizeOperatorHealth(snapshot.operator_health),
     protection_health: protectionHealth,
   };
 }

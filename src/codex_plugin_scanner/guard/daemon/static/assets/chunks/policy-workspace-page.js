@@ -4005,7 +4005,7 @@ function PolicyStrictConfigTab({
           ] }) : null
         ] })
       ] }),
-      onOpenSettings ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0 sm:pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: onOpenSettings, variant: "primary", children: [
+      onOpenSettings ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0 sm:pt-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: () => onOpenSettings(), variant: "primary", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
         "Open protection rules"
       ] }) }) : null
