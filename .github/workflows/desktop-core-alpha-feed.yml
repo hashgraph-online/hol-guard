@@ -346,7 +346,15 @@ jobs:
           chmod 0755 "$BINARY"
           codesign --verify --deep --strict --verbose=2 "$BINARY"
           codesign --display --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/codesign.txt"
-          grep -Fx "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/codesign.txt"
+          if ! grep -Fx "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/codesign.txt"; then
+            codesign --display --extract-certificates "$RUNNER_TEMP/codesign-cert-" "$BINARY"
+            CERTIFICATE_SHA1=$(openssl x509 -inform DER \
+              -in "$RUNNER_TEMP/codesign-cert-0" -noout -fingerprint -sha1 \
+              | sed -E 's/^[^=]+=//; s/://g' | tr '[:lower:]' '[:upper:]')
+            SELECTOR_SHA1=$(printf '%s' "$APPLE_SIGNING_IDENTITY" \
+              | tr -d '[:space:]:' | tr '[:lower:]' '[:upper:]')
+            test "$CERTIFICATE_SHA1" = "$SELECTOR_SHA1"
+          fi
           grep -Fx "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/codesign.txt"
           if ! spctl --assess --type execute --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/spctl.txt"; then
             cat "$RUNNER_TEMP/spctl.txt" >&2

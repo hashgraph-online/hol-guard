@@ -60,7 +60,9 @@ def test_release_branch_pushes_publish_alpha_while_main_pushes_publish_stable() 
         assert "github.run_attempt == 1" in condition
         assert "github.ref == 'refs/heads/main'" in condition
         assert "needs.build.outputs.channel == 'stable'" in condition
-    assert jobs["publish-main-pypi"]["needs"] == ["build", "publish-main-testpypi"]
+    assert jobs["publish-main-pypi"]["needs"] == "build"
+    assert "needs.publish-main-testpypi.result == 'success'" not in jobs["publish-main-pypi"]["if"]
+    assert "vars.MAIN_TESTPYPI_ENABLED == 'true'" in jobs["publish-main-testpypi"]["if"]
     assert jobs["release-main"]["needs"] == ["build", "publish-main-pypi"]
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
@@ -205,6 +207,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     assert "skip-existing" not in workflow_text and "pytest" not in workflow_text
 
+
 def test_alpha_tag_reservation_binds_version_to_build_source() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     job = workflow["jobs"]["reserve-alpha-tag"]
@@ -212,11 +215,9 @@ def test_alpha_tag_reservation_binds_version_to_build_source() -> None:
     assert job["needs"] == ["build"]
     assert job["permissions"] == {"contents": "write"}
     assert "needs.build.outputs.channel == 'alpha'" in job["if"]
-    reservation_run = next(
-        step["run"] for step in job["steps"] if step.get("name") == "Reserve exact alpha tag"
-    )
+    reservation_run = next(step["run"] for step in job["steps"] if step.get("name") == "Reserve exact alpha tag")
     assert 'tag="alpha/v${VERSION}"' in reservation_run
-    assert 'refs/tags/${tag}' in reservation_run
+    assert "refs/tags/${tag}" in reservation_run
     assert '-f sha="$SOURCE_SHA"' in reservation_run
     assert 'remote_tag_sha" != "$SOURCE_SHA"' in reservation_run
 

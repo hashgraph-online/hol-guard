@@ -989,7 +989,7 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
         capsys=capsys,
     )
     ready_event = Event()
-    lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13, ready_event))
+    lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 2, ready_event))
     lock_process.start()
     assert ready_event.wait(timeout=5)
     env = dict(os.environ)

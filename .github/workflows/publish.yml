@@ -854,6 +854,7 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      vars.MAIN_TESTPYPI_ENABLED == 'true' &&
       github.event_name == 'push' &&
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
@@ -948,9 +949,8 @@ jobs:
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
       needs.build.result == 'success' &&
-      needs.publish-main-testpypi.result == 'success' &&
       needs.build.outputs.channel == 'stable'
-    needs: [build, publish-main-testpypi]
+    needs: build
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -971,7 +971,7 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distribution-sha256
-      - name: Verify the TestPyPI-proven artifact
+      - name: Verify immutable build artifact
         run: sha256sum --check distribution-sha256.txt
       - name: Keep only the Guard release distribution
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
