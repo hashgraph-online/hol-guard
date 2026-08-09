@@ -27,7 +27,7 @@ def _safe_cli_metadata_segment_is_safe(command_name: str, args: list[str], *, cw
             return git_binary_path_is_trusted(Path(git_path).resolve(), cwd=cwd.resolve())
         except (OSError, RuntimeError):
             return False
-    if command_name != "hol-guard" or args not in (["--version"], ["status"]):
+    if command_name != "hol-guard" or args not in (["--version"], ["status"], ["daemon", "status"]):
         return False
     executable = _which_for_execution_cwd("hol-guard", cwd=cwd)
     if executable is None:
