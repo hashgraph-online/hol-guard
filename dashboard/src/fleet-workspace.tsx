@@ -32,6 +32,7 @@ import type {
   GuardInventoryItem,
   GuardPolicyDecision,
   GuardProtectionAppHealth,
+  GuardProtectionHealth,
   GuardProtectionState,
   GuardReceipt,
   GuardRuntimeSnapshot,
@@ -150,6 +151,20 @@ function formatCount(value: number): string {
 }
 
 type AppStatus = "protected" | "partial" | "found_unprotected" | "needs_repair" | "not_found";
+
+export function repairHarnessesFor(
+  installs: Array<{ harness: string; active?: boolean }>,
+  health: GuardProtectionHealth,
+): string[] {
+  return Array.from(new Set(
+    installs
+      .filter((install) => install.active === true)
+      .filter((install) => health.apps.find((app) => app.harness === install.harness)?.checks.some(
+        (check) => check.check_id === "harness_hooks" && check.status === "fail"
+      ) === true)
+      .map((install) => install.harness)
+  ));
+}
 
 function resolveAppStatus(
   install: { active?: boolean } | undefined,
@@ -270,7 +285,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
       (check) => check.check_id === "harness_hooks" && check.status === "fail"
     ));
-  const repairHarnesses = Array.from(new Set(managedInstalls.map((install) => install.harness)));
+  const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
 
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,

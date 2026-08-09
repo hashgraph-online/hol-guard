@@ -30742,7 +30742,11 @@ function App() {
         message: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Unable to load watched app inventory."
       });
     }
+    return inboxResult.status === "fulfilled" ? inboxResult.value.snapshot : null;
   }, [setRuntime, setRequests, setReceipts, setPolicies, setInventory]);
+  const refreshStateWithoutResult = reactExports.useCallback(async () => {
+    await refreshStateAfterAction();
+  }, [refreshStateAfterAction]);
   const handleClearPolicies = reactExports.useCallback(async (scope) => {
     setClearConfirm(scope);
   }, []);
@@ -30929,9 +30933,18 @@ function App() {
     } catch (error) {
       failures.push(error instanceof Error ? error.message : "integrity protection");
     }
-    await refreshStateAfterAction();
+    const refreshedSnapshot = await refreshStateAfterAction();
     if (failures.length > 0) {
       throw new Error(`Repair paused at ${failures.join(", ")}. Retry repair to continue from this page.`);
+    }
+    if (refreshedSnapshot === null) {
+      throw new Error("Repair completed, but Guard could not recheck protection. Check again in a moment.");
+    }
+    const remainingHealth = protectionHealthFor(refreshedSnapshot);
+    if (remainingHealth.state !== "protected") {
+      const failedApps = remainingHealth.apps.filter((app) => app.checks.some((check) => check.status === "fail")).map((app) => harnessDisplayName(app.harness));
+      const remaining = failedApps.length > 0 ? `${failedApps.join(", ")} still ${failedApps.length === 1 ? "needs" : "need"} repair.` : "A local protection check still needs attention.";
+      throw new Error(`${remaining} Open the repair details below for the exact check.`);
     }
     return "Automatic repairs completed. Guard rechecked every protection layer below.";
   }, [refreshStateAfterAction]);
@@ -30952,10 +30965,10 @@ function App() {
         onOpenRequest: handleOpenRequest,
         onClearAppPolicies: handleClearAppPolicies,
         onClearPolicy: handleClearPolicy,
-        onManagedInstallChanged: refreshStateAfterAction
+        onManagedInstallChanged: refreshStateWithoutResult
       }
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateAfterAction]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
   const policyContent = reactExports.useMemo(() => {
     if (runtime.kind !== "ready") {
       return null;
@@ -31070,7 +31083,7 @@ function App() {
             onOpenSettings: handleOpenSettings,
             onGoHome: handleGoHome,
             onNavigate: navigate,
-            onRuntimeRefresh: refreshStateAfterAction
+            onRuntimeRefresh: refreshStateWithoutResult
           }
         ) }) : null,
         policyContent,

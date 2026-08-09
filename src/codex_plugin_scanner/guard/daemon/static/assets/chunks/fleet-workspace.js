@@ -263,6 +263,13 @@ function renderReceiptContext(receipt) {
 function formatCount(value) {
   return value.toLocaleString();
 }
+function repairHarnessesFor(installs, health) {
+  return Array.from(new Set(
+    installs.filter((install) => install.active === true).filter((install) => health.apps.find((app) => app.harness === install.harness)?.checks.some(
+      (check) => check.check_id === "harness_hooks" && check.status === "fail"
+    ) === true).map((install) => install.harness)
+  ));
+}
 function resolveAppStatus(install, protectionHealth, hasInventory, hasReceipts) {
   if (install !== void 0) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
@@ -362,7 +369,7 @@ function FleetWorkspace(props) {
   const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
     (check) => check.check_id === "harness_hooks" && check.status === "fail"
   ));
-  const repairHarnesses = Array.from(new Set(managedInstalls.map((install) => install.harness)));
+  const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -544,5 +551,6 @@ function SetupStep(props) {
 }
 export {
   FleetWorkspace,
+  repairHarnessesFor,
   resolveFleetHeroCopy
 };
