@@ -120,15 +120,38 @@ export function explicitControlState(
   kind: "extension" | "permission",
   targetId: string,
 ): "enabled" | "disabled" | null {
+  const projected = kind === "extension"
+    ? effective.projection?.extensions.find((item) => item.extension_id === targetId)?.local_state
+    : effective.projection?.permissions.find((item) => item.permission_id === targetId)?.local_state;
+  if (projected) return projected === "inherited" ? null : projected;
   return effective.controls.find(
     (control) => control.target.kind === kind && control.target.target_id === targetId,
   )?.state ?? null;
+}
+
+function managedExplicitControlState(
+  effective: EffectiveExtensionControls,
+  kind: "extension" | "permission",
+  targetId: string,
+): "enabled" | "disabled" | null {
+  const projected = kind === "extension"
+    ? effective.projection?.extensions.find((item) => item.extension_id === targetId)?.managed_state
+    : effective.projection?.permissions.find((item) => item.permission_id === targetId)?.managed_state;
+  if (projected) return projected === "inherited" ? null : projected;
+  for (const layer of effective.layers) {
+    if (layer.kind !== "signed-cloud") continue;
+    const control = layer.controls.find((item) => item.target_kind === kind && item.target_id === targetId);
+    if (control) return control.state;
+  }
+  return null;
 }
 
 export function extensionEffectiveState(
   effective: EffectiveExtensionControls,
   extension: ExtensionCatalogItem,
 ): "enabled" | "disabled" {
+  const projected = effective.projection?.extensions.find((item) => item.extension_id === extension.extension_id);
+  if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
   if (effective.health !== "protected") return "disabled";
   if (effective.global_lockdown) return "disabled";
   if (extension.required) return "enabled";
@@ -140,6 +163,8 @@ export function permissionEffectiveState(
   extension: ExtensionCatalogItem,
   permission: ExtensionPermission,
 ): "enabled" | "disabled" {
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission.permission_id);
+  if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
   if (extensionEffectiveState(effective, extension) === "disabled") return "disabled";
   if (!permission.configurable) return permission.default_enabled ? "enabled" : "disabled";
   return explicitControlState(effective, "permission", permission.permission_id) ??
@@ -152,8 +177,7 @@ export function extensionStateLabel(
 ): "Allowed" | "Blocked" | "Required" | "Managed" | "Lockdown" | "Unavailable" {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
-  const cloud = effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some((control) => control.target_kind === "extension" && control.target_id === extension.extension_id));
-  if (cloud) return "Managed";
+  if (managedExplicitControlState(effective, "extension", extension.extension_id) !== null) return "Managed";
   if (extension.required) return "Required";
   return extensionEffectiveState(effective, extension) === "enabled" ? "Allowed" : "Blocked";
 }
@@ -165,13 +189,13 @@ export function permissionStateLabel(
 ): "Allowed" | "Blocked" | "Required" | "Managed" | "Inherited" | "Lockdown" | "Unavailable" {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
-  if (extensionEffectiveState(effective, extension) === "disabled") return "Blocked";
-  const cloud = effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some((control) => control.target_kind === "permission" && control.target_id === permission.permission_id));
-  if (cloud) return "Managed";
+  if (managedExplicitControlState(effective, "permission", permission.permission_id) !== null) return "Managed";
   if (!permission.configurable) return "Required";
-  const explicit = explicitControlState(effective, "permission", permission.permission_id);
-  if (explicit === null) return "Inherited";
-  return explicit === "enabled" ? "Allowed" : "Blocked";
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission.permission_id);
+  const localState = projected?.local_state ?? (explicitControlState(effective, "permission", permission.permission_id) ?? "inherited");
+  const effectiveState = permissionEffectiveState(effective, extension, permission);
+  if (localState === "inherited") return effectiveState === "enabled" ? "Inherited" : "Blocked";
+  return effectiveState === "enabled" ? "Allowed" : "Blocked";
 }
 
 export function controlProvenance(
@@ -179,6 +203,17 @@ export function controlProvenance(
   kind: "extension" | "permission",
   targetId: string,
 ): string[] {
+  const projected = kind === "extension"
+    ? effective.projection?.extensions.find((item) => item.extension_id === targetId)
+    : effective.projection?.permissions.find((item) => item.permission_id === targetId);
+  if (projected) {
+    const sources: string[] = [];
+    if (effective.global_lockdown) sources.push("Global lockdown");
+    if (projected.managed_state !== "inherited") sources.push("Signed cloud policy");
+    if (projected.local_state !== "inherited") sources.push("Local administrator");
+    if (sources.length === 0) sources.push("Built-in default");
+    return sources;
+  }
   const sources: string[] = [];
   if (effective.global_lockdown) sources.push("Global lockdown");
   for (const layer of effective.layers) {

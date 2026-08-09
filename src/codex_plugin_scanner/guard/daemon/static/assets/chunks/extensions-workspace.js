@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, an as HiMiniArrowLeft, Z as HiMiniLockClosed, o as HiMiniShieldCheck, ao as HiMiniArrowTopRightOnSquare, c as HiMiniChevronRight, ap as HiMiniInformationCircle, w as HiMiniXMark, J as HiMiniExclamationTriangle, aq as fetchExtensionControlApi, $ as HiMiniAdjustmentsHorizontal, ak as HiMiniMagnifyingGlass, l as HiMiniCheckCircle, y as HiMiniChevronDown, ar as HiMiniArrowPath, B as HiMiniCloud, as as commandReasonLabel, at as DEFAULT_COMMAND_ACTIVITY_FILTERS, a4 as fetchRuntimeSnapshot, d as createCommandActivityClient, f as fetchCommandActivityApi, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, x as HiMiniChevronUp, au as buildApprovalProofCredentials, av as isApprovalProofSubmitDisabled, aw as ApprovalProofFieldInputs } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, an as HiMiniArrowLeft, Z as HiMiniLockClosed, o as HiMiniShieldCheck, ao as HiMiniArrowTopRightOnSquare, c as HiMiniChevronRight, ap as HiMiniInformationCircle, w as HiMiniXMark, J as HiMiniExclamationTriangle, aq as fetchExtensionControlApi, ar as HiMiniArrowPath, $ as HiMiniAdjustmentsHorizontal, ak as HiMiniMagnifyingGlass, l as HiMiniCheckCircle, y as HiMiniChevronDown, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, x as HiMiniChevronUp, as as buildApprovalProofCredentials, at as isApprovalProofSubmitDisabled, au as ApprovalProofFieldInputs } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -76,18 +76,34 @@ function canonicalExtensionId(catalog, candidate) {
   if (direct) return direct.extension_id;
   return catalog.find((extension2) => extension2.aliases.includes(normalized))?.extension_id ?? null;
 }
-function explicitControlState(effective, kind, targetId) {
+function explicitControlState(effective, kind, targetId2) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.local_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.local_state;
+  if (projected) return projected === "inherited" ? null : projected;
   return effective.controls.find(
-    (control) => control.target.kind === kind && control.target.target_id === targetId
+    (control) => control.target.kind === kind && control.target.target_id === targetId2
   )?.state ?? null;
 }
+function managedExplicitControlState(effective, kind, targetId2) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.managed_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.managed_state;
+  if (projected) return projected === "inherited" ? null : projected;
+  for (const layer of effective.layers) {
+    if (layer.kind !== "signed-cloud") continue;
+    const control = layer.controls.find((item) => item.target_kind === kind && item.target_id === targetId2);
+    if (control) return control.state;
+  }
+  return null;
+}
 function extensionEffectiveState(effective, extension2) {
+  const projected = effective.projection?.extensions.find((item) => item.extension_id === extension2.extension_id);
+  if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
   if (effective.health !== "protected") return "disabled";
   if (effective.global_lockdown) return "disabled";
   if (extension2.required) return "enabled";
   return explicitControlState(effective, "extension", extension2.extension_id) ?? "enabled";
 }
 function permissionEffectiveState(effective, extension2, permission2) {
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission2.permission_id);
+  if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
   if (extensionEffectiveState(effective, extension2) === "disabled") return "disabled";
   if (!permission2.configurable) return permission2.default_enabled ? "enabled" : "disabled";
   return explicitControlState(effective, "permission", permission2.permission_id) ?? (permission2.default_enabled ? "enabled" : "disabled");
@@ -95,27 +111,35 @@ function permissionEffectiveState(effective, extension2, permission2) {
 function extensionStateLabel(effective, extension2) {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
-  const cloud = effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some((control) => control.target_kind === "extension" && control.target_id === extension2.extension_id));
-  if (cloud) return "Managed";
+  if (managedExplicitControlState(effective, "extension", extension2.extension_id) !== null) return "Managed";
   if (extension2.required) return "Required";
   return extensionEffectiveState(effective, extension2) === "enabled" ? "Allowed" : "Blocked";
 }
 function permissionStateLabel(effective, extension2, permission2) {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
-  if (extensionEffectiveState(effective, extension2) === "disabled") return "Blocked";
-  const cloud = effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some((control) => control.target_kind === "permission" && control.target_id === permission2.permission_id));
-  if (cloud) return "Managed";
+  if (managedExplicitControlState(effective, "permission", permission2.permission_id) !== null) return "Managed";
   if (!permission2.configurable) return "Required";
-  const explicit = explicitControlState(effective, "permission", permission2.permission_id);
-  if (explicit === null) return "Inherited";
-  return explicit === "enabled" ? "Allowed" : "Blocked";
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission2.permission_id);
+  const localState = projected?.local_state ?? (explicitControlState(effective, "permission", permission2.permission_id) ?? "inherited");
+  const effectiveState = permissionEffectiveState(effective, extension2, permission2);
+  if (localState === "inherited") return effectiveState === "enabled" ? "Inherited" : "Blocked";
+  return effectiveState === "enabled" ? "Allowed" : "Blocked";
 }
-function controlProvenance(effective, kind, targetId) {
+function controlProvenance(effective, kind, targetId2) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2) : effective.projection?.permissions.find((item) => item.permission_id === targetId2);
+  if (projected) {
+    const sources2 = [];
+    if (effective.global_lockdown) sources2.push("Global lockdown");
+    if (projected.managed_state !== "inherited") sources2.push("Signed cloud policy");
+    if (projected.local_state !== "inherited") sources2.push("Local administrator");
+    if (sources2.length === 0) sources2.push("Built-in default");
+    return sources2;
+  }
   const sources = [];
   if (effective.global_lockdown) sources.push("Global lockdown");
   for (const layer of effective.layers) {
-    if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId)) {
+    if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId2)) {
       sources.push(layer.kind === "signed-cloud" ? "Signed cloud policy" : "Local administrator");
     }
   }
@@ -266,7 +290,7 @@ function useModalDialog(onClose, canClose = true) {
   }, []);
   return dialogRef;
 }
-const RISK_TONE = {
+const RISK_TONE$1 = {
   critical: "border-red-200 bg-red-50 text-red-800",
   high: "border-orange-200 bg-orange-50 text-orange-800",
   medium: "border-amber-200 bg-amber-50 text-amber-800",
@@ -274,9 +298,10 @@ const RISK_TONE = {
 };
 const TABS = [
   { id: "overview", label: "Overview" },
-  { id: "commands", label: "Commands & rules" }
+  { id: "commands", label: "Commands & rules" },
+  { id: "policy", label: "Policy" }
 ];
-function Pill({ children, tone = "border-slate-200 bg-slate-50 text-slate-700" }) {
+function Pill$1({ children, tone = "border-slate-200 bg-slate-50 text-slate-700" }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`, children });
 }
 function Definition({ label, children }) {
@@ -382,13 +407,13 @@ function PermissionInspector(props) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-slate-600", children: props.permission.description }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: RISK_TONE[props.permission.risk_tier], children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill$1, { tone: RISK_TONE$1[props.permission.risk_tier], children: [
         props.permission.risk_tier,
         " baseline risk"
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: permissionStateLabel(props.effective, props.extension, props.permission) }),
-      !props.permission.configurable ? /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: "Fixed" }) : null,
-      props.permission.deprecated ? /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { tone: "border-amber-200 bg-amber-50 text-amber-800", children: "Deprecated" }) : null
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { children: permissionStateLabel(props.effective, props.extension, props.permission) }),
+      !props.permission.configurable ? /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { children: "Fixed" }) : null,
+      props.permission.deprecated ? /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { tone: "border-amber-200 bg-amber-50 text-amber-800", children: "Deprecated" }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-slate-950", children: "Baseline and effective behavior" }),
@@ -447,15 +472,15 @@ function RuleInspector(props) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-slate-600", children: props.rule.description }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: RISK_TONE[props.rule.severity], children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill$1, { tone: RISK_TONE$1[props.rule.severity], children: [
         props.rule.severity,
         " detector severity"
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill$1, { children: [
         treatmentLabel(props.rule.default_mode),
         " default"
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: props.rule.matcher_kind })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { children: props.rule.matcher_kind })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-7 grid gap-5 sm:grid-cols-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(Definition, { label: "Governing permission", children: permission2?.label ?? "Compatibility mapping" }),
@@ -486,7 +511,7 @@ function RuleInspector(props) {
     ] }) : null
   ] });
 }
-function ExtensionControlCenterDetail(props) {
+function ExtensionControlCenterDetail$1(props) {
   const extensionState = extensionEffectiveState(props.effective, props.extension);
   const stateLabel = extensionStateLabel(props.effective, props.extension);
   const provenance = controlProvenance(props.effective, "extension", props.extension.extension_id);
@@ -518,10 +543,10 @@ function ExtensionControlCenterDetail(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 max-w-3xl text-sm leading-6 text-slate-600", children: props.extension.description })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { tone: extensionState === "enabled" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-300 bg-slate-100 text-slate-700", children: stateLabel }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: props.extension.required ? "Required" : "Optional" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: props.extension.source }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { tone: extensionState === "enabled" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-300 bg-slate-100 text-slate-700", children: stateLabel }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { children: props.extension.required ? "Required" : "Optional" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { children: props.extension.source }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill$1, { children: [
             "v",
             props.extension.version
           ] })
@@ -611,9 +636,9 @@ function ExtensionControlCenterDetail(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid gap-3 lg:grid-cols-2", children: permissions.map((permission2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => props.onUrlState({ ...props.urlState, ruleId: permission2.permission_id }), className: "min-h-11 rounded-2xl border border-slate-200 bg-white p-4 text-left hover:border-blue-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-slate-950", children: permission2.label }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { tone: RISK_TONE[permission2.risk_tier], children: permission2.risk_tier }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: permissionStateLabel(props.effective, props.extension, permission2) }),
-            !permission2.configurable ? /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: "Fixed" }) : null
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { tone: RISK_TONE$1[permission2.risk_tier], children: permission2.risk_tier }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { children: permissionStateLabel(props.effective, props.extension, permission2) }),
+            !permission2.configurable ? /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { children: "Fixed" }) : null
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: permission2.description }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 text-xs text-slate-500", children: [
@@ -649,7 +674,7 @@ function ExtensionControlCenterDetail(props) {
                 /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "text-[11px] text-slate-500", children: rule2.rule_id })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-4 py-3", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { tone: RISK_TONE[rule2.severity], children: rule2.severity }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { tone: RISK_TONE$1[rule2.severity], children: rule2.severity }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 text-xs text-slate-500", children: treatmentLabel(rule2.default_mode) })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-3 text-slate-600", children: rule2.matcher_kind }),
@@ -663,8 +688,8 @@ function ExtensionControlCenterDetail(props) {
           const allowed = permission2 ? permissionEffectiveState(props.effective, props.extension, permission2) === "enabled" : extensionState === "enabled";
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => props.onUrlState({ ...props.urlState, ruleId: rule2.rule_id }), className: "rounded-2xl border border-slate-200 bg-white p-4 text-left", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: allowed ? "Allowed" : "Blocked" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { tone: RISK_TONE[rule2.severity], children: rule2.severity })
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { children: allowed ? "Allowed" : "Blocked" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Pill$1, { tone: RISK_TONE$1[rule2.severity], children: rule2.severity })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 font-semibold text-slate-950", children: rule2.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block break-all text-[11px] text-slate-500", children: rule2.rule_id }),
@@ -707,10 +732,10 @@ function ExtensionControlCenterDetail(props) {
     selectedRule ? /* @__PURE__ */ jsxRuntimeExports.jsx(RuleInspector, { extension: props.extension, rule: selectedRule, onClose: () => props.onUrlState({ ...props.urlState, ruleId: null }), onTest: () => props.onUrlState({ ...props.urlState, tab: "test-lab", ruleId: selectedRule.rule_id }) }) : null
   ] });
 }
-const EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const PERMISSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const EXTENSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const DIGEST = /^[a-f0-9]{64}$/;
+const DIGEST$2 = /^[a-f0-9]{64}$/;
 const VERSION = /^[1-9][0-9]*\.[0-9]+\.[0-9]+$/;
 const EXTENSION_CLIENT_LIMITS = Object.freeze({
   extensions: 256,
@@ -727,7 +752,7 @@ class ExtensionControlProtocolError extends Error {
     super(`Invalid extension-control response: ${message}`);
   }
 }
-function record(value, label) {
+function record$2(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ExtensionControlProtocolError(`${label} must be an object`);
   }
@@ -738,7 +763,7 @@ function array(value, label, max) {
   if (value.length > max) throw new ExtensionControlProtocolError(`${label} exceeds ${max} items`);
   return value;
 }
-function string(value, label, allowEmpty = false) {
+function string$1(value, label, allowEmpty = false) {
   if (typeof value !== "string") throw new ExtensionControlProtocolError(`${label} must be a string`);
   if (value.length > EXTENSION_CLIENT_LIMITS.stringLength) throw new ExtensionControlProtocolError(`${label} is too long`);
   if (!allowEmpty && value.trim().length === 0) throw new ExtensionControlProtocolError(`${label} is required`);
@@ -746,57 +771,57 @@ function string(value, label, allowEmpty = false) {
 }
 function optionalString(value, label) {
   if (value === null) return null;
-  return string(value, label);
+  return string$1(value, label);
 }
-function bool(value, label) {
+function bool$1(value, label) {
   if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
   return value;
 }
-function integer(value, label, min = 0) {
+function integer$2(value, label, min = 0) {
   if (!Number.isSafeInteger(value) || value < min) {
     throw new ExtensionControlProtocolError(`${label} must be an integer >= ${min}`);
   }
   return value;
 }
-function enumValue(value, label, values) {
-  const candidate = string(value, label);
+function enumValue$1(value, label, values) {
+  const candidate = string$1(value, label);
   if (!values.includes(candidate)) throw new ExtensionControlProtocolError(`${label} has unsupported value`);
   return candidate;
 }
-function id(value, label, pattern) {
-  const candidate = string(value, label).trim().toLowerCase();
+function id$1(value, label, pattern) {
+  const candidate = string$1(value, label).trim().toLowerCase();
   if (!pattern.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not canonical`);
   return candidate;
 }
-function digest(value, label) {
-  const candidate = string(value, label).trim().toLowerCase();
-  if (!DIGEST.test(candidate)) throw new ExtensionControlProtocolError(`${label} must be a SHA-256 digest`);
+function digest$1(value, label) {
+  const candidate = string$1(value, label).trim().toLowerCase();
+  if (!DIGEST$2.test(candidate)) throw new ExtensionControlProtocolError(`${label} must be a SHA-256 digest`);
   return candidate;
 }
 function version(value, label) {
-  const candidate = string(value, label);
+  const candidate = string$1(value, label);
   if (!VERSION.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not a semantic implementation version`);
   return candidate;
 }
 function stringList(value, label, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
-  return array(value, label, max).map((item, index) => string(item, `${label}[${index}]`));
+  return array(value, label, max).map((item, index) => string$1(item, `${label}[${index}]`));
 }
-function idList(value, label, pattern, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
-  const items = array(value, label, max).map((item, index) => id(item, `${label}[${index}]`, pattern));
+function idList$1(value, label, pattern, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
+  const items = array(value, label, max).map((item, index) => id$1(item, `${label}[${index}]`, pattern));
   if (new Set(items).size !== items.length) throw new ExtensionControlProtocolError(`${label} contains duplicates`);
   return items;
 }
 function safeVariant(value, label) {
-  const item = record(value, label);
+  const item = record$2(value, label);
   return {
-    variant_id: string(item.variant_id, `${label}.variant_id`),
-    title: string(item.title, `${label}.title`),
-    matcher_kind: string(item.matcher_kind, `${label}.matcher_kind`)
+    variant_id: string$1(item.variant_id, `${label}.variant_id`),
+    title: string$1(item.title, `${label}.title`),
+    matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`)
   };
 }
 function rule(value, extensionId, label) {
-  const item = record(value, label);
-  const ruleId = id(item.rule_id, `${label}.rule_id`, RULE_ID);
+  const item = record$2(value, label);
+  const ruleId = id$1(item.rule_id, `${label}.rule_id`, RULE_ID);
   if (!ruleId.startsWith(`${extensionId}.`)) throw new ExtensionControlProtocolError(`${label}.rule_id belongs to another extension`);
   const rawVersion = item.rule_version;
   if (!(typeof rawVersion === "string" || Number.isSafeInteger(rawVersion))) {
@@ -805,53 +830,53 @@ function rule(value, extensionId, label) {
   return {
     rule_id: ruleId,
     rule_version: rawVersion,
-    title: string(item.title, `${label}.title`),
-    description: string(item.description, `${label}.description`),
-    severity: enumValue(item.severity, `${label}.severity`, ["low", "medium", "high", "critical"]),
+    title: string$1(item.title, `${label}.title`),
+    description: string$1(item.description, `${label}.description`),
+    severity: enumValue$1(item.severity, `${label}.severity`, ["low", "medium", "high", "critical"]),
     risk_classes: stringList(item.risk_classes, `${label}.risk_classes`),
     action_classes: stringList(item.action_classes, `${label}.action_classes`),
     safer_alternatives: stringList(item.safer_alternatives, `${label}.safer_alternatives`),
-    default_mode: enumValue(item.default_mode, `${label}.default_mode`, ["required", "enforce", "review", "monitor", "disabled"]),
-    matcher_kind: string(item.matcher_kind, `${label}.matcher_kind`),
+    default_mode: enumValue$1(item.default_mode, `${label}.default_mode`, ["required", "enforce", "review", "monitor", "disabled"]),
+    matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`),
     safe_variants: array(item.safe_variants, `${label}.safe_variants`, EXTENSION_CLIENT_LIMITS.relationshipIds).map((entry, index) => safeVariant(entry, `${label}.safe_variants[${index}]`)),
-    compatibility_fallback: bool(item.compatibility_fallback, `${label}.compatibility_fallback`)
+    compatibility_fallback: bool$1(item.compatibility_fallback, `${label}.compatibility_fallback`)
   };
 }
 function permission(value, extensionId, label) {
-  const item = record(value, label);
-  const permissionId = id(item.permission_id, `${label}.permission_id`, PERMISSION_ID);
-  const owner = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
+  const item = record$2(value, label);
+  const permissionId = id$1(item.permission_id, `${label}.permission_id`, PERMISSION_ID$1);
+  const owner = id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1);
   if (owner !== extensionId || !permissionId.startsWith(`${extensionId}.permission.`)) {
     throw new ExtensionControlProtocolError(`${label} belongs to another extension`);
   }
-  const replacement = item.replacement_permission_id === null ? null : id(item.replacement_permission_id, `${label}.replacement_permission_id`, PERMISSION_ID);
+  const replacement = item.replacement_permission_id === null ? null : id$1(item.replacement_permission_id, `${label}.replacement_permission_id`, PERMISSION_ID$1);
   return {
     permission_id: permissionId,
-    schema_version: integer(item.schema_version, `${label}.schema_version`, 1),
+    schema_version: integer$2(item.schema_version, `${label}.schema_version`, 1),
     extension_id: owner,
     implementation_version: version(item.implementation_version, `${label}.implementation_version`),
-    label: string(item.label, `${label}.label`),
-    description: string(item.description, `${label}.description`),
-    risk_tier: enumValue(item.risk_tier, `${label}.risk_tier`, ["low", "medium", "high", "critical"]),
-    baseline_floor: enumValue(item.baseline_floor, `${label}.baseline_floor`, ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]),
-    default_enabled: bool(item.default_enabled, `${label}.default_enabled`),
-    configurable: bool(item.configurable, `${label}.configurable`),
+    label: string$1(item.label, `${label}.label`),
+    description: string$1(item.description, `${label}.description`),
+    risk_tier: enumValue$1(item.risk_tier, `${label}.risk_tier`, ["low", "medium", "high", "critical"]),
+    baseline_floor: enumValue$1(item.baseline_floor, `${label}.baseline_floor`, ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]),
+    default_enabled: bool$1(item.default_enabled, `${label}.default_enabled`),
+    configurable: bool$1(item.configurable, `${label}.configurable`),
     fixed_reason: optionalString(item.fixed_reason, `${label}.fixed_reason`),
     typed_capabilities: stringList(item.typed_capabilities, `${label}.typed_capabilities`),
     action_classes: stringList(item.action_classes, `${label}.action_classes`),
-    rule_ids: idList(item.rule_ids, `${label}.rule_ids`, RULE_ID),
-    dependencies: idList(item.dependencies, `${label}.dependencies`, PERMISSION_ID),
-    conflicts: idList(item.conflicts, `${label}.conflicts`, PERMISSION_ID),
-    implied_permissions: idList(item.implied_permissions, `${label}.implied_permissions`, PERMISSION_ID),
+    rule_ids: idList$1(item.rule_ids, `${label}.rule_ids`, RULE_ID),
+    dependencies: idList$1(item.dependencies, `${label}.dependencies`, PERMISSION_ID$1),
+    conflicts: idList$1(item.conflicts, `${label}.conflicts`, PERMISSION_ID$1),
+    implied_permissions: idList$1(item.implied_permissions, `${label}.implied_permissions`, PERMISSION_ID$1),
     introduced_version: version(item.introduced_version, `${label}.introduced_version`),
-    deprecated: bool(item.deprecated, `${label}.deprecated`),
+    deprecated: bool$1(item.deprecated, `${label}.deprecated`),
     replacement_permission_id: replacement,
     safer_guidance: stringList(item.safer_guidance, `${label}.safer_guidance`)
   };
 }
 function extension(value, label) {
-  const item = record(value, label);
-  const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
+  const item = record$2(value, label);
+  const extensionId = id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1);
   const rules = array(item.rules, `${label}.rules`, EXTENSION_CLIENT_LIMITS.rulesPerExtension).map((entry, index) => rule(entry, extensionId, `${label}.rules[${index}]`));
   const permissions = array(item.permissions, `${label}.permissions`, EXTENSION_CLIENT_LIMITS.permissionsPerExtension).map((entry, index) => permission(entry, extensionId, `${label}.permissions[${index}]`));
   const ruleIds = rules.map((entry) => entry.rule_id);
@@ -864,23 +889,23 @@ function extension(value, label) {
       if (!knownRules.has(ruleId)) throw new ExtensionControlProtocolError(`${label} permission references unknown rule ${ruleId}`);
     }
   }
-  const ruleCount = integer(item.rule_count, `${label}.rule_count`);
-  const permissionCount = integer(item.permission_count, `${label}.permission_count`);
+  const ruleCount = integer$2(item.rule_count, `${label}.rule_count`);
+  const permissionCount = integer$2(item.permission_count, `${label}.permission_count`);
   if (ruleCount !== rules.length || permissionCount !== permissions.length) {
     throw new ExtensionControlProtocolError(`${label} count metadata does not match payload`);
   }
   return {
-    schema_version: integer(item.schema_version, `${label}.schema_version`, 1),
+    schema_version: integer$2(item.schema_version, `${label}.schema_version`, 1),
     extension_id: extensionId,
-    name: string(item.name, `${label}.name`),
-    description: string(item.description, `${label}.description`),
-    enabled: bool(item.enabled, `${label}.enabled`),
-    required: bool(item.required, `${label}.required`),
-    source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
+    name: string$1(item.name, `${label}.name`),
+    description: string$1(item.description, `${label}.description`),
+    enabled: bool$1(item.enabled, `${label}.enabled`),
+    required: bool$1(item.required, `${label}.required`),
+    source: enumValue$1(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
     version: version(item.version, `${label}.version`),
-    aliases: idList(item.aliases, `${label}.aliases`, EXTENSION_ID),
-    dependencies: idList(item.dependencies, `${label}.dependencies`, EXTENSION_ID),
-    conflicts: idList(item.conflicts, `${label}.conflicts`, EXTENSION_ID),
+    aliases: idList$1(item.aliases, `${label}.aliases`, EXTENSION_ID$1),
+    dependencies: idList$1(item.dependencies, `${label}.dependencies`, EXTENSION_ID$1),
+    conflicts: idList$1(item.conflicts, `${label}.conflicts`, EXTENSION_ID$1),
     delegated_protection: optionalString(item.delegated_protection, `${label}.delegated_protection`),
     ecosystem_ids: stringList(item.ecosystem_ids, `${label}.ecosystem_ids`),
     executables: stringList(item.executables, `${label}.executables`),
@@ -896,78 +921,306 @@ function extension(value, label) {
   };
 }
 function controlLayer(value, label) {
-  const item = record(value, label);
+  const item = record$2(value, label);
   const controls = array(item.controls, `${label}.controls`, EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record(entry, `${label}.controls[${index}]`);
-    const kind = enumValue(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
+    const raw = record$2(entry, `${label}.controls[${index}]`);
+    const kind = enumValue$1(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
     return {
       target_kind: kind,
-      target_id: id(raw.target_id, `${label}.controls[${index}].target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID),
-      state: enumValue(raw.state, `${label}.controls[${index}].state`, ["enabled", "disabled"])
+      target_id: id$1(raw.target_id, `${label}.controls[${index}].target_id`, kind === "extension" ? EXTENSION_ID$1 : PERMISSION_ID$1),
+      state: enumValue$1(raw.state, `${label}.controls[${index}].state`, ["enabled", "disabled"])
     };
   });
   const keys = controls.map((control) => `${control.target_kind}:${control.target_id}`);
   if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError(`${label}.controls contains duplicate targets`);
   return {
-    schema_version: string(item.schema_version, `${label}.schema_version`),
-    kind: enumValue(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
-    catalog_digest: digest(item.catalog_digest, `${label}.catalog_digest`),
-    global_lockdown: bool(item.global_lockdown, `${label}.global_lockdown`),
+    schema_version: string$1(item.schema_version, `${label}.schema_version`),
+    kind: enumValue$1(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
+    catalog_digest: digest$1(item.catalog_digest, `${label}.catalog_digest`),
+    global_lockdown: bool$1(item.global_lockdown, `${label}.global_lockdown`),
     controls
   };
 }
 function normalizeExtensionCatalog(value) {
-  const root = record(value, "catalog");
+  const root = record$2(value, "catalog");
   const extensions = array(root.extensions, "catalog.extensions", EXTENSION_CLIENT_LIMITS.extensions).map((entry, index) => extension(entry, `catalog.extensions[${index}]`));
   const ids = extensions.map((entry) => entry.extension_id);
   if (new Set(ids).size !== ids.length) throw new ExtensionControlProtocolError("catalog.extensions contains duplicate extension IDs");
-  const limits = root.limits === void 0 ? void 0 : record(root.limits, "catalog.limits");
+  const limits = root.limits === void 0 ? void 0 : record$2(root.limits, "catalog.limits");
   return {
-    schema_version: string(root.schema_version, "catalog.schema_version"),
-    control_schema_version: root.control_schema_version === void 0 ? void 0 : string(root.control_schema_version, "catalog.control_schema_version"),
-    catalog_digest: digest(root.catalog_digest, "catalog.catalog_digest"),
+    schema_version: string$1(root.schema_version, "catalog.schema_version"),
+    control_schema_version: root.control_schema_version === void 0 ? void 0 : string$1(root.control_schema_version, "catalog.control_schema_version"),
+    catalog_digest: digest$1(root.catalog_digest, "catalog.catalog_digest"),
     extensions,
     limits: limits === void 0 ? void 0 : {
-      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
-      max_controls: limits.max_controls === void 0 ? void 0 : integer(limits.max_controls, "catalog.limits.max_controls", 1),
-      max_observations: limits.max_observations === void 0 ? void 0 : integer(limits.max_observations, "catalog.limits.max_observations", 1)
+      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer$2(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
+      max_controls: limits.max_controls === void 0 ? void 0 : integer$2(limits.max_controls, "catalog.limits.max_controls", 1),
+      max_observations: limits.max_observations === void 0 ? void 0 : integer$2(limits.max_observations, "catalog.limits.max_observations", 1)
     }
   };
 }
 function normalizeEffectiveExtensionControls(value) {
-  const root = record(value, "effective");
+  const root = record$2(value, "effective");
   const controls = array(root.controls, "effective.controls", EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record(entry, `effective.controls[${index}]`);
-    const target = record(raw.target, `effective.controls[${index}].target`);
-    const kind = enumValue(target.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
+    const raw = record$2(entry, `effective.controls[${index}]`);
+    const target2 = record$2(raw.target, `effective.controls[${index}].target`);
+    const kind = enumValue$1(target2.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
     return {
       target: {
         kind,
-        target_id: id(target.target_id, `effective.controls[${index}].target.target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID)
+        target_id: id$1(target2.target_id, `effective.controls[${index}].target.target_id`, kind === "extension" ? EXTENSION_ID$1 : PERMISSION_ID$1)
       },
-      state: enumValue(raw.state, `effective.controls[${index}].state`, ["enabled", "disabled"])
+      state: enumValue$1(raw.state, `effective.controls[${index}].state`, ["enabled", "disabled"])
     };
   });
   const keys = controls.map((control) => `${control.target.kind}:${control.target.target_id}`);
   if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
   const layers = array(root.layers, "effective.layers", EXTENSION_CLIENT_LIMITS.layers).map((entry, index) => controlLayer(entry, `effective.layers[${index}]`));
   const failures = array(root.failures, "effective.failures", EXTENSION_CLIENT_LIMITS.failures).map((entry, index) => {
-    const raw = record(entry, `effective.failures[${index}]`);
+    const raw = record$2(entry, `effective.failures[${index}]`);
     return {
-      code: string(raw.code, `effective.failures[${index}].code`),
-      detail: raw.detail === void 0 ? void 0 : string(raw.detail, `effective.failures[${index}].detail`, true),
-      layer_kind: raw.layer_kind === void 0 ? void 0 : string(raw.layer_kind, `effective.failures[${index}].layer_kind`)
+      code: string$1(raw.code, `effective.failures[${index}].code`),
+      detail: raw.detail === void 0 ? void 0 : string$1(raw.detail, `effective.failures[${index}].detail`, true),
+      layer_kind: raw.layer_kind === void 0 ? void 0 : string$1(raw.layer_kind, `effective.failures[${index}].layer_kind`)
     };
   });
   return {
-    schema_version: string(root.schema_version, "effective.schema_version"),
-    health: enumValue(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
-    revision: integer(root.revision, "effective.revision"),
-    catalog_digest: digest(root.catalog_digest, "effective.catalog_digest"),
-    global_lockdown: bool(root.global_lockdown, "effective.global_lockdown"),
+    schema_version: string$1(root.schema_version, "effective.schema_version"),
+    health: enumValue$1(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
+    revision: integer$2(root.revision, "effective.revision"),
+    catalog_digest: digest$1(root.catalog_digest, "effective.catalog_digest"),
+    global_lockdown: bool$1(root.global_lockdown, "effective.global_lockdown"),
     controls,
     layers,
     failures
+  };
+}
+const DIGEST$1 = /^[a-f0-9]{64}$/;
+const TARGET_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const MAX_CHANGED_TARGETS = 4096;
+const MAX_AFFECTED_IDS = 4096;
+const MAX_WARNINGS = 64;
+const MAX_TEXT = 8192;
+function record$1(value, label) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid extension-control ${label}: expected object`);
+  return value;
+}
+function string(value, label, max = MAX_TEXT) {
+  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid extension-control ${label}`);
+  return value;
+}
+function integer$1(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid extension-control ${label}`);
+  return value;
+}
+function bool(value, label) {
+  if (typeof value !== "boolean") throw new Error(`Invalid extension-control ${label}`);
+  return value;
+}
+function digest(value, label) {
+  const candidate = string(value, label, 64);
+  if (!DIGEST$1.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
+  return candidate;
+}
+function targetId(value, label) {
+  const candidate = string(value, label, 256);
+  if (!TARGET_ID.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
+  return candidate;
+}
+function boundedArray(value, label, max) {
+  if (!Array.isArray(value) || value.length > max) throw new Error(`Invalid extension-control ${label}`);
+  return value;
+}
+function idList(value, label) {
+  const items = boundedArray(value, label, MAX_AFFECTED_IDS).map((item, index) => targetId(item, `${label}[${index}]`));
+  if (new Set(items).size !== items.length) throw new Error(`Invalid extension-control ${label}: duplicate IDs`);
+  return items;
+}
+function optionalIdList(value, label) {
+  return value === void 0 ? void 0 : idList(value, label);
+}
+function optionalStringList(value, label) {
+  if (value === void 0) return void 0;
+  const items = boundedArray(value, label, MAX_AFFECTED_IDS).map((item, index) => string(item, `${label}[${index}]`, 128));
+  if (new Set(items).size !== items.length) throw new Error(`Invalid extension-control ${label}: duplicate values`);
+  return items;
+}
+function warning(value, label) {
+  const item = record$1(value, label);
+  return {
+    code: string(item.code, `${label}.code`, 128),
+    message: string(item.message, `${label}.message`, 1024),
+    ...item.target_id === void 0 ? {} : { target_id: targetId(item.target_id, `${label}.target_id`) },
+    ...item.count === void 0 ? {} : { count: integer$1(item.count, `${label}.count`) }
+  };
+}
+function target(value, label) {
+  const item = record$1(value, label);
+  const rawTarget = record$1(item.target, `${label}.target`);
+  const kind = string(rawTarget.kind, `${label}.target.kind`, 32);
+  if (kind !== "extension" && kind !== "permission") throw new Error(`Invalid extension-control ${label}.target.kind`);
+  const beforeExplicit = string(item.before_explicit, `${label}.before_explicit`, 32);
+  const afterExplicit = string(item.after_explicit, `${label}.after_explicit`, 32);
+  if (!["inherited", "enabled", "disabled"].includes(beforeExplicit) || !["inherited", "enabled", "disabled"].includes(afterExplicit)) throw new Error(`Invalid extension-control ${label} explicit state`);
+  const beforeEffective = string(item.before_effective, `${label}.before_effective`, 32);
+  const afterEffective = string(item.after_effective, `${label}.after_effective`, 32);
+  if (!["allowed", "blocked"].includes(beforeEffective) || !["allowed", "blocked"].includes(afterEffective)) throw new Error(`Invalid extension-control ${label} effective state`);
+  const affectedExtensionIds = optionalIdList(item.affected_extension_ids, `${label}.affected_extension_ids`);
+  const dependencyPermissionIds = optionalIdList(item.dependency_permission_ids, `${label}.dependency_permission_ids`);
+  const impliedPermissionIds = optionalIdList(item.implied_permission_ids, `${label}.implied_permission_ids`);
+  const conflictPermissionIds = optionalIdList(item.conflict_permission_ids, `${label}.conflict_permission_ids`);
+  const provenance = optionalStringList(item.provenance, `${label}.provenance`);
+  return {
+    target: { kind, target_id: targetId(rawTarget.target_id, `${label}.target.target_id`) },
+    extension_id: targetId(item.extension_id, `${label}.extension_id`),
+    label: string(item.label, `${label}.label`, 512),
+    before_explicit: beforeExplicit,
+    after_explicit: afterExplicit,
+    before_effective: beforeEffective,
+    after_effective: afterEffective,
+    affected_permission_ids: idList(item.affected_permission_ids, `${label}.affected_permission_ids`),
+    affected_rule_ids: idList(item.affected_rule_ids, `${label}.affected_rule_ids`),
+    ...affectedExtensionIds === void 0 ? {} : { affected_extension_ids: affectedExtensionIds },
+    ...dependencyPermissionIds === void 0 ? {} : { dependency_permission_ids: dependencyPermissionIds },
+    ...impliedPermissionIds === void 0 ? {} : { implied_permission_ids: impliedPermissionIds },
+    ...conflictPermissionIds === void 0 ? {} : { conflict_permission_ids: conflictPermissionIds },
+    ...provenance === void 0 ? {} : { provenance },
+    warnings: boundedArray(item.warnings, `${label}.warnings`, MAX_WARNINGS).map((entry, index) => warning(entry, `${label}.warnings[${index}]`)),
+    ...item.extension_name === void 0 ? {} : { extension_name: string(item.extension_name, `${label}.extension_name`, 512) },
+    ...item.baseline_risk === void 0 ? {} : { baseline_risk: string(item.baseline_risk, `${label}.baseline_risk`, 32) },
+    ...item.baseline_floor === void 0 ? {} : { baseline_floor: string(item.baseline_floor, `${label}.baseline_floor`, 32) }
+  };
+}
+function normalizeExtensionSemanticPreview(value) {
+  const root = record$1(value, "semantic preview");
+  if (string(root.schema_version, "semantic_preview.schema_version", 128) !== "guard.daemon.extension-control-semantic-preview.v1") throw new Error("Invalid extension-control semantic preview schema");
+  const lockdown = record$1(root.global_lockdown, "semantic_preview.global_lockdown");
+  const summary = record$1(root.summary, "semantic_preview.summary");
+  const changedTargets = boundedArray(root.changed_targets, "semantic_preview.changed_targets", MAX_CHANGED_TARGETS).map((entry, index) => target(entry, `semantic_preview.changed_targets[${index}]`));
+  const changedTargetCount = integer$1(root.changed_target_count, "semantic_preview.changed_target_count");
+  if (changedTargetCount !== changedTargets.length) throw new Error("Invalid extension-control semantic preview target count");
+  return {
+    schema_version: "guard.daemon.extension-control-semantic-preview.v1",
+    global_lockdown: {
+      before: bool(lockdown.before, "semantic_preview.global_lockdown.before"),
+      after: bool(lockdown.after, "semantic_preview.global_lockdown.after"),
+      changed: bool(lockdown.changed, "semantic_preview.global_lockdown.changed")
+    },
+    changed_target_count: changedTargetCount,
+    affected_permission_count: integer$1(root.affected_permission_count, "semantic_preview.affected_permission_count"),
+    affected_rule_count: integer$1(root.affected_rule_count, "semantic_preview.affected_rule_count"),
+    changed_targets: changedTargets,
+    ...root.approval_required === void 0 ? {} : { approval_required: bool(root.approval_required, "semantic_preview.approval_required") },
+    summary: {
+      newly_blocked_permissions: integer$1(summary.newly_blocked_permissions, "semantic_preview.summary.newly_blocked_permissions"),
+      newly_allowed_permissions: integer$1(summary.newly_allowed_permissions, "semantic_preview.summary.newly_allowed_permissions"),
+      effective_change_count: integer$1(summary.effective_change_count, "semantic_preview.summary.effective_change_count")
+    }
+  };
+}
+function normalizeExtensionMutationPreview(value) {
+  const root = record$1(value, "mutation preview");
+  return {
+    schema_version: string(root.schema_version, "preview.schema_version", 128),
+    previous_revision: integer$1(root.previous_revision, "preview.previous_revision"),
+    next_revision: integer$1(root.next_revision, "preview.next_revision"),
+    catalog_digest: digest(root.catalog_digest, "preview.catalog_digest"),
+    canonical_diff_digest: digest(root.canonical_diff_digest, "preview.canonical_diff_digest"),
+    global_lockdown: bool(root.global_lockdown, "preview.global_lockdown"),
+    controls: integer$1(root.controls, "preview.controls"),
+    semantic_preview: normalizeExtensionSemanticPreview(root.semantic_preview),
+    ...root.proof_id === void 0 ? {} : { proof_id: string(root.proof_id, "preview.proof_id", 256) }
+  };
+}
+function normalizeExtensionMutationApply(value) {
+  const root = record$1(value, "mutation apply");
+  if (string(root.status, "apply.status", 32) !== "applied") throw new Error("Invalid extension-control apply status");
+  return {
+    schema_version: string(root.schema_version, "apply.schema_version", 128),
+    status: "applied",
+    revision: integer$1(root.revision, "apply.revision"),
+    catalog_digest: digest(root.catalog_digest, "apply.catalog_digest")
+  };
+}
+const DIGEST = /^[a-f0-9]{64}$/;
+const EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const PERMISSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const MAX_EXTENSIONS = 512;
+const MAX_PERMISSIONS = 4096;
+const MAX_REASONS = 64;
+function record(value, label) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function text(value, label, max = 256) {
+  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function integer(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function boolean(value, label) {
+  if (typeof value !== "boolean") throw new Error(`Invalid ${label}`);
+  return value;
+}
+function enumValue(value, label, values) {
+  const candidate = text(value, label, 64);
+  if (!values.includes(candidate)) throw new Error(`Invalid ${label}`);
+  return candidate;
+}
+function id(value, label, pattern) {
+  const candidate = text(value, label).toLowerCase();
+  if (!pattern.test(candidate)) throw new Error(`Invalid ${label}`);
+  return candidate;
+}
+function reasons(value, label) {
+  if (!Array.isArray(value) || value.length > MAX_REASONS) throw new Error(`Invalid ${label}`);
+  return value.map((item, index) => text(item, `${label}[${index}]`, 128));
+}
+function extensionItem(value, label) {
+  const item = record(value, label);
+  return {
+    extension_id: id(item.extension_id, `${label}.extension_id`, EXTENSION_ID),
+    effective_state: enumValue(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
+    local_state: enumValue(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
+    managed_state: enumValue(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
+    required: boolean(item.required, `${label}.required`),
+    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
+  };
+}
+function permissionItem(value, label) {
+  const item = record(value, label);
+  return {
+    permission_id: id(item.permission_id, `${label}.permission_id`, PERMISSION_ID),
+    extension_id: id(item.extension_id, `${label}.extension_id`, EXTENSION_ID),
+    effective_state: enumValue(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
+    local_state: enumValue(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
+    managed_state: enumValue(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
+    configurable: boolean(item.configurable, `${label}.configurable`),
+    fixed_reason: item.fixed_reason === null ? null : text(item.fixed_reason, `${label}.fixed_reason`, 2048),
+    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
+  };
+}
+function normalizeEffectiveExtensionControlProjection(value) {
+  const root = record(value, "extension projection");
+  const schemaVersion = text(root.schema_version, "projection.schema_version", 128);
+  if (schemaVersion !== "guard.daemon.extension-control-projection.v1") throw new Error("Invalid extension projection schema");
+  const digest2 = text(root.catalog_digest, "projection.catalog_digest", 64);
+  if (!DIGEST.test(digest2)) throw new Error("Invalid projection.catalog_digest");
+  if (!Array.isArray(root.extensions) || root.extensions.length > MAX_EXTENSIONS) throw new Error("Invalid projection.extensions");
+  if (!Array.isArray(root.permissions) || root.permissions.length > MAX_PERMISSIONS) throw new Error("Invalid projection.permissions");
+  const extensions = root.extensions.map((item, index) => extensionItem(item, `projection.extensions[${index}]`));
+  const permissions = root.permissions.map((item, index) => permissionItem(item, `projection.permissions[${index}]`));
+  if (new Set(extensions.map((item) => item.extension_id)).size !== extensions.length) throw new Error("Duplicate projection extension ID");
+  if (new Set(permissions.map((item) => item.permission_id)).size !== permissions.length) throw new Error("Duplicate projection permission ID");
+  return {
+    schema_version: "guard.daemon.extension-control-projection.v1",
+    revision: integer(root.revision, "projection.revision"),
+    catalog_digest: digest2,
+    health: enumValue(root.health, "projection.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
+    extensions,
+    permissions
   };
 }
 class ExtensionControlApiError extends Error {
@@ -1004,49 +1257,693 @@ async function fetchExtensionCatalog() {
   return normalizeExtensionCatalog(await request("/v1/extension-controls/catalog"));
 }
 async function fetchEffectiveExtensionControls() {
-  return normalizeEffectiveExtensionControls(await request("/v1/extension-controls/effective"));
+  const raw = await request("/v1/extension-controls/effective");
+  const normalized = normalizeEffectiveExtensionControls(raw);
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return normalized;
+  const projectionValue = raw.projection;
+  if (projectionValue === void 0) return normalized;
+  const projection = normalizeEffectiveExtensionControlProjection(projectionValue);
+  if (projection.revision !== normalized.revision || projection.catalog_digest !== normalized.catalog_digest || projection.health !== normalized.health) {
+    throw new ExtensionControlApiError("Guard returned an inconsistent extension-control projection", 502);
+  }
+  return { ...normalized, projection };
 }
 async function recoverExtensionControlAuthority(credentials) {
-  return normalizeEffectiveExtensionControls(await request("/v1/extension-controls/recover-authority", {
+  const raw = await request("/v1/extension-controls/recover-authority", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       session_nonce: crypto.randomUUID().replaceAll("-", ""),
       ...credentials
     })
-  }));
+  });
+  const normalized = normalizeEffectiveExtensionControls(raw);
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.projection !== void 0) {
+    return { ...normalized, projection: normalizeEffectiveExtensionControlProjection(raw.projection) };
+  }
+  return normalized;
 }
 async function acknowledgeDegradedExtensionControlAuthority(credentials) {
-  return normalizeEffectiveExtensionControls(await request("/v1/extension-controls/acknowledge-degraded", {
+  const raw = await request("/v1/extension-controls/acknowledge-degraded", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       session_nonce: crypto.randomUUID().replaceAll("-", ""),
       ...credentials
     })
-  }));
+  });
+  const normalized = normalizeEffectiveExtensionControls(raw);
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.projection !== void 0) {
+    return { ...normalized, projection: normalizeEffectiveExtensionControlProjection(raw.projection) };
+  }
+  return normalized;
 }
 async function previewExtensionMutation(payload) {
-  const result = await request("/v1/extension-controls/preview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (typeof result !== "object" || result === null || Array.isArray(result)) {
-    throw new ExtensionControlApiError("Guard returned an invalid preview response", 502);
+  try {
+    return normalizeExtensionMutationPreview(await request("/v1/extension-controls/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+  } catch (error) {
+    if (error instanceof ExtensionControlApiError) throw error;
+    throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid preview response", 502);
   }
-  return result;
 }
 async function applyExtensionMutation(payload) {
-  const result = await request("/v1/extension-controls/apply", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (typeof result !== "object" || result === null || Array.isArray(result)) {
-    throw new ExtensionControlApiError("Guard returned an invalid apply response", 502);
+  try {
+    return normalizeExtensionMutationApply(await request("/v1/extension-controls/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+  } catch (error) {
+    if (error instanceof ExtensionControlApiError) throw error;
+    throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid apply response", 502);
   }
-  return result;
+}
+function cloneLayers$1(layers) {
+  return layers.map((layer) => ({
+    ...layer,
+    controls: layer.controls.map((control) => ({ ...control }))
+  }));
+}
+function sortedControls(layer) {
+  return {
+    ...layer,
+    controls: [...layer.controls].sort(
+      (left, right) => `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`)
+    )
+  };
+}
+function localPermissionDraftState(layers, permissionId) {
+  const local = layers.find((layer) => layer.kind === "local-admin");
+  const control = local?.controls.find(
+    (item) => item.target_kind === "permission" && item.target_id === permissionId
+  );
+  if (!control) return "inherit";
+  return control.state === "enabled" ? "allow" : "block";
+}
+function setLocalPermissionDraftState(layers, catalogDigest, permissionId, state) {
+  const next = cloneLayers$1(layers);
+  let local = next.find((layer) => layer.kind === "local-admin");
+  if (!local) {
+    local = {
+      schema_version: "1.0.0",
+      kind: "local-admin",
+      catalog_digest: catalogDigest,
+      global_lockdown: false,
+      controls: []
+    };
+    next.push(local);
+  }
+  local.controls = local.controls.filter(
+    (control) => control.target_kind !== "permission" || control.target_id !== permissionId
+  );
+  if (state !== "inherit") {
+    local.controls.push({
+      target_kind: "permission",
+      target_id: permissionId,
+      state: state === "allow" ? "enabled" : "disabled"
+    });
+  }
+  const normalized = next.map((layer) => sortedControls(layer));
+  normalized.sort((left, right) => left.kind.localeCompare(right.kind));
+  return normalized;
+}
+function canonicalLayerValue(layers) {
+  return JSON.stringify(
+    [...layers].map((layer) => sortedControls(layer)).sort((left, right) => left.kind.localeCompare(right.kind))
+  );
+}
+function extensionPolicyDraftIsDirty(effective, draftLayers) {
+  return canonicalLayerValue(effective.layers) !== canonicalLayerValue(draftLayers);
+}
+function buildExtensionPolicyDraftMutation(effective, catalogDigest, draftLayers, identity) {
+  return {
+    previous_revision: effective.revision,
+    catalog_digest: catalogDigest,
+    layers: cloneLayers$1(draftLayers),
+    actor_id: "dashboard-admin",
+    idempotency_key: identity.idempotencyKey,
+    nonce: identity.nonce
+  };
+}
+function newExtensionPolicyDraftIdentity() {
+  return {
+    idempotencyKey: crypto.randomUUID().replaceAll("-", ""),
+    nonce: crypto.randomUUID().replaceAll("-", "")
+  };
+}
+function permissionSuffix(permissionId) {
+  const marker = ".permission.";
+  const index = permissionId.indexOf(marker);
+  return index < 0 ? null : permissionId.slice(index + marker.length);
+}
+function latestPermissionId(original, oldExtension, latestExtension) {
+  if (latestExtension.permissions.some((permission2) => permission2.permission_id === original)) return original;
+  if (latestExtension.extension_id !== oldExtension.extension_id && latestExtension.aliases.includes(oldExtension.extension_id)) {
+    const suffix = permissionSuffix(original);
+    if (!suffix) return null;
+    const candidate = `${latestExtension.extension_id}.permission.${suffix}`;
+    if (latestExtension.permissions.some((permission2) => permission2.permission_id === candidate)) return candidate;
+  }
+  return null;
+}
+function rebaseExtensionPolicyDraft(oldEffective, latestEffective, oldExtension, latestExtension, draftLayers) {
+  let rebased = latestEffective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
+  const conflicts = [];
+  const remapped = {};
+  for (const permission2 of oldExtension.permissions) {
+    const baseState = localPermissionDraftState(oldEffective.layers, permission2.permission_id);
+    const requestedState = localPermissionDraftState(draftLayers, permission2.permission_id);
+    if (baseState === requestedState) continue;
+    const mapped = latestPermissionId(permission2.permission_id, oldExtension, latestExtension);
+    if (!mapped) {
+      conflicts.push({
+        original_permission_id: permission2.permission_id,
+        latest_permission_id: null,
+        kind: "removed",
+        base_state: baseState,
+        latest_state: "inherit",
+        requested_state: requestedState
+      });
+      continue;
+    }
+    remapped[permission2.permission_id] = mapped;
+    const latestState = localPermissionDraftState(latestEffective.layers, mapped);
+    if (latestState !== baseState && latestState !== requestedState) {
+      conflicts.push({
+        original_permission_id: permission2.permission_id,
+        latest_permission_id: mapped,
+        kind: "overlap",
+        base_state: baseState,
+        latest_state: latestState,
+        requested_state: requestedState
+      });
+      continue;
+    }
+    rebased = setLocalPermissionDraftState(rebased, latestEffective.catalog_digest, mapped, requestedState);
+  }
+  return { draft_layers: rebased, conflicts, remapped_permission_ids: remapped };
+}
+function keepExtensionPolicyRebaseConflicts(result, latestEffective) {
+  let layers = result.draft_layers;
+  for (const conflict of result.conflicts) {
+    if (conflict.kind !== "overlap" || !conflict.latest_permission_id) continue;
+    layers = setLocalPermissionDraftState(
+      layers,
+      latestEffective.catalog_digest,
+      conflict.latest_permission_id,
+      conflict.requested_state
+    );
+  }
+  return layers;
+}
+const RISK_TONE = {
+  critical: "border-red-200 bg-red-50 text-red-800",
+  high: "border-orange-200 bg-orange-50 text-orange-800",
+  medium: "border-amber-200 bg-amber-50 text-amber-800",
+  low: "border-slate-200 bg-slate-50 text-slate-700"
+};
+function Pill(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${props.tone ?? "border-slate-200 bg-slate-50 text-slate-700"}`, children: props.children });
+}
+function cloneLayers(effective) {
+  return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
+}
+function managedPermissionState(effective, permissionId) {
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permissionId)?.managed_state;
+  if (projected && projected !== "inherited") return projected;
+  for (const layer of effective.layers) {
+    if (layer.kind !== "signed-cloud") continue;
+    const control = layer.controls.find((item) => item.target_kind === "permission" && item.target_id === permissionId);
+    if (control) return control.state;
+  }
+  return null;
+}
+function draftChangeCount(effective, extension2, draftLayers) {
+  return extension2.permissions.filter(
+    (permission2) => localPermissionDraftState(effective.layers, permission2.permission_id) !== localPermissionDraftState(draftLayers, permission2.permission_id)
+  ).length;
+}
+function DraftControl(props) {
+  const managed = managedPermissionState(props.effective, props.permission.permission_id);
+  const choices = [
+    { value: "inherit", label: "Inherit" },
+    { value: "allow", label: "Allow", disabled: managed === "disabled" },
+    { value: "block", label: "Block" }
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "radiogroup", "aria-label": `${props.permission.label} local policy`, className: "flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1", children: choices.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", role: "radio", "aria-checked": props.state === choice.value, disabled: props.disabled || choice.disabled, title: choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : void 0, onClick: () => props.onChange(choice.value), className: `min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`, children: choice.label }, choice.value)) });
+}
+function PermissionPolicyRow(props) {
+  const managed = managedPermissionState(props.effective, props.permission.permission_id);
+  const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("article", { className: "rounded-2xl border border-slate-200 bg-white p-4", "data-permission-id": props.permission.permission_id, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-slate-950", children: props.permission.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: RISK_TONE[props.permission.risk_tier], children: [
+          props.permission.risk_tier,
+          " baseline risk"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: permissionStateLabel(props.effective, props.extension, props.permission) }),
+        !props.permission.configurable ? /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: "Fixed" }) : null,
+        managed ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: "border-indigo-200 bg-indigo-50 text-indigo-800", children: [
+          "Managed ",
+          managed === "disabled" ? "block" : "allow"
+        ] }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-600", children: props.permission.description }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "Baseline floor: ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-slate-700", children: treatmentLabel(props.permission.baseline_floor) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          props.permission.rule_ids.length,
+          " governed rule",
+          props.permission.rule_ids.length === 1 ? "" : "s"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "Provenance: ",
+          provenance.join(" · ")
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-2 block break-all text-[11px] text-slate-400", children: props.permission.permission_id }),
+      !props.permission.configurable ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Why fixed:" }),
+        " ",
+        props.permission.fixed_reason ?? "Guard marks this safety permission as immutable."
+      ] }) : null,
+      managed === "disabled" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 flex items-start gap-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs leading-5 text-indigo-900", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 size-4 shrink-0" }),
+        "Managed policy blocks this permission. Local policy may inherit or add a block, but it cannot weaken the managed block."
+      ] }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(DraftControl, { permission: props.permission, effective: props.effective, state: props.draftState, disabled: !props.permission.configurable || props.effective.health !== "protected", onChange: props.onChange })
+  ] }) });
+}
+function PreviewPanel(props) {
+  const semantic = props.preview.semantic_preview;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Server semantic preview" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-1 text-lg font-semibold text-slate-950", children: "Blast radius before apply" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+          semantic.changed_target_count,
+          " target",
+          semantic.changed_target_count === 1 ? "" : "s"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+          semantic.affected_permission_count,
+          " permissions"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+          semantic.affected_rule_count,
+          " rules"
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-3 sm:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl bg-slate-50 p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-semibold text-slate-950", children: semantic.summary.newly_blocked_permissions }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-slate-500", children: "Newly blocked permissions" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl bg-slate-50 p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-semibold text-slate-950", children: semantic.summary.newly_allowed_permissions }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-slate-500", children: "Newly allowed permissions" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl bg-slate-50 p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-semibold text-slate-950", children: semantic.summary.effective_change_count }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-slate-500", children: "Effective changes" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: semantic.changed_targets.map((target2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-2xl border border-slate-200 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-slate-950", children: target2.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+          target2.before_explicit,
+          " → ",
+          target2.after_explicit
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+          target2.before_effective,
+          " → ",
+          target2.after_effective
+        ] }),
+        target2.baseline_risk ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: RISK_TONE[target2.baseline_risk], children: [
+          target2.baseline_risk,
+          " baseline"
+        ] }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 text-xs text-slate-500", children: [
+        "Affects ",
+        target2.affected_permission_ids.length,
+        " permission",
+        target2.affected_permission_ids.length === 1 ? "" : "s",
+        " and ",
+        target2.affected_rule_ids.length,
+        " rule",
+        target2.affected_rule_ids.length === 1 ? "" : "s",
+        "."
+      ] }),
+      target2.affected_rule_ids.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-xs font-semibold text-brand-blue", children: "Affected rule IDs" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 max-h-40 overflow-auto rounded-xl bg-slate-50 p-3", children: target2.affected_rule_ids.map((id2) => /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block break-all text-[11px] text-slate-600", children: id2 }, id2)) })
+      ] }) : null,
+      target2.warnings.map((warning2, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
+            warning2.code,
+            ":"
+          ] }),
+          " ",
+          warning2.message
+        ] })
+      ] }, `${warning2.code}-${index}`))
+    ] }, `${target2.target.kind}:${target2.target.target_id}`)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 break-all text-[11px] text-slate-400", children: [
+      "Canonical diff: ",
+      props.preview.canonical_diff_digest
+    ] })
+  ] });
+}
+function ReviewDrawer(props) {
+  const ref = useModalDialog(props.onClose, !props.busy);
+  const count = props.preview.semantic_preview.changed_target_count;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 bg-slate-950/40", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { ref, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "extension-policy-review-title", className: "absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto bg-white p-5 shadow-2xl focus:outline-none sm:p-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Semantic review" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "extension-policy-review-title", className: "mt-1 text-xl font-semibold text-slate-950", children: [
+          "Review ",
+          count,
+          " permission change",
+          count === 1 ? "" : "s"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, "aria-label": "Close semantic review", onClick: props.onClose, className: "grid size-11 place-items-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-50", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-5" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(PreviewPanel, { preview: props.preview }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sticky bottom-0 mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white pt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onClose, className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700", children: "Continue editing" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: props.busy || count === 0, onClick: props.onApply, className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:opacity-40", children: [
+        "Apply ",
+        count,
+        " reviewed change",
+        count === 1 ? "" : "s"
+      ] })
+    ] })
+  ] }) });
+}
+function ExtensionPolicyPanel(props) {
+  const [baseEffective, setBaseEffective] = reactExports.useState(props.effective);
+  const [policyExtension, setPolicyExtension] = reactExports.useState(props.extension);
+  const [draftLayers, setDraftLayers] = reactExports.useState(() => cloneLayers(props.effective));
+  const [identity, setIdentity] = reactExports.useState(() => newExtensionPolicyDraftIdentity());
+  const [preview, setPreview] = reactExports.useState(null);
+  const [previewBusy, setPreviewBusy] = reactExports.useState(false);
+  const [applyBusy, setApplyBusy] = reactExports.useState(false);
+  const [approvalOpen, setApprovalOpen] = reactExports.useState(false);
+  const [reviewOpen, setReviewOpen] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [stale, setStale] = reactExports.useState(false);
+  const [pendingRebase, setPendingRebase] = reactExports.useState(null);
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const dirty = reactExports.useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
+  const changeCount = reactExports.useMemo(() => draftChangeCount(baseEffective, policyExtension, draftLayers), [baseEffective, draftLayers, policyExtension]);
+  reactExports.useEffect(() => {
+    props.onDirtyChange?.(dirty);
+  }, [dirty, props]);
+  reactExports.useEffect(() => {
+    const beforeUnload = (event) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [dirty]);
+  reactExports.useEffect(() => {
+    setBaseEffective(props.effective);
+    setPolicyExtension(props.extension);
+    setDraftLayers(cloneLayers(props.effective));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [props.effective.revision, props.effective.catalog_digest, props.extension.extension_id]);
+  const resetDraft = reactExports.useCallback(() => {
+    setDraftLayers(cloneLayers(baseEffective));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [baseEffective]);
+  const setPermission = reactExports.useCallback((permission2, state) => {
+    if (!permission2.configurable) return;
+    setDraftLayers((current) => setLocalPermissionDraftState(current, baseEffective.catalog_digest, permission2.permission_id, state));
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [baseEffective.catalog_digest]);
+  const mutation = reactExports.useCallback(() => buildExtensionPolicyDraftMutation(baseEffective, baseEffective.catalog_digest, draftLayers, identity), [baseEffective, draftLayers, identity]);
+  const handleApiError = reactExports.useCallback((caught, fallback) => {
+    if (caught instanceof ExtensionControlApiError && ["revision_conflict", "catalog_conflict", "authority_conflict"].includes(caught.code ?? "")) {
+      setStale(true);
+      setError("The authoritative extension policy changed while this draft was open. Rebase the draft before applying; Guard will not silently overwrite security policy.");
+      return;
+    }
+    setError(caught instanceof Error ? caught.message : fallback);
+  }, []);
+  const runPreview = reactExports.useCallback(async () => {
+    if (!dirty) return;
+    setPreviewBusy(true);
+    setError(null);
+    setStale(false);
+    try {
+      const next = await previewExtensionMutation(mutation());
+      setPreview(next);
+      setReviewOpen(true);
+    } catch (caught) {
+      handleApiError(caught, "Guard could not preview this draft.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }, [dirty, handleApiError, mutation]);
+  const openApproval = reactExports.useCallback(async () => {
+    if (!preview || !dirty || stale) return;
+    try {
+      await resolveApprovalGate({ failClosed: true });
+      setReviewOpen(false);
+      setApprovalOpen(true);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Guard could not load the local approval gate.");
+    }
+  }, [dirty, preview, resolveApprovalGate, stale]);
+  const apply = reactExports.useCallback(async (credentials) => {
+    if (!preview || !dirty || stale) return;
+    setApplyBusy(true);
+    setError(null);
+    try {
+      const base = mutation();
+      const proofPreview = await previewExtensionMutation({ ...base, ...credentials, session_nonce: crypto.randomUUID().replaceAll("-", "") });
+      if (!proofPreview.proof_id) throw new Error("Guard did not issue an approval proof for this exact draft.");
+      if (proofPreview.canonical_diff_digest !== preview.canonical_diff_digest) throw new Error("The policy draft changed after preview. Preview it again before applying.");
+      const applied = await applyExtensionMutation({ ...base, proof_id: proofPreview.proof_id });
+      setApprovalOpen(false);
+      setPreview(null);
+      setReviewOpen(false);
+      setError(null);
+      setStale(false);
+      if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
+      await props.onRefresh();
+    } catch (caught) {
+      handleApiError(caught, "Guard could not apply this draft.");
+    } finally {
+      setApplyBusy(false);
+    }
+  }, [baseEffective.revision, dirty, handleApiError, mutation, preview, props, stale]);
+  const rebaseDraft = reactExports.useCallback(async () => {
+    setPreviewBusy(true);
+    setError(null);
+    try {
+      const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
+      const latestExtension = latestCatalog.extensions.find((item) => item.extension_id === policyExtension.extension_id) ?? latestCatalog.extensions.find((item) => item.aliases.includes(policyExtension.extension_id));
+      if (!latestExtension) {
+        setError("This extension no longer exists in the authoritative catalog. Discard the draft and refresh before continuing.");
+        return;
+      }
+      const result = rebaseExtensionPolicyDraft(baseEffective, latestEffective, policyExtension, latestExtension, draftLayers);
+      setBaseEffective(latestEffective);
+      setPolicyExtension(latestExtension);
+      setIdentity(newExtensionPolicyDraftIdentity());
+      setPreview(null);
+      setReviewOpen(false);
+      if (result.conflicts.length) {
+        setPendingRebase({ result, latestEffective, latestExtension });
+        setDraftLayers(result.draft_layers);
+        setStale(true);
+        setError("The latest policy overlaps this draft. Choose whether to keep your overlapping changes or use current authoritative values. Removed permissions cannot be restored.");
+      } else {
+        setDraftLayers(result.draft_layers);
+        setPendingRebase(null);
+        setStale(false);
+        setError(null);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }, [baseEffective, draftLayers, policyExtension]);
+  const keepConflicts = reactExports.useCallback(() => {
+    if (!pendingRebase) return;
+    setDraftLayers(keepExtensionPolicyRebaseConflicts(pendingRebase.result, pendingRebase.latestEffective));
+    setPendingRebase(null);
+    setStale(false);
+    setError(null);
+    setIdentity(newExtensionPolicyDraftIdentity());
+  }, [pendingRebase]);
+  const useCurrent = reactExports.useCallback(() => {
+    if (!pendingRebase) return;
+    setDraftLayers(cloneLayers(pendingRebase.latestEffective));
+    setPendingRebase(null);
+    setStale(false);
+    setError(null);
+    setPreview(null);
+    setIdentity(newExtensionPolicyDraftIdentity());
+  }, [pendingRebase]);
+  const configurableCount = policyExtension.permissions.filter((permission2) => permission2.configurable).length;
+  const managedCount = policyExtension.permissions.filter((permission2) => managedPermissionState(baseEffective, permission2.permission_id) !== null).length;
+  const confirmationCount = preview?.semantic_preview.changed_target_count ?? changeCount;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "extension-policy-editor", "aria-labelledby": "extension-policy-heading", className: "space-y-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-3xl border border-slate-200 bg-white p-5 sm:p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Local policy draft" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "extension-policy-heading", className: "mt-1 text-lg font-semibold text-slate-950", children: "Permission controls" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-3xl text-sm leading-6 text-slate-600", children: "Choose Inherit, Allow, or Block for independently configurable capabilities. A blocked capability makes Guard block matching actions; it does not turn detection off. Detector severity and baseline floors never change." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+            configurableCount,
+            " configurable"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
+            policyExtension.permissions.length - configurableCount,
+            " fixed"
+          ] }),
+          dirty ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: "border-blue-200 bg-blue-50 text-blue-800", children: [
+            changeCount,
+            " staged"
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Pill, { children: "Authoritative" })
+        ] })
+      ] }),
+      baseEffective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 flex gap-2 rounded-xl bg-slate-950 p-3 text-sm text-white", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 size-4 shrink-0" }),
+        "Global lockdown remains dominant. You can prepare a local draft, but matching commands stay blocked while lockdown is active."
+      ] }) : null,
+      baseEffective.health !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "alert", className: "mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
+        "Permission editing is disabled until extension-control authority is protected."
+      ] }) : null,
+      managedCount ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900", children: [
+        managedCount,
+        " permission",
+        managedCount === 1 ? " is" : "s are",
+        " governed by signed organization policy. Local policy cannot weaken a managed block. Managed exception requests must be made through the organization policy workflow."
+      ] }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: policyExtension.permissions.map((permission2) => /* @__PURE__ */ jsxRuntimeExports.jsx(PermissionPolicyRow, { permission: permission2, extension: policyExtension, effective: baseEffective, draftState: localPermissionDraftState(draftLayers, permission2.permission_id), onChange: (state) => setPermission(permission2, state) }, permission2.permission_id)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sticky bottom-4 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-slate-600", children: dirty ? `${changeCount} staged permission change${changeCount === 1 ? "" : "s"}.` : "No local policy changes drafted." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !dirty || previewBusy || applyBusy, onClick: resetDraft, className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 disabled:opacity-40", children: "Discard draft" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: !dirty || previewBusy || applyBusy || baseEffective.health !== "protected" || stale, onClick: () => {
+          void runPreview();
+        }, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-brand-blue/30 bg-blue-50 px-4 text-sm font-semibold text-brand-blue disabled:opacity-40", children: [
+          previewBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin motion-reduce:animate-none" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4" }),
+          "Review ",
+          changeCount,
+          " change",
+          changeCount === 1 ? "" : "s"
+        ] })
+      ] })
+    ] }) }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: error })
+      ] }),
+      stale && !pendingRebase ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: previewBusy, onClick: () => {
+        void rebaseDraft();
+      }, className: "mt-3 min-h-11 rounded-xl bg-red-700 px-4 text-sm font-semibold text-white", children: "Rebase draft onto current policy" }) : null,
+      pendingRebase ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-2", children: pendingRebase.result.conflicts.map((conflict) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "rounded-xl bg-white p-3 text-xs", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all", children: conflict.original_permission_id }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1", children: conflict.kind === "removed" ? "Target removed from the current catalog." : `Current ${conflict.latest_state}; your draft requests ${conflict.requested_state}.` })
+        ] }, conflict.original_permission_id)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: keepConflicts, className: "min-h-11 rounded-xl bg-red-700 px-4 text-sm font-semibold text-white", children: "Keep my remaining draft changes" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: useCurrent, className: "min-h-11 rounded-xl border border-red-300 bg-white px-4 text-sm font-semibold text-red-800", children: "Use current policy" })
+        ] })
+      ] }) : null
+    ] }) : dirty && !preview ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Review is required before apply. Guard calculates effective blast radius server-side from the canonical registry, dependencies, managed policy, and global lockdown." })
+    ] }) : null,
+    reviewOpen && preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewDrawer, { preview, busy: previewBusy || applyBusy, onClose: () => setReviewOpen(false), onApply: () => {
+      void openApproval();
+    } }) : null,
+    approvalOpen && preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofModal, { title: `Apply ${confirmationCount} extension permission change${confirmationCount === 1 ? "" : "s"}`, detail: "Authenticate this exact reviewed draft. Guard issues a one-use proof bound to the canonical mutation digest.", confirmLabel: `Apply ${confirmationCount} reviewed change${confirmationCount === 1 ? "" : "s"}`, approvalGate: resolvedApprovalGate, busy: applyBusy, error, onCancel: () => {
+      if (!applyBusy) setApprovalOpen(false);
+    }, onConfirm: (credentials) => {
+      void apply(credentials);
+    } }) : null
+  ] });
+}
+const DRAFT_EXIT_MESSAGE = "Discard the staged extension policy draft and leave this extension?";
+function ExtensionControlCenterDetail(props) {
+  const [policyDirty, setPolicyDirty] = reactExports.useState(false);
+  const policyActive = props.urlState.tab === "policy";
+  const guardedBack = reactExports.useCallback(() => {
+    if (policyDirty && !window.confirm(DRAFT_EXIT_MESSAGE)) return;
+    props.onBack();
+  }, [policyDirty, props.onBack]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: policyActive ? "[&_#extension-panel-policy]:hidden" : void 0, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionControlCenterDetail$1, { ...props, onBack: guardedBack }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        hidden: !policyActive,
+        "aria-hidden": !policyActive,
+        className: "mx-auto -mt-8 w-full max-w-7xl px-4 pb-10 sm:px-6 lg:px-8",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ExtensionPolicyPanel,
+          {
+            extension: props.extension,
+            effective: props.effective,
+            catalogDigest: props.catalogDigest,
+            onRefresh: () => window.location.reload(),
+            onDirtyChange: setPolicyDirty
+          }
+        )
+      }
+    )
+  ] });
 }
 const EMPTY_EXTENSION_FILTERS = {
   query: "",
@@ -1299,8 +2196,8 @@ function ExtensionsFilterBar(props) {
   const searchRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     const handleKeyDown = (event) => {
-      const target = event.target;
-      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
+      const target2 = event.target;
+      const typing = target2?.tagName === "INPUT" || target2?.tagName === "TEXTAREA" || target2?.isContentEditable;
       if (event.key === "/" && !typing) {
         event.preventDefault();
         searchRef.current?.focus();

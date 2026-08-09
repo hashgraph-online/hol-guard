@@ -11,8 +11,9 @@ on:
       - src/codex_plugin_scanner/guard/runtime/command_permission_catalog.py
       - src/codex_plugin_scanner/guard/runtime/extension_control_*.py
       - scripts/ci/installed_extension_control_center_server.py
+      - scripts/ci/installed_extension_control_probe.py
       - scripts/ci/verify_protection_center_artifacts.py
-      - tests/test_guard_extension_control_catalog_detail.py
+      - tests/test_guard_extension_control_*.py
       - tests/fixtures/extension-controls/**
       - pyproject.toml
       - uv.lock
@@ -27,8 +28,9 @@ on:
       - src/codex_plugin_scanner/guard/runtime/command_permission_catalog.py
       - src/codex_plugin_scanner/guard/runtime/extension_control_*.py
       - scripts/ci/installed_extension_control_center_server.py
+      - scripts/ci/installed_extension_control_probe.py
       - scripts/ci/verify_protection_center_artifacts.py
-      - tests/test_guard_extension_control_catalog_detail.py
+      - tests/test_guard_extension_control_*.py
       - tests/fixtures/extension-controls/**
       - pyproject.toml
       - uv.lock
@@ -44,7 +46,7 @@ concurrency:
 jobs:
   installed-browser:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Check out exact source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -94,58 +96,120 @@ jobs:
           bun install --frozen-lockfile --ignore-scripts
           bunx playwright install --with-deps chromium
 
-      - name: Run exact installed daemon and Chromium proof
+      - name: Run exact installed daemon, proof-apply policy, restart, verify runtime, and restore
         shell: bash
         run: |
           set -euo pipefail
           SESSION_FILE="$RUNNER_TEMP/ecc-dashboard-session"
+          APPROVAL_FILE="$RUNNER_TEMP/ecc-approval-password"
           READY_FILE="$RUNNER_TEMP/ecc-dashboard-ready"
           GUARD_HOME="$RUNNER_TEMP/ecc-guard-home"
           WORKSPACE="$RUNNER_TEMP/ecc-workspace"
           PROOF_DIR="$GITHUB_WORKSPACE/.artifacts/extension-control-center-installed"
+          PROBE_FILE="$PROOF_DIR/installed-extension-runtime-probe.json"
           SERVER_LOG="$RUNNER_TEMP/ecc-installed-server.log"
           mkdir -p "$GUARD_HOME" "$WORKSPACE" "$PROOF_DIR"
-          PYTHONPATH= \
-          HOL_GUARD_INSTALLED_EXPECTED_VERSION="$VERSION" \
-          HOL_GUARD_INSTALLED_HOME="$GUARD_HOME" \
-          HOL_GUARD_INSTALLED_WORKSPACE="$WORKSPACE" \
-          HOL_GUARD_INSTALLED_SESSION_FILE="$SESSION_FILE" \
-          HOL_GUARD_INSTALLED_READY_FILE="$READY_FILE" \
-            "$CANARY_PYTHON" scripts/ci/installed_extension_control_center_server.py \
-            > "$SERVER_LOG" 2>&1 &
-          SERVER_PID=$!
-          cleanup() {
-            kill "$SERVER_PID" >/dev/null 2>&1 || true
-            wait "$SERVER_PID" >/dev/null 2>&1 || true
+          SERVER_PID=""
+
+          start_server() {
+            rm -f "$SESSION_FILE" "$READY_FILE"
+            PYTHONPATH= \
+            HOL_GUARD_INSTALLED_EXPECTED_VERSION="$VERSION" \
+            HOL_GUARD_INSTALLED_HOME="$GUARD_HOME" \
+            HOL_GUARD_INSTALLED_WORKSPACE="$WORKSPACE" \
+            HOL_GUARD_INSTALLED_SESSION_FILE="$SESSION_FILE" \
+            HOL_GUARD_INSTALLED_APPROVAL_FILE="$APPROVAL_FILE" \
+            HOL_GUARD_INSTALLED_READY_FILE="$READY_FILE" \
+              "$CANARY_PYTHON" scripts/ci/installed_extension_control_center_server.py \
+              >> "$SERVER_LOG" 2>&1 &
+            SERVER_PID=$!
+          }
+
+          stop_server() {
+            if [[ -n "$SERVER_PID" ]]; then
+              kill "$SERVER_PID" >/dev/null 2>&1 || true
+              wait "$SERVER_PID" >/dev/null 2>&1 || true
+              SERVER_PID=""
+            fi
             rm -f "$SESSION_FILE" "$READY_FILE"
           }
-          trap cleanup EXIT
-          for _ in $(seq 1 200); do
-            if [[ -s "$READY_FILE" && -s "$SESSION_FILE" ]]; then
-              ORIGIN=$(tr -d '\r\n' < "$READY_FILE")
-              if curl --fail --silent --show-error "$ORIGIN/extensions" >/dev/null; then
-                break
+
+          wait_ready() {
+            for _ in $(seq 1 250); do
+              if [[ -s "$READY_FILE" && -s "$SESSION_FILE" && -s "$APPROVAL_FILE" ]]; then
+                ORIGIN=$(tr -d '\r\n' < "$READY_FILE")
+                if curl --fail --silent --show-error "$ORIGIN/extensions" >/dev/null; then return 0; fi
               fi
-            fi
-            if ! kill -0 "$SERVER_PID" >/dev/null 2>&1; then
-              cat "$SERVER_LOG" >&2
-              exit 1
-            fi
-            sleep 0.1
-          done
-          test -s "$READY_FILE"
-          test -s "$SESSION_FILE"
+              if [[ -n "$SERVER_PID" ]] && ! kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+                cat "$SERVER_LOG" >&2
+                return 1
+              fi
+              sleep 0.1
+            done
+            cat "$SERVER_LOG" >&2
+            return 1
+          }
+
+          cleanup() {
+            stop_server
+            rm -f "$APPROVAL_FILE"
+          }
+          trap cleanup EXIT
+
+          start_server
+          wait_ready
           ORIGIN=$(tr -d '\r\n' < "$READY_FILE")
           SESSION=$(tr -d '\r\n' < "$SESSION_FILE")
+          APPROVAL_PASSWORD=$(tr -d '\r\n' < "$APPROVAL_FILE")
           echo "::add-mask::$SESSION"
+          echo "::add-mask::$APPROVAL_PASSWORD"
           (
             cd dashboard
             PLAYWRIGHT_PROOF_DIR="$PROOF_DIR" \
             GUARD_INSTALLED_ORIGIN="$ORIGIN" \
             GUARD_INSTALLED_DASHBOARD_SESSION="$SESSION" \
+            GUARD_INSTALLED_APPROVAL_PASSWORD="$APPROVAL_PASSWORD" \
+            GUARD_INSTALLED_POLICY_PHASE="apply" \
               bunx playwright test --config playwright.installed.config.ts \
               e2e/installed-extension-control-center.spec.ts
           )
+
+          stop_server
+          start_server
+          wait_ready
+
+          PYTHONPATH= \
+          HOL_GUARD_INSTALLED_EXPECTED_VERSION="$VERSION" \
+          HOL_GUARD_INSTALLED_HOME="$GUARD_HOME" \
+          HOL_GUARD_INSTALLED_WORKSPACE="$WORKSPACE" \
+          HOL_GUARD_INSTALLED_PROBE_FILE="$PROBE_FILE" \
+            "$CANARY_PYTHON" scripts/ci/installed_extension_control_probe.py
+          PYTHONPATH= "$CANARY_PYTHON" - "$PROBE_FILE" <<'PY'
+          import json, pathlib, sys
+          payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert payload["control_blocked"] is True
+          assert payload["minimum_action"] == "block"
+          assert payload["command_executed"] is False
+          assert payload["permission_id"] == "command.git.permission.force-clean"
+          assert "command.git.force-clean" in payload["matched_rule_ids"]
+          PY
+
+          ORIGIN=$(tr -d '\r\n' < "$READY_FILE")
+          SESSION=$(tr -d '\r\n' < "$SESSION_FILE")
+          APPROVAL_PASSWORD=$(tr -d '\r\n' < "$APPROVAL_FILE")
+          echo "::add-mask::$SESSION"
+          echo "::add-mask::$APPROVAL_PASSWORD"
+          (
+            cd dashboard
+            PLAYWRIGHT_PROOF_DIR="$PROOF_DIR" \
+            GUARD_INSTALLED_ORIGIN="$ORIGIN" \
+            GUARD_INSTALLED_DASHBOARD_SESSION="$SESSION" \
+            GUARD_INSTALLED_APPROVAL_PASSWORD="$APPROVAL_PASSWORD" \
+            GUARD_INSTALLED_POLICY_PHASE="verify" \
+              bunx playwright test --config playwright.installed.config.ts \
+              e2e/installed-extension-control-center.spec.ts
+          )
+
           HOL_GUARD_ARTIFACT_SECRET="$SESSION" \
             "$CANARY_PYTHON" scripts/ci/verify_protection_center_artifacts.py \
             "$PROOF_DIR" "$SERVER_LOG"
@@ -155,9 +219,14 @@ jobs:
         run: |
           set -euo pipefail
           proof_dir=.artifacts/extension-control-center-installed
+          test -s "$proof_dir/installed-extension-runtime-probe.json"
           for screenshot in \
             installed-extension-catalog.png \
             installed-extension-rule-detail.png \
+            installed-extension-policy-preview.png \
+            installed-extension-policy-applied.png \
+            installed-extension-policy-persisted.png \
+            installed-extension-policy-restored.png \
             installed-protection-center-simple.png \
             installed-protection-center-advanced.png \
             installed-protection-center-developer.png \
@@ -168,7 +237,7 @@ jobs:
             installed-protection-center-simple-1440.png \
             installed-protection-center-simple-zoom-200.png; do
             count=$(find "$proof_dir" -type f -name "$screenshot" | wc -l)
-            test "$count" -eq 1
+            test "$count" -ge 1
           done
 
       - name: Upload installed browser proof
@@ -178,6 +247,7 @@ jobs:
           path: |
             extension-control-center-wheel.sha256
             .artifacts/extension-control-center-installed/**/*.png
+            .artifacts/extension-control-center-installed/installed-extension-runtime-probe.json
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14

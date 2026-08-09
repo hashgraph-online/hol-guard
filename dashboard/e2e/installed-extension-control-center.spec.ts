@@ -8,49 +8,53 @@ function requiredEnvironment(name: string): string {
 
 const origin = requiredEnvironment("GUARD_INSTALLED_ORIGIN");
 const session = requiredEnvironment("GUARD_INSTALLED_DASHBOARD_SESSION");
+const policyPhase = process.env.GUARD_INSTALLED_POLICY_PHASE ?? "read-only";
+const approvalPassword = process.env.GUARD_INSTALLED_APPROVAL_PASSWORD ?? "";
+const permissionId = "command.git.permission.force-clean";
+const governedRuleId = "command.git.force-clean";
+
+async function installSession(page: import("@playwright/test").Page) {
+  await page.addInitScript(({ daemon, token }) => {
+    sessionStorage.setItem("guard-token", token);
+    sessionStorage.setItem("guardDaemon", daemon);
+  }, { daemon: origin, token: session });
+}
 
 async function expectSecretSafeUrl(page: import("@playwright/test").Page) {
   expect(page.url()).not.toContain(session);
+  expect(page.url()).not.toContain(approvalPassword);
   expect(page.url()).not.toContain("guard-token");
   expect(page.url()).not.toContain("#");
 }
 
-async function expectNoHorizontalOverflow(page: import("@playwright/test").Page) {
-  const report = await page.evaluate(() => {
-    const root = document.documentElement;
-    const overflow = root.scrollWidth - root.clientWidth;
-    const offenders = [...document.querySelectorAll<HTMLElement>("body *")]
-      .map((element) => {
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return {
-          tag: element.tagName.toLowerCase(),
-          className: typeof element.className === "string" ? element.className.slice(0, 180) : "",
-          text: (element.innerText || "").replace(/\s+/g, " ").trim().slice(0, 100),
-          left: Math.round(rect.left),
-          right: Math.round(rect.right),
-          width: Math.round(rect.width),
-          display: style.display,
-          position: style.position,
-        };
-      })
-      .filter((item) => item.display !== "none" && (item.right > root.clientWidth + 4 || item.left < -4))
-      .sort((a, b) => Math.max(b.right - root.clientWidth, -b.left) - Math.max(a.right - root.clientWidth, -a.left))
-      .slice(0, 12);
-    return {
-      overflow,
-      clientWidth: root.clientWidth,
-      scrollWidth: root.scrollWidth,
-      innerWidth: window.innerWidth,
-      outerWidth: window.outerWidth,
-      screenWidth: window.screen.width,
-      rootFontSize: getComputedStyle(root).fontSize,
-      lgMatches: window.matchMedia("(min-width: 64rem)").matches,
-      offenders,
-    };
+async function openPolicy(page: import("@playwright/test").Page) {
+  await installSession(page);
+  await page.goto("/extensions/command.git?tab=policy");
+  await expectSecretSafeUrl(page);
+  await expect(page.getByTestId("extension-control-center-detail")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Permission controls" })).toBeVisible();
+  return page.locator(`[data-permission-id="${permissionId}"]`);
+}
+
+async function authenticateAndApply(page: import("@playwright/test").Page, count = 1) {
+  expect(approvalPassword.length).toBeGreaterThan(20);
+  const review = page.getByRole("dialog", { name: `Review ${count} permission change${count === 1 ? "" : "s"}` });
+  await expect(review).toBeVisible();
+  await review.getByRole("button", { name: `Apply ${count} reviewed change${count === 1 ? "" : "s"}` }).click();
+  const dialog = page.getByRole("dialog", { name: `Apply ${count} extension permission change${count === 1 ? "" : "s"}` });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Approval password").fill(approvalPassword);
+  const effectiveResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/v1/extension-controls/effective" && response.status() === 200;
   });
-  expect(report, JSON.stringify(report, null, 2)).toMatchObject({ overflow: expect.any(Number) });
-  expect(report.overflow, JSON.stringify(report, null, 2)).toBeLessThanOrEqual(4);
+  await dialog.getByRole("button", { name: `Apply ${count} reviewed change${count === 1 ? "" : "s"}` }).click();
+  const response = await effectiveResponse;
+  return response.json() as Promise<{
+    revision: number;
+    controls: Array<{ target: { kind: string; target_id: string }; state: string }>;
+    projection?: { permissions: Array<{ permission_id: string; effective_state: string; local_state: string }> };
+  }>;
 }
 
 async function selectDensity(page: import("@playwright/test").Page, density: "Simple" | "Advanced" | "Developer") {
@@ -155,5 +159,53 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
   expect(extensionResponses.some((response) => response.path === "/v1/extension-controls/catalog" && response.status === 200)).toBe(true);
   expect(extensionResponses.some((response) => response.path === "/v1/extension-controls/effective" && response.status === 200)).toBe(true);
   expect(extensionResponses.every((response) => response.status >= 200 && response.status < 300)).toBe(true);
+  expect(runtimeErrors).toEqual([]);
+});
+
+test("installed dashboard previews and proof-applies a permission block", async ({ page }, testInfo) => {
+  test.skip(policyPhase !== "apply", "policy apply phase runs before the deliberate daemon restart");
+  const runtimeErrors: string[] = [];
+  page.on("pageerror", (error) => runtimeErrors.push(error.message));
+  const row = await openPolicy(page);
+  await expect(row).toBeVisible();
+  await expect(row.getByRole("radio", { name: "Block" })).toBeEnabled();
+  await row.getByRole("radio", { name: "Block" }).click();
+  await expect(page.getByText("1 staged")).toBeVisible();
+  await page.getByRole("button", { name: "Review 1 change" }).click();
+  const review = page.getByRole("dialog", { name: "Review 1 permission change" });
+  await expect(review.getByText("Server semantic preview")).toBeVisible();
+  await review.getByText("Affected rule IDs").click();
+  await expect(review.getByText(governedRuleId, { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("installed-extension-policy-preview.png"), fullPage: true });
+
+  const effective = await authenticateAndApply(page);
+  expect(effective.revision).toBeGreaterThan(0);
+  expect(effective.controls).toContainEqual({ target: { kind: "permission", target_id: permissionId }, state: "disabled" });
+  expect(effective.projection?.permissions.find((permission) => permission.permission_id === permissionId)?.effective_state).toBe("blocked");
+  await expectSecretSafeUrl(page);
+  const appliedRow = page.locator(`[data-permission-id="${permissionId}"]`);
+  await expect(appliedRow.getByText("Blocked", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("installed-extension-policy-applied.png"), fullPage: true });
+  expect(runtimeErrors).toEqual([]);
+});
+
+test("permission authority persists across daemon restart and can be proof-restored", async ({ page }, testInfo) => {
+  test.skip(policyPhase !== "verify", "persistence phase runs only after the workflow restarts the real daemon");
+  const runtimeErrors: string[] = [];
+  page.on("pageerror", (error) => runtimeErrors.push(error.message));
+  const row = await openPolicy(page);
+  await expect(row.getByText("Blocked", { exact: true })).toBeVisible();
+  await expect(row.getByRole("radio", { name: "Block" })).toHaveAttribute("aria-checked", "true");
+  await page.screenshot({ path: testInfo.outputPath("installed-extension-policy-persisted.png"), fullPage: true });
+
+  await row.getByRole("radio", { name: "Inherit" }).click();
+  await page.getByRole("button", { name: "Review 1 change" }).click();
+  await expect(page.getByRole("dialog", { name: "Review 1 permission change" })).toBeVisible();
+  const effective = await authenticateAndApply(page);
+  expect(effective.controls.some((control) => control.target.kind === "permission" && control.target.target_id === permissionId)).toBe(false);
+  const restoredRow = page.locator(`[data-permission-id="${permissionId}"]`);
+  await expect(restoredRow.getByText("Inherited", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("installed-extension-policy-restored.png"), fullPage: true });
+  await expectSecretSafeUrl(page);
   expect(runtimeErrors).toEqual([]);
 });

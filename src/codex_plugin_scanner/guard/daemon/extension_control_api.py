@@ -25,6 +25,7 @@ from ..runtime.extension_control_authority import (
 )
 from ..runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
+    ControlLayerKind,
     ControlTargetKind,
     ExtensionControl,
     ExtensionControlLayer,
@@ -37,6 +38,8 @@ from ..runtime.extension_control_proof import (
 )
 from ..runtime.extension_control_resolver import compose_control_layers
 from ..runtime.extension_control_runtime import ExtensionControlRuntime
+from .extension_control_projection import build_effective_extension_control_projection
+from .extension_control_semantic_preview import build_extension_control_semantic_preview
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -47,11 +50,16 @@ _MAX_APPLIED_MUTATIONS = 128
 _MAX_CONTROLS = 4096
 _MAX_LAYERS = 2
 _MAX_OBSERVATIONS = 2048
+_MAX_EVENT_TARGETS = 512
+_MAX_EVENT_RULE_IDS = 1024
 _RECOVERY_ACTIONS = {
     "approval_required": "provide_local_approval",
     "authority_conflict": "refresh_effective_controls",
     "authority_unavailable": "enroll_or_repair_authority",
     "catalog_conflict": "refresh_catalog",
+    "immutable_extension": "remove_local_override",
+    "immutable_permission": "remove_local_override",
+    "managed_layer_mutation": "managed_policy_read_only",
     "proof_invalid": "request_new_proof",
     "proof_mismatch": "request_new_proof",
     "proof_not_found": "request_new_proof",
@@ -142,6 +150,7 @@ class ExtensionControlApiService:
                 }
                 for failure in composed.failures
             ],
+            "projection": build_effective_extension_control_projection(self._registry, snapshot),
         }
 
     def refresh(self) -> dict[str, object]:
@@ -230,6 +239,11 @@ class ExtensionControlApiService:
             "canonical_diff_digest": mutation.canonical_digest,
             "global_lockdown": composed.global_lockdown,
             "controls": len(composed.controls),
+            "semantic_preview": build_extension_control_semantic_preview(
+                self._registry,
+                current.layers,
+                mutation.layers,
+            ),
         }
         if self._payload_requests_proof(payload):
             session_nonce = self._required_string(payload, "session_nonce")
@@ -260,6 +274,12 @@ class ExtensionControlApiService:
             return dict(pending.response)
         if pending.mutation.canonical_digest != mutation.canonical_digest:
             raise ExtensionControlApiError(409, "proof_mismatch")
+        current = self._runtime.current()
+        semantic_preview = build_extension_control_semantic_preview(
+            self._registry,
+            current.layers,
+            mutation.layers,
+        )
         try:
             view = self._store.commit_extension_control_layers(
                 mutation.layers,
@@ -279,9 +299,11 @@ class ExtensionControlApiService:
             "extension_control_authority_changed",
             {
                 "revision": snapshot.revision,
+                "previous_revision": mutation.previous_revision,
                 "catalog_digest": snapshot.catalog_digest,
                 "actor_ref": hashlib.sha256(f"actor-ref\u0000{mutation.actor_id}".encode()).hexdigest(),
                 "mutation_ref": mutation.canonical_digest,
+                "semantic_targets": self._semantic_event_targets(semantic_preview),
             },
             datetime.now(timezone.utc).isoformat(),
         )
@@ -323,6 +345,36 @@ class ExtensionControlApiService:
                 canonical_controls.append(control)
             canonical_layers.append(replace(layer, controls=tuple(canonical_controls)))
         return tuple(canonical_layers)
+
+    def _validate_authority_mutability(self, layers: tuple[ExtensionControlLayer, ...]) -> None:
+        current = self._runtime.current()
+        current_managed = tuple(layer for layer in current.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
+        proposed_managed = tuple(layer for layer in layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
+        if proposed_managed != current_managed:
+            raise ExtensionControlApiError(403, "managed_layer_mutation")
+
+        current_local = next((layer for layer in current.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN), None)
+        current_states = {
+            (control.target.kind, control.target.target_id): control.state
+            for control in (() if current_local is None else current_local.controls)
+        }
+        proposed_local = next((layer for layer in layers if layer.kind is ControlLayerKind.LOCAL_ADMIN), None)
+        for control in (() if proposed_local is None else proposed_local.controls):
+            target_id = control.target.target_id
+            immutable = False
+            error_code = "immutable_permission"
+            if control.target.kind is ControlTargetKind.EXTENSION:
+                extension = self._registry.get(target_id)
+                immutable = extension is not None and extension.required
+                error_code = "immutable_extension"
+            else:
+                permission = self._registry.permission(target_id)
+                immutable = permission is not None and not permission.configurable
+            if immutable and current_states.get((control.target.kind, target_id)) != control.state:
+                # Preserve unchanged legacy authority, but do not permit creation or
+                # modification of immutable controls. Omitting a legacy immutable
+                # control remains allowed because that restores canonical behavior.
+                raise ExtensionControlApiError(403, error_code)
 
     def _mutation_from_payload(self, payload: dict[str, object]) -> ExtensionControlMutation:
         previous_revision = payload.get("previous_revision")
@@ -368,7 +420,44 @@ class ExtensionControlApiService:
                         raise ExtensionControlApiError(400, "unknown_extension")
                 elif self._registry.permission(target_id) is None:
                     raise ExtensionControlApiError(400, "unknown_permission")
+        self._validate_authority_mutability(mutation.layers)
         return mutation
+
+    def _semantic_event_targets(self, semantic_preview: dict[str, object]) -> list[dict[str, object]]:
+        raw_targets = semantic_preview.get("changed_targets")
+        if not isinstance(raw_targets, list):
+            return []
+        event_targets: list[dict[str, object]] = []
+        for raw in raw_targets[:_MAX_EVENT_TARGETS]:
+            if not isinstance(raw, dict):
+                continue
+            target = raw.get("target")
+            if not isinstance(target, dict):
+                continue
+            kind = target.get("kind")
+            target_id = target.get("target_id")
+            if not isinstance(kind, str) or not isinstance(target_id, str):
+                continue
+            rule_ids = raw.get("affected_rule_ids")
+            safe_rule_ids = (
+                [value for value in rule_ids[:_MAX_EVENT_RULE_IDS] if isinstance(value, str)]
+                if isinstance(rule_ids, list)
+                else []
+            )
+            event_targets.append(
+                {
+                    "kind": kind,
+                    "target_ref": hashlib.sha256(
+                        f"extension-control-target-ref\u0000{kind}\u0000{target_id}".encode()
+                    ).hexdigest(),
+                    "before_explicit": raw.get("before_explicit"),
+                    "after_explicit": raw.get("after_explicit"),
+                    "before_effective": raw.get("before_effective"),
+                    "after_effective": raw.get("after_effective"),
+                    "affected_rule_ids": safe_rule_ids,
+                }
+            )
+        return event_targets
 
     @staticmethod
     def _required_string(payload: dict[str, object], key: str) -> str:
