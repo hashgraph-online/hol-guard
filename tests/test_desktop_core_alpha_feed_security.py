@@ -83,7 +83,9 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     assert 'grep -Fx "Authority=$APPLE_SIGNING_IDENTITY"' in text
     assert 'test "$CERTIFICATE_SHA1" = "$SELECTOR_SHA1"' in text
     assert 'grep -Fx "TeamIdentifier=$APPLE_TEAM_ID"' in text
-    assert 'grep -F "source=Notarized Developer ID"' in text
+    assert "spctl --assess" not in text
+    assert 'if [ -f "$RUNNER_TEMP/notary-result.json" ]' in text
+    assert "jq -e '.status == \"Accepted\"'" in text
 
 
 def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
