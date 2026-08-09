@@ -37,13 +37,13 @@ def _benign(command: str, *, repository: Path, home: Path) -> bool:
     )
 
 
-def test_mcp_search_query_is_data_not_shell_source() -> None:
+def test_mcp_search_query_is_data_but_name_alone_is_not_trust_proof() -> None:
     tool = "mcp__codex_apps__github__search"
     arguments = {"query": "Not publicly verified"}
 
     assert command_text_from_tool_payload(tool, arguments) is None
     assert extract_sensitive_tool_action_request(tool, arguments) is None
-    assert is_explicitly_benign_tool_action_request(tool, arguments)
+    assert not is_explicitly_benign_tool_action_request(tool, arguments)
 
 
 def test_mcp_search_preserves_explicit_command_review() -> None:
@@ -55,12 +55,12 @@ def test_mcp_search_preserves_explicit_command_review() -> None:
     assert not is_explicitly_benign_tool_action_request(tool, arguments)
 
 
-def test_guard_status_native_tool_and_cli_are_benign(
+def test_guard_status_native_name_is_unverified_but_cli_is_benign(
     repository: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert is_explicitly_benign_tool_action_request(
+    assert not is_explicitly_benign_tool_action_request(
         "mcp__codex_apps__hol_guard__get_guard_status",
         {},
         cwd=repository,

@@ -195,6 +195,7 @@ def _typescript_no_emit_args_are_safe(args: list[str], *, workspace: Path) -> bo
     if (
         args.count("--noEmit") != 1
         or any(_token_has_shell_dynamics(arg) for arg in args)
+        or any(_token_is_shell_redirection(arg) for arg in args)
         or any(arg in _TSC_WRITE_FLAGS or arg.startswith(write_flag_prefixes) for arg in args)
     ):
         return False
@@ -295,6 +296,10 @@ def _safe_typecheck_node_options(value: str) -> bool:
 
 def _token_has_shell_dynamics(value: str) -> bool:
     return any(marker in value for marker in ("$", "`", "<(", ">(", "\x00", "\n"))
+
+
+def _token_is_shell_redirection(value: str) -> bool:
+    return "<" in value or ">" in value
 
 
 def _node_execution_environment_is_configurable(workspace: Path, home_dir: Path) -> bool:

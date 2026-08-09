@@ -8715,12 +8715,12 @@ def test_hook_runtime_artifact_allows_codex_apply_patch_command_for_source_file(
 @pytest.mark.parametrize(
     "strict_config",
     (
-        'default_action = "require-reapproval"\n',
-        '[harnesses.codex]\ndefault_action = "require-reapproval"\n',
+        'default_action = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+        '[harnesses.codex]\ndefault_action = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
     ),
     ids=("global", "harness"),
 )
-def test_guard_hook_codex_strict_default_allows_verified_non_sensitive_apply_patch(
+def test_guard_hook_codex_strict_default_reviews_non_sensitive_apply_patch(
     strict_config: str,
     tmp_path: Path,
     capsys,
@@ -8742,6 +8742,11 @@ def test_guard_hook_codex_strict_default_allows_verified_non_sensitive_apply_pat
         "source_scope": "project",
         "cwd": str(workspace_dir),
     }
+    monkeypatch.setattr(
+        guard_commands_module,
+        "schedule_guard_daemon_ensure",
+        lambda _guard_home, **_kwargs: "http://127.0.0.1:4455",
+    )
 
     rc, output = _run_guard_hook(
         home_dir=home_dir,
@@ -8750,13 +8755,15 @@ def test_guard_hook_codex_strict_default_allows_verified_non_sensitive_apply_pat
         event=event,
         capsys=capsys,
         monkeypatch=monkeypatch,
+        as_json=True,
     )
     store = GuardStore(home_dir)
 
-    assert rc == 0
-    assert output == ""
-    assert store.list_approval_requests(limit=10) == []
-    assert store.list_receipts(limit=1) == []
+    assert rc == 1
+    assert output["policy_action"] == "require-reapproval"
+    requests = store.list_approval_requests(limit=10)
+    assert len(requests) == 1
+    assert requests[0]["artifact_type"] == "tool_action_request"
 
 
 def test_guard_hook_codex_strict_default_reviews_protected_apply_patch(
