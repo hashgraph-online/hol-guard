@@ -397,7 +397,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                         expected_revision=_row_int(pending, "previous_revision"),
                         key=key,
                     )
-                    if resumed is not None:
+                    if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
                         return resumed
                     connection.commit()
                 if anchor.revision == current_revision and anchor.snapshot_digest == current_digest:
@@ -425,7 +425,9 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                             layers_json=_row_str(committed, "layers_json"),
                             occurred_at=_row_str(committed, "created_at"),
                         )
-                    return self._read_extension_control_authority_locked(catalog_digest)
+                    recovered = self._read_extension_control_authority_locked(catalog_digest)
+                    if recovered.health is AuthorityHealth.PROTECTED:
+                        return recovered
             return self._reset_extension_control_authority(catalog_digest, key=key)
 
     def _reset_extension_control_authority(

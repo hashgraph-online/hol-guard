@@ -127,6 +127,24 @@ def test_authenticated_recovery_rebuilds_unverifiable_authority(tmp_path: Path) 
     )
 
 
+def test_authenticated_recovery_rebuilds_snapshot_with_invalid_mac(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    with store._connect() as connection:
+        connection.execute(
+            "update extension_control_authority_snapshot set snapshot_mac = ? where singleton = 1",
+            ("invalid",),
+        )
+
+    repaired = store.recover_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+
+    assert repaired.health is AuthorityHealth.PROTECTED
+    assert repaired.revision == 0
+    assert repaired.layers == ()
+
+
 @pytest.mark.parametrize("missing_part", ("snapshot", "anchor", "key"))
 def test_authenticated_recovery_rebuilds_incomplete_authority(tmp_path: Path, missing_part: str) -> None:
     secrets = MemorySecretStore()
