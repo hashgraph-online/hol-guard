@@ -243,6 +243,7 @@ jobs:
             --base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
             --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
             --apple-team-id "$APPLE_TEAM_ID"
+          echo "PRIOR_FEED_PROVENANCE_VERIFIED=true" >> "$GITHUB_ENV"
       - name: Build standalone Core executable
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
@@ -369,6 +370,8 @@ jobs:
           grep -Fx "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/codesign.txt"
           if [ -f "$RUNNER_TEMP/notary-result.json" ]; then
             jq -e '.status == "Accepted"' "$RUNNER_TEMP/notary-result.json" >/dev/null
+          else
+            test "${PRIOR_FEED_PROVENANCE_VERIFIED:-}" = "true"
           fi
           file "$BINARY" | grep -F "Mach-O 64-bit executable arm64"
           cp "$BINARY" "$VERIFY"
