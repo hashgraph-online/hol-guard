@@ -10,8 +10,9 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
-from typing import Literal, Mapping, Sequence
+from typing import Literal
 
 SCHEMA_VERSION = "guard-local-risk-report/v1"
 
@@ -100,7 +101,9 @@ def build_local_risk_report(
         LocalRiskCheck(
             id="runtime",
             status="pass" if runtime_status == "active" else "fail",
-            summary="Local Guard runtime is active." if runtime_status == "active" else "Local Guard runtime is not active.",
+            summary=(
+                "Local Guard runtime is active." if runtime_status == "active" else "Local Guard runtime is not active."
+            ),
         )
     )
     checks.append(
@@ -188,9 +191,9 @@ def render_local_risk_report_html(report: LocalRiskReport) -> str:
     )
     harnesses = ", ".join(html.escape(item) for item in report.installed_harnesses) or "None detected"
     return (
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"robots\" content=\"noindex,nofollow\">"
-        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="robots" content="noindex,nofollow">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
         "<title>HOL Guard local risk report</title></head><body>"
         "<main><h1>HOL Guard local risk report</h1>"
         f"<p>Risk band: <strong>{html.escape(report.risk_band)}</strong></p>"
