@@ -308,6 +308,11 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          openssl pkcs12 -in "$RUNNER_TEMP/certificate.p12" -clcerts -nokeys \
+            -passin env:APPLE_CERTIFICATE_PASSWORD -out "$RUNNER_TEMP/signing-certificate.pem"
+          IMPORTED_CERTIFICATE_SHA1=$(openssl x509 -in "$RUNNER_TEMP/signing-certificate.pem" \
+            -noout -fingerprint -sha1 | sed -E 's/^[^=]+=//; s/://g' | tr '[:lower:]' '[:upper:]')
+          printf 'IMPORTED_CERTIFICATE_SHA1=%s\n' "$IMPORTED_CERTIFICATE_SHA1" >> "$GITHUB_ENV"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN"
       - name: Sign and notarize new Core sidecar
@@ -346,14 +351,14 @@ jobs:
           chmod 0755 "$BINARY"
           codesign --verify --deep --strict --verbose=2 "$BINARY"
           codesign --display --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/codesign.txt"
-          if ! grep -Fx "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/codesign.txt"; then
+          if [ -n "${IMPORTED_CERTIFICATE_SHA1:-}" ]; then
             codesign --display --extract-certificates="$RUNNER_TEMP/codesign-cert-" "$BINARY"
             CERTIFICATE_SHA1=$(openssl x509 -inform DER \
               -in "$RUNNER_TEMP/codesign-cert-0" -noout -fingerprint -sha1 \
               | sed -E 's/^[^=]+=//; s/://g' | tr '[:lower:]' '[:upper:]')
-            SELECTOR_SHA1=$(printf '%s' "$APPLE_SIGNING_IDENTITY" \
-              | tr -d '[:space:]:' | tr '[:lower:]' '[:upper:]')
-            test "$CERTIFICATE_SHA1" = "$SELECTOR_SHA1"
+            test "$CERTIFICATE_SHA1" = "$IMPORTED_CERTIFICATE_SHA1"
+          else
+            grep -Fx "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/codesign.txt"
           fi
           grep -Fx "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/codesign.txt"
           if ! spctl --assess --type execute --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/spctl.txt"; then

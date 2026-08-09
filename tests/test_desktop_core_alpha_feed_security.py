@@ -76,9 +76,11 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     assert "json.sig" not in text
     assert "minisign" not in helper.lower()
     assert "bunx @tauri-apps/cli" not in text
-    assert 'grep -Fx "Authority=$APPLE_SIGNING_IDENTITY"' in text
+    assert "IMPORTED_CERTIFICATE_SHA1=$(openssl x509" in text
+    assert "-passin env:APPLE_CERTIFICATE_PASSWORD" in text
     assert 'codesign --display --extract-certificates="$RUNNER_TEMP/codesign-cert-"' in text
-    assert 'test "$CERTIFICATE_SHA1" = "$SELECTOR_SHA1"' in text
+    assert 'test "$CERTIFICATE_SHA1" = "$IMPORTED_CERTIFICATE_SHA1"' in text
+    assert 'grep -Fx "Authority=$APPLE_SIGNING_IDENTITY"' in text
     assert 'grep -Fx "TeamIdentifier=$APPLE_TEAM_ID"' in text
     assert 'grep -F "source=Notarized Developer ID"' in text
 
