@@ -155,8 +155,8 @@ const targetedRepairs = repairHarnessesFor(
   },
 );
 assert(
-  targetedRepairs.length === 1 && targetedRepairs[0] === "grok",
-  "F8: fleet repair must reinstall only active apps with failed hook proof",
+  targetedRepairs.length === 2 && targetedRepairs[0] === "grok" && targetedRepairs[1] === "cursor",
+  "F8: fleet repair must reinstall inactive apps and active apps with failed hook proof",
 );
 
 const allStates: FleetHeroCopy[] = [localOnlyWithApps, pairedWaitingWithApps, pairedActiveWithApps];
