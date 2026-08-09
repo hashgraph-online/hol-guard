@@ -130,6 +130,7 @@ export function ExtensionStatusBanner(props: {
   busy?: boolean;
   effective: EffectiveExtensionControls;
   error?: string | null;
+  status?: string | null;
   onRecover?: () => void;
   onRetry: () => void;
 }) {
@@ -165,7 +166,7 @@ export function ExtensionStatusBanner(props: {
           <p className="mt-1 text-sm leading-6 text-slate-700">{recovery?.description}</p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {tampered && props.onRecover ? (
-              <button type="button" disabled={props.busy} onClick={props.onRecover} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:opacity-60">
+              <button type="button" aria-busy={props.busy} disabled={props.busy} onClick={props.onRecover} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:opacity-60">
                 {props.busy ? <HiMiniArrowPath className="size-4 animate-spin" aria-hidden="true" /> : <HiMiniShieldCheck className="size-4" aria-hidden="true" />}
                 {props.busy ? "Repairing…" : "Repair now"}
               </button>
@@ -187,6 +188,7 @@ export function ExtensionStatusBanner(props: {
             {copyState === "failed" ? <span role="status" className="mt-2 block text-sm text-brand-attention">Copy failed. Select the command above.</span> : null}
           </div>
           {props.error ? <p role="alert" className="mt-3 text-sm font-medium text-brand-attention">{props.error}</p> : null}
+          {props.status ? <p role="status" className="mt-3 text-sm font-medium text-brand-dark">{props.status}</p> : null}
         </div>
       </div>
     </div>
@@ -305,6 +307,7 @@ export function ExtensionsWorkspace() {
   const [recoveryApprovalOpen, setRecoveryApprovalOpen] = useState(false);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
   const [provenanceOpen, setProvenanceOpen] = useState(false);
   const [filters, setFilters] = useState<ExtensionFilterState>(EMPTY_EXTENSION_FILTERS);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
@@ -355,17 +358,20 @@ export function ExtensionsWorkspace() {
     } finally { setBusy(false); }
   }, [load, pending, state]);
   const recoverAuthority = useCallback(async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
-    setRecoveryBusy(true); setRecoveryError(null);
+    setRecoveryBusy(true); setRecoveryError(null); setRecoveryStatus("Repairing extension controls…");
     try {
       const effective = await recoverExtensionControlAuthority(credentials);
+      if (effective.health !== "protected") throw new Error("Guard could not restore protected extension controls.");
       if (state.kind === "ready") setState({ ...state, effective });
       setRecoveryApprovalOpen(false);
+      setRecoveryStatus("Extension controls repaired.");
     } catch (error) {
       if (credentials === undefined && requiresExtensionRecoveryApproval(error)) {
         await resolveApprovalGate();
         setRecoveryApprovalOpen(true);
       } else {
         setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
+        setRecoveryStatus(null);
       }
     } finally { setRecoveryBusy(false); }
   }, [resolveApprovalGate, state]);
@@ -386,7 +392,7 @@ export function ExtensionsWorkspace() {
         <div><p className="text-xs font-bold uppercase tracking-[0.22em] text-brand-blue">Command safety</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Extensions</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Inspect and govern the capabilities Guard uses to understand development commands.</p></div>
         <button type="button" onClick={toggleLockdown} disabled={locked} className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${state.effective.global_lockdown ? "bg-red-700 text-white" : "border border-slate-300 bg-white text-slate-700"} disabled:opacity-50`}><HiMiniLockClosed className="size-4" />{state.effective.global_lockdown ? "Disable lockdown" : "Enable lockdown"}</button>
       </header>
-      <div className="mt-6"><ExtensionStatusBanner busy={recoveryBusy} effective={state.effective} error={recoveryError} onRecover={handleRecover} onRetry={load} /></div>
+      <div className="mt-6"><ExtensionStatusBanner busy={recoveryBusy} effective={state.effective} error={recoveryError} status={recoveryStatus} onRecover={handleRecover} onRetry={load} /></div>
       {state.effective.global_lockdown ? <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white"><HiMiniLockClosed className="size-5" /><span><strong>Global lockdown active.</strong> Optional extensions remain disabled regardless of individual settings.</span></div> : null}
       <section aria-labelledby="installed-extensions" className="mt-8">
         <div className="flex flex-col gap-1">

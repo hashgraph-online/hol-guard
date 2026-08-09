@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
+    ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_proof import ExtensionControlProof
@@ -212,6 +213,64 @@ def test_authority_recovery_rejects_healthy_authority(tmp_path: Path) -> None:
 
     assert denied.value.status == 409
     assert denied.value.code == "authority_not_recoverable"
+
+
+def test_authority_recovery_never_reports_success_while_still_tampered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    tampered = ExtensionControlAuthorityView(
+        AuthorityHealth.TAMPERED,
+        4,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    service = ExtensionControlApiService(
+        store=store,
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        runtime=ExtensionControlRuntime(tampered),
+    )
+    monkeypatch.setattr(store, "read_extension_control_authority", lambda **_kwargs: tampered)
+    monkeypatch.setattr(store, "recover_extension_control_authority", lambda **_kwargs: tampered)
+    monkeypatch.setattr(extension_control_api_module, "require_extension_control", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(extension_control_api_module, "consume_extension_control_grant", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(ExtensionControlApiError) as denied:
+        service.recover_authority({"approval_password": "secret", "session_nonce": "nonce"})
+
+    assert denied.value.status == 503
+    assert denied.value.code == "authority_recovery_incomplete"
+
+
+def test_authority_recovery_returns_bounded_error_when_store_repair_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    tampered = ExtensionControlAuthorityView(
+        AuthorityHealth.TAMPERED,
+        4,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    service = ExtensionControlApiService(
+        store=store,
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        runtime=ExtensionControlRuntime(tampered),
+    )
+    monkeypatch.setattr(store, "read_extension_control_authority", lambda **_kwargs: tampered)
+    monkeypatch.setattr(
+        store,
+        "recover_extension_control_authority",
+        lambda **_kwargs: (_ for _ in ()).throw(ExtensionControlAuthorityError("failed")),
+    )
+    monkeypatch.setattr(extension_control_api_module, "require_extension_control", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(extension_control_api_module, "consume_extension_control_grant", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(ExtensionControlApiError) as denied:
+        service.recover_authority({"approval_password": "secret", "session_nonce": "nonce"})
+
+    assert denied.value.status == 503
+    assert denied.value.code == "authority_recovery_failed"
 
 
 def test_legacy_extension_aliases_migrate_to_canonical_catalog_ids(tmp_path: Path) -> None:

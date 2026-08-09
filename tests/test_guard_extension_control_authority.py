@@ -100,6 +100,54 @@ def _store(
     return store
 
 
+def test_authenticated_recovery_rebuilds_unverifiable_authority(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    with store._connect() as connection:
+        connection.execute(
+            "update extension_control_authority_snapshot set snapshot_digest = ? where singleton = 1",
+            ("f" * 64,),
+        )
+
+    assert (
+        store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest).health
+        is AuthorityHealth.TAMPERED
+    )
+
+    repaired = store.recover_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+
+    assert repaired.health is AuthorityHealth.PROTECTED
+    assert repaired.revision == 0
+    assert repaired.layers == ()
+    assert (
+        store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest).health
+        is AuthorityHealth.PROTECTED
+    )
+
+
+@pytest.mark.parametrize("missing_part", ("snapshot", "anchor", "key"))
+def test_authenticated_recovery_rebuilds_incomplete_authority(tmp_path: Path, missing_part: str) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    if missing_part == "snapshot":
+        with store._connect() as connection:
+            connection.execute("delete from extension_control_authority_snapshot")
+    else:
+        suffix = ":anchor" if missing_part == "anchor" else ":authentication-key"
+        secret_id = next(secret_id for secret_id in secrets.values if secret_id.endswith(suffix))
+        secrets.delete_secret(secret_id)
+
+    repaired = store.recover_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+
+    assert repaired.health is AuthorityHealth.PROTECTED
+    assert repaired.revision == 0
+    assert repaired.layers == ()
+
+
 def _enrollment_proof(
     store: GuardStore,
     *,

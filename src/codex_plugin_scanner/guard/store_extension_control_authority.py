@@ -353,9 +353,9 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
 
     def recover_extension_control_authority(self, *, catalog_digest: str) -> ExtensionControlAuthorityView:
         with self._extension_control_authority_lock():
-            key = self._authority_key(required=True)
+            key = self._authority_key(required=False)
             if key is None:
-                return self._degraded_view(catalog_digest)
+                return self._reset_extension_control_authority(catalog_digest, key=None)
             anchor = self._read_anchor(key=key)
             with self._connect() as connection:
                 ensure_extension_control_authority_schema(connection)
@@ -363,7 +363,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                     "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
                 ).fetchone()
                 if snapshot is None or anchor is None:
-                    return self._tampered_view(catalog_digest)
+                    return self._reset_extension_control_authority(catalog_digest, key=key)
                 current_revision = _row_int(snapshot, "revision")
                 current_digest = _row_str(snapshot, "snapshot_digest")
                 pending = connection.execute(
@@ -417,7 +417,7 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                             (current_revision, AuthorityPhase.COMMITTED.value),
                         ).fetchone()
                         if committed is None:
-                            return self._tampered_view(catalog_digest)
+                            return self._reset_extension_control_authority(catalog_digest, key=key)
                         self._queue_extension_control_change_event(
                             connection,
                             revision=current_revision,
@@ -426,7 +426,19 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                             occurred_at=_row_str(committed, "created_at"),
                         )
                     return self._read_extension_control_authority_locked(catalog_digest)
-            return self._tampered_view(catalog_digest)
+            return self._reset_extension_control_authority(catalog_digest, key=key)
+
+    def _reset_extension_control_authority(
+        self, catalog_digest: str, *, key: bytes | None
+    ) -> ExtensionControlAuthorityView:
+        # Authenticated recovery must not import rows whose chain cannot be
+        # verified. Re-establish an empty, protected local authority instead.
+        with self._connect() as connection:
+            ensure_extension_control_authority_schema(connection)
+            connection.execute("delete from extension_control_authority_proof")
+            connection.execute("delete from extension_control_authority_transition")
+            connection.execute("delete from extension_control_authority_snapshot")
+        return self._bootstrap_extension_control_authority(catalog_digest, key=key)
 
     def acknowledge_extension_control_degraded_mode(self) -> ExtensionControlAuthorityView:
         self._extension_control_degraded_acknowledged = True

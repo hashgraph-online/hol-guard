@@ -562,7 +562,7 @@ function ExtensionStatusBanner(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "font-semibold text-brand-dark", children: recovery?.title }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-slate-700", children: recovery?.description }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-2", children: [
-        tampered && props.onRecover ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: props.busy, onClick: props.onRecover, className: "inline-flex min-h-10 items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:opacity-60", children: [
+        tampered && props.onRecover ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", "aria-busy": props.busy, disabled: props.busy, onClick: props.onRecover, className: "inline-flex min-h-10 items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:opacity-60", children: [
           props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4", "aria-hidden": "true" }),
           props.busy ? "Repairing…" : "Repair now"
         ] }) : null,
@@ -582,7 +582,8 @@ function ExtensionStatusBanner(props) {
         ] }),
         copyState === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", className: "mt-2 block text-sm text-brand-attention", children: "Copy failed. Select the command above." }) : null
       ] }),
-      props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm font-medium text-brand-attention", children: props.error }) : null
+      props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm font-medium text-brand-attention", children: props.error }) : null,
+      props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null
     ] })
   ] }) });
 }
@@ -692,6 +693,7 @@ function ExtensionsWorkspace() {
   const [recoveryApprovalOpen, setRecoveryApprovalOpen] = reactExports.useState(false);
   const [recoveryBusy, setRecoveryBusy] = reactExports.useState(false);
   const [recoveryError, setRecoveryError] = reactExports.useState(null);
+  const [recoveryStatus, setRecoveryStatus] = reactExports.useState(null);
   const [provenanceOpen, setProvenanceOpen] = reactExports.useState(false);
   const [filters, setFilters] = reactExports.useState(EMPTY_EXTENSION_FILTERS);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
@@ -754,16 +756,20 @@ function ExtensionsWorkspace() {
   const recoverAuthority = reactExports.useCallback(async (credentials) => {
     setRecoveryBusy(true);
     setRecoveryError(null);
+    setRecoveryStatus("Repairing extension controls…");
     try {
       const effective = await recoverExtensionControlAuthority(credentials);
+      if (effective.health !== "protected") throw new Error("Guard could not restore protected extension controls.");
       if (state.kind === "ready") setState({ ...state, effective });
       setRecoveryApprovalOpen(false);
+      setRecoveryStatus("Extension controls repaired.");
     } catch (error) {
       if (credentials === void 0 && requiresExtensionRecoveryApproval(error)) {
         await resolveApprovalGate();
         setRecoveryApprovalOpen(true);
       } else {
         setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
+        setRecoveryStatus(null);
       }
     } finally {
       setRecoveryBusy(false);
@@ -800,7 +806,7 @@ function ExtensionsWorkspace() {
         state.effective.global_lockdown ? "Disable lockdown" : "Enable lockdown"
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionStatusBanner, { busy: recoveryBusy, effective: state.effective, error: recoveryError, onRecover: handleRecover, onRetry: load }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionStatusBanner, { busy: recoveryBusy, effective: state.effective, error: recoveryError, status: recoveryStatus, onRecover: handleRecover, onRetry: load }) }),
     state.effective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "size-5" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [

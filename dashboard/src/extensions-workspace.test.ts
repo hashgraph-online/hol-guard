@@ -43,8 +43,29 @@ const recoveryMarkup = renderToStaticMarkup(createElement(ExtensionStatusBanner,
 assert.match(recoveryMarkup, /hol-guard guard command controls recover-authority/);
 assert.match(recoveryMarkup, /Copy repair command/);
 assert.match(recoveryMarkup, /Repair now/);
+assert.doesNotMatch(recoveryMarkup, /aria-busy="true"/);
 assert.match(recoveryMarkup, /Check again/);
 assert.doesNotMatch(recoveryMarkup, /bg-slate-950|bg-red-700|border-red-200/);
+
+const busyRecoveryMarkup = renderToStaticMarkup(createElement(ExtensionStatusBanner, {
+  effective: {
+    schema_version: "1.0.0",
+    health: "tampered",
+    revision: 4,
+    catalog_digest: "a".repeat(64),
+    global_lockdown: false,
+    controls: [],
+    failures: [],
+    layers: [],
+  },
+  busy: true,
+  status: "Repairing extension controls…",
+  onRecover: () => undefined,
+  onRetry: () => undefined,
+}));
+assert.match(busyRecoveryMarkup, /aria-busy="true"/);
+assert.match(busyRecoveryMarkup, /Repairing…/);
+assert.match(busyRecoveryMarkup, /role="status"/);
 
 const totpRecoveryMarkup = renderToStaticMarkup(createElement(ApprovalProofModal, {
   title: "Repair extension controls",

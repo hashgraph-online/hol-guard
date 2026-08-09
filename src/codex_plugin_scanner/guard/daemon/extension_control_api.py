@@ -175,7 +175,12 @@ class ExtensionControlApiService:
             )
         except ApprovalGateError as exc:
             raise ExtensionControlApiError(exc.status, exc.code) from exc
-        view = self._store.recover_extension_control_authority(catalog_digest=self._registry.catalog_digest)
+        try:
+            view = self._store.recover_extension_control_authority(catalog_digest=self._registry.catalog_digest)
+        except ExtensionControlAuthorityError as exc:
+            raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
+        if view.health is not AuthorityHealth.PROTECTED:
+            raise ExtensionControlApiError(503, "authority_recovery_incomplete")
         _ = self._runtime.refresh(view)
         return self.effective()
 
