@@ -6,9 +6,18 @@ on:
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
       - scripts/release/desktop_core_alpha_feed.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/desktop-core-alpha-feed.yml
+      - scripts/release/desktop_core_alpha_feed.py
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Publish to PyPI"]
+    types: [completed]
+    branches: [release/3.0]
 
 permissions:
   contents: read
@@ -41,7 +50,9 @@ jobs:
 
   publish-macos-arm64:
     name: Publish signed macOS arm64 Core sidecar
-    if: github.event_name != 'pull_request'
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     needs: validate
     runs-on: macos-15
     timeout-minutes: 90
@@ -75,7 +86,7 @@ jobs:
           test -z "$(git status --porcelain)"
       - name: Verify runner architecture
         run: test "$(uname -m)" = "arm64"
-      - name: Require signing, notarization, and update-key configuration
+      - name: Require Apple signing and notarization configuration
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -83,9 +94,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CORE_UPDATE_PRIVATE_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PRIVATE_KEY }}
-          CORE_UPDATE_PRIVATE_KEY_PASSWORD: ${{ secrets.HOL_GUARD_CORE_UPDATE_PRIVATE_KEY_PASSWORD }}
-          CORE_UPDATE_PUBLIC_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PUBLIC_KEY }}
         run: |
           set -euo pipefail
           test -n "$APPLE_CERTIFICATE"
@@ -94,9 +102,6 @@ jobs:
           test -n "$APPLE_ID"
           test -n "$APPLE_PASSWORD"
           test -n "$APPLE_TEAM_ID"
-          test -n "$CORE_UPDATE_PRIVATE_KEY"
-          test -n "$CORE_UPDATE_PRIVATE_KEY_PASSWORD"
-          test -n "$CORE_UPDATE_PUBLIC_KEY"
       - name: Discover newest published Core 3.x alpha
         id: release
         env:
@@ -143,11 +148,17 @@ jobs:
             --pattern "hol_guard-${CORE_VERSION}-*.whl" --dir "$TRUST_ASSETS"
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern "hol-guard-v${CORE_VERSION}.intoto.jsonl" --dir "$TRUST_ASSETS"
-          mapfile -t WHEELS < <(find "$TRUST_ASSETS" -maxdepth 1 -type f -name "hol_guard-${CORE_VERSION}-*.whl" -print)
-          test "${#WHEELS[@]}" -eq 1
+          WHEEL=""
+          WHEEL_COUNT=0
+          while IFS= read -r candidate; do
+            WHEEL="$candidate"
+            WHEEL_COUNT=$((WHEEL_COUNT + 1))
+          done < <(find "$TRUST_ASSETS" -maxdepth 1 -type f -name "hol_guard-${CORE_VERSION}-*.whl" -print)
+          test "$WHEEL_COUNT" -eq 1
+          test -f "$WHEEL"
           BUNDLE="$TRUST_ASSETS/hol-guard-v${CORE_VERSION}.intoto.jsonl"
           test -s "$BUNDLE"
-          gh attestation verify "${WHEELS[0]}" \
+          gh attestation verify "$WHEEL" \
             --repo "$GITHUB_REPOSITORY" \
             --bundle "$BUNDLE" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
@@ -182,11 +193,6 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
-      - name: Set up Bun signer
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'verify_existing'
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: 1.3.14
       - name: Fetch exact authorized Core source
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
@@ -210,7 +216,6 @@ jobs:
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
-          MODE: ${{ steps.existing.outputs.mode }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
@@ -221,16 +226,12 @@ jobs:
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE" --dir "$DIST"
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.json" --dir "$DIST"
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.attested.json" --dir "$DIST"
-          if [[ "$MODE" == "verify_existing" ]]; then
-            gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE.json.sig" --dir "$DIST"
-          fi
       - name: Verify prior feed provenance before reusing assets
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'build'
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'verify_existing'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
-          MODE: ${{ steps.existing.outputs.mode }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GH_TOKEN: ${{ github.token }}
@@ -238,31 +239,15 @@ jobs:
         run: |
           set -euo pipefail
           BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
-          if [[ "$MODE" == "repair_signature" ]]; then
-            for asset in "$BASE" "$BASE.json"; do
-              gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
-                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/desktop-core-alpha-feed.yml" \
-                --source-ref refs/heads/main --deny-self-hosted-runners >/dev/null
-            done
-            MARKER_SCHEMA=$(jq -r '.schema // empty' "$BASE.attested.json")
-            if [[ "$MARKER_SCHEMA" != "hol-guard-core-attestation.v2" ]]; then
-              echo "Only hardened v2 markers are eligible for signature repair; rebuild legacy assets instead" >&2
-              exit 1
-            fi
-            gh attestation verify "$BASE.attested.json" --repo "$GITHUB_REPOSITORY" \
+          for asset in "$BASE" "$BASE.json" "$BASE.attested.json"; do
+            gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/desktop-core-alpha-feed.yml" \
               --source-ref refs/heads/main --deny-self-hosted-runners >/dev/null
-            python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker \
-              --base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
-              --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
-              --apple-team-id "$APPLE_TEAM_ID" --mode repair
-          else
-            for asset in "$BASE" "$BASE.json" "$BASE.json.sig" "$BASE.attested.json"; do
-              gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
-                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/desktop-core-alpha-feed.yml" \
-                --source-ref refs/heads/main --deny-self-hosted-runners >/dev/null
-            done
-          fi
+          done
+          python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker \
+            --base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
+            --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
+            --apple-team-id "$APPLE_TEAM_ID"
       - name: Build standalone Core executable
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
@@ -306,7 +291,7 @@ jobs:
             --payload "$RUNNER_TEMP/bootstrap.json" --version "$CORE_VERSION" --subject "Standalone Core"
           mv "$BUILT" "$ASSET"
       - name: Import Apple signing identity
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        if: steps.release.outputs.available == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -327,9 +312,22 @@ jobs:
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign >/dev/null
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
           security list-keychains -d user -s "$KEYCHAIN"
+          security find-identity -v -p codesigning "$KEYCHAIN" > "$RUNNER_TEMP/codesign-identities.txt"
+          python3 -I - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          identity_text = (root / "codesign-identities.txt").read_text(encoding="utf-8")
+          matches = re.findall(r'^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"[^"]+"\s*$', identity_text, flags=re.MULTILINE)
+          if len(matches) != 1:
+              raise SystemExit(f"Expected exactly one imported code-signing identity, found {len(matches)}")
+          (root / "apple-signing-fingerprint.txt").write_text(matches[0].upper() + "\n", encoding="ascii")
+          PY
       - name: Sign and notarize new Core sidecar
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
@@ -356,23 +354,38 @@ jobs:
         if: steps.release.outputs.available == 'true'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MODE: ${{ steps.existing.outputs.mode }}
         shell: bash
         run: |
           set -euo pipefail
           BINARY="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           VERIFY="$RUNNER_TEMP/dist/hol-guard"
+          CERT_DIR="$RUNNER_TEMP/codesign-certs"
           chmod 0755 "$BINARY"
           codesign --verify --deep --strict --verbose=2 "$BINARY"
           codesign --display --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/codesign.txt"
-          grep -Fx "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/codesign.txt"
           grep -Fx "TeamIdentifier=$APPLE_TEAM_ID" "$RUNNER_TEMP/codesign.txt"
-          if ! spctl --assess --type execute --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/spctl.txt"; then
-            cat "$RUNNER_TEMP/spctl.txt" >&2
+          rm -rf "$CERT_DIR"
+          mkdir -p "$CERT_DIR"
+          if ! (
+            cd "$CERT_DIR"
+            codesign --display --extract-certificates "$BINARY" >/dev/null 2> "$RUNNER_TEMP/codesign-certificates.txt"
+          ); then
+            cat "$RUNNER_TEMP/codesign-certificates.txt" >&2
             exit 1
           fi
-          grep -F "source=Notarized Developer ID" "$RUNNER_TEMP/spctl.txt"
+          test -s "$CERT_DIR/codesign0"
+          EXPECTED_FINGERPRINT=$(tr -d '\r\n' < "$RUNNER_TEMP/apple-signing-fingerprint.txt" | tr '[:lower:]' '[:upper:]')
+          ACTUAL_FINGERPRINT=$(openssl x509 -inform DER -in "$CERT_DIR/codesign0" -noout -fingerprint -sha1 \
+            | sed -E 's/^[^=]+=//; s/://g' | tr '[:lower:]' '[:upper:]')
+          test -n "$EXPECTED_FINGERPRINT"
+          test "$ACTUAL_FINGERPRINT" = "$EXPECTED_FINGERPRINT"
+          if [[ "$MODE" == "build" ]]; then
+            test -s "$RUNNER_TEMP/notary-result.json"
+            jq -e '.status == "Accepted" and (.id | type == "string" and length > 0)' \
+              "$RUNNER_TEMP/notary-result.json" >/dev/null
+          fi
           file "$BINARY" | grep -F "Mach-O 64-bit executable arm64"
           cp "$BINARY" "$VERIFY"
           chmod 0755 "$VERIFY"
@@ -401,24 +414,6 @@ jobs:
             python3 -I scripts/release/desktop_core_alpha_feed.py create-manifest "${COMMON[@]}"
           fi
           python3 -I scripts/release/desktop_core_alpha_feed.py validate-manifest "${COMMON[@]}"
-      - name: Sign missing update manifest
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'verify_existing'
-        env:
-          CORE_VERSION: ${{ steps.release.outputs.version }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.HOL_GUARD_CORE_UPDATE_PRIVATE_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          MANIFEST="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json"
-          bunx @tauri-apps/cli@2.11.4 signer sign "$MANIFEST"
-          test -s "$MANIFEST.sig"
-      - name: Verify update manifest signature
-        if: steps.release.outputs.available == 'true'
-        env:
-          CORE_VERSION: ${{ steps.release.outputs.version }}
-          CORE_UPDATE_PUBLIC_KEY: ${{ secrets.HOL_GUARD_CORE_UPDATE_PUBLIC_KEY }}
-        run: uv run --no-project --with cryptography==50.0.0 python -I scripts/release/desktop_core_alpha_feed.py verify-minisign --file "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json" --signature "$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}.json.sig" --public-key "$CORE_UPDATE_PUBLIC_KEY"
       - name: Create or validate immutable marker
         if: steps.release.outputs.available == 'true'
         env:
@@ -436,41 +431,30 @@ jobs:
           COMMON=(--base "$BASE" --marker "$MARKER" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
             --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
             --apple-team-id "$APPLE_TEAM_ID")
-          if [[ "$MODE" == "build" || "$MODE" == "repair_signature" ]]; then
+          if [[ "$MODE" == "build" ]]; then
             python3 -I scripts/release/desktop_core_alpha_feed.py create-marker "${COMMON[@]}" --workflow-run "$GITHUB_RUN_ID"
           else
-            python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker "${COMMON[@]}" --mode complete
+            python3 -I scripts/release/desktop_core_alpha_feed.py validate-marker "${COMMON[@]}"
           fi
       - name: Attest complete hardened Core asset set
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'verify_existing'
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
         with:
           subject-path: |
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.json
-            ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.json.sig
             ${{ runner.temp }}/dist/hol-guard-core-${{ steps.release.outputs.version }}-${{ env.RELEASE_TARGET }}.attested.json
-      - name: Publish new or repaired immutable assets
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode != 'verify_existing'
+      - name: Publish immutable Core assets
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
-          MODE: ${{ steps.existing.outputs.mode }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           BASE="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
-          if [[ "$MODE" == "build" ]]; then
-            gh release upload "$CORE_TAG" "$BASE" "$BASE.json" "$BASE.json.sig" "$BASE.attested.json" \
-              --repo "$GITHUB_REPOSITORY"
-          elif [[ "$MODE" == "repair_signature" ]]; then
-            gh release upload "$CORE_TAG" "$BASE.json.sig" "$BASE.attested.json" --clobber \
-              --repo "$GITHUB_REPOSITORY"
-          else
-            echo "Unexpected publication mode: $MODE" >&2
-            exit 1
-          fi
+          gh release upload "$CORE_TAG" "$BASE" "$BASE.json" "$BASE.attested.json" --repo "$GITHUB_REPOSITORY"
       - name: Verify final release assets and provenance
         if: steps.release.outputs.available == 'true'
         env:
@@ -487,7 +471,7 @@ jobs:
           mkdir -p "$PUBLISHED"
           gh release view "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
             > "$RUNNER_TEMP/final-assets.txt"
-          for asset in "$BASE" "$BASE.json" "$BASE.json.sig" "$BASE.attested.json"; do
+          for asset in "$BASE" "$BASE.json" "$BASE.attested.json"; do
             grep -Fx "$asset" "$RUNNER_TEMP/final-assets.txt"
             gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$PUBLISHED"
             test -f "$PUBLISHED/$asset"

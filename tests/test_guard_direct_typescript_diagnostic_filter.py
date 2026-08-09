@@ -130,6 +130,141 @@ def test_typescript_diagnostic_filter_accepts_escaped_literal_dots(
     )
 
 
+def test_verified_routine_typescript_pipeline_is_benign(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+    workspace = Path(command.split(" && ", 1)[0].removeprefix("cd "))
+    source = workspace / "src" / "index.ts"
+    source.parent.mkdir()
+    _ = source.write_text("export const value = 1;\n", encoding="utf-8")
+    command = (
+        f"cd {workspace} && npx tsc --noEmit --types @cloudflare/workers-types "
+        "--lib es2022 --target es2022 --module esnext --moduleResolution bundler "
+        '--skipLibCheck src/index.ts 2>&1 | grep -v "npm warn" | head -8; echo "TSC_DONE"'
+    )
+
+    heap_command = command.replace("npx tsc", 'NODE_OPTIONS="--max-old-space-size=8192" npx tsc').replace(
+        '| grep -v "npm warn" | head -8',
+        "| head -40",
+    )
+    assert is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": heap_command},
+        cwd=caller,
+        home_dir=home,
+    )
+
+    assert (
+        extract_sensitive_tool_action_request(
+            "bash",
+            {"command": command},
+            cwd=caller,
+            home_dir=home,
+        )
+        is None
+    )
+    assert is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command},
+        cwd=caller,
+        home_dir=home,
+    )
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    (
+        ("--noEmit", "--outDir build"),
+        ("--noEmit", "--noEmit false"),
+        ("--noEmit", "--noEmit @compiler.args"),
+        ("@cloudflare/workers-types", '"$(touch marker)"'),
+        ("@cloudflare/workers-types", "../../outside"),
+        ("--skipLibCheck", "--generateTrace traces"),
+        ("--skipLibCheck", "--watch"),
+        ("--skipLibCheck", "--project=../outside/tsconfig.json"),
+        ("npx tsc", 'NODE_OPTIONS="--require=payload" npx tsc'),
+        ("src/index.ts", "../outside.ts"),
+        ('grep -v "npm warn"', "grep -f patterns.txt"),
+        ('grep -v "npm warn"', "grep -v --file=patterns.txt"),
+        ('grep -v "npm warn"', 'grep -v "$(touch marker)"'),
+        ('grep -v "npm warn" | head -8', 'grep -v "npm warn"'),
+        ("head -8", "head -10000"),
+        ('echo "TSC_DONE"', "touch marker"),
+    ),
+)
+def test_routine_typescript_pipeline_rejects_effect_widening(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    original: str,
+    replacement: str,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+    workspace = Path(command.split(" && ", 1)[0].removeprefix("cd "))
+    source = workspace / "src" / "index.ts"
+    source.parent.mkdir()
+    _ = source.write_text("export const value = 1;\n", encoding="utf-8")
+    command = (
+        f"cd {workspace} && npx tsc --noEmit --types @cloudflare/workers-types "
+        "--lib es2022 --target es2022 --module esnext --moduleResolution bundler "
+        '--skipLibCheck src/index.ts 2>&1 | grep -v "npm warn" | head -8; echo "TSC_DONE"'
+    )
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command.replace(original, replacement)},
+        cwd=caller,
+        home_dir=home,
+    )
+
+
+@pytest.mark.parametrize("shadowed_command", ("grep", "head"))
+def test_routine_typescript_pipeline_requires_trusted_observers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    shadowed_command: str,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+    workspace = Path(command.split(" && ", 1)[0].removeprefix("cd "))
+    source = workspace / "src" / "index.ts"
+    source.parent.mkdir()
+    _ = source.write_text("export const value = 1;\n", encoding="utf-8")
+    command = f'cd {workspace} && npx tsc --noEmit src/index.ts 2>&1 | grep -v "npm warn" | head -8; echo "TSC_DONE"'
+
+    def selectively_trusted(candidate: str, *, cwd: Path, home_dir: Path) -> bool:
+        del cwd, home_dir
+        return candidate != shadowed_command
+
+    monkeypatch.setattr(direct_vitest, "_trusted_path_command", selectively_trusted)
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command},
+        cwd=caller,
+        home_dir=home,
+    )
+
+
+def test_routine_typescript_pipeline_rejects_bare_symlink_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+    workspace = Path(command.split(" && ", 1)[0].removeprefix("cd "))
+    outside = tmp_path / "outside.js"
+    _ = outside.write_text("export const secret = 1;\n", encoding="utf-8")
+    _ = (workspace / "linked.js").symlink_to(outside)
+    command = f'cd {workspace} && npx tsc --noEmit linked.js 2>&1 | grep -v "npm warn" | head -8; echo "TSC_DONE"'
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command},
+        cwd=caller,
+        home_dir=home,
+    )
+
+
 @pytest.mark.parametrize(
     ("original", "replacement"),
     (

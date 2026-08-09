@@ -141,6 +141,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "retrying in 30s" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert "Resolve published scanner version" in workflow_text
+    assert 'urlopen("https://pypi.org/pypi/plugin-scanner/json", timeout=30)' in workflow_text
     assert "Compute scanner wheel SHA256" in workflow_text
     assert 'workflows: ["Publish to PyPI"]' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
@@ -148,6 +149,17 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "printf '%s\\n' \"${{ steps.scanner_sha256.outputs.sha256 }}\" > scanner-sha256.txt" in workflow_text
     assert "git push origin HEAD:main" in workflow_text
     assert "git push origin refs/tags/v1 --force" in workflow_text
+
+
+def test_publish_action_repo_scanner_version_heredoc_is_shell_aligned() -> None:
+    yaml = pytest.importorskip("yaml")
+    workflow_path = ROOT / ".github" / "workflows" / "publish-action-repo.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish-action-repo"]["steps"]
+    script = next(step["run"] for step in steps if step.get("name") == "Resolve published scanner version")
+
+    assert "\nimport json\nimport urllib.request\n" in script
+    assert '\nPY\n)"' in script
 
 
 def test_action_bundle_docs_reference_hol_guard_source() -> None:

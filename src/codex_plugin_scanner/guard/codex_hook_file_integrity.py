@@ -45,6 +45,12 @@ def _owner_is_only_group_member(owner_uid: int, group_gid: int) -> bool:
     package modules extracted by pip/pipx.  The group write bit is safe only
     when NSS can prove that no other account belongs to that group.  Lookup
     failures remain fail-closed.
+
+    User-private groups often have an empty ``gr_mem`` list (membership is only
+    via ``pw_gid``).  Some restricted NSS configurations also return an empty
+    ``getpwall()`` result.  In that case the classic ``group name == username``
+    user-private-group convention plus matching primary gid is accepted; any
+    evidence of a second member still rejects.
     """
 
     try:
@@ -53,11 +59,24 @@ def _owner_is_only_group_member(owner_uid: int, group_gid: int) -> bool:
 
         owner = pwd.getpwuid(owner_uid)
         group = grp.getgrgid(group_gid)
+        owner_in_group = owner.pw_gid == group_gid or owner.pw_name in set(group.gr_mem)
+        if not owner_in_group:
+            return False
+        accounts = pwd.getpwall()
         member_names = set(group.gr_mem)
-        member_names.update(entry.pw_name for entry in pwd.getpwall() if entry.pw_gid == group_gid)
+        member_names.update(entry.pw_name for entry in accounts if entry.pw_gid == group_gid)
+        other_members = member_names - {owner.pw_name}
+        if other_members:
+            return False
+        # Proven private membership: the owner is listed and no one else is.
+        if owner.pw_name in member_names:
+            return True
+        # Empty NSS listing cannot prove absence of other primary members. Accept
+        # only the classic user-private-group convention (group name == username,
+        # matching primary gid, empty gr_mem). Partial non-empty listings fail closed.
+        return not accounts and not group.gr_mem and group.gr_name == owner.pw_name and owner.pw_gid == group_gid
     except (ImportError, KeyError, OSError):
         return False
-    return member_names == {owner.pw_name}
 
 
 def _python_package_roots() -> tuple[Path, ...]:
@@ -67,7 +86,9 @@ def _python_package_roots() -> tuple[Path, ...]:
     active interpreter.  The explicit prefix-derived candidates cover common
     POSIX venv and distro layouts, including Debian/Ubuntu ``dist-packages``,
     without trusting an arbitrary directory merely because it has a familiar
-    basename.
+    basename.  ``site`` and the installed ``codex_plugin_scanner`` location cover
+    pipx/venv layouts where the active purelib spelling differs from the path
+    that imported the package.
     """
 
     roots: set[Path] = set()
@@ -88,6 +109,34 @@ def _python_package_roots() -> tuple[Path, ...]:
         value = configured_paths.get(key)
         if isinstance(value, str) and value:
             add_root(value)
+
+    try:
+        import site
+
+        getsitepackages = getattr(site, "getsitepackages", None)
+        if callable(getsitepackages):
+            site_packages = getsitepackages()
+            if isinstance(site_packages, (list, tuple)):
+                for value in site_packages:
+                    if isinstance(value, str) and value:
+                        add_root(value)
+        getusersitepackages = getattr(site, "getusersitepackages", None)
+        if callable(getusersitepackages):
+            user_site = getusersitepackages()
+            if isinstance(user_site, str) and user_site:
+                add_root(user_site)
+    except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
+        pass
+
+    try:
+        import codex_plugin_scanner
+
+        package_file = getattr(codex_plugin_scanner, "__file__", None)
+        if isinstance(package_file, str) and package_file:
+            # site-packages/codex_plugin_scanner/__init__.py -> site-packages
+            add_root(Path(package_file).expanduser().resolve(strict=False).parent.parent)
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError):
+        pass
 
     version_dirs = {
         f"python{sys.version_info.major}",

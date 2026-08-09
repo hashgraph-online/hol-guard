@@ -60,7 +60,9 @@ def test_release_branch_pushes_publish_alpha_while_main_pushes_publish_stable() 
         assert "github.run_attempt == 1" in condition
         assert "github.ref == 'refs/heads/main'" in condition
         assert "needs.build.outputs.channel == 'stable'" in condition
-    assert jobs["publish-main-pypi"]["needs"] == ["build", "publish-main-testpypi"]
+    assert jobs["publish-main-pypi"]["needs"] == "build"
+    assert "needs.publish-main-testpypi.result == 'success'" not in jobs["publish-main-pypi"]["if"]
+    assert "vars.MAIN_TESTPYPI_ENABLED == 'true'" in jobs["publish-main-testpypi"]["if"]
     assert jobs["release-main"]["needs"] == ["build", "publish-main-pypi"]
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")

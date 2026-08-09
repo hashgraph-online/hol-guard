@@ -16,7 +16,6 @@ on:
         type: choice
         options:
           - "3.0"
-          - "3.1"
       release_version:
         description: "Exact canonical release version"
         required: true
@@ -26,7 +25,7 @@ on:
         required: true
         type: string
   push:
-    branches: [main, release/3.0, release/3.1]
+    branches: [main, release/3.0]
   pull_request:
     branches: [main, release/3.0]
     types: [opened, synchronize, reopened, labeled]
@@ -64,12 +63,12 @@ jobs:
             echo "Release dispatch actor is not an authorized maintainer" >&2
             exit 1
           fi
-          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "3.0" && "$RELEASE_TRAIN" != "3.1" ]]; then
-            echo "Only an authorized 3.x alpha train is permitted" >&2
+          if [[ "$RELEASE_CHANNEL" != "alpha" || "$RELEASE_TRAIN" != "3.0" ]]; then
+            echo "Only the release/3.0 alpha train is authorized" >&2
             exit 1
           fi
-          if [[ "$GITHUB_REF" != "refs/heads/release/${RELEASE_TRAIN}" ]]; then
-            echo "Alpha releases must run from the selected release train branch" >&2
+          if [[ "$GITHUB_REF" != "refs/heads/release/3.0" ]]; then
+            echo "Alpha releases must run from refs/heads/release/3.0" >&2
             exit 1
           fi
           if [[ "$EXPECTED_SHA" != "$GITHUB_SHA" ]]; then
@@ -81,6 +80,7 @@ jobs:
     name: Build + Verify
     if: >-
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
+      (github.event_name != 'push' || github.run_attempt == 1) &&
       (github.event.action != 'labeled' || github.event.label.name == 'publish-testpypi-canary')
     needs: authorize-release
     runs-on: ubuntu-latest
@@ -151,20 +151,21 @@ jobs:
             fi
             CHANNEL="$RELEASE_CHANNEL"
             TRAIN="$RELEASE_TRAIN"
-            if [[ "$TRAIN" != "3.0" && "$TRAIN" != "3.1" ]]; then
+            if [[ "$TRAIN" != "3.0" ]]; then
               echo "Unsupported release train: ${TRAIN}" >&2
               exit 1
             fi
             TRAIN_REF="refs/heads/release/${TRAIN}"
 
             if [[ "$CHANNEL" != "alpha" ]]; then
-              echo "The selected release train is alpha-only" >&2
+              echo "The release/3.0 train is alpha-only" >&2
               exit 1
             fi
             if [[ "$GITHUB_REF" != "$TRAIN_REF" ]]; then
               echo "Alpha releases must run from ${TRAIN_REF}" >&2
               exit 1
             fi
+
             EXISTING_VERSION_FILE=$(mktemp)
             uv run --no-sync python scripts/verify_release_registry.py \
               list-versions --registry pypi | jq -r '.[]' > "$EXISTING_VERSION_FILE"
@@ -198,7 +199,7 @@ jobs:
           print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
           PY
             )
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" =~ ^refs/heads/release/3\.[0-9]+$ ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]]; then
             if [[ "$RELEASE_PUBLISHING_ENABLED" != "true" ]]; then
               echo "Release publishing is disabled until protected environments are verified" >&2
               exit 1
@@ -208,11 +209,7 @@ jobs:
               exit 1
             fi
             CHANNEL="alpha"
-            TRAIN="${GITHUB_REF#refs/heads/release/}"
-            if [[ "$TRAIN" != "3.0" && "$TRAIN" != "3.1" ]]; then
-              echo "Unsupported release train: ${TRAIN}" >&2
-              exit 1
-            fi
+            TRAIN="3.0"
             TRAIN_REF="refs/heads/release/${TRAIN}"
             PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
               list-versions --registry pypi)
@@ -589,7 +586,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/3.'))
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build]
     runs-on: ubuntu-latest
@@ -639,13 +636,12 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      vars.ALPHA_TESTPYPI_ENABLED == 'true' &&
       needs.build.result == 'success' &&
       needs.reserve-alpha-tag.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/3.'))
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, reserve-alpha-tag]
     runs-on: ubuntu-latest
@@ -678,13 +674,13 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           train_ref="refs/heads/release/${TRAIN}"
-          git fetch --no-tags origin "+${train_ref}:refs/remotes/origin/release/${TRAIN}"
-          if ! git merge-base --is-ancestor "$SOURCE_SHA" "refs/remotes/origin/release/${TRAIN}"; then
-            echo "Alpha publication source is no longer part of the release train" >&2
+          remote_train_sha=$(git ls-remote --exit-code origin "$train_ref" | awk '{print $1}')
+          if [[ "$remote_train_sha" != "$SOURCE_SHA" ]]; then
+            echo "Alpha publication source is no longer the release train head" >&2
             exit 1
           fi
-          remote_alpha_tag_sha=$(git ls-remote origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
-          if [[ -n "$remote_alpha_tag_sha" && "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
+          remote_alpha_tag_sha=$(git ls-remote --exit-code origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
+          if [[ "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
             echo "Alpha tag targets a different source" >&2
             exit 1
           fi
@@ -741,12 +737,13 @@ jobs:
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       needs.build.result == 'success' &&
       needs.reserve-alpha-tag.result == 'success' &&
+      needs.publish-alpha-testpypi.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/3.'))
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
-    needs: [build, reserve-alpha-tag]
+    needs: [build, reserve-alpha-tag, publish-alpha-testpypi]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -767,7 +764,7 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distribution-sha256
-      - name: Verify immutable build artifact
+      - name: Verify the TestPyPI-proven artifact
         run: sha256sum --check distribution-sha256.txt
       - name: Keep only the Guard release distribution
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
@@ -796,13 +793,13 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           train_ref="refs/heads/release/${TRAIN}"
-          git fetch --no-tags origin "+${train_ref}:refs/remotes/origin/release/${TRAIN}"
-          if ! git merge-base --is-ancestor "$SOURCE_SHA" "refs/remotes/origin/release/${TRAIN}"; then
-            echo "Alpha publication source is no longer part of the release train" >&2
+          remote_train_sha=$(git ls-remote --exit-code origin "$train_ref" | awk '{print $1}')
+          if [[ "$remote_train_sha" != "$SOURCE_SHA" ]]; then
+            echo "Alpha publication source is no longer the release train head" >&2
             exit 1
           fi
-          remote_alpha_tag_sha=$(git ls-remote origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
-          if [[ -n "$remote_alpha_tag_sha" && "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
+          remote_alpha_tag_sha=$(git ls-remote --exit-code origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
+          if [[ "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
             echo "Alpha tag targets a different source" >&2
             exit 1
           fi
@@ -857,6 +854,7 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      vars.MAIN_TESTPYPI_ENABLED == 'true' &&
       github.event_name == 'push' &&
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
@@ -951,9 +949,8 @@ jobs:
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
       needs.build.result == 'success' &&
-      needs.publish-main-testpypi.result == 'success' &&
       needs.build.outputs.channel == 'stable'
-    needs: [build, publish-main-testpypi]
+    needs: build
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -974,7 +971,7 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distribution-sha256
-      - name: Verify the TestPyPI-proven artifact
+      - name: Verify immutable build artifact
         run: sha256sum --check distribution-sha256.txt
       - name: Keep only the Guard release distribution
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
@@ -1179,7 +1176,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/3.'))
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, publish-alpha-pypi]
     runs-on: ubuntu-latest
@@ -1288,7 +1285,7 @@ jobs:
         (
           (
             (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-            (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/3.'))
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
           ) &&
           needs.build.outputs.channel == 'alpha' &&
           needs.publish-alpha-pypi.result == 'success' &&

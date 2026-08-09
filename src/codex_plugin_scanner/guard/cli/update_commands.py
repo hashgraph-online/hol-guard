@@ -33,7 +33,9 @@ from ..adapters.opencode_pretool import (
     managed_plugin_path,
     pretool_plugin_source,
 )
-from ..adapters.pi import legacy_omp_managed_extension_is_verified
+from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
+from ..adapters.pi_extension_source import managed_extension_source
+from ..adapters.pi_support import json_payload
 from ..config import load_guard_config, resolve_guard_home
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
@@ -534,7 +536,24 @@ def run_guard_update(
         payload["upgrade_source"] = update_context.source.public_name
         if include_alpha:
             payload["release_channel"] = "alpha"
+    already_current = (
+        requested_wheel_path is None
+        and not force_pypi_reinstall
+        and version_check.get("update_available") is False
+        and str(version_check.get("status") or "") == "current"
+        and local_source_install is None
+        and local_archive_install is None
+        and vcs_install is None
+    )
     if dry_run:
+        if already_current:
+            payload["status"] = "current"
+            payload["changed"] = False
+            payload["resulting_version"] = current_version
+            payload["message"] = "HOL Guard is already current."
+            if trusted_wheel is not None:
+                trusted_wheel.cleanup()
+            return payload, 0
         payload["status"] = "planned"
         payload["changed"] = False
         payload["message"] = _planned_update_message(
@@ -544,6 +563,35 @@ def run_guard_update(
         )
         if trusted_wheel is not None:
             trusted_wheel.cleanup()
+        return payload, 0
+    if already_current:
+        payload["status"] = "current"
+        payload["changed"] = False
+        payload["resulting_version"] = current_version
+        payload["message"] = "HOL Guard is already current."
+        # Skip force-reinstall/upgrade noise when PyPI already reports current.
+        package_shims, package_shim_note = _refresh_package_shims_after_update(
+            context=context,
+            dry_run=dry_run,
+            update_context=update_context,
+        )
+        if package_shims is not None:
+            payload["package_shims"] = package_shims
+        _append_payload_note(payload, package_shim_note)
+        repaired_installs, repair_notes = _repair_supported_harnesses(
+            context=context,
+            store=store,
+            workspace=workspace,
+            now=now,
+            dry_run=dry_run,
+            update_context=update_context,
+        )
+        if repair_notes:
+            payload["notes"] = [*_payload_notes(payload), *repair_notes]
+        if repaired_installs:
+            payload["managed_installs"] = repaired_installs
+            if len(repaired_installs) == 1:
+                payload["managed_install"] = repaired_installs[0]
         return payload, 0
     active_command = execution_command
     active_display_command = command
@@ -988,52 +1036,31 @@ def _output_lines(value: str) -> list[str]:
 
 
 def _success_status(payload: dict[str, object]) -> str:
-    if str(payload.get("upgrade_source") or "") == "local_wheel":
-        current_version = str(payload.get("current_version") or "").strip()
-        resulting_version = str(payload.get("resulting_version") or "").strip()
-        if (
-            current_version
-            and resulting_version
-            and current_version != "unknown"
-            and resulting_version != "unknown"
-            and current_version != resulting_version
-        ):
-            return "updated"
-        if (
-            current_version
-            and resulting_version
-            and current_version != "unknown"
-            and resulting_version != "unknown"
-            and current_version == resulting_version
-        ):
-            return "current"
-        output_text = str(payload.get("stdout") or "").lower()
-        if any(hint in output_text for hint in _ALREADY_CURRENT_HINTS):
-            return "current"
-        if "requirement already satisfied: hol-guard" in output_text or "hol-guard is already installed" in output_text:
-            return "current"
-        return "updated"
-    if _is_stale_install(payload):
-        return "stale"
     current_version = str(payload.get("current_version") or "").strip()
     resulting_version = str(payload.get("resulting_version") or "").strip()
-    if (
-        current_version
-        and resulting_version
-        and current_version != "unknown"
-        and resulting_version != "unknown"
-        and current_version != resulting_version
-    ):
-        return "updated"
-    if (
-        current_version
-        and resulting_version
-        and current_version != "unknown"
-        and resulting_version != "unknown"
-        and current_version == resulting_version
-    ):
+    versions_known = (
+        bool(current_version)
+        and bool(resulting_version)
+        and current_version not in {"", "unknown"}
+        and resulting_version not in {"", "unknown"}
+    )
+    is_local_wheel = str(payload.get("upgrade_source") or "") == "local_wheel"
+    versions_differ = versions_known and current_version != resulting_version
+    versions_equal = versions_known and current_version == resulting_version
+    still_behind_pypi = (not is_local_wheel) and _is_stale_install(payload)
+
+    if versions_differ:
+        # Partial upgrades that remain behind PyPI stay "stale".
+        return "stale" if still_behind_pypi else "updated"
+    if still_behind_pypi:
+        # Same resulting version while PyPI has a newer release (pin / no-op upgrade).
+        return "stale"
+    if versions_equal:
+        # Same version after install is "current" unless this was an explicit repair/reinstall.
+        if payload.get("recovery_reinstall") is True or payload.get("recovery_source_install") is True:
+            return "updated"
         return "current"
-    output_text = str(payload.get("stdout") or "").lower()
+    output_text = str(payload.get("stdout") or "").lower() + "\n" + str(payload.get("stderr") or "").lower()
     if any(hint in output_text for hint in _ALREADY_CURRENT_HINTS):
         return "current"
     if "requirement already satisfied: hol-guard" in output_text or "hol-guard is already installed" in output_text:
@@ -2305,6 +2332,8 @@ def _repair_pi_family_install(
 
     The extension embeds timeout and daemon-compat constants. Refreshing it after
     update keeps the fast daemon path available and avoids cold CLI timeouts.
+    When the on-disk extension and settings already match the current package,
+    skip the rewrite so already-current updates stay silent.
     """
 
     try:
@@ -2315,6 +2344,8 @@ def _repair_pi_family_install(
         return None, None
     try:
         repair_context, repair_workspace = _repair_context_from_managed_install(context, managed_install)
+        if _pi_family_extension_is_current(harness=harness, context=repair_context):
+            return None, None
         payload = apply_managed_install(
             "install",
             harness,
@@ -2330,6 +2361,41 @@ def _repair_pi_family_install(
     if not isinstance(repaired, dict):
         return None, f"Could not refresh {display_name} protection during update: managed install was not recorded"
     return repaired, None
+
+
+def _pi_family_extension_is_current(*, harness: str, context: HarnessContext) -> bool:
+    """Return whether the managed Pi/OMP extension already matches this package."""
+
+    adapter: PiHarnessAdapter | OmpHarnessAdapter
+    if harness == "pi":
+        adapter = PiHarnessAdapter()
+    elif harness == "omp":
+        adapter = OmpHarnessAdapter()
+    else:
+        return False
+    extension_path = adapter._managed_extension_path(context)
+    settings_path = adapter._managed_settings_path(context)
+    if not extension_path.is_file():
+        return False
+    expected_source = managed_extension_source(
+        guard_home=context.guard_home,
+        home_dir=context.home_dir,
+        settings_path=settings_path,
+        harness=adapter.harness,
+        display_name=adapter.display_name,
+    )
+    try:
+        current_source = extension_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if current_source != expected_source:
+        return False
+    settings = json_payload(settings_path) if settings_path.is_file() else {}
+    raw_extensions = settings.get("extensions")
+    if not isinstance(raw_extensions, list):
+        return False
+    extension_value = str(extension_path)
+    return any(isinstance(item, str) and item == extension_value for item in raw_extensions)
 
 
 def _repair_cursor_install(
