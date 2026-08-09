@@ -6,6 +6,7 @@ import {
   buildExtensionMutation,
   ExtensionStatusBanner,
   extensionRecoveryAction,
+  ReviewModal,
   requiresExtensionRecoveryApproval,
 } from "./extensions-workspace";
 import { ExtensionControlApiError } from "./extension-controls-api";
@@ -91,6 +92,58 @@ assert.match(totpRecoveryMarkup, /Authenticator code/);
 assert.doesNotMatch(totpRecoveryMarkup, /Approval password/);
 assert.match(totpRecoveryMarkup, /That authenticator code was not accepted/);
 assert.match(totpRecoveryMarkup, /role="alert"/);
+
+const extension = {
+  extension_id: "test-extension",
+  name: "Test extension",
+  description: "Test extension",
+  required: false,
+  source: "built-in",
+  version: "1.0.0",
+  action_classes: [],
+  risk_classes: [],
+};
+const totpChangeMarkup = renderToStaticMarkup(createElement(ReviewModal, {
+  change: { extension, enabled: true },
+  busy: false,
+  error: null,
+  approvalGate: {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: true,
+    strict_all_decisions: false,
+    totp_enabled: true,
+  },
+  onCancel: () => undefined,
+  onConfirm: () => undefined,
+}));
+assert.match(totpChangeMarkup, /Authenticator code/);
+assert.doesNotMatch(totpChangeMarkup, /Approval password/);
+
+const passwordChangeMarkup = renderToStaticMarkup(createElement(ReviewModal, {
+  change: { extension, enabled: true },
+  busy: false,
+  error: null,
+  approvalGate: {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: true,
+    strict_all_decisions: false,
+    totp_enabled: false,
+  },
+  onCancel: () => undefined,
+  onConfirm: () => undefined,
+}));
+assert.match(passwordChangeMarkup, /Approval password/);
+assert.doesNotMatch(passwordChangeMarkup, /Authenticator code/);
 assert.equal(
   requiresExtensionRecoveryApproval(new ExtensionControlApiError("approval_gate_required", 403, "approval_gate_required")),
   true,

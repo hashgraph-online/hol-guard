@@ -1,4 +1,4 @@
-import { an as fetchExtensionControlApi, r as reactExports, j as jsxRuntimeExports, $ as HiMiniAdjustmentsHorizontal, ak as HiMiniMagnifyingGlass, w as HiMiniXMark, o as HiMiniShieldCheck, J as HiMiniExclamationTriangle, ao as HiMiniArrowPath, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, Z as HiMiniLockClosed, x as HiMiniChevronUp, y as HiMiniChevronDown, l as HiMiniCheckCircle, ap as HiMiniPuzzlePiece } from "../guard-dashboard.js";
+import { an as fetchExtensionControlApi, r as reactExports, j as jsxRuntimeExports, $ as HiMiniAdjustmentsHorizontal, ak as HiMiniMagnifyingGlass, w as HiMiniXMark, o as HiMiniShieldCheck, J as HiMiniExclamationTriangle, ao as HiMiniArrowPath, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, Z as HiMiniLockClosed, x as HiMiniChevronUp, y as HiMiniChevronDown, l as HiMiniCheckCircle, ap as buildApprovalProofCredentials, aq as isApprovalProofSubmitDisabled, ar as ApprovalProofFieldInputs, as as HiMiniPuzzlePiece } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 class ExtensionControlApiError extends Error {
   constructor(message, status, code, recoveryAction) {
@@ -632,9 +632,7 @@ function ExtensionCard(props) {
 function ReviewModal(props) {
   const [password, setPassword] = reactExports.useState("");
   const [totp, setTotp] = reactExports.useState("");
-  const passwordInput = reactExports.useRef(null);
   reactExports.useEffect(() => {
-    passwordInput.current?.focus();
     const handleKeyDown = (event) => {
       if (event.key === "Escape" && !props.busy) {
         props.onCancel();
@@ -652,8 +650,16 @@ function ReviewModal(props) {
   const title = "globalLockdown" in props.change ? `${props.change.globalLockdown ? "Enable" : "Disable"} global lockdown` : `${props.change.enabled ? "Enable" : "Disable"} ${props.change.extension.name}`;
   const handleSubmit = reactExports.useCallback((event) => {
     event.preventDefault();
-    props.onConfirm(password, totp);
+    props.onConfirm(buildApprovalProofCredentials(props.approvalGate, {
+      approvalPassword: password,
+      approvalTotpCode: totp
+    }));
   }, [password, props, totp]);
+  const submitDisabled = isApprovalProofSubmitDisabled(
+    props.approvalGate,
+    { approvalPassword: password, approvalTotpCode: totp },
+    props.busy
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", role: "presentation", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, role: "dialog", "aria-modal": "true", "aria-labelledby": "extension-review-title", className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -670,18 +676,20 @@ function ReviewModal(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", {}),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "globalLockdown" in props.change ? props.change.globalLockdown ? "Locked" : "Open" : props.change.enabled ? "Enabled" : "Disabled" })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-5 block text-sm font-medium text-slate-700", children: [
-      "Approval password",
-      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { ref: passwordInput, type: "password", autoComplete: "current-password", value: password, onChange: handlePasswordChange, className: "mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 block text-sm font-medium text-slate-700", children: [
-      "Authenticator code",
-      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { inputMode: "numeric", autoComplete: "one-time-code", value: totp, onChange: handleTotpChange, className: "mt-2 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100" })
-    ] }),
-    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700", children: props.error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofFieldInputs,
+      {
+        approvalGate: props.approvalGate,
+        approvalPassword: password,
+        approvalTotpCode: totp,
+        onApprovalPasswordChange: handlePasswordChange,
+        onApprovalTotpCodeChange: handleTotpChange
+      }
+    ) }),
+    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention", children: props.error }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onCancel, className: "rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100", children: "Cancel" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: props.busy, className: "rounded-xl bg-brand-blue px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-60", children: props.busy ? "Verifying…" : "Confirm change" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "rounded-xl bg-brand-blue px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-60", children: props.busy ? "Verifying…" : "Confirm change" })
     ] })
   ] }) });
 }
@@ -726,19 +734,18 @@ function ExtensionsWorkspace() {
   const clearFilters = reactExports.useCallback(() => setFilters(EMPTY_EXTENSION_FILTERS), []);
   const handleChange = reactExports.useCallback((change) => {
     setMutationError(null);
-    setPending(change);
-  }, []);
+    void resolveApprovalGate().finally(() => setPending(change));
+  }, [resolveApprovalGate]);
   const handleCancel = reactExports.useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
-  const handleConfirm = reactExports.useCallback(async (password, totp) => {
+  const handleConfirm = reactExports.useCallback(async (credentials) => {
     if (state.kind !== "ready" || pending === null) return;
     setBusy(true);
     setMutationError(null);
     try {
       const payload = buildExtensionMutation(state, pending);
-      payload.approval_password = password;
-      payload.approval_totp_code = totp;
+      Object.assign(payload, credentials);
       payload.session_nonce = randomToken();
       const preview = await previewExtensionMutation(payload);
       if (typeof preview.proof_id !== "string") throw new Error("Guard did not issue a mutation proof");
@@ -865,13 +872,14 @@ function ExtensionsWorkspace() {
         ] })
       ] }, `${layer.kind}-${layer.catalog_digest}`)) }) }) : null
     ] }),
-    pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewModal, { change: pending, busy, error: mutationError, onCancel: handleCancel, onConfirm: handleConfirm }) : null,
+    pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewModal, { change: pending, busy, error: mutationError, approvalGate: resolvedApprovalGate, onCancel: handleCancel, onConfirm: handleConfirm }) : null,
     recoveryApprovalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofModal, { title: "Repair extension controls", detail: "Authenticate this repair on your device. Guard uses the proof once and does not store it.", confirmLabel: "Repair controls", approvalGate: resolvedApprovalGate, busy: recoveryBusy, error: recoveryError, onCancel: handleRecoveryCancel, onConfirm: handleRecoveryConfirm }) : null
   ] });
 }
 export {
   ExtensionStatusBanner,
   ExtensionsWorkspace,
+  ReviewModal,
   buildExtensionMutation,
   extensionRecoveryAction,
   requiresExtensionRecoveryApproval

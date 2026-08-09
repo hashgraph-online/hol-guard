@@ -5800,10 +5800,6 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus\:ring-blue-100:focus {
-    --tw-ring-color: var(--color-blue-100);
-  }
-
   .focus\:ring-blue-500:focus {
     --tw-ring-color: var(--color-blue-500);
   }
