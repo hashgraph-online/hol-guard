@@ -47,21 +47,27 @@ function ApprovalProofModal(props) {
     }
   ) });
 }
+async function fetchResolvedApprovalGate(fetcher = fetchSettings) {
+  const payload = await fetcher();
+  return payload.settings.approval_gate ?? null;
+}
 function useResolvedApprovalGate(initialGate) {
   const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(initialGate);
   reactExports.useEffect(() => {
     setResolvedApprovalGate(initialGate);
   }, [initialGate]);
-  const resolveApprovalGate = reactExports.useCallback(async () => {
+  const resolveApprovalGate = reactExports.useCallback(async (options) => {
     if (resolvedApprovalGate !== null) {
       return resolvedApprovalGate;
     }
     try {
-      const payload = await fetchSettings();
-      const gate = payload.settings.approval_gate ?? null;
+      const gate = await fetchResolvedApprovalGate();
       setResolvedApprovalGate(gate);
       return gate;
-    } catch {
+    } catch (error) {
+      if (options?.failClosed) {
+        throw error;
+      }
       return null;
     }
   }, [resolvedApprovalGate]);

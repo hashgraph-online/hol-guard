@@ -734,7 +734,7 @@ function ExtensionsWorkspace() {
   const clearFilters = reactExports.useCallback(() => setFilters(EMPTY_EXTENSION_FILTERS), []);
   const handleChange = reactExports.useCallback((change) => {
     setMutationError(null);
-    void resolveApprovalGate().finally(() => setPending(change));
+    void resolveApprovalGate({ failClosed: true }).then(() => setPending(change)).catch(() => setMutationError("Guard could not load approval settings. Check the local connection and try again."));
   }, [resolveApprovalGate]);
   const handleCancel = reactExports.useCallback(() => {
     if (!busy) setPending(null);
@@ -772,8 +772,13 @@ function ExtensionsWorkspace() {
       setRecoveryStatus("Extension controls repaired.");
     } catch (error) {
       if (credentials === void 0 && requiresExtensionRecoveryApproval(error)) {
-        await resolveApprovalGate();
-        setRecoveryApprovalOpen(true);
+        try {
+          await resolveApprovalGate({ failClosed: true });
+          setRecoveryApprovalOpen(true);
+        } catch {
+          setRecoveryError("Guard could not load approval settings. Check the local connection and try again.");
+          setRecoveryStatus(null);
+        }
       } else {
         setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
         setRecoveryStatus(null);
@@ -814,6 +819,7 @@ function ExtensionsWorkspace() {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionStatusBanner, { busy: recoveryBusy, effective: state.effective, error: recoveryError, status: recoveryStatus, onRecover: handleRecover, onRetry: load }) }),
+    mutationError && pending === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.06] px-4 py-3 text-sm font-medium text-brand-attention", children: mutationError }) : null,
     state.effective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "size-5" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [

@@ -358,7 +358,9 @@ export function ExtensionsWorkspace() {
   const clearFilters = useCallback(() => setFilters(EMPTY_EXTENSION_FILTERS), []);
   const handleChange = useCallback((change: PendingChange) => {
     setMutationError(null);
-    void resolveApprovalGate().finally(() => setPending(change));
+    void resolveApprovalGate({ failClosed: true })
+      .then(() => setPending(change))
+      .catch(() => setMutationError("Guard could not load approval settings. Check the local connection and try again."));
   }, [resolveApprovalGate]);
   const handleCancel = useCallback(() => { if (!busy) setPending(null); }, [busy]);
   const handleConfirm = useCallback(async (credentials: { approval_password?: string; approval_totp_code?: string }) => {
@@ -389,8 +391,13 @@ export function ExtensionsWorkspace() {
       setRecoveryStatus("Extension controls repaired.");
     } catch (error) {
       if (credentials === undefined && requiresExtensionRecoveryApproval(error)) {
-        await resolveApprovalGate();
-        setRecoveryApprovalOpen(true);
+        try {
+          await resolveApprovalGate({ failClosed: true });
+          setRecoveryApprovalOpen(true);
+        } catch {
+          setRecoveryError("Guard could not load approval settings. Check the local connection and try again.");
+          setRecoveryStatus(null);
+        }
       } else {
         setRecoveryError(error instanceof Error ? error.message : "Guard could not repair extension controls.");
         setRecoveryStatus(null);
@@ -415,6 +422,7 @@ export function ExtensionsWorkspace() {
         <button type="button" onClick={toggleLockdown} disabled={locked} className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${state.effective.global_lockdown ? "bg-red-700 text-white" : "border border-slate-300 bg-white text-slate-700"} disabled:opacity-50`}><HiMiniLockClosed className="size-4" />{state.effective.global_lockdown ? "Disable lockdown" : "Enable lockdown"}</button>
       </header>
       <div className="mt-6"><ExtensionStatusBanner busy={recoveryBusy} effective={state.effective} error={recoveryError} status={recoveryStatus} onRecover={handleRecover} onRetry={load} /></div>
+      {mutationError && pending === null ? <p role="alert" className="mt-4 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.06] px-4 py-3 text-sm font-medium text-brand-attention">{mutationError}</p> : null}
       {state.effective.global_lockdown ? <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white"><HiMiniLockClosed className="size-5" /><span><strong>Global lockdown active.</strong> Optional extensions remain disabled regardless of individual settings.</span></div> : null}
       <section aria-labelledby="installed-extensions" className="mt-8">
         <div className="flex flex-col gap-1">

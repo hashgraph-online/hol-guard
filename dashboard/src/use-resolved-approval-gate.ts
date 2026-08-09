@@ -2,6 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchSettings } from "./guard-api";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 
+type ApprovalGateFetcher = () => Promise<{
+  settings: { approval_gate?: GuardApprovalGatePublicConfig | null };
+}>;
+
+export async function fetchResolvedApprovalGate(
+  fetcher: ApprovalGateFetcher = fetchSettings,
+): Promise<GuardApprovalGatePublicConfig | null> {
+  const payload = await fetcher();
+  return payload.settings.approval_gate ?? null;
+}
+
 export function useResolvedApprovalGate(initialGate: GuardApprovalGatePublicConfig | null) {
   const [resolvedApprovalGate, setResolvedApprovalGate] =
     useState<GuardApprovalGatePublicConfig | null>(initialGate);
@@ -10,16 +21,18 @@ export function useResolvedApprovalGate(initialGate: GuardApprovalGatePublicConf
     setResolvedApprovalGate(initialGate);
   }, [initialGate]);
 
-  const resolveApprovalGate = useCallback(async () => {
+  const resolveApprovalGate = useCallback(async (options?: { failClosed?: boolean }) => {
     if (resolvedApprovalGate !== null) {
       return resolvedApprovalGate;
     }
     try {
-      const payload = await fetchSettings();
-      const gate = payload.settings.approval_gate ?? null;
+      const gate = await fetchResolvedApprovalGate();
       setResolvedApprovalGate(gate);
       return gate;
-    } catch {
+    } catch (error) {
+      if (options?.failClosed) {
+        throw error;
+      }
       return null;
     }
   }, [resolvedApprovalGate]);

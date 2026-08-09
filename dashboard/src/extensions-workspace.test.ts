@@ -11,6 +11,7 @@ import {
 } from "./extensions-workspace";
 import { ExtensionControlApiError } from "./extension-controls-api";
 import { ApprovalProofModal } from "./approval-proof-modal";
+import { fetchResolvedApprovalGate } from "./use-resolved-approval-gate";
 
 assert.equal(extensionRecoveryAction("protected"), null);
 assert.deepEqual(extensionRecoveryAction("unenrolled"), {
@@ -144,6 +145,29 @@ const passwordChangeMarkup = renderToStaticMarkup(createElement(ReviewModal, {
 }));
 assert.match(passwordChangeMarkup, /Approval password/);
 assert.doesNotMatch(passwordChangeMarkup, /Authenticator code/);
+
+const resolvedTotpGate = await fetchResolvedApprovalGate(async () => ({
+  settings: {
+    approval_gate: {
+      enabled: true,
+      configured: true,
+      cooldown_seconds: 0,
+      cooldown_active: false,
+      cooldown_expires_at: null,
+      locked_until: null,
+      fail_closed: true,
+      strict_all_decisions: false,
+      totp_enabled: true,
+    },
+  },
+}));
+assert.equal(resolvedTotpGate?.totp_enabled, true);
+await assert.rejects(
+  fetchResolvedApprovalGate(async () => {
+    throw new Error("settings unavailable");
+  }),
+  /settings unavailable/,
+);
 assert.equal(
   requiresExtensionRecoveryApproval(new ExtensionControlApiError("approval_gate_required", 403, "approval_gate_required")),
   true,
