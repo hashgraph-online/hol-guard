@@ -266,9 +266,9 @@ function formatCount(value) {
 }
 function repairHarnessesFor(installs, health) {
   return Array.from(new Set(
-    installs.filter((install) => install.active === true).filter((install) => health.apps.find((app) => app.harness === install.harness)?.checks.some(
-      (check) => check.check_id === "harness_hooks" && check.status === "fail"
-    ) === true).map((install) => install.harness)
+    installs.filter((install) => install.active !== true || health.apps.find(
+      (app) => app.harness === install.harness
+    )?.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail") === true).map((install) => install.harness)
   ));
 }
 function resolveAppStatus(install, protectionHealth, hasInventory, hasReceipts) {
