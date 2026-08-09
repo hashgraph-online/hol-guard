@@ -246,6 +246,25 @@ def test_routine_typescript_pipeline_requires_trusted_observers(
     )
 
 
+def test_routine_typescript_pipeline_rejects_bare_symlink_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+    workspace = Path(command.split(" && ", 1)[0].removeprefix("cd "))
+    outside = tmp_path / "outside.js"
+    _ = outside.write_text("export const secret = 1;\n", encoding="utf-8")
+    _ = (workspace / "linked.js").symlink_to(outside)
+    command = f'cd {workspace} && npx tsc --noEmit linked.js 2>&1 | grep -v "npm warn" | head -8; echo "TSC_DONE"'
+
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command},
+        cwd=caller,
+        home_dir=home,
+    )
+
+
 @pytest.mark.parametrize(
     ("original", "replacement"),
     (

@@ -233,11 +233,7 @@ def _typescript_no_emit_args_are_safe(args: list[str], *, workspace: Path) -> bo
             continue
         if arg.startswith("-"):
             return False
-        if (
-            not arg.startswith("-")
-            and ("/" in arg or arg.endswith((".ts", ".tsx", ".mts", ".cts")))
-            and not _typescript_path_is_contained(arg, workspace=workspace)
-        ):
+        if not _typescript_path_is_contained(arg, workspace=workspace):
             return False
         index += 1
     return True
