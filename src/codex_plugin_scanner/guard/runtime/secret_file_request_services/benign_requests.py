@@ -7,9 +7,7 @@ import json
 import os
 import re
 import shlex
-from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
 
 from ...models import GuardArtifact
 from ..command_decision_adapter import effect_decision_to_dict
@@ -61,8 +59,6 @@ def is_explicitly_benign_tool_action_request(
     home_dir: Path | None = None,
 ) -> bool:
     normalized_tool_name = _normalize_tool_name(tool_name)
-    if _is_verified_read_only_native_tool(normalized_tool_name, arguments):
-        return True
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return False
     found_benign_candidate = False
@@ -170,23 +166,6 @@ def is_explicitly_benign_tool_action_request(
             continue
         return False
     return found_benign_candidate
-
-
-def _is_verified_read_only_native_tool(tool_name: str | None, arguments: object) -> bool:
-    if not isinstance(arguments, Mapping):
-        return False
-    typed_arguments = cast(Mapping[str, object], arguments)
-    if tool_name == "mcp__codex_apps__hol_guard__get_guard_status":
-        return not typed_arguments
-    if tool_name != "mcp__codex_apps__github__search":
-        return False
-    if any(key in typed_arguments for key in ("command", "cmd", "shell_command", "shellCommand")):
-        return False
-    allowed_keys = {"query", "q", "page", "per_page", "sort", "order"}
-    if not typed_arguments or any(key not in allowed_keys for key in typed_arguments):
-        return False
-    query = typed_arguments.get("query", typed_arguments.get("q"))
-    return isinstance(query, str) and bool(query.strip()) and len(query) <= 4096
 
 
 def _is_guard_safety_doc_read(command_text: str, *, home_dir: Path) -> bool:
