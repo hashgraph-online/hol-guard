@@ -414,7 +414,6 @@ def git_worktree_add_has_execution_free_config(
     resolved_git = git_binary or trusted_git_binary_for_cwd(cwd)
     if (
         resolved_git is None
-        or not git_fetch_origin_has_execution_free_config(cwd, git_binary=resolved_git)
         or not git_status_has_execution_free_config(cwd, git_binary=resolved_git)
     ):
         return False

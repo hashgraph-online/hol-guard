@@ -97,6 +97,13 @@ def test_safe_git_worktree_add_accepts_detached_full_commit(
     )
 
 
+def test_safe_git_worktree_add_ignores_network_credential_helpers(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    _git(repository, "config", "credential.helper", "!false")
+
+    assert git_execution_safety.git_worktree_add_has_execution_free_config(repository)
+
+
 @pytest.mark.parametrize(
     "command_template",
     (
