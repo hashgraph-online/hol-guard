@@ -358,7 +358,10 @@ def _git_log_has_execution_free_config(
     git_binary: Path,
     pager_key: str = "pager.log",
 ) -> bool:
-    if any(os.environ.get(key, "").strip() not in {"", "cat"} for key in ("GIT_PAGER", "PAGER")):
+    git_pager = os.environ.get("GIT_PAGER")
+    if git_pager is not None:
+        return git_pager.strip() in {"", "cat"} and git_config_routing_environment_is_clean()
+    if os.environ.get("PAGER", "").strip() not in {"", "cat"}:
         return False
     if not git_config_routing_environment_is_clean():
         return False
@@ -382,6 +385,17 @@ def _git_log_has_execution_free_config(
         if any(value != "cat" for value in values):
             return False
     return True
+
+
+def git_log_has_execution_free_config(
+    cwd: Path,
+    *,
+    git_binary: Path,
+    pager_key: str = "pager.log",
+) -> bool:
+    """Return whether Git log-family output cannot invoke an executable pager."""
+
+    return _git_log_has_execution_free_config(cwd, git_binary=git_binary, pager_key=pager_key)
 
 
 def _safe_ls_files_args(args: tuple[str, ...]) -> bool:

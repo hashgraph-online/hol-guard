@@ -10,6 +10,7 @@ from pathlib import Path
 from ..command_critical_floors import command_critical_floor_factors
 from ..command_model import parse_shell_command
 from ..data_flow import extract_heredocs
+from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..shell_execution_context import (
     ShellExecutionContext,
     model_shell_execution_context,
@@ -207,6 +208,12 @@ def _looks_destructive_shell_command(
         return True
     normalized = command_text.strip()
     if not normalized:
+        return False
+    if home_dir is not None and is_read_only_git_ancestry_audit(
+        normalized,
+        cwd=cwd,
+        home_dir=home_dir,
+    ):
         return False
     guard_command_token_present = any(
         Path(part).name.lower().removesuffix(".exe") in {"hol-guard", "plugin-guard"}

@@ -117,8 +117,13 @@ def test_standalone_verified_origin_reads_reject_widening_syntax(tmp_path: Path,
     assert not _is_benign(command, home=home, repository=repository)
 
 
-def test_remote_branch_listing_rejects_executable_pager(tmp_path: Path) -> None:
+def test_remote_branch_listing_rejects_executable_pager(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     home, repository = _repository(tmp_path)
+    monkeypatch.delenv("GIT_PAGER", raising=False)
+    monkeypatch.delenv("PAGER", raising=False)
     _ = subprocess.run(["git", "-C", str(repository), "config", "pager.branch", "!payload"], check=True)
 
     assert not _is_benign("git branch -r --list origin/main", home=home, repository=repository)
