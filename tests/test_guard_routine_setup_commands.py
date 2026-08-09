@@ -71,6 +71,28 @@ def test_safe_git_worktree_add_requires_new_bounded_destination(
     )
 
 
+def test_safe_git_worktree_add_accepts_detached_destination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _repository(tmp_path)
+    destination = tmp_path / "detached-worktree"
+    monkeypatch.setattr(routine_setup_commands, "_safe_worktree_parent", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(routine_setup_commands, "trusted_git_binary_for_cwd", lambda _cwd: Path("/usr/bin/git"))
+    monkeypatch.setattr(
+        routine_setup_commands,
+        "git_worktree_add_has_execution_free_config",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(routine_setup_commands, "_git_ref_exists", lambda *_args: True)
+
+    assert routine_setup_commands.is_safe_git_worktree_add(
+        f"git worktree add --detach {destination} origin/release/3.0",
+        cwd=repository,
+        home_dir=tmp_path,
+    )
+
+
 def test_safe_git_worktree_add_rejects_checkout_hooks(
     tmp_path: Path,
 ) -> None:

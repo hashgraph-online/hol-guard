@@ -84,9 +84,7 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
     args = tokens[operation_index + 1 :]
     if operation == "fetch":
         return bool(
-            len(args) == 2
-            and args[0] == "origin"
-            and _safe_ref(args[1])
+            _safe_fetch_args(args)
             and git_fetch_origin_has_execution_free_config(
                 repository_cwd,
                 git_binary=resolved_git,
@@ -97,6 +95,8 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
             repository_cwd,
             git_binary=resolved_git,
         )
+    if operation == "blame":
+        return _safe_blame_args(args)
     if operation == "status":
         return (
             bool(args)
@@ -179,6 +179,8 @@ def _safe_status_arg(value: str) -> bool:
 
 
 def _safe_bounded_log_args(args: tuple[str, ...]) -> bool:
+    if len(args) == 3 and args[0] in {"-1", "-n1"} and args[1].startswith("--format="):
+        return _safe_log_format(args[1][len("--format=") :]) and _safe_ref(args[2])
     if "--oneline" not in args or args.count("--oneline") != 1:
         return False
     bounds = [arg for arg in args if arg.startswith("-") and arg[1:].isdigit()]
@@ -186,6 +188,26 @@ def _safe_bounded_log_args(args: tuple[str, ...]) -> bool:
         return False
     refs = [arg for arg in args if arg not in {"--oneline", bounds[0]}]
     return len(refs) <= 1 and all(_safe_ref(ref) for ref in refs)
+
+
+def _safe_fetch_args(args: tuple[str, ...]) -> bool:
+    if args in {("origin", "--quiet"), ("--quiet", "origin")}:
+        return True
+    return len(args) == 2 and args[0] == "origin" and _safe_ref(args[1])
+
+
+def _safe_log_format(value: str) -> bool:
+    return bool(value and len(value) <= 160 and re.fullmatch(r"(?:[^%\r\n]|%(?:H|h|cI|s|an|ae))+", value))
+
+
+def _safe_blame_args(args: tuple[str, ...]) -> bool:
+    if len(args) != 4 or args[0] != "-L" or args[2] != "--":
+        return False
+    match = re.fullmatch(r"([1-9][0-9]{0,5}),([1-9][0-9]{0,5})", args[1])
+    if match is None:
+        return False
+    start, end = int(match.group(1)), int(match.group(2))
+    return start <= end <= 100_000 and end - start <= 1000 and _safe_repository_path(args[3])
 
 
 def _safe_repository_path(value: str) -> bool:
@@ -348,6 +370,8 @@ def _without_stderr_merge(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
 
 
 def _safe_ref(value: str) -> bool:
+    if re.fullmatch(r"HEAD~[1-9][0-9]{0,3}", value):
+        return True
     return _REF.fullmatch(value) is not None and ".." not in value and not value.endswith((".", "/"))
 
 

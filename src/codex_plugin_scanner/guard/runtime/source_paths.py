@@ -210,6 +210,19 @@ def source_path_is_allowed(
             relative_path=stripped,
         )
 
+    if home_dir is not None and stripped in {"~/.hol-support/SAFETY.md", str(home_dir / ".hol-support" / "SAFETY.md")}:
+        safety_doc = home_dir / ".hol-support" / "SAFETY.md"
+        try:
+            if safety_doc.is_file() and not safety_doc.is_symlink():
+                return SourcePathDecision(
+                    allowed=True,
+                    reason_code="guard_safety_doc_path",
+                    resolved_path=safety_doc.resolve(strict=True),
+                    relative_path=stripped,
+                )
+        except (OSError, RuntimeError):
+            pass
+
     if any(char in stripped for char in ("*", "?", "{", "}")):
         return SourcePathDecision(allowed=False, reason_code="glob_pattern")
 

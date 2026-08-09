@@ -834,6 +834,12 @@ def command_text_from_tool_payload(tool_name: object, tool_input: object) -> str
     native_command = _native_tool_command_text(tool_name, tool_input)
     if native_command is not None:
         return native_command
+    normalized_tool = tool_name.strip() if isinstance(tool_name, str) else None
+    mcp_server, _mcp_tool = _mcp_parts(normalized_tool)
+    if mcp_server is not None:
+        # MCP search/query fields are tool data, not shell source. Explicit
+        # command keys above remain eligible for command-risk inspection.
+        return None
     return _command_from_payload(tool_input)
 
 

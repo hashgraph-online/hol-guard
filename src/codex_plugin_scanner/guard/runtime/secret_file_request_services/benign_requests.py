@@ -5,7 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shlex
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 from ...models import GuardArtifact
 from ..command_decision_adapter import effect_decision_to_dict
@@ -57,6 +61,8 @@ def is_explicitly_benign_tool_action_request(
     home_dir: Path | None = None,
 ) -> bool:
     normalized_tool_name = _normalize_tool_name(tool_name)
+    if _is_verified_read_only_native_tool(normalized_tool_name, arguments):
+        return True
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return False
     found_benign_candidate = False
@@ -74,6 +80,9 @@ def is_explicitly_benign_tool_action_request(
             ).normalized_command
         stripped_command = command_text.strip()
         if not stripped_command:
+            continue
+        if home_dir is not None and _is_guard_safety_doc_read(stripped_command, home_dir=home_dir):
+            found_benign_candidate = True
             continue
         parts = _split_shell_parts(stripped_command)
         if not parts:
@@ -161,6 +170,42 @@ def is_explicitly_benign_tool_action_request(
             continue
         return False
     return found_benign_candidate
+
+
+def _is_verified_read_only_native_tool(tool_name: str | None, arguments: object) -> bool:
+    if not isinstance(arguments, Mapping):
+        return False
+    typed_arguments = cast(Mapping[str, object], arguments)
+    if tool_name == "mcp__codex_apps__hol_guard__get_guard_status":
+        return not typed_arguments
+    if tool_name != "mcp__codex_apps__github__search":
+        return False
+    if any(key in typed_arguments for key in ("command", "cmd", "shell_command", "shellCommand")):
+        return False
+    allowed_keys = {"query", "q", "page", "per_page", "sort", "order"}
+    if not typed_arguments or any(key not in allowed_keys for key in typed_arguments):
+        return False
+    query = typed_arguments.get("query", typed_arguments.get("q"))
+    return isinstance(query, str) and bool(query.strip()) and len(query) <= 4096
+
+
+def _is_guard_safety_doc_read(command_text: str, *, home_dir: Path) -> bool:
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    if len(parts) != 4 or parts[:2] != ["sed", "-n"]:
+        return False
+    match = re.fullmatch(r"([1-9][0-9]{0,3}),([1-9][0-9]{0,3})p", parts[2])
+    if match is None or int(match.group(2)) - int(match.group(1)) > 500:
+        return False
+    target = parts[3]
+    expected = home_dir / ".hol-support" / "SAFETY.md"
+    candidate = home_dir / target[2:] if target.startswith("~/") else Path(target)
+    try:
+        return candidate.absolute() == expected.absolute() and expected.is_file() and not expected.is_symlink()
+    except OSError:
+        return False
 
 
 def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
