@@ -16,14 +16,14 @@ assert.deepEqual(extensionRecoveryAction("unenrolled"), {
   title: "Finish local enrollment",
   copyLabel: "Copy enrollment command",
   description: "Authenticate in this device's terminal to protect extension settings, then check again.",
-  command: "hol-guard guard command controls enroll",
+  command: "hol-guard command controls enroll",
 });
 assert.deepEqual(extensionRecoveryAction("tampered"), {
   title: "Repair extension controls",
   copyLabel: "Copy repair command",
   description:
     "Guard locked these settings after detecting damaged authority data. Authenticate on this device to rebuild trusted authority.",
-  command: "hol-guard guard command controls recover-authority",
+  command: "hol-guard command controls recover-authority",
 });
 
 const recoveryMarkup = renderToStaticMarkup(createElement(ExtensionStatusBanner, {
@@ -40,7 +40,8 @@ const recoveryMarkup = renderToStaticMarkup(createElement(ExtensionStatusBanner,
   onRecover: () => undefined,
   onRetry: () => undefined,
 }));
-assert.match(recoveryMarkup, /hol-guard guard command controls recover-authority/);
+assert.match(recoveryMarkup, /hol-guard command controls recover-authority/);
+assert.doesNotMatch(recoveryMarkup, /hol-guard guard/);
 assert.match(recoveryMarkup, /Copy repair command/);
 assert.match(recoveryMarkup, /Repair now/);
 assert.doesNotMatch(recoveryMarkup, /aria-busy="true"/);

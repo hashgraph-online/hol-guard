@@ -67,7 +67,7 @@ export function extensionRecoveryAction(
       copyLabel: "Copy repair command",
       description:
         "Guard locked these settings after detecting damaged authority data. Authenticate on this device to rebuild trusted authority.",
-      command: "hol-guard guard command controls recover-authority",
+      command: "hol-guard command controls recover-authority",
     };
   }
   return {
@@ -75,7 +75,7 @@ export function extensionRecoveryAction(
     copyLabel: "Copy enrollment command",
     description:
       "Authenticate in this device's terminal to protect extension settings, then check again.",
-    command: "hol-guard guard command controls enroll",
+    command: "hol-guard command controls enroll",
   };
 }
 
