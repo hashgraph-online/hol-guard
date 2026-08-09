@@ -108,7 +108,7 @@ def incomplete_lockfile_result(
 
 def parse_lockfile_text(
     path: str,
-    text: str,
+    source_text: str | bytes,
     *,
     deadline: float,
     budget_ms: float,
@@ -116,12 +116,14 @@ def parse_lockfile_text(
     package_lock_parser: PackageLockParser,
 ) -> LockfileParseResult:
     started = time.monotonic()
-    source = text.encode("utf-8")
+    source = b""
     lockfile_format = _lockfile_format(path)
     try:
+        source = source_text if isinstance(source_text, bytes) else source_text.encode("utf-8")
         _ensure_within_deadline(deadline)
         if len(source) > LOCKFILE_MAX_BYTES:
             raise _LockfileValidationError("byte_limit_exceeded")
+        text = source.decode("utf-8") if isinstance(source_text, bytes) else source_text
         lower_name = path.rsplit("/", 1)[-1].lower()
         if lower_name not in _JSON_LOCKFILES | _JSONC_LOCKFILES | _TOML_LOCKFILES | _TEXT_LOCKFILES:
             raise _LockfileValidationError("unsupported_format")
@@ -157,6 +159,8 @@ def parse_lockfile_text(
         error_reason = exc.reason
     except (json.JSONDecodeError, tomllib.TOMLDecodeError):
         error_reason = "syntax_error"
+    except UnicodeDecodeError:
+        error_reason = "decode_error"
     except (MemoryError, RecursionError):
         error_reason = "resource_limit_exceeded"
     except (TypeError, UnicodeError, ValueError):

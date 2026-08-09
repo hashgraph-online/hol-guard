@@ -10,9 +10,10 @@ import pytest
 import codex_plugin_scanner.guard.runtime.lockfile_parse_result as lockfile_parse_module
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.guard.runtime.lockfile_evaluation_support import (
+    collect_lockfile_parse_results,
     incomplete_lockfile_fallback_target,
 )
-from codex_plugin_scanner.guard.runtime.lockfile_parse_result import LOCKFILE_MAX_BYTES
+from codex_plugin_scanner.guard.runtime.lockfile_parse_result import LOCKFILE_MAX_BYTES, parse_lockfile_text
 from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
@@ -25,6 +26,49 @@ from tests.test_guard_js_supply_chain_phase11 import (
     _write_text,
 )
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
+
+
+def test_lockfile_parser_rejects_invalid_utf8_bytes() -> None:
+    result = parse_lockfile_text(
+        "bun.lock",
+        b'packages = { "safe" = "1.0.0" }\xff',
+        deadline=float("inf"),
+        budget_ms=200,
+        dependency_parser=evaluator_module._dependency_map_for_path,
+        package_lock_parser=evaluator_module._package_lock_entries,
+    )
+
+    assert result.complete is False
+    assert result.error_reason == "decode_error"
+
+
+def test_lockfile_parser_rejects_oversized_bytes_before_decoding() -> None:
+    result = parse_lockfile_text(
+        "bun.lock",
+        b"\xff" * (LOCKFILE_MAX_BYTES + 1),
+        deadline=float("inf"),
+        budget_ms=200,
+        dependency_parser=evaluator_module._dependency_map_for_path,
+        package_lock_parser=evaluator_module._package_lock_entries,
+    )
+
+    assert result.complete is False
+    assert result.error_reason == "byte_limit_exceeded"
+
+
+def test_lockfile_collection_rejects_oversized_bytes_before_decoding(tmp_path: Path) -> None:
+    (tmp_path / "bun.lock").write_bytes(b"\xff" * (LOCKFILE_MAX_BYTES + 1))
+
+    results = collect_lockfile_parse_results(
+        tmp_path,
+        ["bun.lock"],
+        budget_ms=200,
+        parse_text_result=evaluator_module._parse_lockfile_text_result,
+    )
+
+    assert len(results) == 1
+    assert results[0].complete is False
+    assert results[0].error_reason == "byte_limit_exceeded"
 
 
 @pytest.mark.parametrize(
@@ -186,7 +230,9 @@ def test_lockfile_parse_result_rejects_incomplete_or_unsupported_inputs(
     assert result.error_reason == error_reason
     assert result.source_hash == stable_digest_hex(lockfile_text.encode("utf-8"))
     assert result.parser_version == "complete-v1"
-    assert result.budget_ms == 200
+    assert result.budget_ms == pytest.approx(
+        evaluator_module._lockfile_parse_budget_seconds(len(lockfile_text.encode("utf-8"))) * 1000
+    )
 
 
 def test_lockfile_parse_result_rejects_excessive_json_depth() -> None:
@@ -255,6 +301,25 @@ def test_bun_jsonc_lockfile_is_parsed_completely() -> None:
         ("@scope/demo", "2.4.1"),
         ("left-pad", "1.3.0"),
     }
+
+
+def test_representative_large_bun_lockfile_completes_within_scaled_budget() -> None:
+    lockfile_text = json.dumps(
+        {
+            "lockfileVersion": 1,
+            "packages": {
+                f"package-{index}": [f"package-{index}@1.0.{index}", "", {}, "sha512-demo"] for index in range(10_000)
+            },
+        }
+    )
+
+    result = evaluator_module._parse_lockfile_text_result("bun.lock", lockfile_text)
+
+    assert len(lockfile_text.encode("utf-8")) > 600_000
+    assert result.complete is True
+    assert result.error_reason is None
+    assert len(result.entries) == 10_000
+    assert 200 < result.budget_ms <= 1_500
 
 
 @pytest.mark.parametrize(
@@ -374,17 +439,17 @@ def test_late_incomplete_lockfile_result_is_not_deduplicated_against_direct_pack
     real_parser = evaluator_module._parse_lockfile_text_result
     parse_calls = 0
 
-    def changing_parser(path: str, text: str):
+    def changing_parser(path: str, source: str | bytes):
         nonlocal parse_calls
         parse_calls += 1
         if parse_calls == 3:
             return lockfile_parse_module.incomplete_lockfile_result(
                 path,
-                text.encode("utf-8"),
+                source if isinstance(source, bytes) else source.encode("utf-8"),
                 error_reason="parse_error",
                 budget_ms=200,
             )
-        return real_parser(path, text)
+        return real_parser(path, source)
 
     monkeypatch.setattr(evaluator_module, "_parse_lockfile_text_result", changing_parser)
 

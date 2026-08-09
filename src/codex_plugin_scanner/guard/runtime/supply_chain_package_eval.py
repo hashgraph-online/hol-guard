@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,7 +41,12 @@ from .lockfile_evaluation_support import (
     package_has_incomplete_lockfile,
     parse_lockfile_with_budget,
 )
-from .lockfile_parse_result import LOCKFILE_PARSER_VERSION, LockfileParseResult, parse_lockfile_text
+from .lockfile_parse_result import (
+    LOCKFILE_PARSER_VERSION,
+    LockfileParseResult,
+    incomplete_lockfile_result,
+    parse_lockfile_text,
+)
 from .manifest_dependency_targets import evaluation_targets as _manifest_evaluation_targets
 from .npm_policy_range import (
     bind_resolved_npm_policy_result,
@@ -119,7 +125,13 @@ _NAMED_SOURCE_SEPARATOR_RE = re.compile(
     r"@(?=(?:https?|git\+|github|gitlab|bitbucket|file):)",
     re.IGNORECASE,
 )
-_LOCKFILE_PARSE_BUDGET_SECONDS = 0.2
+_LOCKFILE_PARSE_BUDGET_SECONDS = 0.5
+_LOCKFILE_PARSE_BUDGET_PER_MIB_SECONDS = 0.75
+_LOCKFILE_PARSE_MAX_BUDGET_SECONDS = 1.5
+_LOCKFILE_PARSE_CACHE: ContextVar[dict[tuple[str, bytes], LockfileParseResult] | None] = ContextVar(
+    "lockfile_parse_cache",
+    default=None,
+)
 _TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD = 900
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
 _PYPI_REGISTRY_METADATA_BASE_URL = "https://pypi.org/pypi"
@@ -297,6 +309,29 @@ class PackageRequestEvaluation:
 
 
 def evaluate_package_request_artifact(
+    *,
+    artifact: GuardArtifact,
+    store: GuardStore,
+    workspace_dir: Path | None,
+    now: str | None = None,
+    external_archive_network_authorized: bool = False,
+    retain_external_archive_blob: bool = False,
+) -> PackageRequestEvaluation:
+    cache_token = _LOCKFILE_PARSE_CACHE.set({})
+    try:
+        return _evaluate_package_request_artifact_uncached(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now=now,
+            external_archive_network_authorized=external_archive_network_authorized,
+            retain_external_archive_blob=retain_external_archive_blob,
+        )
+    finally:
+        _LOCKFILE_PARSE_CACHE.reset(cache_token)
+
+
+def _evaluate_package_request_artifact_uncached(
     *,
     artifact: GuardArtifact,
     store: GuardStore,
@@ -2259,13 +2294,37 @@ def _lockfile_parse_results(
     )
 
 
-def _parse_lockfile_text_result(path: str, text: str) -> LockfileParseResult:
-    return parse_lockfile_with_budget(
+def _parse_lockfile_text_result(path: str, source: str | bytes) -> LockfileParseResult:
+    cache = _LOCKFILE_PARSE_CACHE.get()
+    try:
+        source_bytes = source if isinstance(source, bytes) else source.encode("utf-8")
+    except MemoryError:
+        return incomplete_lockfile_result(
+            path,
+            b"",
+            error_reason="resource_limit_exceeded",
+            budget_ms=_LOCKFILE_PARSE_BUDGET_SECONDS * 1000,
+        )
+    cache_key = (path.casefold(), source_bytes)
+    if cache is not None and (cached := cache.get(cache_key)) is not None:
+        return cached
+    result = parse_lockfile_with_budget(
         path,
-        text,
-        budget_seconds=_LOCKFILE_PARSE_BUDGET_SECONDS,
+        source_bytes,
+        budget_seconds=_lockfile_parse_budget_seconds(len(source_bytes)),
         dependency_parser=_dependency_map_for_path,
         package_lock_parser=_package_lock_entries,
+    )
+    if cache is not None and result.complete:
+        cache[cache_key] = result
+    return result
+
+
+def _lockfile_parse_budget_seconds(byte_count: int) -> float:
+    source_mib = byte_count / (1024 * 1024)
+    return min(
+        _LOCKFILE_PARSE_MAX_BUDGET_SECONDS,
+        _LOCKFILE_PARSE_BUDGET_SECONDS + (_LOCKFILE_PARSE_BUDGET_PER_MIB_SECONDS * source_mib),
     )
 
 

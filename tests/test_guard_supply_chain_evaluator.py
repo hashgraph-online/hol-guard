@@ -23,6 +23,11 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.runtime.lockfile_parse_result import (
+    DependencyMapParser,
+    LockfileParseResult,
+    PackageLockParser,
+)
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
@@ -2294,7 +2299,86 @@ def test_transitive_lockfile_resolution_uses_bounded_deadline(tmp_path: Path, mo
         now="2026-05-19T00:00:00Z",
     )
 
-    assert captured["deadline"] == pytest.approx(100.2)
+    expected_budget = evaluator_module._lockfile_parse_budget_seconds(
+        len((workspace_dir / "package-lock.json").read_bytes())
+    )
+    assert captured["deadline"] == pytest.approx(100.0 + expected_budget)
+
+
+@pytest.mark.parametrize(
+    ("byte_count", "expected_budget"),
+    (
+        (0, 0.5),
+        (667_000, 0.5 + (0.75 * 667_000 / (1024 * 1024))),
+        (1024 * 1024, 1.25),
+        (8 * 1024 * 1024, 1.5),
+    ),
+)
+def test_lockfile_parse_budget_scales_with_a_hard_ceiling(byte_count: int, expected_budget: float) -> None:
+    assert evaluator_module._lockfile_parse_budget_seconds(byte_count) == pytest.approx(expected_budget)
+
+
+def test_lockfile_parse_cache_is_evaluation_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
+    parse = evaluator_module.parse_lockfile_with_budget
+    calls = 0
+
+    def counted_parse(
+        path: str,
+        source_text: str | bytes,
+        *,
+        budget_seconds: float,
+        dependency_parser: DependencyMapParser,
+        package_lock_parser: PackageLockParser,
+    ) -> LockfileParseResult:
+        nonlocal calls
+        calls += 1
+        return parse(
+            path,
+            source_text,
+            budget_seconds=budget_seconds,
+            dependency_parser=dependency_parser,
+            package_lock_parser=package_lock_parser,
+        )
+
+    monkeypatch.setattr(evaluator_module, "parse_lockfile_with_budget", counted_parse)
+    token = evaluator_module._LOCKFILE_PARSE_CACHE.set({})
+    try:
+        text = '{"lockfileVersion":3,"packages":{}}'
+        first = evaluator_module._parse_lockfile_text_result("package-lock.json", text)
+        second = evaluator_module._parse_lockfile_text_result("package-lock.json", text)
+    finally:
+        evaluator_module._LOCKFILE_PARSE_CACHE.reset(token)
+
+    assert first.complete
+    assert second is first
+    assert calls == 1
+
+
+def test_incomplete_lockfile_parse_is_not_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def incomplete_parse(*_args: object, **_kwargs: object) -> LockfileParseResult:
+        nonlocal calls
+        calls += 1
+        return LockfileParseResult(
+            entries=(),
+            complete=False,
+            format="bun-lock",
+            source_hash="0" * 64,
+            elapsed_ms=200,
+            budget_ms=200,
+            error_reason="deadline_exceeded",
+        )
+
+    monkeypatch.setattr(evaluator_module, "parse_lockfile_with_budget", incomplete_parse)
+    token = evaluator_module._LOCKFILE_PARSE_CACHE.set({})
+    try:
+        evaluator_module._parse_lockfile_text_result("bun.lock", "{}")
+        evaluator_module._parse_lockfile_text_result("bun.lock", "{}")
+    finally:
+        evaluator_module._LOCKFILE_PARSE_CACHE.reset(token)
+
+    assert calls == 2
 
 
 def test_transitive_lockfile_timeout_pauses_without_using_partial_entries(

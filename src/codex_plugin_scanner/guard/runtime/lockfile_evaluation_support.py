@@ -18,7 +18,7 @@ from .workspace_path_guard import read_bytes_within_workspace, resolve_path_with
 
 
 class LockfileTextParser(Protocol):
-    def __call__(self, path: str, text: str) -> LockfileParseResult: ...
+    def __call__(self, path: str, source: str | bytes) -> LockfileParseResult: ...
 
 
 def collect_lockfile_parse_results(
@@ -59,25 +59,13 @@ def collect_lockfile_parse_results(
                 )
             )
             continue
-        try:
-            lockfile_text = lockfile_bytes.decode("utf-8")
-        except UnicodeDecodeError:
-            results.append(
-                incomplete_lockfile_result(
-                    lockfile_path.name,
-                    lockfile_bytes,
-                    error_reason="decode_error",
-                    budget_ms=budget_ms,
-                )
-            )
-            continue
-        results.append(parse_text_result(lockfile_path.name, lockfile_text))
+        results.append(parse_text_result(lockfile_path.name, lockfile_bytes))
     return tuple(results)
 
 
 def parse_lockfile_with_budget(
     path: str,
-    text: str,
+    source_text: str | bytes,
     *,
     budget_seconds: float,
     dependency_parser: DependencyMapParser,
@@ -86,7 +74,7 @@ def parse_lockfile_with_budget(
     budget_ms = budget_seconds * 1000
     return parse_lockfile_text(
         path,
-        text,
+        source_text,
         deadline=time.monotonic() + budget_seconds,
         budget_ms=budget_ms,
         dependency_parser=dependency_parser,
