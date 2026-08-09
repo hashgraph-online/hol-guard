@@ -96,7 +96,15 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
             git_binary=resolved_git,
         )
     if operation == "blame":
-        return _safe_blame_args(args)
+        return (
+            _safe_blame_args(args)
+            and _git_show_has_execution_free_config(segment, repository_path=repository_path)
+            and _git_log_has_execution_free_config(
+                repository_cwd,
+                git_binary=resolved_git,
+                pager_key="pager.blame",
+            )
+        )
     if operation == "status":
         return (
             bool(args)
@@ -320,12 +328,13 @@ def _git_log_has_execution_free_config(
     cwd: Path,
     *,
     git_binary: Path,
+    pager_key: str = "pager.log",
 ) -> bool:
     if any(os.environ.get(key, "").strip() not in {"", "cat"} for key in ("GIT_PAGER", "PAGER")):
         return False
     if not git_config_routing_environment_is_clean():
         return False
-    for key in ("core.pager", "pager.log"):
+    for key in ("core.pager", pager_key):
         try:
             result = subprocess.run(
                 [str(git_binary), "config", "--null", "--get-all", key],
