@@ -10,8 +10,9 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
-from typing import Literal, Mapping, Sequence
+from typing import Literal
 
 SCHEMA_VERSION = "guard-local-risk-report/v1"
 
@@ -100,7 +101,11 @@ def build_local_risk_report(
         LocalRiskCheck(
             id="runtime",
             status="pass" if runtime_status == "active" else "fail",
-            summary="Local Guard runtime is active." if runtime_status == "active" else "Local Guard runtime is not active.",
+            summary=(
+                "Local Guard runtime is active."
+                if runtime_status == "active"
+                else "Local Guard runtime is not active."
+            ),
         )
     )
     checks.append(
