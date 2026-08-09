@@ -184,9 +184,10 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert "distribution-sha256" in {
         step.get("with", {}).get("name") for step in jobs["build"]["steps"] if isinstance(step, dict)
     }
-    assert jobs["publish-alpha-pypi"]["needs"] == ["build", "reserve-alpha-tag", "publish-alpha-testpypi"]
-    assert "needs.publish-alpha-testpypi.result == 'success'" in jobs["publish-alpha-pypi"]["if"]
-    assert "vars.ALPHA_TESTPYPI_ENABLED" not in jobs["publish-alpha-testpypi"]["if"]
+    assert jobs["publish-alpha-pypi"]["needs"] == ["build", "reserve-alpha-tag"]
+    assert "needs.publish-alpha-testpypi" not in jobs["publish-alpha-pypi"]["if"]
+    assert "vars.ALPHA_TESTPYPI_ENABLED" not in jobs["publish-alpha-pypi"]["if"]
+    assert "vars.ALPHA_TESTPYPI_ENABLED == 'true'" in jobs["publish-alpha-testpypi"]["if"]
     for job_name in (
         "publish-alpha-testpypi",
         "publish-alpha-pypi",

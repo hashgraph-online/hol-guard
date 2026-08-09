@@ -636,6 +636,7 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      vars.ALPHA_TESTPYPI_ENABLED == 'true' &&
       needs.build.result == 'success' &&
       needs.reserve-alpha-tag.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
@@ -737,13 +738,12 @@ jobs:
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       needs.build.result == 'success' &&
       needs.reserve-alpha-tag.result == 'success' &&
-      needs.publish-alpha-testpypi.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
         (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
-    needs: [build, reserve-alpha-tag, publish-alpha-testpypi]
+    needs: [build, reserve-alpha-tag]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
