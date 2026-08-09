@@ -141,6 +141,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "retrying in 30s" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert "Resolve published scanner version" in workflow_text
+    assert 'urlopen("https://pypi.org/pypi/plugin-scanner/json", timeout=30)' in workflow_text
     assert "Compute scanner wheel SHA256" in workflow_text
     assert 'workflows: ["Publish to PyPI"]' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text

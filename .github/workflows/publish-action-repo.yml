@@ -66,7 +66,18 @@ jobs:
           if [ -n "$REQUESTED_VERSION" ]; then
             VERSION="$REQUESTED_VERSION"
           else
-            VERSION="$(gh release list --repo "$SOURCE_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName | ltrimstr("v")')"
+            VERSION="$(python3 - <<'PY'
+          import json
+          import urllib.request
+
+          with urllib.request.urlopen("https://pypi.org/pypi/plugin-scanner/json", timeout=30) as response:
+              payload = json.load(response)
+          version = payload.get("info", {}).get("version")
+          if not isinstance(version, str) or not version.strip():
+              raise SystemExit("PyPI did not return a current plugin-scanner version")
+          print(version.strip())
+          PY
+          )"
           fi
 
           if [ -z "$VERSION" ]; then
