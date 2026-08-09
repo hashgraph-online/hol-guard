@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 from ..command_model import CanonicalCommand
 from ..git_execution_safety import git_status_args_are_read_only, git_status_has_execution_free_config
@@ -33,8 +35,16 @@ def extract_sensitive_tool_action_request(
 ) -> ToolActionRequestMatch | None:
     """Extract a sensitive native tool action from arguments."""
 
-    command_texts = _candidate_command_texts(arguments)
     normalized_tool_name = _normalize_tool_name(tool_name)
+    command_arguments = arguments
+    if normalized_tool_name not in _SHELL_TOOL_NAMES and isinstance(arguments, Mapping):
+        typed_arguments = cast(Mapping[str, object], arguments)
+        command_arguments = {
+            key: value
+            for key, value in typed_arguments.items()
+            if key in {"command", "cmd", "shell_command", "shellCommand"}
+        }
+    command_texts = _candidate_command_texts(command_arguments)
     if normalized_tool_name in _FILE_WRITE_TOOL_NAMES:
         return None
     if normalized_tool_name is None and not command_texts:
