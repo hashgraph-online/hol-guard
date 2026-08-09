@@ -90,6 +90,14 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
                 git_binary=resolved_git,
             )
         )
+    if operation == "ls-remote":
+        return bool(
+            _safe_ls_remote_args(args)
+            and git_fetch_origin_has_execution_free_config(
+                repository_cwd,
+                git_binary=resolved_git,
+            )
+        )
     if operation == "log":
         return _safe_bounded_log_args(args) and _git_log_has_execution_free_config(
             repository_cwd,
@@ -112,7 +120,11 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
             and git_status_has_execution_free_config(repository_cwd, git_binary=resolved_git)
         )
     if operation == "branch":
-        return args in {("--show-current",), ("--list",)}
+        return _safe_branch_args(args) and _git_log_has_execution_free_config(
+            repository_cwd,
+            git_binary=resolved_git,
+            pager_key="pager.branch",
+        )
     if operation == "rev-parse":
         return _safe_rev_parse_args(args)
     if operation == "diff":
@@ -204,6 +216,20 @@ def _safe_fetch_args(args: tuple[str, ...]) -> bool:
     if args in {("origin", "--quiet"), ("--quiet", "origin")}:
         return True
     return len(args) == 2 and args[0] == "origin" and _safe_ref(args[1])
+
+
+def _safe_ls_remote_args(args: tuple[str, ...]) -> bool:
+    return bool(3 <= len(args) <= 12 and args[:2] == ("--heads", "origin") and all(_safe_ref(ref) for ref in args[2:]))
+
+
+def _safe_branch_args(args: tuple[str, ...]) -> bool:
+    if args in {("--show-current",), ("--list",)}:
+        return True
+    return bool(
+        3 <= len(args) <= 12
+        and args[:2] in {("-r", "--list"), ("--remotes", "--list")}
+        and all(_safe_ref(ref) for ref in args[2:])
+    )
 
 
 def _safe_log_format(value: str) -> bool:

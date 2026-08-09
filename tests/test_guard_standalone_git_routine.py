@@ -80,6 +80,50 @@ def test_standalone_origin_ref_refresh_and_resolution_are_explicitly_benign(tmp_
         )
 
 
+def test_standalone_verified_origin_reads_are_explicitly_benign(tmp_path: Path) -> None:
+    home, repository = _repository(tmp_path)
+
+    assert _is_benign("git ls-remote --heads origin main release/3.0", home=home, repository=repository)
+    assert _is_benign(
+        "git branch -r --list origin/main origin/release/3.0",
+        home=home,
+        repository=repository,
+    )
+    command = " && ".join(
+        (
+            "git status --short --branch",
+            "git worktree list --porcelain",
+            "git branch -r --list origin/main origin/release/3.0",
+        )
+    )
+    assert _is_benign(command, home=home, repository=repository)
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git ls-remote origin main",
+        "git ls-remote --heads https://github.com/example/project.git main",
+        "git ls-remote --upload-pack=payload origin main",
+        "git ls-remote --heads origin 'refs/heads/*'",
+        "git ls-remote --heads origin main | cat",
+        "git branch -a --list origin/main",
+        "git branch -r --contains origin/main",
+    ),
+)
+def test_standalone_verified_origin_reads_reject_widening_syntax(tmp_path: Path, command: str) -> None:
+    home, repository = _repository(tmp_path)
+
+    assert not _is_benign(command, home=home, repository=repository)
+
+
+def test_remote_branch_listing_rejects_executable_pager(tmp_path: Path) -> None:
+    home, repository = _repository(tmp_path)
+    _ = subprocess.run(["git", "-C", str(repository), "config", "pager.branch", "!payload"], check=True)
+
+    assert not _is_benign("git branch -r --list origin/main", home=home, repository=repository)
+
+
 def test_standalone_git_routine_requires_explicit_execution_directory(tmp_path: Path) -> None:
     home, _repository_path = _repository(tmp_path)
 
