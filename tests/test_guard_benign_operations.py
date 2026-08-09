@@ -106,6 +106,24 @@ def test_bounded_git_operations_reject_widening(repository: Path, tmp_path: Path
     assert not _benign(command, repository=repository, home=tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("key", "value"),
+    (
+        ("pager.blame", "sh payload.sh"),
+        ("diff.guard.textconv", "sh payload.sh"),
+    ),
+)
+def test_git_blame_rejects_executable_repository_config(
+    repository: Path,
+    tmp_path: Path,
+    key: str,
+    value: str,
+) -> None:
+    _git(repository, "config", key, value)
+
+    assert not _benign("git blame -L 1,1 -- app.ts", repository=repository, home=tmp_path)
+
+
 def test_guard_safety_doc_is_a_read_only_source(tmp_path: Path, repository: Path) -> None:
     support = tmp_path / ".hol-support"
     support.mkdir()
