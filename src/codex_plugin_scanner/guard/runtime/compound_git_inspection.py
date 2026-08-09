@@ -124,6 +124,8 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
             segment,
             repository_path=repository_path,
         )
+    if operation == "worktree":
+        return args == ("list", "--porcelain")
     return False
 
 

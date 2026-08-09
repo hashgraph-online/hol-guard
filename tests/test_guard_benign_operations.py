@@ -55,6 +55,17 @@ def test_mcp_search_preserves_explicit_command_review() -> None:
     assert not is_explicitly_benign_tool_action_request(tool, arguments)
 
 
+def test_non_shell_tool_text_is_not_interpreted_as_a_command() -> None:
+    arguments = {
+        "items": ["PR verified and all checks are green."],
+        "op": "append",
+        "phase": "review",
+    }
+
+    assert extract_sensitive_tool_action_request("todo", arguments) is None
+    assert extract_sensitive_tool_action_request("todo", {"command": "rm -rf build"}) is not None
+
+
 def test_guard_status_native_name_is_unverified_but_cli_is_benign(
     repository: Path,
     tmp_path: Path,
@@ -77,6 +88,8 @@ def test_guard_status_native_name_is_unverified_but_cli_is_benign(
     )
 
     assert _benign("hol-guard status", repository=repository, home=tmp_path)
+    assert _benign("hol-guard daemon status", repository=repository, home=tmp_path)
+    assert not _benign("hol-guard daemon repair", repository=repository, home=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -86,6 +99,7 @@ def test_guard_status_native_name_is_unverified_but_cli_is_benign(
         "git log -1 --format='%H %cI %s' origin/main",
         "git blame -L 1,1 -- app.ts",
         "git show HEAD~1:app.ts | sed -n '1,55p'",
+        "git worktree list --porcelain",
     ),
 )
 def test_bounded_git_operations_are_benign(repository: Path, tmp_path: Path, command: str) -> None:
@@ -100,6 +114,7 @@ def test_bounded_git_operations_are_benign(repository: Path, tmp_path: Path, com
         "git blame -L 1,999999 -- app.ts",
         "git blame -L 1,1 -- ../outside.ts",
         "git show HEAD~99999:app.ts | sed -n '1,55p'",
+        "git worktree list --porcelain --verbose",
     ),
 )
 def test_bounded_git_operations_reject_widening(repository: Path, tmp_path: Path, command: str) -> None:

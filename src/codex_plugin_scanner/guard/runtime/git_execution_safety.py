@@ -44,6 +44,13 @@ _GIT_FETCH_EXECUTION_ENV = frozenset(
         "SSH_ASKPASS",
     }
 )
+_GIT_LOCAL_CHECKOUT_EXECUTION_ENV = frozenset(
+    {
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_EXEC_PATH",
+        "GIT_OBJECT_DIRECTORY",
+    }
+)
 _SAFE_GITHUB_REPOSITORY_PATH = re.compile(r"/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?")
 _SAFE_GIT_HELPER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 _GIT_PROBE_TIMEOUT_SECONDS = 1.0
@@ -412,7 +419,11 @@ def git_worktree_add_has_execution_free_config(
     """Reject worktree creation when checkout can invoke configured code."""
 
     resolved_git = git_binary or trusted_git_binary_for_cwd(cwd)
-    if resolved_git is None or not git_status_has_execution_free_config(cwd, git_binary=resolved_git):
+    if (
+        resolved_git is None
+        or any(os.environ.get(key, "") != "" for key in _GIT_LOCAL_CHECKOUT_EXECUTION_ENV)
+        or not git_status_has_execution_free_config(cwd, git_binary=resolved_git)
+    ):
         return False
     try:
         repository_cwd = cwd.resolve()
@@ -451,8 +462,10 @@ def git_worktree_add_has_execution_free_config(
         if parsed_config is not None
         else ()
     )
-    if parsed_config is None or (
-        any(configured_filters) and _git_ref_uses_checkout_filter(resolved_git, repository_cwd, ref)
+    if (
+        parsed_config is None
+        or _git_checkout_config_can_fetch(parsed_config)
+        or (any(configured_filters) and _git_ref_uses_checkout_filter(resolved_git, repository_cwd, ref))
     ):
         return False
     if hook_paths.returncode != 0:
@@ -470,6 +483,22 @@ def git_worktree_add_has_execution_free_config(
         except OSError:
             return False
     return True
+
+
+def _git_checkout_config_can_fetch(config: dict[str, tuple[str, ...]]) -> bool:
+    """Reject partial-clone configuration that can lazily fetch checkout objects."""
+
+    return any(
+        (
+            (key == "extensions.partialclone" or key.endswith(".partialclonefilter"))
+            and any(value != "" for value in values)
+        )
+        or (
+            key.endswith(".promisor")
+            and any(value.strip().casefold() not in {"", "0", "false", "no", "off"} for value in values)
+        )
+        for key, values in config.items()
+    )
 
 
 def _git_ref_uses_checkout_filter(git_binary: Path, cwd: Path, ref: str) -> bool:
