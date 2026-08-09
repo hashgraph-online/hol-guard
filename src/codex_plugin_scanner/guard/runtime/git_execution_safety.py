@@ -412,10 +412,7 @@ def git_worktree_add_has_execution_free_config(
     """Reject worktree creation when checkout can invoke configured code."""
 
     resolved_git = git_binary or trusted_git_binary_for_cwd(cwd)
-    if (
-        resolved_git is None
-        or not git_status_has_execution_free_config(cwd, git_binary=resolved_git)
-    ):
+    if resolved_git is None or not git_status_has_execution_free_config(cwd, git_binary=resolved_git):
         return False
     try:
         repository_cwd = cwd.resolve()
