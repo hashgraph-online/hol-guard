@@ -1,5 +1,5 @@
 import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
-import { resolveFleetHeroCopy } from "./fleet-workspace";
+import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
 import type { FleetHeroCopy } from "./fleet-workspace";
 
 function assert(condition: boolean, message: string): void {
@@ -102,6 +102,47 @@ const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", ur
 assert(degradedWithApps.status === "degraded", "active installs cannot imply protected fleet health");
 assert(degradedWithApps.headline === "App protection is degraded", "degraded fleet copy is explicit");
 assert(pairedActiveNoApps.status === "setup_gap", "F5: paired_active no apps status should be setup_gap");
+
+const targetedRepairs = repairHarnessesFor(
+  [
+    { harness: "codex", active: true },
+    { harness: "grok", active: true },
+    { harness: "cursor", active: false },
+  ],
+  {
+    schema_version: "guard.protection-health.v1",
+    state: "degraded",
+    label: "Degraded",
+    detail: "One app needs repair.",
+    evidence_gap: false,
+    checks: [],
+    reason_codes: [],
+    apps: [
+      {
+        harness: "codex",
+        state: "protected",
+        label: "Protected",
+        detail: "Hooks verified.",
+        evidence_gap: false,
+        checks: [{ check_id: "harness_hooks", status: "pass", reason_code: "hooks_verified" }],
+        reason_codes: ["hooks_verified"],
+      },
+      {
+        harness: "grok",
+        state: "degraded",
+        label: "Degraded",
+        detail: "Hooks need repair.",
+        evidence_gap: false,
+        checks: [{ check_id: "harness_hooks", status: "fail", reason_code: "hook_verification_failed" }],
+        reason_codes: ["hook_verification_failed"],
+      },
+    ],
+  },
+);
+assert(
+  targetedRepairs.length === 1 && targetedRepairs[0] === "grok",
+  "F8: fleet repair must reinstall only active apps with failed hook proof",
+);
 
 const allStates: FleetHeroCopy[] = [localOnlyWithApps, pairedWaitingWithApps, pairedActiveWithApps];
 for (const state of allStates) {

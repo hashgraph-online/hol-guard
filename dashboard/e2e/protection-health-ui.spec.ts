@@ -143,6 +143,65 @@ test("degraded protection copy remains visible on mobile", async ({ page }, test
   await page.screenshot({ path: testInfo.outputPath("protection-health-mobile.png"), fullPage: true });
 });
 
+test("fleet repair targets only the app with failed hook proof and verifies recovery", async ({ page }) => {
+  const protectedSnapshot = snapshotForState("protected");
+  const protectedChecks = protectedSnapshot.protection_health.checks;
+  const failedChecks = protectedChecks.map((check) => check.check_id === "harness_hooks"
+    ? { ...check, status: "fail" as const, reason_code: "hook_verification_failed" }
+    : check);
+  let currentSnapshot = {
+    ...protectedSnapshot,
+    managed_installs: [
+      ...protectedSnapshot.managed_installs,
+      { ...protectedSnapshot.managed_installs[0], harness: "grok" },
+    ],
+    protection_health: {
+      ...protectedSnapshot.protection_health,
+      state: "degraded" as const,
+      checks: failedChecks,
+      apps: [
+        { ...protectedSnapshot.protection_health.apps[0], checks: protectedChecks },
+        {
+          ...protectedSnapshot.protection_health.apps[0],
+          harness: "grok",
+          state: "degraded" as const,
+          checks: failedChecks,
+        },
+      ],
+    },
+  };
+  const repairedHarnesses: string[] = [];
+  await page.route("**/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    let body: unknown = {};
+    if (path.includes("/initialize")) body = { auth_token: "e2e-protection-token" };
+    else if (path.endsWith("/runtime")) body = currentSnapshot;
+    else if (/\/v1\/harnesses\/[^/]+\/repair$/.test(path)) {
+      const harness = path.split("/")[3];
+      repairedHarnesses.push(harness);
+      body = { harness, action: "repair", dry_run: false, managed_install: { harness, active: true } };
+    } else if (path.endsWith("/protection/repair")) {
+      currentSnapshot = protectedSnapshot;
+      body = { repaired: true, repair_scope: "local_integrity", check_ids: PROTECTION_CHECK_IDS, message: "Protection restored." };
+    } else if (path.endsWith("/daemon/repair")) body = { repaired: true, cleared: [] };
+    else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
+    else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
+    else if (path.endsWith("/settings")) body = defaultSettingsPayload;
+    else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
+    else if (path.endsWith("/command-activity/events")) {
+      await route.fulfill({ status: 200, contentType: "text/event-stream", body: "" });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+
+  await page.goto(`/protect?${DAEMON}`);
+  await page.getByRole("button", { name: "Repair protection" }).click();
+  await expect(page.getByRole("heading", { name: "Your apps are covered" })).toBeVisible();
+  expect(repairedHarnesses).toEqual(["grok"]);
+});
+
 for (const expected of [
   { state: "protected", heading: "All clear", badge: "Protected" },
   { state: "partial", heading: "Protection is partial", badge: "Partially protected" },
