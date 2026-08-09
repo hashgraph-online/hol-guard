@@ -7,12 +7,9 @@ import json
 import os
 import re
 import shlex
-from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
 
 from ...models import GuardArtifact
-from ..benign_dx_guard import classify_benign_command
 from ..command_decision_adapter import effect_decision_to_dict
 from ..command_evaluation import evaluate_command
 from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
@@ -62,8 +59,6 @@ def is_explicitly_benign_tool_action_request(
     home_dir: Path | None = None,
 ) -> bool:
     normalized_tool_name = _normalize_tool_name(tool_name)
-    if _is_verified_read_only_native_tool(normalized_tool_name, arguments):
-        return True
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return False
     found_benign_candidate = False
@@ -82,14 +77,7 @@ def is_explicitly_benign_tool_action_request(
         stripped_command = command_text.strip()
         if not stripped_command:
             continue
-        if home_dir is not None and _is_guard_safety_doc_read(
-            stripped_command,
-            home_dir=home_dir,
-        ):
-            found_benign_candidate = True
-            continue
-        is_prompt_free, _reason_code = classify_benign_command(stripped_command)
-        if is_prompt_free:
+        if home_dir is not None and _is_guard_safety_doc_read(stripped_command, home_dir=home_dir):
             found_benign_candidate = True
             continue
         parts = _split_shell_parts(stripped_command)
@@ -178,23 +166,6 @@ def is_explicitly_benign_tool_action_request(
             continue
         return False
     return found_benign_candidate
-
-
-def _is_verified_read_only_native_tool(tool_name: str | None, arguments: object) -> bool:
-    if not isinstance(arguments, Mapping):
-        return False
-    typed_arguments = cast(Mapping[str, object], arguments)
-    if tool_name == "mcp__codex_apps__hol_guard__get_guard_status":
-        return not typed_arguments
-    if tool_name != "mcp__codex_apps__github__search":
-        return False
-    if any(key in typed_arguments for key in ("command", "cmd", "shell_command", "shellCommand")):
-        return False
-    allowed_keys = {"query", "q", "page", "per_page", "sort", "order"}
-    if not typed_arguments or any(key not in allowed_keys for key in typed_arguments):
-        return False
-    query = typed_arguments.get("query", typed_arguments.get("q"))
-    return isinstance(query, str) and bool(query.strip()) and len(query) <= 4096
 
 
 def _is_guard_safety_doc_read(command_text: str, *, home_dir: Path) -> bool:
