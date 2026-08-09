@@ -151,6 +151,17 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "git push origin refs/tags/v1 --force" in workflow_text
 
 
+def test_publish_action_repo_scanner_version_heredoc_is_shell_aligned() -> None:
+    yaml = pytest.importorskip("yaml")
+    workflow_path = ROOT / ".github" / "workflows" / "publish-action-repo.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish-action-repo"]["steps"]
+    script = next(step["run"] for step in steps if step.get("name") == "Resolve published scanner version")
+
+    assert "\nimport json\nimport urllib.request\n" in script
+    assert '\nPY\n)"' in script
+
+
 def test_action_bundle_docs_reference_hol_guard_source() -> None:
     action_readme = (ROOT / "action" / "README.md").read_text(encoding="utf-8")
 
