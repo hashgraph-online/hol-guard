@@ -71,23 +71,71 @@ def test_safe_git_worktree_add_requires_new_bounded_destination(
     )
 
 
-def test_safe_git_worktree_add_accepts_detached_destination(
+def test_safe_git_worktree_add_accepts_detached_full_commit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repository = _repository(tmp_path)
     destination = tmp_path / "detached-worktree"
-    monkeypatch.setattr(routine_setup_commands, "_safe_worktree_parent", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(routine_setup_commands, "trusted_git_binary_for_cwd", lambda _cwd: Path("/usr/bin/git"))
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     monkeypatch.setattr(
         routine_setup_commands,
-        "git_worktree_add_has_execution_free_config",
-        lambda *_args, **_kwargs: True,
+        "_safe_worktree_parent",
+        lambda _destination, *, home_dir: home_dir == tmp_path,
     )
-    monkeypatch.setattr(routine_setup_commands, "_git_ref_exists", lambda *_args: True)
 
     assert routine_setup_commands.is_safe_git_worktree_add(
-        f"git worktree add --detach {destination} origin/release/3.0",
+        f"git worktree add --detach {destination} {commit}",
+        cwd=repository,
+        home_dir=tmp_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "command_template",
+    (
+        "git worktree add --detach {destination} HEAD",
+        "git worktree add --detach {destination} {short_commit}",
+        "git worktree add --detach --force {destination} {commit}",
+        "git worktree add --detach --force {commit}",
+        "git worktree add --detach --lock {commit}",
+        "git worktree add --detach --guess-remote {commit}",
+        "git worktree add --lock --detach {destination} {commit}",
+        "git worktree add --detach {destination} {commit} && sh payload.sh",
+    ),
+)
+def test_safe_git_worktree_add_rejects_widened_detached_forms(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command_template: str,
+) -> None:
+    repository = _repository(tmp_path)
+    destination = tmp_path / "detached-worktree"
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    monkeypatch.setattr(
+        routine_setup_commands,
+        "_safe_worktree_parent",
+        lambda _destination, *, home_dir: home_dir == tmp_path,
+    )
+
+    assert not routine_setup_commands.is_safe_git_worktree_add(
+        command_template.format(
+            destination=destination,
+            commit=commit,
+            short_commit=commit[:12],
+        ),
         cwd=repository,
         home_dir=tmp_path,
     )
