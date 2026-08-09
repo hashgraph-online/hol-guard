@@ -97,6 +97,54 @@ def test_safe_git_worktree_add_accepts_detached_full_commit(
     )
 
 
+def test_safe_git_worktree_add_ignores_network_credential_helpers(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    _git(repository, "config", "credential.helper", "!false")
+
+    assert git_execution_safety.git_worktree_add_has_execution_free_config(repository)
+
+
+@pytest.mark.parametrize(
+    ("config_key", "config_value"),
+    (
+        ("extensions.partialClone", "origin"),
+        ("extensions.partialClone", "false"),
+        ("extensions.partialClone", " "),
+        ("remote.origin.promisor", "true"),
+        ("remote.origin.partialCloneFilter", "blob:none"),
+        ("remote.origin.partialCloneFilter", "false"),
+    ),
+)
+def test_safe_git_worktree_add_rejects_partial_clone_configuration(
+    tmp_path: Path,
+    config_key: str,
+    config_value: str,
+) -> None:
+    repository = _repository(tmp_path)
+    _git(repository, "config", config_key, config_value)
+
+    assert not git_execution_safety.git_worktree_add_has_execution_free_config(repository)
+
+
+@pytest.mark.parametrize(
+    ("environment_key", "environment_value"),
+    (
+        ("GIT_EXEC_PATH", "helpers"),
+        ("GIT_OBJECT_DIRECTORY", " "),
+    ),
+)
+def test_safe_git_worktree_add_rejects_local_checkout_execution_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    environment_key: str,
+    environment_value: str,
+) -> None:
+    repository = _repository(tmp_path)
+    monkeypatch.setenv(environment_key, environment_value)
+
+    assert not git_execution_safety.git_worktree_add_has_execution_free_config(repository)
+
+
 @pytest.mark.parametrize(
     "command_template",
     (
