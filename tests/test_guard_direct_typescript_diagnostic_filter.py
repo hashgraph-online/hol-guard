@@ -173,6 +173,52 @@ def test_verified_routine_typescript_pipeline_is_benign(
     )
 
 
+def test_verified_direct_typescript_diagnostic_is_benign(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, caller, command = _fixture(tmp_path, monkeypatch)
+    workspace = Path(command.split(" && ", 1)[0].removeprefix("cd "))
+    source = workspace / "workers" / "services" / "risk.ts"
+    source.parent.mkdir(parents=True)
+    _ = source.write_text("export {};\n", encoding="utf-8")
+    command = (
+        f'cd {workspace} && NODE_OPTIONS="--max-old-space-size=8192" npx tsc --noEmit '
+        + "--strict --skipLibCheck --esModuleInterop --moduleResolution bundler --module esnext --target es2022 "
+        + str(source.relative_to(workspace))
+    )
+    assert (
+        extract_sensitive_tool_action_request(
+            "bash",
+            {"command": command},
+            cwd=caller,
+            home_dir=home,
+        )
+        is None
+    )
+    assert is_explicitly_benign_tool_action_request(
+        "bash",
+        {"command": command},
+        cwd=caller,
+        home_dir=home,
+    )
+    assert (
+        _hook_runtime_artifact(
+            harness="pi",
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "bash",
+                "tool_input": {"command": command},
+            },
+            action_envelope=None,
+            home_dir=home,
+            guard_home=home / ".guard",
+            workspace=caller,
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     ("original", "replacement"),
     (

@@ -55,7 +55,7 @@ _TSC_WRITE_FLAGS = frozenset(
 )
 _TSC_PATH_VALUE_FLAGS = frozenset({"--baseUrl", "--project", "-p", "--rootDir", "--typeRoots"})
 _TSC_PACKAGE_VALUE_FLAGS = frozenset({"--types"})
-_TSC_BOOLEAN_FLAGS = frozenset({"--noEmit", "--skipLibCheck"})
+_TSC_BOOLEAN_FLAGS = frozenset({"--esModuleInterop", "--noEmit", "--skipLibCheck", "--strict"})
 _TSC_VALUE_FLAGS = frozenset(
     {
         "--jsx",
@@ -137,9 +137,9 @@ def _routine_typescript_diagnostic_context(
     trusted_path_command: TrustedPathCommand,
     workspace_typescript_is_bound: WorkspaceTypeScriptBinding,
 ) -> ShellExecutionContext | None:
-    """Recognize a local no-emit compiler followed by bounded stream observers."""
+    """Recognize a local no-emit compiler with optional bounded stream observers."""
 
-    if not context.complete or len(context.segments) not in {4, 5}:
+    if not context.complete or len(context.segments) not in {2, 4, 5}:
         return None
     directory, compiler, *observers = context.segments
     if (
@@ -150,9 +150,9 @@ def _routine_typescript_diagnostic_context(
     ):
         return None
     compiler_tokens = list(compiler.tokens)
-    if compiler_tokens[-1:] != ["2>&1"]:
-        return None
-    _ = compiler_tokens.pop()
+    stderr_merged = compiler_tokens[-1:] == ["2>&1"]
+    if stderr_merged:
+        _ = compiler_tokens.pop()
     node_options = compiler_tokens[0] if compiler_tokens and compiler_tokens[0].startswith("NODE_OPTIONS=") else None
     if node_options is not None and not _safe_typecheck_node_options(node_options):
         return None
@@ -168,6 +168,10 @@ def _routine_typescript_diagnostic_context(
         or not workspace_typescript_is_bound(workspace)
         or not _workspace_npx_typescript_runner_is_bound(workspace)
     ):
+        return None
+    if not observers:
+        return context
+    if not stderr_merged:
         return None
     stream_observers = observers
     if observers[-1].control_before == (";",):
