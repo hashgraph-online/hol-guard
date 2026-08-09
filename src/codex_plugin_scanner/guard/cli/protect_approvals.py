@@ -177,6 +177,10 @@ def _protect_approval_item(
     decision_reason = risk_summary or f"package_supply_chain_{policy_action.replace('-', '_')}"
     decision_v2 = build_decision_v2(policy_action, reason=decision_reason)
     decision_v2_payload = decision_v2.to_dict()
+    action_envelope = _protect_approval_action_envelope(
+        receipt.get("action_envelope_json"),
+        policy_action=policy_action,
+    )
     reasons = supply_chain_evaluation.get("reasons")
     reason_items = reasons if isinstance(reasons, list) else []
     reason_codes = {str(reason.get("code") or "") for reason in reason_items if isinstance(reason, dict)}
@@ -195,12 +199,31 @@ def _protect_approval_item(
         "changed_fields": _protect_target_labels(response_payload),
         "risk_summary": risk_summary,
         "risk_signals": _string_list(verdict.get("risk_signals")),
-        "action_envelope_json": (
-            receipt.get("action_envelope_json") if isinstance(receipt.get("action_envelope_json"), dict) else None
-        ),
+        "action_envelope_json": action_envelope,
         "decision_v2_json": decision_v2_payload,
         "scanner_evidence": scanner_evidence,
     }
+
+
+def _protect_approval_action_envelope(
+    value: object,
+    *,
+    policy_action: GuardAction,
+) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    envelope = dict(value)
+    if envelope.get("observe_mode") is not True:
+        return envelope
+    observed_action = _normalize_protect_policy_action(envelope.get("observed_policy_action"))
+    if observed_action != policy_action:
+        return envelope
+    envelope.pop("observe_mode", None)
+    envelope.pop("observed_policy_action", None)
+    for key in ("policy_action", "policyAction", "pre_execution_result", "preExecutionResult"):
+        if key in envelope:
+            envelope[key] = policy_action
+    return envelope
 
 
 def _annotate_package_execution_context_change(
