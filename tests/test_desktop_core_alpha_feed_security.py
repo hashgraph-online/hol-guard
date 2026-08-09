@@ -81,6 +81,7 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     assert 'codesign --display --extract-certificates="$RUNNER_TEMP/codesign-cert-"' in text
     assert 'test "$CERTIFICATE_SHA1" = "$IMPORTED_CERTIFICATE_SHA1"' in text
     assert 'grep -Fx "Authority=$APPLE_SIGNING_IDENTITY"' in text
+    assert 'test "$CERTIFICATE_SHA1" = "$SELECTOR_SHA1"' in text
     assert 'grep -Fx "TeamIdentifier=$APPLE_TEAM_ID"' in text
     assert 'grep -F "source=Notarized Developer ID"' in text
 
