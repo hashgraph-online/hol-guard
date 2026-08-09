@@ -347,7 +347,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$BINARY"
           codesign --display --verbose=4 "$BINARY" 2> "$RUNNER_TEMP/codesign.txt"
           if ! grep -Fx "Authority=$APPLE_SIGNING_IDENTITY" "$RUNNER_TEMP/codesign.txt"; then
-            codesign --display --extract-certificates "$RUNNER_TEMP/codesign-cert-" "$BINARY"
+            codesign --display --extract-certificates="$RUNNER_TEMP/codesign-cert-" "$BINARY"
             CERTIFICATE_SHA1=$(openssl x509 -inform DER \
               -in "$RUNNER_TEMP/codesign-cert-0" -noout -fingerprint -sha1 \
               | sed -E 's/^[^=]+=//; s/://g' | tr '[:lower:]' '[:upper:]')
