@@ -102,9 +102,7 @@ def build_local_risk_report(
             id="runtime",
             status="pass" if runtime_status == "active" else "fail",
             summary=(
-                "Local Guard runtime is active."
-                if runtime_status == "active"
-                else "Local Guard runtime is not active."
+                "Local Guard runtime is active." if runtime_status == "active" else "Local Guard runtime is not active."
             ),
         )
     )
@@ -193,9 +191,9 @@ def render_local_risk_report_html(report: LocalRiskReport) -> str:
     )
     harnesses = ", ".join(html.escape(item) for item in report.installed_harnesses) or "None detected"
     return (
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"robots\" content=\"noindex,nofollow\">"
-        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="robots" content="noindex,nofollow">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
         "<title>HOL Guard local risk report</title></head><body>"
         "<main><h1>HOL Guard local risk report</h1>"
         f"<p>Risk band: <strong>{html.escape(report.risk_band)}</strong></p>"
