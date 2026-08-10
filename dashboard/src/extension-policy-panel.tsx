@@ -84,6 +84,8 @@ function DraftControl(props: {
     { value: "allow", label: "Allow", disabled: managed === "disabled" },
     { value: "block", label: "Block" },
   ];
+  const selectedIndex = choices.findIndex((choice) => choice.value === props.state && !choice.disabled);
+  const tabStopIndex = selectedIndex >= 0 ? selectedIndex : choices.findIndex((choice) => !choice.disabled);
   const chooseAdjacent = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
     event.preventDefault();
@@ -96,7 +98,7 @@ function DraftControl(props: {
       return;
     }
   };
-  return <div role="radiogroup" aria-label={`${props.permission.label} local policy`} className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">{choices.map((choice, index) => <button key={choice.value} type="button" role="radio" aria-checked={props.state === choice.value} tabIndex={props.state === choice.value ? 0 : -1} disabled={props.disabled || choice.disabled} title={choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : undefined} onKeyDown={(event) => chooseAdjacent(event, index)} onClick={() => props.onChange(choice.value)} className={`min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`}>{choice.label}</button>)}</div>;
+  return <div role="radiogroup" aria-label={`${props.permission.label} local policy`} className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">{choices.map((choice, index) => <button key={choice.value} type="button" role="radio" aria-checked={props.state === choice.value} tabIndex={!props.disabled && index === tabStopIndex ? 0 : -1} disabled={props.disabled || choice.disabled} title={choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : undefined} onKeyDown={(event) => chooseAdjacent(event, index)} onClick={() => props.onChange(choice.value)} className={`min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`}>{choice.label}</button>)}</div>;
 }
 
 function PermissionPolicyRow(props: {
@@ -206,7 +208,9 @@ export function ExtensionPolicyPanel(props: {
       if (generation !== draftGeneration.current) return;
       setPreview(next);
       setReviewOpen(true);
-    } catch (caught) { handleApiError(caught, "Guard could not preview this draft."); }
+    } catch (caught) {
+      if (generation === draftGeneration.current) handleApiError(caught, "Guard could not preview this draft.");
+    }
     finally { setPreviewBusy(false); }
   }, [dirty, handleApiError, mutation]);
 
@@ -235,6 +239,11 @@ export function ExtensionPolicyPanel(props: {
       setError(null);
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
+      draftGeneration.current += 1;
+      const committedEffective = { ...baseEffective, revision: applied.revision, layers: base.layers };
+      setBaseEffective(committedEffective);
+      setDraftLayers(cloneLayers(committedEffective));
+      setIdentity(newExtensionPolicyDraftIdentity());
       try {
         await onRefresh();
       } catch {
@@ -274,7 +283,11 @@ export function ExtensionPolicyPanel(props: {
         setDraftLayers(result.draft_layers);
         setPendingRebase(null); setStale(false); setError(null);
       }
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft."); }
+    } catch (caught) {
+      if (generation === draftGeneration.current) {
+        setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft.");
+      }
+    }
     finally { setPreviewBusy(false); }
   }, [baseEffective, draftLayers, policyExtension]);
 

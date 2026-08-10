@@ -27,11 +27,14 @@ export function ExtensionControlCenterDetail(props: {
     <div>
       <ReadonlyExtensionControlCenterDetail
         {...props}
-        externalPolicyPanelId="extension-policy-editor"
+        externalPolicyPanelId="extension-policy-tabpanel"
         onBack={guardedBack}
       />
     </div>
     <div
+      id="extension-policy-tabpanel"
+      role="tabpanel"
+      aria-labelledby="extension-tab-policy"
       hidden={!policyActive}
       aria-hidden={!policyActive}
       className="mx-auto -mt-8 w-full max-w-7xl px-4 pb-10 sm:px-6 lg:px-8"

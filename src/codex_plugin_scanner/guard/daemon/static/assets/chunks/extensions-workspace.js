@@ -1496,6 +1496,8 @@ function DraftControl(props) {
     { value: "allow", label: "Allow", disabled: managed === "disabled" },
     { value: "block", label: "Block" }
   ];
+  const selectedIndex = choices.findIndex((choice) => choice.value === props.state && !choice.disabled);
+  const tabStopIndex = selectedIndex >= 0 ? selectedIndex : choices.findIndex((choice) => !choice.disabled);
   const chooseAdjacent = (event, index) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
     event.preventDefault();
@@ -1508,7 +1510,7 @@ function DraftControl(props) {
       return;
     }
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "radiogroup", "aria-label": `${props.permission.label} local policy`, className: "flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1", children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", role: "radio", "aria-checked": props.state === choice.value, tabIndex: props.state === choice.value ? 0 : -1, disabled: props.disabled || choice.disabled, title: choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : void 0, onKeyDown: (event) => chooseAdjacent(event, index), onClick: () => props.onChange(choice.value), className: `min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`, children: choice.label }, choice.value)) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "radiogroup", "aria-label": `${props.permission.label} local policy`, className: "flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1", children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", role: "radio", "aria-checked": props.state === choice.value, tabIndex: !props.disabled && index === tabStopIndex ? 0 : -1, disabled: props.disabled || choice.disabled, title: choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : void 0, onKeyDown: (event) => chooseAdjacent(event, index), onClick: () => props.onChange(choice.value), className: `min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`, children: choice.label }, choice.value)) });
 }
 function PermissionPolicyRow(props) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
@@ -1706,6 +1708,7 @@ function ExtensionPolicyPanel(props) {
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
   reactExports.useEffect(() => {
+    draftGeneration.current += 1;
     setBaseEffective(props.effective);
     setPolicyExtension(props.extension);
     setDraftLayers(cloneLayers(props.effective));
@@ -1757,7 +1760,7 @@ function ExtensionPolicyPanel(props) {
       setPreview(next);
       setReviewOpen(true);
     } catch (caught) {
-      handleApiError(caught, "Guard could not preview this draft.");
+      if (generation === draftGeneration.current) handleApiError(caught, "Guard could not preview this draft.");
     } finally {
       setPreviewBusy(false);
     }
@@ -1789,6 +1792,11 @@ function ExtensionPolicyPanel(props) {
       setError(null);
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
+      draftGeneration.current += 1;
+      const committedEffective = { ...baseEffective, revision: applied.revision, layers: base.layers };
+      setBaseEffective(committedEffective);
+      setDraftLayers(cloneLayers(committedEffective));
+      setIdentity(newExtensionPolicyDraftIdentity());
       try {
         await onRefresh();
       } catch {
@@ -1835,7 +1843,9 @@ function ExtensionPolicyPanel(props) {
         setError(null);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft.");
+      if (generation === draftGeneration.current) {
+        setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft.");
+      }
     } finally {
       setPreviewBusy(false);
     }
@@ -1959,13 +1969,16 @@ function ExtensionControlCenterDetail(props) {
       ExtensionControlCenterDetail$1,
       {
         ...props,
-        externalPolicyPanelId: "extension-policy-editor",
+        externalPolicyPanelId: "extension-policy-tabpanel",
         onBack: guardedBack
       }
     ) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
+        id: "extension-policy-tabpanel",
+        role: "tabpanel",
+        "aria-labelledby": "extension-tab-policy",
         hidden: !policyActive,
         "aria-hidden": !policyActive,
         className: "mx-auto -mt-8 w-full max-w-7xl px-4 pb-10 sm:px-6 lg:px-8",
