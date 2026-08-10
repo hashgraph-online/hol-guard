@@ -15,6 +15,7 @@ from ..command_evaluation import evaluate_command
 from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
 from ..extension_control_contract import ExtensionControlLayer
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
+from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
 from ..shell_command_wrappers import normalize_transparent_shell_command
 from .constants_core import _SHELL_TOOL_NAMES
@@ -155,6 +156,13 @@ def is_explicitly_benign_tool_action_request(
             found_benign_candidate = True
             continue
         if home_dir is not None and _looks_like_safe_compound_developer_inspection(
+            stripped_command,
+            cwd=cwd,
+            home_dir=home_dir,
+        ):
+            found_benign_candidate = True
+            continue
+        if home_dir is not None and is_read_only_git_ancestry_audit(
             stripped_command,
             cwd=cwd,
             home_dir=home_dir,

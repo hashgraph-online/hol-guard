@@ -131,9 +131,12 @@ def test_bounded_git_operations_reject_widening(repository: Path, tmp_path: Path
 def test_git_blame_rejects_executable_repository_config(
     repository: Path,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     key: str,
     value: str,
 ) -> None:
+    monkeypatch.delenv("GIT_PAGER", raising=False)
+    monkeypatch.delenv("PAGER", raising=False)
     _git(repository, "config", key, value)
 
     assert not _benign("git blame -L 1,1 -- app.ts", repository=repository, home=tmp_path)

@@ -26,6 +26,19 @@ def _isolate_user_git_config(  # pyright: ignore[reportUnusedFunction]
     config.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
+    for variable in (
+        "GIT_CONFIG",
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_COMMON_DIR",
+        "GIT_DIR",
+        "GIT_NAMESPACE",
+        "GIT_WORK_TREE",
+    ):
+        monkeypatch.delenv(variable, raising=False)
 
 
 def _repository(tmp_path: Path) -> tuple[Path, Path]:
@@ -117,8 +130,13 @@ def test_standalone_verified_origin_reads_reject_widening_syntax(tmp_path: Path,
     assert not _is_benign(command, home=home, repository=repository)
 
 
-def test_remote_branch_listing_rejects_executable_pager(tmp_path: Path) -> None:
+def test_remote_branch_listing_rejects_executable_pager(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     home, repository = _repository(tmp_path)
+    monkeypatch.delenv("GIT_PAGER", raising=False)
+    monkeypatch.delenv("PAGER", raising=False)
     _ = subprocess.run(["git", "-C", str(repository), "config", "pager.branch", "!payload"], check=True)
 
     assert not _is_benign("git branch -r --list origin/main", home=home, repository=repository)
