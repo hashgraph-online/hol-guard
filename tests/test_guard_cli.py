@@ -5437,7 +5437,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert pending[0]["policy_action"] == "require-reapproval"
         assert pending[0]["scanner_evidence"][-1] == {
             "source": "observe_mode_inbox",
-            "observed_policy_action": "require-reapproval",
+            "observed_policy_action": "block",
             "queued_policy_action": "require-reapproval",
             "authoritative_action": "allow",
         }
