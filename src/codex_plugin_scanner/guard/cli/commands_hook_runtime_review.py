@@ -387,6 +387,15 @@ def _review_runtime_artifact_hook(
             )
             _localize_pending_approval_copy(response_payload, harness=args.harness)
     if observe_mode and event_name == "PreToolUse" and not observe_request_queued:
+        runtime_scanner_evidence = list(scanner_evidence_payload)
+        if not any(item.get("source") == "observe_mode" for item in runtime_scanner_evidence):
+            runtime_scanner_evidence.append(
+                {
+                    "source": "observe_mode",
+                    "observed_policy_action": policy_action,
+                    "authoritative_action": policy_action,
+                }
+            )
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=runtime_artifact,
@@ -396,7 +405,7 @@ def _review_runtime_artifact_hook(
             observed_policy_action=policy_action,
             redaction_level=config.receipt_redaction_level,
             risk_summary=risk_summary,
-            scanner_evidence=scanner_evidence_payload,
+            scanner_evidence=runtime_scanner_evidence,
             store=store,
         )
     state.action_envelope = action_envelope
