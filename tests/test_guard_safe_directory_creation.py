@@ -44,6 +44,8 @@ def test_literal_workspace_directory_creation_is_benign(tmp_path: Path) -> None:
         "mkdir -p /etc/guard-test",
         "mkdir -p $TARGET",
         "mkdir -p target; id",
+        "mkdir -p target\nid",
+        "mkdir -p target\rid",
         "mkdir -p target |& id",
         "mkdir -p target >> output.log",
         "mkdir -p target >& output.log",
