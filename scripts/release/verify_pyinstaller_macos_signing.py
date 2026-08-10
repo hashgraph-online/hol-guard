@@ -9,7 +9,7 @@ import struct
 import subprocess
 import tempfile
 import zlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 COOKIE_MAGIC = b"MEI\x0c\x0b\x0a\x0b\x0e"
 COOKIE_FORMAT = "!8sIIII64s"
@@ -17,6 +17,7 @@ COOKIE_LENGTH = struct.calcsize(COOKIE_FORMAT)
 TOC_FORMAT = "!IIIIBc"
 TOC_HEADER_LENGTH = struct.calcsize(TOC_FORMAT)
 BINARY_TYPE = "b"
+SYMLINK_TYPE = "n"
 MACHO_MAGICS = {
     b"\xce\xfa\xed\xfe",  # MH_MAGIC
     b"\xcf\xfa\xed\xfe",  # MH_MAGIC_64
@@ -127,33 +128,109 @@ def _team_id(path: Path) -> str:
     raise ValueError(f"Embedded Mach-O has no TeamIdentifier: {path.name}")
 
 
+def _unique_entry(
+    entries: list[tuple[str, int, int, bool, str]],
+    name: str,
+    *,
+    role: str,
+) -> tuple[str, int, int, bool, str]:
+    matches = [entry for entry in entries if entry[0] == name]
+    if len(matches) != 1:
+        raise ValueError(f"{role} {name!r} must have exactly one TOC entry; found {len(matches)}")
+    return matches[0]
+
+
+def _archive_relative_name(name: str, *, role: str) -> str:
+    path = PurePosixPath(name)
+    if not name or path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"{role} {name!r} must be archive-relative")
+    normalized = path.as_posix()
+    if normalized in {"", ".", ".."}:
+        raise ValueError(f"{role} {name!r} must be archive-relative")
+    return normalized
+
+
+def _normalized_symlink_target(source_name: str, target: str) -> str:
+    source_name = _archive_relative_name(source_name, role="PyInstaller archive symlink source")
+    target_path = PurePosixPath(target)
+    if target_path.is_absolute():
+        raise ValueError(f"PyInstaller archive symlink {source_name!r} has an absolute target")
+
+    parts = list(PurePosixPath(source_name).parent.parts)
+    for part in target_path.parts:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if not parts:
+                raise ValueError(f"PyInstaller archive symlink {source_name!r} escapes the archive root")
+            parts.pop()
+            continue
+        parts.append(part)
+    if not parts:
+        raise ValueError(f"PyInstaller archive symlink {source_name!r} has an empty target")
+    normalized = PurePosixPath(*parts).as_posix()
+    return _archive_relative_name(normalized, role="PyInstaller archive symlink target")
+
+
+def _resolve_declared_runtime(
+    handle,
+    archive_start: int,
+    declared_runtime: str,
+    entries: list[tuple[str, int, int, bool, str]],
+) -> tuple[str, int, int, bool, str]:
+    """Resolve PyInstaller's cookie runtime through archive-local symlinks to a binary entry."""
+
+    current_name = _archive_relative_name(
+        declared_runtime,
+        role="Cookie-declared Python runtime",
+    )
+    seen: set[str] = set()
+    for _ in range(8):
+        if current_name in seen:
+            raise ValueError(f"Cookie-declared Python runtime {declared_runtime!r} resolves through a symlink cycle")
+        seen.add(current_name)
+        entry = _unique_entry(entries, current_name, role="Cookie-declared Python runtime target")
+        name, offset, length, compressed, typecode = entry
+        if typecode == BINARY_TYPE:
+            return entry
+        if typecode != SYMLINK_TYPE:
+            raise ValueError(
+                f"Cookie-declared Python runtime {declared_runtime!r} resolves to unsupported TOC type {typecode!r}"
+            )
+
+        data = _entry_bytes(handle, archive_start, name, offset, length, compressed)
+        if not data.endswith(b"\0") or b"\0" in data[:-1]:
+            raise ValueError(f"PyInstaller archive symlink {name!r} has invalid target encoding")
+        try:
+            target = data[:-1].decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"PyInstaller archive symlink {name!r} target is not UTF-8") from exc
+        if not target:
+            raise ValueError(f"PyInstaller archive symlink {name!r} has an empty target")
+        current_name = _normalized_symlink_target(name, target)
+
+    raise ValueError(f"Cookie-declared Python runtime {declared_runtime!r} exceeds symlink resolution depth")
+
+
 def verify(binary: Path, expected_team_id: str) -> None:
     archive_start, declared_runtime, entries = _archive_layout(binary)
-    declared_entries = [entry for entry in entries if entry[0] == declared_runtime]
-    if len(declared_entries) != 1:
-        raise ValueError(
-            f"Cookie-declared Python runtime {declared_runtime!r} must have exactly one TOC entry; "
-            f"found {len(declared_entries)}"
-        )
-    if declared_entries[0][4] != BINARY_TYPE:
-        raise ValueError(
-            f"Cookie-declared Python runtime {declared_runtime!r} is not a binary TOC entry"
-        )
 
     macho_count = 0
     declared_runtime_verified = False
     with binary.open("rb") as handle, tempfile.TemporaryDirectory(
         prefix="hol-guard-pyi-signing-"
     ) as tmp:
+        runtime_entry = _resolve_declared_runtime(handle, archive_start, declared_runtime, entries)
+        runtime_name = runtime_entry[0]
         root = Path(tmp)
         for index, (name, offset, length, compressed, typecode) in enumerate(entries):
             if typecode != BINARY_TYPE:
                 continue
             data = _entry_bytes(handle, archive_start, name, offset, length, compressed)
             is_macho = data[:4] in MACHO_MAGICS
-            if name == declared_runtime and not is_macho:
+            if name == runtime_name and not is_macho:
                 raise ValueError(
-                    f"Cookie-declared Python runtime {declared_runtime!r} is not Mach-O"
+                    f"Cookie-declared Python runtime {declared_runtime!r} resolves to non-Mach-O binary {name!r}"
                 )
             if not is_macho:
                 continue
@@ -167,7 +244,7 @@ def verify(binary: Path, expected_team_id: str) -> None:
                     f"Embedded Mach-O {name!r} has TeamIdentifier={actual_team_id!r}; "
                     f"expected {expected_team_id!r}"
                 )
-            if name == declared_runtime:
+            if name == runtime_name:
                 declared_runtime_verified = True
 
     if macho_count == 0:

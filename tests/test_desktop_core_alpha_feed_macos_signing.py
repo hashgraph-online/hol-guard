@@ -30,11 +30,16 @@ def _load_verifier() -> ModuleType:
     return module
 
 
-def _fake_archive(path: Path, *, declared_runtime: str, entries: list[tuple[str, bytes]]) -> None:
+def _fake_archive(
+    path: Path,
+    *,
+    declared_runtime: str,
+    entries: list[tuple[str, bytes, str]],
+) -> None:
     module = _load_verifier()
     payload = bytearray()
     toc = bytearray()
-    for name, data in entries:
+    for name, data, typecode in entries:
         offset = len(payload)
         payload.extend(data)
         raw_name = name.encode("utf-8") + b"\0"
@@ -47,7 +52,7 @@ def _fake_archive(path: Path, *, declared_runtime: str, entries: list[tuple[str,
                 len(data),
                 len(data),
                 0,
-                b"b",
+                typecode.encode("ascii"),
             )
         )
         toc.extend(raw_name)
@@ -95,6 +100,68 @@ def test_final_verification_checks_reused_and_new_embedded_team_identity() -> No
     assert run.index(verifier) < run.index('if [[ "$MODE" == "build" ]]; then')
 
 
+def test_verifier_accepts_framework_runtime_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_verifier()
+    archive = tmp_path / "hol-guard"
+    runtime = "Python.framework/Versions/3.12/Python"
+    _fake_archive(
+        archive,
+        declared_runtime="Python",
+        entries=[
+            ("Python", runtime.encode() + b"\0", "n"),
+            (runtime, b"\xcf\xfa\xed\xfe-runtime", "b"),
+            ("helper.dylib", b"\xcf\xfa\xed\xfe-helper", "b"),
+        ],
+    )
+    monkeypatch.setattr(module, "_team_id", lambda _path: "TEAM123")
+
+    module.verify(archive, "TEAM123")
+
+
+def test_verifier_rejects_framework_runtime_symlink_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_verifier()
+    archive = tmp_path / "hol-guard"
+    _fake_archive(
+        archive,
+        declared_runtime="Python",
+        entries=[
+            ("Python", b"../outside/Python\0", "n"),
+            ("helper.dylib", b"\xcf\xfa\xed\xfe-helper", "b"),
+        ],
+    )
+    monkeypatch.setattr(module, "_team_id", lambda _path: "TEAM123")
+
+    with pytest.raises(ValueError, match="escapes the archive root"):
+        module.verify(archive, "TEAM123")
+
+
+def test_verifier_rejects_framework_runtime_symlink_to_non_binary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_verifier()
+    archive = tmp_path / "hol-guard"
+    runtime = "Python.framework/Versions/3.12/Python"
+    _fake_archive(
+        archive,
+        declared_runtime="Python",
+        entries=[
+            ("Python", runtime.encode() + b"\0", "n"),
+            (runtime, b"not-a-binary", "x"),
+        ],
+    )
+    monkeypatch.setattr(module, "_team_id", lambda _path: "TEAM123")
+
+    with pytest.raises(ValueError, match="resolves to unsupported TOC type 'x'"):
+        module.verify(archive, "TEAM123")
+
+
 def test_verifier_rejects_missing_cookie_declared_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -104,9 +171,29 @@ def test_verifier_rejects_missing_cookie_declared_runtime(
     _fake_archive(
         archive,
         declared_runtime="Python",
-        entries=[("python_helper", b"\xcf\xfa\xed\xfe")],
+        entries=[("python_helper", b"\xcf\xfa\xed\xfe", "b")],
     )
     monkeypatch.setattr(module, "_team_id", lambda _path: "TEAM123")
 
-    with pytest.raises(ValueError, match="Cookie-declared Python runtime 'Python'.*found 0"):
+    with pytest.raises(ValueError, match="Cookie-declared Python runtime target 'Python'.*found 0"):
+        module.verify(archive, "TEAM123")
+
+
+def test_verifier_rejects_parent_traversal_cookie_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_verifier()
+    archive = tmp_path / "hol-guard"
+    _fake_archive(
+        archive,
+        declared_runtime="../Python",
+        entries=[
+            ("../Python", b"runtime\0", "n"),
+            ("../runtime", b"\xcf\xfa\xed\xfe-runtime", "b"),
+        ],
+    )
+    monkeypatch.setattr(module, "_team_id", lambda _path: "TEAM123")
+
+    with pytest.raises(ValueError, match="archive-relative"):
         module.verify(archive, "TEAM123")
