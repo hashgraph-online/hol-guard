@@ -359,7 +359,7 @@ class ExtensionControlApiService:
             for control in (() if current_local is None else current_local.controls)
         }
         proposed_local = next((layer for layer in layers if layer.kind is ControlLayerKind.LOCAL_ADMIN), None)
-        for control in (() if proposed_local is None else proposed_local.controls):
+        for control in () if proposed_local is None else proposed_local.controls:
             target_id = control.target.target_id
             immutable = False
             error_code = "immutable_permission"
