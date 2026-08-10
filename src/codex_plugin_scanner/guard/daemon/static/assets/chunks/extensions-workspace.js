@@ -732,10 +732,91 @@ function ExtensionControlCenterDetail$1(props) {
     selectedRule ? /* @__PURE__ */ jsxRuntimeExports.jsx(RuleInspector, { extension: props.extension, rule: selectedRule, onClose: () => props.onUrlState({ ...props.urlState, ruleId: null }), onTest: () => props.onUrlState({ ...props.urlState, tab: "test-lab", ruleId: selectedRule.rule_id }) }) : null
   ] });
 }
+const DIGEST$2 = /^[a-f0-9]{64}$/;
 const EXTENSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const MAX_EXTENSIONS = 512;
+const MAX_PERMISSIONS = 4096;
+const MAX_REASONS = 64;
+function record$2(value, label) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function text(value, label, max = 256) {
+  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function integer$2(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function boolean(value, label) {
+  if (typeof value !== "boolean") throw new Error(`Invalid ${label}`);
+  return value;
+}
+function enumValue$1(value, label, values) {
+  const candidate = text(value, label, 64);
+  if (!values.includes(candidate)) throw new Error(`Invalid ${label}`);
+  return candidate;
+}
+function id$1(value, label, pattern) {
+  const candidate = text(value, label).toLowerCase();
+  if (!pattern.test(candidate)) throw new Error(`Invalid ${label}`);
+  return candidate;
+}
+function reasons(value, label) {
+  if (!Array.isArray(value) || value.length > MAX_REASONS) throw new Error(`Invalid ${label}`);
+  return value.map((item, index) => text(item, `${label}[${index}]`, 128));
+}
+function extensionItem(value, label) {
+  const item = record$2(value, label);
+  return {
+    extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
+    effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
+    local_state: enumValue$1(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
+    managed_state: enumValue$1(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
+    required: boolean(item.required, `${label}.required`),
+    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
+  };
+}
+function permissionItem(value, label) {
+  const item = record$2(value, label);
+  return {
+    permission_id: id$1(item.permission_id, `${label}.permission_id`, PERMISSION_ID$1),
+    extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
+    effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
+    local_state: enumValue$1(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
+    managed_state: enumValue$1(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
+    configurable: boolean(item.configurable, `${label}.configurable`),
+    fixed_reason: item.fixed_reason === null ? null : text(item.fixed_reason, `${label}.fixed_reason`, 2048),
+    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
+  };
+}
+function normalizeEffectiveExtensionControlProjection(value) {
+  const root = record$2(value, "extension projection");
+  const schemaVersion = text(root.schema_version, "projection.schema_version", 128);
+  if (schemaVersion !== "guard.daemon.extension-control-projection.v1") throw new Error("Invalid extension projection schema");
+  const digest2 = text(root.catalog_digest, "projection.catalog_digest", 64);
+  if (!DIGEST$2.test(digest2)) throw new Error("Invalid projection.catalog_digest");
+  if (!Array.isArray(root.extensions) || root.extensions.length > MAX_EXTENSIONS) throw new Error("Invalid projection.extensions");
+  if (!Array.isArray(root.permissions) || root.permissions.length > MAX_PERMISSIONS) throw new Error("Invalid projection.permissions");
+  const extensions = root.extensions.map((item, index) => extensionItem(item, `projection.extensions[${index}]`));
+  const permissions = root.permissions.map((item, index) => permissionItem(item, `projection.permissions[${index}]`));
+  if (new Set(extensions.map((item) => item.extension_id)).size !== extensions.length) throw new Error("Duplicate projection extension ID");
+  if (new Set(permissions.map((item) => item.permission_id)).size !== permissions.length) throw new Error("Duplicate projection permission ID");
+  return {
+    schema_version: "guard.daemon.extension-control-projection.v1",
+    revision: integer$2(root.revision, "projection.revision"),
+    catalog_digest: digest2,
+    health: enumValue$1(root.health, "projection.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
+    extensions,
+    permissions
+  };
+}
+const EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const PERMISSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const DIGEST$2 = /^[a-f0-9]{64}$/;
+const DIGEST$1 = /^[a-f0-9]{64}$/;
 const VERSION = /^[1-9][0-9]*\.[0-9]+\.[0-9]+$/;
 const EXTENSION_CLIENT_LIMITS = Object.freeze({
   extensions: 256,
@@ -752,7 +833,7 @@ class ExtensionControlProtocolError extends Error {
     super(`Invalid extension-control response: ${message}`);
   }
 }
-function record$2(value, label) {
+function record$1(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ExtensionControlProtocolError(`${label} must be an object`);
   }
@@ -777,25 +858,25 @@ function bool$1(value, label) {
   if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
   return value;
 }
-function integer$2(value, label, min = 0) {
+function integer$1(value, label, min = 0) {
   if (!Number.isSafeInteger(value) || value < min) {
     throw new ExtensionControlProtocolError(`${label} must be an integer >= ${min}`);
   }
   return value;
 }
-function enumValue$1(value, label, values) {
+function enumValue(value, label, values) {
   const candidate = string$1(value, label);
   if (!values.includes(candidate)) throw new ExtensionControlProtocolError(`${label} has unsupported value`);
   return candidate;
 }
-function id$1(value, label, pattern) {
+function id(value, label, pattern) {
   const candidate = string$1(value, label).trim().toLowerCase();
   if (!pattern.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not canonical`);
   return candidate;
 }
 function digest$1(value, label) {
   const candidate = string$1(value, label).trim().toLowerCase();
-  if (!DIGEST$2.test(candidate)) throw new ExtensionControlProtocolError(`${label} must be a SHA-256 digest`);
+  if (!DIGEST$1.test(candidate)) throw new ExtensionControlProtocolError(`${label} must be a SHA-256 digest`);
   return candidate;
 }
 function version(value, label) {
@@ -807,12 +888,12 @@ function stringList(value, label, max = EXTENSION_CLIENT_LIMITS.relationshipIds)
   return array(value, label, max).map((item, index) => string$1(item, `${label}[${index}]`));
 }
 function idList$1(value, label, pattern, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
-  const items = array(value, label, max).map((item, index) => id$1(item, `${label}[${index}]`, pattern));
+  const items = array(value, label, max).map((item, index) => id(item, `${label}[${index}]`, pattern));
   if (new Set(items).size !== items.length) throw new ExtensionControlProtocolError(`${label} contains duplicates`);
   return items;
 }
 function safeVariant(value, label) {
-  const item = record$2(value, label);
+  const item = record$1(value, label);
   return {
     variant_id: string$1(item.variant_id, `${label}.variant_id`),
     title: string$1(item.title, `${label}.title`),
@@ -820,8 +901,8 @@ function safeVariant(value, label) {
   };
 }
 function rule(value, extensionId, label) {
-  const item = record$2(value, label);
-  const ruleId = id$1(item.rule_id, `${label}.rule_id`, RULE_ID);
+  const item = record$1(value, label);
+  const ruleId = id(item.rule_id, `${label}.rule_id`, RULE_ID);
   if (!ruleId.startsWith(`${extensionId}.`)) throw new ExtensionControlProtocolError(`${label}.rule_id belongs to another extension`);
   const rawVersion = item.rule_version;
   if (!(typeof rawVersion === "string" || Number.isSafeInteger(rawVersion))) {
@@ -832,42 +913,42 @@ function rule(value, extensionId, label) {
     rule_version: rawVersion,
     title: string$1(item.title, `${label}.title`),
     description: string$1(item.description, `${label}.description`),
-    severity: enumValue$1(item.severity, `${label}.severity`, ["low", "medium", "high", "critical"]),
+    severity: enumValue(item.severity, `${label}.severity`, ["low", "medium", "high", "critical"]),
     risk_classes: stringList(item.risk_classes, `${label}.risk_classes`),
     action_classes: stringList(item.action_classes, `${label}.action_classes`),
     safer_alternatives: stringList(item.safer_alternatives, `${label}.safer_alternatives`),
-    default_mode: enumValue$1(item.default_mode, `${label}.default_mode`, ["required", "enforce", "review", "monitor", "disabled"]),
+    default_mode: enumValue(item.default_mode, `${label}.default_mode`, ["required", "enforce", "review", "monitor", "disabled"]),
     matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`),
     safe_variants: array(item.safe_variants, `${label}.safe_variants`, EXTENSION_CLIENT_LIMITS.relationshipIds).map((entry, index) => safeVariant(entry, `${label}.safe_variants[${index}]`)),
     compatibility_fallback: bool$1(item.compatibility_fallback, `${label}.compatibility_fallback`)
   };
 }
 function permission(value, extensionId, label) {
-  const item = record$2(value, label);
-  const permissionId = id$1(item.permission_id, `${label}.permission_id`, PERMISSION_ID$1);
-  const owner = id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1);
+  const item = record$1(value, label);
+  const permissionId = id(item.permission_id, `${label}.permission_id`, PERMISSION_ID);
+  const owner = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
   if (owner !== extensionId || !permissionId.startsWith(`${extensionId}.permission.`)) {
     throw new ExtensionControlProtocolError(`${label} belongs to another extension`);
   }
-  const replacement = item.replacement_permission_id === null ? null : id$1(item.replacement_permission_id, `${label}.replacement_permission_id`, PERMISSION_ID$1);
+  const replacement = item.replacement_permission_id === null ? null : id(item.replacement_permission_id, `${label}.replacement_permission_id`, PERMISSION_ID);
   return {
     permission_id: permissionId,
-    schema_version: integer$2(item.schema_version, `${label}.schema_version`, 1),
+    schema_version: integer$1(item.schema_version, `${label}.schema_version`, 1),
     extension_id: owner,
     implementation_version: version(item.implementation_version, `${label}.implementation_version`),
     label: string$1(item.label, `${label}.label`),
     description: string$1(item.description, `${label}.description`),
-    risk_tier: enumValue$1(item.risk_tier, `${label}.risk_tier`, ["low", "medium", "high", "critical"]),
-    baseline_floor: enumValue$1(item.baseline_floor, `${label}.baseline_floor`, ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]),
+    risk_tier: enumValue(item.risk_tier, `${label}.risk_tier`, ["low", "medium", "high", "critical"]),
+    baseline_floor: enumValue(item.baseline_floor, `${label}.baseline_floor`, ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]),
     default_enabled: bool$1(item.default_enabled, `${label}.default_enabled`),
     configurable: bool$1(item.configurable, `${label}.configurable`),
     fixed_reason: optionalString(item.fixed_reason, `${label}.fixed_reason`),
     typed_capabilities: stringList(item.typed_capabilities, `${label}.typed_capabilities`),
     action_classes: stringList(item.action_classes, `${label}.action_classes`),
     rule_ids: idList$1(item.rule_ids, `${label}.rule_ids`, RULE_ID),
-    dependencies: idList$1(item.dependencies, `${label}.dependencies`, PERMISSION_ID$1),
-    conflicts: idList$1(item.conflicts, `${label}.conflicts`, PERMISSION_ID$1),
-    implied_permissions: idList$1(item.implied_permissions, `${label}.implied_permissions`, PERMISSION_ID$1),
+    dependencies: idList$1(item.dependencies, `${label}.dependencies`, PERMISSION_ID),
+    conflicts: idList$1(item.conflicts, `${label}.conflicts`, PERMISSION_ID),
+    implied_permissions: idList$1(item.implied_permissions, `${label}.implied_permissions`, PERMISSION_ID),
     introduced_version: version(item.introduced_version, `${label}.introduced_version`),
     deprecated: bool$1(item.deprecated, `${label}.deprecated`),
     replacement_permission_id: replacement,
@@ -875,8 +956,8 @@ function permission(value, extensionId, label) {
   };
 }
 function extension(value, label) {
-  const item = record$2(value, label);
-  const extensionId = id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1);
+  const item = record$1(value, label);
+  const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
   const rules = array(item.rules, `${label}.rules`, EXTENSION_CLIENT_LIMITS.rulesPerExtension).map((entry, index) => rule(entry, extensionId, `${label}.rules[${index}]`));
   const permissions = array(item.permissions, `${label}.permissions`, EXTENSION_CLIENT_LIMITS.permissionsPerExtension).map((entry, index) => permission(entry, extensionId, `${label}.permissions[${index}]`));
   const ruleIds = rules.map((entry) => entry.rule_id);
@@ -889,23 +970,23 @@ function extension(value, label) {
       if (!knownRules.has(ruleId)) throw new ExtensionControlProtocolError(`${label} permission references unknown rule ${ruleId}`);
     }
   }
-  const ruleCount = integer$2(item.rule_count, `${label}.rule_count`);
-  const permissionCount = integer$2(item.permission_count, `${label}.permission_count`);
+  const ruleCount = integer$1(item.rule_count, `${label}.rule_count`);
+  const permissionCount = integer$1(item.permission_count, `${label}.permission_count`);
   if (ruleCount !== rules.length || permissionCount !== permissions.length) {
     throw new ExtensionControlProtocolError(`${label} count metadata does not match payload`);
   }
   return {
-    schema_version: integer$2(item.schema_version, `${label}.schema_version`, 1),
+    schema_version: integer$1(item.schema_version, `${label}.schema_version`, 1),
     extension_id: extensionId,
     name: string$1(item.name, `${label}.name`),
     description: string$1(item.description, `${label}.description`),
     enabled: bool$1(item.enabled, `${label}.enabled`),
     required: bool$1(item.required, `${label}.required`),
-    source: enumValue$1(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
+    source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
     version: version(item.version, `${label}.version`),
-    aliases: idList$1(item.aliases, `${label}.aliases`, EXTENSION_ID$1),
-    dependencies: idList$1(item.dependencies, `${label}.dependencies`, EXTENSION_ID$1),
-    conflicts: idList$1(item.conflicts, `${label}.conflicts`, EXTENSION_ID$1),
+    aliases: idList$1(item.aliases, `${label}.aliases`, EXTENSION_ID),
+    dependencies: idList$1(item.dependencies, `${label}.dependencies`, EXTENSION_ID),
+    conflicts: idList$1(item.conflicts, `${label}.conflicts`, EXTENSION_ID),
     delegated_protection: optionalString(item.delegated_protection, `${label}.delegated_protection`),
     ecosystem_ids: stringList(item.ecosystem_ids, `${label}.ecosystem_ids`),
     executables: stringList(item.executables, `${label}.executables`),
@@ -921,63 +1002,63 @@ function extension(value, label) {
   };
 }
 function controlLayer(value, label) {
-  const item = record$2(value, label);
+  const item = record$1(value, label);
   const controls = array(item.controls, `${label}.controls`, EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$2(entry, `${label}.controls[${index}]`);
-    const kind = enumValue$1(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
+    const raw = record$1(entry, `${label}.controls[${index}]`);
+    const kind = enumValue(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
     return {
       target_kind: kind,
-      target_id: id$1(raw.target_id, `${label}.controls[${index}].target_id`, kind === "extension" ? EXTENSION_ID$1 : PERMISSION_ID$1),
-      state: enumValue$1(raw.state, `${label}.controls[${index}].state`, ["enabled", "disabled"])
+      target_id: id(raw.target_id, `${label}.controls[${index}].target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID),
+      state: enumValue(raw.state, `${label}.controls[${index}].state`, ["enabled", "disabled"])
     };
   });
   const keys = controls.map((control) => `${control.target_kind}:${control.target_id}`);
   if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError(`${label}.controls contains duplicate targets`);
   return {
     schema_version: string$1(item.schema_version, `${label}.schema_version`),
-    kind: enumValue$1(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
+    kind: enumValue(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
     catalog_digest: digest$1(item.catalog_digest, `${label}.catalog_digest`),
     global_lockdown: bool$1(item.global_lockdown, `${label}.global_lockdown`),
     controls
   };
 }
 function normalizeExtensionCatalog(value) {
-  const root = record$2(value, "catalog");
+  const root = record$1(value, "catalog");
   const extensions = array(root.extensions, "catalog.extensions", EXTENSION_CLIENT_LIMITS.extensions).map((entry, index) => extension(entry, `catalog.extensions[${index}]`));
   const ids = extensions.map((entry) => entry.extension_id);
   if (new Set(ids).size !== ids.length) throw new ExtensionControlProtocolError("catalog.extensions contains duplicate extension IDs");
-  const limits = root.limits === void 0 ? void 0 : record$2(root.limits, "catalog.limits");
+  const limits = root.limits === void 0 ? void 0 : record$1(root.limits, "catalog.limits");
   return {
     schema_version: string$1(root.schema_version, "catalog.schema_version"),
     control_schema_version: root.control_schema_version === void 0 ? void 0 : string$1(root.control_schema_version, "catalog.control_schema_version"),
     catalog_digest: digest$1(root.catalog_digest, "catalog.catalog_digest"),
     extensions,
     limits: limits === void 0 ? void 0 : {
-      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer$2(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
-      max_controls: limits.max_controls === void 0 ? void 0 : integer$2(limits.max_controls, "catalog.limits.max_controls", 1),
-      max_observations: limits.max_observations === void 0 ? void 0 : integer$2(limits.max_observations, "catalog.limits.max_observations", 1)
+      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer$1(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
+      max_controls: limits.max_controls === void 0 ? void 0 : integer$1(limits.max_controls, "catalog.limits.max_controls", 1),
+      max_observations: limits.max_observations === void 0 ? void 0 : integer$1(limits.max_observations, "catalog.limits.max_observations", 1)
     }
   };
 }
 function normalizeEffectiveExtensionControls(value) {
-  const root = record$2(value, "effective");
+  const root = record$1(value, "effective");
   const controls = array(root.controls, "effective.controls", EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$2(entry, `effective.controls[${index}]`);
-    const target2 = record$2(raw.target, `effective.controls[${index}].target`);
-    const kind = enumValue$1(target2.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
+    const raw = record$1(entry, `effective.controls[${index}]`);
+    const target2 = record$1(raw.target, `effective.controls[${index}].target`);
+    const kind = enumValue(target2.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
     return {
       target: {
         kind,
-        target_id: id$1(target2.target_id, `effective.controls[${index}].target.target_id`, kind === "extension" ? EXTENSION_ID$1 : PERMISSION_ID$1)
+        target_id: id(target2.target_id, `effective.controls[${index}].target.target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID)
       },
-      state: enumValue$1(raw.state, `effective.controls[${index}].state`, ["enabled", "disabled"])
+      state: enumValue(raw.state, `effective.controls[${index}].state`, ["enabled", "disabled"])
     };
   });
   const keys = controls.map((control) => `${control.target.kind}:${control.target.target_id}`);
   if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
   const layers = array(root.layers, "effective.layers", EXTENSION_CLIENT_LIMITS.layers).map((entry, index) => controlLayer(entry, `effective.layers[${index}]`));
   const failures = array(root.failures, "effective.failures", EXTENSION_CLIENT_LIMITS.failures).map((entry, index) => {
-    const raw = record$2(entry, `effective.failures[${index}]`);
+    const raw = record$1(entry, `effective.failures[${index}]`);
     return {
       code: string$1(raw.code, `effective.failures[${index}].code`),
       detail: raw.detail === void 0 ? void 0 : string$1(raw.detail, `effective.failures[${index}].detail`, true),
@@ -986,22 +1067,23 @@ function normalizeEffectiveExtensionControls(value) {
   });
   return {
     schema_version: string$1(root.schema_version, "effective.schema_version"),
-    health: enumValue$1(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
-    revision: integer$2(root.revision, "effective.revision"),
+    health: enumValue(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
+    revision: integer$1(root.revision, "effective.revision"),
     catalog_digest: digest$1(root.catalog_digest, "effective.catalog_digest"),
     global_lockdown: bool$1(root.global_lockdown, "effective.global_lockdown"),
     controls,
     layers,
-    failures
+    failures,
+    projection: root.projection === void 0 ? void 0 : normalizeEffectiveExtensionControlProjection(root.projection)
   };
 }
-const DIGEST$1 = /^[a-f0-9]{64}$/;
+const DIGEST = /^[a-f0-9]{64}$/;
 const TARGET_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const MAX_CHANGED_TARGETS = 4096;
 const MAX_AFFECTED_IDS = 4096;
 const MAX_WARNINGS = 64;
 const MAX_TEXT = 8192;
-function record$1(value, label) {
+function record(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid extension-control ${label}: expected object`);
   return value;
 }
@@ -1009,7 +1091,7 @@ function string(value, label, max = MAX_TEXT) {
   if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid extension-control ${label}`);
   return value;
 }
-function integer$1(value, label) {
+function integer(value, label) {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid extension-control ${label}`);
   return value;
 }
@@ -1019,7 +1101,7 @@ function bool(value, label) {
 }
 function digest(value, label) {
   const candidate = string(value, label, 64);
-  if (!DIGEST$1.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
+  if (!DIGEST.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
   return candidate;
 }
 function targetId(value, label) {
@@ -1046,17 +1128,17 @@ function optionalStringList(value, label) {
   return items;
 }
 function warning(value, label) {
-  const item = record$1(value, label);
+  const item = record(value, label);
   return {
     code: string(item.code, `${label}.code`, 128),
     message: string(item.message, `${label}.message`, 1024),
     ...item.target_id === void 0 ? {} : { target_id: targetId(item.target_id, `${label}.target_id`) },
-    ...item.count === void 0 ? {} : { count: integer$1(item.count, `${label}.count`) }
+    ...item.count === void 0 ? {} : { count: integer(item.count, `${label}.count`) }
   };
 }
 function target(value, label) {
-  const item = record$1(value, label);
-  const rawTarget = record$1(item.target, `${label}.target`);
+  const item = record(value, label);
+  const rawTarget = record(item.target, `${label}.target`);
   const kind = string(rawTarget.kind, `${label}.target.kind`, 32);
   if (kind !== "extension" && kind !== "permission") throw new Error(`Invalid extension-control ${label}.target.kind`);
   const beforeExplicit = string(item.before_explicit, `${label}.before_explicit`, 32);
@@ -1092,12 +1174,12 @@ function target(value, label) {
   };
 }
 function normalizeExtensionSemanticPreview(value) {
-  const root = record$1(value, "semantic preview");
+  const root = record(value, "semantic preview");
   if (string(root.schema_version, "semantic_preview.schema_version", 128) !== "guard.daemon.extension-control-semantic-preview.v1") throw new Error("Invalid extension-control semantic preview schema");
-  const lockdown = record$1(root.global_lockdown, "semantic_preview.global_lockdown");
-  const summary = record$1(root.summary, "semantic_preview.summary");
+  const lockdown = record(root.global_lockdown, "semantic_preview.global_lockdown");
+  const summary = record(root.summary, "semantic_preview.summary");
   const changedTargets = boundedArray(root.changed_targets, "semantic_preview.changed_targets", MAX_CHANGED_TARGETS).map((entry, index) => target(entry, `semantic_preview.changed_targets[${index}]`));
-  const changedTargetCount = integer$1(root.changed_target_count, "semantic_preview.changed_target_count");
+  const changedTargetCount = integer(root.changed_target_count, "semantic_preview.changed_target_count");
   if (changedTargetCount !== changedTargets.length) throw new Error("Invalid extension-control semantic preview target count");
   return {
     schema_version: "guard.daemon.extension-control-semantic-preview.v1",
@@ -1107,120 +1189,39 @@ function normalizeExtensionSemanticPreview(value) {
       changed: bool(lockdown.changed, "semantic_preview.global_lockdown.changed")
     },
     changed_target_count: changedTargetCount,
-    affected_permission_count: integer$1(root.affected_permission_count, "semantic_preview.affected_permission_count"),
-    affected_rule_count: integer$1(root.affected_rule_count, "semantic_preview.affected_rule_count"),
+    affected_permission_count: integer(root.affected_permission_count, "semantic_preview.affected_permission_count"),
+    affected_rule_count: integer(root.affected_rule_count, "semantic_preview.affected_rule_count"),
     changed_targets: changedTargets,
     ...root.approval_required === void 0 ? {} : { approval_required: bool(root.approval_required, "semantic_preview.approval_required") },
     summary: {
-      newly_blocked_permissions: integer$1(summary.newly_blocked_permissions, "semantic_preview.summary.newly_blocked_permissions"),
-      newly_allowed_permissions: integer$1(summary.newly_allowed_permissions, "semantic_preview.summary.newly_allowed_permissions"),
-      effective_change_count: integer$1(summary.effective_change_count, "semantic_preview.summary.effective_change_count")
+      newly_blocked_permissions: integer(summary.newly_blocked_permissions, "semantic_preview.summary.newly_blocked_permissions"),
+      newly_allowed_permissions: integer(summary.newly_allowed_permissions, "semantic_preview.summary.newly_allowed_permissions"),
+      effective_change_count: integer(summary.effective_change_count, "semantic_preview.summary.effective_change_count")
     }
   };
 }
 function normalizeExtensionMutationPreview(value) {
-  const root = record$1(value, "mutation preview");
+  const root = record(value, "mutation preview");
   return {
     schema_version: string(root.schema_version, "preview.schema_version", 128),
-    previous_revision: integer$1(root.previous_revision, "preview.previous_revision"),
-    next_revision: integer$1(root.next_revision, "preview.next_revision"),
+    previous_revision: integer(root.previous_revision, "preview.previous_revision"),
+    next_revision: integer(root.next_revision, "preview.next_revision"),
     catalog_digest: digest(root.catalog_digest, "preview.catalog_digest"),
     canonical_diff_digest: digest(root.canonical_diff_digest, "preview.canonical_diff_digest"),
     global_lockdown: bool(root.global_lockdown, "preview.global_lockdown"),
-    controls: integer$1(root.controls, "preview.controls"),
+    controls: integer(root.controls, "preview.controls"),
     semantic_preview: normalizeExtensionSemanticPreview(root.semantic_preview),
     ...root.proof_id === void 0 ? {} : { proof_id: string(root.proof_id, "preview.proof_id", 256) }
   };
 }
 function normalizeExtensionMutationApply(value) {
-  const root = record$1(value, "mutation apply");
+  const root = record(value, "mutation apply");
   if (string(root.status, "apply.status", 32) !== "applied") throw new Error("Invalid extension-control apply status");
   return {
     schema_version: string(root.schema_version, "apply.schema_version", 128),
     status: "applied",
-    revision: integer$1(root.revision, "apply.revision"),
+    revision: integer(root.revision, "apply.revision"),
     catalog_digest: digest(root.catalog_digest, "apply.catalog_digest")
-  };
-}
-const DIGEST = /^[a-f0-9]{64}$/;
-const EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const PERMISSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const MAX_EXTENSIONS = 512;
-const MAX_PERMISSIONS = 4096;
-const MAX_REASONS = 64;
-function record(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function text(value, label, max = 256) {
-  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function integer(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function boolean(value, label) {
-  if (typeof value !== "boolean") throw new Error(`Invalid ${label}`);
-  return value;
-}
-function enumValue(value, label, values) {
-  const candidate = text(value, label, 64);
-  if (!values.includes(candidate)) throw new Error(`Invalid ${label}`);
-  return candidate;
-}
-function id(value, label, pattern) {
-  const candidate = text(value, label).toLowerCase();
-  if (!pattern.test(candidate)) throw new Error(`Invalid ${label}`);
-  return candidate;
-}
-function reasons(value, label) {
-  if (!Array.isArray(value) || value.length > MAX_REASONS) throw new Error(`Invalid ${label}`);
-  return value.map((item, index) => text(item, `${label}[${index}]`, 128));
-}
-function extensionItem(value, label) {
-  const item = record(value, label);
-  return {
-    extension_id: id(item.extension_id, `${label}.extension_id`, EXTENSION_ID),
-    effective_state: enumValue(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
-    local_state: enumValue(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
-    managed_state: enumValue(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
-    required: boolean(item.required, `${label}.required`),
-    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
-  };
-}
-function permissionItem(value, label) {
-  const item = record(value, label);
-  return {
-    permission_id: id(item.permission_id, `${label}.permission_id`, PERMISSION_ID),
-    extension_id: id(item.extension_id, `${label}.extension_id`, EXTENSION_ID),
-    effective_state: enumValue(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
-    local_state: enumValue(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
-    managed_state: enumValue(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
-    configurable: boolean(item.configurable, `${label}.configurable`),
-    fixed_reason: item.fixed_reason === null ? null : text(item.fixed_reason, `${label}.fixed_reason`, 2048),
-    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
-  };
-}
-function normalizeEffectiveExtensionControlProjection(value) {
-  const root = record(value, "extension projection");
-  const schemaVersion = text(root.schema_version, "projection.schema_version", 128);
-  if (schemaVersion !== "guard.daemon.extension-control-projection.v1") throw new Error("Invalid extension projection schema");
-  const digest2 = text(root.catalog_digest, "projection.catalog_digest", 64);
-  if (!DIGEST.test(digest2)) throw new Error("Invalid projection.catalog_digest");
-  if (!Array.isArray(root.extensions) || root.extensions.length > MAX_EXTENSIONS) throw new Error("Invalid projection.extensions");
-  if (!Array.isArray(root.permissions) || root.permissions.length > MAX_PERMISSIONS) throw new Error("Invalid projection.permissions");
-  const extensions = root.extensions.map((item, index) => extensionItem(item, `projection.extensions[${index}]`));
-  const permissions = root.permissions.map((item, index) => permissionItem(item, `projection.permissions[${index}]`));
-  if (new Set(extensions.map((item) => item.extension_id)).size !== extensions.length) throw new Error("Duplicate projection extension ID");
-  if (new Set(permissions.map((item) => item.permission_id)).size !== permissions.length) throw new Error("Duplicate projection permission ID");
-  return {
-    schema_version: "guard.daemon.extension-control-projection.v1",
-    revision: integer(root.revision, "projection.revision"),
-    catalog_digest: digest2,
-    health: enumValue(root.health, "projection.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
-    extensions,
-    permissions
   };
 }
 class ExtensionControlApiError extends Error {

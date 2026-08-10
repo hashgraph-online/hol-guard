@@ -10,8 +10,9 @@ const origin = requiredEnvironment("GUARD_INSTALLED_ORIGIN");
 const session = requiredEnvironment("GUARD_INSTALLED_DASHBOARD_SESSION");
 const policyPhase = process.env.GUARD_INSTALLED_POLICY_PHASE ?? "read-only";
 const approvalPassword = process.env.GUARD_INSTALLED_APPROVAL_PASSWORD ?? "";
-const permissionId = "command.git.permission.force-clean";
-const governedRuleId = "command.git.force-clean";
+const extensionId = "command.api-gateway";
+const permissionId = "command.api-gateway.permission.delete";
+const governedRuleId = "command.api-gateway.delete";
 
 async function installSession(page: import("@playwright/test").Page) {
   await page.addInitScript(({ daemon, token }) => {
@@ -29,7 +30,7 @@ async function expectSecretSafeUrl(page: import("@playwright/test").Page) {
 
 async function openPolicy(page: import("@playwright/test").Page) {
   await installSession(page);
-  await page.goto("/extensions/command.git?tab=policy");
+  await page.goto(`/extensions/${extensionId}?tab=policy`);
   await expectSecretSafeUrl(page);
   await expect(page.getByTestId("extension-control-center-detail")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Permission controls" })).toBeVisible();
@@ -170,7 +171,7 @@ test("installed dashboard previews and proof-applies a permission block", async 
   await expect(row).toBeVisible();
   await expect(row.getByRole("radio", { name: "Block" })).toBeEnabled();
   await row.getByRole("radio", { name: "Block" }).click();
-  await expect(page.getByText("1 staged")).toBeVisible();
+  await expect(page.getByText("1 staged", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Review 1 change" }).click();
   const review = page.getByRole("dialog", { name: "Review 1 permission change" });
   await expect(review.getByText("Server semantic preview")).toBeVisible();

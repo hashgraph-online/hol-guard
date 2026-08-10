@@ -18,7 +18,7 @@ import threading
 from pathlib import Path
 
 from codex_plugin_scanner import __version__
-from codex_plugin_scanner.guard.approval_gate import update_settings
+from codex_plugin_scanner.guard.approval_gate import public_config, update_settings
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -73,15 +73,16 @@ def _prepare_test_authority(store: GuardStore, guard_home: Path, password_file: 
     if password is None:
         password = secrets.token_urlsafe(36)
         _write_secret(password_file, password)
-    update_settings(
-        guard_home,
-        {
-            "enabled": True,
-            "new_password": password,
-            "confirm_password": password,
-            "cooldown_seconds": 0,
-        },
-    )
+    if not public_config(guard_home).configured:
+        update_settings(
+            guard_home,
+            {
+                "enabled": True,
+                "new_password": password,
+                "confirm_password": password,
+                "cooldown_seconds": 0,
+            },
+        )
     catalog_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     view = store.read_extension_control_authority(catalog_digest=catalog_digest)
     if view.health is AuthorityHealth.UNENROLLED:

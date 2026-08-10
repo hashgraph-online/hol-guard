@@ -7,6 +7,7 @@ import type {
   ExtensionRule,
   ExtensionRuleSafeVariant,
 } from "./extension-controls-api";
+import { normalizeEffectiveExtensionControlProjection } from "./extension-control-projection-normalize";
 
 const EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const PERMISSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -292,5 +293,6 @@ export function normalizeEffectiveExtensionControls(value: unknown): EffectiveEx
     controls,
     layers,
     failures,
+    projection: root.projection === undefined ? undefined : normalizeEffectiveExtensionControlProjection(root.projection),
   };
 }

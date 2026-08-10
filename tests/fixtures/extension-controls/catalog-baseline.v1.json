@@ -17,7 +17,8 @@
     "global_lockdown",
     "controls",
     "layers",
-    "failures"
+    "failures",
+    "projection"
   ],
   "extension_count": 59,
   "extension_ids": [
@@ -178,7 +179,8 @@
     "catalog_digest",
     "canonical_diff_digest",
     "global_lockdown",
-    "controls"
+    "controls",
+    "semantic_preview"
   ],
   "rule_count": 84,
   "rule_ids": [

@@ -190,8 +190,8 @@ jobs:
           assert payload["control_blocked"] is True
           assert payload["minimum_action"] == "block"
           assert payload["command_executed"] is False
-          assert payload["permission_id"] == "command.git.permission.force-clean"
-          assert "command.git.force-clean" in payload["matched_rule_ids"]
+          assert payload["permission_id"] == "command.api-gateway.permission.delete"
+          assert "command.api-gateway.delete" in payload["matched_rule_ids"]
           PY
 
           ORIGIN=$(tr -d '\r\n' < "$READY_FILE")

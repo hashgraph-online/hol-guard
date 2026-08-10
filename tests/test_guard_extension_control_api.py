@@ -91,6 +91,13 @@ def test_catalog_and_effective_responses_are_bounded_public_dtos(tmp_path: Path)
         "max_controls": 4096,
         "max_observations": 2048,
     }
+    projection = cast(dict[str, object], effective.pop("projection"))
+    assert projection["schema_version"] == "guard.daemon.extension-control-projection.v1"
+    assert projection["revision"] == effective["revision"]
+    assert projection["catalog_digest"] == effective["catalog_digest"]
+    assert projection["health"] == effective["health"]
+    assert isinstance(projection["extensions"], list)
+    assert isinstance(projection["permissions"], list)
     assert effective == {
         "schema_version": "guard.daemon.extension-controls.v1",
         "health": "protected",

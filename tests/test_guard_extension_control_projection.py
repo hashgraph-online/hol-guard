@@ -5,7 +5,10 @@ from codex_plugin_scanner.guard.daemon.extension_control_projection import (
     build_effective_extension_control_projection,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -18,7 +21,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
 
-def _snapshot(*layers: ExtensionControlLayer, health: AuthorityHealth = AuthorityHealth.PROTECTED) -> ExtensionControlRuntimeSnapshot:
+def _snapshot(
+    *layers: ExtensionControlLayer, health: AuthorityHealth = AuthorityHealth.PROTECTED
+) -> ExtensionControlRuntimeSnapshot:
     return ExtensionControlRuntimeSnapshot.from_authority_view(
         ExtensionControlAuthorityView(
             health,

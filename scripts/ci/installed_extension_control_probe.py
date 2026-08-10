@@ -15,9 +15,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import Autho
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
 
-_PROBE_COMMAND = "git clean -fdx"
-_EXPECTED_PERMISSION = "command.git.permission.force-clean"
-_EXPECTED_RULE = "command.git.force-clean"
+_PROBE_COMMAND = "aws apigateway delete-rest-api --rest-api-id ci-proof"
+_EXPECTED_PERMISSION = "command.api-gateway.permission.delete"
+_EXPECTED_RULE = "command.api-gateway.delete"
 
 
 def main() -> None:

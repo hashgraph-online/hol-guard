@@ -106,6 +106,14 @@ function effective() {
       controls: [{ target_kind: "permission", target_id: "command.git.permission.reset-hard", state: "disabled" }],
     }],
     failures: [],
+    projection: {
+      schema_version: "guard.daemon.extension-control-projection.v1",
+      revision: 7,
+      catalog_digest: digest,
+      health: "protected",
+      extensions: [],
+      permissions: [],
+    },
     additive_future_field: "ignored",
   };
 }
@@ -115,6 +123,7 @@ assert.equal(normalizedCatalog.extensions[0]?.rules[0]?.rule_id, "command.git.re
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.safer_guidance[0], "Create a checkpoint first.");
 assert.deepEqual(normalizedCatalog.extensions[0]?.reference_urls, ["https://git-scm.com/docs"]);
 assert.equal(normalizeEffectiveExtensionControls(effective()).controls[0]?.state, "disabled");
+assert.equal(normalizeEffectiveExtensionControls(effective()).projection?.revision, 7);
 const acknowledged = effective();
 acknowledged.health = "degraded-acknowledged";
 assert.equal(normalizeEffectiveExtensionControls(acknowledged).health, "degraded-acknowledged");

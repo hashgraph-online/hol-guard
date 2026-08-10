@@ -10,7 +10,10 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     COMMAND_EXTENSION_SCHEMA_VERSION,
 )
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_contract import CONTROL_SCHEMA_VERSION
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
@@ -76,9 +79,7 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
 
     extensions = payload["extensions"]
     assert isinstance(extensions, list)
-    assert [item["extension_id"] for item in extensions] == sorted(
-        item["extension_id"] for item in extensions
-    )
+    assert [item["extension_id"] for item in extensions] == sorted(item["extension_id"] for item in extensions)
 
     canonical_bytes = json.dumps(
         extensions,
