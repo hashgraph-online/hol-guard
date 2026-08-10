@@ -7,7 +7,10 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -26,7 +29,9 @@ def _configurable_permission():
 
 
 def _fixed_permission():
-    return next(permission for permission in BUILT_IN_COMMAND_EXTENSION_REGISTRY.permissions if not permission.configurable)
+    return next(
+        permission for permission in BUILT_IN_COMMAND_EXTENSION_REGISTRY.permissions if not permission.configurable
+    )
 
 
 def _layer(*controls: ExtensionControl, kind: ControlLayerKind = ControlLayerKind.LOCAL_ADMIN) -> ExtensionControlLayer:
@@ -82,7 +87,9 @@ def _payload(layers: tuple[ExtensionControlLayer, ...]) -> dict[str, object]:
 
 def test_permission_preview_reports_effective_blast_radius_without_rewriting_baseline(tmp_path: Path) -> None:
     permission = _configurable_permission()
-    control = ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED)
+    control = ExtensionControl(
+        ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED
+    )
     preview = _service(tmp_path).preview(_payload((_layer(control),)))
 
     semantic = preview["semantic_preview"]
@@ -106,9 +113,13 @@ def test_permission_preview_reports_effective_blast_radius_without_rewriting_bas
 
 def test_preview_explains_when_managed_disable_dominates_local_allow(tmp_path: Path) -> None:
     permission = _configurable_permission()
-    managed_control = ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED)
+    managed_control = ExtensionControl(
+        ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED
+    )
     managed = _layer(managed_control, kind=ControlLayerKind.SIGNED_CLOUD)
-    local_allow = ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.ENABLED)
+    local_allow = ExtensionControl(
+        ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.ENABLED
+    )
     preview = _service(tmp_path, layers=(managed,)).preview(_payload((_layer(local_allow), managed)))
 
     target = preview["semantic_preview"]["changed_targets"][0]
@@ -140,14 +151,18 @@ def test_client_cannot_mutate_or_remove_signed_cloud_layer(tmp_path: Path) -> No
 
 def test_local_draft_cannot_create_fixed_permission_or_required_extension_controls(tmp_path: Path) -> None:
     fixed = _fixed_permission()
-    fixed_control = ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, fixed.permission_id), ControlState.DISABLED)
+    fixed_control = ExtensionControl(
+        ControlTarget(ControlTargetKind.PERMISSION, fixed.permission_id), ControlState.DISABLED
+    )
     service = _service(tmp_path)
     with pytest.raises(ExtensionControlApiError) as fixed_error:
         service.preview(_payload((_layer(fixed_control),)))
     assert (fixed_error.value.status, fixed_error.value.code) == (403, "immutable_permission")
 
     required = next(extension for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions if extension.required)
-    required_control = ExtensionControl(ControlTarget(ControlTargetKind.EXTENSION, required.extension_id), ControlState.DISABLED)
+    required_control = ExtensionControl(
+        ControlTarget(ControlTargetKind.EXTENSION, required.extension_id), ControlState.DISABLED
+    )
     with pytest.raises(ExtensionControlApiError) as extension_error:
         service.preview(_payload((_layer(required_control),)))
     assert (extension_error.value.status, extension_error.value.code) == (403, "immutable_extension")
@@ -172,7 +187,9 @@ def test_legacy_immutable_control_can_be_preserved_or_removed_but_not_changed(tm
 
 def test_target_level_event_projection_is_redacted_and_rule_aware(tmp_path: Path) -> None:
     permission = _configurable_permission()
-    layer = _layer(ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED))
+    layer = _layer(
+        ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED)
+    )
     service = _service(tmp_path)
     semantic = service.preview(_payload((layer,)))["semantic_preview"]
     targets = service._semantic_event_targets(semantic)
@@ -191,7 +208,9 @@ def test_target_level_event_projection_is_redacted_and_rule_aware(tmp_path: Path
 
 def test_semantic_preview_is_deterministic_and_bounded_json(tmp_path: Path) -> None:
     permission = _configurable_permission()
-    layer = _layer(ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED))
+    layer = _layer(
+        ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED)
+    )
     service = _service(tmp_path)
     first = service.preview(_payload((layer,)))["semantic_preview"]
     second = service.preview(_payload((layer,)))["semantic_preview"]
