@@ -24,8 +24,12 @@ export function ExtensionControlCenterDetail(props: {
   }, [policyDirty, props.onBack]);
 
   return <>
-    <div className={policyActive ? "[&_#extension-panel-policy]:hidden" : undefined}>
-      <ReadonlyExtensionControlCenterDetail {...props} onBack={guardedBack} />
+    <div>
+      <ReadonlyExtensionControlCenterDetail
+        {...props}
+        externalPolicyPanelId="extension-policy-editor"
+        onBack={guardedBack}
+      />
     </div>
     <div
       hidden={!policyActive}

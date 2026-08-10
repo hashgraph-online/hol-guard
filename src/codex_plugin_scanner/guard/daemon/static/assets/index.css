@@ -6818,10 +6818,6 @@
     }
   }
 
-  .\[\&_\#extension-panel-policy\]\:hidden #extension-panel-policy {
-    display: none;
-  }
-
   .\[\&_button\]\:h-11 button {
     height: calc(var(--spacing) * 11);
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiMiniArrowPath,
   HiMiniCheckCircle,
@@ -84,7 +84,19 @@ function DraftControl(props: {
     { value: "allow", label: "Allow", disabled: managed === "disabled" },
     { value: "block", label: "Block" },
   ];
-  return <div role="radiogroup" aria-label={`${props.permission.label} local policy`} className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">{choices.map((choice) => <button key={choice.value} type="button" role="radio" aria-checked={props.state === choice.value} disabled={props.disabled || choice.disabled} title={choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : undefined} onClick={() => props.onChange(choice.value)} className={`min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`}>{choice.label}</button>)}</div>;
+  const chooseAdjacent = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+    for (let offset = 1; offset <= choices.length; offset += 1) {
+      const next = (index + direction * offset + choices.length) % choices.length;
+      if (props.disabled || choices[next]?.disabled) continue;
+      props.onChange(choices[next]!.value);
+      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+      return;
+    }
+  };
+  return <div role="radiogroup" aria-label={`${props.permission.label} local policy`} className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">{choices.map((choice, index) => <button key={choice.value} type="button" role="radio" aria-checked={props.state === choice.value} tabIndex={props.state === choice.value ? 0 : -1} disabled={props.disabled || choice.disabled} title={choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : undefined} onKeyDown={(event) => chooseAdjacent(event, index)} onClick={() => props.onChange(choice.value)} className={`min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`}>{choice.label}</button>)}</div>;
 }
 
 function PermissionPolicyRow(props: {
@@ -136,10 +148,12 @@ export function ExtensionPolicyPanel(props: {
   const [stale, setStale] = useState(false);
   const [pendingRebase, setPendingRebase] = useState<PendingRebase | null>(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const draftGeneration = useRef(0);
+  const { onDirtyChange, onRefresh } = props;
   const dirty = useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
   const changeCount = useMemo(() => draftChangeCount(baseEffective, policyExtension, draftLayers), [baseEffective, draftLayers, policyExtension]);
 
-  useEffect(() => { props.onDirtyChange?.(dirty); }, [dirty, props]);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirty) return;
@@ -150,6 +164,7 @@ export function ExtensionPolicyPanel(props: {
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
   useEffect(() => {
+    draftGeneration.current += 1;
     setBaseEffective(props.effective);
     setPolicyExtension(props.extension);
     setDraftLayers(cloneLayers(props.effective));
@@ -158,6 +173,7 @@ export function ExtensionPolicyPanel(props: {
   }, [props.effective.revision, props.effective.catalog_digest, props.extension.extension_id]);
 
   const resetDraft = useCallback(() => {
+    draftGeneration.current += 1;
     setDraftLayers(cloneLayers(baseEffective));
     setIdentity(newExtensionPolicyDraftIdentity());
     setPreview(null); setReviewOpen(false); setError(null); setStale(false); setPendingRebase(null);
@@ -165,6 +181,7 @@ export function ExtensionPolicyPanel(props: {
 
   const setPermission = useCallback((permission: ExtensionPermission, state: PermissionDraftState) => {
     if (!permission.configurable) return;
+    draftGeneration.current += 1;
     setDraftLayers((current) => setLocalPermissionDraftState(current, baseEffective.catalog_digest, permission.permission_id, state));
     setPreview(null); setReviewOpen(false); setError(null); setStale(false); setPendingRebase(null);
   }, [baseEffective.catalog_digest]);
@@ -182,9 +199,11 @@ export function ExtensionPolicyPanel(props: {
 
   const runPreview = useCallback(async () => {
     if (!dirty) return;
+    const generation = draftGeneration.current;
     setPreviewBusy(true); setError(null); setStale(false);
     try {
       const next = await previewExtensionMutation(mutation());
+      if (generation !== draftGeneration.current) return;
       setPreview(next);
       setReviewOpen(true);
     } catch (caught) { handleApiError(caught, "Guard could not preview this draft."); }
@@ -216,19 +235,29 @@ export function ExtensionPolicyPanel(props: {
       setError(null);
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
-      await props.onRefresh();
+      try {
+        await onRefresh();
+      } catch {
+        setError("The policy was applied, but Guard could not refresh the latest state. Refresh this page to confirm the committed policy.");
+      }
     } catch (caught) { handleApiError(caught, "Guard could not apply this draft."); }
     finally { setApplyBusy(false); }
-  }, [baseEffective.revision, dirty, handleApiError, mutation, preview, props, stale]);
+  }, [baseEffective.revision, dirty, handleApiError, mutation, onRefresh, preview, stale]);
 
   const rebaseDraft = useCallback(async () => {
+    const generation = draftGeneration.current;
     setPreviewBusy(true); setError(null);
     try {
       const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      const latestExtension = latestCatalog.extensions.find((item) => item.extension_id === policyExtension.extension_id)
-        ?? latestCatalog.extensions.find((item) => item.aliases.includes(policyExtension.extension_id));
+      const exactExtension = latestCatalog.extensions.find((item) => item.extension_id === policyExtension.extension_id);
+      const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(policyExtension.extension_id));
+      const latestExtension = exactExtension ?? (aliasMatches.length === 1 ? aliasMatches[0] : undefined);
       if (!latestExtension) {
         setError("This extension no longer exists in the authoritative catalog. Discard the draft and refresh before continuing.");
+        return;
+      }
+      if (generation !== draftGeneration.current) {
+        setError("The draft changed while Guard was loading current policy. Rebase again to preserve the latest edits.");
         return;
       }
       const result = rebaseExtensionPolicyDraft(baseEffective, latestEffective, policyExtension, latestExtension, draftLayers);

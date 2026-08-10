@@ -580,7 +580,7 @@ function ExtensionControlCenterDetail$1(props) {
       ] }) : null,
       props.onBroadControl && !props.extension.required && props.effective.health === "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onBroadControl, className: "mt-5 min-h-11 rounded-xl border border-brand-blue/25 bg-white px-4 text-sm font-semibold text-brand-blue hover:bg-blue-50", children: "Review broad capability control" }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6 overflow-x-auto border-b border-slate-200", role: "tablist", "aria-label": "Extension detail sections", children: TABS.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { id: `extension-tab-${item.id}`, type: "button", role: "tab", "aria-selected": activeTab === item.id, "aria-controls": `extension-panel-${item.id}`, onKeyDown: (event) => handleTabKey(event, item.id), onClick: () => setTab(item.id), className: `min-h-11 border-b-2 px-4 py-3 text-sm font-semibold whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === item.id ? "border-brand-blue text-brand-blue" : "border-transparent text-slate-500 hover:text-slate-900"}`, children: item.label }, item.id)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6 overflow-x-auto border-b border-slate-200", role: "tablist", "aria-label": "Extension detail sections", children: TABS.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { id: `extension-tab-${item.id}`, type: "button", role: "tab", "aria-selected": activeTab === item.id, "aria-controls": item.id === "policy" && props.externalPolicyPanelId ? props.externalPolicyPanelId : `extension-panel-${item.id}`, onKeyDown: (event) => handleTabKey(event, item.id), onClick: () => setTab(item.id), className: `min-h-11 border-b-2 px-4 py-3 text-sm font-semibold whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === item.id ? "border-brand-blue text-brand-blue" : "border-transparent text-slate-500 hover:text-slate-900"}`, children: item.label }, item.id)) }),
     activeTab !== props.urlState.tab ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600", children: "This older link points to a section that is not available in this build. Showing Overview instead." }) : null,
     activeTab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "extension-panel-overview", role: "tabpanel", "aria-labelledby": "extension-tab-overview", className: "mt-6 grid gap-5 lg:grid-cols-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5", children: [
@@ -704,7 +704,7 @@ function ExtensionControlCenterDetail$1(props) {
         rules.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-500", children: "No rules match these filters." }) : null
       ] }) : null
     ] }) : null,
-    activeTab === "policy" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "extension-panel-policy", role: "tabpanel", "aria-labelledby": "extension-tab-policy", className: "mt-6 rounded-3xl border border-slate-200 bg-white p-6", children: [
+    activeTab === "policy" && !props.externalPolicyPanelId ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "extension-panel-policy", role: "tabpanel", "aria-labelledby": "extension-tab-policy", className: "mt-6 rounded-3xl border border-slate-200 bg-white p-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-slate-950", children: "Policy" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm text-slate-600", children: "This Batch 1 view is read-only below the existing broad capability control. Permission editing and semantic preview arrive in the next implementation batch." }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
@@ -1496,7 +1496,19 @@ function DraftControl(props) {
     { value: "allow", label: "Allow", disabled: managed === "disabled" },
     { value: "block", label: "Block" }
   ];
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "radiogroup", "aria-label": `${props.permission.label} local policy`, className: "flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1", children: choices.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", role: "radio", "aria-checked": props.state === choice.value, disabled: props.disabled || choice.disabled, title: choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : void 0, onClick: () => props.onChange(choice.value), className: `min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`, children: choice.label }, choice.value)) });
+  const chooseAdjacent = (event, index) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+    for (let offset = 1; offset <= choices.length; offset += 1) {
+      const next = (index + direction * offset + choices.length) % choices.length;
+      if (props.disabled || choices[next]?.disabled) continue;
+      props.onChange(choices[next].value);
+      event.currentTarget.parentElement?.querySelectorAll('[role="radio"]')[next]?.focus();
+      return;
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "radiogroup", "aria-label": `${props.permission.label} local policy`, className: "flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1", children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", role: "radio", "aria-checked": props.state === choice.value, tabIndex: props.state === choice.value ? 0 : -1, disabled: props.disabled || choice.disabled, title: choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : void 0, onKeyDown: (event) => chooseAdjacent(event, index), onClick: () => props.onChange(choice.value), className: `min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`, children: choice.label }, choice.value)) });
 }
 function PermissionPolicyRow(props) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
@@ -1677,11 +1689,13 @@ function ExtensionPolicyPanel(props) {
   const [stale, setStale] = reactExports.useState(false);
   const [pendingRebase, setPendingRebase] = reactExports.useState(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const draftGeneration = reactExports.useRef(0);
+  const { onDirtyChange, onRefresh } = props;
   const dirty = reactExports.useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
   const changeCount = reactExports.useMemo(() => draftChangeCount(baseEffective, policyExtension, draftLayers), [baseEffective, draftLayers, policyExtension]);
   reactExports.useEffect(() => {
-    props.onDirtyChange?.(dirty);
-  }, [dirty, props]);
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
   reactExports.useEffect(() => {
     const beforeUnload = (event) => {
       if (!dirty) return;
@@ -1703,6 +1717,7 @@ function ExtensionPolicyPanel(props) {
     setPendingRebase(null);
   }, [props.effective.revision, props.effective.catalog_digest, props.extension.extension_id]);
   const resetDraft = reactExports.useCallback(() => {
+    draftGeneration.current += 1;
     setDraftLayers(cloneLayers(baseEffective));
     setIdentity(newExtensionPolicyDraftIdentity());
     setPreview(null);
@@ -1713,6 +1728,7 @@ function ExtensionPolicyPanel(props) {
   }, [baseEffective]);
   const setPermission = reactExports.useCallback((permission2, state) => {
     if (!permission2.configurable) return;
+    draftGeneration.current += 1;
     setDraftLayers((current) => setLocalPermissionDraftState(current, baseEffective.catalog_digest, permission2.permission_id, state));
     setPreview(null);
     setReviewOpen(false);
@@ -1731,11 +1747,13 @@ function ExtensionPolicyPanel(props) {
   }, []);
   const runPreview = reactExports.useCallback(async () => {
     if (!dirty) return;
+    const generation = draftGeneration.current;
     setPreviewBusy(true);
     setError(null);
     setStale(false);
     try {
       const next = await previewExtensionMutation(mutation());
+      if (generation !== draftGeneration.current) return;
       setPreview(next);
       setReviewOpen(true);
     } catch (caught) {
@@ -1771,21 +1789,32 @@ function ExtensionPolicyPanel(props) {
       setError(null);
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
-      await props.onRefresh();
+      try {
+        await onRefresh();
+      } catch {
+        setError("The policy was applied, but Guard could not refresh the latest state. Refresh this page to confirm the committed policy.");
+      }
     } catch (caught) {
       handleApiError(caught, "Guard could not apply this draft.");
     } finally {
       setApplyBusy(false);
     }
-  }, [baseEffective.revision, dirty, handleApiError, mutation, preview, props, stale]);
+  }, [baseEffective.revision, dirty, handleApiError, mutation, onRefresh, preview, stale]);
   const rebaseDraft = reactExports.useCallback(async () => {
+    const generation = draftGeneration.current;
     setPreviewBusy(true);
     setError(null);
     try {
       const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      const latestExtension = latestCatalog.extensions.find((item) => item.extension_id === policyExtension.extension_id) ?? latestCatalog.extensions.find((item) => item.aliases.includes(policyExtension.extension_id));
+      const exactExtension = latestCatalog.extensions.find((item) => item.extension_id === policyExtension.extension_id);
+      const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(policyExtension.extension_id));
+      const latestExtension = exactExtension ?? (aliasMatches.length === 1 ? aliasMatches[0] : void 0);
       if (!latestExtension) {
         setError("This extension no longer exists in the authoritative catalog. Discard the draft and refresh before continuing.");
+        return;
+      }
+      if (generation !== draftGeneration.current) {
+        setError("The draft changed while Guard was loading current policy. Rebase again to preserve the latest edits.");
         return;
       }
       const result = rebaseExtensionPolicyDraft(baseEffective, latestEffective, policyExtension, latestExtension, draftLayers);
@@ -1926,7 +1955,14 @@ function ExtensionControlCenterDetail(props) {
     props.onBack();
   }, [policyDirty, props.onBack]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: policyActive ? "[&_#extension-panel-policy]:hidden" : void 0, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionControlCenterDetail$1, { ...props, onBack: guardedBack }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ExtensionControlCenterDetail$1,
+      {
+        ...props,
+        externalPolicyPanelId: "extension-policy-editor",
+        onBack: guardedBack
+      }
+    ) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
