@@ -165,7 +165,7 @@ jobs:
           echo "::add-mask::$APPROVAL_PASSWORD"
           (
             cd dashboard
-            PLAYWRIGHT_PROOF_DIR="$PROOF_DIR" \
+            PLAYWRIGHT_PROOF_DIR="$PROOF_DIR/apply" \
             GUARD_INSTALLED_ORIGIN="$ORIGIN" \
             GUARD_INSTALLED_DASHBOARD_SESSION="$SESSION" \
             GUARD_INSTALLED_APPROVAL_PASSWORD="$APPROVAL_PASSWORD" \
@@ -201,7 +201,7 @@ jobs:
           echo "::add-mask::$APPROVAL_PASSWORD"
           (
             cd dashboard
-            PLAYWRIGHT_PROOF_DIR="$PROOF_DIR" \
+            PLAYWRIGHT_PROOF_DIR="$PROOF_DIR/verify" \
             GUARD_INSTALLED_ORIGIN="$ORIGIN" \
             GUARD_INSTALLED_DASHBOARD_SESSION="$SESSION" \
             GUARD_INSTALLED_APPROVAL_PASSWORD="$APPROVAL_PASSWORD" \
