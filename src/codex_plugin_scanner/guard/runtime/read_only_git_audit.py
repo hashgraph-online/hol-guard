@@ -36,6 +36,8 @@ def is_read_only_git_ancestry_audit(
     workspace_root = _leading_workspace_root(context)
     if workspace_root is None:
         return False
+    if not _is_within(workspace_root, home_dir) and not _is_within(workspace_root, initial_root):
+        return False
     segments = context.segments
     index = 1
     if _is_static_echo(segments[index], before="&&", after="&&"):
@@ -190,7 +192,8 @@ def _numeric_file_is_safe(target_text: str, *, workspace_root: Path) -> bool:
             return True
         if target.is_symlink() or not target.is_file():
             return False
-        payload = target.read_bytes()
+        with target.open("rb") as handle:
+            payload = handle.read(_MAX_PID_BYTES + 1)
     except (OSError, ValueError):
         return False
     return len(payload) <= _MAX_PID_BYTES and bool(re.fullmatch(rb"[0-9]+(?:\r?\n)?", payload))
@@ -211,6 +214,14 @@ def _same_path(left: Path, right: Path) -> bool:
     try:
         return left.resolve(strict=True) == right
     except OSError:
+        return False
+
+
+def _is_within(path: Path, parent: Path) -> bool:
+    try:
+        _ = path.relative_to(parent.resolve(strict=True))
+        return True
+    except (OSError, ValueError):
         return False
 
 

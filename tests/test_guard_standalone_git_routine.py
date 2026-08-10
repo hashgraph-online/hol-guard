@@ -26,6 +26,19 @@ def _isolate_user_git_config(  # pyright: ignore[reportUnusedFunction]
     config.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
+    for variable in (
+        "GIT_CONFIG",
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_COMMON_DIR",
+        "GIT_DIR",
+        "GIT_NAMESPACE",
+        "GIT_WORK_TREE",
+    ):
+        monkeypatch.delenv(variable, raising=False)
 
 
 def _repository(tmp_path: Path) -> tuple[Path, Path]:

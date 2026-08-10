@@ -12,6 +12,27 @@ import pytest
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.read_only_git_audit import is_read_only_git_ancestry_audit
 
+_GIT_ROUTING_ENV = (
+    "GIT_CONFIG",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_COMMON_DIR",
+    "GIT_DIR",
+    "GIT_NAMESPACE",
+    "GIT_WORK_TREE",
+)
+
+
+@pytest.fixture(autouse=True)
+def _clear_git_routing_environment(  # pyright: ignore[reportUnusedFunction]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for variable in _GIT_ROUTING_ENV:
+        monkeypatch.delenv(variable, raising=False)
+
 
 def _repository(tmp_path: Path) -> tuple[Path, Path]:
     home = tmp_path / "home"
@@ -58,6 +79,18 @@ def test_ancestry_audit_allows_bounded_log_and_numeric_pid_read(tmp_path: Path) 
     result = inspect_command(command, cwd=home, home_dir=home)
     assert _classification(result)["explicitly_benign"] is True
     assert result["risk_classes"] == []
+
+
+def test_ancestry_audit_rejects_workspace_outside_home_and_cwd(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    cwd = tmp_path / "current"
+    repository = tmp_path / "unrelated" / "project"
+    home.mkdir()
+    cwd.mkdir()
+    repository.mkdir(parents=True)
+    _ = subprocess.run(["git", "init"], cwd=repository, check=True, capture_output=True)
+
+    assert not is_read_only_git_ancestry_audit(_audit(repository), cwd=cwd, home_dir=home)
 
 
 def test_ancestry_audit_allows_structured_status_substitutions(tmp_path: Path) -> None:
