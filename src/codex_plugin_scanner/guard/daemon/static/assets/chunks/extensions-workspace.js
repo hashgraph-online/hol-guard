@@ -1489,12 +1489,17 @@ function extensionPolicyRadioTabStop(choices, state, groupDisabled) {
   const selected = choices.findIndex((choice) => choice.value === state && !choice.disabled);
   return selected >= 0 ? selected : choices.findIndex((choice) => !choice.disabled);
 }
-function committedExtensionPolicyState(effective, layers, revision) {
-  const localControls = layers.filter((layer) => layer.kind === "local-admin").flatMap((layer) => layer.controls).map((control) => ({
-    target: { kind: control.target_kind, target_id: control.target_id },
-    state: control.state
-  }));
-  return { ...effective, revision, layers, controls: localControls, projection: void 0 };
+function nextExtensionPolicyRadioIndex(choices, index, key, groupDisabled) {
+  if (groupDisabled || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) return -1;
+  const direction = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
+  for (let offset = 1; offset <= choices.length; offset += 1) {
+    const next = (index + direction * offset + choices.length) % choices.length;
+    if (!choices[next]?.disabled) return next;
+  }
+  return -1;
+}
+function isCurrentExtensionPolicyDraft(generation, current) {
+  return generation === current;
 }
 function draftChangeCount(effective, extension2, draftLayers) {
   return extension2.permissions.filter(
@@ -1510,16 +1515,11 @@ function DraftControl(props) {
   ];
   const tabStopIndex = extensionPolicyRadioTabStop(choices, props.state, props.disabled);
   const chooseAdjacent = (event, index) => {
-    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const next = nextExtensionPolicyRadioIndex(choices, index, event.key, props.disabled);
+    if (next < 0) return;
     event.preventDefault();
-    const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
-    for (let offset = 1; offset <= choices.length; offset += 1) {
-      const next = (index + direction * offset + choices.length) % choices.length;
-      if (props.disabled || choices[next]?.disabled) continue;
-      props.onChange(choices[next].value);
-      event.currentTarget.parentElement?.querySelectorAll('[role="radio"]')[next]?.focus();
-      return;
-    }
+    props.onChange(choices[next].value);
+    event.currentTarget.parentElement?.querySelectorAll('[role="radio"]')[next]?.focus();
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "radiogroup", "aria-label": `${props.permission.label} local policy`, className: "flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1", children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", role: "radio", "aria-checked": props.state === choice.value, tabIndex: !props.disabled && index === tabStopIndex ? 0 : -1, disabled: props.disabled || choice.disabled, title: choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : void 0, onKeyDown: (event) => chooseAdjacent(event, index), onClick: () => props.onChange(choice.value), className: `min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`, children: choice.label }, choice.value)) });
 }
@@ -1568,7 +1568,7 @@ function PermissionPolicyRow(props) {
         "Managed policy blocks this permission. Local policy may inherit or add a block, but it cannot weaken the managed block."
       ] }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(DraftControl, { permission: props.permission, effective: props.effective, state: props.draftState, disabled: !props.permission.configurable || props.effective.health !== "protected", onChange: props.onChange })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(DraftControl, { permission: props.permission, effective: props.effective, state: props.draftState, disabled: props.disabled || !props.permission.configurable || props.effective.health !== "protected", onChange: props.onChange })
   ] }) });
 }
 function PreviewPanel(props) {
@@ -1701,6 +1701,7 @@ function ExtensionPolicyPanel(props) {
   const [error, setError] = reactExports.useState(null);
   const [stale, setStale] = reactExports.useState(false);
   const [pendingRebase, setPendingRebase] = reactExports.useState(null);
+  const [refreshRequired, setRefreshRequired] = reactExports.useState(false);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const draftGeneration = reactExports.useRef(0);
   const { onDirtyChange, onRefresh } = props;
@@ -1724,6 +1725,7 @@ function ExtensionPolicyPanel(props) {
     setPolicyExtension(props.extension);
     setDraftLayers(cloneLayers(props.effective));
     setIdentity(newExtensionPolicyDraftIdentity());
+    setRefreshRequired(false);
     setPreview(null);
     setReviewOpen(false);
     setError(null);
@@ -1767,11 +1769,11 @@ function ExtensionPolicyPanel(props) {
     setStale(false);
     try {
       const next = await previewExtensionMutation(mutation());
-      if (generation !== draftGeneration.current) return;
+      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) return;
       setPreview(next);
       setReviewOpen(true);
     } catch (caught) {
-      if (generation === draftGeneration.current) handleApiError(caught, "Guard could not preview this draft.");
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not preview this draft.");
     } finally {
       setPreviewBusy(false);
     }
@@ -1804,10 +1806,9 @@ function ExtensionPolicyPanel(props) {
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
       draftGeneration.current += 1;
-      const committedEffective = committedExtensionPolicyState(baseEffective, base.layers, applied.revision);
-      setBaseEffective(committedEffective);
-      setDraftLayers(cloneLayers(committedEffective));
+      setDraftLayers(cloneLayers(baseEffective));
       setIdentity(newExtensionPolicyDraftIdentity());
+      setRefreshRequired(true);
       try {
         await onRefresh();
       } catch {
@@ -1832,7 +1833,7 @@ function ExtensionPolicyPanel(props) {
         setError("This extension no longer exists in the authoritative catalog. Discard the draft and refresh before continuing.");
         return;
       }
-      if (generation !== draftGeneration.current) {
+      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
         setError("The draft changed while Guard was loading current policy. Rebase again to preserve the latest edits.");
         return;
       }
@@ -1854,7 +1855,7 @@ function ExtensionPolicyPanel(props) {
         setError(null);
       }
     } catch (caught) {
-      if (generation === draftGeneration.current) {
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
         setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft.");
       }
     } finally {
@@ -1919,7 +1920,8 @@ function ExtensionPolicyPanel(props) {
         " governed by signed organization policy. Local policy cannot weaken a managed block. Managed exception requests must be made through the organization policy workflow."
       ] }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: policyExtension.permissions.map((permission2) => /* @__PURE__ */ jsxRuntimeExports.jsx(PermissionPolicyRow, { permission: permission2, extension: policyExtension, effective: baseEffective, draftState: localPermissionDraftState(draftLayers, permission2.permission_id), onChange: (state) => setPermission(permission2, state) }, permission2.permission_id)) }),
+    refreshRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "status", className: "rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900", children: "Policy applied. Editing stays locked until this page reloads current authoritative state." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: policyExtension.permissions.map((permission2) => /* @__PURE__ */ jsxRuntimeExports.jsx(PermissionPolicyRow, { permission: permission2, extension: policyExtension, effective: baseEffective, draftState: localPermissionDraftState(draftLayers, permission2.permission_id), disabled: refreshRequired, onChange: (state) => setPermission(permission2, state) }, permission2.permission_id)) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sticky bottom-4 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-slate-600", children: dirty ? `${changeCount} staged permission change${changeCount === 1 ? "" : "s"}.` : "No local policy changes drafted." }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [

@@ -75,19 +75,23 @@ export function extensionPolicyRadioTabStop(
   return selected >= 0 ? selected : choices.findIndex((choice) => !choice.disabled);
 }
 
-export function committedExtensionPolicyState(
-  effective: EffectiveExtensionControls,
-  layers: EffectiveExtensionControls["layers"],
-  revision: number,
-): EffectiveExtensionControls {
-  const localControls = layers
-    .filter((layer) => layer.kind === "local-admin")
-    .flatMap((layer) => layer.controls)
-    .map((control) => ({
-      target: { kind: control.target_kind, target_id: control.target_id },
-      state: control.state,
-    }));
-  return { ...effective, revision, layers, controls: localControls, projection: undefined };
+export function nextExtensionPolicyRadioIndex(
+  choices: Array<{ disabled?: boolean }>,
+  index: number,
+  key: string,
+  groupDisabled: boolean,
+): number {
+  if (groupDisabled || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key)) return -1;
+  const direction = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
+  for (let offset = 1; offset <= choices.length; offset += 1) {
+    const next = (index + direction * offset + choices.length) % choices.length;
+    if (!choices[next]?.disabled) return next;
+  }
+  return -1;
+}
+
+export function isCurrentExtensionPolicyDraft(generation: number, current: number): boolean {
+  return generation === current;
 }
 
 function draftChangeCount(effective: EffectiveExtensionControls, extension: ExtensionCatalogItem, draftLayers: EffectiveExtensionControls["layers"]): number {
@@ -111,16 +115,11 @@ function DraftControl(props: {
   ];
   const tabStopIndex = extensionPolicyRadioTabStop(choices, props.state, props.disabled);
   const chooseAdjacent = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const next = nextExtensionPolicyRadioIndex(choices, index, event.key, props.disabled);
+    if (next < 0) return;
     event.preventDefault();
-    const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
-    for (let offset = 1; offset <= choices.length; offset += 1) {
-      const next = (index + direction * offset + choices.length) % choices.length;
-      if (props.disabled || choices[next]?.disabled) continue;
-      props.onChange(choices[next]!.value);
-      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
-      return;
-    }
+    props.onChange(choices[next]!.value);
+    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
   };
   return <div role="radiogroup" aria-label={`${props.permission.label} local policy`} className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">{choices.map((choice, index) => <button key={choice.value} type="button" role="radio" aria-checked={props.state === choice.value} tabIndex={!props.disabled && index === tabStopIndex ? 0 : -1} disabled={props.disabled || choice.disabled} title={choice.disabled ? "Managed policy already blocks this permission; local policy cannot weaken it." : undefined} onKeyDown={(event) => chooseAdjacent(event, index)} onClick={() => props.onChange(choice.value)} className={`min-h-10 rounded-lg px-3 text-xs font-semibold transition motion-reduce:transition-none ${props.state === choice.value ? "bg-white text-brand-blue shadow-sm" : "text-slate-600 hover:bg-white/70"} disabled:cursor-not-allowed disabled:opacity-45`}>{choice.label}</button>)}</div>;
 }
@@ -130,11 +129,12 @@ function PermissionPolicyRow(props: {
   extension: ExtensionCatalogItem;
   effective: EffectiveExtensionControls;
   draftState: PermissionDraftState;
+  disabled: boolean;
   onChange: (state: PermissionDraftState) => void;
 }) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
   const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
-  return <article className="rounded-2xl border border-slate-200 bg-white p-4" data-permission-id={props.permission.permission_id}><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-950">{props.permission.label}</h3><Pill tone={RISK_TONE[props.permission.risk_tier]}>{props.permission.risk_tier} baseline risk</Pill><Pill>{permissionStateLabel(props.effective, props.extension, props.permission)}</Pill>{!props.permission.configurable ? <Pill>Fixed</Pill> : null}{managed ? <Pill tone="border-indigo-200 bg-indigo-50 text-indigo-800">Managed {managed === "disabled" ? "block" : "allow"}</Pill> : null}</div><p className="mt-2 text-sm leading-6 text-slate-600">{props.permission.description}</p><div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>Baseline floor: <strong className="text-slate-700">{treatmentLabel(props.permission.baseline_floor)}</strong></span><span>{props.permission.rule_ids.length} governed rule{props.permission.rule_ids.length === 1 ? "" : "s"}</span><span>Provenance: {provenance.join(" · ")}</span></div><code className="mt-2 block break-all text-[11px] text-slate-400">{props.permission.permission_id}</code>{!props.permission.configurable ? <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600"><strong>Why fixed:</strong> {props.permission.fixed_reason ?? "Guard marks this safety permission as immutable."}</p> : null}{managed === "disabled" ? <p className="mt-3 flex items-start gap-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs leading-5 text-indigo-900"><HiMiniLockClosed className="mt-0.5 size-4 shrink-0" />Managed policy blocks this permission. Local policy may inherit or add a block, but it cannot weaken the managed block.</p> : null}</div><DraftControl permission={props.permission} effective={props.effective} state={props.draftState} disabled={!props.permission.configurable || props.effective.health !== "protected"} onChange={props.onChange} /></div></article>;
+  return <article className="rounded-2xl border border-slate-200 bg-white p-4" data-permission-id={props.permission.permission_id}><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-950">{props.permission.label}</h3><Pill tone={RISK_TONE[props.permission.risk_tier]}>{props.permission.risk_tier} baseline risk</Pill><Pill>{permissionStateLabel(props.effective, props.extension, props.permission)}</Pill>{!props.permission.configurable ? <Pill>Fixed</Pill> : null}{managed ? <Pill tone="border-indigo-200 bg-indigo-50 text-indigo-800">Managed {managed === "disabled" ? "block" : "allow"}</Pill> : null}</div><p className="mt-2 text-sm leading-6 text-slate-600">{props.permission.description}</p><div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>Baseline floor: <strong className="text-slate-700">{treatmentLabel(props.permission.baseline_floor)}</strong></span><span>{props.permission.rule_ids.length} governed rule{props.permission.rule_ids.length === 1 ? "" : "s"}</span><span>Provenance: {provenance.join(" · ")}</span></div><code className="mt-2 block break-all text-[11px] text-slate-400">{props.permission.permission_id}</code>{!props.permission.configurable ? <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600"><strong>Why fixed:</strong> {props.permission.fixed_reason ?? "Guard marks this safety permission as immutable."}</p> : null}{managed === "disabled" ? <p className="mt-3 flex items-start gap-2 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs leading-5 text-indigo-900"><HiMiniLockClosed className="mt-0.5 size-4 shrink-0" />Managed policy blocks this permission. Local policy may inherit or add a block, but it cannot weaken the managed block.</p> : null}</div><DraftControl permission={props.permission} effective={props.effective} state={props.draftState} disabled={props.disabled || !props.permission.configurable || props.effective.health !== "protected"} onChange={props.onChange} /></div></article>;
 }
 
 function PreviewPanel(props: { preview: ExtensionMutationPreview }) {
@@ -173,6 +173,7 @@ export function ExtensionPolicyPanel(props: {
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [pendingRebase, setPendingRebase] = useState<PendingRebase | null>(null);
+  const [refreshRequired, setRefreshRequired] = useState(false);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const draftGeneration = useRef(0);
   const { onDirtyChange, onRefresh } = props;
@@ -195,6 +196,7 @@ export function ExtensionPolicyPanel(props: {
     setPolicyExtension(props.extension);
     setDraftLayers(cloneLayers(props.effective));
     setIdentity(newExtensionPolicyDraftIdentity());
+    setRefreshRequired(false);
     setPreview(null); setReviewOpen(false); setError(null); setStale(false); setPendingRebase(null);
   }, [props.effective.revision, props.effective.catalog_digest, props.extension.extension_id]);
 
@@ -229,11 +231,11 @@ export function ExtensionPolicyPanel(props: {
     setPreviewBusy(true); setError(null); setStale(false);
     try {
       const next = await previewExtensionMutation(mutation());
-      if (generation !== draftGeneration.current) return;
+      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) return;
       setPreview(next);
       setReviewOpen(true);
     } catch (caught) {
-      if (generation === draftGeneration.current) handleApiError(caught, "Guard could not preview this draft.");
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not preview this draft.");
     }
     finally { setPreviewBusy(false); }
   }, [dirty, handleApiError, mutation]);
@@ -264,10 +266,9 @@ export function ExtensionPolicyPanel(props: {
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
       draftGeneration.current += 1;
-      const committedEffective = committedExtensionPolicyState(baseEffective, base.layers, applied.revision);
-      setBaseEffective(committedEffective);
-      setDraftLayers(cloneLayers(committedEffective));
+      setDraftLayers(cloneLayers(baseEffective));
       setIdentity(newExtensionPolicyDraftIdentity());
+      setRefreshRequired(true);
       try {
         await onRefresh();
       } catch {
@@ -289,7 +290,7 @@ export function ExtensionPolicyPanel(props: {
         setError("This extension no longer exists in the authoritative catalog. Discard the draft and refresh before continuing.");
         return;
       }
-      if (generation !== draftGeneration.current) {
+      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
         setError("The draft changed while Guard was loading current policy. Rebase again to preserve the latest edits.");
         return;
       }
@@ -308,7 +309,7 @@ export function ExtensionPolicyPanel(props: {
         setPendingRebase(null); setStale(false); setError(null);
       }
     } catch (caught) {
-      if (generation === draftGeneration.current) {
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
         setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft.");
       }
     }
@@ -331,7 +332,8 @@ export function ExtensionPolicyPanel(props: {
   const confirmationCount = preview?.semantic_preview.changed_target_count ?? changeCount;
   return <section id="extension-policy-editor" aria-labelledby="extension-policy-heading" className="space-y-5"><div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-blue">Local policy draft</p><h2 id="extension-policy-heading" className="mt-1 text-lg font-semibold text-slate-950">Permission controls</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Choose Inherit, Allow, or Block for independently configurable capabilities. A blocked capability makes Guard block matching actions; it does not turn detection off. Detector severity and baseline floors never change.</p></div><div className="flex flex-wrap gap-2"><Pill>{configurableCount} configurable</Pill><Pill>{policyExtension.permissions.length - configurableCount} fixed</Pill>{dirty ? <Pill tone="border-blue-200 bg-blue-50 text-blue-800">{changeCount} staged</Pill> : <Pill>Authoritative</Pill>}</div></div>{baseEffective.global_lockdown ? <p role="status" className="mt-4 flex gap-2 rounded-xl bg-slate-950 p-3 text-sm text-white"><HiMiniLockClosed className="mt-0.5 size-4 shrink-0" />Global lockdown remains dominant. You can prepare a local draft, but matching commands stay blocked while lockdown is active.</p> : null}{baseEffective.health !== "protected" ? <p role="alert" className="mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><HiMiniExclamationTriangle className="mt-0.5 size-4 shrink-0" />Permission editing is disabled until extension-control authority is protected.</p> : null}{managedCount ? <p className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">{managedCount} permission{managedCount === 1 ? " is" : "s are"} governed by signed organization policy. Local policy cannot weaken a managed block. Managed exception requests must be made through the organization policy workflow.</p> : null}</div>
 
-    <div className="space-y-3">{policyExtension.permissions.map((permission) => <PermissionPolicyRow key={permission.permission_id} permission={permission} extension={policyExtension} effective={baseEffective} draftState={localPermissionDraftState(draftLayers, permission.permission_id)} onChange={(state) => setPermission(permission, state)} />)}</div>
+    {refreshRequired ? <div role="status" className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Policy applied. Editing stays locked until this page reloads current authoritative state.</div> : null}
+    <div className="space-y-3">{policyExtension.permissions.map((permission) => <PermissionPolicyRow key={permission.permission_id} permission={permission} extension={policyExtension} effective={baseEffective} draftState={localPermissionDraftState(draftLayers, permission.permission_id)} disabled={refreshRequired} onChange={(state) => setPermission(permission, state)} />)}</div>
 
     <div className="sticky bottom-4 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="text-sm text-slate-600">{dirty ? `${changeCount} staged permission change${changeCount === 1 ? "" : "s"}.` : "No local policy changes drafted."}</div><div className="flex flex-wrap gap-2"><button type="button" disabled={!dirty || previewBusy || applyBusy} onClick={resetDraft} className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 disabled:opacity-40">Discard draft</button><button type="button" disabled={!dirty || previewBusy || applyBusy || baseEffective.health !== "protected" || stale} onClick={() => { void runPreview(); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-brand-blue/30 bg-blue-50 px-4 text-sm font-semibold text-brand-blue disabled:opacity-40">{previewBusy ? <HiMiniArrowPath className="size-4 animate-spin motion-reduce:animate-none" /> : <HiMiniShieldCheck className="size-4" />}Review {changeCount} change{changeCount === 1 ? "" : "s"}</button></div></div></div>
 
