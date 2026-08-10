@@ -23,9 +23,10 @@ type ReviewScopeControlsProps = {
 
 export function ReviewScopeControls(props: ReviewScopeControlsProps) {
   const showAllowScopes = props.showAllowScopes !== false;
+  const showApprovalControls = showAllowScopes || props.exactActionPersistenceEligible;
   return (
     <div className="mt-6 space-y-2">
-      <SectionLabel>{showAllowScopes ? "Approval scope" : "Block scope"}</SectionLabel>
+      <SectionLabel>{showApprovalControls ? "Approval scope" : "Block scope"}</SectionLabel>
       {showAllowScopes && !props.hasAllowScope && (
         <p className="text-sm text-brand-attention" role="status">
           This action cannot be approved under its current Guard policy.
@@ -41,7 +42,7 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
           />
         ))}
       </div>}
-      {showAllowScopes && props.exactActionPersistenceEligible && props.allowScope === "artifact" && (
+      {props.exactActionPersistenceEligible && props.allowScope === "artifact" && (
         <ExactActionPersistenceChoice
           checked={props.rememberExactAction}
           onChange={props.onRememberExactActionChange}
@@ -136,7 +137,7 @@ function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (chec
       <span>
         <span className="block text-sm font-medium text-brand-dark">Always allow this exact action</span>
         <span className="mt-0.5 block text-xs text-muted-foreground">
-          Save only this exact command for this AI app. Changed commands still need review.
+          Save only this exact action for this AI app. Changed actions still need review.
         </span>
       </span>
     </label>

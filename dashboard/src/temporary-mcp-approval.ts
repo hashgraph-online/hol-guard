@@ -190,8 +190,10 @@ export function buildTemporaryMcpResolutionFields(
   options: TemporaryMcpApprovalOptions | null,
   target: GuardTemporaryMcpGrantTarget,
   duration: GuardTemporaryMcpGrantDuration,
+  persistExactAction = false,
 ): { mcp_grant_target: GuardTemporaryMcpGrantTarget; mcp_grant_duration: GuardTemporaryMcpGrantDuration } | Record<string, never> {
   if (
+    persistExactAction ||
     options === null ||
     duration === "once" ||
     !options.allowed_targets.includes(target) ||

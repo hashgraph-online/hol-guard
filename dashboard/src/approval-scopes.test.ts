@@ -125,6 +125,27 @@ function renderExactActionControl(eligible: boolean): string {
   );
 }
 
+function renderExactActionControlWithTimedScopesHidden(): string {
+  return renderToStaticMarkup(
+    createElement(ReviewScopeControls, {
+      commonScopeOptions: standardScopeChoicesForRequest(BASE_REQUEST, "allow"),
+      broaderScopeOptions: [],
+      advancedScopeOptions: [],
+      blockScopeOptions: [],
+      hasAllowScope: true,
+      taskCapabilityCopy: null,
+      exactActionPersistenceEligible: true,
+      rememberExactAction: false,
+      allowScope: "artifact",
+      blockScope: "artifact",
+      showAllowScopes: false,
+      onAllowScopeChange: ignoreScopeChange,
+      onBlockScopeChange: ignoreScopeChange,
+      onRememberExactActionChange: ignoreScopeChange,
+    }),
+  );
+}
+
 assert(
   renderExactActionControl(true).includes("Always allow this exact action"),
   "T-AS-03c: eligible requests render the exact-action permission",
@@ -132,6 +153,10 @@ assert(
 assert(
   !renderExactActionControl(false).includes("Always allow this exact action"),
   "T-AS-03d: unproven requests do not render a durable permission",
+);
+assert(
+  renderExactActionControlWithTimedScopesHidden().includes("Always allow this exact action"),
+  "T-AS-03e: exact-action permission remains available beside bounded MCP choices",
 );
 
 const blockPayload = buildDecisionPayload({

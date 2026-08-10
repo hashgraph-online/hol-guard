@@ -212,7 +212,12 @@ export function ReviewDecisionCard(props: {
           ...(includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {}),
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
           ...(action === "allow"
-            ? buildTemporaryMcpResolutionFields(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration)
+            ? buildTemporaryMcpResolutionFields(
+                temporaryMcpOptions,
+                mcpGrantTarget,
+                mcpGrantDuration,
+                rememberExactAction,
+              )
             : {}),
           ...(action === "allow" && temporaryMcpOptions === null
             ? buildLocalToolResolutionFields(localToolOptions, localToolGrantTarget, localToolGrantDuration)
@@ -385,7 +390,7 @@ export function ReviewDecisionCard(props: {
   if (rememberExactAction && allowScope === "artifact") {
     resolvedAllowButtonLabel = "Approve and remember";
   }
-  if (temporaryMcpOptions !== null) {
+  if (temporaryMcpOptions !== null && !rememberExactAction) {
     resolvedAllowButtonLabel = temporaryMcpAllowButtonLabel(mcpGrantDuration);
   } else if (localToolOptions !== null) {
     resolvedAllowButtonLabel = localToolAllowButtonLabel(localToolGrantDuration);
@@ -477,7 +482,7 @@ export function ReviewDecisionCard(props: {
 
         {resolutionBlockReason === null && (
           <>
-            {temporaryMcpOptions !== null && (
+            {temporaryMcpOptions !== null && !rememberExactAction && (
               <TemporaryMcpApprovalControls
                 options={temporaryMcpOptions}
                 target={mcpGrantTarget}
@@ -505,7 +510,9 @@ export function ReviewDecisionCard(props: {
               blockScopeOptions={blockScopeOptions}
               hasAllowScope={hasAllowScope}
               taskCapabilityCopy={taskCapabilityCopy}
-              exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
+              exactActionPersistenceEligible={
+                item.exact_action_persistence_eligible === true && localToolOptions === null
+              }
               rememberExactAction={rememberExactAction}
               allowScope={allowScope}
               blockScope={blockScope}

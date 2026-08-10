@@ -57,6 +57,10 @@ assert(
   Object.keys(buildTemporaryMcpResolutionFields(options, "category", "once")).length === 0,
   "one-time approval uses the existing exact one-shot path",
 );
+assert(
+  Object.keys(buildTemporaryMcpResolutionFields(options, "category", "1h", true)).length === 0,
+  "permanent exact-action approval never submits conflicting timed grant fields",
+);
 const refreshedOptions = {
   ...options,
   allowed_targets: ["exact"] as const,

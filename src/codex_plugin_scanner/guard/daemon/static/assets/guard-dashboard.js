@@ -15561,8 +15561,8 @@ function temporaryMcpSummary(options, target, duration) {
   const coverage = target === "server" ? "Routine tools" : browserCapabilityLabel(options.category);
   return ["Allow", options.server_name, coverage, options.target_label, temporaryMcpDurationLabel(duration)].filter(nonEmpty$1).join(" · ");
 }
-function buildTemporaryMcpResolutionFields(options, target, duration) {
-  if (options === null || duration === "once" || !options.allowed_targets.includes(target) || !options.allowed_durations.includes(duration)) {
+function buildTemporaryMcpResolutionFields(options, target, duration, persistExactAction = false) {
+  if (persistExactAction || options === null || duration === "once" || !options.allowed_targets.includes(target) || !options.allowed_durations.includes(duration)) {
     return {};
   }
   return { mcp_grant_target: target, mcp_grant_duration: duration };
@@ -28341,8 +28341,9 @@ function ReviewCloudRecovery({ item }) {
 }
 function ReviewScopeControls(props) {
   const showAllowScopes = props.showAllowScopes !== false;
+  const showApprovalControls = showAllowScopes || props.exactActionPersistenceEligible;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: showAllowScopes ? "Approval scope" : "Block scope" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: showApprovalControls ? "Approval scope" : "Block scope" }),
     showAllowScopes && !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: "This action cannot be approved under its current Guard policy." }),
     showAllowScopes && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       ScopeChoiceButton,
@@ -28353,7 +28354,7 @@ function ReviewScopeControls(props) {
       },
       choice.value
     )) }),
-    showAllowScopes && props.exactActionPersistenceEligible && props.allowScope === "artifact" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+    props.exactActionPersistenceEligible && props.allowScope === "artifact" && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ExactActionPersistenceChoice,
       {
         checked: props.rememberExactAction,
@@ -28424,7 +28425,7 @@ function ExactActionPersistenceChoice(props) {
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-medium text-brand-dark", children: "Always allow this exact action" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Save only this exact command for this AI app. Changed commands still need review." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Save only this exact action for this AI app. Changed actions still need review." })
     ] })
   ] });
 }
@@ -28908,7 +28909,12 @@ function ReviewDecisionCard(props) {
           ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
           ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {},
-          ...action === "allow" ? buildTemporaryMcpResolutionFields(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration) : {},
+          ...action === "allow" ? buildTemporaryMcpResolutionFields(
+            temporaryMcpOptions,
+            mcpGrantTarget,
+            mcpGrantDuration,
+            rememberExactAction
+          ) : {},
           ...action === "allow" && temporaryMcpOptions === null ? buildLocalToolResolutionFields(localToolOptions, localToolGrantTarget, localToolGrantDuration) : {}
         });
         setResolved(action);
@@ -29065,7 +29071,7 @@ function ReviewDecisionCard(props) {
   if (rememberExactAction && allowScope === "artifact") {
     resolvedAllowButtonLabel = "Approve and remember";
   }
-  if (temporaryMcpOptions !== null) {
+  if (temporaryMcpOptions !== null && !rememberExactAction) {
     resolvedAllowButtonLabel = temporaryMcpAllowButtonLabel(mcpGrantDuration);
   } else if (localToolOptions !== null) {
     resolvedAllowButtonLabel = localToolAllowButtonLabel(localToolGrantDuration);
@@ -29135,7 +29141,7 @@ function ReviewDecisionCard(props) {
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
       resolutionBlockReason === null && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        temporaryMcpOptions !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        temporaryMcpOptions !== null && !rememberExactAction && /* @__PURE__ */ jsxRuntimeExports.jsx(
           TemporaryMcpApprovalControls,
           {
             options: temporaryMcpOptions,
@@ -29165,7 +29171,7 @@ function ReviewDecisionCard(props) {
             blockScopeOptions,
             hasAllowScope,
             taskCapabilityCopy,
-            exactActionPersistenceEligible: item.exact_action_persistence_eligible === true,
+            exactActionPersistenceEligible: item.exact_action_persistence_eligible === true && localToolOptions === null,
             rememberExactAction,
             allowScope,
             blockScope,
