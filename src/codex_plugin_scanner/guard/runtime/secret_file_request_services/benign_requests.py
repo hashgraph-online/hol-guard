@@ -196,7 +196,7 @@ def _looks_like_safe_existence_probe(
     if parts[3:] != ["&&", "echo", "exists", "||", "echo", "absent"]:
         return False
     target = parts[2]
-    if any(marker in target for marker in ("$", "`", "*", "?", "[", "]", "{", "}")):
+    if any(marker in target for marker in ("$", "`", "*", "?", "[", "]", "{", "}", ";", "&", "|", "<", ">", "(", ")")):
         return False
     try:
         candidate = Path(target).expanduser()

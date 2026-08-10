@@ -36,6 +36,10 @@ def test_literal_local_existence_probe_is_benign(tmp_path: Path) -> None:
         "test -e candidate && payload || echo absent",
         "test -f candidate && echo exists || echo absent",
         "test -e candidate; payload",
+        "test -e candidate;id && echo exists || echo absent",
+        "test -e <(id) && echo exists || echo absent",
+        "test -e candidate&whoami && echo exists || echo absent",
+        "test -e candidate|id && echo exists || echo absent",
     ),
 )
 def test_existence_probe_rejects_dynamic_widened_or_outside_commands(

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from ..runtime.actions import apply_patch_target_paths
+from ..runtime.secret_sensitivity import classify_secret_path
 
 _AGENT_INSTRUCTION_FILE_NAMES = frozenset(
     {
@@ -14,6 +15,7 @@ _AGENT_INSTRUCTION_FILE_NAMES = frozenset(
         "claude.md",
         "copilot-instructions.md",
         ".clinerules",
+        ".cursorrules",
         ".windsurfrules",
     }
 )
@@ -24,6 +26,7 @@ def verified_non_sensitive_codex_apply_patch(
     *,
     canonical_harness: str,
     event_name: str | None,
+    home_dir: Path | None,
     payload: Mapping[str, object],
     runtime_artifact_checked: bool,
     runtime_workspace: Path | None,
@@ -63,7 +66,8 @@ def verified_non_sensitive_codex_apply_patch(
             resolved = candidate.resolve(strict=False)
             relative = resolved.relative_to(workspace)
             if (
-                resolved.name.lower() in _AGENT_INSTRUCTION_FILE_NAMES
+                classify_secret_path(str(resolved), cwd=workspace, home_dir=home_dir) is not None
+                or resolved.name.lower() in _AGENT_INSTRUCTION_FILE_NAMES
                 or {part.lower() for part in relative.parts} & _AGENT_INSTRUCTION_DIRECTORIES
             ):
                 return False

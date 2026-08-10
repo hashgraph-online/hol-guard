@@ -584,6 +584,7 @@ def _should_relax_configured_default(
     if verified_non_sensitive_codex_apply_patch(
         canonical_harness=_canonical_harness_name(harness),
         event_name=event_name,
+        home_dir=home_dir,
         payload=payload,
         runtime_artifact_checked=runtime_artifact_checked,
         runtime_workspace=runtime_workspace,
