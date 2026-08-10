@@ -41,6 +41,7 @@ from .interpreter_observers import (
 )
 from .request_artifacts import _candidate_command_texts
 from .request_models import ToolActionRequestMatch, _normalize_tool_name
+from .routine_directory_creation import is_safe_routine_directory_creation
 from .sensitive_read_pipeline import _runtime_read_root_texts
 from .shell_static_safety import _path_text_is_within_root_text
 from .shell_stdin_sources import (
@@ -105,6 +106,9 @@ def is_explicitly_benign_tool_action_request(
             found_benign_candidate = True
             continue
         if _looks_like_safe_existence_probe(stripped_command, cwd=cwd, home_dir=home_dir):
+            found_benign_candidate = True
+            continue
+        if is_safe_routine_directory_creation(stripped_command, cwd=cwd, home_dir=home_dir):
             found_benign_candidate = True
             continue
         if _looks_like_safe_cli_metadata_command(stripped_command, parts, cwd=cwd):
