@@ -5,12 +5,15 @@ on:
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
+      - tests/test_desktop_core_alpha_feed_macos_signing.py
       - scripts/release/desktop_core_alpha_feed.py
+      - scripts/release/verify_pyinstaller_macos_signing.py
   push:
     branches: [main]
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
       - scripts/release/desktop_core_alpha_feed.py
+      - scripts/release/verify_pyinstaller_macos_signing.py
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -248,48 +251,6 @@ jobs:
             --base "$BASE" --marker "$BASE.attested.json" --version "$CORE_VERSION" --source-commit "$SOURCE_SHA" \
             --source-tag "$CORE_TAG" --target "$RELEASE_TARGET" --apple-signing-identity "$APPLE_SIGNING_IDENTITY" \
             --apple-team-id "$APPLE_TEAM_ID"
-      - name: Build standalone Core executable
-        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
-        env:
-          CORE_VERSION: ${{ steps.release.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          SOURCE="$RUNNER_TEMP/hol-guard-core"
-          DIST="$RUNNER_TEMP/dist"
-          mkdir -p "$DIST" "$RUNNER_TEMP/pyinstaller" "$RUNNER_TEMP/spec"
-          uv sync --directory "$SOURCE" --frozen --extra mdm-build --python 3.12
-          (
-            cd "$SOURCE"
-            uv run --no-sync python scripts/sync_repo_version.py --version "$CORE_VERSION"
-            test "$(uv run --no-sync python scripts/sync_repo_version.py --check)" = "$CORE_VERSION"
-          )
-          uv sync --directory "$SOURCE" --frozen --extra mdm-build --python 3.12
-          git -C "$SOURCE" diff --check
-          while IFS= read -r changed_path; do
-            [[ -z "$changed_path" ]] && continue
-            case "$changed_path" in
-              pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock) ;;
-              *) echo "Version stamping changed an unexpected Core file: $changed_path" >&2; exit 1 ;;
-            esac
-          done < <(git -C "$SOURCE" diff --name-only)
-          (
-            cd "$SOURCE"
-            uv run --no-sync pyinstaller --clean --noconfirm --onefile --name hol-guard \
-              --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
-              --distpath "$DIST" --workpath "$RUNNER_TEMP/pyinstaller" --specpath "$RUNNER_TEMP/spec" \
-              scripts/mdm/hol-guard-entry.py
-          )
-          BUILT="$DIST/hol-guard"
-          ASSET="$DIST/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
-          chmod 0755 "$BUILT"
-          test "$("$BUILT" --version | sed -E 's/^hol-guard[[:space:]]+//')" = "$CORE_VERSION"
-          export HOL_GUARD_HOME="$RUNNER_TEMP/smoke-home"
-          mkdir -p "$HOL_GUARD_HOME"
-          "$BUILT" desktop bootstrap --json > "$RUNNER_TEMP/bootstrap.json"
-          python3 -I scripts/release/desktop_core_alpha_feed.py verify-bootstrap \
-            --payload "$RUNNER_TEMP/bootstrap.json" --version "$CORE_VERSION" --subject "Standalone Core"
-          mv "$BUILT" "$ASSET"
       - name: Import Apple signing identity
         if: steps.release.outputs.available == 'true'
         env:
@@ -328,6 +289,53 @@ jobs:
               raise SystemExit(f"Expected exactly one imported code-signing identity, found {len(matches)}")
           (root / "apple-signing-fingerprint.txt").write_text(matches[0].upper() + "\n", encoding="ascii")
           PY
+      - name: Build standalone Core executable
+        if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
+        env:
+          CORE_VERSION: ${{ steps.release.outputs.version }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE="$RUNNER_TEMP/hol-guard-core"
+          DIST="$RUNNER_TEMP/dist"
+          mkdir -p "$DIST" "$RUNNER_TEMP/pyinstaller" "$RUNNER_TEMP/spec"
+          uv sync --directory "$SOURCE" --frozen --extra mdm-build --python 3.12
+          (
+            cd "$SOURCE"
+            uv run --no-sync python scripts/sync_repo_version.py --version "$CORE_VERSION"
+            test "$(uv run --no-sync python scripts/sync_repo_version.py --check)" = "$CORE_VERSION"
+          )
+          uv sync --directory "$SOURCE" --frozen --extra mdm-build --python 3.12
+          git -C "$SOURCE" diff --check
+          while IFS= read -r changed_path; do
+            [[ -z "$changed_path" ]] && continue
+            case "$changed_path" in
+              pyproject.toml|src/codex_plugin_scanner/version.py|uv.lock) ;;
+              *) echo "Version stamping changed an unexpected Core file: $changed_path" >&2; exit 1 ;;
+            esac
+          done < <(git -C "$SOURCE" diff --name-only)
+          (
+            cd "$SOURCE"
+            uv run --no-sync pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" \
+              --clean --noconfirm --onefile --name hol-guard \
+              --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+              --distpath "$DIST" --workpath "$RUNNER_TEMP/pyinstaller" --specpath "$RUNNER_TEMP/spec" \
+              scripts/mdm/hol-guard-entry.py
+          )
+          BUILT="$DIST/hol-guard"
+          ASSET="$DIST/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
+          chmod 0755 "$BUILT"
+          python3 -I scripts/release/verify_pyinstaller_macos_signing.py \
+            --binary "$BUILT" --team-id "$APPLE_TEAM_ID"
+          test "$("$BUILT" --version | sed -E 's/^hol-guard[[:space:]]+//')" = "$CORE_VERSION"
+          export HOL_GUARD_HOME="$RUNNER_TEMP/smoke-home"
+          mkdir -p "$HOL_GUARD_HOME"
+          "$BUILT" desktop bootstrap --json > "$RUNNER_TEMP/bootstrap.json"
+          python3 -I scripts/release/desktop_core_alpha_feed.py verify-bootstrap \
+            --payload "$RUNNER_TEMP/bootstrap.json" --version "$CORE_VERSION" --subject "Standalone Core"
+          mv "$BUILT" "$ASSET"
       - name: Sign and notarize new Core sidecar
         if: steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'
         env:
@@ -342,6 +350,8 @@ jobs:
           BINARY="$RUNNER_TEMP/dist/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$BINARY"
           codesign --verify --deep --strict --verbose=2 "$BINARY"
+          python3 -I scripts/release/verify_pyinstaller_macos_signing.py \
+            --binary "$BINARY" --team-id "$APPLE_TEAM_ID"
           ditto -c -k --keepParent "$BINARY" "$RUNNER_TEMP/core-update-notary.zip"
           xcrun notarytool submit "$RUNNER_TEMP/core-update-notary.zip" \
             --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" \
@@ -381,6 +391,8 @@ jobs:
             | sed -E 's/^[^=]+=//; s/://g' | tr '[:lower:]' '[:upper:]')
           test -n "$EXPECTED_FINGERPRINT"
           test "$ACTUAL_FINGERPRINT" = "$EXPECTED_FINGERPRINT"
+          python3 -I scripts/release/verify_pyinstaller_macos_signing.py \
+            --binary "$BINARY" --team-id "$APPLE_TEAM_ID"
           if [[ "$MODE" == "build" ]]; then
             test -s "$RUNNER_TEMP/notary-result.json"
             jq -e '.status == "Accepted" and (.id | type == "string" and length > 0)' \

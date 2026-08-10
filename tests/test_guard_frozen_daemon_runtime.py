@@ -102,10 +102,24 @@ def test_frozen_runtime_fingerprint_binds_exact_executable_bytes(
     assert frozen_daemon_runtime._frozen_runtime_fingerprint() == hashlib.sha256(payload).hexdigest()
 
 
+def test_frozen_runtime_forces_fresh_pyinstaller_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    inventory = manager._guard_daemon_process_inventory_for_guard_home
+    monkeypatch.setattr(frozen_daemon_runtime.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_installed", False)
+    monkeypatch.delenv("PYINSTALLER_RESET_ENVIRONMENT", raising=False)
+
+    frozen_daemon_runtime.install_frozen_daemon_runtime()
+
+    assert frozen_daemon_runtime.os.environ["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    monkeypatch.setattr(manager, "_guard_daemon_process_inventory_for_guard_home", inventory)
+
+
 def test_non_frozen_runtime_does_not_patch_daemon_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
     inventory = manager._guard_daemon_process_inventory_for_guard_home
     monkeypatch.setattr(frozen_daemon_runtime.sys, "frozen", False, raising=False)
+    monkeypatch.delenv("PYINSTALLER_RESET_ENVIRONMENT", raising=False)
 
     frozen_daemon_runtime.install_frozen_daemon_runtime()
 
     assert manager._guard_daemon_process_inventory_for_guard_home is inventory
+    assert "PYINSTALLER_RESET_ENVIRONMENT" not in frozen_daemon_runtime.os.environ

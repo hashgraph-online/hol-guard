@@ -122,7 +122,15 @@ def install_frozen_daemon_runtime() -> None:
     """Install one-file daemon identity and process-inventory adaptations."""
 
     global _frozen_runtime_installed
-    if not bool(getattr(sys, "frozen", False)) or _frozen_runtime_installed:
+    if not bool(getattr(sys, "frozen", False)):
+        return
+
+    # A daemon is an independent invocation of the one-file executable. Force
+    # PyInstaller to create a fresh extraction root instead of treating it as a
+    # worker process that reuses the parent's private _MEI runtime directory.
+    os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+
+    if _frozen_runtime_installed:
         return
     current_inventory = manager._guard_daemon_process_inventory_for_guard_home
 
