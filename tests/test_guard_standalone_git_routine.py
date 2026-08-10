@@ -115,6 +115,79 @@ def test_standalone_verified_origin_reads_are_explicitly_benign(tmp_path: Path) 
 @pytest.mark.parametrize(
     "command",
     (
+        "git cat-file -e HEAD",
+        "git cat-file -e f3270157fc59c04cf676e6bdf4f440f95eac890c^{commit}",
+        "git cat-file -e release/3.0^{tree}",
+    ),
+)
+def test_standalone_object_existence_queries_are_explicitly_benign(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    home, repository = _repository(tmp_path)
+
+    assert _is_benign(command, home=home, repository=repository)
+    assert (
+        _hook_runtime_artifact(
+            harness="codex",
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+            },
+            action_envelope=None,
+            home_dir=home,
+            guard_home=home / ".guard",
+            workspace=repository,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git cat-file -p HEAD",
+        "git cat-file --batch",
+        "git cat-file -e HEAD:secret.txt",
+        "git cat-file -e 'HEAD^{/payload}'",
+        "git cat-file -e '$(payload)'",
+        "git cat-file -e HEAD | cat",
+        "git cat-file -e HEAD; payload",
+    ),
+)
+def test_standalone_object_queries_reject_content_and_execution_syntax(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    home, repository = _repository(tmp_path)
+
+    assert not _is_benign(command, home=home, repository=repository)
+
+
+def test_standalone_object_existence_rejects_partial_clone_configuration(tmp_path: Path) -> None:
+    home, repository = _repository(tmp_path)
+    _ = subprocess.run(
+        ["git", "-C", str(repository), "config", "remote.origin.promisor", "true"],
+        check=True,
+    )
+
+    assert not _is_benign("git cat-file -e deadbeef^{commit}", home=home, repository=repository)
+
+
+def test_standalone_object_existence_rejects_config_routing_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home, repository = _repository(tmp_path)
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+
+    assert not _is_benign("git cat-file -e deadbeef^{commit}", home=home, repository=repository)
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
         "git ls-remote origin main",
         "git ls-remote --heads https://github.com/example/project.git main",
         "git ls-remote --upload-pack=payload origin main",
