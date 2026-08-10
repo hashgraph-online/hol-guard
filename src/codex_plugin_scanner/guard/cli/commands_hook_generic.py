@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 
@@ -138,6 +139,7 @@ from ..trusted_local_tools import (
 )
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .commands_support_apply_patch_policy import verified_non_sensitive_codex_apply_patch
 from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
 from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
 from .commands_support_command_activity import (
@@ -151,7 +153,7 @@ from .commands_support_command_activity import (
 from .commands_support_runtime_policy import _runtime_hook_effective_policy_config
 
 # Bump when generic-hook classification or action-composition semantics change.
-_GENERIC_HOOK_EVALUATOR_POLICY_VERSION = "generic-hook-evaluation-v2"
+_GENERIC_HOOK_EVALUATOR_POLICY_VERSION = "generic-hook-evaluation-v3"
 
 _GENERIC_HOOK_EXPLICIT_POSIX_SHELL_TOOLS = frozenset({"ash", "bash", "dash", "sh", "zsh"})
 
@@ -579,6 +581,15 @@ def _should_relax_configured_default(
             cwd=runtime_workspace,
             home_dir=home_dir,
         )
+    if verified_non_sensitive_codex_apply_patch(
+        canonical_harness=_canonical_harness_name(harness),
+        event_name=event_name,
+        home_dir=home_dir,
+        payload=payload,
+        runtime_artifact_checked=runtime_artifact_checked,
+        runtime_workspace=runtime_workspace,
+    ):
+        return True
     return event_name == "PreToolUse" and is_explicitly_benign_tool_action_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),

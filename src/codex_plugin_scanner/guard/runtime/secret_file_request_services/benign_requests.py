@@ -104,6 +104,9 @@ def is_explicitly_benign_tool_action_request(
         ):
             found_benign_candidate = True
             continue
+        if _looks_like_safe_existence_probe(stripped_command, cwd=cwd, home_dir=home_dir):
+            found_benign_candidate = True
+            continue
         if _looks_like_safe_cli_metadata_command(stripped_command, parts, cwd=cwd):
             found_benign_candidate = True
             continue
@@ -174,6 +177,43 @@ def is_explicitly_benign_tool_action_request(
             continue
         return False
     return found_benign_candidate
+
+
+def _looks_like_safe_existence_probe(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    """Recognize a metadata-only local path existence check with literal output."""
+
+    try:
+        lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|<>()")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        parts = list(lexer)
+    except ValueError:
+        return False
+    if len(parts) != 9 or parts[:2] != ["test", "-e"]:
+        return False
+    if parts[3:] != ["&&", "echo", "exists", "||", "echo", "absent"]:
+        return False
+    target = parts[2]
+    if any(marker in target for marker in ("$", "`", "*", "?", "[", "]", "{", "}")):
+        return False
+    try:
+        candidate = Path(target).expanduser()
+        if not candidate.is_absolute():
+            if cwd is None:
+                return False
+            if ".." in candidate.parts:
+                return False
+            candidate = cwd / candidate
+        resolved = candidate.resolve(strict=False)
+        allowed_roots = tuple(root.resolve() for root in (cwd, home_dir) if root is not None)
+    except (OSError, RuntimeError):
+        return False
+    return bool(allowed_roots) and any(resolved.is_relative_to(root) for root in allowed_roots)
 
 
 def _is_guard_safety_doc_read(command_text: str, *, home_dir: Path) -> bool:
