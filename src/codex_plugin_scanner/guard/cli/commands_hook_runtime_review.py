@@ -109,6 +109,8 @@ def _review_runtime_artifact_hook(
     event_name = state.event_name
     package_evaluation = state.package_evaluation
     policy_action = state.policy_action
+    if not is_guard_action(policy_action):
+        return None
     response_payload = state.response_payload
     risk_summary = state.risk_summary
     runtime_artifact = state.runtime_artifact
@@ -151,7 +153,6 @@ def _review_runtime_artifact_hook(
                 artifact_hash=runtime_artifact_hash,
                 changed_fields=changed_capabilities,
                 executable_action=_observe_mode_executable_action(state),
-                home_dir=context.home_dir,
                 observed_policy_action=observed_policy_action,
                 redaction_level=config.receipt_redaction_level,
                 risk_summary=risk_summary,
@@ -392,7 +393,6 @@ def _review_runtime_artifact_hook(
             artifact_hash=runtime_artifact_hash,
             changed_fields=changed_capabilities,
             executable_action=policy_action,
-            home_dir=context.home_dir,
             observed_policy_action=policy_action,
             redaction_level=config.receipt_redaction_level,
             risk_summary=risk_summary,

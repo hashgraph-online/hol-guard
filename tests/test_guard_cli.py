@@ -5519,7 +5519,14 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert rc == 0
         assert captured.out == ""
         pending = store.list_approval_requests(limit=5)
-        assert pending == []
+        assert len(pending) == 1
+        assert pending[0]["policy_action"] == "require-reapproval"
+        assert pending[0]["scanner_evidence"][-1] == {
+            "source": "observe_mode_inbox",
+            "observed_policy_action": "require-reapproval",
+            "queued_policy_action": "require-reapproval",
+            "authoritative_action": "allow",
+        }
 
     def test_guard_codex_pretooluse_returns_without_browser_wait_for_secret_exfil(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"

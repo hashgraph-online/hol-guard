@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 
 from ..approvals import queue_blocked_approvals
-from ..daemon.manager import schedule_guard_daemon_ensure
+from ..daemon.manager import guard_daemon_url_for_home
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..runtime.actions import GuardActionEnvelope
 from ..store import GuardStore
@@ -19,7 +18,6 @@ def queue_observe_mode_request(
     artifact_hash: str,
     changed_fields: Sequence[str],
     executable_action: GuardAction,
-    home_dir: Path | None,
     observed_policy_action: GuardAction,
     redaction_level: str,
     risk_summary: str | None,
@@ -42,10 +40,7 @@ def queue_observe_mode_request(
         }
     )
     try:
-        approval_center_url = schedule_guard_daemon_ensure(
-            store.guard_home,
-            home_dir=home_dir,
-        )
+        approval_center_url = guard_daemon_url_for_home(store.guard_home)
         return queue_blocked_approvals(
             detection=HarnessDetection(
                 harness=artifact.harness,

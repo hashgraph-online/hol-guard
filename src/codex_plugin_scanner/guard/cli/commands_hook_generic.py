@@ -1109,7 +1109,6 @@ def _run_hook_generic_payload(
             artifact_hash=runtime_artifact_hash,
             changed_fields=changed_capabilities or ["tool_action"],
             executable_action=policy_action,
-            home_dir=home_dir,
             observed_policy_action=inbox_policy_action,
             redaction_level=config.receipt_redaction_level,
             risk_summary=(
