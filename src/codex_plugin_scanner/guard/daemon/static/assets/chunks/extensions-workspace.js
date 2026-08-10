@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, an as HiMiniArrowLeft, Z as HiMiniLockClosed, o as HiMiniShieldCheck, ao as HiMiniArrowTopRightOnSquare, c as HiMiniChevronRight, ap as HiMiniInformationCircle, w as HiMiniXMark, J as HiMiniExclamationTriangle, aq as fetchExtensionControlApi, ar as HiMiniArrowPath, $ as HiMiniAdjustmentsHorizontal, ak as HiMiniMagnifyingGlass, l as HiMiniCheckCircle, y as HiMiniChevronDown, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, x as HiMiniChevronUp, as as buildApprovalProofCredentials, at as isApprovalProofSubmitDisabled, au as ApprovalProofFieldInputs } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, an as HiMiniArrowLeft, Z as HiMiniLockClosed, o as HiMiniShieldCheck, ao as HiMiniArrowTopRightOnSquare, c as HiMiniChevronRight, ap as HiMiniInformationCircle, w as HiMiniXMark, J as HiMiniExclamationTriangle, aq as fetchExtensionControlApi, ar as HiMiniArrowPath, $ as HiMiniAdjustmentsHorizontal, ak as HiMiniMagnifyingGlass, l as HiMiniCheckCircle, y as HiMiniChevronDown, B as HiMiniCloud, as as commandReasonLabel, at as DEFAULT_COMMAND_ACTIVITY_FILTERS, a4 as fetchRuntimeSnapshot, d as createCommandActivityClient, f as fetchCommandActivityApi, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, x as HiMiniChevronUp, au as buildApprovalProofCredentials, av as isApprovalProofSubmitDisabled, aw as ApprovalProofFieldInputs } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -2638,16 +2638,16 @@ function searchableExtensionText(extension2) {
   ].join(" ").toLowerCase();
 }
 function protectionCategoryIdForExtension(extension2) {
-  const text = searchableExtensionText(extension2);
-  if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text)) return "source-control";
-  if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text)) return "packages";
-  if (/secret|credential|\.env|filesystem|sensitive.?file|keychain/.test(text)) return "files-secrets";
-  if (/aws|azure|gcp|cloud|terraform|kubectl|kubernetes|infrastructure|platform/.test(text)) return "cloud-infrastructure";
-  if (/network|egress|download|curl|wget|ssh|remote|http|ftp/.test(text)) return "network-downloads";
-  if (/database|sql|postgres|mysql|sqlite|redis|mongo|storage|backup|data/.test(text)) return "data-databases";
-  if (/deploy|release|ci.?cd|pipeline|workflow|build|artifact/.test(text)) return "deployments-ci";
-  if (/slack|discord|message|collaboration|search|email/.test(text)) return "messaging-collaboration";
-  if (/agent|\bmcp\b|assistant|model|prompt|ai.?tool/.test(text)) return "ai-workflows";
+  const text2 = searchableExtensionText(extension2);
+  if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text2)) return "source-control";
+  if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text2)) return "packages";
+  if (/secret|credential|\.env|filesystem|sensitive.?file|keychain/.test(text2)) return "files-secrets";
+  if (/aws|azure|gcp|cloud|terraform|kubectl|kubernetes|infrastructure|platform/.test(text2)) return "cloud-infrastructure";
+  if (/network|egress|download|curl|wget|ssh|remote|http|ftp/.test(text2)) return "network-downloads";
+  if (/database|sql|postgres|mysql|sqlite|redis|mongo|storage|backup|data/.test(text2)) return "data-databases";
+  if (/deploy|release|ci.?cd|pipeline|workflow|build|artifact/.test(text2)) return "deployments-ci";
+  if (/slack|discord|message|collaboration|search|email/.test(text2)) return "messaging-collaboration";
+  if (/agent|\bmcp\b|assistant|model|prompt|ai.?tool/.test(text2)) return "ai-workflows";
   return "system-shell";
 }
 function protectionCategoryForExtension(extension2) {
@@ -2719,8 +2719,8 @@ function filterProtectionModulesByHumanQuery(modules, query) {
   if (!normalized) return [...modules];
   const terms = normalized.split(/\s+/).filter(Boolean).slice(0, 8);
   return modules.filter(({ extension: extension2 }) => {
-    const text = safeSearchText(extension2);
-    return terms.every((term) => text.includes(term));
+    const text2 = safeSearchText(extension2);
+    return terms.every((term) => text2.includes(term));
   });
 }
 function protectionCloudContinuity(runtime, loadFailed = false) {
