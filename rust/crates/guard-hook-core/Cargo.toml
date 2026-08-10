@@ -1,0 +1,18 @@
+[package]
+name = "guard-hook-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+guard-contracts = { path = "../guard-contracts" }
+guard-rules = { path = "../guard-rules" }
+guard-scanner = { path = "../guard-scanner" }
+guard-secure-fs = { path = "../guard-secure-fs" }
+hex.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,20 @@
+[package]
+name = "hol-guard-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hol-guard-runtime"
+path = "src/main.rs"
+
+[dependencies]
+guard-contracts = { path = "../guard-contracts" }
+guard-hook-core = { path = "../guard-hook-core" }
+guard-rules = { path = "../guard-rules" }
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
