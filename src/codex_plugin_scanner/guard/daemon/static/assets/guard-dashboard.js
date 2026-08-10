@@ -27972,7 +27972,7 @@ function ExactActionPersistenceChoice(props) {
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-medium text-brand-dark", children: "Always allow this exact action" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Save only this exact command for this AI app. Changed commands still need review." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Save only this exact action for this AI app. Changed actions still need review." })
     ] })
   ] });
 }

@@ -134,7 +134,7 @@ function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (chec
       <span>
         <span className="block text-sm font-medium text-brand-dark">Always allow this exact action</span>
         <span className="mt-0.5 block text-xs text-muted-foreground">
-          Save only this exact command for this AI app. Changed commands still need review.
+          Save only this exact action for this AI app. Changed actions still need review.
         </span>
       </span>
     </label>

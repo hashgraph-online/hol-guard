@@ -15,6 +15,7 @@ from .package_execution_context import (
     PackageExecutionContext,
     package_execution_context_from_scanner_evidence,
 )
+from .runtime.approval_context import parse_approval_context_token
 from .runtime.github_workflow_runtime import approval_record_from_approval_request
 from .temporary_mcp_approvals import temporary_mcp_approval_payload
 from .trusted_local_tools import local_tool_approval_payload
@@ -221,12 +222,21 @@ def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, o
 def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bool:
     """Return whether an artifact allow can be saved as one exact action."""
 
-    if _allow_is_non_overridable(request) or _string_or_none(request.get("artifact_type")) != "tool_action_request":
+    if _allow_is_non_overridable(request):
+        return False
+    artifact_type = _string_or_none(request.get("artifact_type"))
+    artifact_id = _string_or_none(request.get("artifact_id"))
+    artifact_hash = _string_or_none(request.get("artifact_hash"))
+    if artifact_type == "tool_call":
+        return bool(
+            artifact_id
+            and parse_approval_context_token(artifact_hash) is not None
+            and _string_or_none(request.get("raw_command_text"))
+        )
+    if artifact_type != "tool_action_request":
         return False
     if _request_scoped_family_key(request) != "family:tool-action":
         return False
-    artifact_id = _string_or_none(request.get("artifact_id"))
-    artifact_hash = _string_or_none(request.get("artifact_hash"))
     action_identity = _string_or_none(request.get("action_identity"))
     raw_command_text = _string_or_none(request.get("raw_command_text"))
     envelope = request.get("action_envelope_json")

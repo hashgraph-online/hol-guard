@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.approval_scope_support import (
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardAction, GuardApprovalRequest
+from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
 from codex_plugin_scanner.guard.store import GuardStore, runtime_tool_action_exact_match_context
 
 
@@ -435,6 +436,108 @@ def test_exact_action_persistence_accepts_envelope_raw_command_text(tmp_path: Pa
     row = _store_request(store, request)
 
     assert request_scope_contract(row).exact_action_persistence_eligible is True
+
+
+def test_exact_action_persistence_accepts_context_bound_tool_call(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    context_token = build_approval_context_token(
+        identity={"server": "browser", "tool": "navigate"},
+        content={"url": "http://127.0.0.1:3000"},
+        capabilities={"risk_categories": ["browser_navigation"]},
+        policy={"action": "review"},
+        sandbox={"mode": "workspace-write"},
+    )
+    request = replace(
+        _request(
+            "context-bound-tool-call",
+            artifact_id="codex:runtime:global:browser:navigate",
+            artifact_type="tool_call",
+            artifact_hash=context_token,
+        ),
+        raw_command_text="navigate http://127.0.0.1:3000",
+    )
+    row = _store_request(store, request)
+
+    assert request_scope_contract(row).exact_action_persistence_eligible is True
+
+
+def test_v2_saved_tool_call_allow_remains_bound_to_exact_context(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    context_token = build_approval_context_token(
+        identity={"server": "browser", "tool": "navigate"},
+        content={"url": "http://127.0.0.1:3000"},
+        capabilities={"risk_categories": ["browser_navigation"]},
+        policy={"action": "review"},
+        sandbox={"mode": "workspace-write"},
+    )
+    artifact_id = "codex:runtime:global:browser:navigate"
+    request = replace(
+        _request(
+            "saved-tool-call",
+            artifact_id=artifact_id,
+            artifact_type="tool_call",
+            artifact_hash=context_token,
+        ),
+        raw_command_text="navigate http://127.0.0.1:3000",
+    )
+    row = _store_request(store, request)
+    payload = {**_v2_selection(row, "artifact"), "persist_policy": True}
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, response = _post(daemon, "/v1/requests/saved-tool-call/approve", payload)
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert response["applied_scope"] == "artifact"
+    decisions = store.list_policy_decisions()
+    assert len(decisions) == 1
+    assert decisions[0]["expires_at"] is None
+    assert (
+        store.resolve_policy(
+            "codex",
+            artifact_id,
+            context_token,
+            now="2026-07-19T00:01:00+00:00",
+            consume_one_shot=False,
+        )
+        == "allow"
+    )
+    changed_token = build_approval_context_token(
+        identity={"server": "browser", "tool": "navigate"},
+        content={"url": "https://example.com"},
+        capabilities={"risk_categories": ["browser_navigation"]},
+        policy={"action": "review"},
+        sandbox={"mode": "workspace-write"},
+    )
+    assert (
+        store.resolve_policy(
+            "codex",
+            artifact_id,
+            changed_token,
+            now="2026-07-19T00:02:00+00:00",
+            consume_one_shot=False,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize("artifact_hash", ["unknown", "plain-hash", "guard-approval-context:v1:invalid"])
+def test_exact_action_persistence_rejects_unbound_tool_call(tmp_path: Path, artifact_hash: str) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    request = replace(
+        _request(
+            f"unbound-tool-call-{len(artifact_hash)}",
+            artifact_id="codex:runtime:global:browser:navigate",
+            artifact_type="tool_call",
+            artifact_hash=artifact_hash,
+        ),
+        raw_command_text="navigate http://127.0.0.1:3000",
+    )
+    row = _store_request(store, request)
+
+    assert request_scope_contract(row).exact_action_persistence_eligible is False
 
 
 def test_legacy_unknown_broad_deny_is_not_silently_narrowed(tmp_path: Path) -> None:
