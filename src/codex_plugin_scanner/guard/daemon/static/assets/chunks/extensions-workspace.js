@@ -1484,6 +1484,18 @@ function managedPermissionState(effective, permissionId) {
   }
   return null;
 }
+function extensionPolicyRadioTabStop(choices, state, groupDisabled) {
+  if (groupDisabled) return -1;
+  const selected = choices.findIndex((choice) => choice.value === state && !choice.disabled);
+  return selected >= 0 ? selected : choices.findIndex((choice) => !choice.disabled);
+}
+function committedExtensionPolicyState(effective, layers, revision) {
+  const localControls = layers.filter((layer) => layer.kind === "local-admin").flatMap((layer) => layer.controls).map((control) => ({
+    target: { kind: control.target_kind, target_id: control.target_id },
+    state: control.state
+  }));
+  return { ...effective, revision, layers, controls: localControls, projection: void 0 };
+}
 function draftChangeCount(effective, extension2, draftLayers) {
   return extension2.permissions.filter(
     (permission2) => localPermissionDraftState(effective.layers, permission2.permission_id) !== localPermissionDraftState(draftLayers, permission2.permission_id)
@@ -1496,8 +1508,7 @@ function DraftControl(props) {
     { value: "allow", label: "Allow", disabled: managed === "disabled" },
     { value: "block", label: "Block" }
   ];
-  const selectedIndex = choices.findIndex((choice) => choice.value === props.state && !choice.disabled);
-  const tabStopIndex = selectedIndex >= 0 ? selectedIndex : choices.findIndex((choice) => !choice.disabled);
+  const tabStopIndex = extensionPolicyRadioTabStop(choices, props.state, props.disabled);
   const chooseAdjacent = (event, index) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
     event.preventDefault();
@@ -1793,7 +1804,7 @@ function ExtensionPolicyPanel(props) {
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
       draftGeneration.current += 1;
-      const committedEffective = { ...baseEffective, revision: applied.revision, layers: base.layers };
+      const committedEffective = committedExtensionPolicyState(baseEffective, base.layers, applied.revision);
       setBaseEffective(committedEffective);
       setDraftLayers(cloneLayers(committedEffective));
       setIdentity(newExtensionPolicyDraftIdentity());

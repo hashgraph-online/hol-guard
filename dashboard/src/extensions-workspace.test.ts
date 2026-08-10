@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -19,6 +20,7 @@ import {
 } from "./extensions-workspace";
 import { isExtensionEnabled } from "./extensions-filters";
 import { fetchResolvedApprovalGate } from "./use-resolved-approval-gate";
+import { committedExtensionPolicyState, extensionPolicyRadioTabStop } from "./extension-policy-panel";
 
 assert.equal(extensionRecoveryAction("protected"), null);
 assert.deepEqual(extensionRecoveryAction("recovery-required"), extensionRecoveryAction("tampered"));
@@ -153,5 +155,48 @@ assert.equal(isExtensionEnabled(effective, extension), true);
 assert.equal(permissionEffectiveState(effective, extension, extension.permissions[0]!), "disabled");
 assert.equal(extensionEffectiveState({ ...effective, global_lockdown: true }, { ...extension, required: true }), "disabled");
 assert.equal(extensionEffectiveState({ ...effective, health: "tampered" }, extension), "disabled");
+
+assert.equal(extensionPolicyRadioTabStop([
+  { value: "inherit" },
+  { value: "allow", disabled: true },
+  { value: "block" },
+], "allow", false), 0, "managed-disabled selected choice must leave an enabled radio tabbable");
+assert.equal(extensionPolicyRadioTabStop([{ value: "inherit" }, { value: "block" }], "block", false), 1);
+assert.equal(extensionPolicyRadioTabStop([{ value: "inherit" }], "inherit", true), -1);
+
+const committed = committedExtensionPolicyState({
+  ...effective,
+  projection: {
+    schema_version: "guard.daemon.extension-control-projection.v1",
+    revision: 7,
+    catalog_digest: effective.catalog_digest,
+    health: "protected",
+    extensions: [],
+    permissions: [{
+      permission_id: extension.permissions[0]!.permission_id,
+      extension_id: extension.extension_id,
+      effective_state: "allowed",
+      local_state: "inherited",
+      managed_state: "inherited",
+      configurable: true,
+      fixed_reason: null,
+      reason_codes: [],
+    }],
+  },
+}, [{
+  schema_version: "1.0.0", kind: "local-admin", catalog_digest: effective.catalog_digest,
+  global_lockdown: false,
+  controls: [{ target_kind: "permission", target_id: extension.permissions[0]!.permission_id, state: "disabled" }],
+}], 8);
+assert.equal(committed.revision, 8);
+assert.equal(committed.projection, undefined, "committed local state must not retain stale projection data");
+assert.equal(permissionEffectiveState(committed, extension, extension.permissions[0]!), "disabled");
+
+const policyDetailSource = readFileSync(new URL("./extension-control-center-detail.tsx", import.meta.url), "utf8");
+const policyPanelSource = readFileSync(new URL("./extension-policy-panel.tsx", import.meta.url), "utf8");
+assert.match(policyDetailSource, /id="extension-policy-tabpanel"[\s\S]*role="tabpanel"[\s\S]*aria-labelledby="extension-tab-policy"/);
+assert.match(policyPanelSource, /if \(generation === draftGeneration\.current\) handleApiError/);
+assert.match(policyPanelSource, /if \(generation === draftGeneration\.current\) \{[\s\S]*Guard could not rebase this draft/);
+assert.match(policyPanelSource, /ArrowLeft[\s\S]*ArrowRight[\s\S]*ArrowUp[\s\S]*ArrowDown/);
 
 console.log("extensions-workspace.test.ts: all assertions passed");

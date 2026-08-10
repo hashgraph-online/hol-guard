@@ -65,6 +65,31 @@ function managedPermissionState(effective: EffectiveExtensionControls, permissio
   return null;
 }
 
+export function extensionPolicyRadioTabStop(
+  choices: Array<{ value: PermissionDraftState; disabled?: boolean }>,
+  state: PermissionDraftState,
+  groupDisabled: boolean,
+): number {
+  if (groupDisabled) return -1;
+  const selected = choices.findIndex((choice) => choice.value === state && !choice.disabled);
+  return selected >= 0 ? selected : choices.findIndex((choice) => !choice.disabled);
+}
+
+export function committedExtensionPolicyState(
+  effective: EffectiveExtensionControls,
+  layers: EffectiveExtensionControls["layers"],
+  revision: number,
+): EffectiveExtensionControls {
+  const localControls = layers
+    .filter((layer) => layer.kind === "local-admin")
+    .flatMap((layer) => layer.controls)
+    .map((control) => ({
+      target: { kind: control.target_kind, target_id: control.target_id },
+      state: control.state,
+    }));
+  return { ...effective, revision, layers, controls: localControls, projection: undefined };
+}
+
 function draftChangeCount(effective: EffectiveExtensionControls, extension: ExtensionCatalogItem, draftLayers: EffectiveExtensionControls["layers"]): number {
   return extension.permissions.filter((permission) =>
     localPermissionDraftState(effective.layers, permission.permission_id) !== localPermissionDraftState(draftLayers, permission.permission_id),
@@ -84,8 +109,7 @@ function DraftControl(props: {
     { value: "allow", label: "Allow", disabled: managed === "disabled" },
     { value: "block", label: "Block" },
   ];
-  const selectedIndex = choices.findIndex((choice) => choice.value === props.state && !choice.disabled);
-  const tabStopIndex = selectedIndex >= 0 ? selectedIndex : choices.findIndex((choice) => !choice.disabled);
+  const tabStopIndex = extensionPolicyRadioTabStop(choices, props.state, props.disabled);
   const chooseAdjacent = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
     event.preventDefault();
@@ -240,7 +264,7 @@ export function ExtensionPolicyPanel(props: {
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
       draftGeneration.current += 1;
-      const committedEffective = { ...baseEffective, revision: applied.revision, layers: base.layers };
+      const committedEffective = committedExtensionPolicyState(baseEffective, base.layers, applied.revision);
       setBaseEffective(committedEffective);
       setDraftLayers(cloneLayers(committedEffective));
       setIdentity(newExtensionPolicyDraftIdentity());
