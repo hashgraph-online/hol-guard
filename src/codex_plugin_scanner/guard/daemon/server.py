@@ -5488,9 +5488,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "workspace",
                 workspace_candidate,
                 roots=self._hook_safe_roots(),
+                require_directory=action_workdir is not None,
             )
-            if action_workdir is not None and (workspace is None or not os.path.isdir(workspace)):
-                raise _HookPathValidationError("workspace", "not_directory")
         except _HookPathValidationError as error:
             self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
             self._write_json({"error": error.code}, status=400)
@@ -7211,10 +7210,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         value: str | None,
         *,
         roots: tuple[Path, ...] | None = None,
+        require_directory: bool = False,
     ) -> str | None:
         if value is None:
             return None
-        return os.fspath(self._validate_hook_directory_path(parameter, value, roots=roots))
+        path = self._validate_hook_directory_path(parameter, value, roots=roots)
+        if require_directory:
+            try:
+                # codeql[py/path-injection] path is canonical and constrained to a trusted root above.
+                path_stat = path.stat()
+            except OSError:
+                raise _HookPathValidationError(parameter, "not_directory") from None
+            if not stat.S_ISDIR(path_stat.st_mode):
+                raise _HookPathValidationError(parameter, "not_directory")
+        return os.fspath(path)
 
     @staticmethod
     def _normalized_hook_workspace_string(value: object) -> str | None:

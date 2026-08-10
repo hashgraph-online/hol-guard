@@ -38,7 +38,8 @@ def _benign(command: str, *, repository: Path, home: Path) -> bool:
 
 
 def _trust_guard_executable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    executable = tmp_path / "bin" / "hol-guard"
+    executable_directory = "Scripts" if sys.platform == "win32" else "bin"
+    executable = tmp_path / executable_directory / "hol-guard"
     executable.parent.mkdir()
     _ = executable.write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr(sys, "prefix", str(tmp_path))
