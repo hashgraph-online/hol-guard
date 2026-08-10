@@ -188,7 +188,10 @@ def _looks_like_safe_existence_probe(
     """Recognize a metadata-only local path existence check with literal output."""
 
     try:
-        parts = shlex.split(command_text)
+        lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|<>()")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        parts = list(lexer)
     except ValueError:
         return False
     if len(parts) != 9 or parts[:2] != ["test", "-e"]:
@@ -196,12 +199,14 @@ def _looks_like_safe_existence_probe(
     if parts[3:] != ["&&", "echo", "exists", "||", "echo", "absent"]:
         return False
     target = parts[2]
-    if any(marker in target for marker in ("$", "`", "*", "?", "[", "]", "{", "}", ";", "&", "|", "<", ">", "(", ")")):
+    if any(marker in target for marker in ("$", "`", "*", "?", "[", "]", "{", "}")):
         return False
     try:
         candidate = Path(target).expanduser()
         if not candidate.is_absolute():
             if cwd is None:
+                return False
+            if ".." in candidate.parts:
                 return False
             candidate = cwd / candidate
         resolved = candidate.resolve(strict=False)

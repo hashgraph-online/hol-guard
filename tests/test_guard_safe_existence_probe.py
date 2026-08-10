@@ -26,6 +26,11 @@ def test_literal_local_existence_probe_is_benign(tmp_path: Path) -> None:
         cwd=workspace,
         home=home,
     )
+    assert _is_benign(
+        'test -e "my&file" && echo exists || echo absent',
+        cwd=workspace,
+        home=home,
+    )
 
 
 @pytest.mark.parametrize(
@@ -33,6 +38,7 @@ def test_literal_local_existence_probe_is_benign(tmp_path: Path) -> None:
     (
         "test -e $TARGET && echo exists || echo absent",
         "test -e /etc/passwd && echo exists || echo absent",
+        "test -e ../outside && echo exists || echo absent",
         "test -e candidate && payload || echo absent",
         "test -f candidate && echo exists || echo absent",
         "test -e candidate; payload",
