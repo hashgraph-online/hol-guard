@@ -6,7 +6,7 @@ import getpass
 import sys
 from pathlib import Path
 
-from ..approval_gate import ApprovalGateError, ApprovalGateInput, public_config
+from ..approval_gate import ApprovalGateError, ApprovalGateInput, public_config, recent_totp_satisfied
 
 
 def prompt_for_approval_gate(
@@ -17,6 +17,8 @@ def prompt_for_approval_gate(
 ) -> ApprovalGateInput | None:
     gate = public_config(guard_home)
     if not gate.enabled:
+        return None
+    if gate.totp_enabled and recent_totp_satisfied(guard_home):
         return None
     if not sys.stdin.isatty():
         proof_name = "Authenticator code" if gate.totp_enabled else "Approval password"
