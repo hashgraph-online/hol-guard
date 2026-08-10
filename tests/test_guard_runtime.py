@@ -8720,7 +8720,7 @@ def test_hook_runtime_artifact_allows_codex_apply_patch_command_for_source_file(
     ),
     ids=("global", "harness"),
 )
-def test_guard_hook_codex_strict_default_reviews_non_sensitive_apply_patch(
+def test_guard_hook_codex_review_default_allows_verified_non_sensitive_apply_patch(
     strict_config: str,
     tmp_path: Path,
     capsys,
@@ -8759,11 +8759,9 @@ def test_guard_hook_codex_strict_default_reviews_non_sensitive_apply_patch(
     )
     store = GuardStore(home_dir)
 
-    assert rc == 1
-    assert output["policy_action"] == "require-reapproval"
-    requests = store.list_approval_requests(limit=10)
-    assert len(requests) == 1
-    assert requests[0]["artifact_type"] == "tool_action_request"
+    assert rc == 0
+    assert output["policy_action"] == "warn"
+    assert store.list_approval_requests(limit=10) == []
 
 
 def test_guard_hook_codex_strict_default_reviews_protected_apply_patch(
