@@ -194,7 +194,13 @@ def _compound_developer_effect_graph(
         if command_name == "gh" and github_is_low_risk:
             effects.append(DeveloperShellSegmentEffect(index, command_name, DeveloperShellEffect.REMOTE_READ))
             continue
-        if _safe_cli_metadata_segment_is_safe(command_name, args, cwd=segment_root):
+        if _safe_cli_metadata_segment_is_safe(
+            command_name,
+            args,
+            cwd=segment_root,
+            command_token=segment.tokens[command_index],
+            command_index=command_index,
+        ):
             effects.append(DeveloperShellSegmentEffect(index, command_name, DeveloperShellEffect.LOCAL_READ))
             continue
         if (

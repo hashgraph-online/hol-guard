@@ -50,7 +50,7 @@ from .shell_stdin_sources import (
     _echo_stdout_payload,
     _printf_stdout_payloads,
 )
-from .shell_tokenization import _shell_segment_primary_command, _split_shell_parts
+from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command, _split_shell_parts
 
 
 def is_explicitly_benign_tool_action_request(
@@ -65,6 +65,7 @@ def is_explicitly_benign_tool_action_request(
         return False
     found_benign_candidate = False
     for command_text in _candidate_command_texts(arguments):
+        raw_command_text = command_text
         interpreter_evidence = _python_interpreter_executable_identities(
             command_text,
             cwd=cwd,
@@ -73,9 +74,16 @@ def is_explicitly_benign_tool_action_request(
         if any(evidence.get("trust") not in {"trusted_guard", "trusted_system"} for evidence in interpreter_evidence):
             return False
         if normalized_tool_name in _SHELL_TOOL_NAMES:
-            command_text = normalize_transparent_shell_command(
-                command_text, cwd=cwd, home_dir=home_dir
-            ).normalized_command
+            normalization = normalize_transparent_shell_command(command_text, cwd=cwd, home_dir=home_dir)
+            command_text = normalization.normalized_command
+            if normalization.wrapper_chain:
+                normalized_parts = _split_shell_parts(command_text)
+                normalized_segments = _iter_shell_command_segments(normalized_parts)
+                invokes_guard = any(
+                    _shell_segment_primary_command(segment)[0] == "hol-guard" for segment in normalized_segments
+                )
+                if invokes_guard and command_text != raw_command_text:
+                    return False
         stripped_command = command_text.strip()
         if not stripped_command:
             continue
