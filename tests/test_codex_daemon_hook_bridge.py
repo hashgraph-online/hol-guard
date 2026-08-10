@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import subprocess
 import sys
 import threading
 from http.server import HTTPServer
@@ -456,3 +457,59 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
         assert response == {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
     else:
         assert response["continue"] is False
+
+
+def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    configured_workspace = tmp_path / "projects"
+    repository = configured_workspace / "example"
+    repository.mkdir(parents=True)
+    _ = subprocess.run(["git", "init", "--quiet", str(repository)], check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example/project.git",
+        ],
+        check=True,
+    )
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode(
+        {
+            "guard-home": str(guard_home),
+            "home": str(tmp_path),
+            "workspace": str(configured_workspace),
+        }
+    )
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "git fetch origin main"},
+                    "cwd": str(repository),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {}
