@@ -206,6 +206,44 @@ def git_status_has_execution_free_config(
     return bool(values) and all(value in {"0", "false", "no", "off"} for value in values)
 
 
+def git_object_query_has_no_lazy_fetch(
+    cwd: Path,
+    *,
+    git_binary: Path | None = None,
+) -> bool:
+    """Reject object queries when repository configuration can fetch missing objects."""
+
+    if not git_config_routing_environment_is_clean():
+        return False
+    resolved_git = git_binary or trusted_git_binary_for_cwd(cwd)
+    if resolved_git is None:
+        return False
+    try:
+        repository_cwd = cwd.resolve()
+        repository = subprocess.run(
+            [str(resolved_git), "rev-parse", "--is-inside-work-tree"],
+            cwd=repository_cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_PROBE_TIMEOUT_SECONDS,
+        )
+        config = subprocess.run(
+            [str(resolved_git), "config", "--null", "--list"],
+            cwd=repository_cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_PROBE_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if repository.returncode != 0 or repository.stdout.strip() != "true" or config.returncode != 0:
+        return False
+    parsed_config = _parse_null_git_config(config.stdout)
+    return parsed_config is not None and not _git_checkout_config_can_fetch(parsed_config)
+
+
 def git_fetch_origin_has_execution_free_config(
     cwd: Path,
     *,
@@ -760,6 +798,7 @@ __all__ = (
     "git_binary_path_is_trusted",
     "git_config_routing_environment_is_clean",
     "git_fetch_origin_has_execution_free_config",
+    "git_object_query_has_no_lazy_fetch",
     "git_push_origin_has_execution_free_config",
     "git_status_args_are_read_only",
     "git_status_has_execution_free_config",
