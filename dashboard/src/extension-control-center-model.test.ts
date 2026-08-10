@@ -119,6 +119,34 @@ const blockedParent: EffectiveExtensionControls = {
 };
 assert.equal(extensionStateLabel(blockedParent, extension), "Blocked");
 assert.equal(permissionStateLabel(blockedParent, extension, permissions[1]!), "Blocked");
+const blockedParentWithManagedPermission: EffectiveExtensionControls = {
+  ...blockedParent,
+  projection: {
+    schema_version: "guard.daemon.extension-control-projection.v1",
+    revision: 1,
+    catalog_digest: digest,
+    health: "protected",
+    extensions: [{
+      extension_id: extension.extension_id,
+      effective_state: "blocked",
+      local_state: "disabled",
+      managed_state: "inherited",
+      required: false,
+      reason_codes: ["control.extension-disabled"],
+    }],
+    permissions: [{
+      permission_id: permissions[1]!.permission_id,
+      extension_id: extension.extension_id,
+      effective_state: "blocked",
+      local_state: "inherited",
+      managed_state: "enabled",
+      configurable: true,
+      fixed_reason: null,
+      reason_codes: ["control.extension-disabled"],
+    }],
+  },
+};
+assert.equal(permissionStateLabel(blockedParentWithManagedPermission, extension, permissions[1]!), "Blocked");
 const managed: EffectiveExtensionControls = {
   ...effective,
   layers: [{ schema_version: "1.0.0", kind: "signed-cloud", catalog_digest: digest, global_lockdown: false, controls: [{ target_kind: "extension", target_id: "command.git", state: "disabled" }] }],

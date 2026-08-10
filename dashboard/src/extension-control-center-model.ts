@@ -189,6 +189,7 @@ export function permissionStateLabel(
 ): "Allowed" | "Blocked" | "Required" | "Managed" | "Inherited" | "Lockdown" | "Unavailable" {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
+  if (extensionEffectiveState(effective, extension) === "disabled") return "Blocked";
   if (managedExplicitControlState(effective, "permission", permission.permission_id) !== null) return "Managed";
   if (!permission.configurable) return "Required";
   const projected = effective.projection?.permissions.find((item) => item.permission_id === permission.permission_id);

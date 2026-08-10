@@ -118,6 +118,7 @@ function extensionStateLabel(effective, extension2) {
 function permissionStateLabel(effective, extension2, permission2) {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
+  if (extensionEffectiveState(effective, extension2) === "disabled") return "Blocked";
   if (managedExplicitControlState(effective, "permission", permission2.permission_id) !== null) return "Managed";
   if (!permission2.configurable) return "Required";
   const projected = effective.projection?.permissions.find((item) => item.permission_id === permission2.permission_id);
