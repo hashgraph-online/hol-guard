@@ -8,7 +8,7 @@ from pathlib import Path
 from ..secret_sensitivity import classify_secret_path
 
 _DYNAMIC_PATH_MARKERS = ("$", "`", "*", "?", "[", "]", "{", "}", "\x00")
-_SHELL_CONTROL_TOKENS = frozenset({";", "&", "&&", "|", "||", "<", ">", "(", ")"})
+_SHELL_CONTROL_CHARACTERS = frozenset(";&|<>()")
 _PROTECTED_DIRECTORY_NAMES = frozenset({".aws", ".codex", ".docker", ".git", ".gnupg", ".hol-guard", ".kube", ".ssh"})
 
 
@@ -30,7 +30,10 @@ def is_safe_routine_directory_creation(
     if len(parts) < 3 or parts[0] != "mkdir" or parts[1] not in {"-p", "--parents"}:
         return False
     targets = parts[2:]
-    if any(target.startswith("-") or target in _SHELL_CONTROL_TOKENS for target in targets):
+    if any(
+        target.startswith("-") or any(character in target for character in _SHELL_CONTROL_CHARACTERS)
+        for target in targets
+    ):
         return False
     if any(marker in target for target in targets for marker in _DYNAMIC_PATH_MARKERS):
         return False
