@@ -58,6 +58,7 @@ from .commands_hook_runtime_state import (
     set_runtime_artifact_hook_final_action,
 )
 from .commands_parser_helpers import *
+from .commands_support_observe_queue import queue_observe_mode_request
 
 _OBSERVE_EXECUTION_SOURCE_FIELDS = (
     "current_config_action",
@@ -108,6 +109,8 @@ def _review_runtime_artifact_hook(
     event_name = state.event_name
     package_evaluation = state.package_evaluation
     policy_action = state.policy_action
+    if not is_guard_action(policy_action):
+        return None
     response_payload = state.response_payload
     risk_summary = state.risk_summary
     runtime_artifact = state.runtime_artifact
@@ -123,6 +126,7 @@ def _review_runtime_artifact_hook(
         guard_payload=response_payload,
     )
     observe_mode = config.mode == "observe"
+    observe_request_queued = False
     terminal_action = policy_action in {
         "block",
         "sandbox-required",
@@ -143,6 +147,19 @@ def _review_runtime_artifact_hook(
         if observe_mode:
             response_payload["approval_requests"] = []
             observed_policy_action = policy_action
+            queue_observe_mode_request(
+                action_envelope=action_envelope,
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                changed_fields=changed_capabilities,
+                executable_action=_observe_mode_executable_action(state),
+                observed_policy_action=observed_policy_action,
+                redaction_level=config.receipt_redaction_level,
+                risk_summary=risk_summary,
+                scanner_evidence=scanner_evidence_payload,
+                store=store,
+            )
+            observe_request_queued = True
             set_runtime_artifact_hook_final_action(
                 state,
                 _observe_mode_executable_action(state),
@@ -369,6 +386,19 @@ def _review_runtime_artifact_hook(
                 managed_install=managed_install,
             )
             _localize_pending_approval_copy(response_payload, harness=args.harness)
+    if observe_mode and event_name == "PreToolUse" and not observe_request_queued:
+        queue_observe_mode_request(
+            action_envelope=action_envelope,
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            changed_fields=changed_capabilities,
+            executable_action=policy_action,
+            observed_policy_action=policy_action,
+            redaction_level=config.receipt_redaction_level,
+            risk_summary=risk_summary,
+            scanner_evidence=scanner_evidence_payload,
+            store=store,
+        )
     state.action_envelope = action_envelope
     state.browser_approval_daemon_client = locals().get("browser_approval_daemon_client")
     state.policy_action = policy_action

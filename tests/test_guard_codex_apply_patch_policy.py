@@ -7,9 +7,11 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import commands_hook_generic
+from codex_plugin_scanner.guard.cli import commands_hook_generic, commands_support_observe_queue
+from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _hook_action_envelope
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -43,6 +45,19 @@ def test_verified_workspace_apply_patch_uses_relaxed_default(tmp_path: Path, ope
     assert not _relaxes(patch, workspace=workspace, checked=False)
 
 
+def test_verified_workspace_apply_patch_allows_plugin_metadata_bundle(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    patch = f"""*** Begin Patch
+*** Add File: {workspace}/.codex-plugin/plugin.json
++{{"name":"example-plugin","mcpServers":"./.mcp.json"}}
+*** Add File: {workspace}/.mcp.json
++{{"mcpServers":{{"example":{{"type":"http","url":"https://api.example.com/mcp"}}}}}}
+*** End Patch"""
+
+    assert _relaxes(patch, workspace=workspace)
+
+
 def test_verified_workspace_apply_patch_does_not_queue_approval(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -59,9 +74,15 @@ def test_verified_workspace_apply_patch_does_not_queue_approval(
         policy_action=None,
     )
 
+    action_envelope = _hook_action_envelope(
+        harness="codex",
+        payload=payload,
+        home_dir=tmp_path,
+        workspace=workspace,
+    )
     rc = commands_hook_generic._run_hook_generic_payload(
         args,
-        action_envelope=None,
+        action_envelope=action_envelope,
         config=GuardConfig(guard_home=guard_home, workspace=workspace, default_action="review"),
         home_dir=tmp_path,
         payload=payload,
@@ -76,6 +97,149 @@ def test_verified_workspace_apply_patch_does_not_queue_approval(
     assert rc == 0
     assert output["policy_action"] == "warn"
     assert "approval_requests" not in output
+
+
+@pytest.mark.parametrize(("default_action", "expected_action"), (("review", "warn"), ("allow", "allow")))
+def test_watch_only_workspace_apply_patch_is_visible_without_blocking(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    default_action: str,
+    expected_action: str,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    guard_home = tmp_path / "guard-home"
+    payload = _payload(
+        f"""*** Begin Patch
+*** Add File: {workspace}/.codex-plugin/plugin.json
++{{"name":"example-plugin","mcpServers":"./.mcp.json"}}
+*** Add File: {workspace}/.mcp.json
++{{"mcpServers":{{"example":{{"type":"http","url":"https://api.example.com/mcp"}}}}}}
+*** End Patch"""
+    )
+    payload["approval_requests"] = []
+    args = argparse.Namespace(
+        artifact_id=None,
+        artifact_name=None,
+        harness="codex",
+        json=True,
+        policy_action=None,
+    )
+    store = GuardStore(guard_home)
+    action_envelope = _hook_action_envelope(
+        harness="codex",
+        payload=payload,
+        home_dir=tmp_path,
+        workspace=workspace,
+    )
+
+    rc = commands_hook_generic._run_hook_generic_payload(
+        args,
+        action_envelope=action_envelope,
+        config=GuardConfig(
+            guard_home=guard_home,
+            workspace=workspace,
+            default_action=default_action,
+            mode="observe",
+        ),
+        home_dir=tmp_path,
+        payload=payload,
+        runtime_artifact_checked=True,
+        runtime_workspace=workspace,
+        store=store,
+    )
+    output = cast(dict[str, object], json.loads(capsys.readouterr().out))
+
+    assert rc == 0
+    assert output["policy_action"] == expected_action
+    assert "approval_requests" not in output
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "require-reapproval"
+    assert pending[0]["launch_target"] == ("apply_patch ~.../plugin.json ~.../.mcp.json")
+    assert pending[0]["scanner_evidence"][-1]["authoritative_action"] == expected_action
+    assert pending[0]["action_envelope_json"]["pre_execution_result"] is None
+
+
+def test_watch_only_inbox_failure_never_changes_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = GuardArtifact(
+        artifact_id="observe-failure",
+        name="apply_patch",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(tmp_path),
+        command="apply_patch src/example.py",
+    )
+    monkeypatch.setattr(
+        commands_support_observe_queue,
+        "queue_blocked_approvals",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("storage unavailable")),
+    )
+
+    queued = commands_support_observe_queue.queue_observe_mode_request(
+        action_envelope=None,
+        artifact=artifact,
+        artifact_hash="observe-failure-hash",
+        changed_fields=("tool_action",),
+        executable_action="allow",
+        observed_policy_action="allow",
+        redaction_level="full",
+        risk_summary="Routine action",
+        scanner_evidence=(),
+        store=GuardStore(tmp_path / "guard-home"),
+    )
+
+    assert queued == []
+
+
+@pytest.mark.parametrize("executable_action", ("allow", "warn"))
+def test_watch_only_inbox_accepts_stamped_runtime_envelope(
+    tmp_path: Path,
+    executable_action: GuardAction,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    payload = _payload("*** Begin Patch\n*** Add File: example.py\n+value = 1\n*** End Patch")
+    action_envelope = _hook_action_envelope(
+        harness="codex",
+        payload=payload,
+        home_dir=tmp_path,
+        workspace=workspace,
+    )
+    assert action_envelope is not None
+    artifact = GuardArtifact(
+        artifact_id=f"stamped-{executable_action}",
+        name="apply_patch",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(workspace),
+        command="apply_patch example.py",
+    )
+    store = GuardStore(tmp_path / "guard-home")
+
+    queued = commands_support_observe_queue.queue_observe_mode_request(
+        action_envelope=action_envelope.with_pre_execution_result(executable_action),
+        artifact=artifact,
+        artifact_hash=f"stamped-{executable_action}-hash",
+        changed_fields=("tool_action",),
+        executable_action=executable_action,
+        observed_policy_action=executable_action,
+        redaction_level="full",
+        risk_summary="Routine action",
+        scanner_evidence=(),
+        store=store,
+    )
+
+    assert len(queued) == 1
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["action_envelope_json"]["pre_execution_result"] is None
+    assert pending[0]["scanner_evidence"][-1]["authoritative_action"] == executable_action
 
 
 @pytest.mark.parametrize(

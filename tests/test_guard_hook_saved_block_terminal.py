@@ -157,6 +157,7 @@ def test_runtime_review_observe_mode_records_saved_block_without_enforcing_it(
     monkeypatch.setattr(runtime_review, "ensure_guard_daemon", _fail_queue)
     monkeypatch.setattr(runtime_review, "queue_blocked_approvals", _fail_queue)
 
+    store = GuardStore(context.guard_home)
     result = runtime_review._review_runtime_artifact_hook(
         state,
         _copilot_args(),
@@ -165,7 +166,7 @@ def test_runtime_review_observe_mode_records_saved_block_without_enforcing_it(
         guard_home=context.guard_home,
         managed_install=None,
         payload={"hook_event_name": "PreToolUse", "tool_name": "dangerous_delete"},
-        store=GuardStore(context.guard_home),
+        store=store,
         workspace=context.workspace_dir,
     )
 
@@ -176,7 +177,7 @@ def test_runtime_review_observe_mode_records_saved_block_without_enforcing_it(
     assert emitted_actions == []
 
 
-def test_runtime_review_observe_mode_allows_fresh_block_without_approval_queue(
+def test_runtime_review_observe_mode_allows_fresh_block_with_retrospective_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -207,6 +208,7 @@ def test_runtime_review_observe_mode_allows_fresh_block_without_approval_queue(
     monkeypatch.setattr(runtime_review, "ensure_guard_daemon", _fail_queue)
     monkeypatch.setattr(runtime_review, "queue_blocked_approvals", _fail_queue)
 
+    store = GuardStore(context.guard_home)
     result = runtime_review._review_runtime_artifact_hook(
         state,
         _copilot_args(json_output=True),
@@ -215,7 +217,7 @@ def test_runtime_review_observe_mode_allows_fresh_block_without_approval_queue(
         guard_home=context.guard_home,
         managed_install=None,
         payload={"hook_event_name": "PreToolUse", "tool_name": "dangerous_delete"},
-        store=GuardStore(context.guard_home),
+        store=store,
         workspace=context.workspace_dir,
     )
 
@@ -232,6 +234,15 @@ def test_runtime_review_observe_mode_allows_fresh_block_without_approval_queue(
     assert "allows" in str(state.response_payload["why_now"]).lower()
     assert state.decision_v2_payload["action"] == "allow"
     assert state.receipt.policy_decision == "allow"
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "require-reapproval"
+    assert pending[0]["scanner_evidence"][-1] == {
+        "source": "observe_mode_inbox",
+        "observed_policy_action": "block",
+        "queued_policy_action": "require-reapproval",
+        "authoritative_action": "allow",
+    }
 
 
 def test_runtime_final_action_rewrites_package_copy_and_preserves_observation(
@@ -361,6 +372,7 @@ def test_runtime_observe_mode_preserves_executable_package_warning(
     monkeypatch.setattr(runtime_review, "load_guard_surface_daemon_client", _fail_queue)
     monkeypatch.setattr(runtime_review, "queue_blocked_approvals", _fail_queue)
 
+    store = GuardStore(context.guard_home)
     result = runtime_review._review_runtime_artifact_hook(
         state,
         _copilot_args(json_output=True),
@@ -369,7 +381,7 @@ def test_runtime_observe_mode_preserves_executable_package_warning(
         guard_home=context.guard_home,
         managed_install=None,
         payload={"hook_event_name": "PreToolUse", "tool_name": "dangerous_delete"},
-        store=GuardStore(context.guard_home),
+        store=store,
         workspace=context.workspace_dir,
     )
 
@@ -378,6 +390,9 @@ def test_runtime_observe_mode_preserves_executable_package_warning(
     assert state.policy_action == "warn"
     assert state.response_payload["policy_action"] == "warn"
     assert state.response_payload["approval_requests"] == []
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["scanner_evidence"][-1]["authoritative_action"] == "warn"
     assert state.response_payload["observed_policy_action"] == "review"
     assert state.decision_v2_payload["guard_action"] == "warn"
     assert state.receipt.policy_decision == "warn"
@@ -432,7 +447,9 @@ def test_copilot_pretool_observe_mode_records_saved_block_without_enforcing_it(
     receipt = store.list_receipts(limit=1)[0]
     assert receipt["policy_decision"] == "allow"
     assert _receipt_reuse_evidence(store) == {"source": "approval_reuse", **approval_reuse}
-    assert store.list_approval_requests(limit=10) == []
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "require-reapproval"
 
 
 def test_copilot_permission_request_observe_mode_does_not_enforce_saved_block(
@@ -478,7 +495,9 @@ def test_copilot_permission_request_observe_mode_does_not_enforce_saved_block(
     receipt = store.list_receipts(limit=1)[0]
     assert receipt["policy_decision"] == "allow"
     assert _receipt_reuse_evidence(store)["reason_code"] == "approval_reuse_saved_block"
-    assert store.list_approval_requests(limit=10) == []
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "require-reapproval"
 
 
 def test_copilot_permission_request_fresh_block_is_terminal_and_never_queued(
@@ -558,7 +577,7 @@ def test_copilot_saved_allow_is_explained_in_native_response_and_allow_receipt(
 
 
 @pytest.mark.parametrize("flow", ("pretool", "permission-request"))
-def test_copilot_observe_mode_allows_fresh_block_without_approval_queue(
+def test_copilot_observe_mode_allows_fresh_block_with_retrospective_queue(
     flow: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -606,3 +625,12 @@ def test_copilot_observe_mode_allows_fresh_block_without_approval_queue(
     scanner_evidence = receipt["scanner_evidence"]
     assert isinstance(scanner_evidence, list)
     assert not any(item.get("source") == "approval_reuse" for item in scanner_evidence if isinstance(item, dict))
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "require-reapproval"
+    assert pending[0]["scanner_evidence"][-1] == {
+        "source": "observe_mode_inbox",
+        "observed_policy_action": "block",
+        "queued_policy_action": "require-reapproval",
+        "authoritative_action": "allow",
+    }

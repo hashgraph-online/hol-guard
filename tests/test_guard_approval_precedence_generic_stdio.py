@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.cli import commands_hook_generic
 from codex_plugin_scanner.guard.cli import commands_support as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands_hook_generic import (
@@ -410,6 +411,11 @@ def test_generic_hook_observe_mode_records_block_without_enforcing_it(
     monkeypatch: pytest.MonkeyPatch,
     event_name: str,
 ) -> None:
+    monkeypatch.setattr(
+        approvals_module,
+        "_notify_pending_approval",
+        lambda **_kwargs: pytest.fail("watch-only persistence must stay silent"),
+    )
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
@@ -451,6 +457,16 @@ def test_generic_hook_observe_mode_records_block_without_enforcing_it(
     if event_name == "PreToolUse":
         assert recorded_activity["policy_action"] == "allow"
         assert recorded_activity["prompted"] is False
+        pending = store.list_approval_requests(limit=10)
+        assert len(pending) == 1
+        assert pending[0]["policy_action"] == "require-reapproval"
+        assert pending[0]["scanner_evidence"][-1] == {
+            "source": "observe_mode_inbox",
+            "observed_policy_action": "block",
+            "queued_policy_action": "require-reapproval",
+            "authoritative_action": "allow",
+        }
+        assert "approval_requests" not in output
 
 
 def test_codex_pretool_observe_mode_persists_observed_decision_evidence(

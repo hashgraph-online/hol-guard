@@ -37,6 +37,7 @@ from .commands_support_command_activity import (
     command_activity_was_prompted,
     record_pre_hook_command_activity_best_effort,
 )
+from .commands_support_observe_queue import queue_observe_mode_request
 
 
 def _record_copilot_pre_activity(
@@ -151,6 +152,7 @@ def _run_hook_copilot_pretool(
     decision_scanner_evidence = _copilot_tool_decision_scanner_evidence(decision)
     saved_policy_blocks = decision.saved_action == "block"
     now = _now()
+    observed_policy_action: GuardAction | None = None
     if config.mode == "observe" and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         observe_mode_evidence: dict[str, object] = {
@@ -160,6 +162,19 @@ def _run_hook_copilot_pretool(
         }
         decision_scanner_evidence = (*decision_scanner_evidence, observe_mode_evidence)
         policy_action = "allow"
+    if config.mode == "observe":
+        queue_observe_mode_request(
+            action_envelope=action_envelope,
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            changed_fields=("runtime_tool_call", *decision.signals),
+            executable_action=policy_action,
+            observed_policy_action=observed_policy_action or policy_action,
+            redaction_level=config.receipt_redaction_level,
+            risk_summary=decision.summary,
+            scanner_evidence=decision_scanner_evidence,
+            store=store,
+        )
     # Copilot review/reapproval continues to PermissionRequest, which owns that
     # activity. PreToolUse records only decisions that terminate at this stage.
     if policy_action in {"allow", "warn"}:
@@ -324,6 +339,7 @@ def _run_hook_copilot_permission_request(
         response_payload["approval_reuse"] = approval_reuse
     if decision_scanner_evidence:
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
+    observed_policy_action: GuardAction | None = None
     if config.mode == "observe" and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         response_payload["approval_requests"] = []
@@ -339,6 +355,19 @@ def _run_hook_copilot_permission_request(
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
         policy_action = "allow"
         response_payload["policy_action"] = "allow"
+    if config.mode == "observe":
+        queue_observe_mode_request(
+            action_envelope=action_envelope,
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            changed_fields=("runtime_tool_call", *decision.signals),
+            executable_action=policy_action,
+            observed_policy_action=observed_policy_action or policy_action,
+            redaction_level=config.receipt_redaction_level,
+            risk_summary=decision.summary,
+            scanner_evidence=decision_scanner_evidence,
+            store=store,
+        )
     if policy_action in {"allow", "warn"}:
         receipt = allow_tool_call(
             store=store,

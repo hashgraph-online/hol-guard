@@ -447,6 +447,7 @@ def queue_blocked_approvals(
     store: GuardStore,
     approval_center_url: str,
     now: str | None = None,
+    notify: bool = True,
     redaction_level: str = "full",
 ) -> list[dict[str, object]]:
     timestamp = now or _now()
@@ -578,7 +579,8 @@ def queue_blocked_approvals(
             )
         if created_new_request:
             _record_created_event(store, request, timestamp)
-        _notify_pending_approval(store=store, request=request)
+        if notify:
+            _notify_pending_approval(store=store, request=request)
         request_payload = store.get_approval_request(persisted_request_id)
         if request_payload is None:
             raise RuntimeError(f"Persisted approval request not found: {persisted_request_id}")
