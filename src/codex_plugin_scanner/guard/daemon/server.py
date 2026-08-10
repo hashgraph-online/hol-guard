@@ -5479,9 +5479,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             guard_home = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
             workspace_query = self._normalized_hook_workspace_string(params.get("workspace", [None])[-1])
-            workspace_candidate = (
-                workspace_query if "workspace" in params else self._optional_string(payload.get("cwd"))
-            )
+            payload_workspace = self._normalized_hook_workspace_string(payload.get("cwd"))
+            workspace_candidate = payload_workspace if payload_workspace is not None else workspace_query
             workspace = self._validated_hook_directory_string(
                 "workspace",
                 workspace_candidate,
