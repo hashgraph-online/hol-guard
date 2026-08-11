@@ -896,6 +896,7 @@ _DASHBOARD_CSP = "; ".join(
     )
 )
 _ROOT_STATIC_FILES = {
+    "/apple-touch-icon.png",
     "/favicon.svg",
     "/favicon.ico",
     "/favicon-16x16.png",

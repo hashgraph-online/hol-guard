@@ -535,6 +535,11 @@ class TestGuardSurfaceServer:
                 timeout=5,
             ) as favicon_response:
                 favicon_response.read()
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/apple-touch-icon.png",
+                timeout=5,
+            ) as touch_icon_response:
+                touch_icon_response.read()
         finally:
             daemon.stop()
 
@@ -550,6 +555,8 @@ class TestGuardSurfaceServer:
         assert "fonts.googleapis.com" not in css_body
         assert favicon_response.status == 200
         assert favicon_response.headers.get("Cache-Control") == "no-store, max-age=0"
+        assert touch_icon_response.status == 200
+        assert touch_icon_response.headers.get("Cache-Control") == "no-store, max-age=0"
 
     def test_guard_daemon_dashboard_assets_use_oauth_connect_copy(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

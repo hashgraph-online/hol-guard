@@ -450,10 +450,10 @@ export function resolvePackageManagerProtectionCopy(
   }
   if (protection.path_status === "restart_required") {
     return {
-      pathLabel: "Finish activation in Guard",
+      pathLabel: "Open a new terminal to activate protection",
       pathDetail: protection.shell_profile_configured
-        ? `Guard saved the shell setup for ${protection.shim_dir}. Finish activation in the package firewall, then run a protection check.`
-        : `Guard installed shims in ${protection.shim_dir}, but activation is still waiting in this Guard session.`,
+        ? `Guard already updated your shell profile for ${protection.shim_dir}. Open a new terminal, or source the matching profile in this terminal. Restart an AI app only if that app runs package managers.`
+        : `Guard installed shims in ${protection.shim_dir}, but your shell profile still needs the shim directory on PATH.`,
       pathTone: "blue",
       protectedList: protection.protected_managers,
       unprotectedList: protection.unprotected_managers,

@@ -236,7 +236,7 @@ export function ReviewDecisionCard(props: {
             ? buildLocalToolResolutionFields(localToolOptions, localToolGrantTarget, localToolGrantDuration)
             : {}),
         });
-        setResolved({ action, persistedExactAction });
+        setResolved({ action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);

@@ -4450,6 +4450,24 @@
     text-decoration-line: underline;
   }
 
+  .decoration-brand-blue\/30 {
+    -webkit-text-decoration-color: var(--brand-blue);
+    -webkit-text-decoration-color: var(--brand-blue);
+    text-decoration-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .decoration-brand-blue\/30 {
+      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 30%, transparent);
+      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 30%, transparent);
+      text-decoration-color: color-mix(in oklab, var(--brand-blue) 30%, transparent);
+    }
+  }
+
+  .underline-offset-2 {
+    text-underline-offset: 2px;
+  }
+
   .accent-brand-blue {
     accent-color: var(--brand-blue);
   }
@@ -5210,6 +5228,12 @@
 
     .hover\:underline:hover {
       text-decoration-line: underline;
+    }
+
+    .hover\:decoration-brand-blue:hover {
+      -webkit-text-decoration-color: var(--brand-blue);
+      -webkit-text-decoration-color: var(--brand-blue);
+      text-decoration-color: var(--brand-blue);
     }
 
     .hover\:opacity-85:hover {

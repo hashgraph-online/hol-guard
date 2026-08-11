@@ -206,7 +206,9 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
   try {
     const item = await fetchRequest(requestId);
     const [diff, receipt, policy] = await Promise.all([
-      fetchDiff(item.artifact_id, item.harness),
+      shouldFetchArtifactDiff(item.artifact_type)
+        ? fetchDiff(item.artifact_id, item.harness)
+        : Promise.resolve(null),
       fetchLatestReceipt(item.artifact_id, item.harness),
       fetchPolicy(item.harness)
     ]);
@@ -221,6 +223,10 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
       message: message.length > 0 ? message : "Unable to load the approval request."
     };
   }
+}
+
+export function shouldFetchArtifactDiff(artifactType: string): boolean {
+  return artifactType !== "package_request";
 }
 
 export function App() {

@@ -828,7 +828,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     setActivatingRuntime(true);
     setActivationAssistError(null);
     try {
-      await activatePackageFirewallRuntime();
+      const message = await activatePackageFirewallRuntime();
+      setActivationAssistError(message);
       await refreshAfterOp();
       await onStateChanged?.();
     } catch (error) {

@@ -279,11 +279,16 @@ export function ShellSidebar(props: {
                     {props.queuedCount > 0 ? "Review" : "Clear"}
                   </span>
                 </div>
-                <p className="text-[11px] leading-relaxed text-brand-dark/70">
-                  {props.queuedCount > 0
-                    ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.`
-                    : "No local approvals are waiting."}
-                </p>
+                {props.queuedCount > 0 ? (
+                  <a
+                    href={guardAwareHref("/inbox")}
+                    className="block text-[11px] font-medium leading-relaxed text-brand-blue underline decoration-brand-blue/30 underline-offset-2 hover:decoration-brand-blue"
+                  >
+                    {props.queuedCount} local {props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision. Open Inbox to review.
+                  </a>
+                ) : (
+                  <p className="text-[11px] leading-relaxed text-brand-dark/70">No local approvals are waiting.</p>
+                )}
                 <GuardUpdatePanel
                   guardVersion={props.guardVersion}
                   updateStatus={props.updateStatus}

@@ -14609,13 +14609,13 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
-function buildRetryAfterApprovalCopy(item, action, persistedExactAction2 = false) {
+function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false) {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
-    if (persistedExactAction2 && action === "allow") {
+    if (persistedExactAction && action === "allow") {
       return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
     }
-    if (persistedExactAction2) return "Saved. Guard will stop this exact action next time.";
+    if (persistedExactAction) return "Saved. Guard will stop this exact action next time.";
     return "Reviewed. Watch only already allowed this action to run; no future rule was saved.";
   }
   if (action === "allow") {
@@ -18737,10 +18737,13 @@ async function activatePackageFirewallRuntime() {
     },
     body: JSON.stringify({})
   });
-  if (response.ok) {
-    return;
-  }
   const payloadBody = await response.json().catch(() => null);
+  if (response.ok) {
+    if (isRecord$1(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
+      return payloadBody.message;
+    }
+    return "Guard verified the shell setup. Open a new terminal to inherit the updated PATH.";
+  }
   if (isRecord$1(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
     throw new Error(payloadBody.message);
   }
@@ -19990,7 +19993,19 @@ function ShellSidebar(props) {
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue", children: props.queuedCount > 0 ? "Review" : "Clear" })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: props.queuedCount > 0 ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.` : "No local approvals are waiting." }),
+          props.queuedCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "a",
+            {
+              href: guardAwareHref("/inbox"),
+              className: "block text-[11px] font-medium leading-relaxed text-brand-blue underline decoration-brand-blue/30 underline-offset-2 hover:decoration-brand-blue",
+              children: [
+                props.queuedCount,
+                " local ",
+                props.queuedCount === 1 ? "action needs" : "actions need",
+                " a Guard decision. Open Inbox to review."
+              ]
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: "No local approvals are waiting." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             GuardUpdatePanel,
             {
@@ -22515,8 +22530,8 @@ function resolvePackageManagerProtectionCopy(protection) {
   }
   if (protection.path_status === "restart_required") {
     return {
-      pathLabel: "Finish activation in Guard",
-      pathDetail: protection.shell_profile_configured ? `Guard saved the shell setup for ${protection.shim_dir}. Finish activation in the package firewall, then run a protection check.` : `Guard installed shims in ${protection.shim_dir}, but activation is still waiting in this Guard session.`,
+      pathLabel: "Open a new terminal to activate protection",
+      pathDetail: protection.shell_profile_configured ? `Guard already updated your shell profile for ${protection.shim_dir}. Open a new terminal, or source the matching profile in this terminal. Restart an AI app only if that app runs package managers.` : `Guard installed shims in ${protection.shim_dir}, but your shell profile still needs the shim directory on PATH.`,
       pathTone: "blue",
       protectedList: protection.protected_managers,
       unprotectedList: protection.unprotected_managers
@@ -22898,7 +22913,7 @@ function EntitlementNotice({
 function activationHeadline(protection) {
   if (protection === null) return "Activation status unavailable";
   if (protection.path_status === "in_path") return "Protection live now";
-  if (protection.path_status === "restart_required") return "Finish activation in Guard";
+  if (protection.path_status === "restart_required") return "New terminal required";
   return "Fix PATH to finish activation";
 }
 function ActivationSummary({
@@ -22927,7 +22942,7 @@ function ActivationSummary({
         formatRelativeTime(lastAuditProofAt)
       ] }),
       protection.path_status === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: [
-        canActivateRuntime && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onActivateRuntime, disabled: activatingRuntime, children: activatingRuntime ? "Finishing activation…" : "Finish activation" }),
+        canActivateRuntime && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onActivateRuntime, disabled: activatingRuntime, children: activatingRuntime ? "Verifying setup…" : "Verify shell setup" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRefreshStatus, disabled: activatingRuntime, children: "Refresh status" })
       ] }),
       activationAssistError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-attention", children: activationAssistError })
@@ -28801,8 +28816,8 @@ function LocalToolApprovalControls(props) {
   ] });
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
-function resolvedActionCopy(item, action, persistedExactAction2) {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction2);
+function resolvedActionCopy(item, action, persistedExactAction) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
   if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
 }
@@ -28945,7 +28960,7 @@ function ReviewDecisionCard(props) {
           ) : {},
           ...action === "allow" && temporaryMcpOptions === null ? buildLocalToolResolutionFields(localToolOptions, localToolGrantTarget, localToolGrantDuration) : {}
         });
-        setResolved({ action, persistedExactAction });
+        setResolved({ action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
@@ -30508,7 +30523,7 @@ async function loadDetail(requestId) {
   try {
     const item = await fetchRequest(requestId);
     const [diff, receipt, policy] = await Promise.all([
-      fetchDiff(item.artifact_id, item.harness),
+      shouldFetchArtifactDiff(item.artifact_type) ? fetchDiff(item.artifact_id, item.harness) : Promise.resolve(null),
       fetchLatestReceipt(item.artifact_id, item.harness),
       fetchPolicy(item.harness)
     ]);
@@ -30523,6 +30538,9 @@ async function loadDetail(requestId) {
       message: message.length > 0 ? message : "Unable to load the approval request."
     };
   }
+}
+function shouldFetchArtifactDiff(artifactType) {
+  return artifactType !== "package_request";
 }
 function App() {
   const pathname = usePathname();

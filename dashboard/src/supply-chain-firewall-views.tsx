@@ -559,7 +559,7 @@ export function EntitlementNotice({
 function activationHeadline(protection: PackageManagerProtection | null): string {
   if (protection === null) return "Activation status unavailable";
   if (protection.path_status === "in_path") return "Protection live now";
-  if (protection.path_status === "restart_required") return "Finish activation in Guard";
+  if (protection.path_status === "restart_required") return "New terminal required";
   return "Fix PATH to finish activation";
 }
 
@@ -620,7 +620,7 @@ export function ActivationSummary({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {canActivateRuntime && (
                 <ActionButton variant="primary" onClick={onActivateRuntime} disabled={activatingRuntime}>
-                  {activatingRuntime ? "Finishing activation…" : "Finish activation"}
+                  {activatingRuntime ? "Verifying setup…" : "Verify shell setup"}
                 </ActionButton>
               )}
               <ActionButton variant="outline" onClick={onRefreshStatus} disabled={activatingRuntime}>

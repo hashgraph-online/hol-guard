@@ -2654,32 +2654,16 @@ def _package_matched_cached_advisory_ids(store: Any, artifact: GuardArtifact) ->
     return tuple(sorted(matched_ids))
 
 
-def _package_feed_snapshot_hash(store: Any) -> str | None:
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        return None
-    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
-    if not isinstance(cached_bundle, dict):
-        return None
-    bundle = cached_bundle.get("bundle")
-    if not isinstance(bundle, dict):
-        return None
-    value = bundle.get("feedSnapshotHash")
-    return value if isinstance(value, str) and value else None
-
-
 def _package_policy_gate_context(
     store: Any,
     artifact: GuardArtifact,
     evaluation: Any,
 ) -> dict[str, object]:
     return {
-        "bundle_version": evaluation.bundle_version,
         "decision": evaluation.decision,
         "enforcement": evaluation.enforcement,
         "entitlement_state": evaluation.entitlement_state,
         "exception_id": evaluation.exception_id,
-        "feed_snapshot_hash": _package_feed_snapshot_hash(store),
         "matched_advisory_ids": list(_package_matched_cached_advisory_ids(store, artifact)),
         "matched_rule_id": evaluation.matched_rule_id,
         "packages": list(evaluation.packages),

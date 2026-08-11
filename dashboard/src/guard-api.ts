@@ -3847,7 +3847,7 @@ export async function runPackageFirewallAction(
   return normalizePackageFirewallAction(payloadBody);
 }
 
-export async function activatePackageFirewallRuntime(): Promise<void> {
+export async function activatePackageFirewallRuntime(): Promise<string> {
   const response = await fetchGuardApi("/v1/supply-chain/package-shims/activate", {
     method: "POST",
     headers: {
@@ -3856,10 +3856,13 @@ export async function activatePackageFirewallRuntime(): Promise<void> {
     },
     body: JSON.stringify({}),
   });
-  if (response.ok) {
-    return;
-  }
   const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (response.ok) {
+    if (isRecord(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
+      return payloadBody.message;
+    }
+    return "Guard verified the shell setup. Open a new terminal to inherit the updated PATH.";
+  }
   if (isRecord(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
     throw new Error(payloadBody.message);
   }

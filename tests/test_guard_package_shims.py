@@ -15,6 +15,7 @@ from http.server import HTTPServer
 from io import StringIO
 from multiprocessing import Event, Process, Queue
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
@@ -78,6 +79,38 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
 
 
 WORKSPACE_ID = "workspace-alpha"
+
+
+def test_package_policy_context_ignores_refresh_only_bundle_metadata() -> None:
+    artifact = SimpleNamespace(metadata={"targets": []})
+
+    class Store:
+        def list_cached_advisories(self, *, limit: int | None) -> list[dict[str, object]]:
+            assert limit is None
+            return []
+
+    common = {
+        "decision": "ask",
+        "enforcement": "local",
+        "entitlement_state": "active",
+        "exception_id": None,
+        "matched_rule_id": "default-unidentified-package-review",
+        "packages": ({"name": "server-memory", "decision": "ask"},),
+        "policy_action": "review",
+        "policy_version": "unchanged-policy-hash",
+        "reasons": ({"code": "package_review", "message": "Review package."},),
+    }
+
+    first = local_supply_chain_module._package_policy_gate_context(
+        Store(), artifact, SimpleNamespace(**common, bundle_version="bundle-1")
+    )
+    refreshed = local_supply_chain_module._package_policy_gate_context(
+        Store(), artifact, SimpleNamespace(**common, bundle_version="bundle-2")
+    )
+
+    assert refreshed == first
+    assert "bundle_version" not in refreshed
+    assert "feed_snapshot_hash" not in refreshed
 
 
 def _signed_cached_policy_bundle(rules: list[dict[str, object]]) -> dict[str, object]:
