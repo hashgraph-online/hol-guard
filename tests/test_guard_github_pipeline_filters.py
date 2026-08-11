@@ -79,6 +79,7 @@ def test_static_github_content_read_with_safe_jq_filter_is_explicitly_benign(tmp
         "gh run list -aRRowner/repo --help",
         "gh -Rowner/repo pr view 17",
         "gh -Rgithub.com/Owner/Repo pr view 17",
+        "gh pr view $'x\\'; gh pr view ${PR_NUMBER}'",
     ):
         assert is_explicitly_benign_tool_action_request(
             "Bash",
@@ -182,6 +183,7 @@ def test_static_github_content_read_with_safe_jq_filter_is_explicitly_benign(tmp
         'g"h" pr view $REPO_ARGS',
         "g\\h pr view $REPO_ARGS",
         '"/usr/local/bin/gh" pr view $REPO_ARGS',
+        "gh pr view 'x\\' ; gh pr view ${PR_NUMBER}",
         "env REPO_ARGS='--repo ghe.example/o/r' bash -lc '\"gh\" pr view $REPO_ARGS'",
     ),
 )

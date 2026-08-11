@@ -722,6 +722,7 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
         'g"h" pr view $REPO_ARGS',
         "g\\h pr view $REPO_ARGS",
         '"/usr/local/bin/gh" pr view $REPO_ARGS',
+        "gh pr view 'x\\' ; gh pr view ${PR_NUMBER}",
         "env REPO_ARGS='--repo ghe.example/o/r' bash -lc '\"gh\" pr view $REPO_ARGS'",
     ),
 )

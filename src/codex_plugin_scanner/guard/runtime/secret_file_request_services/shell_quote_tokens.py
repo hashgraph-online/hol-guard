@@ -46,14 +46,18 @@ def shell_tokens_preserving_quote_context(command_text: str) -> list[ShellTokenW
                 escaped = False
                 index += 1
                 continue
-            if char == "\\":
+            if char == "\\" and quote != "'":
                 escaped = True
                 index += 1
                 continue
             if quote is not None:
-                if char == quote:
+                if char == ("'" if quote == "$'" else quote):
                     quote = None
                 index += 1
+                continue
+            if command_text.startswith("$'", index):
+                quote = "$'"
+                index += 2
                 continue
             if char in {"'", '"'}:
                 quote = char

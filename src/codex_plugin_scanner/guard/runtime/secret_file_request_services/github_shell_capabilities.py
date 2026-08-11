@@ -240,14 +240,14 @@ def _github_shell_has_dynamic_arguments(command_text: str) -> bool:
         if command_name != "gh" or command_index is None:
             continue
         if any(
-            _github_argument_token_has_untrusted_expansion(token.raw)
+            github_argument_token_has_untrusted_expansion(token.raw)
             for token in contextual_segment[command_index + 1 :]
         ):
             return True
     return False
 
 
-def _github_argument_token_has_untrusted_expansion(token: str) -> bool:
+def github_argument_token_has_untrusted_expansion(token: str) -> bool:
     unquoted = token[1:-1] if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'} else token
     if _PR_HEAD_OID_ENDPOINT.fullmatch(unquoted):
         return False

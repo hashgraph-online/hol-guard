@@ -15,6 +15,7 @@ from ..command_evaluation import evaluate_command
 from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
 from ..extension_control_contract import ExtensionControlLayer
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
+from ..github_capability_contract import GitHubCommandAssessment
 from ..github_capability_interaction import github_capability_requires_confirmation
 from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
@@ -32,7 +33,11 @@ from .git_routines import (
     _looks_like_safe_git_status_command,
     _looks_like_safe_standalone_git_routine,
 )
-from .github_shell_capabilities import _ShellTokenWithQuoteContext, classify_github_shell_capabilities
+from .github_shell_capabilities import (
+    _ShellTokenWithQuoteContext,
+    classify_github_shell_capabilities,
+    github_argument_token_has_untrusted_expansion,
+)
 from .interpreter_identity import _python_interpreter_executable_identities
 from .interpreter_observers import (
     _looks_like_benign_interpreter_wait,
@@ -44,7 +49,8 @@ from .request_artifacts import _candidate_command_texts
 from .request_models import ToolActionRequestMatch, _normalize_tool_name
 from .routine_directory_creation import is_safe_routine_directory_creation
 from .sensitive_read_pipeline import _runtime_read_root_texts
-from .shell_static_safety import _path_text_is_within_root_text
+from .shell_quote_tokens import shell_token_segments, shell_tokens_preserving_quote_context
+from .shell_static_safety import _path_text_is_within_root_text, _without_safe_inspection_redirections
 from .shell_stdin_sources import (
     _cat_reads_local_file,
     _cat_stdout_payloads,
@@ -97,6 +103,9 @@ def is_explicitly_benign_tool_action_request(
         github_assessment = classify_github_shell_capabilities(stripped_command, home_dir=home_dir)
         if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
             return False
+        if _quote_aware_direct_github_read_is_safe(stripped_command, assessment=github_assessment):
+            found_benign_candidate = True
+            continue
         if home_dir is not None and _is_guard_safety_doc_read(stripped_command, home_dir=home_dir):
             found_benign_candidate = True
             continue
@@ -196,6 +205,26 @@ def is_explicitly_benign_tool_action_request(
             continue
         return False
     return found_benign_candidate
+
+
+def _quote_aware_direct_github_read_is_safe(
+    command_text: str,
+    *,
+    assessment: GitHubCommandAssessment | None,
+) -> bool:
+    if assessment is None:
+        return False
+    segments = shell_token_segments(shell_tokens_preserving_quote_context(command_text))
+    if len(segments) != 1 or not segments[0] or segments[0][0].raw != "gh":
+        return False
+    segment = segments[0]
+    plain_segment = [token.plain for token in segment]
+    command_name, command_index = _shell_segment_primary_command(plain_segment)
+    if command_name != "gh" or command_index != 0:
+        return False
+    if _without_safe_inspection_redirections(plain_segment[1:]) is None:
+        return False
+    return not any(github_argument_token_has_untrusted_expansion(token.raw) for token in segment[1:])
 
 
 def _looks_like_safe_existence_probe(
