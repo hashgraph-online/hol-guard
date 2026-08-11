@@ -19997,7 +19997,7 @@ function ShellSidebar(props) {
             "a",
             {
               href: guardAwareHref("/inbox"),
-              className: "block text-[11px] font-medium leading-relaxed text-brand-blue underline decoration-brand-blue/30 underline-offset-2 hover:decoration-brand-blue",
+              className: "block text-[11px] font-medium leading-relaxed text-brand-blue underline underline-offset-2 hover:no-underline",
               children: [
                 props.queuedCount,
                 " local ",
