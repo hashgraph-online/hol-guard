@@ -279,7 +279,11 @@ def run_approval_command(
             version = request.get("scope_contract_version")
             digest = request.get("scope_contract_digest")
             if version is None or digest is None:
-                raise ValueError("incomplete_scope_contract")
+                return {
+                    "resolved": False,
+                    "error": "incomplete_scope_contract",
+                    "exit_code": 2,
+                }
             scope_contract_version = str(version)
             scope_contract_digest = str(digest)
         item = apply_approval_resolution(
@@ -313,12 +317,6 @@ def run_approval_command(
             "action": error.action,
             "requested_scope": error.requested_scope,
             **error.contract.to_dict(),
-            "exit_code": 2,
-        }
-    except ValueError as error:
-        return {
-            "resolved": False,
-            "error": str(error),
             "exit_code": 2,
         }
     return {"resolved": True, "item": item}

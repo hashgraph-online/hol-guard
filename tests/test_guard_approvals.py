@@ -3267,6 +3267,7 @@ class TestGuardApprovals:
         assert store.list_policy_decisions("codex") == []
 
     def test_guard_approvals_cli_remembers_eligible_exact_action(self, tmp_path, capsys, monkeypatch):
+        _clear_agent_context(monkeypatch)
         home_dir = tmp_path / "home"
         workspace = str(tmp_path / "workspace")
         store = GuardStore(home_dir)
