@@ -173,6 +173,16 @@ def test_static_github_content_read_with_safe_jq_filter_is_explicitly_benign(tmp
         "gh pr view 1 $REPO_ARGS",
         "REPO_ARGS='--repo ghe.example/o/r' bash -lc 'gh pr view 1 $REPO_ARGS'",
         "env REPO_ARGS='-wRghe.example/o/r' bash -lc 'gh pr view 1 $REPO_ARGS'",
+        'gh pr view "$(gh pr view 1 --json number --jq .number)"',
+        'gh issue view "$(gh pr view 1 --json number --jq .number)"',
+        'gh pr view "prefix$(gh pr view 1 --json title --jq .title)"',
+        '"gh" pr view "$REPO_ARGS"',
+        'command -- "gh" pr view "$REPO_ARGS"',
+        "g'h' pr view $REPO_ARGS",
+        'g"h" pr view $REPO_ARGS',
+        "g\\h pr view $REPO_ARGS",
+        '"/usr/local/bin/gh" pr view $REPO_ARGS',
+        "env REPO_ARGS='--repo ghe.example/o/r' bash -lc '\"gh\" pr view $REPO_ARGS'",
     ),
 )
 def test_github_output_filters_do_not_mask_reads_or_mutations(tmp_path: Path, command: str) -> None:

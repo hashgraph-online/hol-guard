@@ -30,7 +30,7 @@ PR_MERGE_ADMIN_CAPABILITY_CASES: tuple[tuple[str, tuple[str, ...], tuple[GitHubC
     (
         "routine-006",
         ("pr", "merge", "4751", "--repo", "$REPOSITORY", "--squash"),
-        ("merge_remote",),
+        ("unknown",),
     ),
     (
         "routine-007",

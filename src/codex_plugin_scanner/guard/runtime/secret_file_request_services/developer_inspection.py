@@ -155,6 +155,8 @@ def _compound_developer_effect_graph(
     github_is_low_risk = github_assessment is not None and not github_capability_requires_confirmation(
         github_assessment
     )
+    if github_assessment is not None and not github_is_low_risk:
+        return None
     inspection_root = context.workspace_root or home_dir
     effects: list[DeveloperShellSegmentEffect] = []
     first_inspection_segment = 1 if starts_with_literal_cd else 0

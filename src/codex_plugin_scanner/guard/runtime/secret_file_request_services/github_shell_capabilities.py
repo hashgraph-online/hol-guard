@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from pathlib import Path
 
 from ..env_wrapper import parse_env_wrapper
 from ..github_capability_contract import GitHubCommandAssessment, github_assessment
 from ..github_command_capabilities import _github_repository_selector_is_safe
+from ..github_rest_capabilities import _PR_HEAD_OID_ENDPOINT
 from ..github_shell_capabilities import GitHubShellAnalysis
 from ..github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from ..interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
@@ -16,6 +16,13 @@ from .constants_core import _READ_ONLY_LOOKUP_FILTERS, _SHELL_COMMAND_STRING_INT
 from .constants_patterns import _SHELL_ASSIGNMENT_PATTERN, _SHELL_COMMAND_SEPARATORS, _SHELL_COMMAND_WRAPPERS
 from .read_only_filters import _read_only_lookup_filter_segment_is_safe
 from .request_artifacts import _normalized_shell_command_name
+from .shell_quote_tokens import (
+    ShellTokenWithQuoteContext as _ShellTokenWithQuoteContext,
+)
+from .shell_quote_tokens import (
+    shell_token_segments,
+    shell_tokens_preserving_quote_context,
+)
 from .shell_static_safety import (
     _github_jq_filter_args_are_safe,
     _is_python_interpreter_command,
@@ -35,6 +42,9 @@ _SHELL_FUNCTION_DEFINITION = re.compile(
     r"|[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\))\s*\{"
 )
 _SHELL_ALIAS_DEFINITION = re.compile(r"(?:\A|[;&\n])\s*alias\s+[A-Za-z_][A-Za-z0-9_]*\s*=")
+_DEFERRED_GITHUB_EFFECT = re.compile(
+    r"(?:\A|[;{&|\n])\s*gh(?:\s|\Z)|\b(?:GH|GITHUB)_(?:CONFIG_DIR|ENTERPRISE_TOKEN|HOST|REPO|TOKEN)\b"
+)
 
 
 def classify_github_shell_capabilities(
@@ -44,9 +54,9 @@ def classify_github_shell_capabilities(
 ) -> GitHubCommandAssessment | None:
     """Adapt the shared shell parser to focused GitHub capability composition."""
 
-    if (_SHELL_FUNCTION_DEFINITION.search(command_text) or _SHELL_ALIAS_DEFINITION.search(command_text)) and re.search(
-        r"\bgh\b", command_text
-    ):
+    if (
+        _SHELL_FUNCTION_DEFINITION.search(command_text) or _SHELL_ALIAS_DEFINITION.search(command_text)
+    ) and _DEFERRED_GITHUB_EFFECT.search(command_text):
         return github_assessment(
             "unknown",
             "github.command.shell-function",
@@ -59,16 +69,21 @@ def classify_github_shell_capabilities(
             "github.command.untrusted-environment",
             "Exported GitHub host or credential configuration requires explicit review.",
         )
+    if _github_shell_has_dynamic_arguments(command_text):
+        return github_assessment(
+            "unknown",
+            "github.command.dynamic-argument",
+            "Dynamic GitHub arguments require explicit review.",
+        )
     for segment in _iter_shell_command_segments(parts):
+        if _shell_segment_is_command_builtin_lookup(segment):
+            continue
         if segment[:1] == ["env"]:
             parsed_raw_env = parse_env_wrapper(segment[1:])
             if parsed_raw_env.complete:
                 raw_assignments = parsed_raw_env.environment_delta.assignments
                 executable = parsed_raw_env.executable_argv
-                if executable[:1] == ("gh",) and (
-                    _github_environment_requires_review(raw_assignments)
-                    or _github_argv_tokens_have_expansion(executable[1:])
-                ):
+                if executable[:1] == ("gh",) and (_github_environment_requires_review(raw_assignments)):
                     return github_assessment(
                         "unknown",
                         "github.command.untrusted-environment",
@@ -105,16 +120,6 @@ def classify_github_shell_capabilities(
                 "unknown",
                 "github.command.untrusted-environment",
                 "Inline GitHub host or credential configuration requires explicit review.",
-            )
-        if (
-            command_name == "gh"
-            and command_index is not None
-            and _github_argv_tokens_have_expansion(segment[command_index + 1 :])
-        ):
-            return github_assessment(
-                "unknown",
-                "github.command.dynamic-argument",
-                "Dynamic GitHub arguments require explicit review.",
             )
     return _classify_github_shell_capabilities(
         command_text,
@@ -172,6 +177,14 @@ def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
             continue
         if command_name in {"export", "readonly", "declare", "typeset"}:
             export_enabled = command_name == "export" or "-x" in args
+            relevant_assignment = any(
+                _github_environment_name(token.partition("=")[0])
+                or any(marker in token.partition("=")[0] for marker in ("$", "`"))
+                for token in args
+                if not token.startswith("-")
+            )
+            if not relevant_assignment:
+                continue
             if not export_enabled:
                 if any(
                     _github_environment_name(token.partition("=")[0]) for token in args if not token.startswith("-")
@@ -218,21 +231,74 @@ def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
     return False
 
 
-def _github_argv_tokens_have_expansion(tokens: tuple[str, ...] | list[str]) -> bool:
-    return any("$" in token or "`" in token for token in tokens)
+def _github_shell_has_dynamic_arguments(command_text: str) -> bool:
+    for contextual_segment in shell_token_segments(shell_tokens_preserving_quote_context(command_text)):
+        plain_segment = [token.plain for token in contextual_segment]
+        if _shell_segment_is_command_builtin_lookup(plain_segment):
+            continue
+        command_name, command_index = _shell_segment_primary_command(plain_segment)
+        if command_name != "gh" or command_index is None:
+            continue
+        if any(
+            _github_argument_token_has_untrusted_expansion(token.raw)
+            for token in contextual_segment[command_index + 1 :]
+        ):
+            return True
+    return False
+
+
+def _github_argument_token_has_untrusted_expansion(token: str) -> bool:
+    unquoted = token[1:-1] if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'} else token
+    if _PR_HEAD_OID_ENDPOINT.fullmatch(unquoted):
+        return False
+    return _shell_token_has_expansion(token)
+
+
+def _shell_token_has_expansion(token: str) -> bool:
+    single_quoted = False
+    double_quoted = False
+    escaped = False
+    index = 0
+    while index < len(token):
+        character = token[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if character == "\\" and not single_quoted:
+            escaped = True
+            index += 1
+            continue
+        if not single_quoted and not double_quoted and token.startswith("$'", index):
+            index += 2
+            while index < len(token):
+                if token[index] == "\\" and index + 1 < len(token):
+                    index += 2
+                    continue
+                if token[index] == "'":
+                    index += 1
+                    break
+                index += 1
+            continue
+        if character == "'" and not double_quoted:
+            single_quoted = not single_quoted
+            index += 1
+            continue
+        if character == '"' and not single_quoted:
+            double_quoted = not double_quoted
+            index += 1
+            continue
+        if not single_quoted and character in {"$", "`"}:
+            return True
+        index += 1
+    return False
 
 
 def _github_script_requires_review(script: str) -> bool:
     parts = _split_shell_parts(script)
     if _persistent_github_environment_requires_review(parts):
         return True
-    return any(
-        command_name == "gh"
-        and command_index is not None
-        and _github_argv_tokens_have_expansion(segment[command_index + 1 :])
-        for segment in _iter_shell_command_segments(parts)
-        for command_name, command_index in (_shell_segment_primary_command(segment),)
-    )
+    return _github_shell_has_dynamic_arguments(script)
 
 
 def _github_environment_name(name: str) -> bool:
@@ -279,12 +345,6 @@ def _github_pipeline_companion_is_read_only(
     if command_name in _READ_ONLY_LOOKUP_FILTERS:
         return _read_only_lookup_filter_segment_is_safe(command_name, args, home_dir=home_dir)
     return False
-
-
-@dataclass(frozen=True, slots=True)
-class _ShellTokenWithQuoteContext:
-    raw: str
-    plain: str
 
 
 def _command_builtin_options_are_lookup_only(segment: list[_ShellTokenWithQuoteContext], index: int) -> bool:

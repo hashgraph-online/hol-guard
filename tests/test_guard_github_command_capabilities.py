@@ -423,9 +423,8 @@ def test_guard_keeps_exact_review_thread_resolution_prompt_free() -> None:
     "command",
     (
         "gh pr view 17",
-        "gh pr view ${PR_NUMBER}",
+        "gh pr view $'17'",
         "gh issue list --limit 10",
-        "gh issue list --repo ${REPO}",
         "gh ssh-key list",
         "gh gpg-key list",
         "gh api repos/example/project -X GET -f per_page=1 --jq '.name'",
@@ -440,6 +439,16 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
     match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
 
     assert match is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    ("gh pr view ${PR_NUMBER}", "gh issue list --repo ${REPO}"),
+)
+def test_guard_reviews_shell_expanded_github_targets(tmp_path: Path, command: str) -> None:
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is not None
 
 
 def test_guard_keeps_github_read_with_stderr_discard_prompt_free(tmp_path: Path) -> None:

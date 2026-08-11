@@ -15,6 +15,7 @@ from ..command_evaluation import evaluate_command
 from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
 from ..extension_control_contract import ExtensionControlLayer
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
+from ..github_capability_interaction import github_capability_requires_confirmation
 from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
 from ..shell_command_wrappers import normalize_transparent_shell_command
@@ -31,7 +32,7 @@ from .git_routines import (
     _looks_like_safe_git_status_command,
     _looks_like_safe_standalone_git_routine,
 )
-from .github_shell_capabilities import _ShellTokenWithQuoteContext
+from .github_shell_capabilities import _ShellTokenWithQuoteContext, classify_github_shell_capabilities
 from .interpreter_identity import _python_interpreter_executable_identities
 from .interpreter_observers import (
     _looks_like_benign_interpreter_wait,
@@ -77,6 +78,9 @@ def is_explicitly_benign_tool_action_request(
             normalization = normalize_transparent_shell_command(command_text, cwd=cwd, home_dir=home_dir)
             command_text = normalization.normalized_command
             if normalization.wrapper_chain:
+                raw_github_assessment = classify_github_shell_capabilities(raw_command_text, home_dir=home_dir)
+                if raw_github_assessment is not None and github_capability_requires_confirmation(raw_github_assessment):
+                    return False
                 normalized_parts = _split_shell_parts(command_text)
                 normalized_segments = _iter_shell_command_segments(normalized_parts)
                 invokes_guard = any(
@@ -87,6 +91,9 @@ def is_explicitly_benign_tool_action_request(
         stripped_command = command_text.strip()
         if not stripped_command:
             continue
+        github_assessment = classify_github_shell_capabilities(stripped_command, home_dir=home_dir)
+        if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
+            return False
         if home_dir is not None and _is_guard_safety_doc_read(stripped_command, home_dir=home_dir):
             found_benign_candidate = True
             continue

@@ -713,6 +713,16 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
         "gh pr view 1 $REPO_ARGS",
         "REPO_ARGS='--repo ghe.example/o/r' bash -lc 'gh pr view 1 $REPO_ARGS'",
         "env REPO_ARGS='-wRghe.example/o/r' bash -lc 'gh pr view 1 $REPO_ARGS'",
+        'gh pr view "$(gh pr view 1 --json number --jq .number)"',
+        'gh issue view "$(gh pr view 1 --json number --jq .number)"',
+        'gh pr view "prefix$(gh pr view 1 --json title --jq .title)"',
+        '"gh" pr view "$REPO_ARGS"',
+        'command -- "gh" pr view "$REPO_ARGS"',
+        "g'h' pr view $REPO_ARGS",
+        'g"h" pr view $REPO_ARGS',
+        "g\\h pr view $REPO_ARGS",
+        '"/usr/local/bin/gh" pr view $REPO_ARGS',
+        "env REPO_ARGS='--repo ghe.example/o/r' bash -lc '\"gh\" pr view $REPO_ARGS'",
     ),
 )
 def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(

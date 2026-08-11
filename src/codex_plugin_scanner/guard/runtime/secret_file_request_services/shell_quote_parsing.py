@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shlex
 from dataclasses import replace
 from pathlib import Path
 
@@ -13,10 +12,18 @@ from ..shell_execution_context import ShellExecutionContext, model_shell_executi
 from .constants_core import _GH_PR_OPTION_VALUE_FLAGS
 from .developer_inspection import _static_shell_segment_is_safe
 from .docker_requests import _shell_execution_context_validation_reason, shell_execution_context_starts_with_literal_cd
-from .github_shell_capabilities import (
-    _shell_command_substitution_payloads,
-    _shell_segment_env_index,
-    _ShellTokenWithQuoteContext,
+from .github_shell_capabilities import _shell_command_substitution_payloads, _shell_segment_env_index
+from .shell_quote_tokens import (
+    ShellTokenWithQuoteContext as _ShellTokenWithQuoteContext,
+)
+from .shell_quote_tokens import (
+    plain_shell_token as _plain_shell_token,
+)
+from .shell_quote_tokens import (
+    shell_token_segments as _shell_token_segments,
+)
+from .shell_quote_tokens import (
+    shell_tokens_preserving_quote_context as _shell_tokens_preserving_quote_context,
 )
 from .shell_static_safety import (
     _leading_literal_cd_workspace_root,
@@ -272,114 +279,9 @@ def _skip_generic_shell_wrapper_options(
     return index
 
 
-def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellTokenWithQuoteContext]:
-    tokens: list[_ShellTokenWithQuoteContext] = []
-    index = 0
-    while index < len(command_text):
-        if command_text[index] in {"\n", "\r"}:
-            tokens.append(_ShellTokenWithQuoteContext(raw=";", plain=";"))
-            index += 1
-            continue
-        while index < len(command_text) and command_text[index].isspace() and command_text[index] not in {"\n", "\r"}:
-            index += 1
-        if index >= len(command_text):
-            break
-        if command_text[index] in {"\n", "\r"}:
-            tokens.append(_ShellTokenWithQuoteContext(raw=";", plain=";"))
-            index += 1
-            continue
-        if command_text[index] in {";", "&", "|"}:
-            if command_text.startswith("&&", index) or command_text.startswith("||", index):
-                raw_token = command_text[index : index + 2]
-                index += 2
-            else:
-                raw_token = command_text[index]
-                index += 1
-            tokens.append(_ShellTokenWithQuoteContext(raw=raw_token, plain=raw_token))
-            continue
-        start = index
-        quote: str | None = None
-        escaped = False
-        while index < len(command_text):
-            char = command_text[index]
-            if escaped:
-                escaped = False
-                index += 1
-                continue
-            if char == "\\":
-                escaped = True
-                index += 1
-                continue
-            if quote is not None:
-                if char == quote:
-                    quote = None
-                index += 1
-                continue
-            if char in {"'", '"'}:
-                quote = char
-                index += 1
-                continue
-            if char == "&" and _is_fd_duplication_ampersand(command_text, index=index, token_start=start):
-                index += 1
-                continue
-            if char.isspace() or char in {";", "&", "|"}:
-                break
-            index += 1
-        raw_token = command_text[start:index]
-        if raw_token:
-            tokens.append(_ShellTokenWithQuoteContext(raw=raw_token, plain=_plain_shell_token(raw_token)))
-    return tokens
-
-
-def _is_fd_duplication_ampersand(command_text: str, *, index: int, token_start: int) -> bool:
-    if index <= token_start or command_text[index - 1] not in {"<", ">"}:
-        return False
-    descriptor_index = index + 1
-    if descriptor_index >= len(command_text):
-        return False
-    if command_text[descriptor_index] == "-":
-        descriptor_index += 1
-    else:
-        if not command_text[descriptor_index].isdigit():
-            return False
-        while descriptor_index < len(command_text) and command_text[descriptor_index].isdigit():
-            descriptor_index += 1
-    return descriptor_index >= len(command_text) or (
-        command_text[descriptor_index].isspace() or command_text[descriptor_index] in {";", "&", "|"}
-    )
-
-
-def _plain_shell_token(raw_token: str) -> str:
-    try:
-        parts = shlex.split(raw_token, posix=True)
-    except ValueError:
-        return raw_token.strip("'\"")
-    if not parts:
-        return ""
-    return parts[0]
-
-
-def _shell_token_segments(
-    tokens: list[_ShellTokenWithQuoteContext],
-) -> list[list[_ShellTokenWithQuoteContext]]:
-    segments: list[list[_ShellTokenWithQuoteContext]] = []
-    current: list[_ShellTokenWithQuoteContext] = []
-    for token in tokens:
-        if token.plain in {"&&", "||", ";", "&", "|", "|&"}:
-            if current:
-                segments.append(current)
-                current = []
-            continue
-        current.append(token)
-    if current:
-        segments.append(current)
-    return segments
-
-
 __all__ = [
     "_bounded_current_workspace_source_edit_execution_context",
     "_gh_pr_env_split_string_payloads_with_substitution",
-    "_is_fd_duplication_ampersand",
     "_plain_shell_token",
     "_runner_argument_escapes_root",
     "_shell_token_segments",

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from ..command_model import CanonicalCommand
-from ..compound_git_inspection import is_low_risk_standalone_git_routine
+from ..compound_git_inspection import is_low_risk_git_inspection_segment, is_low_risk_standalone_git_routine
 from ..git_execution_safety import git_status_args_are_read_only, git_status_has_execution_free_config
 from ..kubernetes_commands import kubernetes_secret_read_source
 from ..shell_command_wrappers import normalize_transparent_shell_command
@@ -266,6 +266,8 @@ def _unverified_git_fetch_request(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> ToolActionRequestMatch | None:
+    if "git" not in command_text or "fetch" not in command_text:
+        return None
     parsing_cwd = cwd or home_dir or Path.cwd()
     context = model_shell_execution_context(
         command_text,
@@ -276,6 +278,11 @@ def _unverified_git_fetch_request(
     if not any(_segment_invokes_git_fetch(segment.tokens) for segment in context.segments):
         return None
     if cwd is not None and is_low_risk_standalone_git_routine(context):
+        return None
+    if context.complete and all(
+        not _segment_invokes_git_fetch(segment.tokens) or is_low_risk_git_inspection_segment(segment)
+        for segment in context.segments
+    ):
         return None
     return ToolActionRequestMatch(
         tool_name=tool_name,
