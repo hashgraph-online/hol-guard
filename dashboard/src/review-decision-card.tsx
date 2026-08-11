@@ -13,6 +13,7 @@ import {
   buildRetryAfterApprovalCopy,
   formatRelativeTime,
   harnessDisplayName,
+  isWatchOnlyObservation,
   requestResolutionBlockReason,
 } from "./approval-center-utils";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
@@ -131,6 +132,7 @@ export function ReviewDecisionCard(props: {
     () => (item ? localToolApprovalOptions(item) : null),
     [item],
   );
+  const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item
     ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}`
@@ -149,7 +151,7 @@ export function ReviewDecisionCard(props: {
       setUseCooldown(false);
       setPendingAction(null);
       setPendingContractKey(null);
-      setRememberExactAction(false);
+      setRememberExactAction(item.exact_action_persistence_eligible === true && isWatchOnlyObservation(item));
       const nextTemporaryOptions = temporaryMcpApprovalOptions(item);
       if (nextTemporaryOptions !== null) {
         setMcpGrantTarget(defaultTemporaryMcpTarget(nextTemporaryOptions));
@@ -206,7 +208,12 @@ export function ReviewDecisionCard(props: {
             action,
             scope: requestedScope,
             reason: action === "allow" ? "approved in review" : "blocked in review",
-            persistExactAction: action === "allow" ? rememberExactAction : false,
+            persistExactAction:
+              action === "allow"
+                ? rememberExactAction
+                : watchOnlyObservation &&
+                  requestedScope === "artifact" &&
+                  item.exact_action_persistence_eligible === true,
           }),
           ...(includeGateFields && needsPassword ? { approval_password: approvalPassword } : {}),
           ...(includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {}),
@@ -240,6 +247,7 @@ export function ReviewDecisionCard(props: {
       item,
       allowScope,
       blockScope,
+      watchOnlyObservation,
       rememberExactAction,
       props.onResolve,
       props.approvalGate,
@@ -374,7 +382,7 @@ export function ReviewDecisionCard(props: {
     return (
       <EmptyState
         title="Select an action"
-        body="Choose a paused action from the queue to review and decide."
+        body="Choose an action or Watch-only finding to review."
         tone="teach"
       />
     );
@@ -388,7 +396,7 @@ export function ReviewDecisionCard(props: {
   const actionPresentation = guardActionPresentation(item.policy_action);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
   if (rememberExactAction && allowScope === "artifact") {
-    resolvedAllowButtonLabel = "Approve and remember";
+    resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
   }
   if (temporaryMcpOptions !== null && !rememberExactAction) {
     resolvedAllowButtonLabel = temporaryMcpAllowButtonLabel(mcpGrantDuration);
@@ -420,14 +428,14 @@ export function ReviewDecisionCard(props: {
       <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <SectionLabel>Paused action</SectionLabel>
+            <SectionLabel>{watchOnlyObservation ? "Watch-only finding" : "Paused action"}</SectionLabel>
             <h2 className="mt-2 text-lg font-semibold text-brand-dark">{plainTitle}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               From {harnessName}
             </p>
           </div>
-          <Badge tone={actionPresentation.tone}>
-            {actionPresentation.label}
+          <Badge tone={watchOnlyObservation ? "info" : actionPresentation.tone}>
+            {watchOnlyObservation ? "Ran in Watch only" : actionPresentation.label}
           </Badge>
         </div>
 
@@ -573,7 +581,7 @@ export function ReviewDecisionCard(props: {
             ) : (
               <span className="flex items-center gap-2">
                 <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
-                {blockButtonLabel(blockScope)}
+                {watchOnlyObservation && blockScope === "artifact" ? "Block next time" : blockButtonLabel(blockScope)}
               </span>
             )}
           </ActionButton>

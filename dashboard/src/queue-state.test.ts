@@ -561,8 +561,8 @@ assert(
   "T-QS-43: buildHomePrimaryState returns needs_decision status when pending count is greater than zero"
 );
 assert(
-  needsDecision.copy.includes("3 actions"),
-  "T-QS-44: buildHomePrimaryState includes action count in copy when pending"
+  needsDecision.copy === "3 action findings waiting for review.",
+  "T-QS-44: buildHomePrimaryState uses neutral copy for paused and Watch-only findings"
 );
 assert(
   needsDecision.ctaLabel === "Review waiting action",
@@ -597,8 +597,8 @@ assert(
 
 const singlePending = buildHomePrimaryState(1, 1);
 assert(
-  singlePending.copy.includes("1 action paused"),
-  "T-QS-50: buildHomePrimaryState uses singular 'action' when exactly one pending"
+  singlePending.copy === "1 action finding waiting for review.",
+  "T-QS-50: buildHomePrimaryState uses singular 'finding' when exactly one is pending"
 );
 
 const fileReadEnvelope: GuardActionEnvelope = {

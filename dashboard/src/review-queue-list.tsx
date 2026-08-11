@@ -32,7 +32,7 @@ export function ReviewHeader({
       <div>
         <h1 className="text-xl font-semibold tracking-[-0.02em] text-brand-dark sm:text-2xl">Review</h1>
         <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Guard paused these actions before they ran. Review each one and decide what should happen.
+          Review actions Guard paused and findings recorded while Watch only was active.
         </p>
       </div>
       <p className="text-sm text-muted-foreground">

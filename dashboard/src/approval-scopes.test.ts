@@ -166,6 +166,17 @@ const blockPayload = buildDecisionPayload({
   reason: "blocked in review",
 });
 assert(blockPayload.workspace === "/workspace/project", "T-AS-04: workspace block sends the request workspace");
+const rememberedExactBlockPayload = buildDecisionPayload({
+  item: BASE_REQUEST,
+  action: "block",
+  scope: "artifact",
+  reason: "blocked after Watch-only review",
+  persistExactAction: true,
+});
+assert(
+  rememberedExactBlockPayload.persist_policy === true,
+  "T-AS-04a: exact-action blocks can be persisted explicitly",
+);
 
 const allowScopes = scopeChoicesForRequest(BASE_REQUEST, "allow").map((choice) => choice.value);
 const blockScopes = scopeChoicesForRequest(BASE_REQUEST, "block").map((choice) => choice.value);

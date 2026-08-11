@@ -1372,6 +1372,18 @@ def _runtime_scoped_exact_match_key(
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
 
 
+def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:
+    """Return a scoped family identity for one exact runtime tool action."""
+
+    if artifact_id is None or not artifact_id.strip():
+        return None
+    family_key = _artifact_family_key(artifact_id)
+    if family_key is not None and _family_key_value(family_key) in _SCOPED_RUNTIME_EXACT_FAMILIES:
+        return artifact_id
+    digest = sha256(artifact_id.strip().encode("utf-8")).hexdigest()
+    return f"guard:runtime:tool-action:{digest}"
+
+
 def runtime_tool_action_exact_match_context(
     *,
     config_path: str | None,

@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -98,6 +99,63 @@ def _disable_real_desktop_notification_setup(monkeypatch: pytest.MonkeyPatch) ->
 
 
 class TestGuardApprovals:
+    def test_guard_queue_dedupes_harness_delivery_metadata(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace = str(tmp_path / "workspace")
+        base = GuardApprovalRequest(
+            request_id="req-first",
+            harness="codex",
+            artifact_id="codex:project:tool-action:script",
+            artifact_name="Bash unmatched tool action",
+            artifact_type="tool_action_request",
+            artifact_hash="hash-script",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("tool_action",),
+            source_scope="project",
+            config_path=workspace,
+            workspace=workspace,
+            launch_target="npm run guard:acquisition-loop",
+            action_envelope_json={
+                "action_type": "shell_command",
+                "tool_name": "Bash",
+                "command": "npm run guard:acquisition-loop",
+                "raw_payload_redacted": {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "npm run guard:acquisition-loop"},
+                    "tool_use_id": "tool-first",
+                    "transcript_path": "sessions/first.jsonl",
+                    "model": "model-first",
+                    "permission_mode": "ask",
+                },
+            },
+            review_command="hol-guard approvals approve req-first",
+            approval_url="http://127.0.0.1:5474/requests/req-first",
+        )
+        store.add_approval_request(base, "2026-08-11T00:00:00+00:00")
+        second = replace(
+            base,
+            request_id="req-second",
+            action_envelope_json={
+                **(base.action_envelope_json or {}),
+                "raw_payload_redacted": {
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "npm run guard:acquisition-loop"},
+                    "tool_use_id": "tool-second",
+                    "transcript_path": "sessions/second.jsonl",
+                    "model": "model-second",
+                    "permission_mode": "bypassPermissions",
+                },
+            },
+        )
+
+        persisted = store.add_approval_request(second, "2026-08-11T00:01:00+00:00")
+
+        assert persisted == "req-first"
+        pending = store.list_approval_requests(limit=10)
+        assert len(pending) == 1
+        assert pending[0]["dedupe_count"] == 2
+
     def test_guard_store_persists_and_resolves_approval_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"

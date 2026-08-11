@@ -386,19 +386,6 @@ def _review_runtime_artifact_hook(
                 managed_install=managed_install,
             )
             _localize_pending_approval_copy(response_payload, harness=args.harness)
-    if observe_mode and event_name == "PreToolUse" and not observe_request_queued:
-        queue_observe_mode_request(
-            action_envelope=action_envelope,
-            artifact=runtime_artifact,
-            artifact_hash=runtime_artifact_hash,
-            changed_fields=changed_capabilities,
-            executable_action=policy_action,
-            observed_policy_action=policy_action,
-            redaction_level=config.receipt_redaction_level,
-            risk_summary=risk_summary,
-            scanner_evidence=scanner_evidence_payload,
-            store=store,
-        )
     state.action_envelope = action_envelope
     state.browser_approval_daemon_client = locals().get("browser_approval_daemon_client")
     state.policy_action = policy_action

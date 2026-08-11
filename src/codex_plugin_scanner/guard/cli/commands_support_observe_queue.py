@@ -26,6 +26,8 @@ def queue_observe_mode_request(
 ) -> list[dict[str, object]]:
     """Queue retrospective review without changing the executable decision."""
 
+    if observed_policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}:
+        return []
     review_action: GuardAction = (
         observed_policy_action if observed_policy_action in {"review", "require-reapproval"} else "require-reapproval"
     )

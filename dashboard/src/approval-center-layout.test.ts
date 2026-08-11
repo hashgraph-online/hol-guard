@@ -8,6 +8,8 @@ import {
   QUEUE_CONNECTION_ERROR_HEADLINE,
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
   buildRecommendation,
+  buildPauseLine,
+  isWatchOnlyObservation,
   requestResolutionBlockReason,
   scopeLabel,
   buildCodexResumeUx,
@@ -301,6 +303,27 @@ assert(
 assert(
   buildRecommendation(BASE_REQUEST).includes("Project approval remembers this same action"),
   "C9: Recommendation explains project approval does not trust new sensitive actions"
+);
+
+const watchOnlyRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  scanner_evidence: [
+    {
+      source: "observe_mode_inbox",
+      observed_policy_action: "require-reapproval",
+      queued_policy_action: "require-reapproval",
+      authoritative_action: "allow",
+    },
+  ] as unknown as NonNullable<GuardApprovalRequest["scanner_evidence"]>,
+};
+assert(isWatchOnlyObservation(watchOnlyRequest), "Watch-only findings are identified from trusted queue evidence");
+assert(
+  buildPauseLine(watchOnlyRequest).startsWith("Watch only let this action run."),
+  "Watch-only findings never claim the action was paused",
+);
+assert(
+  buildRecommendation(watchOnlyRequest).includes("Save an exact allow"),
+  "Watch-only findings explain how to prevent the same false positive",
 );
 
 const sandboxRequest: GuardApprovalRequest = { ...BASE_REQUEST, policy_action: "sandbox-required" };

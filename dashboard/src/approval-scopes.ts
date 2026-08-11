@@ -252,8 +252,7 @@ export function buildDecisionPayload(input: {
     scope: normalizedScope,
     workspace,
     reason: input.reason,
-    ...(input.action === "allow" &&
-    normalizedScope === "artifact" &&
+    ...(normalizedScope === "artifact" &&
     input.persistExactAction === true &&
     input.item.exact_action_persistence_eligible === true
       ? { persist_policy: true }

@@ -1230,7 +1230,7 @@ export function buildHomePrimaryState(
   if (pendingCount > 0) {
     return {
       status: "needs_decision",
-      copy: `${pendingCount} action${pendingCount !== 1 ? "s" : ""} paused and waiting for your decision.`,
+      copy: `${pendingCount} action finding${pendingCount !== 1 ? "s" : ""} waiting for review.`,
       ctaLabel: "Review waiting action",
     };
   }

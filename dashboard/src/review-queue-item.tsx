@@ -21,7 +21,11 @@ import {
   HiMiniShieldCheck,
 } from "react-icons/hi2";
 import { FaDocker, FaGitAlt, FaGithub } from "react-icons/fa";
-import { harnessDisplayName, resolveStoppedCommandText } from "./approval-center-utils";
+import {
+  harnessDisplayName,
+  isWatchOnlyObservation,
+  resolveStoppedCommandText,
+} from "./approval-center-utils";
 import type { GuardApprovalRequest } from "./guard-types";
 import {
   formatQueueRequestDate,
@@ -62,6 +66,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
   const isRead = readState.isRead(item.request_id);
+  const watchOnlyObservation = isWatchOnlyObservation(item);
   // Checkboxes render whenever bulk selection is active so the affordance is
   // always discoverable. Non-eligible rows show a disabled checkbox with a
   // tooltip instead of silently hiding the control.
@@ -146,6 +151,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
             </p>
             <p className="truncate text-[11px] text-muted-foreground">
               {harnessDisplayName(item.harness)} · {formatQueueRequestDate(item)}
+              {watchOnlyObservation ? " · Watch only" : ""}
             </p>
           </div>
           <span

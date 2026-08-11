@@ -472,19 +472,51 @@ def _generic_hook_saved_decision(
     """Peek saved evidence, retaining legacy blocks without trusting legacy allows."""
 
     workspace = str(runtime_workspace) if runtime_workspace is not None else None
+    from ..store import runtime_tool_action_exact_match_context, runtime_tool_action_policy_artifact_id
+
+    memory_command = _generic_hook_memory_command(payload)
+    runtime_exact_match_context = runtime_tool_action_exact_match_context(
+        config_path=workspace,
+        source_scope=_coalesce_string(payload.get("source_scope"), "project"),
+        raw_command_text=memory_command,
+    )
     lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
         harness,
         artifact_id,
         artifact_hash=artifact_hash,
         workspace=workspace,
         publisher=publisher,
-        memory_command=_generic_hook_memory_command(payload),
+        runtime_exact_match_context=runtime_exact_match_context,
+        memory_command=memory_command,
         memory_artifact_type=_coalesce_string(payload.get("artifact_type"), payload.get("tool_type")),
         memory_artifact_name=artifact_name,
         consume_one_shot=False,
     )
     selected_decision = lookup["decision"]
     ignored_integrity = lookup.get("ignored_local_integrity")
+    policy_artifact_id = runtime_tool_action_policy_artifact_id(artifact_id)
+    if policy_artifact_id is not None and policy_artifact_id != artifact_id:
+        exact_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
+            harness,
+            policy_artifact_id,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
+            runtime_exact_match_context=runtime_exact_match_context,
+            memory_command=memory_command,
+            memory_artifact_type=_coalesce_string(payload.get("artifact_type"), payload.get("tool_type")),
+            memory_artifact_name=artifact_name,
+            consume_one_shot=False,
+        )
+        exact_decision = exact_lookup["decision"]
+        if ignored_integrity is None:
+            ignored_integrity = exact_lookup.get("ignored_local_integrity")
+        if exact_decision is not None and (
+            selected_decision is None
+            or guard_action_severity(exact_decision.get("action"), unknown_action="block")
+            > guard_action_severity(selected_decision.get("action"), unknown_action="block")
+        ):
+            selected_decision = exact_decision
     if legacy_artifact_hash is not None and legacy_artifact_hash != artifact_hash:
         legacy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
             harness,
@@ -492,7 +524,8 @@ def _generic_hook_saved_decision(
             artifact_hash=legacy_artifact_hash,
             workspace=workspace,
             publisher=publisher,
-            memory_command=_generic_hook_memory_command(payload),
+            runtime_exact_match_context=runtime_exact_match_context,
+            memory_command=memory_command,
             memory_artifact_type=_coalesce_string(payload.get("artifact_type"), payload.get("tool_type")),
             memory_artifact_name=artifact_name,
             consume_one_shot=False,
@@ -529,10 +562,16 @@ def _generic_hook_approval_reuse(
             saved_action = "require-reapproval"
         validation_reason = "approval_reuse_integrity_failure"
     elif decision is not None and decision.get("action") == "allow":
-        validation_reason = cast(
-            ApprovalReuseValidationFailure | None,
-            approval_context_tokens_validation_reason(decision.get("artifact_hash"), artifact_hash),
-        )
+        from ..store import _is_runtime_scoped_exact_match_key
+
+        saved_artifact_hash = decision.get("artifact_hash")
+        if not _is_runtime_scoped_exact_match_key(
+            saved_artifact_hash if isinstance(saved_artifact_hash, str) else None
+        ):
+            validation_reason = cast(
+                ApprovalReuseValidationFailure | None,
+                approval_context_tokens_validation_reason(saved_artifact_hash, artifact_hash),
+            )
     if not saved_present:
         diagnosed_reason = store.approval_reuse_validation_reason(
             harness,
@@ -1084,8 +1123,7 @@ def _run_hook_generic_payload(
             output_stream=output_stream,
         )
         return 0
-    if config.mode == "observe" and hook_is_pre_event(hook_event_name):
-        inbox_policy_action = observed_policy_action or policy_action
+    if config.mode == "observe" and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
         observed_artifact = GuardArtifact(
             artifact_id=artifact_id,
             name=artifact_name,
@@ -1109,7 +1147,7 @@ def _run_hook_generic_payload(
             artifact_hash=runtime_artifact_hash,
             changed_fields=changed_capabilities or ["tool_action"],
             executable_action=policy_action,
-            observed_policy_action=inbox_policy_action,
+            observed_policy_action=observed_policy_action,
             redaction_level=config.receipt_redaction_level,
             risk_summary=(
                 "Watch-only mode allowed an action that current policy would stop."
@@ -1164,6 +1202,11 @@ def _run_hook_generic_payload(
                         "changed_fields": changed_capabilities or ["tool_action"],
                         "launch_target": redacted_command_text,
                         "risk_summary": "No command rule matched this tool action.",
+                        "action_envelope_json": (
+                            action_envelope.with_pre_execution_result(None).to_dict()
+                            if action_envelope is not None
+                            else None
+                        ),
                         "scanner_evidence": (
                             [local_tool_eligibility.to_evidence()] if local_tool_eligibility is not None else []
                         ),

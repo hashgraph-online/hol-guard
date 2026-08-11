@@ -71,6 +71,7 @@ from .store import (
     _runtime_scoped_exact_match_key,
     browser_mcp_exact_match_context,
     runtime_tool_action_exact_match_context,
+    runtime_tool_action_policy_artifact_id,
     runtime_tool_action_portable_match_context,
 )
 from .synced_policy import synced_policy_bundle_validation
@@ -681,13 +682,13 @@ def apply_approval_resolution(
     scope = selection.applied_scope
     if selection.warning is not None:
         persist_policy = None
-    elif action == "allow" and scope == "artifact" and persist_policy is True:
+    elif scope == "artifact" and persist_policy is True:
         if scope_contract_version is not None:
             if not exact_action_allow_persistence_eligible(request):
                 raise IneligibleApprovalScopeError(
-                    "saved_allow_scope_ineligible",
+                    "saved_allow_scope_ineligible" if action == "allow" else "saved_block_scope_ineligible",
                     request_scope_contract(request),
-                    action=action,
+                    action="allow" if action == "allow" else "block",
                     requested_scope=scope,
                 )
         else:
@@ -698,7 +699,7 @@ def apply_approval_resolution(
     approval_context_token = (
         request_artifact_hash if parse_approval_context_token(request_artifact_hash) is not None else None
     )
-    exact_context_allow = action == "allow" and approval_context_token is not None
+    exact_context_allow = action == "allow" and approval_context_token is not None and persist_policy is not True
     request_publisher = _string_or_none(request.get("publisher"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     portable_package_workspace = package_request_portable_workspace_scope(
@@ -725,6 +726,7 @@ def apply_approval_resolution(
             include_envelope_command=persist_policy is True,
         )
         if artifact_runtime_exact_match_key is not None:
+            scoped_artifact_id = runtime_tool_action_policy_artifact_id(request_artifact_id)
             scoped_artifact_hash = artifact_runtime_exact_match_key
         broad_runtime_exact_match_key = _broad_runtime_exact_match_key(request, scope)
         if broad_runtime_exact_match_key is not None:
@@ -995,7 +997,7 @@ def _artifact_scope_runtime_exact_match_key(
 ) -> str | None:
     if scope != "artifact" or request.get("artifact_type") != "tool_action_request":
         return None
-    artifact_id = request.get("artifact_id")
+    artifact_id = runtime_tool_action_policy_artifact_id(_string_or_none(request.get("artifact_id")))
     raw_command_text = _string_or_none(request.get("raw_command_text"))
     wrapper_chain = request.get("wrapper_chain")
     envelope = request.get("action_envelope_json")

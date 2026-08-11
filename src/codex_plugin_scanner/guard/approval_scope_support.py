@@ -235,8 +235,6 @@ def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bo
         )
     if artifact_type != "tool_action_request":
         return False
-    if _request_scoped_family_key(request) != "family:tool-action":
-        return False
     action_identity = _string_or_none(request.get("action_identity"))
     raw_command_text = _string_or_none(request.get("raw_command_text"))
     envelope = request.get("action_envelope_json")
@@ -247,7 +245,16 @@ def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bo
             or _string_or_none(typed_envelope.get("raw_command_text"))
             or _string_or_none(typed_envelope.get("command"))
         )
-    return bool(artifact_id and artifact_hash and artifact_hash != "unknown" and action_identity and raw_command_text)
+    context_bound = parse_approval_context_token(artifact_hash) is not None
+    trusted_family = _request_scoped_family_key(request) == "family:tool-action"
+    return bool(
+        artifact_id
+        and artifact_hash
+        and artifact_hash != "unknown"
+        and action_identity
+        and raw_command_text
+        and (context_bound or trusted_family)
+    )
 
 
 def resolve_request_scope_selection(

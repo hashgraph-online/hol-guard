@@ -22,7 +22,11 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardAction, GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
-from codex_plugin_scanner.guard.store import GuardStore, runtime_tool_action_exact_match_context
+from codex_plugin_scanner.guard.store import (
+    GuardStore,
+    runtime_tool_action_exact_match_context,
+    runtime_tool_action_policy_artifact_id,
+)
 
 
 def _request(
@@ -408,6 +412,76 @@ def test_v2_saved_artifact_allow_persists_only_the_exact_action(tmp_path: Path) 
     )
 
 
+def test_context_bound_saved_allow_survives_context_token_changes_but_not_command_changes(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    context_token = build_approval_context_token(
+        identity={"harness": "codex", "tool": "Bash"},
+        content={"command": "npm run guard:acquisition-loop"},
+        capabilities={"action_type": "shell_command"},
+        policy={"mode": "observe", "action": "require-reapproval"},
+        sandbox={"mode": "workspace-write"},
+    )
+    request = replace(
+        _request(
+            "saved-context-action",
+            artifact_id="codex:project:Bash",
+            artifact_hash=context_token,
+        ),
+        launch_target="npm run guard:acquisition-loop",
+        raw_command_text="npm run guard:acquisition-loop",
+        action_envelope_json={
+            "action_type": "shell_command",
+            "tool_name": "Bash",
+            "command": "npm run guard:acquisition-loop",
+        },
+    )
+    row = _store_request(store, request)
+    apply_approval_resolution(
+        store=store,
+        request_id="saved-context-action",
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="remember exact action",
+        persist_policy=True,
+        scope_contract_version=str(row["scope_contract_version"]),
+        scope_contract_digest=str(row["scope_contract_digest"]),
+    )
+    same_action_context = runtime_tool_action_exact_match_context(
+        config_path="/workspace/repo/.guard/config.toml",
+        source_scope="project",
+        raw_command_text="npm run guard:acquisition-loop",
+    )
+    changed_action_context = runtime_tool_action_exact_match_context(
+        config_path="/workspace/repo/.guard/config.toml",
+        source_scope="project",
+        raw_command_text="npm run guard:other",
+    )
+    policy_artifact_id = runtime_tool_action_policy_artifact_id("codex:project:Bash")
+    assert policy_artifact_id is not None
+
+    assert (
+        store.resolve_policy_decision(
+            "codex",
+            policy_artifact_id,
+            artifact_hash="guard-approval-context:v1:different-mode-token",
+            runtime_exact_match_context=same_action_context,
+            consume_one_shot=False,
+        )
+        is not None
+    )
+    assert (
+        store.resolve_policy_decision(
+            "codex",
+            policy_artifact_id,
+            artifact_hash="guard-approval-context:v1:different-mode-token",
+            runtime_exact_match_context=changed_action_context,
+            consume_one_shot=False,
+        )
+        is None
+    )
+
+
 def test_v2_saved_artifact_allow_requires_exact_action_proof(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     request = replace(
@@ -432,6 +506,32 @@ def test_exact_action_persistence_accepts_envelope_raw_command_text(tmp_path: Pa
     request = replace(
         _request("envelope-raw-command"),
         action_envelope_json={"action_type": "shell_command", "raw_command_text": "echo test"},
+    )
+    row = _store_request(store, request)
+
+    assert request_scope_contract(row).exact_action_persistence_eligible is True
+
+
+def test_exact_action_persistence_accepts_context_bound_generic_tool_action(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    context_token = build_approval_context_token(
+        identity={"harness": "codex", "tool": "Bash"},
+        content={"command": "npm run guard:acquisition-loop"},
+        capabilities={"action_type": "shell_command"},
+        policy={"action": "require-reapproval"},
+        sandbox={"mode": "workspace-write"},
+    )
+    request = replace(
+        _request(
+            "generic-tool-action",
+            artifact_id="codex:project:Bash",
+            artifact_hash=context_token,
+        ),
+        action_envelope_json={
+            "action_type": "shell_command",
+            "tool_name": "Bash",
+            "command": "npm run guard:acquisition-loop",
+        },
     )
     row = _store_request(store, request)
 

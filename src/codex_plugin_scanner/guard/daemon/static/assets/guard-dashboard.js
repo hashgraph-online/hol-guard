@@ -13270,7 +13270,7 @@ function buildDecisionPayload(input) {
     scope: normalizedScope,
     workspace,
     reason: input.reason,
-    ...input.action === "allow" && normalizedScope === "artifact" && input.persistExactAction === true && input.item.exact_action_persistence_eligible === true ? { persist_policy: true } : {},
+    ...normalizedScope === "artifact" && input.persistExactAction === true && input.item.exact_action_persistence_eligible === true ? { persist_policy: true } : {},
     ...hasCompleteBinding ? {
       scope_contract_version: contractVersion,
       scope_contract_digest: contractDigest
@@ -14552,6 +14552,11 @@ function whyPaused(request) {
 }
 const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
 const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
+function isWatchOnlyObservation(item) {
+  return (item.scanner_evidence ?? []).some(
+    (evidence) => typeof evidence === "object" && evidence !== null && "source" in evidence && evidence.source === "observe_mode_inbox"
+  );
+}
 function deriveDataFlowEvidence(item) {
   const signals = item.decision_v2_json?.signals ?? [];
   const dataFlowSignals = signals.filter(
@@ -14597,6 +14602,12 @@ function resolveDataFlowSinkLabel(signal) {
 }
 function buildRetryAfterApprovalCopy(item, action) {
   const harness = harnessDisplayName(item.harness);
+  if (isWatchOnlyObservation(item)) {
+    if (action === "allow") {
+      return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
+    }
+    return "Saved. Guard will stop matching actions next time.";
+  }
   if (action === "allow") {
     return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;
   }
@@ -28839,6 +28850,7 @@ function ReviewDecisionCard(props) {
     () => item ? localToolApprovalOptions(item) : null,
     [item]
   );
+  const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}` : null;
   reactExports.useEffect(() => {
@@ -28854,7 +28866,7 @@ function ReviewDecisionCard(props) {
       setUseCooldown(false);
       setPendingAction(null);
       setPendingContractKey(null);
-      setRememberExactAction(false);
+      setRememberExactAction(item.exact_action_persistence_eligible === true && isWatchOnlyObservation(item));
       const nextTemporaryOptions = temporaryMcpApprovalOptions(item);
       if (nextTemporaryOptions !== null) {
         setMcpGrantTarget(defaultTemporaryMcpTarget(nextTemporaryOptions));
@@ -28904,7 +28916,7 @@ function ReviewDecisionCard(props) {
             action,
             scope: requestedScope,
             reason: action === "allow" ? "approved in review" : "blocked in review",
-            persistExactAction: action === "allow" ? rememberExactAction : false
+            persistExactAction: action === "allow" ? rememberExactAction : watchOnlyObservation && requestedScope === "artifact" && item.exact_action_persistence_eligible === true
           }),
           ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
           ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
@@ -28934,6 +28946,7 @@ function ReviewDecisionCard(props) {
       item,
       allowScope,
       blockScope,
+      watchOnlyObservation,
       rememberExactAction,
       props.onResolve,
       props.approvalGate,
@@ -29056,7 +29069,7 @@ function ReviewDecisionCard(props) {
       EmptyState,
       {
         title: "Select an action",
-        body: "Choose a paused action from the queue to review and decide.",
+        body: "Choose an action or Watch-only finding to review.",
         tone: "teach"
       }
     );
@@ -29069,7 +29082,7 @@ function ReviewDecisionCard(props) {
   const actionPresentation = guardActionPresentation(item.policy_action);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
   if (rememberExactAction && allowScope === "artifact") {
-    resolvedAllowButtonLabel = "Approve and remember";
+    resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
   }
   if (temporaryMcpOptions !== null && !rememberExactAction) {
     resolvedAllowButtonLabel = temporaryMcpAllowButtonLabel(mcpGrantDuration);
@@ -29098,14 +29111,14 @@ function ReviewDecisionCard(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Paused action" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: watchOnlyObservation ? "Watch-only finding" : "Paused action" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "mt-2 text-lg font-semibold text-brand-dark", children: plainTitle }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
             "From ",
             harnessName
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: actionPresentation.tone, children: actionPresentation.label })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: watchOnlyObservation ? "info" : actionPresentation.tone, children: watchOnlyObservation ? "Ran in Watch only" : actionPresentation.label })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -29225,7 +29238,7 @@ function ReviewDecisionCard(props) {
               "Blocking..."
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
-              blockButtonLabel(blockScope)
+              watchOnlyObservation && blockScope === "artifact" ? "Block next time" : blockButtonLabel(blockScope)
             ] })
           }
         )
@@ -29308,6 +29321,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
   const isRead = readState.isRead(item.request_id);
+  const watchOnlyObservation = isWatchOnlyObservation(item);
   const showCheckbox = selectionMode;
   const canSelect = selectionMode && selectable;
   const handleClick = reactExports.useCallback(() => {
@@ -29385,7 +29399,8 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
                   harnessDisplayName(item.harness),
                   " · ",
-                  formatQueueRequestDate(item)
+                  formatQueueRequestDate(item),
+                  watchOnlyObservation ? " · Watch only" : ""
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -29496,7 +29511,7 @@ function ReviewHeader({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold tracking-[-0.02em] text-brand-dark sm:text-2xl", children: "Review" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground", children: "Guard paused these actions before they ran. Review each one and decide what should happen." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground", children: "Review actions Guard paused and findings recorded while Watch only was active." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
       progress,
