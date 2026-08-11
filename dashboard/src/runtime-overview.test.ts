@@ -291,6 +291,15 @@ assert(
   `SC2b: restart_required detail should explain terminal and AI-app restart scope — got: "${restartRequiredCopy.pathDetail}"`
 );
 
+const unconfiguredProfileCopy = resolvePackageManagerProtectionCopy({
+  ...restartRequiredProtection,
+  shell_profile_configured: false,
+});
+assert(
+  unconfiguredProfileCopy.pathDetail.includes("still needs the shim directory on PATH"),
+  `SC2c: unconfigured profile should explain the remaining PATH requirement — got: "${unconfiguredProfileCopy.pathDetail}"`,
+);
+
 const absentCopy = resolvePackageManagerProtectionCopy(undefined);
 assert(absentCopy.pathTone === "slate", "SC3: absent supply-chain data should use slate tone (no crash)");
 assert(absentCopy.pathLabel.length > 0, "SC3: absent supply-chain data should still produce a non-empty label");

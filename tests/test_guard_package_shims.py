@@ -102,12 +102,28 @@ def test_package_policy_context_ignores_refresh_only_bundle_metadata() -> None:
     }
 
     first = local_supply_chain_module._package_policy_gate_context(
-        Store(), artifact, SimpleNamespace(**common, bundle_version="bundle-1")
+        Store(),
+        artifact,
+        SimpleNamespace(**common, bundle_version="bundle-1", feed_snapshot_hash="feed-1"),
     )
     refreshed = local_supply_chain_module._package_policy_gate_context(
-        Store(), artifact, SimpleNamespace(**common, bundle_version="bundle-2")
+        Store(),
+        artifact,
+        SimpleNamespace(**common, bundle_version="bundle-2", feed_snapshot_hash="feed-2"),
     )
 
+    assert first == {
+        "decision": "ask",
+        "enforcement": "local",
+        "entitlement_state": "active",
+        "exception_id": None,
+        "matched_advisory_ids": [],
+        "matched_rule_id": "default-unidentified-package-review",
+        "packages": [{"name": "server-memory", "decision": "ask"}],
+        "policy_action": "review",
+        "policy_version": "unchanged-policy-hash",
+        "reasons": [{"code": "package_review", "message": "Review package."}],
+    }
     assert refreshed == first
     assert "bundle_version" not in refreshed
     assert "feed_snapshot_hash" not in refreshed
