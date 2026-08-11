@@ -666,6 +666,9 @@ def test_watch_only_exact_allow_applies_after_enforcement_is_enabled(
     )
     assert rc == 0
     observed = store.list_approval_requests(limit=10)[0]
+    assert "paused" not in str(observed["trigger_summary"]).lower()
+    assert "paused" not in str(observed["why_now"]).lower()
+    assert "continue" in str(observed["why_now"]).lower()
     approvals_module.apply_approval_resolution(
         store=store,
         request_id=str(observed["request_id"]),

@@ -47,7 +47,8 @@ def build_incident_context(
     harness_label = _HARNESS_LABELS.get(harness, harness.title())
     artifact_label = _ARTIFACT_LABELS.get(artifact_type or "artifact", "Artifact")
     normalized_scope = source_scope or "project"
-    action_verb = _trigger_verb(policy_action=policy_action, changed_fields=changed_fields)
+    presentation_action = _presentation_action(artifact=artifact, policy_action=policy_action)
+    action_verb = _trigger_verb(policy_action=presentation_action, changed_fields=changed_fields)
     if artifact_type == "prompt_request":
         source_label = f"{harness_label} session prompt"
         trigger_summary = (
@@ -79,7 +80,7 @@ def build_incident_context(
             f"HOL Guard {action_verb} the {artifact_label} `{artifact_name or artifact_id}` from "
             f"`{short_config_path}` for {harness_label}."
         )
-    why_now = _why_now_text(changed_fields, policy_action, harness_label, artifact_type)
+    why_now = _why_now_text(changed_fields, presentation_action, harness_label, artifact_type)
     launch_summary = _launch_summary(artifact=artifact, launch_target=launch_target)
     risk_headline = risk_summary or _fallback_risk_headline(policy_action)
     return {
@@ -90,6 +91,17 @@ def build_incident_context(
         "launch_summary": launch_summary,
         "risk_headline": risk_headline,
     }
+
+
+def _presentation_action(*, artifact: GuardArtifact | None, policy_action: GuardAction) -> GuardAction:
+    if artifact is None or artifact.metadata.get("watch_only_observation") is not True:
+        return policy_action
+    authoritative_action = artifact.metadata.get("watch_only_authoritative_action")
+    if authoritative_action == "allow":
+        return "allow"
+    if authoritative_action == "warn":
+        return "warn"
+    return policy_action
 
 
 def _fallback_risk_headline(policy_action: GuardAction) -> str:

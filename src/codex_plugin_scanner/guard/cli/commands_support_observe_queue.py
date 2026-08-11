@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 
 from ..approvals import queue_blocked_approvals
 from ..daemon.manager import guard_daemon_url_for_home
@@ -41,15 +42,23 @@ def queue_observe_mode_request(
             "authoritative_action": executable_action,
         }
     )
+    observed_artifact = replace(
+        artifact,
+        metadata={
+            **artifact.metadata,
+            "watch_only_observation": True,
+            "watch_only_authoritative_action": executable_action,
+        },
+    )
     try:
         approval_center_url = guard_daemon_url_for_home(store.guard_home)
         return queue_blocked_approvals(
             detection=HarnessDetection(
-                harness=artifact.harness,
+                harness=observed_artifact.harness,
                 installed=True,
                 command_available=True,
-                config_paths=(artifact.config_path,),
-                artifacts=(artifact,),
+                config_paths=(observed_artifact.config_path,),
+                artifacts=(observed_artifact,),
             ),
             evaluation={
                 "artifacts": [
