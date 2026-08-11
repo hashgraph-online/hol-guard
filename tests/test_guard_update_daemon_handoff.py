@@ -24,6 +24,7 @@ def test_refresh_script_adapts_to_new_manager_signature(
     _ = guard_home.mkdir(parents=True)
     _ = (guard_home / "daemon-state.json").write_text('{"port":8123}', encoding="utf-8")
     observed: dict[str, object] = {}
+    events: list[str] = []
 
     def retire(_guard_home: Path) -> list[int]:
         return [17]
@@ -39,6 +40,12 @@ def test_refresh_script_adapts_to_new_manager_signature(
     monkeypatch.setattr(manager, "clear_guard_daemon_state", no_op)
     monkeypatch.setattr(manager, "repair_approval_center_locator", no_op)
 
+    def refresh_approval_center(received_guard_home: Path) -> None:
+        events.append("approval_center")
+        observed["approval_center_home"] = received_guard_home
+
+    monkeypatch.setattr(manager, "ensure_approval_center", refresh_approval_center)
+
     def require_new_parameters(
         received_guard_home: Path,
         *,
@@ -46,6 +53,7 @@ def test_refresh_script_adapts_to_new_manager_signature(
         preferred_port: int | None = None,
         allow_windows_job_breakaway: bool = False,
     ) -> str:
+        events.append("restart")
         observed.update(
             guard_home=received_guard_home,
             home_dir=home_dir,
@@ -73,7 +81,9 @@ def test_refresh_script_adapts_to_new_manager_signature(
         "home_dir": home_dir.resolve(),
         "preferred_port": 8123,
         "allow_windows_job_breakaway": True,
+        "approval_center_home": guard_home.resolve(),
     }
+    assert events == ["restart", "approval_center"]
     assert json.loads(capsys.readouterr().out) == {
         "status": "restarted",
         "retired": [17],
@@ -91,6 +101,7 @@ def test_refresh_script_preserves_legacy_manager_signature(
     _ = guard_home.mkdir(parents=True)
     _ = (guard_home / "daemon-state.json").write_text('{"port":8124}', encoding="utf-8")
     observed: dict[str, object] = {}
+    events: list[str] = []
 
     def retire(_guard_home: Path) -> list[int]:
         return [18]
@@ -102,13 +113,19 @@ def test_refresh_script_preserves_legacy_manager_signature(
         return True
 
     def legacy_parameters(received_guard_home: Path, *, preferred_port: int | None = None) -> str:
+        events.append("restart")
         observed.update(guard_home=received_guard_home, preferred_port=preferred_port)
         return "http://127.0.0.1:8124"
+
+    def refresh_approval_center(received_guard_home: Path) -> None:
+        events.append("approval_center")
+        observed["approval_center_home"] = received_guard_home
 
     monkeypatch.setattr(manager, "retire_all_guard_daemons_for_home", retire)
     monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", retirement_complete)
     monkeypatch.setattr(manager, "clear_guard_daemon_state", no_op)
     monkeypatch.setattr(manager, "repair_approval_center_locator", no_op)
+    monkeypatch.setattr(manager, "ensure_approval_center", refresh_approval_center)
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", legacy_parameters)
     monkeypatch.setattr(
         sys,
@@ -119,7 +136,12 @@ def test_refresh_script_preserves_legacy_manager_signature(
     refresh_script = cast(str, update_commands.__dict__["_DAEMON_REFRESH_SCRIPT"])
     exec(refresh_script, {})
 
-    assert observed == {"guard_home": guard_home.resolve(), "preferred_port": 8124}
+    assert observed == {
+        "guard_home": guard_home.resolve(),
+        "preferred_port": 8124,
+        "approval_center_home": guard_home.resolve(),
+    }
+    assert events == ["restart", "approval_center"]
     assert json.loads(capsys.readouterr().out) == {
         "status": "restarted",
         "retired": [18],

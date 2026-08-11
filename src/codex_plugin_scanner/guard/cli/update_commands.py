@@ -149,6 +149,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.manager import (
     clear_guard_daemon_state,
+    ensure_approval_center,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
     repair_approval_center_locator,
@@ -185,6 +186,7 @@ if "home_dir" in refresh_parameters:
 if "allow_windows_job_breakaway" in refresh_parameters:
     refresh_kwargs["allow_windows_job_breakaway"] = True
 daemon_url = ensure_guard_daemon_after_update(guard_home, **refresh_kwargs)
+ensure_approval_center(guard_home)
 print(json.dumps({"status": "restarted", "retired": retired, "daemon_url": daemon_url}))
 """.strip()
 _DAEMON_REFRESH_CLEANUP_SCRIPT = """
