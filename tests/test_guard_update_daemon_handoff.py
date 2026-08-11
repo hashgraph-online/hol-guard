@@ -38,6 +38,7 @@ def test_refresh_script_adapts_to_new_manager_signature(
     monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", retirement_complete)
     monkeypatch.setattr(manager, "clear_guard_daemon_state", no_op)
     monkeypatch.setattr(manager, "repair_approval_center_locator", no_op)
+    monkeypatch.setattr(manager, "ensure_approval_center", lambda _guard_home: observed.update(locator_refreshed=True))
 
     def require_new_parameters(
         received_guard_home: Path,
@@ -73,6 +74,7 @@ def test_refresh_script_adapts_to_new_manager_signature(
         "home_dir": home_dir.resolve(),
         "preferred_port": 8123,
         "allow_windows_job_breakaway": True,
+        "locator_refreshed": True,
     }
     assert json.loads(capsys.readouterr().out) == {
         "status": "restarted",
@@ -109,6 +111,7 @@ def test_refresh_script_preserves_legacy_manager_signature(
     monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", retirement_complete)
     monkeypatch.setattr(manager, "clear_guard_daemon_state", no_op)
     monkeypatch.setattr(manager, "repair_approval_center_locator", no_op)
+    monkeypatch.setattr(manager, "ensure_approval_center", lambda _guard_home: observed.update(locator_refreshed=True))
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", legacy_parameters)
     monkeypatch.setattr(
         sys,
@@ -119,7 +122,11 @@ def test_refresh_script_preserves_legacy_manager_signature(
     refresh_script = cast(str, update_commands.__dict__["_DAEMON_REFRESH_SCRIPT"])
     exec(refresh_script, {})
 
-    assert observed == {"guard_home": guard_home.resolve(), "preferred_port": 8124}
+    assert observed == {
+        "guard_home": guard_home.resolve(),
+        "preferred_port": 8124,
+        "locator_refreshed": True,
+    }
     assert json.loads(capsys.readouterr().out) == {
         "status": "restarted",
         "retired": [18],
