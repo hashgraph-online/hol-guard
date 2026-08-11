@@ -478,8 +478,6 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
 )
 
 
-
-
 @pytest.mark.parametrize(
     ("args", "capability", "reason_code"),
     (
@@ -768,6 +766,10 @@ def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args: tuple[str, .
         "gh ssh-key list",
         "gh gpg-key list",
         "gh api repos/example/project -X GET -f per_page=1 --jq '.name'",
+        (
+            "gh api -H 'Accept: application/vnd.github.raw+json' "
+            "'repos/example/project/contents/ci/baseline.json?ref=main'"
+        ),
         "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
         (
             "gh api graphql -f 'query=query { viewer { login } }' 2>&1 | "

@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 
 
 def _git(repository: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=repository, check=True, capture_output=True, text=True)
+    _ = subprocess.run(["git", *args], cwd=repository, check=True, capture_output=True, text=True)
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def repository(tmp_path: Path) -> Path:
     path = tmp_path / "repository"
     path.mkdir()
     _git(path, "init", "-q")
-    (path / "app.ts").write_text("export const value = 1;\n", encoding="utf-8")
+    _ = (path / "app.ts").write_text("export const value = 1;\n", encoding="utf-8")
     _git(path, "remote", "add", "origin", "https://github.com/example/project.git")
     return path
 
@@ -35,6 +35,35 @@ def _benign(command: str, *, repository: Path, home: Path) -> bool:
         cwd=repository,
         home_dir=home,
     )
+
+
+def _trust_guard_executable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    executable_directory = "Scripts" if sys.platform == "win32" else "bin"
+    executable_name = "hol-guard.exe" if sys.platform == "win32" else "hol-guard"
+    executable = tmp_path / executable_directory / executable_name
+    executable.parent.mkdir()
+    _ = executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "prefix", str(tmp_path))
+
+    def trusted_guard_path(_command: str, *, cwd: Path) -> str:
+        _ = cwd
+        return str(executable)
+
+    monkeypatch.setattr(
+        shell_static_safety,
+        "_which_for_execution_cwd",
+        trusted_guard_path,
+    )
+
+
+def test_windows_managed_guard_launcher_is_trusted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    _trust_guard_executable(tmp_path, monkeypatch)
+
+    assert _benign("hol-guard status", repository=tmp_path, home=tmp_path)
 
 
 def test_mcp_search_query_is_data_but_name_alone_is_not_trust_proof() -> None:
@@ -66,10 +95,21 @@ def test_non_shell_tool_text_is_not_interpreted_as_a_command() -> None:
     assert extract_sensitive_tool_action_request("todo", {"command": "rm -rf build"}) is not None
 
 
-def test_guard_status_native_name_is_unverified_but_cli_is_benign(
+@pytest.mark.parametrize(
+    "command",
+    (
+        "hol-guard status",
+        "hol-guard status --json",
+        "hol-guard daemon status",
+        "hol-guard settings",
+        "hol-guard settings --json",
+    ),
+)
+def test_guard_read_only_cli_commands_are_benign(
     repository: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    command: str,
 ) -> None:
     assert not is_explicitly_benign_tool_action_request(
         "mcp__codex_apps__hol_guard__get_guard_status",
@@ -77,25 +117,64 @@ def test_guard_status_native_name_is_unverified_but_cli_is_benign(
         cwd=repository,
         home_dir=tmp_path,
     )
-    executable = tmp_path / "bin" / "hol-guard"
-    executable.parent.mkdir()
-    executable.write_text("#!/bin/sh\n", encoding="utf-8")
-    monkeypatch.setattr(sys, "prefix", str(tmp_path))
-    monkeypatch.setattr(
-        shell_static_safety,
-        "_which_for_execution_cwd",
-        lambda *_args, **_kwargs: str(executable),
-    )
+    _trust_guard_executable(tmp_path, monkeypatch)
 
-    assert _benign("hol-guard status", repository=repository, home=tmp_path)
-    assert _benign("hol-guard daemon status", repository=repository, home=tmp_path)
-    assert not _benign("hol-guard daemon repair", repository=repository, home=tmp_path)
+    assert _benign(command, repository=repository, home=tmp_path)
 
 
 @pytest.mark.parametrize(
     "command",
     (
+        "hol-guard status --verbose",
+        "hol-guard daemon repair",
+        "hol-guard settings set enforcement.mode strict",
+        "hol-guard settings --json --verbose",
+        "/tmp/evil/hol-guard status",
+        "./hol-guard status",
+        "PATH=/tmp/evil hol-guard status",
+        "env PATH=/tmp/evil hol-guard status",
+        "command -p hol-guard status",
+        "sudo hol-guard status",
+        "hol-guard status > report.json",
+        "hol-guard status && touch marker",
+    ),
+)
+def test_guard_cli_commands_reject_mutation_and_unmodeled_options(
+    repository: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    _trust_guard_executable(tmp_path, monkeypatch)
+
+    assert not _benign(command, repository=repository, home=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "template",
+    (
+        "/bin/zsh -lc 'cd {repository} && hol-guard status'",
+        "/bin/zsh -lc 'cd {repository}; hol-guard settings --json'",
+        "/bin/zsh -lc \"sh -c 'cd {repository} && hol-guard status --json'\"",
+    ),
+)
+def test_guard_cli_commands_reject_wrapped_compound_launches(
+    repository: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    template: str,
+) -> None:
+    _trust_guard_executable(tmp_path, monkeypatch)
+
+    assert not _benign(template.format(repository=repository), repository=repository, home=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git fetch origin main",
         "git fetch origin --quiet",
+        "git rev-parse origin/main",
         "git log -1 --format='%H %cI %s' origin/main",
         "git blame -L 1,1 -- app.ts",
         "git show HEAD~1:app.ts | sed -n '1,55p'",
@@ -145,6 +224,6 @@ def test_git_blame_rejects_executable_repository_config(
 def test_guard_safety_doc_is_a_read_only_source(tmp_path: Path, repository: Path) -> None:
     support = tmp_path / ".hol-support"
     support.mkdir()
-    (support / "SAFETY.md").write_text("# Safety\n", encoding="utf-8")
+    _ = (support / "SAFETY.md").write_text("# Safety\n", encoding="utf-8")
 
     assert _benign("sed -n '1,220p' ~/.hol-support/SAFETY.md", repository=repository, home=tmp_path)

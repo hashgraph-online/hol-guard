@@ -18,7 +18,16 @@ from .request_artifacts import _normalized_shell_command_name
 from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command
 
 
-def _safe_cli_metadata_segment_is_safe(command_name: str, args: list[str], *, cwd: Path) -> bool:
+def _safe_cli_metadata_segment_is_safe(
+    command_name: str,
+    args: list[str],
+    *,
+    cwd: Path,
+    command_token: str,
+    command_index: int,
+) -> bool:
+    if command_index != 0 or command_token != command_name:
+        return False
     if command_name == "git" and args in (["--version"], ["version"]):
         git_path = _which_for_execution_cwd("git", cwd=cwd)
         if git_path is None:
@@ -27,7 +36,14 @@ def _safe_cli_metadata_segment_is_safe(command_name: str, args: list[str], *, cw
             return git_binary_path_is_trusted(Path(git_path).resolve(), cwd=cwd.resolve())
         except (OSError, RuntimeError):
             return False
-    if command_name != "hol-guard" or args not in (["--version"], ["status"], ["daemon", "status"]):
+    if command_name != "hol-guard" or args not in (
+        ["--version"],
+        ["status"],
+        ["status", "--json"],
+        ["daemon", "status"],
+        ["settings"],
+        ["settings", "--json"],
+    ):
         return False
     executable = _which_for_execution_cwd("hol-guard", cwd=cwd)
     if executable is None:
@@ -36,19 +52,22 @@ def _safe_cli_metadata_segment_is_safe(command_name: str, args: list[str], *, cw
         actual = Path(executable).resolve(strict=True)
     except (OSError, RuntimeError):
         return False
-    bin_name = "Scripts" if os.name == "nt" else "bin"
+    is_windows = sys.platform == "win32"
+    bin_name = "Scripts" if is_windows else "bin"
+    executable_names = ("hol-guard.exe", "hol-guard") if is_windows else ("hol-guard",)
     roots = [Path(sys.prefix)]
     site_packages = next(
         (parent for parent in Path(__file__).resolve().parents if parent.name == "site-packages"), None
     )
     if site_packages is not None:
-        roots.append(site_packages.parent.parent if os.name == "nt" else site_packages.parent.parent.parent)
+        roots.append(site_packages.parent.parent if is_windows else site_packages.parent.parent.parent)
     managed_candidates: set[Path] = set()
     for root in roots:
-        try:
-            managed_candidates.add((root / bin_name / "hol-guard").resolve(strict=True))
-        except (OSError, RuntimeError):
-            continue
+        for executable_name in executable_names:
+            try:
+                managed_candidates.add((root / bin_name / executable_name).resolve(strict=True))
+            except (OSError, RuntimeError):
+                continue
     return actual in managed_candidates
 
 

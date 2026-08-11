@@ -30,7 +30,7 @@ _API_OPTIONS_WITH_VALUES = frozenset(
 )
 _API_BOOLEAN_OPTIONS = frozenset({"--include", "--paginate", "--silent", "--slurp", "--verbose", "-i"})
 _METHOD_OVERRIDE_HEADER = re.compile(r"\Ax-http-method-override\s*:", re.IGNORECASE)
-_STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=-]+\Z")
+_STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=?&-]+\Z")
 
 
 @dataclass(frozen=True, slots=True)

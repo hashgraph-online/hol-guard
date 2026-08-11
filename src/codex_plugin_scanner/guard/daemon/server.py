@@ -5775,8 +5775,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             guard_home = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
             workspace_query = self._normalized_hook_workspace_string(params.get("workspace", [None])[-1])
+            action_workdir_provided, action_workdir = self._runtime_hook_exec_command_workdir(payload)
+            if action_workdir_provided and action_workdir is None:
+                raise _HookPathValidationError("workspace", "invalid_action_workdir")
             payload_workspace = self._normalized_hook_workspace_string(payload.get("cwd"))
-            workspace_candidate = payload_workspace if payload_workspace is not None else workspace_query
+            workspace_candidate = action_workdir or payload_workspace or workspace_query
             workspace = self._validated_hook_directory_string(
                 "workspace",
                 workspace_candidate,
@@ -7546,6 +7549,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
             return None
         return candidate
+
+    @staticmethod
+    def _runtime_hook_exec_command_workdir(payload: dict[str, object]) -> tuple[bool, str | None]:
+        tool_name = payload.get("tool_name")
+        if not isinstance(tool_name, str) or tool_name.strip().casefold() != "exec_command":
+            return False, None
+        tool_input = payload.get("tool_input")
+        if not isinstance(tool_input, dict) or "workdir" not in tool_input:
+            return False, None
+        value = tool_input.get("workdir")
+        if not isinstance(value, str):
+            return True, None
+        stripped = value.strip()
+        if not stripped or stripped.casefold() in {"none", "null"}:
+            return True, None
+        candidate = os.path.normpath(os.path.expanduser(stripped))
+        try:
+            temporary_root = trusted_temporary_root_for_path(Path(candidate))
+        except OSError:
+            temporary_root = None
+        if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
+            return True, None
+        return True, candidate
 
     def _validate_hook_directory_path(
         self,

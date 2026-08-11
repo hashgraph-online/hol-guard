@@ -16,8 +16,10 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_auth as hook_auth
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.runtime.local_temp_paths import trusted_temporary_root_for_path
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
@@ -501,6 +503,168 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
                     "tool_name": "Bash",
                     "tool_input": {"command": "git fetch origin main"},
                     "cwd": str(repository),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {}
+
+
+def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    session_workspace = tmp_path / "projects"
+    repository = session_workspace / "example"
+    repository.mkdir(parents=True)
+    _ = subprocess.run(["git", "init", "--quiet", str(repository)], check=True)
+    _ = subprocess.run(
+        ["git", "-C", str(repository), "remote", "add", "origin", "https://github.com/example/project.git"],
+        check=True,
+    )
+    guard_config = load_guard_config(guard_home)
+    assert guard_config.mode == "prompt"
+    assert guard_config.security_level == "balanced"
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "exec_command",
+                    "tool_input": {"cmd": "git fetch origin main", "workdir": str(repository)},
+                    "cwd": str(session_workspace),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {}
+
+
+@pytest.mark.parametrize("workdir", ("relative/repository", "/"))
+def test_bridge_real_daemon_rejects_untrusted_exec_command_workdir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    workdir: str,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "exec_command",
+                    "tool_input": {"cmd": "git status --short", "workdir": workdir},
+                    "cwd": str(workspace),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) != {}
+
+
+def test_bridge_real_daemon_rejects_temp_root_workdir_without_falling_back_to_repository(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    _ = subprocess.run(["git", "init", "--quiet", str(repository)], check=True)
+    _ = subprocess.run(
+        ["git", "-C", str(repository), "remote", "add", "origin", "https://github.com/example/project.git"],
+        check=True,
+    )
+    temporary_root = trusted_temporary_root_for_path(tmp_path)
+    assert temporary_root is not None
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "exec_command",
+                    "tool_input": {"cmd": "git fetch origin main", "workdir": str(temporary_root)},
+                    "cwd": str(repository),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) != {}
+
+
+def test_bridge_real_daemon_ignores_workdir_for_opaque_tool(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "opaque_tool",
+                    "tool_input": {"command": "git status --short", "workdir": "/"},
+                    "cwd": str(workspace),
                 }
             )
         ),
