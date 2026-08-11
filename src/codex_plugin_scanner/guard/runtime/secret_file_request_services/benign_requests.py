@@ -91,6 +91,9 @@ def is_explicitly_benign_tool_action_request(
         stripped_command = command_text.strip()
         if not stripped_command:
             continue
+        if is_nonexecuting_github_actions_read_workflow(stripped_command, cwd=cwd):
+            found_benign_candidate = True
+            continue
         github_assessment = classify_github_shell_capabilities(stripped_command, home_dir=home_dir)
         if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
             return False
@@ -101,9 +104,6 @@ def is_explicitly_benign_tool_action_request(
         if not parts:
             return False
         parsed_command_names = list(_shell_command_names_from_parts(parts))
-        if is_nonexecuting_github_actions_read_workflow(stripped_command, cwd=cwd):
-            found_benign_candidate = True
-            continue
         if _looks_like_benign_interpreter_wait(stripped_command, parts, parsed_command_names):
             found_benign_candidate = True
             continue
