@@ -594,6 +594,8 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
         "gh run list -aRgithub.com/OWNER/REPO --help",
         "gh pr view 1 -wRRowner/repo --help",
         "gh run list -aRRowner/repo --help",
+        "gh -Rowner/repo pr view 17",
+        "gh -Rgithub.com/Owner/Repo pr view 17",
     ),
 )
 def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filter(
@@ -702,6 +704,8 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
         "gh pr view 1 -cRghe.example/owner/repo --help",
         "gh issue view 1 -cRghe.example/owner/repo --help",
         "gh pr view 1 -cROwner/Repo -R owner/repo --help",
+        "gh -Rghe.example/owner/repo pr view 17",
+        "gh -R'$OWNER/repo' pr view 17",
         "name=GH_REPO; export $name=ghe.example/o/r; gh pr view 1",
         "name=GH_REPO; declare -x $name=ghe.example/o/r; gh pr view 1",
         "env --split-string='GH_REPO=ghe.example/o/r gh pr view 1'",

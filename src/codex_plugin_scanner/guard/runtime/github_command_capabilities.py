@@ -537,6 +537,9 @@ def _strip_global_options(args: list[str]) -> list[str]:
     index = 0
     while index < len(args):
         token = args[index]
+        if token.startswith("-R") and token != "-R":
+            index += 1
+            continue
         option_name, separator, _value = token.partition("=")
         if option_name not in _GLOBAL_OPTIONS_WITH_VALUES:
             break
