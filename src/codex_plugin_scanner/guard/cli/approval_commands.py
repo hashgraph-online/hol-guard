@@ -11,7 +11,12 @@ from pathlib import Path
 from ..approval_gate import ApprovalGateError, require_high_risk, revoke_cooldown, unlock_cooldown
 from ..approval_gate import public_config as approval_gate_public_config
 from ..approval_scope_support import IneligibleApprovalScopeError, StaleApprovalScopeContractError
-from ..approvals import apply_approval_resolution, build_runtime_snapshot
+from ..approvals import (
+    ApprovalRequestAlreadyResolvedError,
+    ApprovalRequestNotFoundError,
+    apply_approval_resolution,
+    build_runtime_snapshot,
+)
 from ..browser_opener import open_browser_url
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
@@ -318,6 +323,18 @@ def run_approval_command(
             "requested_scope": error.requested_scope,
             **error.contract.to_dict(),
             "exit_code": 2,
+        }
+    except ApprovalRequestNotFoundError:
+        return {
+            "resolved": False,
+            "error": "request_unknown",
+            "exit_code": 4,
+        }
+    except ApprovalRequestAlreadyResolvedError:
+        return {
+            "resolved": False,
+            "error": "already_resolved",
+            "exit_code": 4,
         }
     return {"resolved": True, "item": item}
 
