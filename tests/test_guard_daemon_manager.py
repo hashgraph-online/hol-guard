@@ -185,6 +185,7 @@ def test_frozen_daemon_launch_rejects_unreleased_windows_gate(tmp_path, monkeypa
             gate_on_stdin=True,
         )
 
+
 def test_schedule_guard_daemon_ensure_is_reserved_and_nonblocking(
     tmp_path,
     monkeypatch,
@@ -444,7 +445,7 @@ def test_maintenance_thread_start_failure_clears_single_flight_state(
         assert daemon_manager_module._LAST_EPHEMERAL_REAP_AT == 0.0
 
 
-def test_hook_failure_restarts_an_older_unresponsive_daemon(tmp_path, monkeypatch) -> None:
+def test_hook_failure_preserves_an_older_authenticated_daemon(tmp_path, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     old_state = {"started_at": "2020-01-01T00:00:00+00:00"}
     retired: list[Path] = []
@@ -454,7 +455,7 @@ def test_hook_failure_restarts_an_older_unresponsive_daemon(tmp_path, monkeypatc
     monkeypatch.setattr(
         daemon_manager_module,
         "retire_all_guard_daemons_for_home",
-        lambda home: retired.append(home) or [],
+        lambda home: retired.append(home) or pytest.fail("hook traffic must not retire an authenticated daemon"),
     )
     monkeypatch.setattr(daemon_manager_module, "guard_daemon_retirement_is_complete", lambda _home: True)
     monkeypatch.setattr(
@@ -465,8 +466,8 @@ def test_hook_failure_restarts_an_older_unresponsive_daemon(tmp_path, monkeypatc
 
     recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(guard_home)
 
-    assert recovered == "http://127.0.0.1:5475"
-    assert retired == [guard_home]
+    assert recovered == "http://127.0.0.1:5474"
+    assert retired == []
 
 
 def test_hook_failure_preserves_a_concurrently_started_replacement(tmp_path, monkeypatch) -> None:

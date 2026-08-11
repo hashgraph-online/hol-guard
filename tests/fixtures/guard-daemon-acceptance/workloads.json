@@ -43,7 +43,7 @@
     "tests/test_guard_daemon_acceptance.py::test_sqlite_lock_is_bounded_and_recovers",
     "tests/test_guard_daemon_adversarial_transport.py::test_malformed_request_framing_returns_bounded_error_without_handler_exception",
     "tests/test_guard_daemon_adversarial_transport.py::test_slow_request_body_expires_and_releases_handler_capacity",
-    "tests/test_guard_daemon_recovery_resilience.py::test_transport_recovery_replaces_old_process_when_health_probe_misses",
+    "tests/test_guard_daemon_recovery_resilience.py::test_transport_recovery_preserves_verified_old_process_when_health_probe_misses",
     "tests/test_guard_update_artifact.py::test_revalidate_rejects_staged_byte_mutation"
   ],
   "soak": {
