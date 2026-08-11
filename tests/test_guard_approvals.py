@@ -16,13 +16,18 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import bridge as guard_bridge_module
-from codex_plugin_scanner.guard.approval_scope_support import package_request_portable_workspace_scope
+from codex_plugin_scanner.guard.approval_scope_support import (
+    StaleApprovalScopeContractError,
+    package_request_portable_workspace_scope,
+    request_scope_contract,
+)
 from codex_plugin_scanner.guard.approvals import (
     apply_approval_resolution,
     build_runtime_snapshot,
     queue_blocked_approvals,
 )
 from codex_plugin_scanner.guard.bridge import BridgeConfig, GuardBridge
+from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -3261,38 +3266,40 @@ class TestGuardApprovals:
         assert remember_output["item"]["applied_scope"] == "artifact"
         assert store.list_policy_decisions("codex") == []
 
-    def test_guard_approvals_cli_remembers_eligible_exact_action(self, tmp_path, capsys):
+    def test_guard_approvals_cli_remembers_eligible_exact_action(self, tmp_path, capsys, monkeypatch):
+        _clear_agent_context(monkeypatch)
         home_dir = tmp_path / "home"
         workspace = str(tmp_path / "workspace")
         store = GuardStore(home_dir)
-        store.add_approval_request(
-            GuardApprovalRequest(
-                request_id="req-exact-remember",
-                harness="codex",
-                artifact_id="codex:project:tool-action:script",
-                artifact_name="Bash unmatched tool action",
-                artifact_type="tool_action_request",
-                artifact_hash="hash-exact-remember",
-                policy_action="require-reapproval",
-                recommended_scope="artifact",
-                changed_fields=("tool_action",),
-                source_scope="project",
-                config_path=workspace,
-                workspace=workspace,
-                launch_target="npm run guard:acquisition-loop",
-                action_envelope_json={
-                    "action_type": "shell_command",
+        exact_request = GuardApprovalRequest(
+            request_id="req-exact-remember",
+            harness="codex",
+            artifact_id="codex:project:tool-action:script",
+            artifact_name="Bash unmatched tool action",
+            artifact_type="tool_action_request",
+            artifact_hash="hash-exact-remember",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("tool_action",),
+            source_scope="project",
+            config_path=workspace,
+            workspace=workspace,
+            launch_target="npm run guard:acquisition-loop",
+            action_envelope_json={
+                "action_type": "shell_command",
+                "tool_name": "Bash",
+                "command": "npm run guard:acquisition-loop",
+                "raw_payload_redacted": {
                     "tool_name": "Bash",
-                    "command": "npm run guard:acquisition-loop",
-                    "raw_payload_redacted": {
-                        "tool_name": "Bash",
-                        "tool_input": {"command": "npm run guard:acquisition-loop"},
-                        "permission_mode": "ask",
-                    },
+                    "tool_input": {"command": "npm run guard:acquisition-loop"},
+                    "permission_mode": "ask",
                 },
-                review_command="hol-guard approvals approve req-exact-remember",
-                approval_url="http://127.0.0.1/pending",
-            ),
+            },
+            review_command="hol-guard approvals approve req-exact-remember",
+            approval_url="http://127.0.0.1/pending",
+        )
+        store.add_approval_request(
+            exact_request,
             "2026-08-11T00:02:00+00:00",
         )
 
@@ -3315,10 +3322,46 @@ class TestGuardApprovals:
         assert remember_rc == 0
         assert remember_output["resolved"] is True
         assert remember_output["item"]["exact_action_persistence_eligible"] is True
+        assert remember_output["item"]["scope_contract_version"].startswith("guard.approval-scopes.v")
+        assert len(remember_output["item"]["scope_contract_digest"]) == 64
         decisions = store.list_policy_decisions("codex")
         assert len(decisions) == 1
         assert decisions[0]["action"] == "allow"
         assert decisions[0]["scope"] == "artifact"
+
+        stale_request = replace(
+            exact_request,
+            request_id="req-stale-remember",
+            artifact_hash="hash-stale-remember",
+            review_command="hol-guard approvals approve req-stale-remember",
+        )
+        store.add_approval_request(stale_request, "2026-08-11T00:03:00+00:00")
+        stale_contract = request_scope_contract(store.get_approval_request("req-stale-remember") or {})
+
+        def raise_stale_contract(**_kwargs):
+            raise StaleApprovalScopeContractError(stale_contract)
+
+        monkeypatch.setattr(approval_commands_module, "apply_approval_resolution", raise_stale_contract)
+        stale_rc = main(
+            [
+                "guard",
+                "approvals",
+                "approve",
+                "req-stale-remember",
+                "--home",
+                str(home_dir),
+                "--scope",
+                "artifact",
+                "--remember",
+                "--json",
+            ]
+        )
+        stale_output = json.loads(capsys.readouterr().out)
+
+        assert stale_rc == 4
+        assert stale_output["resolved"] is False
+        assert stale_output["error"] == "stale_scope_contract"
+        assert stale_output["scope_contract_digest"] == stale_contract.digest
 
     def test_guard_policies_cli_clears_local_decisions_for_harness(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
