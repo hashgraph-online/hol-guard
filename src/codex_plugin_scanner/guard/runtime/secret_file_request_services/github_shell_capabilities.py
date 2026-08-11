@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..env_wrapper import parse_env_wrapper
 from ..github_capability_contract import GitHubCommandAssessment, github_assessment
+from ..github_command_capabilities import _github_repository_selector_is_safe
 from ..github_shell_capabilities import GitHubShellAnalysis
 from ..github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from ..interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
@@ -59,6 +60,34 @@ def classify_github_shell_capabilities(
             "Exported GitHub host or credential configuration requires explicit review.",
         )
     for segment in _iter_shell_command_segments(parts):
+        if segment[:1] == ["env"]:
+            parsed_raw_env = parse_env_wrapper(segment[1:])
+            if parsed_raw_env.complete:
+                raw_assignments = parsed_raw_env.environment_delta.assignments
+                executable = parsed_raw_env.executable_argv
+                if executable[:1] == ("gh",) and (
+                    _github_environment_requires_review(raw_assignments)
+                    or _github_argv_tokens_have_expansion(executable[1:])
+                ):
+                    return github_assessment(
+                        "unknown",
+                        "github.command.untrusted-environment",
+                        "Expanded GitHub environment or arguments require explicit review.",
+                    )
+                if executable[:1] in {("bash",), ("sh",), ("zsh",)}:
+                    scripts = _shell_command_scripts(list(executable))
+                    if scripts and _github_environment_requires_review(raw_assignments):
+                        return github_assessment(
+                            "unknown",
+                            "github.command.untrusted-environment",
+                            "Nested GitHub environment configuration requires explicit review.",
+                        )
+                    if any(_github_script_requires_review(script) for script in scripts):
+                        return github_assessment(
+                            "unknown",
+                            "github.command.dynamic-nested-shell",
+                            "Nested dynamic GitHub arguments require explicit review.",
+                        )
         command_name, command_index = _shell_segment_primary_command(segment)
         assignments = tuple(
             (token.partition("=")[0], token.partition("=")[2])
@@ -76,6 +105,16 @@ def classify_github_shell_capabilities(
                 "unknown",
                 "github.command.untrusted-environment",
                 "Inline GitHub host or credential configuration requires explicit review.",
+            )
+        if (
+            command_name == "gh"
+            and command_index is not None
+            and _github_argv_tokens_have_expansion(segment[command_index + 1 :])
+        ):
+            return github_assessment(
+                "unknown",
+                "github.command.dynamic-argument",
+                "Dynamic GitHub arguments require explicit review.",
             )
     return _classify_github_shell_capabilities(
         command_text,
@@ -106,7 +145,10 @@ def _github_environment_requires_review(assignments: tuple[tuple[str, str], ...]
     if protected.intersection(normalized):
         return True
     github_host = normalized.get("GH_HOST")
-    return github_host is not None and github_host.casefold() != "github.com"
+    if github_host is not None and github_host.casefold() != "github.com":
+        return True
+    github_repo = normalized.get("GH_REPO")
+    return github_repo is not None and not _github_repository_selector_is_safe(github_repo)
 
 
 def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
@@ -142,6 +184,8 @@ def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
                         return True
                     continue
                 name, separator, value = token.partition("=")
+                if any(marker in name for marker in ("$", "`")):
+                    return True
                 if separator:
                     shell_values[name] = value
                 if name in shell_values:
@@ -161,7 +205,7 @@ def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
             scripts = _shell_command_scripts(segment)
             if scripts and _github_environment_requires_review(tuple(inherited.items())):
                 return True
-            if any(_persistent_github_environment_requires_review(_split_shell_parts(script)) for script in scripts):
+            if any(_github_script_requires_review(script) for script in scripts):
                 return True
         if command_name != "gh" or command_index is None:
             continue
@@ -174,11 +218,29 @@ def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
     return False
 
 
+def _github_argv_tokens_have_expansion(tokens: tuple[str, ...] | list[str]) -> bool:
+    return any("$" in token or "`" in token for token in tokens)
+
+
+def _github_script_requires_review(script: str) -> bool:
+    parts = _split_shell_parts(script)
+    if _persistent_github_environment_requires_review(parts):
+        return True
+    return any(
+        command_name == "gh"
+        and command_index is not None
+        and _github_argv_tokens_have_expansion(segment[command_index + 1 :])
+        for segment in _iter_shell_command_segments(parts)
+        for command_name, command_index in (_shell_segment_primary_command(segment),)
+    )
+
+
 def _github_environment_name(name: str) -> bool:
     return name in {
         "GH_CONFIG_DIR",
         "GH_ENTERPRISE_TOKEN",
         "GH_HOST",
+        "GH_REPO",
         "GH_TOKEN",
         "GITHUB_ENTERPRISE_TOKEN",
         "GITHUB_TOKEN",

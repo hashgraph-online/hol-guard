@@ -7,6 +7,7 @@ status merely because it is followed by an output formatter in a shell pipeline.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Literal
 
@@ -69,6 +70,37 @@ _LOCAL_TOP_LEVEL = frozenset({"completion", "help", "version"})
 _GROUP_OPTIONS_WITH_VALUES = frozenset({"-R", "--repo"})
 _GROUP_BOOLEAN_OPTIONS = frozenset({"--help"})
 _GLOBAL_OPTIONS_WITH_VALUES = frozenset({"--hostname", "--repo", "-R"})
+_REPOSITORY_COMPONENT = re.compile(r"[A-Za-z0-9_.-]+")
+_READ_SHORT_BOOLEAN_FLAGS: dict[tuple[str, str], frozenset[str]] = {
+    ("issue", "list"): frozenset({"w"}),
+    ("issue", "view"): frozenset({"c", "w"}),
+    ("pr", "checks"): frozenset({"w"}),
+    ("pr", "diff"): frozenset({"w"}),
+    ("pr", "list"): frozenset({"d", "w"}),
+    ("pr", "status"): frozenset({"c"}),
+    ("pr", "view"): frozenset({"c", "w"}),
+    ("release", "view"): frozenset({"w"}),
+    ("repo", "view"): frozenset({"w"}),
+    ("run", "list"): frozenset({"a"}),
+    ("run", "view"): frozenset({"v", "w"}),
+    ("workflow", "list"): frozenset({"a"}),
+    ("workflow", "view"): frozenset({"w", "y"}),
+}
+_READ_SHORT_VALUE_FLAGS: dict[tuple[str, str], frozenset[str]] = {
+    ("issue", "list"): frozenset({"A", "L", "S", "a", "l", "m", "s"}),
+    ("pr", "checks"): frozenset({"i"}),
+    ("pr", "diff"): frozenset({"e"}),
+    ("pr", "list"): frozenset({"A", "B", "H", "L", "S", "a", "l", "s"}),
+    ("release", "list"): frozenset({"L", "O"}),
+    ("repo", "list"): frozenset({"L", "l"}),
+    ("repo", "view"): frozenset({"b"}),
+    ("run", "list"): frozenset({"L", "b", "c", "e", "s", "u", "w"}),
+    ("run", "view"): frozenset({"a", "j"}),
+    ("run", "watch"): frozenset({"i"}),
+    ("workflow", "list"): frozenset({"L"}),
+    ("workflow", "view"): frozenset({"r"}),
+}
+_INHERITED_READ_SHORT_VALUE_FLAGS = frozenset({"q", "t"})
 
 
 def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
@@ -86,6 +118,12 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
             "unknown",
             "github.command.alternate-host",
             "An alternate GitHub host requires explicit review.",
+        )
+    if _unsafe_repository_selector_requested(original):
+        return _assessment(
+            "unknown",
+            "github.command.untrusted-repository-selector",
+            "An alternate, dynamic, or malformed GitHub repository selector requires explicit review.",
         )
     normalized = _strip_global_options(normalized)
     if not normalized:
@@ -444,6 +482,55 @@ def _alternate_hostname_requested(args: tuple[str, ...]) -> bool:
         if token == "--hostname":
             hostnames.append(args[index + 1] if index + 1 < len(args) else "")
     return any(hostname.casefold() != "github.com" for hostname in hostnames) or len(set(hostnames)) > 1
+
+
+def _unsafe_repository_selector_requested(args: tuple[str, ...]) -> bool:
+    selectors: list[str] = []
+    malformed_cluster = False
+    command_args = _strip_global_options(list(args))
+    command_key: tuple[str, str] = (command_args[0], command_args[1]) if len(command_args) >= 2 else ("", "")
+    boolean_flags = _READ_SHORT_BOOLEAN_FLAGS.get(command_key, frozenset())
+    value_flags = _READ_SHORT_VALUE_FLAGS.get(command_key, frozenset()) | _INHERITED_READ_SHORT_VALUE_FLAGS
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token.startswith("--repo="):
+            selectors.append(token.partition("=")[2])
+        elif token == "--repo" or token == "-R":
+            selectors.append(args[index + 1] if index + 1 < len(args) else "")
+            index += 1
+        elif len(token) > 2 and token.startswith("-") and token[1] in value_flags:
+            pass
+        elif token.startswith("-") and not token.startswith("--") and "R" in token[1:]:
+            cluster = token[1:]
+            prefix, _separator, attached_selector = cluster.partition("R")
+            if any(flag in value_flags for flag in prefix):
+                pass
+            elif not prefix or all(flag in boolean_flags for flag in prefix):
+                if attached_selector:
+                    selectors.append(attached_selector)
+                else:
+                    selectors.append(args[index + 1] if index + 1 < len(args) else "")
+                    index += 1
+            else:
+                malformed_cluster = True
+        index += 1
+    return (
+        malformed_cluster
+        or len(selectors) > 1
+        or any(not _github_repository_selector_is_safe(selector) for selector in selectors)
+    )
+
+
+def _github_repository_selector_is_safe(selector: str) -> bool:
+    if any(marker in selector for marker in ("$", "`", "$(", "${")):
+        return False
+    parts = selector.split("/")
+    if len(parts) == 3:
+        if parts[0].casefold() != "github.com":
+            return False
+        parts = parts[1:]
+    return len(parts) == 2 and all(_REPOSITORY_COMPONENT.fullmatch(part) for part in parts)
 
 
 def _strip_global_options(args: list[str]) -> list[str]:

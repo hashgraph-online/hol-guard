@@ -572,10 +572,35 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
     assert len(store.list_approval_requests(limit=None)) == 1
 
 
+@pytest.mark.parametrize(
+    "command",
+    (
+        "gh api -H 'Accept: application/vnd.github.raw+json' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0' "
+        "| jq '{tests: .tests, total: .total}'",
+        "gh pr view 1 -tREVIEW",
+        "gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'",
+        "gh issue list -q'.[] | {REPO: .repository}'",
+        "gh pr list -sREVIEW_REQUIRED",
+        "gh pr list -aRandy",
+        "gh issue list -aRandy",
+        "gh pr list -SREVIEW",
+        "gh run list -cREVIEW_SHA",
+        "gh run list -aRgithub.com/owner/repo --help",
+        "gh workflow list -aRowner/repo --help",
+        "gh pr view 1 -cROwner/Repo --help",
+        "gh issue list -wRgithub.com/OWNER/REPO --help",
+        "gh pr list -dROrg/Repo --help",
+        "gh run list -aRgithub.com/OWNER/REPO --help",
+        "gh pr view 1 -wRRowner/repo --help",
+        "gh run list -aRRowner/repo --help",
+    ),
+)
 def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filter(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    command: str,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     session_workspace = tmp_path / "projects"
@@ -586,11 +611,6 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    command = (
-        "gh api -H 'Accept: application/vnd.github.raw+json' "
-        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0' "
-        "| jq '{tests: .tests, total: .total}'"
-    )
     monkeypatch.setattr(
         "sys.stdin",
         io.StringIO(
@@ -662,6 +682,33 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
         "gh api -H 'Authorization: Bearer literal-secret' repos/o/r",
         "gh api -H 'X-Callback: https://evil.example/upload' repos/o/r",
         "gh api -H $'Accept: application/vnd.github.raw+json\\r\\nX-Evil: yes' repos/o/r",
+        "gh pr view 1 --repo ghe.example/owner/repo",
+        "gh pr view 1 -R ghe.example/owner/repo",
+        "gh pr view 1 --repo '$OWNER/repo'",
+        "gh pr view 1 --repo owner",
+        "gh pr view 1 --repo",
+        "GH_REPO=ghe.example/owner/repo gh pr view 1",
+        "export GH_REPO=ghe.example/owner/repo; gh pr view 1",
+        "GH_REPO=ghe.example/owner/repo bash -lc 'gh pr view 1'",
+        "bash -lc 'export GH_REPO=ghe.example/owner/repo; gh pr view 1'",
+        "gh pr view 1 -wRghe.example/owner/repo --help",
+        "gh pr view 1 -cRghe.example/owner/repo --help",
+        "gh pr view 1 -wR --help",
+        "gh pr view 1 -wR'$OWNER/repo' --help",
+        "gh pr list -dRghe.example/owner/repo --help",
+        "gh run list -aRghe.example/owner/repo --help",
+        "gh workflow list -aRghe.example/owner/repo --help",
+        "gh run list -aR --help",
+        "gh pr view 1 -cRghe.example/owner/repo --help",
+        "gh issue view 1 -cRghe.example/owner/repo --help",
+        "gh pr view 1 -cROwner/Repo -R owner/repo --help",
+        "name=GH_REPO; export $name=ghe.example/o/r; gh pr view 1",
+        "name=GH_REPO; declare -x $name=ghe.example/o/r; gh pr view 1",
+        "env --split-string='GH_REPO=ghe.example/o/r gh pr view 1'",
+        "env -S 'GH_REPO=ghe.example/o/r gh pr view 1'",
+        "gh pr view 1 $REPO_ARGS",
+        "REPO_ARGS='--repo ghe.example/o/r' bash -lc 'gh pr view 1 $REPO_ARGS'",
+        "env REPO_ARGS='-wRghe.example/o/r' bash -lc 'gh pr view 1 $REPO_ARGS'",
     ),
 )
 def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(
