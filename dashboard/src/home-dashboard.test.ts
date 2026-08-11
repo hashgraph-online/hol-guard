@@ -78,14 +78,14 @@ assert(
 
 const singlePending = buildHomePrimaryState(1, 1);
 assert(
-  singlePending.copy.includes("1 action"),
-  "L139: Single pending request uses singular 'action' in copy"
+  singlePending.copy.includes("1 action finding"),
+  "L139: Single pending request uses singular 'finding' in copy"
 );
 
 const multiplePending = buildHomePrimaryState(3, 2);
 assert(
-  multiplePending.copy.includes("3 actions"),
-  "L139: Multiple pending requests uses plural 'actions' in copy"
+  multiplePending.copy.includes("3 action findings"),
+  "L139: Multiple pending requests uses plural 'findings' in copy"
 );
 
 assert(
