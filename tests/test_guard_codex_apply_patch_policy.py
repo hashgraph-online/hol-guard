@@ -100,7 +100,7 @@ def test_verified_workspace_apply_patch_does_not_queue_approval(
 
 
 @pytest.mark.parametrize(("default_action", "expected_action"), (("review", "warn"), ("allow", "allow")))
-def test_watch_only_workspace_apply_patch_is_visible_without_blocking(
+def test_watch_only_workspace_apply_patch_nonblocking_actions_do_not_fill_inbox(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     default_action: str,
@@ -153,12 +153,7 @@ def test_watch_only_workspace_apply_patch_is_visible_without_blocking(
     assert rc == 0
     assert output["policy_action"] == expected_action
     assert "approval_requests" not in output
-    pending = store.list_approval_requests(limit=10)
-    assert len(pending) == 1
-    assert pending[0]["policy_action"] == "require-reapproval"
-    assert pending[0]["launch_target"] == ("apply_patch ~.../plugin.json ~.../.mcp.json")
-    assert pending[0]["scanner_evidence"][-1]["authoritative_action"] == expected_action
-    assert pending[0]["action_envelope_json"]["pre_execution_result"] is None
+    assert store.list_approval_requests(limit=10) == []
 
 
 def test_watch_only_inbox_failure_never_changes_execution(
@@ -228,7 +223,7 @@ def test_watch_only_inbox_accepts_stamped_runtime_envelope(
         artifact_hash=f"stamped-{executable_action}-hash",
         changed_fields=("tool_action",),
         executable_action=executable_action,
-        observed_policy_action=executable_action,
+        observed_policy_action="review",
         redaction_level="full",
         risk_summary="Routine action",
         scanner_evidence=(),
