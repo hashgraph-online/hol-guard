@@ -22917,7 +22917,7 @@ function activationHeadline(protection) {
   return "Fix PATH to finish activation";
 }
 function ActivationSummary({
-  activationAssistError,
+  activationAssist,
   lastAuditProofAt = null,
   activatingRuntime,
   onActivateRuntime,
@@ -22945,7 +22945,7 @@ function ActivationSummary({
         canActivateRuntime && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onActivateRuntime, disabled: activatingRuntime, children: activatingRuntime ? "Verifying setup…" : "Verify shell setup" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRefreshStatus, disabled: activatingRuntime, children: "Refresh status" })
       ] }),
-      activationAssistError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-attention", children: activationAssistError })
+      activationAssist !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-xs ${activationAssist.isError ? "text-brand-attention" : "text-slate-600"}`, children: activationAssist.message })
     ] })
   ] }) });
 }
@@ -30540,7 +30540,7 @@ async function loadDetail(requestId) {
   }
 }
 function shouldFetchArtifactDiff(artifactType) {
-  return artifactType !== "package_request";
+  return (/* @__PURE__ */ new Set(["mcp_server", "skill", "skill_file"])).has(artifactType);
 }
 function App() {
   const pathname = usePathname();

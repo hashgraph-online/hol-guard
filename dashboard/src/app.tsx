@@ -226,7 +226,7 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
 }
 
 export function shouldFetchArtifactDiff(artifactType: string): boolean {
-  return artifactType !== "package_request";
+  return new Set(["mcp_server", "skill", "skill_file"]).has(artifactType);
 }
 
 export function App() {

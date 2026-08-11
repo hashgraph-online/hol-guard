@@ -26,6 +26,7 @@ assert(resolveView("/about") === "about", "/about resolves to about view");
 assert(viewTitle("about") === "About", "about view title is About");
 assert(!shouldFetchArtifactDiff("package_request"), "package approvals do not request unsupported artifact diffs");
 assert(shouldFetchArtifactDiff("mcp_server"), "configuration approvals continue to request artifact diffs");
+assert(!shouldFetchArtifactDiff("future_request"), "unknown approval types do not request unsupported artifact diffs");
 
 assert(normalizeHarnessSlug(" OpenCode ") === "opencode", "normalizer trims and lowercases app slugs");
 assert(normalizeHarnessSlug("*") === null, "normalizer rejects wildcard pseudo-harness");

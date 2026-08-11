@@ -564,7 +564,7 @@ function activationHeadline(protection: PackageManagerProtection | null): string
 }
 
 type ActivationSummaryProps = {
-  activationAssistError: string | null;
+  activationAssist: { message: string; isError: boolean } | null;
   lastAuditProofAt?: string | null;
   activatingRuntime: boolean;
   onActivateRuntime: () => void;
@@ -573,7 +573,7 @@ type ActivationSummaryProps = {
 };
 
 export function ActivationSummary({
-  activationAssistError,
+  activationAssist,
   lastAuditProofAt = null,
   activatingRuntime,
   onActivateRuntime,
@@ -628,8 +628,10 @@ export function ActivationSummary({
               </ActionButton>
             </div>
           )}
-          {activationAssistError !== null && (
-            <p className="mt-2 text-xs text-brand-attention">{activationAssistError}</p>
+          {activationAssist !== null && (
+            <p className={`mt-2 text-xs ${activationAssist.isError ? "text-brand-attention" : "text-slate-600"}`}>
+              {activationAssist.message}
+            </p>
           )}
         </div>
       </div>
