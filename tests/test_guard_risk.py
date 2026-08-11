@@ -4976,6 +4976,50 @@ def test_extract_network_hosts_keeps_real_hosts_with_config_labels():
     assert hosts == {"config.example.com", "vault.config"}
 
 
+def test_extract_network_hosts_ignores_vendor_media_type_subtypes():
+    command = (
+        "gh api -H 'Accept: application/vnd.github.raw+json' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0'"
+    )
+
+    assert extract_network_hosts(command) == set()
+
+
+def test_artifact_risk_signals_do_not_treat_github_media_type_as_host():
+    command = (
+        "gh api -H 'Accept: application/vnd.github.raw+json' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0' "
+        "| jq '{tests: .tests, total: .total}'"
+    )
+    artifact = GuardArtifact(
+        artifact_id="codex:session:github-static-read",
+        name="Bash",
+        harness="codex",
+        artifact_type="runtime_action",
+        source_scope="session",
+        config_path="/workspace",
+        command="bash",
+        args=("-lc", command),
+        transport="stdio",
+    )
+
+    signals = artifact_risk_signals_typed(artifact)
+
+    assert not any(signal.signal_id.startswith("network:host:") for signal in signals)
+
+
+def test_extract_network_hosts_keeps_real_hosts_alongside_media_types():
+    text = "Accept: application/vnd.github.raw+json https://api.github.com/repos/example/project"
+
+    assert extract_network_hosts(text) == {"api.github.com"}
+
+
+def test_extract_network_hosts_keeps_host_like_non_media_header_values():
+    text = "X-Callback: vnd.github.raw Accept: application/vnd.github.raw+json"
+
+    assert extract_network_hosts(text) == {"vnd.github.raw"}
+
+
 def test_normalized_url_indicator_tolerates_bracketed_regex():
     raw = r"https://[^:]*:\([^@]*\)@.*|\1|"
     result = _normalized_url_indicator(raw)

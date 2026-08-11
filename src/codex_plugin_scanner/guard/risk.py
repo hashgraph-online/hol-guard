@@ -15,6 +15,10 @@ from .types import GuardSignal
 _RULE_VERSION = "guard-risk-v2"
 _URL_PATTERN = re.compile(r"https?://[^\s'\"`]+", re.IGNORECASE)
 _HOST_PATTERN = re.compile(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", re.IGNORECASE)
+_MEDIA_TYPE_PATTERN = re.compile(
+    r"\b(?:application|audio|font|image|message|model|multipart|text|video)/[a-z0-9!#$&^_.+-]+",
+    re.IGNORECASE,
+)
 _NON_NETWORK_SUFFIXES = {
     "md",
     "json",
@@ -292,6 +296,7 @@ def extract_network_hosts(text: str) -> set[str]:
     """Extract host-like network references from text."""
 
     hosts: set[str] = set()
+    media_type_spans = tuple(match.span() for match in _MEDIA_TYPE_PATTERN.finditer(text))
     for value in _URL_PATTERN.findall(text):
         try:
             parsed = urlsplit(value)
@@ -301,6 +306,8 @@ def extract_network_hosts(text: str) -> set[str]:
             hosts.add(parsed.hostname.lower())
     for match in _HOST_PATTERN.finditer(text):
         value = match.group(0)
+        if any(start <= match.start() and match.end() <= end for start, end in media_type_spans):
+            continue
         if value.count(".") < 1:
             continue
         if text[match.end() : match.end() + 1] == "(":

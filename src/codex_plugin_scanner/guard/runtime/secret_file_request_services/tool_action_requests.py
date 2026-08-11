@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from ..command_model import CanonicalCommand
+from ..compound_git_inspection import is_low_risk_standalone_git_routine
 from ..git_execution_safety import git_status_args_are_read_only, git_status_has_execution_free_config
 from ..kubernetes_commands import kubernetes_secret_read_source
 from ..shell_command_wrappers import normalize_transparent_shell_command
@@ -23,6 +24,25 @@ from .request_artifacts import _candidate_command_texts, _shell_normalized_tool_
 from .request_models import ToolActionRequestMatch, _normalize_tool_name
 from .shell_request_classifier import _destructive_shell_tool_action_request
 from .shell_static_safety import _shell_token_has_command_substitution
+from .shell_tokenization import _shell_segment_primary_command
+
+_GIT_GLOBAL_FLAG_OPTIONS = frozenset(
+    {
+        "--bare",
+        "--literal-pathspecs",
+        "--no-advice",
+        "--no-lazy-fetch",
+        "--no-optional-locks",
+        "--no-pager",
+        "--no-replace-objects",
+        "--paginate",
+        "-P",
+        "-p",
+    }
+)
+_GIT_GLOBAL_VALUE_OPTIONS = frozenset(
+    {"--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree", "-C", "-c"}
+)
 
 
 def extract_sensitive_tool_action_request(
@@ -70,6 +90,15 @@ def extract_sensitive_tool_action_request(
             command_text = normalized_command.normalized_command
             normalized_command_text = command_text
             wrapper_chain = normalized_command.wrapper_chain
+        git_fetch_request = _unverified_git_fetch_request(
+            tool_name=requested_tool_name,
+            normalized_tool_name=effective_tool_name,
+            command_text=command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+        if git_fetch_request is not None:
+            return git_fetch_request
         docker_sensitive_request = _docker_sensitive_tool_action_request(
             tool_name=requested_tool_name,
             normalized_tool_name=effective_tool_name,
@@ -227,6 +256,63 @@ def extract_sensitive_tool_action_request(
                 )
                 return destructive_shell_request
     return None
+
+
+def _unverified_git_fetch_request(
+    *,
+    tool_name: str,
+    normalized_tool_name: str,
+    command_text: str,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> ToolActionRequestMatch | None:
+    parsing_cwd = cwd or home_dir or Path.cwd()
+    context = model_shell_execution_context(
+        command_text,
+        cwd=parsing_cwd,
+        workspace_root=parsing_cwd,
+        home_dir=home_dir,
+    )
+    if not any(_segment_invokes_git_fetch(segment.tokens) for segment in context.segments):
+        return None
+    if cwd is not None and is_low_risk_standalone_git_routine(context):
+        return None
+    return ToolActionRequestMatch(
+        tool_name=tool_name,
+        normalized_tool_name=normalized_tool_name,
+        command_text=command_text,
+        action_class="unverified Git remote refresh",
+        reason="Git fetch requires repository-bound remote and execution-configuration verification.",
+    )
+
+
+def _segment_invokes_git_fetch(tokens: tuple[str, ...]) -> bool:
+    command_name, command_index = _shell_segment_primary_command(list(tokens))
+    if command_name != "git" or command_index is None:
+        return False
+    args = tokens[command_index + 1 :]
+    index = 0
+    while index < len(args):
+        token = args[index]
+        option_name = token.partition("=")[0]
+        if token in _GIT_GLOBAL_FLAG_OPTIONS:
+            index += 1
+            continue
+        if option_name in _GIT_GLOBAL_VALUE_OPTIONS:
+            if "=" in token:
+                if not token.partition("=")[2]:
+                    return False
+                index += 1
+                continue
+            if index + 1 >= len(args):
+                return False
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        return token == "fetch"
+    return False
 
 
 def _safe_git_status_cd_target(command_name: str, args: list[str], *, cwd: Path) -> Path | None:

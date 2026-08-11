@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..env_wrapper import parse_env_wrapper
-from ..github_capability_contract import GitHubCommandAssessment
+from ..github_capability_contract import GitHubCommandAssessment, github_assessment
 from ..github_shell_capabilities import GitHubShellAnalysis
 from ..github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from ..interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
@@ -29,6 +29,12 @@ from .shell_tokenization import (
     _wrapper_option_tokens_consumed,
 )
 
+_SHELL_FUNCTION_DEFINITION = re.compile(
+    r"(?:\A|[;&\n])\s*(?:function\s+[A-Za-z_][A-Za-z0-9_]*(?:\s*\(\s*\))?"
+    r"|[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\))\s*\{"
+)
+_SHELL_ALIAS_DEFINITION = re.compile(r"(?:\A|[;&\n])\s*alias\s+[A-Za-z_][A-Za-z0-9_]*\s*=")
+
 
 def classify_github_shell_capabilities(
     command_text: str,
@@ -37,6 +43,40 @@ def classify_github_shell_capabilities(
 ) -> GitHubCommandAssessment | None:
     """Adapt the shared shell parser to focused GitHub capability composition."""
 
+    if (_SHELL_FUNCTION_DEFINITION.search(command_text) or _SHELL_ALIAS_DEFINITION.search(command_text)) and re.search(
+        r"\bgh\b", command_text
+    ):
+        return github_assessment(
+            "unknown",
+            "github.command.shell-function",
+            "Shell functions in a GitHub command compound require explicit review.",
+        )
+    parts = _split_shell_parts(command_text)
+    if _persistent_github_environment_requires_review(parts):
+        return github_assessment(
+            "unknown",
+            "github.command.untrusted-environment",
+            "Exported GitHub host or credential configuration requires explicit review.",
+        )
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        assignments = tuple(
+            (token.partition("=")[0], token.partition("=")[2])
+            for token in segment[: command_index or 0]
+            if "=" in token
+        )
+        targets_github = command_name == "gh"
+        if command_name == "env" and command_index is not None:
+            parsed_env = parse_env_wrapper(segment[command_index + 1 :])
+            if parsed_env.complete and parsed_env.executable_argv[:1] == ("gh",):
+                assignments = (*assignments, *parsed_env.environment_delta.assignments)
+                targets_github = True
+        if targets_github and _github_environment_requires_review(assignments):
+            return github_assessment(
+                "unknown",
+                "github.command.untrusted-environment",
+                "Inline GitHub host or credential configuration requires explicit review.",
+            )
     return _classify_github_shell_capabilities(
         command_text,
         analysis=GitHubShellAnalysis(
@@ -52,6 +92,97 @@ def classify_github_shell_capabilities(
             ),
         ),
     )
+
+
+def _github_environment_requires_review(assignments: tuple[tuple[str, str], ...]) -> bool:
+    normalized = dict(assignments)
+    protected = {
+        "GH_CONFIG_DIR",
+        "GH_ENTERPRISE_TOKEN",
+        "GH_TOKEN",
+        "GITHUB_ENTERPRISE_TOKEN",
+        "GITHUB_TOKEN",
+    }
+    if protected.intersection(normalized):
+        return True
+    github_host = normalized.get("GH_HOST")
+    return github_host is not None and github_host.casefold() != "github.com"
+
+
+def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
+    shell_values: dict[str, str] = {}
+    exported: dict[str, str] = {}
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None:
+            for token in segment:
+                name, separator, value = token.partition("=")
+                if separator:
+                    shell_values[name] = value
+                    if name in exported:
+                        exported[name] = value
+            continue
+        args = segment[command_index + 1 :] if command_index is not None else []
+        if command_name == "unset":
+            for name in args:
+                shell_values.pop(name, None)
+                exported.pop(name, None)
+            continue
+        if command_name in {"export", "readonly", "declare", "typeset"}:
+            export_enabled = command_name == "export" or "-x" in args
+            if not export_enabled:
+                if any(
+                    _github_environment_name(token.partition("=")[0]) for token in args if not token.startswith("-")
+                ):
+                    return True
+                continue
+            for token in args:
+                if token.startswith("-"):
+                    if token != "-x":
+                        return True
+                    continue
+                name, separator, value = token.partition("=")
+                if separator:
+                    shell_values[name] = value
+                if name in shell_values:
+                    exported[name] = shell_values[name]
+                elif _github_environment_name(name):
+                    return True
+            continue
+        if command_name in {"bash", "sh", "zsh"} and command_index is not None:
+            inherited = {
+                **exported,
+                **{
+                    token.partition("=")[0]: token.partition("=")[2]
+                    for token in segment[:command_index]
+                    if "=" in token
+                },
+            }
+            scripts = _shell_command_scripts(segment)
+            if scripts and _github_environment_requires_review(tuple(inherited.items())):
+                return True
+            if any(_persistent_github_environment_requires_review(_split_shell_parts(script)) for script in scripts):
+                return True
+        if command_name != "gh" or command_index is None:
+            continue
+        local_assignments = {
+            token.partition("=")[0]: token.partition("=")[2] for token in segment[:command_index] if "=" in token
+        }
+        effective = {**exported, **local_assignments}
+        if _github_environment_requires_review(tuple(effective.items())):
+            return True
+    return False
+
+
+def _github_environment_name(name: str) -> bool:
+    return name in {
+        "GH_CONFIG_DIR",
+        "GH_ENTERPRISE_TOKEN",
+        "GH_HOST",
+        "GH_TOKEN",
+        "GITHUB_ENTERPRISE_TOKEN",
+        "GITHUB_TOKEN",
+    }
 
 
 def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:

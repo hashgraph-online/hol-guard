@@ -94,6 +94,29 @@ def test_normalize_artifact_capabilities_ignores_common_local_file_suffixes_as_h
     assert capabilities.network_hosts == ()
 
 
+def test_normalize_artifact_capabilities_ignores_media_type_but_keeps_real_url_host():
+    artifact = GuardArtifact(
+        artifact_id="codex:session:github-read",
+        name="Bash",
+        harness="codex",
+        artifact_type="runtime_action",
+        source_scope="session",
+        config_path="/workspace",
+        command="gh",
+        args=(
+            "api",
+            "-H",
+            "Accept: application/vnd.github.raw+json",
+            "https://api.github.com/repos/o/r",
+        ),
+        transport="stdio",
+    )
+
+    capabilities = normalize_artifact_capabilities(artifact)
+
+    assert capabilities.network_hosts == ("api.github.com",)
+
+
 def test_normalize_artifact_capabilities_tolerates_bracketed_regex_in_command():
     artifact = GuardArtifact(
         artifact_id="hermes:project:regex-tool",

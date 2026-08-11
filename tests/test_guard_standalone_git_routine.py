@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.runtime.git_execution_safety import (
     git_fetch_origin_has_execution_free_config,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
 
@@ -91,6 +92,52 @@ def test_standalone_origin_ref_refresh_and_resolution_are_explicitly_benign(tmp_
             )
             is None
         )
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git fetch origin release/2.2",
+        "git --no-pager fetch origin release/2.2",
+        "git -c credential.helper='!echo pwn' fetch origin release/2.2",
+        "/usr/bin/git fetch origin release/2.2",
+        "git fetch origin release/2.2; true",
+        "true && git fetch origin release/2.2",
+        "GIT_DIR=example/.git git fetch origin release/2.2",
+        "git --exec-path=/tmp fetch origin release/2.2",
+        "git -P fetch origin release/2.2",
+        "git -p fetch origin release/2.2",
+        "git --no-lazy-fetch fetch origin release/2.2",
+        "git --no-optional-locks fetch origin release/2.2",
+        "git --no-advice fetch origin release/2.2",
+        "git --literal-pathspecs fetch origin release/2.2",
+    ),
+)
+def test_git_fetch_without_repository_bound_cwd_is_sensitive(tmp_path: Path, command: str) -> None:
+    home, repository = _repository(tmp_path)
+    session_workspace = repository.parent
+
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=session_workspace,
+        home_dir=home,
+    )
+
+    assert request is not None
+    assert request.action_class == "unverified Git remote refresh"
+
+
+def test_git_fetch_without_any_cwd_is_sensitive(tmp_path: Path) -> None:
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "git fetch origin main"},
+        cwd=None,
+        home_dir=tmp_path,
+    )
+
+    assert request is not None
+    assert request.action_class == "unverified Git remote refresh"
 
 
 def test_standalone_verified_origin_reads_are_explicitly_benign(tmp_path: Path) -> None:

@@ -11,6 +11,10 @@ from .types import CapabilityDelta, CapabilitySet, TransportKind
 
 _URL_PATTERN = re.compile(r"https?://[^\s'\"`]+", re.IGNORECASE)
 _HOST_PATTERN = re.compile(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", re.IGNORECASE)
+_MEDIA_TYPE_PATTERN = re.compile(
+    r"\b(?:application|audio|font|image|message|model|multipart|text|video)/[a-z0-9!#$&^_.+-]+",
+    re.IGNORECASE,
+)
 _PATH_PATTERN = re.compile(r"(~?/[\w./-]+|\.[/\\][\w./\\-]+)")
 _NON_NETWORK_SUFFIXES = {
     "md",
@@ -295,6 +299,7 @@ def _safe_urlsplit(value: str) -> SplitResult | None:
 
 def _extract_network_hosts(text: str, url: str | None) -> set[str]:
     hosts: set[str] = set()
+    media_type_spans = tuple(match.span() for match in _MEDIA_TYPE_PATTERN.finditer(text))
     candidates: list[str] = list(_URL_PATTERN.findall(text))
     if url:
         candidates.append(url)
@@ -302,7 +307,10 @@ def _extract_network_hosts(text: str, url: str | None) -> set[str]:
         parsed = _safe_urlsplit(candidate)
         if parsed is not None and parsed.hostname:
             hosts.add(parsed.hostname.lower())
-    for candidate in _HOST_PATTERN.findall(text):
+    for match in _HOST_PATTERN.finditer(text):
+        if any(start <= match.start() and match.end() <= end for start, end in media_type_spans):
+            continue
+        candidate = match.group(0)
         if candidate.count(".") < 1:
             continue
         lowered = candidate.lower()

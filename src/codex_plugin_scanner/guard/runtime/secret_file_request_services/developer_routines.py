@@ -114,6 +114,7 @@ def _looks_like_safe_compound_developer_inspection(
                 continue
             if effect is DeveloperShellEffect.STREAM_FILTER and command_name in {
                 *_READ_ONLY_LOOKUP_FILTERS,
+                "jq",
                 "sort",
             }:
                 continue

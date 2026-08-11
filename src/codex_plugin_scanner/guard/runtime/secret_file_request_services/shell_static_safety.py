@@ -174,7 +174,6 @@ def _github_jq_filter_args_are_safe(args: list[str]) -> bool:
         "-r",
         "-s",
     }
-    value_options = {"--arg": 2, "--argjson": 2}
     index = 0
     while index < len(normalized_args):
         token = normalized_args[index]
@@ -183,11 +182,6 @@ def _github_jq_filter_args_are_safe(args: list[str]) -> bool:
             continue
         if token in boolean_options:
             index += 1
-            continue
-        if token in value_options:
-            index += 1 + value_options[token]
-            if index > len(normalized_args):
-                return False
             continue
         if token.startswith("-"):
             return False

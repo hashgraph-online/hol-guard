@@ -81,6 +81,12 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
     original = tuple(normalized)
     if not normalized:
         return _assessment("unknown", "github.command.missing", "The GitHub CLI subcommand is missing.")
+    if _alternate_hostname_requested(original):
+        return _assessment(
+            "unknown",
+            "github.command.alternate-host",
+            "An alternate GitHub host requires explicit review.",
+        )
     normalized = _strip_global_options(normalized)
     if not normalized:
         return _assessment(
@@ -425,6 +431,19 @@ def _has_explicit_option_value(args: Sequence[str], long_option: str, short_opti
 
 def _has_dynamic_value(args: Sequence[str]) -> bool:
     return any("$" in token or "`" in token or token.startswith("@") for token in args)
+
+
+def _alternate_hostname_requested(args: tuple[str, ...]) -> bool:
+    hostnames: list[str] = []
+    for index, token in enumerate(args):
+        if index > 0 and token.startswith("-h") and token != "--help":
+            hostname = token[2:] if token != "-h" else (args[index + 1] if index + 1 < len(args) else "")
+            hostnames.append(hostname)
+        if token.startswith("--hostname="):
+            hostnames.append(token.partition("=")[2])
+        if token == "--hostname":
+            hostnames.append(args[index + 1] if index + 1 < len(args) else "")
+    return any(hostname.casefold() != "github.com" for hostname in hostnames) or len(set(hostnames)) > 1
 
 
 def _strip_global_options(args: list[str]) -> list[str]:

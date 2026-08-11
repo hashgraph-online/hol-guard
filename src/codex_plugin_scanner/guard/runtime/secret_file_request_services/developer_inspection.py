@@ -40,6 +40,7 @@ from .read_only_filters import (
     _read_only_lookup_target_is_safe,
 )
 from .shell_static_safety import (
+    _github_jq_filter_args_are_safe,
     _is_python_interpreter_command,
     _leading_literal_cd_workspace_root,
     _path_text_is_within_root,
@@ -193,6 +194,14 @@ def _compound_developer_effect_graph(
             continue
         if command_name == "gh" and github_is_low_risk:
             effects.append(DeveloperShellSegmentEffect(index, command_name, DeveloperShellEffect.REMOTE_READ))
+            continue
+        if (
+            command_name == "jq"
+            and segment.control_before == ("|",)
+            and github_is_low_risk
+            and _github_jq_filter_args_are_safe(args)
+        ):
+            effects.append(DeveloperShellSegmentEffect(index, command_name, DeveloperShellEffect.STREAM_FILTER))
             continue
         if _safe_cli_metadata_segment_is_safe(
             command_name,

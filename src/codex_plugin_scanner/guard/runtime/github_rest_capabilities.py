@@ -31,6 +31,11 @@ _API_OPTIONS_WITH_VALUES = frozenset(
 _API_BOOLEAN_OPTIONS = frozenset({"--include", "--paginate", "--silent", "--slurp", "--verbose", "-i"})
 _API_OUTPUT_FORMAT_OPTIONS = frozenset({"--jq", "--template"})
 _METHOD_OVERRIDE_HEADER = re.compile(r"\Ax-http-method-override\s*:", re.IGNORECASE)
+_SAFE_ACCEPT_HEADER = re.compile(
+    r"\Aaccept\s*:\s*application/vnd\.github(?:\+[a-z0-9.+-]+|\.[a-z0-9.+-]+)\Z",
+    re.IGNORECASE,
+)
+_SAFE_API_VERSION_HEADER = re.compile(r"\Ax-github-api-version\s*:\s*[0-9]{4}-[0-9]{2}-[0-9]{2}\Z", re.IGNORECASE)
 _STATIC_ENDPOINT = re.compile(r"\A[A-Za-z0-9_./{}:+,@=?&-]+\Z")
 _PR_HEAD_OID_ENDPOINT = re.compile(
     "".join(
@@ -82,6 +87,15 @@ def classify_github_api(args: Sequence[str]) -> GitHubCommandAssessment:
             "unknown",
             "github.api.method-override",
             "An HTTP method-override header prevents reliable API capability classification.",
+        )
+    if any(
+        not _SAFE_ACCEPT_HEADER.fullmatch(header) and not _SAFE_API_VERSION_HEADER.fullmatch(header)
+        for header in parsed.headers
+    ):
+        return github_assessment(
+            "unknown",
+            "github.api.untrusted-header",
+            "Only static GitHub Accept media-type headers qualify for prompt-free API reads.",
         )
     method = parsed.method.upper() if parsed.method is not None else None
     if parsed.endpoint.lower() == "graphql":
