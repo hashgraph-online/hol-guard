@@ -38,7 +38,6 @@ _VOLATILE_PAYLOAD_KEY_TOKENS = frozenset(
         "conversationid",
         "messageid",
         "model",
-        "permissionmode",
         "requestid",
         "sessionid",
         "threadid",

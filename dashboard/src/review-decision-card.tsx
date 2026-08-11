@@ -24,6 +24,7 @@ import {
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   taskCapabilityExplanation,
+  willPersistExactAction,
 } from "./approval-scopes";
 import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { ConsolidatedEvidenceAlert } from "./consolidated-evidence-alert";
@@ -67,8 +68,12 @@ import {
 
 const commonScopeValues = new Set<DecisionScope>(["artifact"]);
 
-function resolvedActionCopy(item: GuardApprovalRequest | null, action: "allow" | "block"): string {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action);
+function resolvedActionCopy(
+  item: GuardApprovalRequest | null,
+  action: "allow" | "block",
+  persistedExactAction: boolean,
+): string {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
   if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
 }
@@ -85,7 +90,7 @@ export function ReviewDecisionCard(props: {
   const [allowScope, setAllowScope] = useState<DecisionScope>("artifact");
   const [blockScope, setBlockScope] = useState<DecisionScope>("artifact");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
-  const [resolved, setResolved] = useState<"allow" | "block" | null>(null);
+  const [resolved, setResolved] = useState<{ action: "allow" | "block"; persistedExactAction: boolean } | null>(null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
@@ -151,7 +156,7 @@ export function ReviewDecisionCard(props: {
       setUseCooldown(false);
       setPendingAction(null);
       setPendingContractKey(null);
-      setRememberExactAction(item.exact_action_persistence_eligible === true && isWatchOnlyObservation(item));
+      setRememberExactAction(false);
       const nextTemporaryOptions = temporaryMcpApprovalOptions(item);
       if (nextTemporaryOptions !== null) {
         setMcpGrantTarget(defaultTemporaryMcpTarget(nextTemporaryOptions));
@@ -196,6 +201,12 @@ export function ReviewDecisionCard(props: {
       setErrorMessage(null);
       try {
         const requestedScope = action === "allow" ? allowScope : blockScope;
+        const persistExactAction = willPersistExactAction(
+          item,
+          action,
+          requestedScope,
+          action === "allow" ? rememberExactAction : watchOnlyObservation,
+        );
         const gate = props.approvalGate;
         const needsPassword = approvalProofRequiresPassword(gate);
         const includeGateFields =
@@ -208,12 +219,7 @@ export function ReviewDecisionCard(props: {
             action,
             scope: requestedScope,
             reason: action === "allow" ? "approved in review" : "blocked in review",
-            persistExactAction:
-              action === "allow"
-                ? rememberExactAction
-                : watchOnlyObservation &&
-                  requestedScope === "artifact" &&
-                  item.exact_action_persistence_eligible === true,
+            persistExactAction,
           }),
           ...(includeGateFields && needsPassword ? { approval_password: approvalPassword } : {}),
           ...(includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {}),
@@ -230,7 +236,7 @@ export function ReviewDecisionCard(props: {
             ? buildLocalToolResolutionFields(localToolOptions, localToolGrantTarget, localToolGrantDuration)
             : {}),
         });
-        setResolved(action);
+        setResolved({ action, persistedExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
@@ -395,7 +401,8 @@ export function ReviewDecisionCard(props: {
   const evidenceItems = buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
-  if (rememberExactAction && allowScope === "artifact") {
+  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
+  if (persistExactAllow) {
     resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
   }
   if (temporaryMcpOptions !== null && !rememberExactAction) {
@@ -408,7 +415,7 @@ export function ReviewDecisionCard(props: {
       {resolved && (
         <div
           className={`guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
-            resolved === "allow"
+            resolved.action === "allow"
               ? "border-brand-green/25 bg-brand-green-bg/30"
               : "border-brand-attention/25 bg-brand-attention/[0.04]"
           }`}
@@ -416,11 +423,11 @@ export function ReviewDecisionCard(props: {
           aria-live="polite"
         >
           <HiMiniCheckCircle
-            className={`h-5 w-5 shrink-0 ${resolved === "allow" ? "text-brand-green" : "text-brand-attention"}`}
+            className={`h-5 w-5 shrink-0 ${resolved.action === "allow" ? "text-brand-green" : "text-brand-attention"}`}
             aria-hidden="true"
           />
-          <p className={`text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {resolvedActionCopy(item, resolved)}
+          <p className={`text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
+            {resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
           </p>
         </div>
       )}

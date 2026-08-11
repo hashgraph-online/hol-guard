@@ -144,7 +144,7 @@ class TestGuardApprovals:
                     "tool_use_id": "tool-second",
                     "transcript_path": "sessions/second.jsonl",
                     "model": "model-second",
-                    "permission_mode": "bypassPermissions",
+                    "permission_mode": "ask",
                 },
             },
         )
@@ -155,6 +155,48 @@ class TestGuardApprovals:
         pending = store.list_approval_requests(limit=10)
         assert len(pending) == 1
         assert pending[0]["dedupe_count"] == 2
+
+    def test_guard_queue_keeps_permission_modes_separate(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace = str(tmp_path / "workspace")
+
+        def request(request_id: str, permission_mode: str) -> GuardApprovalRequest:
+            return GuardApprovalRequest(
+                request_id=request_id,
+                harness="codex",
+                artifact_id="codex:project:tool-action:script",
+                artifact_name="Bash unmatched tool action",
+                artifact_type="tool_action_request",
+                artifact_hash=f"hash-{permission_mode}",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("tool_action",),
+                source_scope="project",
+                config_path=workspace,
+                workspace=workspace,
+                launch_target="npm run guard:acquisition-loop",
+                action_envelope_json={
+                    "action_type": "shell_command",
+                    "tool_name": "Bash",
+                    "command": "npm run guard:acquisition-loop",
+                    "raw_payload_redacted": {
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "npm run guard:acquisition-loop"},
+                        "permission_mode": permission_mode,
+                    },
+                },
+                review_command=f"hol-guard approvals approve {request_id}",
+                approval_url=f"http://127.0.0.1:5474/requests/{request_id}",
+            )
+
+        store.add_approval_request(request("req-ask", "ask"), "2026-08-11T00:00:00+00:00")
+        store.add_approval_request(
+            request("req-bypass", "bypassPermissions"),
+            "2026-08-11T00:01:00+00:00",
+        )
+
+        pending = store.list_approval_requests(limit=10)
+        assert len(pending) == 2
 
     def test_guard_store_persists_and_resolves_approval_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

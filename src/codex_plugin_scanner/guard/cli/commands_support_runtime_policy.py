@@ -592,6 +592,7 @@ def _runtime_hook_approval_context_token(
         },
         sandbox={
             "analysis": config.sandbox_analysis,
+            "permission_mode": _runtime_hook_permission_mode(action_envelope),
             "required": current_action == "sandbox-required",
         },
     )
@@ -641,6 +642,13 @@ def _runtime_hook_action_capabilities(action_envelope: GuardActionEnvelope | Non
         "target_paths": list(action_envelope.target_paths),
         "tool_name": action_envelope.tool_name,
     }
+
+
+def _runtime_hook_permission_mode(action_envelope: GuardActionEnvelope | None) -> str | None:
+    if action_envelope is None:
+        return None
+    raw_payload = action_envelope.raw_payload_redacted
+    return _optional_string(raw_payload.get("permission_mode")) or _optional_string(raw_payload.get("permissionMode"))
 
 
 def _runtime_hook_evidence_payload(value: object) -> object:

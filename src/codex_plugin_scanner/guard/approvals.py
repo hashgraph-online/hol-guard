@@ -68,6 +68,7 @@ from .runtime.github_workflow_runtime import (
 from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
+    _is_runtime_scoped_exact_match_key,
     _runtime_scoped_exact_match_key,
     browser_mcp_exact_match_context,
     runtime_tool_action_exact_match_context,
@@ -844,7 +845,11 @@ def apply_approval_resolution(
         )
 
     resolution_harness = None if scope == "global" else str(request["harness"])
-    resolve_matching_scope_requests = resolve_scope_matches and not (action == "allow" and scope != "artifact")
+    resolve_matching_scope_requests = (
+        resolve_scope_matches
+        and not (action == "allow" and scope != "artifact")
+        and not (scope == "artifact" and _is_runtime_scoped_exact_match_key(scoped_artifact_hash))
+    )
     if return_queue_result:
         result = (
             temporary_mcp_result
@@ -1017,6 +1022,7 @@ def _artifact_scope_runtime_exact_match_key(
         source_scope=_string_or_none(request.get("source_scope")),
         raw_command_text=raw_command_text,
         wrapper_chain=normalized_wrapper_chain,
+        permission_mode=_request_permission_mode(request),
     )
     return _runtime_scoped_exact_match_key(artifact_id, context) if isinstance(artifact_id, str) else None
 
@@ -1047,9 +1053,20 @@ def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) ->
             wrapper_chain=(
                 wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
             ),
+            permission_mode=_request_permission_mode(request),
         )
         return _runtime_scoped_exact_match_key(artifact_id, runtime_tool_action_portable_match_context(context))
     return _runtime_scoped_exact_match_key(artifact_id)
+
+
+def _request_permission_mode(request: Mapping[str, object]) -> str | None:
+    envelope = request.get("action_envelope_json")
+    if not isinstance(envelope, Mapping):
+        return None
+    raw_payload = envelope.get("raw_payload_redacted")
+    if not isinstance(raw_payload, Mapping):
+        return None
+    return _string_or_none(raw_payload.get("permission_mode")) or _string_or_none(raw_payload.get("permissionMode"))
 
 
 def _extract_surface_flags(browser_intent: Mapping[str, object]) -> list[str] | None:

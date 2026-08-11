@@ -13264,18 +13264,27 @@ function buildDecisionPayload(input) {
     throw new Error(`No eligible ${input.action} scope is available for this request.`);
   }
   const workspace = normalizedScope === "workspace" && typeof input.item.workspace === "string" ? input.item.workspace : void 0;
+  const persistExactAction = willPersistExactAction(
+    input.item,
+    input.action,
+    normalizedScope,
+    input.persistExactAction === true
+  );
   return {
     requestId: input.item.request_id,
     action: input.action,
     scope: normalizedScope,
     workspace,
     reason: input.reason,
-    ...normalizedScope === "artifact" && input.persistExactAction === true && input.item.exact_action_persistence_eligible === true ? { persist_policy: true } : {},
+    ...persistExactAction ? { persist_policy: true } : {},
     ...hasCompleteBinding ? {
       scope_contract_version: contractVersion,
       scope_contract_digest: contractDigest
     } : {}
   };
+}
+function willPersistExactAction(item, action, scope, requested) {
+  return requested && normalizeDecisionScope(item, action, scope) === "artifact" && item.exact_action_persistence_eligible === true;
 }
 const REVIEW_SEMANTIC_GROUPS = [
   { id: "all", label: "All", matches: [] },
@@ -14600,13 +14609,14 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
-function buildRetryAfterApprovalCopy(item, action) {
+function buildRetryAfterApprovalCopy(item, action, persistedExactAction2 = false) {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
-    if (action === "allow") {
+    if (persistedExactAction2 && action === "allow") {
       return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
     }
-    return "Saved. Guard will stop matching actions next time.";
+    if (persistedExactAction2) return "Saved. Guard will stop this exact action next time.";
+    return "Reviewed. Watch only already allowed this action to run; no future rule was saved.";
   }
   if (action === "allow") {
     return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;
@@ -28791,8 +28801,8 @@ function LocalToolApprovalControls(props) {
   ] });
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
-function resolvedActionCopy(item, action) {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action);
+function resolvedActionCopy(item, action, persistedExactAction2) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction2);
   if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
 }
@@ -28866,7 +28876,7 @@ function ReviewDecisionCard(props) {
       setUseCooldown(false);
       setPendingAction(null);
       setPendingContractKey(null);
-      setRememberExactAction(item.exact_action_persistence_eligible === true && isWatchOnlyObservation(item));
+      setRememberExactAction(false);
       const nextTemporaryOptions = temporaryMcpApprovalOptions(item);
       if (nextTemporaryOptions !== null) {
         setMcpGrantTarget(defaultTemporaryMcpTarget(nextTemporaryOptions));
@@ -28907,6 +28917,12 @@ function ReviewDecisionCard(props) {
       setErrorMessage(null);
       try {
         const requestedScope = action === "allow" ? allowScope : blockScope;
+        const persistExactAction = willPersistExactAction(
+          item,
+          action,
+          requestedScope,
+          action === "allow" ? rememberExactAction : watchOnlyObservation
+        );
         const gate = props.approvalGate;
         const needsPassword = approvalProofRequiresPassword(gate);
         const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, requestedScope);
@@ -28916,7 +28932,7 @@ function ReviewDecisionCard(props) {
             action,
             scope: requestedScope,
             reason: action === "allow" ? "approved in review" : "blocked in review",
-            persistExactAction: action === "allow" ? rememberExactAction : watchOnlyObservation && requestedScope === "artifact" && item.exact_action_persistence_eligible === true
+            persistExactAction
           }),
           ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
           ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
@@ -28929,7 +28945,7 @@ function ReviewDecisionCard(props) {
           ) : {},
           ...action === "allow" && temporaryMcpOptions === null ? buildLocalToolResolutionFields(localToolOptions, localToolGrantTarget, localToolGrantDuration) : {}
         });
-        setResolved(action);
+        setResolved({ action, persistedExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
@@ -29081,7 +29097,8 @@ function ReviewDecisionCard(props) {
   const evidenceItems = buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
-  if (rememberExactAction && allowScope === "artifact") {
+  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
+  if (persistExactAllow) {
     resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
   }
   if (temporaryMcpOptions !== null && !rememberExactAction) {
@@ -29093,18 +29110,18 @@ function ReviewDecisionCard(props) {
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
-        className: `guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${resolved === "allow" ? "border-brand-green/25 bg-brand-green-bg/30" : "border-brand-attention/25 bg-brand-attention/[0.04]"}`,
+        className: `guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${resolved.action === "allow" ? "border-brand-green/25 bg-brand-green-bg/30" : "border-brand-attention/25 bg-brand-attention/[0.04]"}`,
         role: "status",
         "aria-live": "polite",
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             HiMiniCheckCircle,
             {
-              className: `h-5 w-5 shrink-0 ${resolved === "allow" ? "text-brand-green" : "text-brand-attention"}`,
+              className: `h-5 w-5 shrink-0 ${resolved.action === "allow" ? "text-brand-green" : "text-brand-attention"}`,
               "aria-hidden": "true"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolvedActionCopy(item, resolved) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolvedActionCopy(item, resolved.action, resolved.persistedExactAction) })
         ]
       }
     ),

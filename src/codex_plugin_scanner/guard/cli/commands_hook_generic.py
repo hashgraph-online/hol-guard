@@ -479,6 +479,8 @@ def _generic_hook_saved_decision(
         config_path=workspace,
         source_scope=_coalesce_string(payload.get("source_scope"), "project"),
         raw_command_text=memory_command,
+        permission_mode=_optional_string(payload.get("permission_mode"))
+        or _optional_string(payload.get("permissionMode")),
     )
     lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
         harness,

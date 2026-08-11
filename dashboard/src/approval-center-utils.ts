@@ -82,13 +82,18 @@ function resolveDataFlowSinkLabel(signal: RiskSignalV2): string {
   return "External sink";
 }
 
-export function buildRetryAfterApprovalCopy(item: GuardApprovalRequest, action: "allow" | "block"): string {
+export function buildRetryAfterApprovalCopy(
+  item: GuardApprovalRequest,
+  action: "allow" | "block",
+  persistedExactAction = false,
+): string {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
-    if (action === "allow") {
+    if (persistedExactAction && action === "allow") {
       return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
     }
-    return "Saved. Guard will stop matching actions next time.";
+    if (persistedExactAction) return "Saved. Guard will stop this exact action next time.";
+    return "Reviewed. Watch only already allowed this action to run; no future rule was saved.";
   }
   if (action === "allow") {
     return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;

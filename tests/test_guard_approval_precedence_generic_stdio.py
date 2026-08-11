@@ -561,6 +561,7 @@ def test_codex_review_queue_retains_exact_shell_action_for_remembered_policy(
     payload = {
         **_generic_payload(),
         "hook_event_name": "PreToolUse",
+        "permission_mode": "ask",
         "tool_name": "Bash",
         "tool_input": {"command": "npm run guard:acquisition-loop"},
     }
@@ -599,6 +600,7 @@ def test_watch_only_exact_allow_applies_after_enforcement_is_enabled(
     payload = {
         **_generic_payload(),
         "hook_event_name": "PreToolUse",
+        "permission_mode": "ask",
         "tool_name": "Bash",
         "tool_input": {"command": "npm run guard:acquisition-loop"},
     }
@@ -651,6 +653,26 @@ def test_watch_only_exact_allow_applies_after_enforcement_is_enabled(
 
     assert rc == 0, json.dumps(output, sort_keys=True)
     assert output["policy_action"] == "allow"
+
+    changed_mode_payload = {**payload, "permission_mode": "bypassPermissions"}
+    changed_mode_envelope = normalize_harness_payload(
+        "codex",
+        "PreToolUse",
+        changed_mode_payload,
+        workspace=workspace,
+        home_dir=tmp_path,
+    )
+    changed_mode_rc, changed_mode_output = _run_generic_hook(
+        capsys=capsys,
+        config=enforce_config,
+        payload=changed_mode_payload,
+        store=store,
+        workspace=workspace,
+        harness="codex",
+        action_envelope=changed_mode_envelope,
+    )
+    assert changed_mode_rc == 1
+    assert changed_mode_output["policy_action"] == "review"
 
     changed_payload = {
         **payload,
@@ -748,7 +770,6 @@ def test_watch_only_exact_block_applies_after_enforcement_is_enabled(
         scope_contract_digest=str(observed["scope_contract_digest"]),
     )
     assert any(decision["action"] == "block" for decision in store.list_policy_decisions())
-
     enforce_config = replace(observe_config, mode="prompt")
     blocked_rc, blocked_output = _run_generic_hook(
         capsys=capsys,

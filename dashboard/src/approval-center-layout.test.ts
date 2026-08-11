@@ -8,6 +8,7 @@ import {
   QUEUE_CONNECTION_ERROR_HEADLINE,
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
   buildRecommendation,
+  buildRetryAfterApprovalCopy,
   buildPauseLine,
   isWatchOnlyObservation,
   requestResolutionBlockReason,
@@ -324,6 +325,18 @@ assert(
 assert(
   buildRecommendation(watchOnlyRequest).includes("Save an exact allow"),
   "Watch-only findings explain how to prevent the same false positive",
+);
+assert(
+  buildRetryAfterApprovalCopy(watchOnlyRequest, "allow").includes("no future rule was saved"),
+  "Watch-only one-time review copy never promises a remembered allow",
+);
+assert(
+  buildRetryAfterApprovalCopy(watchOnlyRequest, "allow", true).includes("allow this exact action next time"),
+  "Watch-only persisted allow copy describes the exact future rule",
+);
+assert(
+  buildRetryAfterApprovalCopy(watchOnlyRequest, "block", true).includes("stop this exact action next time"),
+  "Watch-only persisted block copy describes the exact future rule",
 );
 
 const sandboxRequest: GuardApprovalRequest = { ...BASE_REQUEST, policy_action: "sandbox-required" };

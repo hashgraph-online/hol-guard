@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as ru
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.proxy import stdio as stdio_module
+from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope, normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_tokens_validation_reason,
     parse_approval_context_token,
@@ -64,12 +65,17 @@ def _assert_only_policy_component_changed(saved_token: str, current_token: str) 
     assert approval_context_tokens_validation_reason(saved_token, current_token) == "approval_reuse_policy_changed"
 
 
-def _runtime_hook_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
+def _runtime_hook_token(
+    *,
+    artifact: GuardArtifact,
+    config: GuardConfig,
+    action_envelope: GuardActionEnvelope | None = None,
+) -> str:
     return runtime_policy_module._runtime_hook_approval_context_token(
         artifact=artifact,
         content_hash="unchanged-runtime-content",
         runtime_workspace=config.workspace,
-        action_envelope=None,
+        action_envelope=action_envelope,
         config=config,
         current_config_action="review",
         trusted_cli_action=None,
@@ -81,6 +87,45 @@ def _runtime_hook_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
         data_flow_signals=(),
         scanner_evidence=(),
     )
+
+
+def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    artifact = GuardArtifact(
+        artifact_id="codex:project:runtime-permission-mode",
+        name="runtime permission mode fixture",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=str(_workspace(config) / ".guard" / "config.toml"),
+        command="npm run guard:acquisition-loop",
+    )
+
+    def envelope(permission_mode: str) -> GuardActionEnvelope:
+        return normalize_harness_payload(
+            "codex",
+            "PreToolUse",
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "npm run guard:acquisition-loop"},
+                "permission_mode": permission_mode,
+            },
+            workspace=_workspace(config),
+            home_dir=tmp_path,
+        )
+
+    ask_token = _runtime_hook_token(artifact=artifact, config=config, action_envelope=envelope("ask"))
+    bypass_token = _runtime_hook_token(
+        artifact=artifact,
+        config=config,
+        action_envelope=envelope("bypassPermissions"),
+    )
+    ask_context = parse_approval_context_token(ask_token)
+    bypass_context = parse_approval_context_token(bypass_token)
+    assert ask_context is not None
+    assert bypass_context is not None
+    assert ask_context.sandbox_hash != bypass_context.sandbox_hash
+    assert approval_context_tokens_validation_reason(ask_token, bypass_token) is not None
 
 
 def test_runtime_hook_evaluator_policy_version_is_the_only_changed_component(

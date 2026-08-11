@@ -246,17 +246,19 @@ export function buildDecisionPayload(input: {
     normalizedScope === "workspace" && typeof input.item.workspace === "string"
       ? input.item.workspace
       : undefined;
+  const persistExactAction = willPersistExactAction(
+    input.item,
+    input.action,
+    normalizedScope,
+    input.persistExactAction === true,
+  );
   return {
     requestId: input.item.request_id,
     action: input.action,
     scope: normalizedScope,
     workspace,
     reason: input.reason,
-    ...(normalizedScope === "artifact" &&
-    input.persistExactAction === true &&
-    input.item.exact_action_persistence_eligible === true
-      ? { persist_policy: true }
-      : {}),
+    ...(persistExactAction ? { persist_policy: true } : {}),
     ...(hasCompleteBinding
       ? {
           scope_contract_version: contractVersion,
@@ -264,4 +266,17 @@ export function buildDecisionPayload(input: {
         }
       : {}),
   };
+}
+
+export function willPersistExactAction(
+  item: GuardApprovalRequest,
+  action: "allow" | "block",
+  scope: DecisionScope,
+  requested: boolean,
+): boolean {
+  return (
+    requested &&
+    normalizeDecisionScope(item, action, scope) === "artifact" &&
+    item.exact_action_persistence_eligible === true
+  );
 }

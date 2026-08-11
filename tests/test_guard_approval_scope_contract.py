@@ -482,6 +482,49 @@ def test_context_bound_saved_allow_survives_context_token_changes_but_not_comman
     )
 
 
+def test_persisted_exact_action_does_not_resolve_sibling_command_request(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    artifact_id = "codex:project:Bash"
+
+    def exact_request(request_id: str, command: str) -> GuardApprovalRequest:
+        context_token = build_approval_context_token(
+            identity={"harness": "codex", "tool": "Bash"},
+            content={"command": command},
+            capabilities={"action_type": "shell_command"},
+            policy={"action": "require-reapproval"},
+            sandbox={"permission_mode": "ask"},
+        )
+        return replace(
+            _request(request_id, artifact_id=artifact_id, artifact_hash=context_token),
+            launch_target=command,
+            raw_command_text=command,
+            action_envelope_json={
+                "action_type": "shell_command",
+                "tool_name": "Bash",
+                "command": command,
+                "raw_payload_redacted": {"permission_mode": "ask"},
+            },
+        )
+
+    selected = _store_request(store, exact_request("selected-command", "npm run guard:acquisition-loop"))
+    _store_request(store, exact_request("sibling-command", "npm run guard:other"))
+
+    apply_approval_resolution(
+        store=store,
+        request_id="selected-command",
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="remember exact action",
+        persist_policy=True,
+        scope_contract_version=str(selected["scope_contract_version"]),
+        scope_contract_digest=str(selected["scope_contract_digest"]),
+    )
+
+    assert store.get_approval_request("selected-command")["status"] == "resolved"
+    assert store.get_approval_request("sibling-command")["status"] == "pending"
+
+
 def test_v2_saved_artifact_allow_requires_exact_action_proof(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     request = replace(
@@ -667,7 +710,15 @@ def test_legacy_unknown_broad_deny_is_not_silently_narrowed(tmp_path: Path) -> N
 
 def test_legacy_global_allow_persists_an_action_bound_rule(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _store_request(store, _request("legacy"))
+    request = replace(
+        _request("legacy"),
+        action_envelope_json={
+            "action_type": "shell_command",
+            "command": "echo test",
+            "raw_payload_redacted": {"permission_mode": "ask"},
+        },
+    )
+    _store_request(store, request)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -696,11 +747,19 @@ def test_legacy_global_allow_persists_an_action_bound_rule(tmp_path: Path) -> No
         config_path="/workspace/other/.guard/config.toml",
         source_scope="project",
         raw_command_text="echo test",
+        permission_mode="ask",
     )
     changed_action_context = runtime_tool_action_exact_match_context(
         config_path="/workspace/other/.guard/config.toml",
         source_scope="project",
         raw_command_text="echo changed",
+        permission_mode="ask",
+    )
+    changed_mode_context = runtime_tool_action_exact_match_context(
+        config_path="/workspace/other/.guard/config.toml",
+        source_scope="project",
+        raw_command_text="echo test",
+        permission_mode="bypassPermissions",
     )
     same_action = store.resolve_policy_decision(
         "pi",
@@ -710,6 +769,16 @@ def test_legacy_global_allow_persists_an_action_bound_rule(tmp_path: Path) -> No
         consume_one_shot=False,
     )
     assert same_action is not None and same_action["action"] == "allow"
+    assert (
+        store.resolve_policy_decision(
+            "pi",
+            "codex:project:tool-action:legacy",
+            "hash-retry",
+            runtime_exact_match_context=changed_mode_context,
+            consume_one_shot=False,
+        )
+        is None
+    )
     assert (
         store.resolve_policy_decision(
             "pi",
