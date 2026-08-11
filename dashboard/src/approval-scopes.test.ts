@@ -9,6 +9,7 @@ import {
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
   taskCapabilityExplanation,
+  willPersistExactAction,
 } from "./approval-scopes";
 import type { GuardApprovalRequest } from "./guard-types";
 import { ReviewScopeControls } from "./review-scope-controls";
@@ -102,6 +103,14 @@ const unprovenRememberedPayload = buildDecisionPayload({
   persistExactAction: true,
 });
 assert(unprovenRememberedPayload.persist_policy === undefined, "T-AS-03b: unproven actions cannot be remembered");
+assert(
+  willPersistExactAction(BASE_REQUEST, "block", "artifact", true),
+  "T-AS-03c: eligible exact Watch-only blocks can be persisted",
+);
+assert(
+  !willPersistExactAction({ ...BASE_REQUEST, exact_action_persistence_eligible: false }, "block", "artifact", true),
+  "T-AS-03d: ineligible Watch-only blocks cannot promise persistence",
+);
 
 function ignoreScopeChange(): void {}
 

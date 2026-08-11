@@ -402,6 +402,7 @@ export function ReviewDecisionCard(props: {
   const actionPresentation = guardActionPresentation(item.policy_action);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
+  const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
   if (persistExactAllow) {
     resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
   }
@@ -588,7 +589,7 @@ export function ReviewDecisionCard(props: {
             ) : (
               <span className="flex items-center gap-2">
                 <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
-                {watchOnlyObservation && blockScope === "artifact" ? "Block next time" : blockButtonLabel(blockScope)}
+                {persistExactBlock ? "Block next time" : blockButtonLabel(blockScope)}
               </span>
             )}
           </ActionButton>

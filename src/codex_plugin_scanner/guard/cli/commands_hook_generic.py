@@ -519,6 +519,7 @@ def _generic_hook_saved_decision(
             > guard_action_severity(selected_decision.get("action"), unknown_action="block")
         ):
             selected_decision = exact_decision
+            ignored_integrity = exact_lookup.get("ignored_local_integrity")
     if legacy_artifact_hash is not None and legacy_artifact_hash != artifact_hash:
         legacy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
             harness,
@@ -541,6 +542,7 @@ def _generic_hook_saved_decision(
             > guard_action_severity(selected_decision.get("action"), unknown_action="block")
         ):
             selected_decision = legacy_decision
+            ignored_integrity = legacy_lookup.get("ignored_local_integrity")
     return selected_decision, ignored_integrity
 
 

@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.cli.commands_hook_generic import (
     _generic_hook_approval_reuse,
     _generic_hook_memory_command,
     _generic_hook_payload_digest,
+    _generic_hook_saved_decision,
 )
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
@@ -61,6 +62,43 @@ def test_generic_hook_integrity_warning_does_not_hide_separate_valid_saved_block
     assert reuse.action == "block"
     assert reuse.saved_action == "block"
     assert reuse.reason_code == "approval_reuse_integrity_failure"
+
+
+def test_generic_hook_exact_decision_uses_its_own_integrity_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    responses: list[dict[str, object]] = [
+        {
+            "decision": {"action": "allow"},
+            "ignored_local_integrity": {"integrity_status": "tampered"},
+        },
+        {
+            "decision": {"action": "block"},
+            "ignored_local_integrity": None,
+        },
+    ]
+
+    def lookup(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return responses.pop(0)
+
+    monkeypatch.setattr(store, "resolve_policy_decision_lookup_with_memory_pattern", lookup)
+
+    decision, ignored_integrity = _generic_hook_saved_decision(
+        artifact_hash="guard-approval-context:v1:current",
+        artifact_id=_GENERIC_ARTIFACT_ID,
+        artifact_name="opaque request",
+        harness=_GENERIC_HARNESS,
+        legacy_artifact_hash=None,
+        payload=_generic_payload(),
+        publisher=None,
+        runtime_workspace=tmp_path,
+        store=store,
+    )
+
+    assert decision == {"action": "block"}
+    assert ignored_integrity is None
 
 
 def _generic_payload() -> dict[str, object]:
