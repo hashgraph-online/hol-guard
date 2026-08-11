@@ -294,7 +294,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setPendingOp({ op: "audit", manager: null });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssistError(null);
+      setActivationAssist(null);
       onAuditErrorChange?.(null);
       onAuditStarted?.();
       onAuditRunningChange?.(true);
@@ -696,7 +696,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setPendingOp({ op, manager });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssistError(null);
+      setActivationAssist(null);
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
@@ -741,7 +741,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setPendingOp({ op, manager: null });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssistError(null);
+      setActivationAssist(null);
       try {
         const response = await runPackageSync();
         setLastCompleted({ op, manager: null, response });
@@ -826,7 +826,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const handleRetry = useCallback(() => void load(), [load]);
   const handleActivateRuntime = useCallback(async () => {
     setActivatingRuntime(true);
-    setActivationAssistError(null);
+    setActivationAssist(null);
     try {
       const message = await activatePackageFirewallRuntime();
       setActivationAssist({ message, isError: false });

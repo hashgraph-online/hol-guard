@@ -58,6 +58,7 @@ from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_accept
 from codex_plugin_scanner.guard.store import (
     EncryptedFileSecretStore,
     GuardStore,
+    MigratingFallbackSecretStore,
     SystemKeyringSecretStore,
 )
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
@@ -770,7 +771,7 @@ def test_policy_integrity_status_includes_trust_status(tmp_path: Path) -> None:
 def test_guard_store_init_does_not_create_policy_integrity_keyring_material(tmp_path: Path) -> None:
     store = _store(tmp_path)
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MigratingFallbackSecretStore)
 
     assert secret_store.get_secret(store._policy_integrity_key_ref) is None
     assert secret_store.get_secret(store._policy_integrity_control_ref) is None
@@ -1046,7 +1047,7 @@ def test_upsert_policy_uses_single_integrity_key_lookup_per_write(
     assert state["key_id"] is None
 
 
-def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
+def test_policy_integrity_status_uses_mirrored_vault_without_keychain_reads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1056,7 +1057,7 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
         "2026-06-14T00:00:00Z",
     )
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MigratingFallbackSecretStore)
     key_value = secret_store.get_secret(store._policy_integrity_key_ref)
     control_value = secret_store.get_secret(store._policy_integrity_control_ref)
     assert isinstance(key_value, str) and key_value
@@ -1073,14 +1074,7 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
             return control_value
         raise AssertionError(f"unexpected policy-integrity secret lookup: {secret_id}")
 
-    monkeypatch.setattr(
-        store,
-        "_get_secret_from_store",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("plain keyring reads should not run for policy integrity")
-        ),
-    )
-    monkeypatch.setattr(secret_store, "get_secret_with_timeout", _count_timed_reads)
+    monkeypatch.setattr(secret_store.primary, "get_secret_with_timeout", _count_timed_reads)
     store._clear_policy_integrity_cache()
 
     first_status = store.get_policy_integrity_status()
@@ -1088,16 +1082,13 @@ def test_policy_integrity_status_uses_timed_keychain_reads_once_per_secret(
 
     assert first_status["mode"] == "protected"
     assert second_status["mode"] == "protected"
-    assert timed_reads == [
-        store._policy_integrity_control_ref,
-        store._policy_integrity_key_ref,
-    ]
+    assert timed_reads == []
 
 
 def test_policy_integrity_status_and_verify_do_not_create_keyring_material_on_fresh_store(tmp_path: Path) -> None:
     store = _store(tmp_path)
     secret_store = store._policy_integrity_secret_store
-    assert isinstance(secret_store, SystemKeyringSecretStore)
+    assert isinstance(secret_store, MigratingFallbackSecretStore)
     _delete_policy_integrity_key(store)
     _delete_policy_integrity_control_state(store)
     assert secret_store.get_secret(store._policy_integrity_key_ref) is None

@@ -1707,7 +1707,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setPendingOp({ op: "audit", manager: null });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssistError(null);
+      setActivationAssist(null);
       onAuditErrorChange?.(null);
       onAuditStarted?.();
       onAuditRunningChange?.(true);
@@ -2075,7 +2075,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setPendingOp({ op, manager });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssistError(null);
+      setActivationAssist(null);
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
@@ -2115,7 +2115,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setPendingOp({ op, manager: null });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssistError(null);
+      setActivationAssist(null);
       try {
         const response = await runPackageSync();
         setLastCompleted({ op, manager: null, response });
@@ -2198,7 +2198,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const handleRetry = reactExports.useCallback(() => void load(), [load]);
   const handleActivateRuntime = reactExports.useCallback(async () => {
     setActivatingRuntime(true);
-    setActivationAssistError(null);
+    setActivationAssist(null);
     try {
       const message = await activatePackageFirewallRuntime();
       setActivationAssist({ message, isError: false });
