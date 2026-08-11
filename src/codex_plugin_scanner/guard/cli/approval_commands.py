@@ -269,6 +269,16 @@ def run_approval_command(
             )
             else None
         )
+        remember = bool(getattr(args, "remember", False))
+        request = store.get_approval_request(args.request_id) if remember else None
+        exact_action_remember = request is not None and request.get("exact_action_persistence_eligible") is True
+        scope_contract_version = None
+        scope_contract_digest = None
+        if exact_action_remember and request is not None:
+            if request.get("scope_contract_version") is not None:
+                scope_contract_version = str(request["scope_contract_version"])
+            if request.get("scope_contract_digest") is not None:
+                scope_contract_digest = str(request["scope_contract_digest"])
         item = apply_approval_resolution(
             store=store,
             request_id=args.request_id,
@@ -278,7 +288,9 @@ def run_approval_command(
             reason=args.reason,
             now=_now(),
             approval_gate_input=gate_input,
-            persist_policy=True if bool(getattr(args, "remember", False)) else None,
+            persist_policy=True if remember else None,
+            scope_contract_version=scope_contract_version,
+            scope_contract_digest=scope_contract_digest,
             local_tool_grant_target=(getattr(args, "trust_target", None) if trust_local_tool else None),
             local_tool_grant_duration=(getattr(args, "trust_duration", None) if trust_local_tool else None),
         )

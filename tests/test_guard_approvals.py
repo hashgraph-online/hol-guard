@@ -3261,6 +3261,65 @@ class TestGuardApprovals:
         assert remember_output["item"]["applied_scope"] == "artifact"
         assert store.list_policy_decisions("codex") == []
 
+    def test_guard_approvals_cli_remembers_eligible_exact_action(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace = str(tmp_path / "workspace")
+        store = GuardStore(home_dir)
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-exact-remember",
+                harness="codex",
+                artifact_id="codex:project:tool-action:script",
+                artifact_name="Bash unmatched tool action",
+                artifact_type="tool_action_request",
+                artifact_hash="hash-exact-remember",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("tool_action",),
+                source_scope="project",
+                config_path=workspace,
+                workspace=workspace,
+                launch_target="npm run guard:acquisition-loop",
+                action_envelope_json={
+                    "action_type": "shell_command",
+                    "tool_name": "Bash",
+                    "command": "npm run guard:acquisition-loop",
+                    "raw_payload_redacted": {
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "npm run guard:acquisition-loop"},
+                        "permission_mode": "ask",
+                    },
+                },
+                review_command="hol-guard approvals approve req-exact-remember",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-08-11T00:02:00+00:00",
+        )
+
+        remember_rc = main(
+            [
+                "guard",
+                "approvals",
+                "approve",
+                "req-exact-remember",
+                "--home",
+                str(home_dir),
+                "--scope",
+                "artifact",
+                "--remember",
+                "--json",
+            ]
+        )
+        remember_output = json.loads(capsys.readouterr().out)
+
+        assert remember_rc == 0
+        assert remember_output["resolved"] is True
+        assert remember_output["item"]["exact_action_persistence_eligible"] is True
+        decisions = store.list_policy_decisions("codex")
+        assert len(decisions) == 1
+        assert decisions[0]["action"] == "allow"
+        assert decisions[0]["scope"] == "artifact"
+
     def test_guard_policies_cli_clears_local_decisions_for_harness(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
