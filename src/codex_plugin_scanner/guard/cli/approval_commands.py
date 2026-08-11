@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..approval_gate import ApprovalGateError, require_high_risk, revoke_cooldown, unlock_cooldown
 from ..approval_gate import public_config as approval_gate_public_config
+from ..approval_scope_support import IneligibleApprovalScopeError, StaleApprovalScopeContractError
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..browser_opener import open_browser_url
 from ..codex_resume import retry_request_resume
@@ -275,10 +276,12 @@ def run_approval_command(
         scope_contract_version = None
         scope_contract_digest = None
         if exact_action_remember and request is not None:
-            if request.get("scope_contract_version") is not None:
-                scope_contract_version = str(request["scope_contract_version"])
-            if request.get("scope_contract_digest") is not None:
-                scope_contract_digest = str(request["scope_contract_digest"])
+            version = request.get("scope_contract_version")
+            digest = request.get("scope_contract_digest")
+            if version is None or digest is None:
+                raise ValueError("incomplete_scope_contract")
+            scope_contract_version = str(version)
+            scope_contract_digest = str(digest)
         item = apply_approval_resolution(
             store=store,
             request_id=args.request_id,
@@ -296,6 +299,28 @@ def run_approval_command(
         )
     except ApprovalGateError as error:
         return approval_gate_cli_payload(error)
+    except StaleApprovalScopeContractError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
+            **error.contract.to_dict(),
+            "exit_code": 4,
+        }
+    except IneligibleApprovalScopeError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
+            "action": error.action,
+            "requested_scope": error.requested_scope,
+            **error.contract.to_dict(),
+            "exit_code": 2,
+        }
+    except ValueError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
+            "exit_code": 2,
+        }
     return {"resolved": True, "item": item}
 
 
