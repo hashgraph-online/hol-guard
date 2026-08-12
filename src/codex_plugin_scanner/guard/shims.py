@@ -1254,7 +1254,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "if guard_process.stdout:",
             "    # Package-manager stdout belongs to the launched process. Keep Guard's",
             "    # human-readable preflight output off protocol streams such as MCP stdio.",
-            "    sys.stderr.write(guard_process.stdout)",
+            "    (sys.stdout if shim_probe else sys.stderr).write(guard_process.stdout)",
             "if guard_process.stderr:",
             "    sys.stderr.write(guard_process.stderr)",
             "if shim_probe:",

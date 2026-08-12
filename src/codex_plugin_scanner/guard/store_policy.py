@@ -2014,16 +2014,10 @@ class StorePolicyMixin:
                     create_key=False,
                 )
                 policy_integrity_key, policy_integrity_key_id = self._policy_integrity_secret_material(create=False)
+        local_integrity_key: bytes | None = None
+        local_integrity_key_id: str | None = None
         if local_rows:
             local_integrity_key, local_integrity_key_id = self._policy_integrity_secret_material(create=False)
-            for row in local_rows:
-                integrity_result = _verify_local_once_approval(
-                    dict(row),
-                    key=local_integrity_key,
-                    key_id=local_integrity_key_id,
-                )
-                if integrity_result.status != "valid":
-                    return "approval_reuse_integrity_failure"
         candidate_failures: list[str] = []
         for row in (*local_rows, *policy_rows):
             row_keys = set(row.keys())
@@ -2042,6 +2036,15 @@ class StorePolicyMixin:
             )
             if not (same_identity or same_content or publisher_scope or (broad_scope and stored_artifact_id is None)):
                 continue
+            if "approval_id" in row_keys:
+                integrity_result = _verify_local_once_approval(
+                    dict(row),
+                    key=local_integrity_key,
+                    key_id=local_integrity_key_id,
+                )
+                if integrity_result.status != "valid":
+                    candidate_failures.append("approval_reuse_integrity_failure")
+                    continue
             if "decision_id" in row_keys and not is_remote_policy_source(str(row["source"])):
                 integrity_result = self._policy_integrity_result_for_row(
                     row,
@@ -2078,6 +2081,16 @@ class StorePolicyMixin:
                 candidate_failures.append("approval_reuse_identity_changed")
                 continue
             if not same_identity:
+                candidate_failures.append("approval_reuse_identity_changed")
+                continue
+            if "scope" in row_keys and _scoped_runtime_row_requires_exact_match(
+                scope=str(row["scope"]),
+                stored_artifact_id=stored_artifact_id,
+                stored_artifact_hash=stored_artifact_hash,
+                source=str(row["source"]),
+                requested_artifact_id=artifact_id,
+                requested_artifact_hash=artifact_hash,
+            ):
                 candidate_failures.append("approval_reuse_identity_changed")
                 continue
             # At least one relevant row remains valid. Old or narrower stale rows

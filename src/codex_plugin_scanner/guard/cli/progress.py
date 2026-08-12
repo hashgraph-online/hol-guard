@@ -79,7 +79,7 @@ class GuardProgress:
         exc_tb: TracebackType | None,
     ) -> None:
         if exc_type is not None:
-            self.failed("Sync did not complete")
+            self.failed(f"{self._title or 'Operation'} did not complete")
         if self._use_rich and self._progress is not None:
             self._progress.__exit__(exc_type, exc_val, exc_tb)
 

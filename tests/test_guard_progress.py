@@ -12,4 +12,4 @@ def test_progress_finishes_with_failure_state_when_step_raises(capsys: pytest.Ca
 
     stderr = capsys.readouterr().err
     assert "[ 50%] Syncing local proof to Guard Cloud..." in stderr
-    assert "✗ Sync did not complete" in stderr
+    assert "✗ Guard Sync did not complete" in stderr

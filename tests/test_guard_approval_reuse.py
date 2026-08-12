@@ -1193,6 +1193,90 @@ def test_reuse_diagnostic_ignores_expired_row_when_newer_matching_approval_is_va
     )
 
 
+def test_reuse_diagnostic_ignores_invalid_row_when_newer_matching_approval_is_valid(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    artifact_id = "codex:project:tool-action:diagnostic"
+    artifact_hash = "sha256:exact"
+    invalid_id = store.record_local_once_approval(
+        request_id="req-invalid",
+        harness="codex",
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        workspace="/workspace/a",
+        publisher="publisher-a",
+        action="allow",
+        created_at="2026-07-17T12:00:00+00:00",
+        expires_at="2026-07-17T14:00:00+00:00",
+    )
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "update guard_local_once_approvals set payload_mac = 'invalid' where approval_id = ?",
+            (invalid_id,),
+        )
+    store.record_local_once_approval(
+        request_id="req-current",
+        harness="codex",
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        workspace="/workspace/a",
+        publisher="publisher-a",
+        action="allow",
+        created_at="2026-07-17T12:30:00+00:00",
+        expires_at="2026-07-17T14:00:00+00:00",
+    )
+
+    assert (
+        store.approval_reuse_validation_reason(
+            "codex",
+            artifact_id,
+            artifact_hash,
+            "/workspace/a",
+            "publisher-a",
+            "2026-07-17T13:00:00+00:00",
+        )
+        is None
+    )
+
+
+def test_reuse_diagnostic_rejects_broad_runtime_family_after_expired_exact_row(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    artifact_id = "codex:project:tool-action:diagnostic"
+    store.record_local_once_approval(
+        request_id="req-expired",
+        harness="codex",
+        artifact_id=artifact_id,
+        artifact_hash="sha256:exact",
+        workspace=None,
+        publisher=None,
+        action="allow",
+        created_at="2026-07-17T11:00:00+00:00",
+        expires_at="2026-07-17T12:00:00+00:00",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="harness",
+            action="allow",
+            artifact_id="family:tool-action",
+            artifact_hash=None,
+            source="manual",
+        ),
+        "2026-07-17T12:30:00+00:00",
+    )
+
+    assert (
+        store.approval_reuse_validation_reason(
+            "codex",
+            artifact_id,
+            "sha256:exact",
+            None,
+            None,
+            "2026-07-17T13:00:00+00:00",
+        )
+        == "approval_reuse_expired"
+    )
+
+
 def test_lookup_miss_diagnostic_remains_targeted_with_many_unrelated_allows(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     with sqlite3.connect(store.path) as connection:
