@@ -1801,6 +1801,20 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: 
     assert result.stdout.strip() == "fake-manager-stdout"
 
 
+def test_guard_package_shim_keeps_preflight_output_off_manager_stdout(tmp_path: Path) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path,
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    context.workspace_dir.mkdir()
+
+    shim_source = guard_shims_module._build_package_manager_python_shim(context, "npx")
+
+    assert "sys.stderr.write(guard_process.stdout)" in shim_source
+    assert "sys.stdout.write(guard_process.stdout)" not in shim_source
+
+
 def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_local_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

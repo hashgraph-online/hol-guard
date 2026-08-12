@@ -1160,6 +1160,39 @@ def test_lookup_miss_reports_stable_saved_approval_invalidation_reason(
     assert reason == expected_reason
 
 
+def test_reuse_diagnostic_ignores_expired_row_when_newer_matching_approval_is_valid(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    artifact_id = "codex:project:tool-action:diagnostic"
+    artifact_hash = "sha256:exact"
+    for request_id, created_at, expires_at in (
+        ("req-expired", "2026-07-17T11:00:00+00:00", "2026-07-17T12:00:00+00:00"),
+        ("req-current", "2026-07-17T12:30:00+00:00", "2026-07-17T14:00:00+00:00"),
+    ):
+        store.record_local_once_approval(
+            request_id=request_id,
+            harness="codex",
+            artifact_id=artifact_id,
+            artifact_hash=artifact_hash,
+            workspace="/workspace/a",
+            publisher="publisher-a",
+            action="allow",
+            created_at=created_at,
+            expires_at=expires_at,
+        )
+
+    assert (
+        store.approval_reuse_validation_reason(
+            "codex",
+            artifact_id,
+            artifact_hash,
+            "/workspace/a",
+            "publisher-a",
+            "2026-07-17T13:00:00+00:00",
+        )
+        is None
+    )
+
+
 def test_lookup_miss_diagnostic_remains_targeted_with_many_unrelated_allows(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     with sqlite3.connect(store.path) as connection:

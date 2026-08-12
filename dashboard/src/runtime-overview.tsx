@@ -390,6 +390,7 @@ function WatchedAppsList(props: { inventory: GuardInventoryItem[] | undefined })
 type DeviceProofCardProps = {
   device: GuardRuntimeDevice;
   proofStatus: GuardProofStatus;
+  connectUrl: string;
 };
 
 function formatDeviceInstallationId(installationId: string | null | undefined): string {
@@ -419,6 +420,16 @@ export function DeviceProofCard(props: DeviceProofCardProps) {
         <p className="font-mono text-xs text-slate-400">{shortId}…</p>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+      {props.proofStatus.state !== "synced" && props.proofStatus.state !== "pending" && props.proofStatus.state !== "waiting" ? (
+        <div className="mt-3">
+          <ActionButton href={props.connectUrl} variant="secondary">
+            Connect Guard Cloud
+          </ActionButton>
+          <p className="mt-2 text-xs text-slate-500">
+            If browser sign-in does not pair this machine, run <code>hol-guard connect</code> in a terminal.
+          </p>
+        </div>
+      ) : null}
       {timeValue !== null ? (
         <p className="mt-1 text-xs text-slate-400">{formatRelativeTime(timeValue)}</p>
       ) : null}
@@ -593,7 +604,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
           <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
           <ApprovalCenterHealthCard snapshot={snapshot} />
-          <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
+          <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} connectUrl={snapshot.connect_url} />
           <PackageManagerProtectionCard snapshot={snapshot} />
         </div>
 

@@ -22515,6 +22515,14 @@ function DeviceProofCard(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: copy.detail }),
+    props.proofStatus.state !== "synced" && props.proofStatus.state !== "pending" && props.proofStatus.state !== "waiting" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, variant: "secondary", children: "Connect Guard Cloud" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
+        "If browser sign-in does not pair this machine, run ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "hol-guard connect" }),
+        " in a terminal."
+      ] })
+    ] }) : null,
     timeValue !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: formatRelativeTime(timeValue) }) : null
   ] });
 }

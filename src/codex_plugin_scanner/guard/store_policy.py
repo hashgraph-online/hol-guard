@@ -2024,6 +2024,7 @@ class StorePolicyMixin:
                 )
                 if integrity_result.status != "valid":
                     return "approval_reuse_integrity_failure"
+        candidate_failures: list[str] = []
         for row in (*local_rows, *policy_rows):
             row_keys = set(row.keys())
             if "claimed_at" in row_keys and row["claimed_at"] is not None:
@@ -2054,25 +2055,35 @@ class StorePolicyMixin:
                     policy_integrity_state,
                     source=str(row["source"]),
                 ):
-                    return "approval_reuse_integrity_failure"
+                    candidate_failures.append("approval_reuse_integrity_failure")
+                    continue
             expires_at = str(row["expires_at"]) if row["expires_at"] is not None else None
             if expires_at is not None and _timestamp_has_expired(expires_at, now=current_time):
-                return "approval_reuse_expired"
+                candidate_failures.append("approval_reuse_expired")
+                continue
             if _is_approval_context_token(stored_artifact_hash) or _is_approval_context_token(artifact_hash):
                 context_reason = approval_context_tokens_validation_reason(stored_artifact_hash, artifact_hash)
                 if context_reason is not None:
-                    return context_reason
+                    candidate_failures.append(context_reason)
+                    continue
             if stored_artifact_hash is not None and artifact_hash is not None and stored_artifact_hash != artifact_hash:
-                return "approval_reuse_content_changed"
+                candidate_failures.append("approval_reuse_content_changed")
+                continue
             stored_workspace = str(row["workspace"]) if row["workspace"] is not None else None
             stored_publisher = str(row["publisher"]) if row["publisher"] is not None else None
             if stored_workspace is not None and stored_workspace not in {workspace, workspace_key}:
-                return "approval_reuse_identity_changed"
+                candidate_failures.append("approval_reuse_identity_changed")
+                continue
             if stored_publisher is not None and stored_publisher != publisher:
-                return "approval_reuse_identity_changed"
+                candidate_failures.append("approval_reuse_identity_changed")
+                continue
             if not same_identity:
-                return "approval_reuse_identity_changed"
-        return None
+                candidate_failures.append("approval_reuse_identity_changed")
+                continue
+            # At least one relevant row remains valid. Old or narrower stale rows
+            # must not make a newer reusable approval look rejected.
+            return None
+        return candidate_failures[0] if candidate_failures else None
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:

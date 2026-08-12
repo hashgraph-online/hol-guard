@@ -109,21 +109,9 @@ function buildPackageManagerAuditResult(
     return null;
   }
 
-  if (coverage === "restart_required") {
-    return {
-      id: `unprotected-${manager}`,
-      severity: "medium",
-      title: `${manager} is waiting for restart`,
-      detail: `Guard added ${manager} to its managed shell profiles. Open a new terminal or source the matching profile to use it. The dashboard cannot observe a PATH change made in another terminal.`,
-      harness: "global",
-      workspace: null,
-      timestamp: generatedAt,
-      remediation: "Open a new terminal or source the matching shell profile. Restart AI apps only when they run package managers.",
-      remediationAction: null,
-      resolved: false,
-      evidenceHref: null,
-    };
-  }
+  // A staged profile change is guidance, not an unresolved security finding.
+  // Supply chain already presents the required new-terminal action inline.
+  if (coverage === "restart_required") return null;
 
   if (coverage === "path_repair") {
     return {

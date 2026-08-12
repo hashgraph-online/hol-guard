@@ -15,6 +15,8 @@ const policyTabSource = readFileSync(join(__dirname, "policy-strict-config-tab.t
 const strictModeSource = readFileSync(join(__dirname, "policy-strict-config-strict-mode-card.tsx"), "utf8");
 const sparklineSource = readFileSync(join(__dirname, "evidence/sparkline.tsx"), "utf8");
 const supplyChainFirewallPanelSource = readFileSync(join(__dirname, "supply-chain-firewall-panel.tsx"), "utf8");
+const auditWorkspaceSource = readFileSync(join(__dirname, "audit-workspace.tsx"), "utf8");
+const runtimeOverviewSource = readFileSync(join(__dirname, "runtime-overview.tsx"), "utf8");
 
 assert(
   !feedHealthSource.includes("onClick={onOpenSettings}"),
@@ -43,6 +45,14 @@ assert(
 assert(
   !supplyChainFirewallPanelSource.includes("setActivationAssistError"),
   "supply-chain actions must only use the current activation-assist state setter",
+);
+assert(
+  !auditWorkspaceSource.includes("is waiting for restart"),
+  "profile activation guidance must not remain as an unresolved audit finding",
+);
+assert(
+  runtimeOverviewSource.includes("Connect Guard Cloud") && runtimeOverviewSource.includes("hol-guard connect"),
+  "disconnected proof status provides both a UI connect action and terminal fallback",
 );
 
 console.log("user-reported-regressions.test.ts: all tests passed");
