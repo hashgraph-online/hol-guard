@@ -8,8 +8,10 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from http.server import HTTPServer
 from pathlib import Path
+from urllib import request
 from urllib.parse import urlencode
 
 import pytest
@@ -27,6 +29,20 @@ from tests.codex_daemon_hook_bridge_fixtures import (
     _ProxyHandler,
     _write_authenticated_daemon_files,
 )
+
+
+def _start_daemon(daemon: GuardDaemonServer) -> None:
+    daemon.start()
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            with request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=0.25) as response:
+                if response.status == 200:
+                    return
+        except OSError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
 
 
 def test_assert_loopback_http_url_rejects_remote_and_credentialed_urls() -> None:
@@ -343,7 +359,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode(
         {
@@ -385,7 +401,7 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -421,7 +437,7 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -473,7 +489,7 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
     )
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode(
         {
@@ -543,7 +559,7 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
     )
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode(
         {"guard-home": str(guard_home), "home": str(tmp_path), "workspace": str(session_workspace)}
@@ -609,7 +625,7 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
     session_workspace.mkdir()
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -737,7 +753,7 @@ def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(
     session_workspace.mkdir()
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -783,7 +799,7 @@ def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(
     assert guard_config.mode == "prompt"
     assert guard_config.security_level == "balanced"
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -821,7 +837,7 @@ def test_bridge_real_daemon_rejects_untrusted_exec_command_workdir(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -864,7 +880,7 @@ def test_bridge_real_daemon_rejects_temp_root_workdir_without_falling_back_to_re
     temporary_root = trusted_temporary_root_for_path(tmp_path)
     assert temporary_root is not None
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
@@ -900,7 +916,7 @@ def test_bridge_real_daemon_ignores_workdir_for_opaque_tool(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
+    _start_daemon(daemon)
     config = _bridge_config(guard_home, daemon.port)
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
