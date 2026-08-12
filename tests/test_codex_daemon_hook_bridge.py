@@ -41,6 +41,9 @@ def _start_daemon(daemon: GuardDaemonServer) -> None:
                 with opener.open(f"http://127.0.0.1:{daemon.port}/healthz", timeout=0.25) as response:
                     if response.status == 200:
                         return
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Guard daemon health check did not return HTTP 200")
+                    time.sleep(0.01)
             except OSError:
                 if time.monotonic() >= deadline:
                     raise
