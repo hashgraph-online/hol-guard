@@ -400,7 +400,14 @@ function HomeWorkspace(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DeviceProofCard, { device: snapshot.device, proofStatus: snapshot.proof_status }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        DeviceProofCard,
+        {
+          device: snapshot.device,
+          proofStatus: snapshot.proof_status,
+          connectUrl: snapshot.connect_url
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         CloudStatusCard,
         {
