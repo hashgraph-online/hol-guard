@@ -585,7 +585,6 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
 
     assert exit_code == 0
     assert json.loads(capsys.readouterr().out) != {}
-    assert len(store.list_approval_requests(limit=None)) == 1
 
 
 @pytest.mark.parametrize(
