@@ -323,6 +323,69 @@ def test_standalone_fetch_rejects_execution_routing_or_widening_config(
     assert _is_benign("git rev-parse origin/release/2.2", home=home, repository=repository)
 
 
+def test_standalone_fetch_accepts_canonical_github_https_rewrite(tmp_path: Path) -> None:
+    home, repository = _repository(tmp_path)
+    _ = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "config",
+            "url.https://github.com/.insteadOf",
+            "git@github.com:",
+        ],
+        check=True,
+    )
+
+    assert _is_benign("git fetch origin release/2.2", home=home, repository=repository)
+    assert _is_benign(
+        f"git -C {repository} fetch origin release/2.2",
+        home=home,
+        repository=repository.parent,
+    )
+    assert _is_benign(
+        "cd example && git fetch origin release/2.2",
+        home=home,
+        repository=repository.parent,
+    )
+    for harness in ("codex", "cursor", "pi"):
+        assert (
+            _hook_runtime_artifact(
+                harness=harness,
+                payload={
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {
+                        "command": f"git -C {repository} fetch origin release/2.2",
+                    },
+                    "cwd": str(repository.parent),
+                },
+                action_envelope=None,
+                home_dir=home,
+                guard_home=home / ".guard",
+                workspace=repository.parent,
+            )
+            is None
+        )
+
+
+def test_standalone_fetch_rejects_absolute_git_c_target_outside_execution_root(tmp_path: Path) -> None:
+    home, repository = _repository(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    _ = subprocess.run(["git", "init", "--quiet", str(outside)], check=True)
+    _ = subprocess.run(
+        ["git", "-C", str(outside), "remote", "add", "origin", "https://github.com/example/outside.git"],
+        check=True,
+    )
+
+    assert not _is_benign(
+        f"git -C {outside} fetch origin release/2.2",
+        home=home,
+        repository=repository.parent,
+    )
+
+
 @pytest.mark.parametrize(
     "remote_url",
     (
