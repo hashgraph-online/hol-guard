@@ -303,6 +303,7 @@ def test_standalone_git_routine_rejects_widening_or_execution_syntax(
     (
         ("remote.origin.uploadpack", "./payload"),
         ("url.ext::payload.insteadOf", "https://github.com/"),
+        ("url.https://github.com/.insteadOf", "https://example.invalid/"),
         ("credential.helper", "!payload"),
         ("credential.https://github.com.helper", "!payload"),
         ("core.askPass", "./payload"),
