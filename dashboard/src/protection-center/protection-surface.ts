@@ -1,0 +1,9 @@
+export const EXTENSION_SURFACE_CLASS = "guard-extensions-surface";
+export const EXTENSION_PANEL_CLASS = "guard-extensions-panel p-5 sm:p-6";
+export const EXTENSION_PANEL_COMPACT_CLASS = "guard-extensions-panel px-5 py-4";
+export const EXTENSION_KICKER_CLASS = "guard-extensions-kicker";
+export const EXTENSION_CHIP_CLASS = "guard-extensions-chip";
+export const EXTENSION_ROW_CLASS = "guard-extensions-row";
+export const EXTENSION_LIST_CLASS = "mt-4 space-y-2";
+export const EXTENSION_TITLE_CLASS = "mt-2 text-3xl font-semibold tracking-tight text-brand-dark sm:text-4xl";
+export const EXTENSION_BODY_CLASS = "text-sm leading-6 text-brand-dark/80";

@@ -27,6 +27,7 @@ import { protectionCategoryForExtension } from "./model/protection-categories";
 import { recentProtectionDecisions } from "./model/protection-landing";
 import { ProtectionRepairCard } from "./protection-repair-card";
 import { ProtectionTestLab } from "./protection-test-lab";
+import { EXTENSION_KICKER_CLASS, EXTENSION_PANEL_CLASS, EXTENSION_SURFACE_CLASS, EXTENSION_TITLE_CLASS } from "./protection-surface";
 import { useProtectionModuleActivity } from "./use-protection-module-activity";
 
 function sourceForTarget(effective: EffectiveExtensionControls, targetKind: "extension" | "permission", targetId: string): "built-in" | "device" | "organization" {
@@ -82,27 +83,27 @@ function WhatThisProtects({ extension }: { extension: ExtensionCatalogItem }) {
     ...extension.rules.slice(0, 3).map((rule) => rule.title),
   ].filter((value, index, all) => all.indexOf(value) === index).slice(0, 6);
   return (
-    <section aria-labelledby="module-what-heading" className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
+    <section aria-labelledby="module-what-heading" className={EXTENSION_PANEL_CLASS}>
       <div className="flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-brand-blue">
           <HiMiniShieldCheck className="size-5" aria-hidden="true" />
         </span>
         <div>
-          <h2 id="module-what-heading" className="text-lg font-semibold text-slate-950">What this protects</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-800">{extension.description}</p>
-          <p className="mt-2 text-xs font-semibold text-slate-800">{category.label}</p>
+          <h2 id="module-what-heading" className="text-lg font-semibold text-brand-dark">What this protects</h2>
+          <p className="mt-1 text-sm leading-6 text-brand-dark/80">{extension.description}</p>
+          <p className="mt-2 text-xs font-semibold text-brand-dark/80">{category.label}</p>
         </div>
       </div>
       <div className="mt-5">
-        <h3 className="text-sm font-semibold text-slate-900">Common examples</h3>
+        <h3 className="text-sm font-semibold text-brand-dark">Common examples</h3>
         {examples.length ? (
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
             {examples.map((example) => (
-              <li key={example} className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-800">{example}</li>
+              <li key={example} className="rounded-xl bg-white/55 px-3 py-2 text-sm text-brand-dark/80">{example}</li>
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-sm text-slate-800">Guard applies this protection whenever the matching capability is detected.</p>
+          <p className="mt-2 text-sm text-brand-dark/80">Guard applies this protection whenever the matching capability is detected.</p>
         )}
       </div>
     </section>
@@ -119,11 +120,11 @@ function SimpleSettingsSummary(props: {
   const source = sourceForTarget(props.effective, "extension", props.extension.extension_id);
   const canChange = props.effective.health === "protected" && configurable.length > 0;
   return (
-    <section aria-labelledby="module-settings-heading" className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
+    <section aria-labelledby="module-settings-heading" className={EXTENSION_PANEL_CLASS}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 id="module-settings-heading" className="text-lg font-semibold text-slate-950">Protection settings</h2>
-          <p className="mt-1 text-sm text-slate-800">{plainBehavior(props.effective, props.extension)}.</p>
+          <h2 id="module-settings-heading" className="text-lg font-semibold text-brand-dark">Protection settings</h2>
+          <p className="mt-1 text-sm text-brand-dark/80">{plainBehavior(props.effective, props.extension)}.</p>
         </div>
         {props.onChange && canChange ? (
           <button type="button" onClick={props.onChange} className="min-h-11 shrink-0 rounded-xl border border-brand-blue/25 bg-white px-4 text-sm font-semibold text-brand-blue hover:bg-blue-50">
@@ -131,7 +132,7 @@ function SimpleSettingsSummary(props: {
           </button>
         ) : null}
       </div>
-      <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-800">
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-brand-dark/80">
         <SettingSource source={source} />
         <span>{configurable.length} changeable setting{configurable.length === 1 ? "" : "s"}</span>
         {blocked ? <span>{blocked} blocked setting{blocked === 1 ? "" : "s"}</span> : null}
@@ -142,7 +143,7 @@ function SimpleSettingsSummary(props: {
         </p>
       ) : null}
       {props.extension.required ? (
-        <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-800">
+        <p className="mt-4 rounded-xl bg-white/55 p-3 text-sm text-brand-dark/80">
           This protection is required by Guard and cannot be turned off.
         </p>
       ) : null}
@@ -154,31 +155,31 @@ function ModuleRecentDecisions(props: { extension: ExtensionCatalogItem }) {
   const activity = useProtectionModuleActivity(props.extension.extension_id);
   const decisions = useMemo(() => recentProtectionDecisions(activity.items, [props.extension], 5), [activity.items, props.extension]);
   return (
-    <section aria-labelledby="module-recent-heading" className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
-      <h2 id="module-recent-heading" className="text-lg font-semibold text-slate-950">Activity</h2>
-      <p className="mt-1 text-sm text-slate-800">Recent privacy-safe decisions on this device. Raw commands and paths are not shown.</p>
-      <p className="mt-2 text-xs leading-5 text-slate-800">Local activity works without Cloud. Guard Cloud adds longer retention, synchronization, advanced search, evidence exports, and team history according to your plan.</p>
+    <section aria-labelledby="module-recent-heading" className={EXTENSION_PANEL_CLASS}>
+      <h2 id="module-recent-heading" className="text-lg font-semibold text-brand-dark">Activity</h2>
+      <p className="mt-1 text-sm text-brand-dark/80">Recent privacy-safe decisions on this device. Raw commands and paths are not shown.</p>
+      <p className="mt-2 text-xs leading-5 text-brand-dark/80">Local activity works without Cloud. Guard Cloud adds longer retention, synchronization, advanced search, evidence exports, and team history according to your plan.</p>
       {activity.loading ? (
         <div className="guard-skeleton mt-4 h-20 w-full" aria-label="Loading recent decisions" />
       ) : activity.unavailable ? (
-        <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-800">Recent local activity is unavailable right now. This does not change the protection status above.</p>
+        <p className="mt-4 rounded-xl bg-white/55 p-3 text-sm text-brand-dark/80">Recent local activity is unavailable right now. This does not change the protection status above.</p>
       ) : decisions.length ? (
-        <div className="mt-4 divide-y divide-slate-100">
+        <div className="mt-4 space-y-2">
           {decisions.map((decision) => (
-            <article key={decision.activityId} className="py-3 first:pt-0 last:pb-0">
+            <article key={decision.activityId} className="rounded-2xl bg-white/55 px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <ProtectionDecisionBadge result={decision.result} />
-                <time dateTime={decision.occurredAt} className="text-xs text-slate-800">{new Date(decision.occurredAt).toLocaleString()}</time>
+                <time dateTime={decision.occurredAt} className="text-xs text-brand-dark/80">{new Date(decision.occurredAt).toLocaleString()}</time>
               </div>
               <details className="mt-2">
                 <summary className="cursor-pointer text-xs font-semibold text-brand-blue">Why?</summary>
-                <p className="mt-2 text-sm leading-6 text-slate-800">{commandReasonLabel(decision.reasonCode)}</p>
+                <p className="mt-2 text-sm leading-6 text-brand-dark/80">{commandReasonLabel(decision.reasonCode)}</p>
               </details>
             </article>
           ))}
         </div>
       ) : (
-        <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-800">No recent decisions are recorded for this protection yet.</p>
+        <p className="mt-4 rounded-xl bg-white/55 p-3 text-sm text-brand-dark/80">No recent decisions are recorded for this protection yet.</p>
       )}
     </section>
   );
@@ -188,58 +189,58 @@ function AdvancedModuleDetails(props: { extension: ExtensionCatalogItem; effecti
   const source = sourceForTarget(props.effective, "extension", props.extension.extension_id);
   return (
     <div className="space-y-5">
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
-        <h2 className="text-lg font-semibold text-slate-950">Advanced protection details</h2>
+      <section className={EXTENSION_PANEL_CLASS}>
+        <h2 className="text-lg font-semibold text-brand-dark">Advanced protection details</h2>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-800">Current behavior</dt>
-            <dd className="mt-1 text-sm text-slate-800">{plainBehavior(props.effective, props.extension)}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-brand-dark/80">Current behavior</dt>
+            <dd className="mt-1 text-sm text-brand-dark/80">{plainBehavior(props.effective, props.extension)}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-800">Setting source</dt>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-brand-dark/80">Setting source</dt>
             <dd className="mt-1"><SettingSource source={source} /></dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-800">Required</dt>
-            <dd className="mt-1 text-sm text-slate-800">{props.extension.required ? "Yes" : "No"}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-brand-dark/80">Required</dt>
+            <dd className="mt-1 text-sm text-brand-dark/80">{props.extension.required ? "Yes" : "No"}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-800">Changeable settings</dt>
-            <dd className="mt-1 text-sm text-slate-800">{props.extension.permissions.filter((item) => item.configurable).length} of {props.extension.permissions.length}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-brand-dark/80">Changeable settings</dt>
+            <dd className="mt-1 text-sm text-brand-dark/80">{props.extension.permissions.filter((item) => item.configurable).length} of {props.extension.permissions.length}</dd>
           </div>
         </dl>
         {props.extension.dependencies.length || props.extension.conflicts.length ? (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs font-semibold text-slate-800">Depends on</div>
-              <div className="mt-1 text-sm text-slate-800">{props.extension.dependencies.length ? props.extension.dependencies.join(", ") : "None"}</div>
+            <div className="rounded-xl bg-white/55 p-3">
+              <div className="text-xs font-semibold text-brand-dark/80">Depends on</div>
+              <div className="mt-1 text-sm text-brand-dark/80">{props.extension.dependencies.length ? props.extension.dependencies.join(", ") : "None"}</div>
             </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs font-semibold text-slate-800">Conflicts with</div>
-              <div className="mt-1 text-sm text-slate-800">{props.extension.conflicts.length ? props.extension.conflicts.join(", ") : "None"}</div>
+            <div className="rounded-xl bg-white/55 p-3">
+              <div className="text-xs font-semibold text-brand-dark/80">Conflicts with</div>
+              <div className="mt-1 text-sm text-brand-dark/80">{props.extension.conflicts.length ? props.extension.conflicts.join(", ") : "None"}</div>
             </div>
           </div>
         ) : null}
       </section>
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
-        <h2 className="text-lg font-semibold text-slate-950">Protection settings</h2>
+      <section className={EXTENSION_PANEL_CLASS}>
+        <h2 className="text-lg font-semibold text-brand-dark">Protection settings</h2>
         <div className="mt-4 space-y-3">
           {props.extension.permissions.map((permission) => {
             const summary = permissionSummary(props.effective, props.extension, permission);
             return (
-              <article key={permission.permission_id} className="rounded-2xl border border-slate-200 p-4">
+              <article key={permission.permission_id} className="rounded-2xl bg-white/55 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <strong className="text-sm text-slate-900">{permission.label}</strong>
-                  <span className="text-xs font-semibold text-slate-800">{summary.behavior}</span>
+                  <strong className="text-sm text-brand-dark">{permission.label}</strong>
+                  <span className="text-xs font-semibold text-brand-dark/80">{summary.behavior}</span>
                 </div>
-                <p className="mt-1 text-sm text-slate-800">{permission.description}</p>
-                <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-800">
+                <p className="mt-1 text-sm text-brand-dark/80">{permission.description}</p>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs text-brand-dark/80">
                   <SettingSource source={summary.source} />
                   <span>{permission.configurable ? "Changeable" : "Fixed"}</span>
                   <span>Minimum: {treatmentLabel(permission.baseline_floor)}</span>
                 </div>
                 {!permission.configurable && permission.fixed_reason ? (
-                  <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-800">{permission.fixed_reason}</p>
+                  <p className="mt-3 rounded-xl bg-white/55 p-3 text-xs leading-5 text-brand-dark/80">{permission.fixed_reason}</p>
                 ) : null}
               </article>
             );
@@ -255,31 +256,31 @@ function DeveloperModuleDetails(props: { extension: ExtensionCatalogItem; effect
     <TechnicalDetails title="Developer details">
       <div className="grid gap-5">
         <section>
-          <h3 className="font-semibold text-slate-900">Canonical module</h3>
+          <h3 className="font-semibold text-brand-dark">Canonical module</h3>
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
-              <dt className="text-xs text-slate-800">Extension ID</dt>
+              <dt className="text-xs text-brand-dark/80">Extension ID</dt>
               <dd><code className="break-all text-xs">{props.extension.extension_id}</code></dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-800">Version</dt>
+              <dt className="text-xs text-brand-dark/80">Version</dt>
               <dd className="text-sm">{props.extension.version}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-800">Catalog digest</dt>
+              <dt className="text-xs text-brand-dark/80">Catalog digest</dt>
               <dd><code className="break-all text-xs">{props.catalogDigest}</code></dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-800">Provenance</dt>
+              <dt className="text-xs text-brand-dark/80">Provenance</dt>
               <dd className="text-sm">{controlProvenance(props.effective, "extension", props.extension.extension_id).join(" · ")}</dd>
             </div>
           </dl>
         </section>
         <section>
-          <h3 className="font-semibold text-slate-900">Detections</h3>
-          <div className="mt-3 max-h-96 overflow-auto rounded-xl border border-slate-200">
+          <h3 className="font-semibold text-brand-dark">Detections</h3>
+          <div className="mt-3 max-h-96 overflow-auto rounded-xl border border-[rgba(63,65,116,0.12)]">
             <table className="min-w-full text-left text-xs">
-              <thead className="sticky top-0 bg-slate-50 text-slate-800">
+              <thead className="sticky top-0 bg-white/55 text-brand-dark/80">
                 <tr>
                   <th className="px-3 py-2">Detection</th>
                   <th className="px-3 py-2">Severity</th>
@@ -287,12 +288,12 @@ function DeveloperModuleDetails(props: { extension: ExtensionCatalogItem; effect
                   <th className="px-3 py-2">Default</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[rgba(63,65,116,0.08)]">
                 {props.extension.rules.map((rule) => (
                   <tr key={rule.rule_id}>
                     <td className="px-3 py-2">
-                      <div className="font-medium text-slate-800">{rule.title}</div>
-                      <code className="break-all text-[10px] text-slate-800">{rule.rule_id}</code>
+                      <div className="font-medium text-brand-dark/80">{rule.title}</div>
+                      <code className="break-all text-[10px] text-brand-dark/80">{rule.rule_id}</code>
                     </td>
                     <td className="px-3 py-2">{rule.severity}</td>
                     <td className="px-3 py-2">{rule.matcher_kind}</td>
@@ -304,13 +305,13 @@ function DeveloperModuleDetails(props: { extension: ExtensionCatalogItem; effect
           </div>
         </section>
         <section>
-          <h3 className="font-semibold text-slate-900">Protection setting identifiers</h3>
+          <h3 className="font-semibold text-brand-dark">Protection setting identifiers</h3>
           <div className="mt-2 space-y-2">
             {props.extension.permissions.map((permission) => (
               <div key={permission.permission_id} className="rounded-xl bg-white p-3">
-                <div className="text-sm font-medium text-slate-800">{permission.label}</div>
-                <code className="mt-1 block break-all text-[11px] text-slate-800">{permission.permission_id}</code>
-                <div className="mt-1 text-xs text-slate-800">{permission.action_classes.join(", ") || "No action classes"}</div>
+                <div className="text-sm font-medium text-brand-dark/80">{permission.label}</div>
+                <code className="mt-1 block break-all text-[11px] text-brand-dark/80">{permission.permission_id}</code>
+                <div className="mt-1 text-xs text-brand-dark/80">{permission.action_classes.join(", ") || "No action classes"}</div>
               </div>
             ))}
           </div>
@@ -348,28 +349,28 @@ export function ProtectionModuleDetail(props: {
     : "border-red-200 bg-red-50 text-red-800";
 
   return (
-    <main data-testid="protection-module-detail" className="mx-auto w-full max-w-6xl px-4 pb-10 pt-5 sm:px-6 lg:px-8">
+    <main data-testid="protection-module-detail" className={`${EXTENSION_SURFACE_CLASS} mx-auto w-full max-w-6xl px-4 pb-10 pt-5 sm:px-6 lg:px-8`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={handleBack} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-slate-800 hover:bg-slate-100">
+        <button type="button" onClick={handleBack} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-brand-dark/80 hover:bg-white/70">
           <HiMiniArrowLeft className="size-4" aria-hidden="true" />
           Extensions
         </button>
         <ProtectionDensityControl value={density} onChange={setDensity} />
       </div>
-      <header className="mt-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] sm:p-6">
+      <header className={`mt-3 ${EXTENSION_PANEL_CLASS}`}>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Extension</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{props.extension.name}</h1>
-            <p className="mt-2 text-sm font-medium text-slate-800">{category.label}</p>
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-800">{props.extension.description}</p>
+            <p className={EXTENSION_KICKER_CLASS}>Extension</p>
+            <h1 className={EXTENSION_TITLE_CLASS}>{props.extension.name}</h1>
+            <p className="mt-2 text-sm font-medium text-brand-dark/80">{category.label}</p>
+            <p className="mt-4 max-w-3xl text-sm leading-6 text-brand-dark/80">{props.extension.description}</p>
           </div>
           <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold ${statusTone}`}>
             {plainBehavior(props.effective, props.extension)}
           </span>
         </div>
         {props.effective.global_lockdown ? (
-          <p role="status" className="mt-5 flex gap-2 rounded-xl bg-slate-950 p-3 text-sm text-white">
+          <p role="status" className="mt-5 flex gap-2 rounded-xl bg-brand-dark p-3 text-sm text-[#f8fbff]">
             <HiMiniLockClosed className="mt-0.5 size-4 shrink-0" />
             Emergency Lockdown currently controls this module. Matching optional actions remain blocked.
           </p>
@@ -389,26 +390,26 @@ export function ProtectionModuleDetail(props: {
         <WhyThisHappened summary={whySummary} />
       </div>
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
-          <h2 className="text-lg font-semibold text-slate-950">Safer alternatives</h2>
+        <section className={EXTENSION_PANEL_CLASS}>
+          <h2 className="text-lg font-semibold text-brand-dark">Safer alternatives</h2>
           {props.extension.safer_alternatives.length ? (
             <ul className="mt-3 space-y-2">
               {props.extension.safer_alternatives.map((alternative) => (
-                <li key={alternative} className="flex gap-2 text-sm leading-6 text-slate-800">
+                <li key={alternative} className="flex gap-2 text-sm leading-6 text-brand-dark/80">
                   <HiMiniCheckCircle className="mt-1 size-4 shrink-0 text-emerald-800" aria-hidden="true" />
                   {alternative}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm text-slate-800">No module-level alternative is registered. Guard still evaluates each matching action using its built-in safety rules.</p>
+            <p className="mt-2 text-sm text-brand-dark/80">No module-level alternative is registered. Guard still evaluates each matching action using its built-in safety rules.</p>
           )}
           {props.extension.reference_urls.length ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {props.extension.reference_urls.slice(0, 4).map((value) => {
                 const href = safeReferenceUrl(value);
                 return href ? (
-                  <a key={value} href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-300 px-3 text-xs font-semibold text-brand-blue">
+                  <a key={value} href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[rgba(63,65,116,0.16)] px-3 text-xs font-semibold text-brand-blue">
                     Reference <HiMiniArrowTopRightOnSquare className="size-4" aria-hidden="true" />
                   </a>
                 ) : null;

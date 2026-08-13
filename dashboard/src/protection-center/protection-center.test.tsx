@@ -120,6 +120,7 @@ const moduleRow = renderToStaticMarkup(createElement(ProtectionModuleRow, {
 }));
 assert.match(moduleRow, /Git/);
 assert.match(moduleRow, /Ask first/);
+assert.match(moduleRow, /guard-extensions-row/);
 assert.doesNotMatch(moduleRow, />[^<]*(?:permission|rule|version)[^<]*</i);
 
 const density = renderToStaticMarkup(createElement(ProtectionDensityControl, { value: "simple", onChange: () => undefined }));

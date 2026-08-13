@@ -57,6 +57,15 @@ import { PROTECTION_TERMS, protectionCenterLoadError } from "./copy/protection-c
 import { ProtectionLandingExperience } from "./protection-landing-experience";
 import { ProtectionModuleDetail } from "./protection-module-detail";
 import {
+  EXTENSION_BODY_CLASS,
+  EXTENSION_KICKER_CLASS,
+  EXTENSION_LIST_CLASS,
+  EXTENSION_PANEL_CLASS,
+  EXTENSION_PANEL_COMPACT_CLASS,
+  EXTENSION_SURFACE_CLASS,
+  EXTENSION_TITLE_CLASS,
+} from "./protection-surface";
+import {
   InlineError,
   ProtectionDensityControl,
   ProtectionModuleRow,
@@ -236,13 +245,13 @@ export function ReviewModal(props: {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-blue">Review protection change</p>
-            <h2 id="protection-review-title" className="mt-2 text-xl font-semibold text-slate-950">{title}</h2>
+            <h2 id="protection-review-title" className="mt-2 text-xl font-semibold text-brand-dark">{title}</h2>
           </div>
-          <button type="button" disabled={props.busy} onClick={props.onCancel} aria-label="Close review" className="grid size-11 place-items-center rounded-full text-slate-950 hover:bg-slate-100 disabled:opacity-50">
+          <button type="button" disabled={props.busy} onClick={props.onCancel} aria-label="Close review" className="grid size-11 place-items-center rounded-full text-brand-dark hover:bg-white/70 disabled:opacity-50">
             <HiMiniXMark className="size-5" />
           </button>
         </div>
-        <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl bg-slate-100 p-4 text-sm text-slate-950">
+        <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl bg-[rgba(85,153,254,0.08)] p-4 text-sm text-brand-dark">
           <span>Current</span>
           <span aria-hidden="true">→</span>
           <strong>Requested</strong>
@@ -250,13 +259,13 @@ export function ReviewModal(props: {
           <span />
           <span>{requested}</span>
         </div>
-        <p className="mt-4 text-sm leading-6 text-slate-950">Guard's built-in minimum safety rules and organization policy remain active. This change does not disable detection.</p>
+        <p className="mt-4 text-sm leading-6 text-brand-dark">Guard's built-in minimum safety rules and organization policy remain active. This change does not disable detection.</p>
         <div className="mt-5">
           <ApprovalProofFieldInputs approvalGate={props.approvalGate} approvalPassword={password} approvalTotpCode={totp} onApprovalPasswordChange={(event) => setPassword(event.target.value)} onApprovalTotpCodeChange={(event) => setTotp(event.target.value)} />
         </div>
         {props.error ? <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{props.error}</p> : null}
         <div className="mt-6 flex justify-end gap-3">
-          <button type="button" disabled={props.busy} onClick={props.onCancel} className="min-h-11 rounded-xl px-4 text-sm font-semibold text-slate-950 hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+          <button type="button" disabled={props.busy} onClick={props.onCancel} className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark hover:bg-white/70 disabled:opacity-50">Cancel</button>
           <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60">{props.busy ? "Verifying…" : "Confirm change"}</button>
         </div>
       </form>
@@ -417,7 +426,7 @@ export function ProtectionCenterWorkspace() {
   if (state.kind === "loading") return <main className="grid min-h-[60vh] place-items-center" aria-busy="true"><HiMiniArrowPath className="size-7 animate-spin text-brand-blue motion-reduce:animate-none" aria-label="Loading Extensions" /></main>;
   if (state.kind === "error") {
     const loadError = protectionCenterLoadError(state.message);
-    return <main className="mx-auto max-w-4xl p-6"><div className="rounded-3xl border border-red-200 bg-red-50 p-6"><h1 className="text-xl font-semibold text-red-950">{loadError.title}</h1><p role="alert" className="mt-2 text-sm text-red-800">{loadError.detail}</p><p className="mt-3 text-xs font-medium text-red-900">Local protection continues on this device.</p><button type="button" onClick={load} className="mt-4 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-white">Try again</button></div></main>;
+    return <main className={`${EXTENSION_SURFACE_CLASS} mx-auto max-w-4xl p-6`}><div className={`${EXTENSION_PANEL_CLASS} guard-extensions-tone-danger`}><h1 className="text-xl font-semibold text-red-950">{loadError.title}</h1><p role="alert" className="mt-2 text-sm text-red-800">{loadError.detail}</p><p className="mt-3 text-xs font-medium text-red-900">Local protection continues on this device.</p><button type="button" onClick={load} className="mt-4 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-white">Try again</button></div></main>;
   }
 
   const recoveryModal = recoveryApprovalOpen ? <ApprovalProofModal
@@ -436,7 +445,7 @@ export function ProtectionCenterWorkspace() {
   }
 
   if (routeState.route.kind === "detail" || routeState.route.kind === "invalid") {
-    return <><main className="mx-auto max-w-4xl p-6"><div className="rounded-3xl border border-amber-200 bg-amber-50 p-6"><h1 className="font-semibold text-amber-950">Extension not found</h1><p className="mt-2 text-sm text-amber-800">This link does not match an extension in the current Guard catalog.</p><button type="button" onClick={closeExtension} className="mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white">Back to Extensions</button></div></main>{recoveryModal}</>;
+    return <><main className={`${EXTENSION_SURFACE_CLASS} mx-auto max-w-4xl p-6`}><div className={`${EXTENSION_PANEL_CLASS} guard-extensions-tone-attention`}><h1 className="font-semibold text-amber-950">Extension not found</h1><p className="mt-2 text-sm text-amber-900">This link does not match an extension in the current Guard catalog.</p><button type="button" onClick={closeExtension} className="mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white">Back to Extensions</button></div></main>{recoveryModal}</>;
   }
 
   const status = deriveProtectionStatus(state.effective);
@@ -457,27 +466,27 @@ export function ProtectionCenterWorkspace() {
     }
   };
 
-  return <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-    <header className="flex flex-col gap-5 border-b border-slate-200 pb-7 lg:flex-row lg:items-end lg:justify-between">
-      <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-blue">On this device</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{PROTECTION_TERMS.pageTitle}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-800">See which tools Guard is watching, then open one to understand or change it.</p></div>
+  return <main className={`${EXTENSION_SURFACE_CLASS} mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8`}>
+    <header className="flex flex-col gap-5 pb-2 lg:flex-row lg:items-end lg:justify-between">
+      <div><p className={EXTENSION_KICKER_CLASS}>On this device</p><h1 className={EXTENSION_TITLE_CLASS}>{PROTECTION_TERMS.pageTitle}</h1><p className={`mt-2 max-w-2xl ${EXTENSION_BODY_CLASS}`}>See which tools Guard is watching, then open one to understand or change it.</p></div>
       <details
         className="w-full max-w-sm"
         data-testid="protection-more-detail"
         open={moreDetailOpen}
         onToggle={(event) => setMoreDetailOpen(event.currentTarget.open)}
       >
-        <summary className="cursor-pointer text-sm font-semibold text-slate-800">More detail</summary>
+        <summary className="cursor-pointer text-sm font-semibold text-brand-dark">More detail</summary>
         <div className="mt-3"><ProtectionDensityControl value={density} onChange={setDensity} /></div>
       </details>
     </header>
 
     <div className="mt-6"><ProtectionStatusHero status={status} busy={recoveryBusy} onPrimaryAction={status.primaryAction === "none" ? undefined : handlePrimaryStatusAction}>
-      <p className="text-xs text-slate-600">Cloud continuity is separate from local protection. Signing out or losing Cloud connectivity does not turn local protection off.</p>
+      <p className="text-xs text-brand-dark/70">Cloud continuity is separate from local protection. Signing out or losing Cloud connectivity does not turn local protection off.</p>
     </ProtectionStatusHero></div>
 
     {mutationError && !pending ? <div className="mt-4"><InlineError message={mutationError} /></div> : null}
     {recoveryError ? <div className="mt-4"><InlineError message={recoveryError} /></div> : null}
-    {recoveryStatus ? <p role="status" className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{recoveryStatus}</p> : null}
+    {recoveryStatus ? <p role="status" className={`mt-4 ${EXTENSION_PANEL_COMPACT_CLASS} text-sm text-brand-dark`}>{recoveryStatus}</p> : null}
 
     {density === "simple" ? <ProtectionLandingExperience
       catalog={catalogExtensions}
@@ -490,17 +499,17 @@ export function ProtectionCenterWorkspace() {
     /> : null}
 
     {density !== "simple" ? <section id="advanced-protection-controls" className="mt-6 space-y-3" aria-label="Advanced protection controls">
-      <details open={troubleshootingOpen} onToggle={(event) => setTroubleshootingOpen(event.currentTarget.open)} className="rounded-2xl border border-slate-200 bg-white p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-slate-800">Troubleshooting</summary>
+      <details open={troubleshootingOpen} onToggle={(event) => setTroubleshootingOpen(event.currentTarget.open)} className={EXTENSION_PANEL_CLASS}>
+        <summary className="cursor-pointer text-sm font-semibold text-brand-dark">Troubleshooting</summary>
         <div className="mt-3"><ExtensionStatusBanner busy={recoveryBusy} effective={state.effective} error={recoveryError} status={recoveryStatus} onRecover={() => { void recover(); }} onRetry={load} /></div>
       </details>
-      <button type="button" disabled={locked} onClick={() => requestChange({ globalLockdown: !state.effective.global_lockdown })} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 disabled:opacity-50"><HiMiniLockClosed className="size-4" />{state.effective.global_lockdown ? "Review ending Emergency Lockdown" : "Review Emergency Lockdown"}</button>
+      <button type="button" disabled={locked} onClick={() => requestChange({ globalLockdown: !state.effective.global_lockdown })} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[rgba(63,65,116,0.14)] bg-white/80 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50"><HiMiniLockClosed className="size-4" />{state.effective.global_lockdown ? "Review ending Emergency Lockdown" : "Review Emergency Lockdown"}</button>
     </section> : null}
 
     {density !== "simple" ? <section aria-labelledby="protection-modules-heading" className="mt-8">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"><div><h2 id="protection-modules-heading" className="text-xl font-semibold text-slate-950">All extensions</h2><p className="mt-1 text-sm text-slate-800">Open an extension to understand its current behavior and available controls.</p></div><span className="text-sm text-slate-800">{catalogExtensions.length} available</span></div>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"><div><h2 id="protection-modules-heading" className="text-xl font-semibold text-brand-dark">All extensions</h2><p className={`mt-1 ${EXTENSION_BODY_CLASS}`}>Open an extension to understand its current behavior and available controls.</p></div><span className="text-sm text-brand-dark/70">{catalogExtensions.length} available</span></div>
       <div className="mt-4"><ExtensionsFilterBar filters={filters} onChange={(patch) => setFilters((previous) => ({ ...previous, ...patch }))} onClear={() => setFilters(EMPTY_EXTENSION_FILTERS)} extensions={catalogExtensions} effective={state.effective} /></div>
-      {visible.length ? <div className="mt-4 space-y-2">{visible.map((extension) => <ProtectionModuleRow
+      {visible.length ? <div className={EXTENSION_LIST_CLASS}>{visible.map((extension) => <ProtectionModuleRow
         key={extension.extension_id}
         name={extension.name}
         description={extension.description}
@@ -508,7 +517,7 @@ export function ProtectionCenterWorkspace() {
         required={extension.required}
         managed={sourceIsManaged(state.effective, extension.extension_id)}
         onOpen={() => openExtension(extension)}
-      />)}</div> : hasActiveFilters(effectiveFilters) ? <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="text-sm font-semibold text-slate-900">No protections match these filters.</p><button type="button" onClick={() => setFilters(EMPTY_EXTENSION_FILTERS)} className="mt-3 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white">Clear filters</button></div> : <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No protection modules are registered.</div>}
+      />)}</div> : hasActiveFilters(effectiveFilters) ? <div className={`${EXTENSION_PANEL_CLASS} mt-4 text-center`}><p className="text-sm font-semibold text-brand-dark">No protections match these filters.</p><button type="button" onClick={() => setFilters(EMPTY_EXTENSION_FILTERS)} className="mt-3 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white">Clear filters</button></div> : <div className={`${EXTENSION_PANEL_CLASS} mt-4 text-center text-sm text-brand-dark/70`}>No protection modules are registered.</div>}
     </section> : null}
 
     {density === "developer" ? <div className="mt-8"><TechnicalDetails title="Developer policy details"><button type="button" onClick={() => setProvenanceOpen((value) => !value)} aria-expanded={provenanceOpen} className="flex min-h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 text-left text-sm font-semibold text-slate-800"><span>Policy provenance and catalog identity</span>{provenanceOpen ? <HiMiniChevronUp className="size-4" /> : <HiMiniChevronDown className="size-4" />}</button>{provenanceOpen ? <div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-white p-3"><div className="text-xs font-semibold uppercase text-slate-500">Catalog digest</div><code className="mt-1 block break-all text-xs text-slate-700">{state.catalog.catalog_digest}</code></div><div className="rounded-xl bg-white p-3"><div className="text-xs font-semibold uppercase text-slate-500">Authority layers</div><div className="mt-1 text-sm text-slate-700">{state.effective.layers.length} active layer{state.effective.layers.length === 1 ? "" : "s"}</div></div>{state.effective.layers.map((layer) => <div key={`${layer.kind}:${layer.catalog_digest}`} className="rounded-xl bg-white p-3"><div className="flex items-center gap-2"><HiMiniCheckCircle className="size-4 text-emerald-600" /><strong className="text-sm">{layer.kind}</strong></div><p className="mt-1 text-xs text-slate-500">{layer.controls.length} explicit controls</p></div>)}</div> : null}</TechnicalDetails></div> : null}

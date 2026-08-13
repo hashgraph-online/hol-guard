@@ -75,7 +75,7 @@ export function ProtectionLandingExperience(props: {
     <RecentProtectionDecisions decisions={decisions} loading={landing.activityLoading} unavailable={landing.activityError} />
     <div className="mt-8"><CloudValueGate runtime={landing.runtime} loading={landing.runtimeLoading} loadFailed={landing.runtimeError} /></div>
     <details className="mt-8">
-      <summary className="cursor-pointer text-sm font-semibold text-slate-800">Check protection health</summary>
+      <summary className="cursor-pointer text-sm font-semibold text-brand-dark">Check protection health</summary>
       <ProtectionHealthCheckPanel result={healthResult} busy={healthBusy} error={healthError} onRun={() => { void runHealthCheck(); }} />
     </details>
   </>;

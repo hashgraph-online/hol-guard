@@ -130,6 +130,8 @@ const watching = renderToStaticMarkup(createElement(ProtectionWatchingMap, {
 }));
 assert.match(watching, /Watching/);
 assert.match(watching, /Git/);
+assert.match(watching, /guard-extensions-chip/);
+assert.doesNotMatch(watching, /divide-y/);
 assert.doesNotMatch(watching, /Source control/);
 assert.doesNotMatch(watching, /What HOL Guard protects/);
 
