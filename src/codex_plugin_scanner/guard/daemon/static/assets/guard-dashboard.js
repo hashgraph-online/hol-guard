@@ -14619,7 +14619,10 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
     return "Reviewed. Watch only already allowed this action to run; no future rule was saved.";
   }
   if (action === "allow") {
-    return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;
+    if (persistedExactAction) {
+      return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
+    }
+    return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
@@ -28451,27 +28454,48 @@ function ReviewScopeControls(props) {
   ] });
 }
 function ExactActionPersistenceChoice(props) {
-  const handleChange = reactExports.useCallback(
-    (event) => {
-      props.onChange(event.target.checked);
-    },
-    [props.onChange]
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-start gap-3 rounded-lg border border-brand-blue/20 bg-brand-blue/[0.03] px-4 py-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "input",
-      {
-        type: "checkbox",
-        checked: props.checked,
-        onChange: handleChange,
-        className: "mt-0.5 h-4 w-4 accent-brand-blue"
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-medium text-brand-dark", children: "Always allow this exact action" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Save only this exact action for this AI app. Changed actions still need review." })
+  const handleOnce = reactExports.useCallback(() => props.onChange(false), [props.onChange]);
+  const handleAlways = reactExports.useCallback(() => props.onChange(true), [props.onChange]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/[0.03] p-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "px-1 text-sm font-semibold text-brand-dark", children: "How long should Guard allow it?" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(!props.checked), children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "radio",
+            name: "exact-action-approval-duration",
+            value: "once",
+            checked: !props.checked,
+            onChange: handleOnce,
+            className: "sr-only"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "This time" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Retry within 15 minutes." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "radio",
+            name: "exact-action-approval-duration",
+            value: "always",
+            checked: props.checked,
+            onChange: handleAlways,
+            className: "sr-only"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "Always allow exact action" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Changed commands still need review." })
+      ] })
     ] })
   ] });
+}
+function exactActionChoiceClassName(selected) {
+  const base = "min-h-20 cursor-pointer rounded-md border px-3 py-2 text-left transition-colors focus-within:ring-2 focus-within:ring-brand-blue";
+  if (selected) return `${base} border-brand-blue bg-white ring-1 ring-brand-blue/20`;
+  return `${base} border-slate-200 bg-white/60 hover:border-brand-blue/40`;
 }
 function ScopeChoiceButton(props) {
   const handleClick = reactExports.useCallback(() => {

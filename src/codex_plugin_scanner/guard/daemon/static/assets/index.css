@@ -1113,6 +1113,10 @@
     min-height: calc(var(--spacing) * 16);
   }
 
+  .min-h-20 {
+    min-height: calc(var(--spacing) * 20);
+  }
+
   .min-h-24 {
     min-height: calc(var(--spacing) * 24);
   }
@@ -4862,7 +4866,7 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus-within\:ring-brand-blue\/20:focus-within {
+  .focus-within\:ring-brand-blue:focus-within, .focus-within\:ring-brand-blue\/20:focus-within {
     --tw-ring-color: var(--brand-blue);
   }
 
@@ -4909,6 +4913,16 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:border-brand-blue\/30:hover {
         border-color: color-mix(in oklab, var(--brand-blue) 30%, transparent);
+      }
+    }
+
+    .hover\:border-brand-blue\/40:hover {
+      border-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:border-brand-blue\/40:hover {
+        border-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
       }
     }
 

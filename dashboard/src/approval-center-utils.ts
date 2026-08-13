@@ -96,7 +96,10 @@ export function buildRetryAfterApprovalCopy(
     return "Reviewed. Watch only already allowed this action to run; no future rule was saved.";
   }
   if (action === "allow") {
-    return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;
+    if (persistedExactAction) {
+      return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
+    }
+    return `Approved once. Return to ${harness} and retry within 15 minutes.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }

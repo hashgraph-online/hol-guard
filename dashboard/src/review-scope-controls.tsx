@@ -1,4 +1,4 @@
-import { useCallback, type ChangeEvent } from "react";
+import { useCallback } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { SectionLabel } from "./approval-center-primitives";
 import type { ApprovalScopeChoice } from "./approval-scopes";
@@ -119,29 +119,48 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
 }
 
 function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (checked: boolean) => void }) {
-  const handleChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      props.onChange(event.target.checked);
-    },
-    [props.onChange],
-  );
+  const handleOnce = useCallback(() => props.onChange(false), [props.onChange]);
+  const handleAlways = useCallback(() => props.onChange(true), [props.onChange]);
 
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-brand-blue/20 bg-brand-blue/[0.03] px-4 py-3">
-      <input
-        type="checkbox"
-        checked={props.checked}
-        onChange={handleChange}
-        className="mt-0.5 h-4 w-4 accent-brand-blue"
-      />
-      <span>
-        <span className="block text-sm font-medium text-brand-dark">Always allow this exact action</span>
-        <span className="mt-0.5 block text-xs text-muted-foreground">
-          Save only this exact action for this AI app. Changed actions still need review.
-        </span>
-      </span>
-    </label>
+    <fieldset className="rounded-lg border border-brand-blue/20 bg-brand-blue/[0.03] p-3">
+      <legend className="px-1 text-sm font-semibold text-brand-dark">How long should Guard allow it?</legend>
+      <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className={exactActionChoiceClassName(!props.checked)}>
+          <input
+            type="radio"
+            name="exact-action-approval-duration"
+            value="once"
+            checked={!props.checked}
+            onChange={handleOnce}
+            className="sr-only"
+          />
+          <span className="block text-sm font-semibold text-brand-dark">This time</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">Retry within 15 minutes.</span>
+        </label>
+        <label className={exactActionChoiceClassName(props.checked)}>
+          <input
+            type="radio"
+            name="exact-action-approval-duration"
+            value="always"
+            checked={props.checked}
+            onChange={handleAlways}
+            className="sr-only"
+          />
+          <span className="block text-sm font-semibold text-brand-dark">Always allow exact action</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            Changed commands still need review.
+          </span>
+        </label>
+      </div>
+    </fieldset>
   );
+}
+
+function exactActionChoiceClassName(selected: boolean): string {
+  const base = "min-h-20 cursor-pointer rounded-md border px-3 py-2 text-left transition-colors focus-within:ring-2 focus-within:ring-brand-blue";
+  if (selected) return `${base} border-brand-blue bg-white ring-1 ring-brand-blue/20`;
+  return `${base} border-slate-200 bg-white/60 hover:border-brand-blue/40`;
 }
 
 function ScopeChoiceButton(props: {

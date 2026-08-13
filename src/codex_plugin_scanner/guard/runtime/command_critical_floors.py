@@ -135,7 +135,7 @@ def _command_critical_floor_factors(
             segment,
             index,
             executable,
-            indirect=depth > 0 or str(segment.executable or "").lower().endswith(".exe"),
+            indirect=depth > 0 or bool(command.wrapper_chain) or str(segment.executable or "").lower().endswith(".exe"),
             authorized_action_class=authorized_action_class,
         )
         if github_factor is not None:
