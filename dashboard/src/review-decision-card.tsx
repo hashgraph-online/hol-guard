@@ -99,6 +99,7 @@ export function ReviewDecisionCard(props: {
     [item],
   );
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
+  const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item
     ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}`
@@ -161,7 +162,7 @@ export function ReviewDecisionCard(props: {
           ...(includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {}),
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
         });
-        setResolved({ action, persistedExactAction });
+        setResolved({ action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
@@ -323,10 +324,12 @@ export function ReviewDecisionCard(props: {
   const topAlertItems = buildTopAlertItems(item);
   const evidenceItems = buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
-  const resolvedAllowButtonLabel =
-    rememberExactAction && allowScope === "artifact"
-      ? "Approve and remember"
-      : allowButtonLabel(allowScope);
+  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
+  const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
+  let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
+  if (persistExactAllow) {
+    resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
+  }
   return (
     <div className="space-y-5">
       {resolved && (

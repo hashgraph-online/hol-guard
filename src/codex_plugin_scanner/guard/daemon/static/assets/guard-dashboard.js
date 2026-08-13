@@ -14609,13 +14609,13 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
-function buildRetryAfterApprovalCopy(item, action, persistedExactAction2 = false) {
+function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false) {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
-    if (persistedExactAction2 && action === "allow") {
+    if (persistedExactAction && action === "allow") {
       return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
     }
-    if (persistedExactAction2) return "Saved. Guard will stop this exact action next time.";
+    if (persistedExactAction) return "Saved. Guard will stop this exact action next time.";
     return "Reviewed. Watch only already allowed this action to run; no future rule was saved.";
   }
   if (action === "allow") {
@@ -28193,8 +28193,8 @@ function pastDecisionVerb(decision) {
   }
 }
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
-function resolvedActionCopy(item, action, persistedExactAction2) {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction2);
+function resolvedActionCopy(item, action, persistedExactAction) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
   if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
 }
@@ -28239,6 +28239,7 @@ function ReviewDecisionCard(props) {
     [item]
   );
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
+  const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}` : null;
   reactExports.useEffect(() => {
@@ -28293,7 +28294,7 @@ function ReviewDecisionCard(props) {
           ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
-        setResolved({ action, persistedExactAction });
+        setResolved({ action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
@@ -28442,7 +28443,12 @@ function ReviewDecisionCard(props) {
   const topAlertItems = buildTopAlertItems(item);
   const evidenceItems = buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
-  const resolvedAllowButtonLabel = rememberExactAction && allowScope === "artifact" ? "Approve and remember" : allowButtonLabel(allowScope);
+  const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
+  const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
+  let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
+  if (persistExactAllow) {
+    resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
@@ -28650,7 +28656,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
   const isRead = readState.isRead(item.request_id);
-  const watchOnlyObservation2 = isWatchOnlyObservation(item);
+  const watchOnlyObservation = isWatchOnlyObservation(item);
   const showCheckbox = selectionMode;
   const canSelect = selectionMode && selectable;
   const handleClick = reactExports.useCallback(() => {
@@ -28729,7 +28735,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   harnessDisplayName(item.harness),
                   " · ",
                   formatQueueRequestDate(item),
-                  watchOnlyObservation2 ? " · Watch only" : ""
+                  watchOnlyObservation ? " · Watch only" : ""
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs(

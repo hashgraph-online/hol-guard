@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import {
   resolveEnvelopeDisplayText,
   resolveStoppedCommandText,
@@ -20,6 +21,7 @@ import {
 import type { GuardActionEnvelope, GuardApprovalRequest, GuardCodexResumeResult } from "./guard-types";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PrimaryActionCard } from "./review-states";
+import { ReviewDecisionCard } from "./review-decision-card";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -337,6 +339,18 @@ assert(
 assert(
   buildRetryAfterApprovalCopy(watchOnlyRequest, "block", true).includes("stop this exact action next time"),
   "Watch-only persisted block copy describes the exact future rule",
+);
+const watchOnlyDecisionMarkup = renderToStaticMarkup(
+  createElement(ReviewDecisionCard, {
+    detail: { item: watchOnlyRequest, diff: null, receipt: null, policy: [] },
+    onResolve: () => undefined,
+    onGoHome: () => undefined,
+    approvalGate: null,
+  }),
+);
+assert(
+  watchOnlyDecisionMarkup.includes("Watch-only finding") && watchOnlyDecisionMarkup.includes("Ran in Watch only"),
+  "Watch-only decision card renders its observation state without crashing",
 );
 
 const sandboxRequest: GuardApprovalRequest = { ...BASE_REQUEST, policy_action: "sandbox-required" };
