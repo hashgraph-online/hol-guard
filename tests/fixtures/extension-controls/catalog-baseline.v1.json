@@ -6,7 +6,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "8537c1ceb524c2432fe15939b55fa38516c317c6dcf38e3e3a7be6f5d0a1853e",
+  "catalog_digest": "16b7b637e1ed5656a0290a9391f9b91e986e23ddd0190f1ff769333c85360548",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -85,7 +85,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 85,
+  "permission_count": 86,
   "permission_ids": [
     "command.api-gateway.permission.delete",
     "command.backup.borg.permission.mutation",
@@ -118,6 +118,7 @@
     "command.github.permission.read-local",
     "command.github.permission.read-remote",
     "command.github.permission.propose-remote",
+    "command.github.permission.routine-review-thread-remote",
     "command.github.permission.routine-workflow-remote",
     "command.github.permission.write-local",
     "command.github.permission.maintain-remote",

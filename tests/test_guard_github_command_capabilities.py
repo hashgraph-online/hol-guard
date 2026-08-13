@@ -756,6 +756,35 @@ def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args: tuple[str, .
     assert assessment.capability == "unknown"
 
 
+@pytest.mark.parametrize("selection", ("id", "isResolved", "id isResolved", "isResolved id"))
+def test_guard_keeps_routine_review_thread_resolution_prompt_free(selection: str) -> None:
+    command = (
+        "gh api graphql -f "
+        f"'query=mutation($threadId:ID!){{resolveReviewThread(input:{{threadId:$threadId}})"
+        f"{{thread{{{selection}}}}}}}' -f threadId=PRRT_kwDOQGomAs6T6b-G"
+    )
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command})
+
+    assert match is None
+
+
+@pytest.mark.parametrize(
+    "selection",
+    ("id repository { name }", "id: isResolved", "...ThreadFields"),
+)
+def test_guard_reviews_unbounded_review_thread_response_selections(selection: str) -> None:
+    command = (
+        "gh api graphql -f "
+        f"'query=mutation($threadId:ID!){{resolveReviewThread(input:{{threadId:$threadId}})"
+        f"{{thread{{{selection}}}}}}}' -f threadId=PRRT_kwDOQGomAs6T6b-G"
+    )
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command})
+
+    assert match is not None
+
+
 @pytest.mark.parametrize(
     "command",
     (

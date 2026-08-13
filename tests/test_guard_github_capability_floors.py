@@ -21,6 +21,7 @@ _EXPECTED_FLOORS = {
     "read_local": "allow",
     "read_remote": "allow",
     "propose_remote": "allow",
+    "routine_review_thread_remote": "allow",
     "write_local": "review",
     "maintain_remote": "review",
     "content_remote": "review",
@@ -109,7 +110,10 @@ def test_every_capability_has_an_explicit_floor(capability: GitHubCommandCapabil
     assert assessment.action_floor == expected
 
 
-@pytest.mark.parametrize("capability", ("read_local", "read_remote", "propose_remote"))
+@pytest.mark.parametrize(
+    "capability",
+    ("read_local", "read_remote", "propose_remote", "routine_review_thread_remote"),
+)
 def test_prompt_free_capabilities_cannot_be_rendered_as_review_actions(capability: GitHubCommandCapability) -> None:
     assessment = github_assessment(capability, "test.read", "test read")
 

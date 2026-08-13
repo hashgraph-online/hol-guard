@@ -16,6 +16,7 @@ GitHubCommandCapability = Literal[
     "read_local",
     "read_remote",
     "propose_remote",
+    "routine_review_thread_remote",
     "routine_workflow_remote",
     "write_local",
     "maintain_remote",
@@ -55,6 +56,7 @@ _CAPABILITY_ORDER: Final[tuple[GitHubCommandCapability, ...]] = (
     "read_local",
     "read_remote",
     "propose_remote",
+    "routine_review_thread_remote",
     "routine_workflow_remote",
     "write_local",
     "maintain_remote",
@@ -76,6 +78,7 @@ _CAPABILITY_FLOOR: Final[MappingProxyType[GitHubCommandCapability, GuardAction]]
         "read_local": "allow",
         "read_remote": "allow",
         "propose_remote": "allow",
+        "routine_review_thread_remote": "allow",
         "routine_workflow_remote": "allow",
         "write_local": "review",
         "maintain_remote": "review",
@@ -106,6 +109,8 @@ def _contract(
     prompt_free = rule_suffix is None
     if capability == "propose_remote":
         description = "Creates a pull-request proposal without merging it or changing repository controls."
+    elif capability == "routine_review_thread_remote":
+        description = "Resolves one statically bounded pull-request review thread."
     elif capability == "routine_workflow_remote":
         description = "Retries only failed jobs from one existing GitHub Actions run."
     else:
@@ -144,6 +149,13 @@ _CONTRACTS: Final = MappingProxyType(
             _contract("read_local", "read-local", None, None, "local GitHub state"),
             _contract("read_remote", "read-remote", None, None, "remote GitHub state"),
             _contract("propose_remote", "propose-remote", None, None, "pull-request proposal"),
+            _contract(
+                "routine_review_thread_remote",
+                "routine-review-thread-remote",
+                None,
+                None,
+                "routine review-thread resolution",
+            ),
             _contract(
                 "routine_workflow_remote",
                 "routine-workflow-remote",

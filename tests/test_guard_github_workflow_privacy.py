@@ -54,7 +54,7 @@ def _digest(purpose: str, payload: object) -> str:
 def _descriptor(executable: Path, *, command: str | None = None) -> GitHubWorkflowDescriptor:
     command = command or (
         f"{executable} api graphql -f "
-        "query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' "
+        "query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id __typename}}}' "
         f"-f threadId={_THREAD}"
     )
     operation = parse_github_workflow_operation(
@@ -318,7 +318,7 @@ def test_executable_byte_drift_does_not_consume_capability(tmp_path: Path) -> No
     )
     command = (
         f"{executable} api graphql -f "
-        "query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id}}}' "
+        "query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{id __typename}}}' "
         f"-f threadId={_THREAD}"
     )
     executable.write_bytes(b"#!/bin/sh\nexit 1\n")

@@ -98,7 +98,7 @@ def classify_github_api(args: Sequence[str]) -> GitHubCommandAssessment:
         )
     method = parsed.method.upper() if parsed.method is not None else None
     if parsed.endpoint.lower() == "graphql":
-        return _classify_graphql(parsed, method=method)
+        return _classify_graphql(parsed, method=method, raw_args=args)
     if any(_field_value_is_external(value, allow_graphql_variables=False) for _name, value in parsed.fields):
         return github_assessment(
             "unknown",
@@ -282,7 +282,12 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
     )
 
 
-def _classify_graphql(parsed: GitHubApiArguments, *, method: str | None) -> GitHubCommandAssessment:
+def _classify_graphql(
+    parsed: GitHubApiArguments,
+    *,
+    method: str | None,
+    raw_args: Sequence[str],
+) -> GitHubCommandAssessment:
     if method is not None:
         return github_assessment(
             "unknown",
@@ -302,9 +307,49 @@ def _classify_graphql(parsed: GitHubApiArguments, *, method: str | None) -> GitH
             "github.graphql.external-value",
             "GraphQL query or variable data loaded from an external source cannot be classified statically.",
         )
-    from .github_graphql_capabilities import classify_graphql_document
+    from .github_graphql_capabilities import classify_graphql_document, is_routine_review_thread_resolution
+
+    if (
+        not parsed.headers
+        and _routine_review_thread_arguments_are_static(raw_args)
+        and is_routine_review_thread_resolution(query_values[0], parsed.fields)
+    ):
+        return github_assessment(
+            "routine_review_thread_remote",
+            "github.graphql.routine-review-thread-resolution",
+            "The command resolves one statically bounded pull-request review thread.",
+        )
 
     return classify_graphql_document(query_values[0])
+
+
+def _routine_review_thread_arguments_are_static(args: Sequence[str]) -> bool:
+    if not args or args[0].lower() != "graphql":
+        return False
+    index = 1
+    field_names: list[str] = []
+    while index < len(args):
+        token = args[index]
+        option_name, separator, attached_value = token.partition("=")
+        if not separator and len(token) > 2 and token[:2] == "-f":
+            option_name = "-f"
+            separator = "attached"
+            attached_value = token[2:]
+        if option_name not in {"-f", "--field", "--raw-field"}:
+            return False
+        if separator:
+            value = attached_value
+            index += 1
+        elif index + 1 < len(args):
+            value = args[index + 1]
+            index += 2
+        else:
+            return False
+        name, field_separator, _field_value = value.partition("=")
+        if not field_separator or name not in {"query", "threadId"}:
+            return False
+        field_names.append(name)
+    return field_names.count("query") == 1 and field_names.count("threadId") in {0, 1}
 
 
 def _field_value_is_external(value: str, *, allow_graphql_variables: bool) -> bool:
