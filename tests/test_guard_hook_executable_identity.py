@@ -191,6 +191,27 @@ def test_generic_hook_keeps_repeated_tilde_separators_inside_trusted_home(
     assert resolved_launch["executable"]["path"] == str(executable.resolve())
 
 
+@pytest.mark.parametrize("command", ('"~/bin/reviewed-commit"', "\\~/bin/reviewed-commit"))
+def test_generic_hook_rejects_non_expanding_tilde_syntax(
+    command: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("HOME", raising=False)
+
+    identity = _generic_hook_runtime_launch_identity(
+        _generic_server_action_envelope(command, workspace=tmp_path),
+        _generic_server_payload(command),
+        home_dir=tmp_path,
+        launch_cwd=tmp_path,
+    )
+
+    resolved_launch = identity["resolved_launch"]
+    assert isinstance(resolved_launch, dict)
+    assert resolved_launch["executable"]["status"] == "ambiguous_tilde_syntax"
+    assert isinstance(resolved_launch["executable"]["reuse_nonce"], str)
+
+
 def test_generic_hook_rejects_exact_allow_after_same_path_executable_replacement(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

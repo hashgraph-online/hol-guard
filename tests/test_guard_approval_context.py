@@ -97,6 +97,21 @@ def test_runtime_launch_keeps_repeated_tilde_separators_inside_trusted_home(tmp_
     assert executable_identity["path"] == str(executable.resolve())
 
 
+@pytest.mark.parametrize("command", ('"~/bin/reviewed-commit"', "\\~/bin/reviewed-commit"))
+def test_runtime_launch_rejects_non_expanding_tilde_syntax(command: str, tmp_path) -> None:
+    identity = build_runtime_launch_identity(
+        command,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        launch_env={"PATH": ""},
+    )
+    executable_identity = identity["executable"]
+
+    assert isinstance(executable_identity, dict)
+    assert executable_identity["status"] == "ambiguous_tilde_syntax"
+    assert isinstance(executable_identity["reuse_nonce"], str)
+
+
 @pytest.mark.parametrize(
     "command",
     ("~/bin/reviewed-commit", "~other/bin/reviewed-commit", "~/C:/bin/reviewed-commit"),

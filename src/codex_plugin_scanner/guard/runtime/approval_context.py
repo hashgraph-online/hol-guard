@@ -527,12 +527,16 @@ def build_runtime_launch_identity(
     launch_args = tuple(command_tokens[1:]) + tuple(str(argument) for argument in args)
     environment = launch_env if launch_env is not None else os.environ
     effective_search_path = search_path if search_path is not None else environment.get("PATH")
-    executable_identity = build_runtime_executable_identity(
-        executable,
-        search_path=effective_search_path,
-        cwd=effective_cwd,
-        home_dir=home_dir,
-    )
+    raw_command = command.lstrip()
+    if not structured_command and executable.startswith("~") and not raw_command.startswith("~"):
+        executable_identity = _unreusable_executable_identity(executable, status="ambiguous_tilde_syntax")
+    else:
+        executable_identity = build_runtime_executable_identity(
+            executable,
+            search_path=effective_search_path,
+            cwd=effective_cwd,
+            home_dir=home_dir,
+        )
     executable_shebang, executable_shebang_status = _raw_shebang_for_identity(executable_identity)
     return {
         "argv_sha256": _launch_argv_digest((executable, *launch_args)),
