@@ -214,7 +214,10 @@ def _runtime_path_with_trusted_home(command: str, *, home_dir: Path | None) -> P
     if command.startswith("~/") or (os.name == "nt" and command.startswith("~\\")):
         if home_dir is None:
             return None
-        return home_dir / command[2:]
+        relative_tail = command[2:].lstrip("/\\")
+        if not relative_tail or ntpath.splitdrive(relative_tail)[0]:
+            return None
+        return home_dir / relative_tail
     if command.startswith("~"):
         return None
     return Path(command)

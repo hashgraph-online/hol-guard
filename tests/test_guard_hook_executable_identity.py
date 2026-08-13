@@ -167,6 +167,30 @@ def test_generic_hook_resolves_tilde_executable_from_trusted_home(
     assert resolved_launch["executable"]["path"] == str(executable.resolve())
 
 
+def test_generic_hook_keeps_repeated_tilde_separators_inside_trusted_home(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "bin" / "reviewed-commit"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
+    command = "~//bin/reviewed-commit --message reviewed"
+    monkeypatch.delenv("HOME", raising=False)
+
+    identity = _generic_hook_runtime_launch_identity(
+        _generic_server_action_envelope(command, workspace=tmp_path),
+        _generic_server_payload(command),
+        home_dir=tmp_path,
+        launch_cwd=tmp_path,
+    )
+
+    resolved_launch = identity["resolved_launch"]
+    assert isinstance(resolved_launch, dict)
+    assert resolved_launch["executable"]["status"] == "verified"
+    assert resolved_launch["executable"]["path"] == str(executable.resolve())
+
+
 def test_generic_hook_rejects_exact_allow_after_same_path_executable_replacement(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

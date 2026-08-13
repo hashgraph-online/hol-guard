@@ -78,7 +78,29 @@ def test_runtime_launch_resolves_current_user_tilde_from_trusted_home(tmp_path) 
     assert executable_identity["path"] == str(executable.resolve())
 
 
-@pytest.mark.parametrize("command", ("~/bin/reviewed-commit", "~other/bin/reviewed-commit"))
+def test_runtime_launch_keeps_repeated_tilde_separators_inside_trusted_home(tmp_path) -> None:
+    executable = tmp_path / "bin" / "reviewed-commit"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
+
+    identity = build_runtime_launch_identity(
+        "~//bin/reviewed-commit --message test",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        launch_env={"PATH": ""},
+    )
+    executable_identity = identity["executable"]
+
+    assert isinstance(executable_identity, dict)
+    assert executable_identity["status"] == "verified"
+    assert executable_identity["path"] == str(executable.resolve())
+
+
+@pytest.mark.parametrize(
+    "command",
+    ("~/bin/reviewed-commit", "~other/bin/reviewed-commit", "~/C:/bin/reviewed-commit"),
+)
 def test_runtime_launch_without_matching_trusted_home_fails_closed(command: str, tmp_path) -> None:
     identity = build_runtime_launch_identity(
         command,
