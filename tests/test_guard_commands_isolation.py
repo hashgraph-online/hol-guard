@@ -244,7 +244,7 @@ class TestExplainIsolationPayload:
         explanations = cast(Mapping[str, Mapping[str, str]], result_casted["explanations"])
         info = explanations["contained"]
         assert "file-system writes" in info["description"]
-        assert "audit log" in info["description"]
+        assert "project-approved directories" in info["description"]
 
     def test_explanation_contains_evidence(self) -> None:
         result = explain_isolation_payload(target="sandbox")

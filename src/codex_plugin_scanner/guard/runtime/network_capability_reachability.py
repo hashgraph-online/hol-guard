@@ -45,9 +45,7 @@ def _repository_path(root: Path, value: object, *, field: str, capability_id: st
     return None
 
 
-def validate_reachability_manifest(
-    payload: Mapping[str, object], *, repository_root: Path
-) -> tuple[str, ...]:
+def validate_reachability_manifest(payload: Mapping[str, object], *, repository_root: Path) -> tuple[str, ...]:
     """Return deterministic validation errors for one reachability manifest."""
 
     errors: list[str] = []

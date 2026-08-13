@@ -93,8 +93,10 @@ def build_network_status(
         reason_code = "unsupported-host-platform"
     elif not resolved:
         reason_code = "no-platform-provider-profile"
-    elif supervisor_health is not None and supervisor_health.backend_id is not None and not any(
-        bool(item["active"]) for item in backends
+    elif (
+        supervisor_health is not None
+        and supervisor_health.backend_id is not None
+        and not any(bool(item["active"]) for item in backends)
     ):
         reason_code = "provider-probe-not-enforcing"
 

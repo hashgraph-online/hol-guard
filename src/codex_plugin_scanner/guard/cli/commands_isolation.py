@@ -219,11 +219,7 @@ def _strip_sensitive_keys(payload: dict[str, object]) -> dict[str, object]:
             "secret",
         }
     )
-    return {
-        key: value
-        for key, value in payload.items()
-        if not any(fragment in key.lower() for fragment in sensitive)
-    }
+    return {key: value for key, value in payload.items() if not any(fragment in key.lower() for fragment in sensitive)}
 
 
 __all__ = [
