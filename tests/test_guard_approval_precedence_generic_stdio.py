@@ -628,7 +628,7 @@ def test_codex_review_queue_retains_exact_shell_action_for_remembered_policy(
     assert pending[0]["exact_action_persistence_eligible"] is True
 
 
-def test_watch_only_exact_allow_applies_after_enforcement_is_enabled(
+def test_watch_only_exact_allow_requires_review_after_enforcement_is_enabled(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -692,8 +692,8 @@ def test_watch_only_exact_allow_applies_after_enforcement_is_enabled(
         action_envelope=action_envelope,
     )
 
-    assert rc == 0, json.dumps(output, sort_keys=True)
-    assert output["policy_action"] == "allow"
+    assert rc == 1, json.dumps(output, sort_keys=True)
+    assert output["policy_action"] == "review"
 
     changed_mode_payload = {**payload, "permission_mode": "bypassPermissions"}
     changed_mode_envelope = normalize_harness_payload(
