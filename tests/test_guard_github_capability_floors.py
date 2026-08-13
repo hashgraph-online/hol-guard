@@ -22,6 +22,7 @@ _EXPECTED_FLOORS = {
     "read_remote": "allow",
     "propose_remote": "allow",
     "routine_merge_remote": "allow",
+    "routine_workflow_remote": "allow",
     "routine_review_thread_remote": "allow",
     "write_local": "review",
     "maintain_remote": "review",
@@ -124,7 +125,14 @@ def test_every_capability_has_an_explicit_floor(capability: GitHubCommandCapabil
 
 @pytest.mark.parametrize(
     "capability",
-    ("read_local", "read_remote", "propose_remote", "routine_merge_remote", "routine_review_thread_remote"),
+    (
+        "read_local",
+        "read_remote",
+        "propose_remote",
+        "routine_merge_remote",
+        "routine_workflow_remote",
+        "routine_review_thread_remote",
+    ),
 )
 def test_prompt_free_capabilities_cannot_be_rendered_as_review_actions(capability: GitHubCommandCapability) -> None:
     assessment = github_assessment(capability, "test.read", "test read")

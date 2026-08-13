@@ -124,6 +124,10 @@ CRITICAL_COMMAND_FLOORS: Final[tuple[tuple[str, GuardAction], ...]] = (
     ("parallel sh -c 'hol-guard uninstall --all'", "block"),
     ("xargs aws route53 delete-hosted-zone --id zone", "block"),
     ("xargs gh pr merge 17 --repo example/repo --squash", "require-reapproval"),
+    (
+        "xargs gh run rerun 31707639186 --repo example/repo --failed",
+        "require-reapproval",
+    ),
     ("xargs gh repo sync --force", "block"),
     ("xargs gh secret set TOKEN", "block"),
     ("aws.exe route53 delete-hosted-zone --id zone", "block"),

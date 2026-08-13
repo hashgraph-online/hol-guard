@@ -263,6 +263,12 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "The command publishes or changes a GitHub release artifact.",
             )
         if subcommand in _WORKFLOW_SUBCOMMANDS.get(top_level, frozenset()):
+            if top_level == "run" and subcommand == "rerun" and _is_routine_failed_run_rerun(original, tail):
+                return _assessment(
+                    "routine_workflow_remote",
+                    "github.command.routine-failed-run-rerun",
+                    "The command retries only failed jobs from one numeric GitHub Actions run.",
+                )
             return _assessment(
                 "workflow_remote",
                 "github.command.workflow-mutation",
@@ -469,6 +475,37 @@ def _has_explicit_option_value(args: Sequence[str], long_option: str, short_opti
 
 def _has_dynamic_value(args: Sequence[str]) -> bool:
     return any("$" in token or "`" in token or token.startswith("@") for token in args)
+
+
+def _is_routine_failed_run_rerun(original: tuple[str, ...], args: Sequence[str]) -> bool:
+    """Accept one numeric run, one static repository, and exactly ``--failed``."""
+
+    if not any(
+        token in {"--repo", "-R"} or token.startswith(("--repo=", "-R=")) or (token.startswith("-R") and len(token) > 2)
+        for token in original
+    ):
+        return False
+    run_id: str | None = None
+    failed = False
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--failed":
+            if failed:
+                return False
+            failed = True
+        elif token in {"--repo", "-R"}:
+            if index + 1 >= len(args):
+                return False
+            index += 1
+        elif token.startswith(("--repo=", "-R=")) or (token.startswith("-R") and len(token) > 2):
+            pass
+        elif run_id is None and token.isascii() and token.isdigit() and 0 < len(token) <= 20 and int(token) > 0:
+            run_id = token
+        else:
+            return False
+        index += 1
+    return run_id is not None and failed
 
 
 def _alternate_hostname_requested(args: tuple[str, ...]) -> bool:

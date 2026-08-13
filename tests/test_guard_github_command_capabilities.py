@@ -88,6 +88,11 @@ GITHUB_CAPABILITY_CASES = (
     (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
     (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
     (
+        ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard", "--failed"),
+        "routine_workflow_remote",
+        "github.command.routine-failed-run-rerun",
+    ),
+    (
         ("--repo", "example/project", "workflow", "view", "release.yml"),
         "read_remote",
         "github.command.proven-read",
@@ -417,6 +422,39 @@ def test_guard_keeps_exact_review_thread_resolution_prompt_free() -> None:
     match = extract_sensitive_tool_action_request("Bash", {"command": command})
 
     assert match is None
+
+
+def test_guard_keeps_exact_failed_job_rerun_prompt_free() -> None:
+    command = "gh run rerun 31707639186 --repo hashgraph-online/hol-guard --failed"
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": command})
+
+    assert match is None
+
+
+@pytest.mark.parametrize(
+    "args",
+    (
+        ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard"),
+        ("run", "rerun", "31707639186", "--failed"),
+        ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard", "--job", "44"),
+        ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard", "--failed", "--debug"),
+        ("run", "rerun", "$RUN_ID", "--repo", "hashgraph-online/hol-guard", "--failed"),
+        ("run", "rerun", "31707639186", "--repo", "$REPO", "--failed"),
+        (
+            "run",
+            "rerun",
+            "31707639186",
+            "--repo",
+            "github.example/owner/repository",
+            "--failed",
+        ),
+    ),
+)
+def test_routine_failed_job_rerun_rejects_broader_variants(args: tuple[str, ...]) -> None:
+    assessment = classify_github_cli(args)
+
+    assert assessment.capabilities != ("routine_workflow_remote",)
 
 
 @pytest.mark.parametrize(
