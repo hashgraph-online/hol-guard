@@ -324,6 +324,7 @@ def _generic_hook_runtime_launch_identity(
     action_envelope: GuardActionEnvelope | None,
     payload: Mapping[str, object],
     *,
+    home_dir: Path | None,
     launch_cwd: Path,
 ) -> dict[str, object]:
     """Content-bind the complete launch represented by a generic hook action.
@@ -369,12 +370,14 @@ def _generic_hook_runtime_launch_identity(
             args=("-c", command),
             structured_command=True,
             cwd=launch_cwd,
+            home_dir=home_dir,
             launch_env=os.environ,
         )
     else:
         resolved_launch = build_runtime_launch_identity(
             command,
             cwd=launch_cwd,
+            home_dir=home_dir,
             launch_env=os.environ,
         )
 
@@ -398,6 +401,7 @@ def _generic_hook_approval_context_token(
     daemon_status: str | None,
     fail_mode: str | None,
     harness: str,
+    home_dir: Path | None,
     payload: Mapping[str, object],
     publisher: str | None,
     runtime_workspace: Path | None,
@@ -419,6 +423,7 @@ def _generic_hook_approval_context_token(
             "runtime_launch": _generic_hook_runtime_launch_identity(
                 action_envelope,
                 payload,
+                home_dir=home_dir,
                 launch_cwd=launch_cwd,
             ),
             "source_scope": _coalesce_string(payload.get("source_scope"), "project"),
@@ -819,6 +824,7 @@ def _run_hook_generic_payload(
         daemon_status=daemon_status,
         fail_mode=fail_mode,
         harness=args.harness,
+        home_dir=home_dir,
         payload=payload_map,
         publisher=publisher,
         runtime_workspace=runtime_workspace,
