@@ -177,6 +177,7 @@ def _generic_hook_token(*, config: GuardConfig, payload: dict[str, object]) -> s
         daemon_status=None,
         fail_mode=None,
         harness="generic-test",
+        home_dir=_workspace(config).parent,
         payload=payload,
         publisher=None,
         runtime_workspace=config.workspace,

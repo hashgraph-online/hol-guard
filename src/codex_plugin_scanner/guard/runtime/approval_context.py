@@ -199,11 +199,29 @@ def approval_context_tokens_validation_reason(
     return None
 
 
+def _runtime_path_with_trusted_home(command: str, *, home_dir: Path | None) -> Path | None:
+    """Resolve current-user tilde syntax without trusting worker process state."""
+
+    if command == "~":
+        return home_dir if home_dir is not None else None
+    if command.startswith("~/") or (os.name == "nt" and command.startswith("~\\")):
+        if home_dir is None:
+            return None
+        relative_tail = command[2:].lstrip("/\\")
+        if not relative_tail or ntpath.splitdrive(relative_tail)[0]:
+            return None
+        return home_dir / relative_tail
+    if command.startswith("~"):
+        return None
+    return Path(command)
+
+
 def build_runtime_executable_identity(
     command: object,
     *,
     search_path: str | None = None,
     cwd: Path | None = None,
+    home_dir: Path | None = None,
     require_executable: bool = True,
 ) -> dict[str, object]:
     """Resolve and content-bind an executable without launching it.
@@ -229,7 +247,9 @@ def build_runtime_executable_identity(
         return with_launch_cwd({"command": None, "path": None, "status": "not_applicable"})
     if not isinstance(command, str) or not command.strip():
         return with_launch_cwd(_unreusable_executable_identity(command, status="invalid_command"))
-    candidate = Path(command).expanduser()
+    candidate = _runtime_path_with_trusted_home(command, home_dir=home_dir)
+    if candidate is None:
+        return with_launch_cwd(_unreusable_executable_identity(command, status="unresolved_home"))
     has_windows_path = "\\" in command or bool(ntpath.splitdrive(command)[0]) or command.startswith("//")
     if has_windows_path and os.name != "nt":
         return with_launch_cwd(_unreusable_executable_identity(command, status="foreign_platform_path", path=candidate))
@@ -432,6 +452,7 @@ def build_runtime_launch_identity(
     direct_executable: bool = False,
     search_path: str | None = None,
     cwd: Path | None = None,
+    home_dir: Path | None = None,
     launch_env: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """Content-bind an executable and any local code-bearing entrypoint.
@@ -449,7 +470,12 @@ def build_runtime_launch_identity(
         return {
             "argv_sha256": _launch_argv_digest(()),
             "entrypoint": {"kind": "not-applicable", "status": "not_applicable"},
-            "executable": build_runtime_executable_identity(command, search_path=search_path, cwd=effective_cwd),
+            "executable": build_runtime_executable_identity(
+                command,
+                search_path=search_path,
+                cwd=effective_cwd,
+                home_dir=home_dir,
+            ),
             "launch_cwd": str(effective_cwd),
         }
     if not isinstance(command, str) or not command.strip():
@@ -459,7 +485,12 @@ def build_runtime_launch_identity(
                 kind="unknown-launch",
                 reason="invalid_launch_command",
             ),
-            "executable": build_runtime_executable_identity(command, search_path=search_path, cwd=effective_cwd),
+            "executable": build_runtime_executable_identity(
+                command,
+                search_path=search_path,
+                cwd=effective_cwd,
+                home_dir=home_dir,
+            ),
             "launch_cwd": str(effective_cwd),
         }
     if structured_command:
@@ -480,6 +511,7 @@ def build_runtime_launch_identity(
                 command_tokens[0] if command_tokens else command,
                 search_path=search_path,
                 cwd=effective_cwd,
+                home_dir=home_dir,
             ),
             "launch_cwd": str(effective_cwd),
         }
@@ -488,11 +520,17 @@ def build_runtime_launch_identity(
     launch_args = tuple(command_tokens[1:]) + tuple(str(argument) for argument in args)
     environment = launch_env if launch_env is not None else os.environ
     effective_search_path = search_path if search_path is not None else environment.get("PATH")
-    executable_identity = build_runtime_executable_identity(
-        executable,
-        search_path=effective_search_path,
-        cwd=effective_cwd,
-    )
+    raw_command = command.lstrip()
+    raw_current_user_tilde = raw_command.startswith("~/") or (os.name == "nt" and raw_command.startswith("~\\"))
+    if not structured_command and executable.startswith("~") and not raw_current_user_tilde:
+        executable_identity = _unreusable_executable_identity(executable, status="ambiguous_tilde_syntax")
+    else:
+        executable_identity = build_runtime_executable_identity(
+            executable,
+            search_path=effective_search_path,
+            cwd=effective_cwd,
+            home_dir=home_dir,
+        )
     executable_shebang, executable_shebang_status = _raw_shebang_for_identity(executable_identity)
     return {
         "argv_sha256": _launch_argv_digest((executable, *launch_args)),

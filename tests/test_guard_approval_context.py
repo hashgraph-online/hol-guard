@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_validation_reason,
     build_approval_context_token,
     build_runtime_executable_identity,
+    build_runtime_launch_identity,
     parse_approval_context_token,
 )
 
@@ -48,6 +50,88 @@ def test_token_is_deterministic_for_equivalent_structured_context() -> None:
     assert first == second
     assert first.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
     assert parse_approval_context_token(first) == parse_approval_context_token(second)
+
+
+def test_runtime_launch_resolves_current_user_tilde_from_trusted_home(tmp_path) -> None:
+    executable = tmp_path / "bin" / "reviewed-commit"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
+
+    identity = build_runtime_launch_identity(
+        "~/bin/reviewed-commit --message test",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        launch_env={"PATH": ""},
+    )
+    executable_identity = identity["executable"]
+
+    assert isinstance(executable_identity, dict)
+    assert executable_identity["status"] == "verified"
+    assert executable_identity["path"] == str(executable.resolve())
+
+
+def test_runtime_launch_keeps_repeated_tilde_separators_inside_trusted_home(tmp_path) -> None:
+    executable = tmp_path / "bin" / "reviewed-commit"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
+
+    identity = build_runtime_launch_identity(
+        "~//bin/reviewed-commit --message test",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        launch_env={"PATH": ""},
+    )
+    executable_identity = identity["executable"]
+
+    assert isinstance(executable_identity, dict)
+    assert executable_identity["status"] == "verified"
+    assert executable_identity["path"] == str(executable.resolve())
+
+
+@pytest.mark.parametrize(
+    "command",
+    ('"~/bin/reviewed-commit"', "\\~/bin/reviewed-commit", "~\\/bin/reviewed-commit", '~""/bin/reviewed-commit'),
+)
+def test_runtime_launch_rejects_non_expanding_tilde_syntax(command: str, tmp_path) -> None:
+    identity = build_runtime_launch_identity(
+        command,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        launch_env={"PATH": ""},
+    )
+    executable_identity = identity["executable"]
+
+    assert isinstance(executable_identity, dict)
+    assert executable_identity["status"] == "ambiguous_tilde_syntax"
+    assert isinstance(executable_identity["reuse_nonce"], str)
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_status"),
+    (
+        ("~/bin/reviewed-commit", "unresolved_home"),
+        ("~other/bin/reviewed-commit", "ambiguous_tilde_syntax"),
+        ("~/C:/bin/reviewed-commit", "unresolved_home"),
+    ),
+)
+def test_runtime_launch_without_matching_trusted_home_fails_closed(
+    command: str,
+    expected_status: str,
+    tmp_path: Path,
+) -> None:
+    identity = build_runtime_launch_identity(
+        command,
+        cwd=tmp_path,
+        home_dir=None,
+        launch_env={"PATH": ""},
+    )
+    executable_identity = identity["executable"]
+
+    assert isinstance(executable_identity, dict)
+    assert executable_identity["status"] == expected_status
+    assert isinstance(executable_identity["reuse_nonce"], str)
 
 
 def test_token_serializes_only_component_hashes_and_not_source_values() -> None:
