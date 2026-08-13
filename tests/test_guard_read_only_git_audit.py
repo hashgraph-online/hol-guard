@@ -42,11 +42,11 @@ def _repository(tmp_path: Path) -> tuple[Path, Path]:
     return home, repository
 
 
-def _audit(repository: Path, *, suffix: str = "") -> str:
+def _audit(repository: Path, *, loop_variable: str = "commit", suffix: str = "") -> str:
     return (
-        f"cd {repository} && for commit in deadbee cafebabe; do "
-        'git merge-base --is-ancestor $commit HEAD 2>/dev/null && echo "$commit YES" '
-        '|| echo "$commit NO"; done'
+        f"cd {repository} && for {loop_variable} in deadbee cafebabe; do "
+        f"git merge-base --is-ancestor ${loop_variable} HEAD 2>/dev/null && "
+        f'echo "${loop_variable} YES" || echo "${loop_variable} NO"; done'
         f"{suffix}"
     )
 
@@ -67,7 +67,7 @@ def test_literal_ancestry_audit_is_explicitly_benign(tmp_path: Path) -> None:
 
 def test_ancestry_audit_rejects_path_as_loop_variable(tmp_path: Path) -> None:
     home, repository = _repository(tmp_path)
-    command = _audit(repository).replace("commit", "PATH")
+    command = _audit(repository, loop_variable="PATH")
 
     assert not is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home)
 
