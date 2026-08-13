@@ -2426,7 +2426,9 @@ def _repair_cursor_install(
     if not isinstance(manifest, dict):
         return None, "Could not inspect Cursor protection during update: managed manifest is invalid"
     surface_value = manifest.get("surface")
-    surface = surface_value if surface_value in {"editor", "all"} else None
+    surface: str | None = (
+        surface_value if isinstance(surface_value, str) and surface_value in {"editor", "all"} else None
+    )
     if surface is None:
         return None, None
     try:
@@ -2437,6 +2439,7 @@ def _repair_cursor_install(
     if hook_state["protection_active"] is True:
         return None, None
     try:
+        repair_surface = None if surface == "all" else surface
         payload = apply_managed_install(
             "install",
             "cursor",
@@ -2445,9 +2448,9 @@ def _repair_cursor_install(
             store,
             repair_workspace or workspace,
             now,
-            surface=surface,
+            surface=repair_surface,
         )
-    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
         return None, f"Could not repair Cursor protection during update: {error}"
     repaired = payload.get("managed_install")
     if not isinstance(repaired, dict):

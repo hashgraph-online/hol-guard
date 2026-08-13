@@ -801,6 +801,36 @@ def test_cursor_update_repairs_stale_attested_cli_identity(tmp_path: Path) -> No
     assert cursor_native_hook_state(context)["protection_active"] is True
 
 
+def test_cursor_update_repairs_legacy_all_surface(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    context = HarnessContext(home_dir=home, guard_home=tmp_path / "guard", workspace_dir=workspace)
+    hooks_manifest = install_cursor_hooks(context)
+    store = GuardStore(context.guard_home)
+    store.set_managed_install(
+        "cursor",
+        True,
+        str(workspace),
+        {"surface": "all", **hooks_manifest},
+        "2026-07-20T00:00:00+00:00",
+    )
+    script_path = Path(str(hooks_manifest["managed_hook_script_path"]))
+    script_path.write_text("tampered", encoding="utf-8")
+
+    repaired, warning = guard_update_commands_module._repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=str(workspace),
+        now="2026-07-20T00:01:00+00:00",
+    )
+
+    assert warning is None
+    assert repaired is not None
+    assert repaired["manifest"]["surface"] == "all"
+    assert cursor_native_hook_state(context)["protection_active"] is True
+
+
 def test_cursor_update_reports_context_resolution_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -833,6 +863,41 @@ def test_cursor_update_reports_context_resolution_failure(
 
     assert repaired is None
     assert warning == "Could not inspect Cursor protection during update: invalid repair context"
+
+
+def test_cursor_update_reports_surface_contract_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=None)
+    store = GuardStore(context.guard_home)
+    store.set_managed_install(
+        "cursor",
+        True,
+        str(tmp_path / "workspace"),
+        {"surface": "editor"},
+        "2026-07-20T00:00:00+00:00",
+    )
+    monkeypatch.setattr(
+        guard_update_commands_module,
+        "cursor_native_hook_state",
+        lambda _context: {"protection_active": False},
+    )
+    monkeypatch.setattr(
+        guard_update_commands_module,
+        "apply_managed_install",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("unsupported repair surface")),
+    )
+
+    repaired, warning = guard_update_commands_module._repair_cursor_install(
+        context=context,
+        store=store,
+        workspace=None,
+        now="2026-07-20T00:01:00+00:00",
+    )
+
+    assert repaired is None
+    assert warning == "Could not repair Cursor protection during update: unsupported repair surface"
 
 
 def test_cursor_install_is_idempotent_across_path_changes(
