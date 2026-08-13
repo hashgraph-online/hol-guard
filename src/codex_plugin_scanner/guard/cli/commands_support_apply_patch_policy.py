@@ -20,9 +20,7 @@ _AGENT_INSTRUCTION_FILE_NAMES = frozenset(
     }
 )
 _AGENT_INSTRUCTION_DIRECTORIES = frozenset({".agents", ".claude", ".codex", ".cursor"})
-_PROTECTED_WORKSPACE_METADATA_DIRECTORIES = frozenset(
-    {".bzr", ".git", ".hg", ".jj", ".pijul", ".svn", "_darcs"}
-)
+_PROTECTED_WORKSPACE_METADATA_DIRECTORIES = frozenset({".bzr", ".git", ".hg", ".jj", ".pijul", ".svn", "_darcs"})
 
 
 def verified_non_sensitive_codex_apply_patch(
