@@ -147,6 +147,10 @@ def _git_segment_is_silently_verified(
         return _git_status_has_execution_free_config(git_cwd, git_binary=git_binary)
     if operation == "log":
         return _git_log_has_execution_free_config(git_cwd, git_binary=git_binary)
+    if operation in {"fetch", "ls-remote"}:
+        return "|" not in (*segment.control_before, *segment.control_after) and is_low_risk_git_inspection_segment(
+            segment
+        )
     if operation in {"blame", "branch", "show", "worktree"}:
         return is_low_risk_git_inspection_segment(segment)
     return operation in {"ls-files", "rev-parse"}

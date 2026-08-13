@@ -74,7 +74,7 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
     operation_index = 1
     repository_path: str | None = None
     if tokens[1] == "-C":
-        if len(tokens) < 4 or not _safe_repository_path(tokens[2]):
+        if len(tokens) < 4 or not _safe_git_c_repository_path(tokens[2]):
             return False
         repository_path = tokens[2]
         operation_index = 3
@@ -292,6 +292,17 @@ def _safe_repository_path(value: str) -> bool:
     )
 
 
+def _safe_git_c_repository_path(value: str) -> bool:
+    if _safe_repository_path(value):
+        return True
+    if not value or len(value) > 512 or not Path(value).is_absolute() or _dynamic(value):
+        return False
+    return all(
+        component not in {"", ".", ".."} and _REPOSITORY_PATH_COMPONENT.fullmatch(component) is not None
+        for component in Path(value).parts[1:]
+    )
+
+
 def _safe_diff_args(args: tuple[str, ...]) -> bool:
     if not args:
         return False
@@ -377,10 +388,21 @@ def _git_invocation_cwds(
         return None
     try:
         execution_cwd = segment.effective_cwd.resolve()
-        repository_cwd = (execution_cwd / repository_path).resolve() if repository_path is not None else execution_cwd
+        if repository_path is None:
+            repository_cwd = execution_cwd
+        else:
+            requested_repository = Path(repository_path)
+            candidate = (
+                requested_repository if requested_repository.is_absolute() else execution_cwd / requested_repository
+            )
+            repository_cwd = candidate.resolve()
     except (OSError, RuntimeError):
         return None
-    return (execution_cwd, repository_cwd) if repository_cwd.is_dir() else None
+    return (
+        (execution_cwd, repository_cwd)
+        if repository_cwd.is_dir() and repository_cwd.is_relative_to(execution_cwd)
+        else None
+    )
 
 
 def _git_log_has_execution_free_config(

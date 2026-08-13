@@ -597,7 +597,12 @@ def _git_fetch_config_routes_execution(config: dict[str, tuple[str, ...]]) -> bo
         return True
     if any(value.strip() for value in config.get("core.askpass", ())):
         return True
-    if any(key.startswith("url.") and key.endswith(".insteadof") for key in config):
+    if any(
+        key.startswith("url.")
+        and key.endswith(".insteadof")
+        and key != "url.https://github.com/.insteadof"
+        for key in config
+    ):
         return True
     if not all(_safe_origin_fetch_refspec(value) for value in config.get("remote.origin.fetch", ())):
         return True
