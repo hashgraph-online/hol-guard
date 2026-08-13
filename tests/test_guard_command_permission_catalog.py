@@ -20,6 +20,7 @@ _GITHUB_PERMISSION_IDS = {
     "command.github.permission.read-local",
     "command.github.permission.read-remote",
     "command.github.permission.propose-remote",
+    "command.github.permission.routine-workflow-remote",
     "command.github.permission.write-local",
     "command.github.permission.maintain-remote",
     "command.github.permission.content-remote",
@@ -38,6 +39,7 @@ _GITHUB_CAPABILITIES: set[GitHubCommandCapability] = {
     "read_local",
     "read_remote",
     "propose_remote",
+    "routine_workflow_remote",
     "write_local",
     "maintain_remote",
     "content_remote",
@@ -137,7 +139,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "74434c8faa7e40161e2b20bbf3e6ffa82a71fb90c8f329524ac2f44edfd1c1c0"
+    assert registry.catalog_digest == "8537c1ceb524c2432fe15939b55fa38516c317c6dcf38e3e3a7be6f5d0a1853e"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )
