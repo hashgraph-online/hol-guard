@@ -191,7 +191,10 @@ def test_generic_hook_keeps_repeated_tilde_separators_inside_trusted_home(
     assert resolved_launch["executable"]["path"] == str(executable.resolve())
 
 
-@pytest.mark.parametrize("command", ('"~/bin/reviewed-commit"', "\\~/bin/reviewed-commit"))
+@pytest.mark.parametrize(
+    "command",
+    ('"~/bin/reviewed-commit"', "\\~/bin/reviewed-commit", "~\\/bin/reviewed-commit", '~""/bin/reviewed-commit'),
+)
 def test_generic_hook_rejects_non_expanding_tilde_syntax(
     command: str,
     monkeypatch: pytest.MonkeyPatch,

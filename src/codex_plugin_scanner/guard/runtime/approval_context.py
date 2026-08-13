@@ -528,7 +528,8 @@ def build_runtime_launch_identity(
     environment = launch_env if launch_env is not None else os.environ
     effective_search_path = search_path if search_path is not None else environment.get("PATH")
     raw_command = command.lstrip()
-    if not structured_command and executable.startswith("~") and not raw_command.startswith("~"):
+    raw_current_user_tilde = raw_command.startswith("~/") or (os.name == "nt" and raw_command.startswith("~\\"))
+    if not structured_command and executable.startswith("~") and not raw_current_user_tilde:
         executable_identity = _unreusable_executable_identity(executable, status="ambiguous_tilde_syntax")
     else:
         executable_identity = build_runtime_executable_identity(

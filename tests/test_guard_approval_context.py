@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -97,7 +98,10 @@ def test_runtime_launch_keeps_repeated_tilde_separators_inside_trusted_home(tmp_
     assert executable_identity["path"] == str(executable.resolve())
 
 
-@pytest.mark.parametrize("command", ('"~/bin/reviewed-commit"', "\\~/bin/reviewed-commit"))
+@pytest.mark.parametrize(
+    "command",
+    ('"~/bin/reviewed-commit"', "\\~/bin/reviewed-commit", "~\\/bin/reviewed-commit", '~""/bin/reviewed-commit'),
+)
 def test_runtime_launch_rejects_non_expanding_tilde_syntax(command: str, tmp_path) -> None:
     identity = build_runtime_launch_identity(
         command,
@@ -113,10 +117,18 @@ def test_runtime_launch_rejects_non_expanding_tilde_syntax(command: str, tmp_pat
 
 
 @pytest.mark.parametrize(
-    "command",
-    ("~/bin/reviewed-commit", "~other/bin/reviewed-commit", "~/C:/bin/reviewed-commit"),
+    ("command", "expected_status"),
+    (
+        ("~/bin/reviewed-commit", "unresolved_home"),
+        ("~other/bin/reviewed-commit", "ambiguous_tilde_syntax"),
+        ("~/C:/bin/reviewed-commit", "unresolved_home"),
+    ),
 )
-def test_runtime_launch_without_matching_trusted_home_fails_closed(command: str, tmp_path) -> None:
+def test_runtime_launch_without_matching_trusted_home_fails_closed(
+    command: str,
+    expected_status: str,
+    tmp_path: Path,
+) -> None:
     identity = build_runtime_launch_identity(
         command,
         cwd=tmp_path,
@@ -126,7 +138,7 @@ def test_runtime_launch_without_matching_trusted_home_fails_closed(command: str,
     executable_identity = identity["executable"]
 
     assert isinstance(executable_identity, dict)
-    assert executable_identity["status"] == "unresolved_home"
+    assert executable_identity["status"] == expected_status
     assert isinstance(executable_identity["reuse_nonce"], str)
 
 
