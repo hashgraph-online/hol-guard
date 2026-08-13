@@ -35,7 +35,7 @@ REQUEST_MAGIC = b'HGR2'
 RESPONSE_MAGIC = b'HGS2'
 SERVER_LABEL = b'hol-guard-resident-server-v1\\x00'
 CLIENT_LABEL = b'hol-guard-resident-client-v1\\x00'
-HEADER_BYTES = 72
+REQUEST_HEADER_BYTES = 80
 
 def read_exact(client, length):
     chunks = []
@@ -49,6 +49,8 @@ def read_exact(client, length):
 
 token = bytes.fromhex(sys.stdin.readline().strip())
 assert len(token) == 32
+generation_id = bytes.fromhex(sys.stdin.readline().strip())
+assert len(generation_id) == 16
 socket_path = sys.argv[3]
 server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 server.bind(socket_path)
@@ -65,12 +67,18 @@ while True:
         expected = hmac.new(token, CLIENT_LABEL + nonce, hashlib.sha256).digest()
         if proof is None or not hmac.compare_digest(proof, expected):
             continue
-        header = read_exact(client, HEADER_BYTES)
+        header = read_exact(client, REQUEST_HEADER_BYTES)
         if header is None or header[:4] != REQUEST_MAGIC:
             continue
-        request_id = header[4:36]
-        request_digest = header[36:68]
-        length = int.from_bytes(header[68:72], 'big')
+        operation = header[4]
+        if operation not in (1, 2) or header[5:8] != bytes(3):
+            continue
+        request_id = header[8:40]
+        request_digest = header[40:72]
+        length = int.from_bytes(header[72:76], 'big')
+        deadline_ms = int.from_bytes(header[76:80], 'big')
+        if deadline_ms <= 0:
+            continue
         request = read_exact(client, length)
         if request is None or hashlib.sha256(request).digest() != request_digest:
             continue
@@ -85,6 +93,8 @@ while True:
         response_header = (
             RESPONSE_MAGIC
             + request_id
+            + request_digest
+            + generation_id
             + hashlib.sha256(response).digest()
             + len(response).to_bytes(4, 'big')
         )

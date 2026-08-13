@@ -14,6 +14,9 @@ from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_status,
     review_post_tool_native,
 )
+from codex_plugin_scanner.guard.native_runtime_supervisor import (
+    NativeSupervisorStartPermit,
+)
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
@@ -42,6 +45,7 @@ def _request(tmp_path: Path, request_id: str) -> HookReviewRequest:
 
 def test_invalid_loopback_server_proof_receives_no_authenticated_payload() -> None:
     token = b"t" * resident._AUTH_TOKEN_BYTES
+    generation_id = b"g" * resident._GENERATION_ID_BYTES
     received_after_invalid_proof: list[bytes] = []
     ready = threading.Event()
 
@@ -50,7 +54,7 @@ def test_invalid_loopback_server_proof_receives_no_authenticated_payload() -> No
         listener.listen(1)
         host, port = listener.getsockname()[:2]
 
-        def malicious_server() -> None:
+        def invalid_proof_server() -> None:
             ready.set()
             connection, _ = listener.accept()
             with connection:
@@ -64,15 +68,18 @@ def test_invalid_loopback_server_proof_receives_no_authenticated_payload() -> No
                     extra = b""
                 received_after_invalid_proof.append(extra)
 
-        thread = threading.Thread(target=malicious_server, daemon=True)
+        thread = threading.Thread(target=invalid_proof_server, daemon=True)
         thread.start()
         assert ready.wait(timeout=1.0)
-        client = resident._authenticated_loopback_client(
+        response = resident._send_authenticated_loopback_request(
             (str(host), int(port)),
             token,
+            generation_id,
+            b"{}",
+            operation=resident._OPERATION_EVALUATE,
             timeout_seconds=1.0,
         )
-        assert client is None
+        assert response is None
         thread.join(timeout=2.0)
 
     assert received_after_invalid_proof == [b""]
@@ -104,42 +111,83 @@ def test_windows_service_rotates_auth_secret_and_stays_closed(
         environment={},
     )
     service.loopback_address = ("127.0.0.1", 65534)
-    generated = iter(
+    auth_tokens = iter(
         (
             b"a" * resident._AUTH_TOKEN_BYTES,
             b"b" * resident._AUTH_TOKEN_BYTES,
         )
     )
-    observed: list[bytes | None] = []
+    generation_ids = iter(
+        (
+            b"1" * resident._GENERATION_ID_BYTES,
+            b"2" * resident._GENERATION_ID_BYTES,
+        )
+    )
+    generations = iter((1, 2))
+    observed: list[tuple[bytes, bytes, int]] = []
+
+    def fake_token_bytes(size: int) -> bytes:
+        if size == resident._AUTH_TOKEN_BYTES:
+            return next(auth_tokens)
+        if size == resident._GENERATION_ID_BYTES:
+            return next(generation_ids)
+        raise AssertionError(f"unexpected native resident secret size: {size}")
+
+    def allow_start(
+        _identity_sha256: str,
+        _guard_home: Path,
+    ) -> NativeSupervisorStartPermit:
+        generation = next(generations)
+        return NativeSupervisorStartPermit(
+            allowed=True,
+            generation=generation,
+            reason="native_starting",
+            retry_after_seconds=0.0,
+        )
+
+    def observe_run(
+        _stop_event: threading.Event,
+        auth_token: bytes,
+        generation_id: bytes,
+        generation: int,
+    ) -> None:
+        observed.append((auth_token, generation_id, generation))
 
     monkeypatch.setattr(resident.os, "name", "nt")
+    monkeypatch.setattr(resident.secrets, "token_bytes", fake_token_bytes)
+    monkeypatch.setattr(resident, "native_supervisor_request_start", allow_start)
     monkeypatch.setattr(
-        resident.secrets,
-        "token_bytes",
-        lambda _size: next(generated),
+        resident,
+        "native_supervisor_record_start_failed",
+        lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
         service,
         "_transport_accepts_authenticated_connections",
         lambda: False,
     )
-    monkeypatch.setattr(
-        service,
-        "_run",
-        lambda _stop_event, auth_token, _generation: observed.append(auth_token),
-    )
+    monkeypatch.setattr(service, "_run", observe_run)
 
     assert not service._ensure_started(timeout_seconds=0.1)
     assert not service._ensure_started(timeout_seconds=0.1)
     assert observed == [
-        b"a" * resident._AUTH_TOKEN_BYTES,
-        b"b" * resident._AUTH_TOKEN_BYTES,
+        (
+            b"a" * resident._AUTH_TOKEN_BYTES,
+            b"1" * resident._GENERATION_ID_BYTES,
+            1,
+        ),
+        (
+            b"b" * resident._AUTH_TOKEN_BYTES,
+            b"2" * resident._GENERATION_ID_BYTES,
+            2,
+        ),
     ]
     assert service.starts == 2
 
     service.close()
     assert not service._ensure_started(timeout_seconds=0.1)
     assert service._auth_token is None
+    assert service._generation_id is None
 
 
 @pytest.mark.skipif(

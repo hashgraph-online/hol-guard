@@ -20,6 +20,7 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 hex = "0.4.3"
+hmac = "0.12.1"
 libc = "0.2.175"
 regex = "1.11.2"
 serde = { version = "1.0.219", features = ["derive"] }

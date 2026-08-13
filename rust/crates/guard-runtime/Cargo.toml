@@ -14,6 +14,8 @@ guard-command = { path = "../guard-command" }
 guard-contracts = { path = "../guard-contracts" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-rule-contract = { path = "../guard-rule-contract" }
+hex.workspace = true
+hmac.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

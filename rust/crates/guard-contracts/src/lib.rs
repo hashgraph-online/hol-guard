@@ -31,11 +31,37 @@ pub struct HookOutputSummaryV1 {
     pub output_chars: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NativeRuntimeIdentityV1 {
+    pub binary_sha256: String,
+    pub runtime_version: String,
+    pub build_sha: String,
+    pub rule_digest: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NativePolicySnapshotIdentityV1 {
+    pub schema_version: u16,
+    pub generation: u64,
+    pub rule_set_digest: String,
+    pub strict_config_digest: String,
+    pub never_allow_digest: String,
+    pub source_policy_digest: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NativeHookRequestV1 {
     pub protocol_version: u16,
     #[serde(default)]
     pub request_id: Option<String>,
+    #[serde(default)]
+    pub operation: Option<String>,
+    #[serde(default)]
+    pub payload_size_bytes: Option<usize>,
+    #[serde(default)]
+    pub runtime_identity: Option<NativeRuntimeIdentityV1>,
+    #[serde(default)]
+    pub policy_snapshot: Option<NativePolicySnapshotIdentityV1>,
     pub harness: String,
     pub event_name: String,
     pub payload: Value,
@@ -160,5 +186,21 @@ mod tests {
         assert!(encoded.get("reason").is_none());
         assert_eq!(encoded["decision"], "allow");
         assert_eq!(encoded["reason_code"], "output_scan_allow");
+    }
+
+    #[test]
+    fn identity_bound_request_fields_are_backward_compatible() {
+        let value = serde_json::json!({
+            "protocol_version": 1,
+            "harness": "claude-code",
+            "event_name": "PostToolUse",
+            "payload": {},
+            "home_dir": "/home/test",
+            "guard_home": "/home/test/.guard"
+        });
+        let request: NativeHookRequestV1 = serde_json::from_value(value).unwrap();
+        assert!(request.operation.is_none());
+        assert!(request.runtime_identity.is_none());
+        assert!(request.policy_snapshot.is_none());
     }
 }

@@ -433,6 +433,10 @@ mod tests {
         NativeHookRequestV1 {
             protocol_version: 1,
             request_id: Some("test".into()),
+            operation: None,
+            payload_size_bytes: None,
+            runtime_identity: None,
+            policy_snapshot: None,
             harness: "claude-code".into(),
             event_name: "PostToolUse".into(),
             payload,
