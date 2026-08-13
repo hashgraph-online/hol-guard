@@ -58,10 +58,17 @@ def build_network_status(
             and supervisor_health is not None
             and supervisor_health.backend_id == profile.backend_id
         )
-        installed = selected and supervisor_health.backend_digest is not None
-        verified = installed and supervisor_health.effective_grade is not EnforcementGrade.UNAVAILABLE
-        active = selected and supervisor_health.permits_enforcement
-        effective_grade = supervisor_health.effective_grade if selected else EnforcementGrade.UNAVAILABLE
+        selected_health = supervisor_health if selected else None
+        installed = selected_health is not None and selected_health.backend_digest is not None
+        verified = (
+            installed
+            and selected_health is not None
+            and selected_health.effective_grade is not EnforcementGrade.UNAVAILABLE
+        )
+        active = selected_health is not None and selected_health.permits_enforcement
+        effective_grade = (
+            selected_health.effective_grade if selected_health is not None else EnforcementGrade.UNAVAILABLE
+        )
         if active:
             active_grade = effective_grade
         backends.append(
