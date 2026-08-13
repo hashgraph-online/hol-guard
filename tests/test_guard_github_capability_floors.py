@@ -22,7 +22,7 @@ _EXPECTED_FLOORS = {
     "read_remote": "allow",
     "propose_remote": "allow",
     "routine_merge_remote": "allow",
-    "routine_workflow_remote": "allow",
+    "routine_workflow_remote": "require-reapproval",
     "routine_review_thread_remote": "allow",
     "write_local": "review",
     "maintain_remote": "review",
@@ -130,7 +130,6 @@ def test_every_capability_has_an_explicit_floor(capability: GitHubCommandCapabil
         "read_remote",
         "propose_remote",
         "routine_merge_remote",
-        "routine_workflow_remote",
         "routine_review_thread_remote",
     ),
 )

@@ -412,7 +412,7 @@ def test_v2_saved_artifact_allow_persists_only_the_exact_action(tmp_path: Path) 
     )
 
 
-def test_context_bound_saved_allow_survives_context_token_changes_but_not_command_changes(tmp_path: Path) -> None:
+def test_context_bound_saved_allow_requires_the_identical_context_token(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     context_token = build_approval_context_token(
         identity={"harness": "codex", "tool": "Bash"},
@@ -452,19 +452,14 @@ def test_context_bound_saved_allow_survives_context_token_changes_but_not_comman
         source_scope="project",
         raw_command_text="npm run guard:acquisition-loop",
     )
-    changed_action_context = runtime_tool_action_exact_match_context(
-        config_path="/workspace/repo/.guard/config.toml",
-        source_scope="project",
-        raw_command_text="npm run guard:other",
-    )
     policy_artifact_id = runtime_tool_action_policy_artifact_id("codex:project:Bash")
     assert policy_artifact_id is not None
 
     assert (
         store.resolve_policy_decision(
             "codex",
-            policy_artifact_id,
-            artifact_hash="guard-approval-context:v1:different-mode-token",
+            "codex:project:Bash",
+            artifact_hash=context_token,
             runtime_exact_match_context=same_action_context,
             consume_one_shot=False,
         )
@@ -475,7 +470,7 @@ def test_context_bound_saved_allow_survives_context_token_changes_but_not_comman
             "codex",
             policy_artifact_id,
             artifact_hash="guard-approval-context:v1:different-mode-token",
-            runtime_exact_match_context=changed_action_context,
+            runtime_exact_match_context=same_action_context,
             consume_one_shot=False,
         )
         is None

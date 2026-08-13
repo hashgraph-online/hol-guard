@@ -437,12 +437,12 @@ def test_guard_keeps_routine_review_thread_response_selections_prompt_free(selec
     assert match is None
 
 
-def test_guard_keeps_exact_failed_job_rerun_prompt_free() -> None:
+def test_guard_reviews_exact_failed_job_rerun() -> None:
     command = "gh run rerun 31707639186 --repo hashgraph-online/hol-guard --failed"
 
     match = extract_sensitive_tool_action_request("Bash", {"command": command})
 
-    assert match is None
+    assert match is not None
 
 
 @pytest.mark.parametrize(

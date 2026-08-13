@@ -65,6 +65,13 @@ def test_literal_ancestry_audit_is_explicitly_benign(tmp_path: Path) -> None:
     assert result["risk_classes"] == []
 
 
+def test_ancestry_audit_rejects_path_as_loop_variable(tmp_path: Path) -> None:
+    home, repository = _repository(tmp_path)
+    command = _audit(repository).replace("commit", "PATH")
+
+    assert not is_read_only_git_ancestry_audit(command, cwd=home, home_dir=home)
+
+
 def test_ancestry_audit_allows_bounded_log_and_numeric_pid_read(tmp_path: Path) -> None:
     home, repository = _repository(tmp_path)
     lock = repository / ".deploy.lock.d" / "pid"

@@ -306,6 +306,14 @@ def build_tool_call_hash(
             "mcp_schema_hash": browser_intent.mcp_schema_hash,
             "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
         }
+        exact_arguments = arguments
+        if isinstance(arguments, Mapping):
+            exact_arguments = {
+                key: value for key, value in arguments.items() if key not in browser_intent.volatile_fields_dropped
+            }
+        content_arguments["exact_arguments_hash"] = sha256(
+            json.dumps(exact_arguments, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
         if browser_intent.sensitive_surface_flags:
             sensitive_arguments = arguments
             if isinstance(arguments, Mapping):

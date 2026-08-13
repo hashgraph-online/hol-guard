@@ -20,6 +20,9 @@ _AGENT_INSTRUCTION_FILE_NAMES = frozenset(
     }
 )
 _AGENT_INSTRUCTION_DIRECTORIES = frozenset({".agents", ".claude", ".codex", ".cursor"})
+_PROTECTED_WORKSPACE_METADATA_DIRECTORIES = frozenset(
+    {".bzr", ".git", ".hg", ".jj", ".pijul", ".svn", "_darcs"}
+)
 
 
 def verified_non_sensitive_codex_apply_patch(
@@ -69,6 +72,7 @@ def verified_non_sensitive_codex_apply_patch(
                 classify_secret_path(str(resolved), cwd=workspace, home_dir=home_dir) is not None
                 or resolved.name.lower() in _AGENT_INSTRUCTION_FILE_NAMES
                 or {part.lower() for part in relative.parts} & _AGENT_INSTRUCTION_DIRECTORIES
+                or {part.lower() for part in relative.parts} & _PROTECTED_WORKSPACE_METADATA_DIRECTORIES
             ):
                 return False
     except (OSError, RuntimeError, ValueError):

@@ -11,7 +11,7 @@ from .git_execution_safety import trusted_git_binary_for_cwd
 from .shell_execution_context import ShellExecutionContext, ShellExecutionSegment, model_shell_execution_context
 
 _COMMIT_ID: Final = re.compile(r"[0-9A-Fa-f]{7,40}")
-_VARIABLE: Final = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,31}")
+_SAFE_LOOP_VARIABLES: Final = frozenset({"candidate", "commit", "ref", "rev", "sha"})
 _MAX_COMMITS: Final = 32
 _MAX_PID_BYTES: Final = 32
 
@@ -83,7 +83,7 @@ def _literal_ancestry_loop_end(
     variable = start.tokens[1]
     commits = start.tokens[3:]
     if (
-        _VARIABLE.fullmatch(variable) is None
+        variable not in _SAFE_LOOP_VARIABLES
         or not 1 <= len(commits) <= _MAX_COMMITS
         or any(_COMMIT_ID.fullmatch(commit) is None for commit in commits)
         or start.control_after != (";",)

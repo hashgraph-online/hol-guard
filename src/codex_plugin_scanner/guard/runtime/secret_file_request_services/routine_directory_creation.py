@@ -20,6 +20,9 @@ def is_safe_routine_directory_creation(
 ) -> bool:
     """Allow exact parents-only mkdir calls with bounded literal targets."""
 
+    if "\n" in command_text or "\r" in command_text:
+        return False
+
     try:
         lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|<>()")
         lexer.whitespace_split = True

@@ -81,7 +81,7 @@ _CAPABILITY_FLOOR: Final[MappingProxyType[GitHubCommandCapability, GuardAction]]
         "read_remote": "allow",
         "propose_remote": "allow",
         "routine_merge_remote": "allow",
-        "routine_workflow_remote": "allow",
+        "routine_workflow_remote": "require-reapproval",
         "routine_review_thread_remote": "allow",
         "write_local": "review",
         "maintain_remote": "review",
@@ -166,8 +166,8 @@ _CONTRACTS: Final = MappingProxyType(
             _contract(
                 "routine_workflow_remote",
                 "routine-workflow-remote",
-                None,
-                None,
+                "GitHub workflow rerun",
+                "workflow-mutation",
                 "routine failed-job rerun",
             ),
             _contract(

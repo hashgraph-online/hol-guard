@@ -700,7 +700,7 @@ def apply_approval_resolution(
     approval_context_token = (
         request_artifact_hash if parse_approval_context_token(request_artifact_hash) is not None else None
     )
-    exact_context_allow = action == "allow" and approval_context_token is not None and persist_policy is not True
+    exact_context_allow = action == "allow" and approval_context_token is not None
     request_publisher = _string_or_none(request.get("publisher"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
     portable_package_workspace = package_request_portable_workspace_scope(

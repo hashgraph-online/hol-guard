@@ -319,6 +319,32 @@ def test_sensitive_browser_argument_values_have_distinct_exact_identities(tmp_pa
     )
 
 
+@pytest.mark.parametrize(
+    ("tool_name", "first_arguments", "second_arguments"),
+    (
+        (
+            "new_page",
+            {"url": "https://example.com/search?q=first"},
+            {"url": "https://example.com/search?q=second"},
+        ),
+        ("click", {"uid": "button-allow"}, {"uid": "button-delete"}),
+    ),
+)
+def test_browser_exact_identity_binds_full_action_arguments(
+    tmp_path,
+    tool_name: str,
+    first_arguments: dict[str, str],
+    second_arguments: dict[str, str],
+) -> None:
+    artifact = _artifact(tool_name=tool_name)
+    config = _config(tmp_path)
+
+    first_hash = build_tool_call_hash(artifact, first_arguments, workspace=config.workspace, config=config)
+    second_hash = build_tool_call_hash(artifact, second_arguments, workspace=config.workspace, config=config)
+
+    assert first_hash != second_hash
+
+
 def test_category_grant_does_not_cover_another_routine_category(tmp_path) -> None:
     interaction_artifact = _artifact(tool_name="click")
     navigation_artifact = _artifact(tool_name="new_page")
