@@ -1,0 +1,42 @@
+name: Export clean release source
+
+on:
+  push:
+    branches:
+      - feat/rust-p0-native-core-final
+    paths:
+      - .github/workflows/tmp-export-release-source-clean.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/rust-p0-native-core-final
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Archive clean source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude=.git \
+            --exclude=.venv \
+            --exclude=.uv-cache \
+            --exclude='rust/target' \
+            --exclude='*.pyc' \
+            --exclude='__pycache__' \
+            -czf "$RUNNER_TEMP/hol-guard-release-source.tgz" .
+          test -s "$RUNNER_TEMP/hol-guard-release-source.tgz"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-guard-release-source-${{ github.sha }}
+          path: ${{ runner.temp }}/hol-guard-release-source.tgz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
