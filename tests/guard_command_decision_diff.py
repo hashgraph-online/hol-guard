@@ -51,6 +51,13 @@ def _install_evaluator_packages() -> None:
             }
         )
         sys.modules[name] = package
+        # Bind the stub onto its parent package the way a real submodule
+        # import would, so later dotted-path monkeypatch resolution in the
+        # same test process can find it regardless of import order.
+        parent_name, _, leaf = name.rpartition(".")
+        parent = sys.modules.get(parent_name)
+        if parent is not None and parent_name:
+            setattr(parent, leaf, package)
 
 
 _install_evaluator_packages()

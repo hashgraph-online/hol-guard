@@ -320,8 +320,11 @@ def test_inspection_handles_unregistered_legacy_action_without_crashing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from codex_plugin_scanner.guard.runtime import command_inspection as command_inspection_module
+
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.command_inspection.extract_sensitive_tool_action_request",
+        command_inspection_module,
+        "extract_sensitive_tool_action_request",
         lambda *_args, **_kwargs: ToolActionRequestMatch(
             tool_name="Shell",
             normalized_tool_name="shell",
