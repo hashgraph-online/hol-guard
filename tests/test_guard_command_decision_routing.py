@@ -114,6 +114,7 @@ def _registry(
         action_classes=action_classes,
         safer_alternatives=("Preview the operation.",),
         default_mode=mode,
+        example_command="test-tool inspect",
         matcher=cast(ExecutableMatcher, matcher)
         if matcher is not None
         else ExecutableMatcher(executables=frozenset({"test-tool"})),
