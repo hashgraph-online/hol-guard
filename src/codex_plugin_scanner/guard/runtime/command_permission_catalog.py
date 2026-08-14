@@ -304,9 +304,7 @@ def _validate_family_scope(permissions: tuple[CommandPermissionSpec, ...]) -> No
             continue
         owner = family_extensions.setdefault(permission.family, permission.extension_id)
         if owner != permission.extension_id:
-            raise ValueError(
-                f"family {permission.family} spans extensions: {owner}, {permission.extension_id}"
-            )
+            raise ValueError(f"family {permission.family} spans extensions: {owner}, {permission.extension_id}")
 
 
 def _validate_permission(permission: CommandPermissionSpec) -> None:

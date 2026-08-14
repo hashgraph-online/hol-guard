@@ -160,7 +160,14 @@ _CONTRACTS: Final = MappingProxyType(
         contract.capability: contract
         for contract in (
             _contract("read_local", "read-local", None, None, "local GitHub state", example_command="gh auth status"),
-            _contract("read_remote", "read-remote", None, None, "remote GitHub state", example_command="gh pr view 123"),
+            _contract(
+                "read_remote",
+                "read-remote",
+                None,
+                None,
+                "remote GitHub state",
+                example_command="gh pr view 123",
+            ),
             _contract(
                 "propose_remote",
                 "propose-remote",
@@ -262,19 +269,35 @@ _CONTRACTS: Final = MappingProxyType(
                 example_command="gh repo sync owner/repo --force",
             ),
             _contract(
-                "delete_remote", "delete-remote", "GitHub delete command", "delete", "GitHub deletion",
+                "delete_remote",
+                "delete-remote",
+                "GitHub delete command",
+                "delete",
+                "GitHub deletion",
                 example_command="gh repo delete owner/repo",
             ),
             _contract(
-                "secret_remote", "secret-remote", "GitHub secret mutation command", "secret", "GitHub secret mutation",
+                "secret_remote",
+                "secret-remote",
+                "GitHub secret mutation command",
+                "secret",
+                "GitHub secret mutation",
                 example_command="gh secret set DEPLOY_TOKEN",
             ),
             _contract(
-                "access_remote", "access-remote", "GitHub access mutation command", "access", "GitHub access mutation",
+                "access_remote",
+                "access-remote",
+                "GitHub access mutation command",
+                "access",
+                "GitHub access mutation",
                 example_command="gh repo edit owner/repo --visibility private",
             ),
             _contract(
-                "mutate_remote", "mutate-remote", "GitHub remote mutation command", "mutation", "GitHub remote mutation",
+                "mutate_remote",
+                "mutate-remote",
+                "GitHub remote mutation command",
+                "mutation",
+                "GitHub remote mutation",
                 example_command="gh api -X POST /repos/OWNER/REPO/dispatches",
             ),
             _contract(
