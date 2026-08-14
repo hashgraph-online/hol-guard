@@ -1535,6 +1535,18 @@ def test_package_firewall_activation_uses_scoped_shim_proof(
         "probe_package_shim_intercepts",
         lambda _context, **_kwargs: {"intercept_proved": True},
     )
+    repairs: list[tuple[str, ...]] = []
+
+    def repair_shims(_context, *, managers, repair):
+        assert repair is True
+        repairs.append(managers)
+        return {"package_shims": {"installed_managers": ["npx"], "path_active": False}}
+
+    monkeypatch.setattr(
+        daemon_server,
+        "activate_package_shims",
+        repair_shims,
+    )
     previous_path = daemon_server.os.environ.get("PATH")
 
     status, body = daemon_server._activate_package_firewall_runtime(context)
@@ -1542,6 +1554,7 @@ def test_package_firewall_activation_uses_scoped_shim_proof(
     assert status == 200
     assert body["status"] == "verified"
     assert body["proof"] == {"intercept_proved": True}
+    assert repairs == [("npx",)]
     assert daemon_server.os.environ.get("PATH") == previous_path
 
 
@@ -1554,6 +1567,16 @@ def test_package_firewall_activation_stops_after_first_valid_shim_proof(
         daemon_server,
         "package_shim_status",
         lambda _context: {"installed_managers": ["npm", "npx", "pip"]},
+    )
+
+    def repair_shims(_context, *, managers, repair):
+        assert repair is True
+        return {"package_shims": {"installed_managers": list(managers)}}
+
+    monkeypatch.setattr(
+        daemon_server,
+        "activate_package_shims",
+        repair_shims,
     )
     probed: list[tuple[str, ...]] = []
 

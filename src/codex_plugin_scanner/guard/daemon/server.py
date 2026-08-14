@@ -1488,6 +1488,14 @@ def _activate_package_firewall_runtime(context: HarnessContext) -> tuple[int, di
                 "message": "Protect a package manager before activating this Guard session.",
             },
         )
+    activation = activate_package_shims(
+        context,
+        managers=tuple(str(manager) for manager in installed_managers),
+        repair=True,
+    )
+    repaired_status = activation.get("package_shims")
+    if isinstance(repaired_status, dict):
+        status = repaired_status
     proof = probe_package_shim_intercepts(
         context,
         managers=(str(installed_managers[0]),),

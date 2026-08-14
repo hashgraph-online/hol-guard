@@ -288,9 +288,75 @@ def _run_guard_protect_command(
             harness=harness,
         ),
     )
+    if (
+        bool(getattr(args, "package_shim_ui", False))
+        and not bool(getattr(args, "json", False))
+        and config.approval_wait_timeout_seconds > 0
+    ):
+        approval_request_ids = payload.get("approval_request_ids")
+        request_ids = [
+            str(item)
+            for item in (approval_request_ids if isinstance(approval_request_ids, list) else [])
+            if isinstance(item, str) and item
+        ]
+        if request_ids:
+            wait_result = wait_for_approval_requests(
+                store=store,
+                request_ids=request_ids,
+                timeout_seconds=config.approval_wait_timeout_seconds,
+            )
+            payload["approval_wait"] = wait_result
+            wait_items = wait_result.get("items")
+            resolved_items = [
+                item
+                for item in (wait_items if isinstance(wait_items, list) else [])
+                if isinstance(item, dict)
+            ]
+            if bool(wait_result.get("resolved")) and not any(
+                str(item.get("resolution_action")) == "block" for item in resolved_items
+            ):
+                initial_payload = payload
+                fresh_payload, fresh_exit_code = build_protect_payload(
+                    command=protect_command,
+                    store=store,
+                    workspace_dir=protect_workspace,
+                    dry_run=bool(getattr(args, "dry_run", False)),
+                    now=_now(),
+                    config=current_protect_config(),
+                    current_config_provider=current_protect_config,
+                    unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+                )
+                if fresh_exit_code == 0:
+                    payload, exit_code = fresh_payload, fresh_exit_code
+                elif _package_shim_approval_matches_fresh_request(initial_payload, fresh_payload):
+                    fresh_verdict = fresh_payload.get("verdict")
+                    if isinstance(fresh_verdict, dict):
+                        fresh_verdict["action"] = "allow"
+                        fresh_verdict["blocking"] = False
+                    fresh_payload["policy_action"] = "allow"
+                    fresh_payload["approval_wait"] = wait_result
+                    payload, exit_code = fresh_payload, 0
     if not _suppress_package_shim_allow_output(args, payload):
         _emit("protect", payload, getattr(args, "json", False))
     return exit_code
+
+
+def _package_shim_approval_matches_fresh_request(
+    initial_payload: dict[str, object],
+    fresh_payload: dict[str, object],
+) -> bool:
+    """Resume only when the full package request and execution context are unchanged."""
+    initial_request = initial_payload.get("request")
+    fresh_request = fresh_payload.get("request")
+    fresh_verdict = fresh_payload.get("verdict")
+    if not isinstance(initial_request, dict) or not isinstance(fresh_request, dict):
+        return False
+    if not isinstance(fresh_verdict, dict):
+        return False
+    fresh_action = str(fresh_verdict.get("action") or "")
+    if fresh_action not in {"review", "require-reapproval"}:
+        return False
+    return initial_request == fresh_request
 
 def _run_guard_start_command(
     args: argparse.Namespace,

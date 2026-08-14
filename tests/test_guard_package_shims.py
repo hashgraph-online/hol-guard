@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli.commands_dispatch_local import _package_shim_approval_matches_fresh_request
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.package_shim_gate import (
     package_shim_command_requires_external_archive_binding,
@@ -661,6 +662,8 @@ def test_trusted_python_flags_omit_dash_p_before_python_311(monkeypatch: pytest.
 
 def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
+    home_dir.mkdir()
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     malicious_package = workspace_dir / "codex_plugin_scanner"
@@ -901,6 +904,91 @@ def test_guard_protect_executes_exact_package_request_after_fresh_approval(
     assert replay_payload["verdict"]["action"] == "require-reapproval"
 
 
+def test_package_shim_waits_for_fresh_approval_and_resumes_silently(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    (home_dir / "config.toml").parent.mkdir(parents=True)
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 30\n", encoding="utf-8")
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    observed_timeouts: list[int] = []
+
+    def approve_queued_request(**kwargs: object) -> dict[str, object]:
+        request_ids = kwargs.get("request_ids")
+        assert isinstance(request_ids, list) and len(request_ids) == 1
+        timeout_seconds = kwargs.get("timeout_seconds")
+        assert isinstance(timeout_seconds, int)
+        observed_timeouts.append(timeout_seconds)
+        request_id = str(request_ids[0])
+        apply_approval_resolution(
+            store=store,
+            request_id=request_id,
+            action="allow",
+            scope="artifact",
+            workspace=None,
+            reason="reviewed",
+        )
+        resolved = store.get_approval_request(request_id)
+        assert resolved is not None
+        return {"resolved": True, "pending_request_ids": [], "items": [resolved]}
+
+    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", approve_queued_request)
+
+    rc = main(
+        [
+            "guard",
+            "protect",
+            "--package-shim-ui",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--dry-run",
+            "npm",
+            "install",
+            "guard-github@git+https://example.com/guard.git",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert observed_timeouts == [30]
+    assert captured.out == ""
+    assert "Install protection" not in captured.err
+
+
+def test_package_shim_continuation_accepts_only_same_pending_request() -> None:
+    request = {
+        "redacted_command": "npx -y package",
+        "package_execution_context": {"context_digest": "context-1"},
+    }
+    initial = {"request": request}
+    same_request = {
+        "request": dict(request),
+        "verdict": {"action": "require-reapproval"},
+    }
+    changed_request = {
+        "request": {
+            "redacted_command": "npx -y package",
+            "package_execution_context": {"context_digest": "context-2"},
+        },
+        "verdict": {"action": "require-reapproval"},
+    }
+    terminal_block = {
+        "request": dict(request),
+        "verdict": {"action": "block"},
+    }
+
+    assert _package_shim_approval_matches_fresh_request(initial, same_request) is True
+    assert _package_shim_approval_matches_fresh_request(initial, changed_request) is False
+    assert _package_shim_approval_matches_fresh_request(initial, terminal_block) is False
+
+
 def test_legacy_package_approval_rejects_non_package_request() -> None:
     class _Store:
         @staticmethod
@@ -1025,6 +1113,8 @@ def test_package_manager_shim_runs_homebrew_monitor_only_command_once(tmp_path: 
 
 def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
+    home_dir.mkdir()
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     fake_bin = tmp_path / "fake-bin"
