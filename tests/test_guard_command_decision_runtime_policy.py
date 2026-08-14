@@ -35,6 +35,7 @@ def _failing_registry() -> CommandSafetyExtensionRegistry:
         risk_classes=("destructive_shell",),
         action_classes=(),
         safer_alternatives=("Review the operation.",),
+        example_command="test-tool inspect",
         matcher=_FailingMatcher(),
     )
     return CommandSafetyExtensionRegistry(
