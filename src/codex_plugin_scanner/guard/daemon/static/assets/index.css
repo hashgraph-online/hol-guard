@@ -124,6 +124,7 @@
     --color-emerald-700: oklch(50.8% .118 165.612);
     --color-emerald-800: oklch(43.2% .095 166.913);
     --color-emerald-900: oklch(37.8% .077 168.94);
+    --color-emerald-950: oklch(26.2% .051 172.552);
     --color-teal-50: oklch(98.4% .014 180.72);
     --color-teal-100: oklch(95.3% .051 180.801);
     --color-teal-200: oklch(91% .096 180.426);
@@ -3380,6 +3381,10 @@
     background-color: var(--color-emerald-600);
   }
 
+  .bg-emerald-800 {
+    background-color: var(--color-emerald-800);
+  }
+
   .bg-gray-100 {
     background-color: var(--color-gray-100);
   }
@@ -4742,6 +4747,10 @@
 
   .text-emerald-900 {
     color: var(--color-emerald-900);
+  }
+
+  .text-emerald-950 {
+    color: var(--color-emerald-950);
   }
 
   .text-gray-500 {
@@ -7579,6 +7588,59 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   .guard-extensions-row {
     transition: none;
   }
+}
+
+.guard-tool-switch {
+  border: 1px solid var(--brand-dark);
+  border-radius: 999px;
+  block-size: 1.75rem;
+  inline-size: 3rem;
+  position: relative;
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .guard-tool-switch {
+    border: 1px solid color-mix(in srgb, var(--brand-dark) 18%, transparent);
+  }
+}
+
+.guard-tool-switch {
+  background: var(--brand-dark);
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .guard-tool-switch {
+    background: color-mix(in srgb, var(--brand-dark) 8%, transparent);
+  }
+}
+
+.guard-tool-switch {
+  transition: background-color .16s var(--ease-out-quart);
+  padding: 2px;
+}
+
+.guard-tool-switch[aria-checked="true"] {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+}
+
+.guard-tool-switch-knob {
+  block-size: 1.35rem;
+  inline-size: 1.35rem;
+  transition: transform .16s var(--ease-out-quart);
+  background: #fff;
+  border-radius: 999px;
+  display: block;
+  transform: translateX(0);
+  box-shadow: 0 1px 3px #0f172a40;
+}
+
+.guard-tool-switch[aria-checked="true"] .guard-tool-switch-knob {
+  transform: translateX(1.25rem);
+}
+
+.guard-tool-switch:disabled {
+  opacity: .45;
 }
 
 @property --tw-translate-x {

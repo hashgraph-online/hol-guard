@@ -8,7 +8,9 @@ import {
   HiMiniXMark,
 } from "react-icons/hi2";
 
-import { ApprovalProofModal } from "./approval-proof-modal";
+import { ApprovalProofFieldInputs, buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
+import type { GuardApprovalGatePublicConfig } from "./guard-types";
+import { useModalDialog } from "./use-modal-dialog";
 import {
   type EffectiveExtensionControls,
   type ExtensionCatalogItem,
@@ -19,7 +21,6 @@ import { isCurrentExtensionPolicyDraft, localPermissionDraftState, type Permissi
 import { type ExtensionPolicyRebaseConflict } from "./extension-policy-rebase";
 import { useExtensionPolicyDraft } from "./use-extension-policy-draft";
 import { controlProvenance, groupPermissionsByFamily, treatmentLabel } from "./extension-control-center-model";
-import { useModalDialog } from "./use-modal-dialog";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { ProtectionSettingsHistory } from "./protection-center/protection-settings-history";
 
@@ -243,38 +244,82 @@ export function PreviewPanel(props: { preview: ExtensionMutationPreview }) {
   );
 }
 
-export function ReviewDrawer(props: { preview: ExtensionMutationPreview; busy: boolean; onClose: () => void; onApply: () => void }) {
-  const ref = useModalDialog<HTMLElement>(props.onClose, !props.busy);
+export function PolicyReviewSheet(props: {
+  preview: ExtensionMutationPreview;
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  busy: boolean;
+  error: string | null;
+  onClose: () => void;
+  onApply: (credentials: { approval_password?: string; approval_totp_code?: string }) => void;
+}) {
+  const ref = useModalDialog<HTMLFormElement>(props.onClose, !props.busy);
+  const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
   const count = props.preview.semantic_preview.changed_target_count;
-  return (
-    <div className="fixed inset-0 z-50 bg-brand-dark/40">
-      <aside
-        ref={ref}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="extension-policy-review-title"
-        className="absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto bg-[var(--surface-1)] p-5 focus:outline-none sm:p-6"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-blue">Protection review</p>
-            <h2 id="extension-policy-review-title" className="mt-1 text-xl font-semibold text-brand-dark">
-              Review {count} protection setting change{count === 1 ? "" : "s"}
-            </h2>
-          </div>
-          <button type="button" disabled={props.busy} aria-label="Close semantic review" onClick={props.onClose} className="grid size-11 place-items-center rounded-full text-brand-dark disabled:opacity-50">
-            <HiMiniXMark className="size-5" />
+  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy);
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (submitDisabled) return;
+    props.onApply(buildApprovalProofCredentials(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }));
+  };
+  return <div className="fixed inset-0 z-50 bg-brand-dark/40">
+    <form
+      ref={ref}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="extension-policy-review-title"
+      onSubmit={handleSubmit}
+      className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col overflow-y-auto bg-[var(--surface-1)] p-5 focus:outline-none sm:p-6"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-blue">Protection review</p>
+          <h2 id="extension-policy-review-title" className="mt-1 text-xl font-semibold text-brand-dark">
+            Review and apply {count} protection setting change{count === 1 ? "" : "s"}
+          </h2>
+        </div>
+        <button type="button" disabled={props.busy} aria-label="Close protection review" onClick={props.onClose} className="grid size-11 place-items-center rounded-full text-brand-dark disabled:opacity-50">
+          <HiMiniXMark className="size-5" />
+        </button>
+      </div>
+      <div className="mt-5 flex-1"><PreviewPanel preview={props.preview} /></div>
+      <div className="mt-5 border-t border-[rgba(63,65,116,0.12)] pt-4">
+        <p className="text-sm font-semibold text-brand-dark">Authenticate this exact change</p>
+        <p className="mt-1 text-xs leading-5 text-brand-dark/75">Guard uses a one-time local proof and rejects the apply if the reviewed settings changed.</p>
+        <div className="mt-3">
+          <ApprovalProofFieldInputs
+            approvalGate={props.approvalGate}
+            approvalPassword={password}
+            approvalTotpCode={totpCode}
+            onApprovalPasswordChange={(event) => setPassword(event.target.value)}
+            onApprovalTotpCodeChange={(event) => setTotpCode(event.target.value)}
+          />
+        </div>
+        {props.error ? <p role="alert" className="mt-3 text-sm text-red-950">{props.error}</p> : null}
+        <div className="sticky bottom-0 mt-4 flex flex-wrap justify-end gap-2 bg-[var(--surface-1)] pb-1 pt-3">
+          <button type="button" disabled={props.busy} onClick={props.onClose} className="min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark">Continue editing</button>
+          <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
+            {props.busy ? "Applying…" : `Apply ${count} reviewed change${count === 1 ? "" : "s"}`}
           </button>
         </div>
-        <div className="mt-5"><PreviewPanel preview={props.preview} /></div>
-        <div className="sticky bottom-0 mt-6 flex flex-wrap justify-end gap-2 border-t border-[rgba(63,65,116,0.12)] bg-[var(--surface-1)] pt-4">
-          <button type="button" disabled={props.busy} onClick={props.onClose} className="min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark">Continue editing</button>
-          <button type="button" disabled={props.busy || count === 0} onClick={props.onApply} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">Continue to approval</button>
-        </div>
-      </aside>
+      </div>
+    </form>
+  </div>;
+}
+
+export function AppliedPolicyToast(props: {
+  revision: number;
+  onUndo: () => void;
+  onViewHistory: () => void;
+}) {
+  return <div role="status" data-testid="extension-policy-applied-toast" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+    <p className="text-sm font-medium text-emerald-950">Applied · revision {props.revision}</p>
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={props.onViewHistory} className="min-h-11 rounded-xl border border-emerald-300 bg-white/70 px-3 text-sm font-semibold text-emerald-950">View history</button>
+      <button type="button" onClick={props.onUndo} className="min-h-11 rounded-xl bg-emerald-800 px-3 text-sm font-semibold text-white">Undo</button>
     </div>
-  );
+  </div>;
 }
 
 export function ExtensionPolicyPanel(props: {
@@ -287,10 +332,10 @@ export function ExtensionPolicyPanel(props: {
   const [policyExtension, setPolicyExtension] = useState(props.extension);
   const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
   const {
-    baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen, approvalOpen,
-    error, stale, pendingRebase, refreshRequired, setReviewOpen, setApprovalOpen,
-    setPermissionState, resetDraft, runPreview, apply, rebaseDraft, keepConflicts,
-    useCurrent, applyProfile, useHistoricalDraft, permissionState,
+    baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen,
+    error, stale, pendingRebase, refreshRequired, lastApplied, undoLastApplied,
+    setReviewOpen, setPermissionState, resetDraft, runPreview, apply, rebaseDraft,
+    keepConflicts, useCurrent, applyProfile, useHistoricalDraft, permissionState,
   } = draft;
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
 
@@ -309,19 +354,15 @@ export function ExtensionPolicyPanel(props: {
     resetDraft();
   }, [props.extension.extension_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openApproval = useCallback(async () => {
-    if (!preview || !dirty || stale) return;
-    try {
-      await resolveApprovalGate({ failClosed: true });
-      setReviewOpen(false);
-      setApprovalOpen(true);
-      draft.error === null;
-    } catch (caught) { /* surfaced through the modal error surface */ }
-  }, [dirty, preview, resolveApprovalGate, setApprovalOpen, setReviewOpen, stale]);
+  useEffect(() => {
+    if (!reviewOpen) return;
+    void resolveApprovalGate({ failClosed: true }).catch(() => {
+      /* the review sheet renders the gate resolution failure inline */
+    });
+  }, [reviewOpen, resolveApprovalGate]);
 
   const managedCount = policyExtension.permissions.filter((permission) => managedPermissionState(baseEffective, permission.permission_id) !== null).length;
   const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission) => permission.permission_id));
-  const confirmationCount = preview?.semantic_preview.changed_target_count ?? changeCount;
   return (
     <section id="extension-policy-editor" aria-labelledby="extension-policy-heading">
       <h2 id="extension-policy-heading" className="text-lg font-semibold text-brand-dark">Protection settings</h2>
@@ -333,7 +374,7 @@ export function ExtensionPolicyPanel(props: {
         <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "stricter")} className="min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40">Stricter</button>
         <button type="button" disabled className="min-h-10 px-1 text-xs font-semibold text-brand-dark/55">Custom</button>
       </div>
-      <ProtectionSettingsHistory catalogDigest={baseEffective.catalog_digest} disabled={baseEffective.health !== "protected" || refreshRequired} onUse={(layers) => useHistoricalDraft(layers)} />
+      <div id="extension-settings-history"><ProtectionSettingsHistory catalogDigest={baseEffective.catalog_digest} disabled={baseEffective.health !== "protected" || refreshRequired} onUse={(layers) => useHistoricalDraft(layers)} /></div>
       {baseEffective.global_lockdown ? (
         <p role="status" className="mt-4 flex gap-2 text-sm text-brand-dark">
           <HiMiniLockClosed className="mt-0.5 size-4 shrink-0" />
@@ -352,7 +393,13 @@ export function ExtensionPolicyPanel(props: {
         </p>
       ) : null}
 
-      {refreshRequired ? (
+      {lastApplied ? (
+        <AppliedPolicyToast
+          revision={lastApplied.revision}
+          onUndo={() => { undoLastApplied(); }}
+          onViewHistory={() => { document.getElementById("extension-settings-history")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+        />
+      ) : refreshRequired ? (
         <div role="status" className="mt-4 text-sm text-blue-950">Settings applied. Editing stays locked until Guard reloads the current protected state.</div>
       ) : null}
 
@@ -434,17 +481,14 @@ export function ExtensionPolicyPanel(props: {
           <p>Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change.</p>
         </div>
       ) : null}
-      {reviewOpen && preview ? <ReviewDrawer preview={preview} busy={previewBusy || applyBusy} onClose={() => setReviewOpen(false)} onApply={() => { void openApproval(); }} /> : null}
-      {approvalOpen && preview ? (
-        <ApprovalProofModal
-          title={`Apply ${confirmationCount} protection setting change${confirmationCount === 1 ? "" : "s"}`}
-          detail="Authenticate the exact settings you just reviewed. Guard uses a one-time local proof and rejects the apply if the reviewed settings changed."
-          confirmLabel={`Apply ${confirmationCount} reviewed change${confirmationCount === 1 ? "" : "s"}`}
+      {reviewOpen && preview ? (
+        <PolicyReviewSheet
+          preview={preview}
           approvalGate={resolvedApprovalGate}
           busy={applyBusy}
           error={error}
-          onCancel={() => { if (!applyBusy) setApprovalOpen(false); }}
-          onConfirm={(credentials) => { void apply(credentials); }}
+          onClose={() => { if (!applyBusy) setReviewOpen(false); }}
+          onApply={(credentials) => { void apply(credentials); }}
         />
       ) : null}
     </section>

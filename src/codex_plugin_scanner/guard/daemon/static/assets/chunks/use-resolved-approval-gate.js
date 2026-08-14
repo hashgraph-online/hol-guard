@@ -1,4 +1,4 @@
-import { r as reactExports, au as buildApprovalProofCredentials, av as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, aw as ApprovalProofFieldInputs, A as ActionButton, a3 as fetchSettings } from "../guard-dashboard.js";
+import { r as reactExports, au as buildApprovalProofCredentials, as as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, at as ApprovalProofFieldInputs, A as ActionButton, a3 as fetchSettings } from "../guard-dashboard.js";
 function ApprovalProofModal(props) {
   const { title, detail, confirmLabel, approvalGate, busy = false, error = null, onCancel, onConfirm } = props;
   const [password, setPassword] = reactExports.useState("");

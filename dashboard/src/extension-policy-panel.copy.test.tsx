@@ -14,7 +14,8 @@ for (const expected of [
   "Emergency Lockdown",
   "Technical setting details",
   "Developer change identity",
-  "Continue to approval",
+  "Authenticate this exact change",
+  "Apply ${count} reviewed change",
 ]) {
   assert.ok(source.includes(expected), `missing friendly Protection Center copy: ${expected}`);
 }

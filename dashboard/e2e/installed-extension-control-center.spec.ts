@@ -77,10 +77,7 @@ async function openPolicy(page: import("@playwright/test").Page) {
 
 async function authenticateAndApply(page: import("@playwright/test").Page, count = 1) {
   expect(approvalPassword.length).toBeGreaterThan(20);
-  const review = page.getByRole("dialog", { name: `Review ${count} protection setting change${count === 1 ? "" : "s"}` });
-  await expect(review).toBeVisible();
-  await review.getByRole("button", { name: "Continue to approval" }).click();
-  const dialog = page.getByRole("dialog", { name: `Apply ${count} protection setting change${count === 1 ? "" : "s"}` });
+  const dialog = page.getByRole("dialog", { name: `Review and apply ${count} protection setting change${count === 1 ? "" : "s"}` });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("Approval password").fill(approvalPassword);
   const effectiveResponse = page.waitForResponse((response) => {
@@ -244,7 +241,7 @@ test("installed dashboard previews and proof-applies a permission block", async 
   await row.getByRole("radio", { name: "Block" }).click();
   await expect(page.getByText("1 unsaved setting change.")).toBeVisible();
   await page.getByRole("button", { name: "Review 1 change" }).click();
-  const review = page.getByRole("dialog", { name: "Review 1 protection setting change" });
+  const review = page.getByRole("dialog", { name: "Review and apply 1 protection setting change" });
   await expect(review.getByText("Protection review", { exact: true }).first()).toBeVisible();
   await review.getByText("Developer details", { exact: true }).click();
   await expect(review.getByText(governedRuleId, { exact: true })).toBeVisible();
@@ -252,6 +249,7 @@ test("installed dashboard previews and proof-applies a permission block", async 
 
   const effective = await authenticateAndApply(page);
   expect(effective.revision).toBeGreaterThan(0);
+  await expect(page.getByTestId("extension-policy-applied-toast")).toContainText(`Applied · revision ${effective.revision}`);
   expect(effective.controls).toContainEqual({ target: { kind: "permission", target_id: permissionId }, state: "disabled" });
   expect(effective.projection?.permissions.find((permission) => permission.permission_id === permissionId)?.effective_state).toBe("blocked");
   await expectSecretSafeUrl(page);
@@ -271,7 +269,7 @@ test("permission authority persists across daemon restart and can be proof-resto
 
   await row.getByRole("radio", { name: "Recommended" }).click();
   await page.getByRole("button", { name: "Review 1 change" }).click();
-  await expect(page.getByRole("dialog", { name: "Review 1 protection setting change" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Review and apply 1 protection setting change" })).toBeVisible();
   const effective = await authenticateAndApply(page);
   expect(effective.controls.some((control) => control.target.kind === "permission" && control.target.target_id === permissionId)).toBe(false);
   const restoredRow = await openPolicy(page);

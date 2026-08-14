@@ -106,10 +106,14 @@ export function ProtectionModuleDetail(props: {
   catalogDigest: string;
   onBack: () => void;
   onRefresh: () => Promise<void> | void;
+  onRequestExtensionChange?: (extension: ExtensionCatalogItem, enabled: boolean) => void;
 }) {
   const [density, setDensity] = useProtectionDensity();
   const [policyDirty, setPolicyDirty] = useState(false);
   const requiredNote = requiredLine(props.extension);
+  const extensionEnabled = !props.effective.layers.some((layer) =>
+    layer.controls.some((control) => control.target_kind === "extension" && control.target_id === props.extension.extension_id && control.state === "disabled"),
+  );
   const orgManaged = sourceForTarget(props.effective, "extension", props.extension.extension_id) === "organization";
   const handleBack = () => {
     if (policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) return;
@@ -130,6 +134,28 @@ export function ProtectionModuleDetail(props: {
         )}
         {props.extension.required ? (
           <p className="mt-2 text-sm text-brand-dark/70">This protection is required by Guard and cannot be turned off.</p>
+        ) : props.onRequestExtensionChange ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={extensionEnabled}
+              disabled={props.effective.health !== "protected"}
+              onClick={() => props.onRequestExtensionChange?.(props.extension, !extensionEnabled)}
+              className="guard-tool-switch"
+              data-testid="extension-availability-switch"
+            >
+              <span className="guard-tool-switch-knob" />
+            </button>
+            <div>
+              <p className="text-sm font-semibold text-brand-dark">Commands available</p>
+              <p className="text-xs leading-5 text-brand-dark/75">
+                {extensionEnabled
+                  ? "Matching commands follow the protection settings below. Turn off to block every command this tool owns on this device."
+                  : "Every command this tool owns is blocked on this device. Turn on to follow the protection settings below."}
+              </p>
+            </div>
+          </div>
         ) : null}
         {orgManaged ? (
           <p className="mt-2 text-sm text-brand-dark/80">Your organization controls part of this protection. Local changes cannot weaken organization policy.</p>

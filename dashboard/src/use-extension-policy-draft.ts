@@ -32,6 +32,12 @@ export type PendingPolicyRebase = {
   latestExtensions: ExtensionCatalogItem[];
 };
 
+export type AppliedPolicySnapshot = {
+  revision: number;
+  previousLayers: EffectiveExtensionControls["layers"];
+  changedPermissionIds: string[];
+};
+
 export type PolicyDraftMutationCredentials = {
   approval_password?: string;
   approval_totp_code?: string;
@@ -65,6 +71,7 @@ export function useExtensionPolicyDraft(props: {
   const [stale, setStale] = useState(false);
   const [pendingRebase, setPendingRebase] = useState<PendingPolicyRebase | null>(null);
   const [refreshRequired, setRefreshRequired] = useState(false);
+  const [lastApplied, setLastApplied] = useState<AppliedPolicySnapshot | null>(null);
   const draftGeneration = useRef(0);
   const { onRefresh } = props;
   const dirty = useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
@@ -156,6 +163,7 @@ export function useExtensionPolicyDraft(props: {
     setError(null);
     try {
       const base = mutation();
+      const appliedLayersBefore = cloneLayers(baseEffective);
       const proofPreview = await previewExtensionMutation({ ...base, ...credentials, session_nonce: crypto.randomUUID().replaceAll("-", "") });
       if (!proofPreview.proof_id) throw new Error("Guard did not issue an approval proof for this exact draft.");
       if (proofPreview.canonical_diff_digest !== preview.canonical_diff_digest) throw new Error("The policy draft changed after preview. Preview it again before applying.");
@@ -166,6 +174,21 @@ export function useExtensionPolicyDraft(props: {
       setError(null);
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
+      const changedPermissionIds = baseEffective.layers
+        .flatMap((layer) => layer.controls)
+        .concat(draftLayers.flatMap((layer) => layer.controls))
+        .map((control) => (control.target_kind === "permission" ? control.target_id : null))
+        .filter((id): id is string => Boolean(id));
+      const previouslyRequested = new Set(
+        draftLayers.flatMap((layer) => layer.controls)
+          .map((control) => (control.target_kind === "permission" ? control.target_id : null))
+          .filter((id): id is string => Boolean(id)),
+      );
+      setLastApplied({
+        revision: applied.revision,
+        previousLayers: appliedLayersBefore,
+        changedPermissionIds: [...new Set(changedPermissionIds)].filter((id) => previouslyRequested.has(id) || localPermissionDraftState(baseEffective.layers, id) !== localPermissionDraftState(draftLayers, id)),
+      });
       draftGeneration.current += 1;
       setDraftLayers(cloneLayers(baseEffective));
       setIdentity(newExtensionPolicyDraftIdentity());
@@ -296,6 +319,20 @@ export function useExtensionPolicyDraft(props: {
     setPendingRebase(null);
   }, [baseEffective.layers]);
 
+  const undoLastApplied = useCallback(() => {
+    if (!lastApplied) return false;
+    draftGeneration.current += 1;
+    setDraftLayers(cloneLayers({ ...baseEffective, layers: lastApplied.previousLayers }));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+    setLastApplied(null);
+    return true;
+  }, [baseEffective, lastApplied]);
+
   return {
     baseEffective,
     draftLayers,
@@ -309,6 +346,8 @@ export function useExtensionPolicyDraft(props: {
     stale,
     pendingRebase,
     refreshRequired,
+    lastApplied,
+    undoLastApplied,
     changedPermissionCount,
     setReviewOpen,
     setApprovalOpen,

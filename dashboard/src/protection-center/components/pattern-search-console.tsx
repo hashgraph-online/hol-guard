@@ -3,11 +3,11 @@ import { HiMiniArrowPath, HiMiniExclamationTriangle, HiMiniInformationCircle, Hi
 
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../../extension-controls-api";
 import {
+  AppliedPolicyToast,
   managedPermissionState,
   PermissionPolicyRow,
-  ReviewDrawer,
+  PolicyReviewSheet,
 } from "../../extension-policy-panel";
-import { ApprovalProofModal } from "../../approval-proof-modal";
 import { useResolvedApprovalGate } from "../../use-resolved-approval-gate";
 import { useExtensionPolicyDraft } from "../../use-extension-policy-draft";
 import { searchCommandPatterns } from "../model/protection-landing";
@@ -31,9 +31,9 @@ export function PatternSearchConsole(props: {
   const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const {
-    baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen, approvalOpen,
-    error, stale, refreshRequired, setReviewOpen, setApprovalOpen,
-    setPermissionState, resetDraft, runPreview, apply, permissionState, changeCountFor,
+    baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen,
+    error, stale, refreshRequired, lastApplied, undoLastApplied,
+    setReviewOpen, setPermissionState, resetDraft, runPreview, apply, permissionState, changeCountFor,
   } = draft;
 
   useEffect(() => {
@@ -60,19 +60,14 @@ export function PatternSearchConsole(props: {
   }, [matches]);
   const involvedPermissions = useMemo(() => matches.map((match) => match.permission), [matches]);
   const changeCount = changeCountFor(involvedPermissions.map((permission) => permission.permission_id));
-  const confirmationCount = preview?.semantic_preview.changed_target_count ?? changeCount;
   const showResults = query.trim().length > 0;
 
-  const openApproval = async () => {
-    if (!preview || !dirty || stale) return;
-    try {
-      await resolveApprovalGate({ failClosed: true });
-      setReviewOpen(false);
-      setApprovalOpen(true);
-    } catch {
-      /* the proof modal surfaces gate resolution failures */
-    }
-  };
+  useEffect(() => {
+    if (!reviewOpen) return;
+    void resolveApprovalGate({ failClosed: true }).catch(() => {
+      /* the review sheet renders the gate resolution failure inline */
+    });
+  }, [reviewOpen, resolveApprovalGate]);
 
   const managedCount = involvedPermissions.filter((permission) =>
     managedPermissionState(baseEffective, permission.permission_id) !== null,
@@ -139,6 +134,13 @@ export function PatternSearchConsole(props: {
               </div>
             </div>
           ) : null}
+          {lastApplied ? (
+            <AppliedPolicyToast
+              revision={lastApplied.revision}
+              onUndo={() => { undoLastApplied(); }}
+              onViewHistory={() => { document.getElementById("pattern-search-heading")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+            />
+          ) : null}
           {error ? (
             <div role="alert" className="mt-4 text-sm text-red-950">
               <div className="flex items-start gap-2">
@@ -158,17 +160,14 @@ export function PatternSearchConsole(props: {
       )
     ) : null}
 
-    {reviewOpen && preview ? <ReviewDrawer preview={preview} busy={previewBusy || applyBusy} onClose={() => setReviewOpen(false)} onApply={() => { void openApproval(); }} /> : null}
-    {approvalOpen && preview ? (
-      <ApprovalProofModal
-        title={`Apply ${confirmationCount} protection setting change${confirmationCount === 1 ? "" : "s"}`}
-        detail="Authenticate the exact settings you just reviewed. Guard uses a one-time local proof and rejects the apply if the reviewed settings changed."
-        confirmLabel={`Apply ${confirmationCount} reviewed change${confirmationCount === 1 ? "" : "s"}`}
+    {reviewOpen && preview ? (
+      <PolicyReviewSheet
+        preview={preview}
         approvalGate={resolvedApprovalGate}
         busy={applyBusy}
         error={error}
-        onCancel={() => { if (!applyBusy) setApprovalOpen(false); }}
-        onConfirm={(credentials) => { void apply(credentials); }}
+        onClose={() => { if (!applyBusy) setReviewOpen(false); }}
+        onApply={(credentials) => { void apply(credentials); }}
       />
     ) : null}
   </section>;

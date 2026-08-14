@@ -604,3 +604,38 @@ a:focus-visible {
     transition: none;
   }
 }
+
+.guard-tool-switch {
+  position: relative;
+  inline-size: 3rem;
+  block-size: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand-dark) 18%, transparent);
+  background: color-mix(in srgb, var(--brand-dark) 8%, transparent);
+  padding: 2px;
+  transition: background-color 160ms var(--ease-out-quart);
+}
+
+.guard-tool-switch[aria-checked="true"] {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+}
+
+.guard-tool-switch-knob {
+  display: block;
+  inline-size: 1.35rem;
+  block-size: 1.35rem;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.25);
+  transform: translateX(0);
+  transition: transform 160ms var(--ease-out-quart);
+}
+
+.guard-tool-switch[aria-checked="true"] .guard-tool-switch-knob {
+  transform: translateX(1.25rem);
+}
+
+.guard-tool-switch:disabled {
+  opacity: 0.45;
+}

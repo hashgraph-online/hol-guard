@@ -297,7 +297,9 @@ export function ProtectionCenterWorkspace() {
   const aliasRedirected = useRef<string | null>(null);
 
   const load = useCallback(async () => {
-    setState({ kind: "loading" });
+    // Keep the already-rendered protection data mounted while a refresh is in
+    // flight so an applied change's confirmation toast survives the reload.
+    setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
     try {
       const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
       if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
@@ -442,7 +444,7 @@ export function ProtectionCenterWorkspace() {
   /> : null;
 
   if (routeState.route.kind === "detail" && selectedExtension) {
-    return <><ProtectionModuleDetail extension={selectedExtension} effective={state.effective} catalogDigest={state.catalog.catalog_digest} onBack={closeExtension} onRefresh={load} />{pending ? <ReviewModal change={pending} busy={busy} error={mutationError} approvalGate={resolvedApprovalGate} onCancel={() => { if (!busy) setPending(null); }} onConfirm={confirm} /> : null}{recoveryModal}</>;
+    return <><ProtectionModuleDetail extension={selectedExtension} effective={state.effective} catalogDigest={state.catalog.catalog_digest} onBack={closeExtension} onRefresh={load} onRequestExtensionChange={(extension, enabled) => requestChange({ extension: { extension_id: extension.extension_id, name: extension.name }, enabled })} />{pending ? <ReviewModal change={pending} busy={busy} error={mutationError} approvalGate={resolvedApprovalGate} onCancel={() => { if (!busy) setPending(null); }} onConfirm={confirm} /> : null}{recoveryModal}</>;
   }
 
   if (routeState.route.kind === "detail" || routeState.route.kind === "invalid") {
