@@ -216,6 +216,24 @@ def test_malformed_separators_do_not_carry_stale_conditional_state(
     assert assessment.capabilities == ("read_remote",)
 
 
+@pytest.mark.parametrize(
+    ("command", "capabilities"),
+    (
+        ("false | true && gh pr view 1", ("read_remote",)),
+        ("false | true && gh repo delete example/project --yes", ("delete_remote",)),
+    ),
+)
+def test_pipeline_boundary_preserves_following_github_capability(
+    tmp_path: Path,
+    command: str,
+    capabilities: tuple[GitHubCommandCapability, ...],
+) -> None:
+    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
+
+    assert assessment is not None
+    assert assessment.capabilities == capabilities
+
+
 def test_local_write_cannot_mask_remote_secret_capability(tmp_path: Path) -> None:
     assessment = classify_github_shell_capabilities(
         "gh repo set-default o/r; gh secret set TOKEN --body value",

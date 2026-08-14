@@ -5,7 +5,9 @@ import socket
 import sqlite3
 import time
 import urllib.request
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime
 from http.client import HTTPResponse
 from pathlib import Path
@@ -281,13 +283,15 @@ def test_store_promotes_rollback_journal_before_bounded_hook_writes(
         assert legacy_connection.execute("pragma journal_mode").fetchone() == ("delete",)
 
     traced_statements: list[str] = []
-    enable_wal_mode = GuardStore._enable_wal_mode
+    connect = GuardStore._connect
 
-    def enable_wal_mode_with_trace(connection: sqlite3.Connection) -> None:
-        connection.set_trace_callback(traced_statements.append)
-        enable_wal_mode(connection)
+    @contextmanager
+    def connect_with_trace(store: GuardStore) -> Iterator[sqlite3.Connection]:
+        with connect(store) as connection:
+            connection.set_trace_callback(traced_statements.append)
+            yield connection
 
-    monkeypatch.setattr(GuardStore, "_enable_wal_mode", staticmethod(enable_wal_mode_with_trace))
+    monkeypatch.setattr(GuardStore, "_connect", connect_with_trace)
     store = GuardStore(guard_home, prime_policy_integrity=False)
     wal_index = next(
         index for index, statement in enumerate(traced_statements) if statement.lower() == "pragma journal_mode=wal"
