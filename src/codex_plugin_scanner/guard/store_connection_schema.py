@@ -962,6 +962,11 @@ class StoreConnectionSchemaMixin:
         with self._connect() as connection:
             if initialize_incremental_vacuum:
                 connection.execute("pragma auto_vacuum=incremental")
+            # WAL must be enabled before schema DML starts a transaction. SQLite
+            # cannot change journal modes from inside an active transaction, and
+            # leaving an existing store in rollback-journal mode lets dashboard
+            # readers exhaust the bounded hook write deadline.
+            self._enable_wal_mode(connection)
             for statement in statements:
                 connection.execute(statement)
             ensure_command_activity_schema(connection, applied_at=_now())
@@ -1093,7 +1098,6 @@ class StoreConnectionSchemaMixin:
             )
             if not self._schema_version_applied(connection, version=2):
                 self._record_schema_version(connection, version=2)
-            self._enable_wal_mode(connection)
             connection.execute(
                 """
                 update approval_requests

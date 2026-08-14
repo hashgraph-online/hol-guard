@@ -1111,7 +1111,15 @@ def _guard_home_has_state(path: Path) -> bool:
     if not entries:
         return False
     state_entries = [
-        entry for entry in entries if entry.name not in {"guard.db", "secrets", *GUARD_HOME_METADATA_FILES}
+        entry
+        for entry in entries
+        if entry.name
+        not in {
+            "guard.db",
+            "secrets",
+            *GUARD_HOME_METADATA_FILES,
+            *NON_MIGRATED_GUARD_RUNTIME_FILES,
+        }
     ]
     if state_entries:
         return True

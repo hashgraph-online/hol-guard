@@ -191,28 +191,34 @@ def value_names_github_executable(value: str) -> bool:
 def conditional_pipeline_indexes(parts: list[str]) -> frozenset[int]:
     """Return pipelines reached through conditional shell separators."""
 
-    indexes: set[int] = set()
-    pipeline_index = 0
-    for token in parts:
-        if token not in {"&", "&&", ";", "||"}:
-            continue
-        pipeline_index += 1
-        if token in {"&&", "||"}:
-            indexes.add(pipeline_index)
-    return frozenset(indexes)
+    return frozenset(conditional_pipeline_connectors(parts))
 
 
 def conditional_pipeline_connectors(parts: list[str]) -> dict[int, str]:
     """Map each conditional pipeline to the connector that guards it."""
 
     connectors: dict[int, str] = {}
-    pipeline_index = 0
-    for token in parts:
-        if token not in {"&", "&&", ";", "||"}:
+    completed_pipelines = 0
+    in_pipeline = False
+    pending_connector: str | None = None
+    for raw_token in parts:
+        token = raw_token.strip()
+        if not token:
             continue
-        pipeline_index += 1
-        if token in {"&&", "||"}:
-            connectors[pipeline_index] = token
+        if token in {"|", "|&"}:
+            continue
+        if token not in {"&", "&&", ";", "||"}:
+            if not in_pipeline:
+                if completed_pipelines > 0 and pending_connector is not None:
+                    connectors[completed_pipelines] = pending_connector
+                pending_connector = None
+                in_pipeline = True
+            continue
+        connector_follows_pipeline = in_pipeline
+        if in_pipeline:
+            completed_pipelines += 1
+            in_pipeline = False
+        pending_connector = token if token in {"&&", "||"} and connector_follows_pipeline else None
     return connectors
 
 
@@ -227,6 +233,8 @@ def pipeline_control_flow(
     connectors = conditional_pipeline_connectors(parts)
     skipped: set[int] = set()
     for pipeline_index, connector in connectors.items():
+        if pipeline_index <= 0 or pipeline_index >= len(pipelines) or not pipelines[pipeline_index - 1]:
+            continue
         previous_command, _previous_index = primary_command(pipelines[pipeline_index - 1][-1])
         if (connector == "&&" and previous_command == "false") or (connector == "||" and previous_command == "true"):
             skipped.add(pipeline_index)

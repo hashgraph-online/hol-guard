@@ -5,7 +5,9 @@ import socket
 import sqlite3
 import time
 import urllib.request
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime
 from http.client import HTTPResponse
 from pathlib import Path
@@ -14,6 +16,9 @@ from typing import TypeGuard, cast, final
 
 import pytest
 
+from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
+    record_pre_hook_command_activity_best_effort,
+)
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import (
@@ -25,7 +30,7 @@ from codex_plugin_scanner.guard.daemon.server import (
     GuardDaemonServer,
     _GuardDaemonHttpServer,
 )
-from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_seconds
+from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_override, sqlite_connect_timeout_seconds
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -257,6 +262,88 @@ def test_internal_hook_sqlite_timeout_is_bounded_without_changing_default() -> N
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "10000"}) == 0.25
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "invalid"}) == 30.0
     assert sqlite_connect_timeout_seconds({"HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS": "0"}) == 30.0
+
+
+def test_sqlite_timeout_override_is_scoped_to_current_context() -> None:
+    assert sqlite_connect_timeout_seconds({}) == 30.0
+    with sqlite_connect_timeout_override(0.05):
+        assert sqlite_connect_timeout_seconds({}) == 0.05
+    assert sqlite_connect_timeout_seconds({}) == 30.0
+
+
+def test_store_promotes_rollback_journal_before_bounded_hook_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    database_path = guard_home / "guard.db"
+    with sqlite3.connect(database_path) as legacy_connection:
+        legacy_connection.execute("create table legacy_marker (value integer)")
+        assert legacy_connection.execute("pragma journal_mode").fetchone() == ("delete",)
+
+    traced_statements: list[str] = []
+    connect = GuardStore._connect
+
+    @contextmanager
+    def connect_with_trace(store: GuardStore) -> Iterator[sqlite3.Connection]:
+        with connect(store) as connection:
+            connection.set_trace_callback(traced_statements.append)
+            yield connection
+
+    monkeypatch.setattr(GuardStore, "_connect", connect_with_trace)
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    wal_index = next(
+        index for index, statement in enumerate(traced_statements) if statement.lower() == "pragma journal_mode=wal"
+    )
+    schema_dml_index = next(
+        index
+        for index, statement in enumerate(traced_statements)
+        if statement.lower().startswith(
+            ("create table", "create index", "alter table", "insert ", "update ", "delete ")
+        )
+    )
+    assert wal_index < schema_dml_index
+    with sqlite3.connect(database_path) as verification_connection:
+        assert verification_connection.execute("pragma journal_mode").fetchone() == ("wal",)
+
+    reader = sqlite3.connect(database_path, isolation_level=None)
+    try:
+        reader.execute("begin")
+        assert reader.execute("select count(*) from command_activity").fetchone() == (0,)
+        with sqlite_connect_timeout_override(0.05):
+            assert record_pre_hook_command_activity_best_effort(
+                store=store,
+                guard_home=guard_home,
+                harness="cursor",
+                event="PreToolUse",
+                payload={
+                    "tool_name": "Shell",
+                    "tool_input": {"command": "git status --short"},
+                    "generation_id": "cursor_generation_abcdef1234567890",
+                    "cursor_source_hook_event": "beforeShellExecution",
+                },
+                policy_action="allow",
+                receipt_id=None,
+                prompted=False,
+                cwd=tmp_path,
+                home_dir=tmp_path,
+            )
+    finally:
+        reader.rollback()
+        reader.close()
+
+    health = store.get_command_activity_persistence_health()
+    assert health.active_error_count == 0
+    assert health.persistence_error_count == 0
+
+
+def test_new_store_keeps_incremental_auto_vacuum_with_wal(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+
+    with sqlite3.connect(store.path) as connection:
+        assert connection.execute("pragma journal_mode").fetchone() == ("wal",)
+        assert connection.execute("pragma auto_vacuum").fetchone() == (2,)
 
 
 def test_unclassified_watchdog_distinguishes_complete_headers_from_trickle() -> None:
