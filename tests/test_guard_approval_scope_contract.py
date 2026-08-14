@@ -167,6 +167,74 @@ def test_package_context_never_invents_workspace_allow() -> None:
     assert supported_request_scopes(request) == ("artifact",)
 
 
+def test_package_request_can_persist_the_exact_context_bound_action() -> None:
+    request = _request(
+        "package-exact-action",
+        artifact_id="codex:project:package-request:package-exact-action",
+        artifact_type="package_request",
+        artifact_hash="package-context-sha256",
+        action_type="package_install",
+    ).to_dict()
+
+    assert request_scope_contract(request).exact_action_persistence_eligible is True
+
+
+def test_package_request_without_a_context_hash_cannot_be_persisted() -> None:
+    request = _request(
+        "package-missing-context",
+        artifact_id="codex:project:package-request:package-missing-context",
+        artifact_type="package_request",
+        artifact_hash="unknown",
+        action_type="package_install",
+    ).to_dict()
+
+    assert request_scope_contract(request).exact_action_persistence_eligible is False
+
+
+def test_saved_package_allow_only_resolves_the_identical_package_context(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    artifact_id = "guard-cli:project:package-request:server-memory"
+    request = _request(
+        "saved-package-exact-action",
+        artifact_id=artifact_id,
+        artifact_type="package_request",
+        artifact_hash="package-context-sha256",
+        action_type="package_install",
+    )
+    row = _store_request(store, request)
+
+    apply_approval_resolution(
+        store=store,
+        request_id=request.request_id,
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="remember exact package request",
+        persist_policy=True,
+        scope_contract_version=str(row["scope_contract_version"]),
+        scope_contract_digest=str(row["scope_contract_digest"]),
+    )
+
+    assert (
+        store.resolve_policy_decision(
+            "codex",
+            artifact_id,
+            "package-context-sha256",
+            consume_one_shot=False,
+        )
+        is not None
+    )
+    assert (
+        store.resolve_policy_decision(
+            "codex",
+            artifact_id,
+            "changed-package-context-sha256",
+            consume_one_shot=False,
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     ("artifact_type", "family", "action_type", "expected_allow"),
     [

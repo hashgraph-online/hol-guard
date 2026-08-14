@@ -227,6 +227,8 @@ def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bo
     artifact_type = _string_or_none(request.get("artifact_type"))
     artifact_id = _string_or_none(request.get("artifact_id"))
     artifact_hash = _string_or_none(request.get("artifact_hash"))
+    if artifact_type == "package_request":
+        return bool(artifact_id and artifact_hash and artifact_hash != "unknown")
     if artifact_type == "tool_call":
         return bool(
             artifact_id
