@@ -187,6 +187,16 @@ def test_shell_composition_preserves_read_and_mutating_capabilities(
     assert assessment.workflow_authorizable is False
 
 
+def test_empty_shell_segments_do_not_break_github_capability_analysis(tmp_path: Path) -> None:
+    assessment = classify_github_shell_capabilities(
+        "echo first; ; echo second && || ; ; gh pr view 1",
+        home_dir=tmp_path,
+    )
+
+    assert assessment is not None
+    assert assessment.capabilities == ("read_remote",)
+
+
 def test_local_write_cannot_mask_remote_secret_capability(tmp_path: Path) -> None:
     assessment = classify_github_shell_capabilities(
         "gh repo set-default o/r; gh secret set TOKEN --body value",
