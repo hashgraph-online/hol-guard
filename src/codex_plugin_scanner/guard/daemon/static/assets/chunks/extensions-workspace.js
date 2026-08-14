@@ -1605,6 +1605,35 @@ function evaluateProtectionHealth(catalogDigest, effective, runtime) {
     checks
   };
 }
+function patternSearchText(extension2, permission2) {
+  return [
+    permission2.label,
+    permission2.description,
+    permission2.example_command ?? "",
+    permission2.family ?? "",
+    permission2.permission_id,
+    extension2.name,
+    extension2.extension_id,
+    ...extension2.executables
+  ].join(" ").toLowerCase();
+}
+function searchCommandPatterns(extensions, rawQuery, limit = 24) {
+  const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
+  if (!normalized) return [];
+  const terms = normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap);
+  const matches = [];
+  for (const extension2 of extensions) {
+    for (const permission2 of extension2.permissions) {
+      const text2 = patternSearchText(extension2, permission2);
+      if (terms.every((term) => text2.includes(term))) {
+        matches.push({ extension: extension2, permission: permission2, score: terms.length });
+      }
+    }
+  }
+  return matches.sort(
+    (left, right) => right.permission.risk_tier.localeCompare(left.permission.risk_tier) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
+  ).slice(0, limit);
+}
 function managedByOrganization(effective, extensionId) {
   return effective.layers.some(
     (layer) => layer.kind === "signed-cloud" && layer.controls.some((control) => control.target_kind === "extension" && control.target_id === extensionId)
@@ -2079,6 +2108,9 @@ function newExtensionPolicyDraftIdentity() {
     nonce: crypto.randomUUID().replaceAll("-", "")
   };
 }
+function isCurrentExtensionPolicyDraft(generation, current) {
+  return generation === current;
+}
 function permissionSuffix(permissionId) {
   const marker = ".permission.";
   const index = permissionId.indexOf(marker);
@@ -2144,6 +2176,263 @@ function keepExtensionPolicyRebaseConflicts(result, latestEffective) {
   }
   return layers;
 }
+function cloneLayers(effective) {
+  return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
+}
+function useExtensionPolicyDraft(props) {
+  const [baseEffective, setBaseEffective] = reactExports.useState(props.effective);
+  const [draftLayers, setDraftLayers] = reactExports.useState(() => cloneLayers(props.effective));
+  const [identity, setIdentity] = reactExports.useState(() => newExtensionPolicyDraftIdentity());
+  const [preview, setPreview] = reactExports.useState(null);
+  const [previewBusy, setPreviewBusy] = reactExports.useState(false);
+  const [applyBusy, setApplyBusy] = reactExports.useState(false);
+  const [approvalOpen, setApprovalOpen] = reactExports.useState(false);
+  const [reviewOpen, setReviewOpen] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [stale, setStale] = reactExports.useState(false);
+  const [pendingRebase, setPendingRebase] = reactExports.useState(null);
+  const [refreshRequired, setRefreshRequired] = reactExports.useState(false);
+  const draftGeneration = reactExports.useRef(0);
+  const { onRefresh } = props;
+  const dirty = reactExports.useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
+  reactExports.useEffect(() => {
+    draftGeneration.current += 1;
+    setBaseEffective(props.effective);
+    setDraftLayers(cloneLayers(props.effective));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setRefreshRequired(false);
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [props.effective.revision, props.effective.catalog_digest]);
+  const changeCountFor = reactExports.useCallback((permissionIds) => {
+    return permissionIds.filter(
+      (permissionId) => localPermissionDraftState(baseEffective.layers, permissionId) !== localPermissionDraftState(draftLayers, permissionId)
+    ).length;
+  }, [baseEffective, draftLayers]);
+  const changedPermissionCount = reactExports.useMemo(
+    () => changeCountFor(
+      baseEffective.layers.flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2))
+    ),
+    [baseEffective, changeCountFor]
+  );
+  const resetDraft = reactExports.useCallback(() => {
+    draftGeneration.current += 1;
+    setDraftLayers(cloneLayers(baseEffective));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [baseEffective]);
+  const setPermissionState = reactExports.useCallback((permissionId, state) => {
+    draftGeneration.current += 1;
+    setDraftLayers((current) => setLocalPermissionDraftState(current, baseEffective.catalog_digest, permissionId, state));
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [baseEffective.catalog_digest]);
+  const mutation = reactExports.useCallback(
+    () => buildExtensionPolicyDraftMutation(baseEffective, baseEffective.catalog_digest, draftLayers, identity),
+    [baseEffective, draftLayers, identity]
+  );
+  const handleApiError = reactExports.useCallback((caught, fallback) => {
+    if (caught instanceof ExtensionControlApiError && ["revision_conflict", "catalog_conflict", "authority_conflict"].includes(caught.code ?? "")) {
+      setStale(true);
+      setError("The authoritative extension policy changed while this draft was open. Rebase the draft before applying; Guard will not silently overwrite security policy.");
+      return;
+    }
+    setError(caught instanceof Error ? caught.message : fallback);
+  }, []);
+  const runPreview = reactExports.useCallback(async () => {
+    if (!dirty) return;
+    const generation = draftGeneration.current;
+    setPreviewBusy(true);
+    setError(null);
+    setStale(false);
+    try {
+      const next = await previewExtensionMutation(mutation());
+      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) return;
+      setPreview(next);
+      setReviewOpen(true);
+    } catch (caught) {
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not preview this draft.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }, [dirty, handleApiError, mutation]);
+  const apply = reactExports.useCallback(async (credentials) => {
+    if (!preview || !dirty || stale) return;
+    setApplyBusy(true);
+    setError(null);
+    try {
+      const base = mutation();
+      const proofPreview = await previewExtensionMutation({ ...base, ...credentials, session_nonce: crypto.randomUUID().replaceAll("-", "") });
+      if (!proofPreview.proof_id) throw new Error("Guard did not issue an approval proof for this exact draft.");
+      if (proofPreview.canonical_diff_digest !== preview.canonical_diff_digest) throw new Error("The policy draft changed after preview. Preview it again before applying.");
+      const applied = await applyExtensionMutation({ ...base, proof_id: proofPreview.proof_id });
+      setApprovalOpen(false);
+      setPreview(null);
+      setReviewOpen(false);
+      setError(null);
+      setStale(false);
+      if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
+      draftGeneration.current += 1;
+      setDraftLayers(cloneLayers(baseEffective));
+      setIdentity(newExtensionPolicyDraftIdentity());
+      setRefreshRequired(true);
+      try {
+        await onRefresh();
+      } catch {
+        setError("The policy was applied, but Guard could not refresh the latest state. Refresh this page to confirm the committed policy.");
+      }
+    } catch (caught) {
+      handleApiError(caught, "Guard could not apply this draft.");
+    } finally {
+      setApplyBusy(false);
+    }
+  }, [baseEffective.revision, dirty, handleApiError, mutation, onRefresh, preview, stale]);
+  const rebaseDraft = reactExports.useCallback(async (oldExtensions) => {
+    const generation = draftGeneration.current;
+    setPreviewBusy(true);
+    setError(null);
+    try {
+      const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
+      const pairs = oldExtensions.map((oldExtension) => {
+        const exact = latestCatalog.extensions.find((item) => item.extension_id === oldExtension.extension_id);
+        if (exact) return { oldExtension, latestExtension: exact };
+        const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(oldExtension.extension_id));
+        return aliasMatches.length === 1 ? { oldExtension, latestExtension: aliasMatches[0] } : null;
+      }).filter((pair) => Boolean(pair));
+      if (!pairs.length) {
+        setError("These extensions no longer exist in the authoritative catalog. Discard the draft and refresh before continuing.");
+        return;
+      }
+      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
+        setError("The draft changed while Guard was loading current policy. Rebase again to preserve the latest edits.");
+        return;
+      }
+      const chained = pairs.reduce((result2, { oldExtension, latestExtension }) => {
+        const next = rebaseExtensionPolicyDraft(
+          baseEffective,
+          latestEffective,
+          oldExtension,
+          latestExtension,
+          result2 ? result2.draft_layers : draftLayers
+        );
+        return {
+          draft_layers: next.draft_layers,
+          conflicts: [...result2?.conflicts ?? [], ...next.conflicts],
+          remapped_permission_ids: { ...result2?.remapped_permission_ids ?? {}, ...next.remapped_permission_ids }
+        };
+      }, null);
+      if (!chained) {
+        setError("Guard could not rebase this draft against the current catalog.");
+        return;
+      }
+      const result = chained;
+      setBaseEffective(latestEffective);
+      setIdentity(newExtensionPolicyDraftIdentity());
+      setPreview(null);
+      setReviewOpen(false);
+      if (result.conflicts.length) {
+        setPendingRebase({ result, latestEffective, latestExtensions: pairs.map((pair) => pair.latestExtension) });
+        setDraftLayers(result.draft_layers);
+        setStale(true);
+        setError("The latest policy overlaps this draft. Choose whether to keep your overlapping changes or use current authoritative values. Removed permissions cannot be restored.");
+      } else {
+        setDraftLayers(result.draft_layers);
+        setPendingRebase(null);
+        setStale(false);
+        setError(null);
+      }
+    } catch (caught) {
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not rebase this draft.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }, [baseEffective, draftLayers]);
+  const keepConflicts = reactExports.useCallback(() => {
+    if (!pendingRebase) return;
+    setDraftLayers(keepExtensionPolicyRebaseConflicts(pendingRebase.result, pendingRebase.latestEffective));
+    setPendingRebase(null);
+    setStale(false);
+    setError(null);
+    setIdentity(newExtensionPolicyDraftIdentity());
+  }, [pendingRebase]);
+  const useCurrent = reactExports.useCallback(() => {
+    if (!pendingRebase) return;
+    setDraftLayers(cloneLayers(pendingRebase.latestEffective));
+    setPendingRebase(null);
+    setStale(false);
+    setError(null);
+    setPreview(null);
+    setIdentity(newExtensionPolicyDraftIdentity());
+  }, [pendingRebase]);
+  const applyProfile = reactExports.useCallback((permissions, profile) => {
+    if (profile === "custom") return;
+    draftGeneration.current += 1;
+    let next = cloneLayers(baseEffective);
+    for (const permission2 of permissions) {
+      if (!permission2.configurable) continue;
+      const state = profile === "recommended" ? "inherit" : "block";
+      next = setLocalPermissionDraftState(next, baseEffective.catalog_digest, permission2.permission_id, state);
+    }
+    setDraftLayers(next);
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [baseEffective]);
+  const useHistoricalDraft = reactExports.useCallback((historicalLayers) => {
+    draftGeneration.current += 1;
+    const historicalLocal = historicalLayers.find((layer) => layer.kind === "local-admin");
+    const next = baseEffective.layers.flatMap((layer) => layer.kind === "local-admin" ? historicalLocal ? [historicalLocal] : [] : [layer]);
+    if (historicalLocal && !baseEffective.layers.some((layer) => layer.kind === "local-admin")) next.push(historicalLocal);
+    setDraftLayers(next);
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [baseEffective.layers]);
+  return {
+    baseEffective,
+    draftLayers,
+    dirty,
+    preview,
+    previewBusy,
+    applyBusy,
+    reviewOpen,
+    approvalOpen,
+    error,
+    stale,
+    pendingRebase,
+    refreshRequired,
+    changedPermissionCount,
+    setReviewOpen,
+    setApprovalOpen,
+    permissionState: reactExports.useCallback((permissionId) => localPermissionDraftState(draftLayers, permissionId), [draftLayers]),
+    changeCountFor,
+    setPermissionState,
+    resetDraft,
+    runPreview,
+    apply,
+    rebaseDraft,
+    keepConflicts,
+    useCurrent,
+    applyProfile,
+    useHistoricalDraft
+  };
+}
 function ProtectionSettingsHistory(props) {
   const [items, setItems] = reactExports.useState([]);
   const [loading, setLoading] = reactExports.useState(true);
@@ -2188,9 +2477,6 @@ const RISK_TONE = {
 function Pill(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${props.tone ?? "border-[rgba(63,65,116,0.16)] text-brand-dark"}`, children: props.children });
 }
-function cloneLayers(effective) {
-  return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
-}
 function managedPermissionState(effective, permissionId) {
   const projected = effective.projection?.permissions.find((item) => item.permission_id === permissionId)?.managed_state;
   if (projected && projected !== "inherited") return projected;
@@ -2214,14 +2500,6 @@ function nextExtensionPolicyRadioIndex(choices, index, key, groupDisabled) {
     if (!choices[next]?.disabled) return next;
   }
   return -1;
-}
-function isCurrentExtensionPolicyDraft(generation, current) {
-  return generation === current;
-}
-function draftChangeCount(effective, extension2, draftLayers) {
-  return extension2.permissions.filter(
-    (permission2) => localPermissionDraftState(effective.layers, permission2.permission_id) !== localPermissionDraftState(draftLayers, permission2.permission_id)
-  ).length;
 }
 function DraftControl(props) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
@@ -2427,27 +2705,37 @@ function ReviewDrawer(props) {
   ) });
 }
 function ExtensionPolicyPanel(props) {
-  const [baseEffective, setBaseEffective] = reactExports.useState(props.effective);
   const [policyExtension, setPolicyExtension] = reactExports.useState(props.extension);
-  const [draftLayers, setDraftLayers] = reactExports.useState(() => cloneLayers(props.effective));
-  const [identity, setIdentity] = reactExports.useState(() => newExtensionPolicyDraftIdentity());
-  const [preview, setPreview] = reactExports.useState(null);
-  const [previewBusy, setPreviewBusy] = reactExports.useState(false);
-  const [applyBusy, setApplyBusy] = reactExports.useState(false);
-  const [approvalOpen, setApprovalOpen] = reactExports.useState(false);
-  const [reviewOpen, setReviewOpen] = reactExports.useState(false);
-  const [error, setError] = reactExports.useState(null);
-  const [stale, setStale] = reactExports.useState(false);
-  const [pendingRebase, setPendingRebase] = reactExports.useState(null);
-  const [refreshRequired, setRefreshRequired] = reactExports.useState(false);
+  const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
+  const {
+    baseEffective,
+    dirty,
+    preview,
+    previewBusy,
+    applyBusy,
+    reviewOpen,
+    approvalOpen,
+    error,
+    stale,
+    pendingRebase,
+    refreshRequired,
+    setReviewOpen,
+    setApprovalOpen,
+    setPermissionState,
+    resetDraft,
+    runPreview,
+    apply,
+    rebaseDraft,
+    keepConflicts,
+    useCurrent,
+    applyProfile,
+    useHistoricalDraft,
+    permissionState
+  } = draft;
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
-  const draftGeneration = reactExports.useRef(0);
-  const { onDirtyChange, onRefresh } = props;
-  const dirty = reactExports.useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
-  const changeCount = reactExports.useMemo(() => draftChangeCount(baseEffective, policyExtension, draftLayers), [baseEffective, draftLayers, policyExtension]);
   reactExports.useEffect(() => {
-    onDirtyChange?.(dirty);
-  }, [dirty, onDirtyChange]);
+    props.onDirtyChange?.(dirty);
+  }, [dirty, props.onDirtyChange]);
   reactExports.useEffect(() => {
     const beforeUnload = (event) => {
       if (!dirty) return;
@@ -2458,206 +2746,31 @@ function ExtensionPolicyPanel(props) {
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
   reactExports.useEffect(() => {
-    draftGeneration.current += 1;
-    setBaseEffective(props.effective);
     setPolicyExtension(props.extension);
-    setDraftLayers(cloneLayers(props.effective));
-    setIdentity(newExtensionPolicyDraftIdentity());
-    setRefreshRequired(false);
-    setPreview(null);
-    setReviewOpen(false);
-    setError(null);
-    setStale(false);
-    setPendingRebase(null);
-  }, [props.effective.revision, props.effective.catalog_digest, props.extension.extension_id]);
-  const resetDraft = reactExports.useCallback(() => {
-    draftGeneration.current += 1;
-    setDraftLayers(cloneLayers(baseEffective));
-    setIdentity(newExtensionPolicyDraftIdentity());
-    setPreview(null);
-    setReviewOpen(false);
-    setError(null);
-    setStale(false);
-    setPendingRebase(null);
-  }, [baseEffective]);
-  const setPermission = reactExports.useCallback((permission2, state) => {
-    if (!permission2.configurable) return;
-    draftGeneration.current += 1;
-    setDraftLayers((current) => setLocalPermissionDraftState(current, baseEffective.catalog_digest, permission2.permission_id, state));
-    setPreview(null);
-    setReviewOpen(false);
-    setError(null);
-    setStale(false);
-    setPendingRebase(null);
-  }, [baseEffective.catalog_digest]);
-  const mutation = reactExports.useCallback(() => buildExtensionPolicyDraftMutation(baseEffective, baseEffective.catalog_digest, draftLayers, identity), [baseEffective, draftLayers, identity]);
-  const handleApiError = reactExports.useCallback((caught, fallback) => {
-    if (caught instanceof ExtensionControlApiError && ["revision_conflict", "catalog_conflict", "authority_conflict"].includes(caught.code ?? "")) {
-      setStale(true);
-      setError("The authoritative extension policy changed while this draft was open. Rebase the draft before applying; Guard will not silently overwrite security policy.");
-      return;
-    }
-    setError(caught instanceof Error ? caught.message : fallback);
-  }, []);
-  const runPreview = reactExports.useCallback(async () => {
-    if (!dirty) return;
-    const generation = draftGeneration.current;
-    setPreviewBusy(true);
-    setError(null);
-    setStale(false);
-    try {
-      const next = await previewExtensionMutation(mutation());
-      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) return;
-      setPreview(next);
-      setReviewOpen(true);
-    } catch (caught) {
-      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not preview this draft.");
-    } finally {
-      setPreviewBusy(false);
-    }
-  }, [dirty, handleApiError, mutation]);
+    resetDraft();
+  }, [props.extension.extension_id]);
   const openApproval = reactExports.useCallback(async () => {
     if (!preview || !dirty || stale) return;
     try {
       await resolveApprovalGate({ failClosed: true });
       setReviewOpen(false);
       setApprovalOpen(true);
-      setError(null);
+      draft.error === null;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Guard could not load the local approval gate.");
     }
-  }, [dirty, preview, resolveApprovalGate, stale]);
-  const apply = reactExports.useCallback(async (credentials) => {
-    if (!preview || !dirty || stale) return;
-    setApplyBusy(true);
-    setError(null);
-    try {
-      const base = mutation();
-      const proofPreview = await previewExtensionMutation({ ...base, ...credentials, session_nonce: crypto.randomUUID().replaceAll("-", "") });
-      if (!proofPreview.proof_id) throw new Error("Guard did not issue an approval proof for this exact draft.");
-      if (proofPreview.canonical_diff_digest !== preview.canonical_diff_digest) throw new Error("The policy draft changed after preview. Preview it again before applying.");
-      const applied = await applyExtensionMutation({ ...base, proof_id: proofPreview.proof_id });
-      setApprovalOpen(false);
-      setPreview(null);
-      setReviewOpen(false);
-      setError(null);
-      setStale(false);
-      if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
-      draftGeneration.current += 1;
-      setDraftLayers(cloneLayers(baseEffective));
-      setIdentity(newExtensionPolicyDraftIdentity());
-      setRefreshRequired(true);
-      try {
-        await onRefresh();
-      } catch {
-        setError("The policy was applied, but Guard could not refresh the latest state. Refresh this page to confirm the committed policy.");
-      }
-    } catch (caught) {
-      handleApiError(caught, "Guard could not apply this draft.");
-    } finally {
-      setApplyBusy(false);
-    }
-  }, [baseEffective.revision, dirty, handleApiError, mutation, onRefresh, preview, stale]);
-  const rebaseDraft = reactExports.useCallback(async () => {
-    const generation = draftGeneration.current;
-    setPreviewBusy(true);
-    setError(null);
-    try {
-      const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      const exactExtension = latestCatalog.extensions.find((item) => item.extension_id === policyExtension.extension_id);
-      const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(policyExtension.extension_id));
-      const latestExtension = exactExtension ?? (aliasMatches.length === 1 ? aliasMatches[0] : void 0);
-      if (!latestExtension) {
-        setError("This extension no longer exists in the authoritative catalog. Discard the draft and refresh before continuing.");
-        return;
-      }
-      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
-        setError("The draft changed while Guard was loading current policy. Rebase again to preserve the latest edits.");
-        return;
-      }
-      const result = rebaseExtensionPolicyDraft(baseEffective, latestEffective, policyExtension, latestExtension, draftLayers);
-      setBaseEffective(latestEffective);
-      setPolicyExtension(latestExtension);
-      setIdentity(newExtensionPolicyDraftIdentity());
-      setPreview(null);
-      setReviewOpen(false);
-      if (result.conflicts.length) {
-        setPendingRebase({ result, latestEffective, latestExtension });
-        setDraftLayers(result.draft_layers);
-        setStale(true);
-        setError("The latest policy overlaps this draft. Choose whether to keep your overlapping changes or use current authoritative values. Removed permissions cannot be restored.");
-      } else {
-        setDraftLayers(result.draft_layers);
-        setPendingRebase(null);
-        setStale(false);
-        setError(null);
-      }
-    } catch (caught) {
-      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
-        setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft.");
-      }
-    } finally {
-      setPreviewBusy(false);
-    }
-  }, [baseEffective, draftLayers, policyExtension]);
-  const keepConflicts = reactExports.useCallback(() => {
-    if (!pendingRebase) return;
-    setDraftLayers(keepExtensionPolicyRebaseConflicts(pendingRebase.result, pendingRebase.latestEffective));
-    setPendingRebase(null);
-    setStale(false);
-    setError(null);
-    setIdentity(newExtensionPolicyDraftIdentity());
-  }, [pendingRebase]);
-  const useCurrent = reactExports.useCallback(() => {
-    if (!pendingRebase) return;
-    setDraftLayers(cloneLayers(pendingRebase.latestEffective));
-    setPendingRebase(null);
-    setStale(false);
-    setError(null);
-    setPreview(null);
-    setIdentity(newExtensionPolicyDraftIdentity());
-  }, [pendingRebase]);
-  const applyProfile = reactExports.useCallback((profile) => {
-    if (profile === "custom") return;
-    draftGeneration.current += 1;
-    let next = cloneLayers(baseEffective);
-    for (const permission2 of policyExtension.permissions) {
-      if (!permission2.configurable) continue;
-      const state = profile === "recommended" ? "inherit" : "block";
-      next = setLocalPermissionDraftState(next, baseEffective.catalog_digest, permission2.permission_id, state);
-    }
-    setDraftLayers(next);
-    setIdentity(newExtensionPolicyDraftIdentity());
-    setPreview(null);
-    setReviewOpen(false);
-    setError(null);
-    setStale(false);
-    setPendingRebase(null);
-  }, [baseEffective, policyExtension]);
-  const useHistoricalDraft = reactExports.useCallback((historicalLayers, _revision) => {
-    draftGeneration.current += 1;
-    const historicalLocal = historicalLayers.find((layer) => layer.kind === "local-admin");
-    const next = baseEffective.layers.flatMap((layer) => layer.kind === "local-admin" ? historicalLocal ? [historicalLocal] : [] : [layer]);
-    if (historicalLocal && !baseEffective.layers.some((layer) => layer.kind === "local-admin")) next.push(historicalLocal);
-    setDraftLayers(next);
-    setIdentity(newExtensionPolicyDraftIdentity());
-    setPreview(null);
-    setReviewOpen(false);
-    setError(null);
-    setStale(false);
-    setPendingRebase(null);
-  }, [baseEffective.layers]);
+  }, [dirty, preview, resolveApprovalGate, setApprovalOpen, setReviewOpen, stale]);
   const managedCount = policyExtension.permissions.filter((permission2) => managedPermissionState(baseEffective, permission2.permission_id) !== null).length;
+  const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission2) => permission2.permission_id));
   const confirmationCount = preview?.semantic_preview.changed_target_count ?? changeCount;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "extension-policy-editor", "aria-labelledby": "extension-policy-heading", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "extension-policy-heading", className: "text-lg font-semibold text-brand-dark", children: "Protection settings" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/80", children: "Recommended follows Guard defaults. Allow is available only where built-in safety and organization policy still permit it. Block is a stricter local floor." }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile("recommended"), className: "min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40", children: "Recommended" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile("stricter"), className: "min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40", children: "Stricter" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile(policyExtension.permissions, "recommended"), className: "min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40", children: "Recommended" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile(policyExtension.permissions, "stricter"), className: "min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40", children: "Stricter" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: true, className: "min-h-10 px-1 text-xs font-semibold text-brand-dark/55", children: "Custom" })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionSettingsHistory, { catalogDigest: baseEffective.catalog_digest, disabled: baseEffective.health !== "protected" || refreshRequired, onUse: useHistoricalDraft }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionSettingsHistory, { catalogDigest: baseEffective.catalog_digest, disabled: baseEffective.health !== "protected" || refreshRequired, onUse: (layers) => useHistoricalDraft(layers) }),
     baseEffective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 flex gap-2 text-sm text-brand-dark", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 size-4 shrink-0" }),
       "Emergency Lockdown remains dominant. You can prepare a local draft, but matching commands stay blocked while lockdown is active."
@@ -2681,9 +2794,9 @@ function ExtensionPolicyPanel(props) {
           permission: permission2,
           extension: policyExtension,
           effective: baseEffective,
-          draftState: localPermissionDraftState(draftLayers, permission2.permission_id),
+          draftState: permissionState(permission2.permission_id),
           disabled: refreshRequired,
-          onChange: (state) => setPermission(permission2, state)
+          onChange: (state) => setPermissionState(permission2.permission_id, state)
         },
         permission2.permission_id
       );
@@ -2728,7 +2841,7 @@ function ExtensionPolicyPanel(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: error })
       ] }),
       stale && !pendingRebase ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: previewBusy, onClick: () => {
-        void rebaseDraft();
+        void rebaseDraft([policyExtension]);
       }, className: "mt-3 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb]", children: "Update draft with latest protection" }) : null,
       pendingRebase ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-2", children: pendingRebase.result.conflicts.map((conflict) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs text-brand-dark", children: [
@@ -2744,6 +2857,168 @@ function ExtensionPolicyPanel(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change." })
     ] }) : null,
+    reviewOpen && preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewDrawer, { preview, busy: previewBusy || applyBusy, onClose: () => setReviewOpen(false), onApply: () => {
+      void openApproval();
+    } }) : null,
+    approvalOpen && preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofModal,
+      {
+        title: `Apply ${confirmationCount} protection setting change${confirmationCount === 1 ? "" : "s"}`,
+        detail: "Authenticate the exact settings you just reviewed. Guard uses a one-time local proof and rejects the apply if the reviewed settings changed.",
+        confirmLabel: `Apply ${confirmationCount} reviewed change${confirmationCount === 1 ? "" : "s"}`,
+        approvalGate: resolvedApprovalGate,
+        busy: applyBusy,
+        error,
+        onCancel: () => {
+          if (!applyBusy) setApprovalOpen(false);
+        },
+        onConfirm: (credentials) => {
+          void apply(credentials);
+        }
+      }
+    ) : null
+  ] });
+}
+function PatternSearchConsole(props) {
+  const [query, setQuery] = reactExports.useState("");
+  const [focused, setFocused] = reactExports.useState(false);
+  const inputRef = reactExports.useRef(null);
+  const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const {
+    baseEffective,
+    dirty,
+    preview,
+    previewBusy,
+    applyBusy,
+    reviewOpen,
+    approvalOpen,
+    error,
+    stale,
+    refreshRequired,
+    setReviewOpen,
+    setApprovalOpen,
+    setPermissionState,
+    resetDraft,
+    runPreview,
+    apply,
+    permissionState,
+    changeCountFor
+  } = draft;
+  reactExports.useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key !== "/" || event.defaultPrevented) return;
+      const target2 = event.target;
+      if (target2 && (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable)) return;
+      event.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+  const matches = reactExports.useMemo(() => searchCommandPatterns(props.catalog, query), [props.catalog, query]);
+  const grouped = reactExports.useMemo(() => {
+    const groups = /* @__PURE__ */ new Map();
+    for (const match of matches) {
+      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissionIds: [] };
+      group.permissionIds.push(match.permission.permission_id);
+      groups.set(match.extension.extension_id, group);
+    }
+    return [...groups.values()];
+  }, [matches]);
+  const involvedPermissions = reactExports.useMemo(() => matches.map((match) => match.permission), [matches]);
+  const changeCount = changeCountFor(involvedPermissions.map((permission2) => permission2.permission_id));
+  const confirmationCount = preview?.semantic_preview.changed_target_count ?? changeCount;
+  const showResults = query.trim().length > 0;
+  const openApproval = async () => {
+    if (!preview || !dirty || stale) return;
+    try {
+      await resolveApprovalGate({ failClosed: true });
+      setReviewOpen(false);
+      setApprovalOpen(true);
+    } catch {
+    }
+  };
+  const managedCount = involvedPermissions.filter(
+    (permission2) => managedPermissionState(baseEffective, permission2.permission_id) !== null
+  ).length;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "pattern-search-heading", className: "mt-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "pattern-search-heading", className: "sr-only", children: "Search command patterns" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search command patterns" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          ref: inputRef,
+          type: "search",
+          value: query,
+          onFocus: () => setFocused(true),
+          onChange: (event) => setQuery(event.target.value.slice(0, 160)),
+          placeholder: 'Search any command Guard watches — "squash", "git push --force", "kubectl"…',
+          "aria-describedby": "pattern-search-hint",
+          className: "min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-3 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "pattern-search-hint", className: `mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`, children: "Matches patterns across every tool. Press / to focus search from anywhere on this page." }),
+    showResults ? matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      grouped.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": `${group.extension.name} patterns`, className: "guard-pattern-family", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "guard-pattern-family-heading", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: group.extension.executables[0] ?? group.extension.extension_id }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: group.extension.name })
+        ] }),
+        group.permissionIds.map((permissionId) => {
+          const permission2 = group.extension.permissions.find((item) => item.permission_id === permissionId);
+          if (!permission2) return null;
+          return /* @__PURE__ */ jsxRuntimeExports.jsx(
+            PermissionPolicyRow,
+            {
+              permission: permission2,
+              extension: group.extension,
+              effective: baseEffective,
+              draftState: permissionState(permission2.permission_id),
+              disabled: refreshRequired,
+              onChange: (state) => setPermissionState(permission2.permission_id, state)
+            },
+            permission2.permission_id
+          );
+        })
+      ] }, group.extension.extension_id)),
+      managedCount ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-xs text-indigo-950", children: [
+        managedCount,
+        " matched setting",
+        managedCount === 1 ? "" : "s are",
+        " managed by your organization and cannot be weakened on this device."
+      ] }) : null,
+      dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-review-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-brand-dark", children: [
+          changeCount,
+          " unsaved setting change",
+          changeCount === 1 ? "" : "s",
+          "."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: previewBusy || applyBusy, onClick: resetDraft, className: "min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark", children: "Reset changes" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: previewBusy || applyBusy || baseEffective.health !== "protected" || stale, onClick: () => {
+            void runPreview();
+          }, className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40", children: [
+            previewBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin motion-reduce:animate-none" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4" }),
+            "Review ",
+            changeCount,
+            " change",
+            changeCount === 1 ? "" : "s"
+          ] })
+        ] })
+      ] }) }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "alert", className: "mt-4 text-sm text-red-950", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: error })
+      ] }) }) : dirty && !preview ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change." })
+      ] }) : null
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No command patterns match this search." }) : null,
     reviewOpen && preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewDrawer, { preview, busy: previewBusy || applyBusy, onClose: () => setReviewOpen(false), onApply: () => {
       void openApproval();
     } }) : null,
@@ -3490,6 +3765,7 @@ function ProtectionCenterWorkspace() {
         }
       )
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PatternSearchConsole, { catalog: catalogExtensions, effective: state.effective, onRefresh: load }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionStatusHero, { status, busy: recoveryBusy, onPrimaryAction: status.primaryAction === "none" ? void 0 : handlePrimaryStatusAction, children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-dark/70", children: "Cloud continuity is separate from local protection. Signing out or losing Cloud connectivity does not turn local protection off." }) }) }),
     mutationError && !pending ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: mutationError }) }) : null,
     recoveryError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: recoveryError }) }) : null,

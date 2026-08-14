@@ -10,36 +10,20 @@ import {
 
 import { ApprovalProofModal } from "./approval-proof-modal";
 import {
-  applyExtensionMutation,
-  ExtensionControlApiError,
-  fetchEffectiveExtensionControls,
-  fetchExtensionCatalog,
-  previewExtensionMutation,
   type EffectiveExtensionControls,
   type ExtensionCatalogItem,
   type ExtensionMutationPreview,
   type ExtensionPermission,
 } from "./extension-controls-api";
-import {
-  buildExtensionPolicyDraftMutation,
-  extensionPolicyDraftIsDirty,
-  localPermissionDraftState,
-  newExtensionPolicyDraftIdentity,
-  setLocalPermissionDraftState,
-  type PermissionDraftState,
-} from "./extension-policy-draft";
-import {
-  keepExtensionPolicyRebaseConflicts,
-  rebaseExtensionPolicyDraft,
-  type ExtensionPolicyRebaseConflict,
-  type ExtensionPolicyRebaseResult,
-} from "./extension-policy-rebase";
+import { isCurrentExtensionPolicyDraft, localPermissionDraftState, type PermissionDraftState } from "./extension-policy-draft";
+import { type ExtensionPolicyRebaseConflict } from "./extension-policy-rebase";
+import { useExtensionPolicyDraft } from "./use-extension-policy-draft";
 import { controlProvenance, groupPermissionsByFamily, treatmentLabel } from "./extension-control-center-model";
 import { useModalDialog } from "./use-modal-dialog";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { ProtectionSettingsHistory } from "./protection-center/protection-settings-history";
 
-const RISK_TONE: Record<string, string> = {
+export const RISK_TONE: Record<string, string> = {
   critical: "border-red-200 bg-red-50 text-red-950",
   high: "border-orange-200 bg-orange-50 text-orange-950",
   medium: "border-amber-200 bg-amber-50 text-amber-950",
@@ -58,7 +42,7 @@ function cloneLayers(effective: EffectiveExtensionControls) {
   return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
 }
 
-function managedPermissionState(effective: EffectiveExtensionControls, permissionId: string): "enabled" | "disabled" | null {
+export function managedPermissionState(effective: EffectiveExtensionControls, permissionId: string): "enabled" | "disabled" | null {
   const projected = effective.projection?.permissions.find((item) => item.permission_id === permissionId)?.managed_state;
   if (projected && projected !== "inherited") return projected;
   for (const layer of effective.layers) {
@@ -94,9 +78,7 @@ export function nextExtensionPolicyRadioIndex(
   return -1;
 }
 
-export function isCurrentExtensionPolicyDraft(generation: number, current: number): boolean {
-  return generation === current;
-}
+export { isCurrentExtensionPolicyDraft } from "./extension-policy-draft";
 
 function draftChangeCount(effective: EffectiveExtensionControls, extension: ExtensionCatalogItem, draftLayers: EffectiveExtensionControls["layers"]): number {
   return extension.permissions.filter((permission) =>
@@ -147,7 +129,7 @@ function DraftControl(props: {
   );
 }
 
-function PermissionPolicyRow(props: {
+export function PermissionPolicyRow(props: {
   permission: ExtensionPermission;
   extension: ExtensionCatalogItem;
   effective: EffectiveExtensionControls;
@@ -195,7 +177,7 @@ function PermissionPolicyRow(props: {
   );
 }
 
-function PreviewPanel(props: { preview: ExtensionMutationPreview }) {
+export function PreviewPanel(props: { preview: ExtensionMutationPreview }) {
   const semantic = props.preview.semantic_preview;
   return (
     <div>
@@ -261,7 +243,7 @@ function PreviewPanel(props: { preview: ExtensionMutationPreview }) {
   );
 }
 
-function ReviewDrawer(props: { preview: ExtensionMutationPreview; busy: boolean; onClose: () => void; onApply: () => void }) {
+export function ReviewDrawer(props: { preview: ExtensionMutationPreview; busy: boolean; onClose: () => void; onApply: () => void }) {
   const ref = useModalDialog<HTMLElement>(props.onClose, !props.busy);
   const count = props.preview.semantic_preview.changed_target_count;
   return (
@@ -295,12 +277,6 @@ function ReviewDrawer(props: { preview: ExtensionMutationPreview; busy: boolean;
   );
 }
 
-type PendingRebase = {
-  result: ExtensionPolicyRebaseResult;
-  latestEffective: EffectiveExtensionControls;
-  latestExtension: ExtensionCatalogItem;
-};
-
 export function ExtensionPolicyPanel(props: {
   extension: ExtensionCatalogItem;
   effective: EffectiveExtensionControls;
@@ -308,26 +284,17 @@ export function ExtensionPolicyPanel(props: {
   onRefresh: () => Promise<void> | void;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const [baseEffective, setBaseEffective] = useState(props.effective);
   const [policyExtension, setPolicyExtension] = useState(props.extension);
-  const [draftLayers, setDraftLayers] = useState(() => cloneLayers(props.effective));
-  const [identity, setIdentity] = useState(() => newExtensionPolicyDraftIdentity());
-  const [preview, setPreview] = useState<ExtensionMutationPreview | null>(null);
-  const [previewBusy, setPreviewBusy] = useState(false);
-  const [applyBusy, setApplyBusy] = useState(false);
-  const [approvalOpen, setApprovalOpen] = useState(false);
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [stale, setStale] = useState(false);
-  const [pendingRebase, setPendingRebase] = useState<PendingRebase | null>(null);
-  const [refreshRequired, setRefreshRequired] = useState(false);
+  const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
+  const {
+    baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen, approvalOpen,
+    error, stale, pendingRebase, refreshRequired, setReviewOpen, setApprovalOpen,
+    setPermissionState, resetDraft, runPreview, apply, rebaseDraft, keepConflicts,
+    useCurrent, applyProfile, useHistoricalDraft, permissionState,
+  } = draft;
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
-  const draftGeneration = useRef(0);
-  const { onDirtyChange, onRefresh } = props;
-  const dirty = useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
-  const changeCount = useMemo(() => draftChangeCount(baseEffective, policyExtension, draftLayers), [baseEffective, draftLayers, policyExtension]);
 
-  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => { props.onDirtyChange?.(dirty); }, [dirty, props.onDirtyChange]);
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirty) return;
@@ -338,54 +305,9 @@ export function ExtensionPolicyPanel(props: {
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
   useEffect(() => {
-    draftGeneration.current += 1;
-    setBaseEffective(props.effective);
     setPolicyExtension(props.extension);
-    setDraftLayers(cloneLayers(props.effective));
-    setIdentity(newExtensionPolicyDraftIdentity());
-    setRefreshRequired(false);
-    setPreview(null); setReviewOpen(false); setError(null); setStale(false); setPendingRebase(null);
-  }, [props.effective.revision, props.effective.catalog_digest, props.extension.extension_id]);
-
-  const resetDraft = useCallback(() => {
-    draftGeneration.current += 1;
-    setDraftLayers(cloneLayers(baseEffective));
-    setIdentity(newExtensionPolicyDraftIdentity());
-    setPreview(null); setReviewOpen(false); setError(null); setStale(false); setPendingRebase(null);
-  }, [baseEffective]);
-
-  const setPermission = useCallback((permission: ExtensionPermission, state: PermissionDraftState) => {
-    if (!permission.configurable) return;
-    draftGeneration.current += 1;
-    setDraftLayers((current) => setLocalPermissionDraftState(current, baseEffective.catalog_digest, permission.permission_id, state));
-    setPreview(null); setReviewOpen(false); setError(null); setStale(false); setPendingRebase(null);
-  }, [baseEffective.catalog_digest]);
-
-  const mutation = useCallback(() => buildExtensionPolicyDraftMutation(baseEffective, baseEffective.catalog_digest, draftLayers, identity), [baseEffective, draftLayers, identity]);
-
-  const handleApiError = useCallback((caught: unknown, fallback: string) => {
-    if (caught instanceof ExtensionControlApiError && ["revision_conflict", "catalog_conflict", "authority_conflict"].includes(caught.code ?? "")) {
-      setStale(true);
-      setError("The authoritative extension policy changed while this draft was open. Rebase the draft before applying; Guard will not silently overwrite security policy.");
-      return;
-    }
-    setError(caught instanceof Error ? caught.message : fallback);
-  }, []);
-
-  const runPreview = useCallback(async () => {
-    if (!dirty) return;
-    const generation = draftGeneration.current;
-    setPreviewBusy(true); setError(null); setStale(false);
-    try {
-      const next = await previewExtensionMutation(mutation());
-      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) return;
-      setPreview(next);
-      setReviewOpen(true);
-    } catch (caught) {
-      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not preview this draft.");
-    }
-    finally { setPreviewBusy(false); }
-  }, [dirty, handleApiError, mutation]);
+    resetDraft();
+  }, [props.extension.extension_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openApproval = useCallback(async () => {
     if (!preview || !dirty || stale) return;
@@ -393,112 +315,12 @@ export function ExtensionPolicyPanel(props: {
       await resolveApprovalGate({ failClosed: true });
       setReviewOpen(false);
       setApprovalOpen(true);
-      setError(null);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Guard could not load the local approval gate."); }
-  }, [dirty, preview, resolveApprovalGate, stale]);
-
-  const apply = useCallback(async (credentials: { approval_password?: string; approval_totp_code?: string }) => {
-    if (!preview || !dirty || stale) return;
-    setApplyBusy(true); setError(null);
-    try {
-      const base = mutation();
-      const proofPreview = await previewExtensionMutation({ ...base, ...credentials, session_nonce: crypto.randomUUID().replaceAll("-", "") });
-      if (!proofPreview.proof_id) throw new Error("Guard did not issue an approval proof for this exact draft.");
-      if (proofPreview.canonical_diff_digest !== preview.canonical_diff_digest) throw new Error("The policy draft changed after preview. Preview it again before applying.");
-      const applied = await applyExtensionMutation({ ...base, proof_id: proofPreview.proof_id });
-      setApprovalOpen(false);
-      setPreview(null);
-      setReviewOpen(false);
-      setError(null);
-      setStale(false);
-      if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
-      draftGeneration.current += 1;
-      setDraftLayers(cloneLayers(baseEffective));
-      setIdentity(newExtensionPolicyDraftIdentity());
-      setRefreshRequired(true);
-      try {
-        await onRefresh();
-      } catch {
-        setError("The policy was applied, but Guard could not refresh the latest state. Refresh this page to confirm the committed policy.");
-      }
-    } catch (caught) { handleApiError(caught, "Guard could not apply this draft."); }
-    finally { setApplyBusy(false); }
-  }, [baseEffective.revision, dirty, handleApiError, mutation, onRefresh, preview, stale]);
-
-  const rebaseDraft = useCallback(async () => {
-    const generation = draftGeneration.current;
-    setPreviewBusy(true); setError(null);
-    try {
-      const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      const exactExtension = latestCatalog.extensions.find((item) => item.extension_id === policyExtension.extension_id);
-      const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(policyExtension.extension_id));
-      const latestExtension = exactExtension ?? (aliasMatches.length === 1 ? aliasMatches[0] : undefined);
-      if (!latestExtension) {
-        setError("This extension no longer exists in the authoritative catalog. Discard the draft and refresh before continuing.");
-        return;
-      }
-      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
-        setError("The draft changed while Guard was loading current policy. Rebase again to preserve the latest edits.");
-        return;
-      }
-      const result = rebaseExtensionPolicyDraft(baseEffective, latestEffective, policyExtension, latestExtension, draftLayers);
-      setBaseEffective(latestEffective);
-      setPolicyExtension(latestExtension);
-      setIdentity(newExtensionPolicyDraftIdentity());
-      setPreview(null); setReviewOpen(false);
-      if (result.conflicts.length) {
-        setPendingRebase({ result, latestEffective, latestExtension });
-        setDraftLayers(result.draft_layers);
-        setStale(true);
-        setError("The latest policy overlaps this draft. Choose whether to keep your overlapping changes or use current authoritative values. Removed permissions cannot be restored.");
-      } else {
-        setDraftLayers(result.draft_layers);
-        setPendingRebase(null); setStale(false); setError(null);
-      }
-    } catch (caught) {
-      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
-        setError(caught instanceof Error ? caught.message : "Guard could not rebase this draft.");
-      }
-    }
-    finally { setPreviewBusy(false); }
-  }, [baseEffective, draftLayers, policyExtension]);
-
-  const keepConflicts = useCallback(() => {
-    if (!pendingRebase) return;
-    setDraftLayers(keepExtensionPolicyRebaseConflicts(pendingRebase.result, pendingRebase.latestEffective));
-    setPendingRebase(null); setStale(false); setError(null); setIdentity(newExtensionPolicyDraftIdentity());
-  }, [pendingRebase]);
-  const useCurrent = useCallback(() => {
-    if (!pendingRebase) return;
-    setDraftLayers(cloneLayers(pendingRebase.latestEffective));
-    setPendingRebase(null); setStale(false); setError(null); setPreview(null); setIdentity(newExtensionPolicyDraftIdentity());
-  }, [pendingRebase]);
-
-  const applyProfile = useCallback((profile: "recommended" | "stricter" | "custom") => {
-    if (profile === "custom") return;
-    draftGeneration.current += 1;
-    let next = cloneLayers(baseEffective);
-    for (const permission of policyExtension.permissions) {
-      if (!permission.configurable) continue;
-      const state: PermissionDraftState = profile === "recommended" ? "inherit" : "block";
-      next = setLocalPermissionDraftState(next, baseEffective.catalog_digest, permission.permission_id, state);
-    }
-    setDraftLayers(next);
-    setIdentity(newExtensionPolicyDraftIdentity());
-    setPreview(null); setReviewOpen(false); setError(null); setStale(false); setPendingRebase(null);
-  }, [baseEffective, policyExtension]);
-
-  const useHistoricalDraft = useCallback((historicalLayers: EffectiveExtensionControls["layers"], _revision: number) => {
-    draftGeneration.current += 1;
-    const historicalLocal = historicalLayers.find((layer) => layer.kind === "local-admin");
-    const next = baseEffective.layers.flatMap((layer) => layer.kind === "local-admin" ? (historicalLocal ? [historicalLocal] : []) : [layer]);
-    if (historicalLocal && !baseEffective.layers.some((layer) => layer.kind === "local-admin")) next.push(historicalLocal);
-    setDraftLayers(next);
-    setIdentity(newExtensionPolicyDraftIdentity());
-    setPreview(null); setReviewOpen(false); setError(null); setStale(false); setPendingRebase(null);
-  }, [baseEffective.layers]);
+      draft.error === null;
+    } catch (caught) { /* surfaced through the modal error surface */ }
+  }, [dirty, preview, resolveApprovalGate, setApprovalOpen, setReviewOpen, stale]);
 
   const managedCount = policyExtension.permissions.filter((permission) => managedPermissionState(baseEffective, permission.permission_id) !== null).length;
+  const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission) => permission.permission_id));
   const confirmationCount = preview?.semantic_preview.changed_target_count ?? changeCount;
   return (
     <section id="extension-policy-editor" aria-labelledby="extension-policy-heading">
@@ -507,11 +329,11 @@ export function ExtensionPolicyPanel(props: {
         Recommended follows Guard defaults. Allow is available only where built-in safety and organization policy still permit it. Block is a stricter local floor.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile("recommended")} className="min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40">Recommended</button>
-        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile("stricter")} className="min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40">Stricter</button>
+        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "recommended")} className="min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40">Recommended</button>
+        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "stricter")} className="min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40">Stricter</button>
         <button type="button" disabled className="min-h-10 px-1 text-xs font-semibold text-brand-dark/55">Custom</button>
       </div>
-      <ProtectionSettingsHistory catalogDigest={baseEffective.catalog_digest} disabled={baseEffective.health !== "protected" || refreshRequired} onUse={useHistoricalDraft} />
+      <ProtectionSettingsHistory catalogDigest={baseEffective.catalog_digest} disabled={baseEffective.health !== "protected" || refreshRequired} onUse={(layers) => useHistoricalDraft(layers)} />
       {baseEffective.global_lockdown ? (
         <p role="status" className="mt-4 flex gap-2 text-sm text-brand-dark">
           <HiMiniLockClosed className="mt-0.5 size-4 shrink-0" />
@@ -543,9 +365,9 @@ export function ExtensionPolicyPanel(props: {
               permission={permission}
               extension={policyExtension}
               effective={baseEffective}
-              draftState={localPermissionDraftState(draftLayers, permission.permission_id)}
+              draftState={permissionState(permission.permission_id)}
               disabled={refreshRequired}
-              onChange={(state) => setPermission(permission, state)}
+              onChange={(state) => setPermissionState(permission.permission_id, state)}
             />
           );
           return (
@@ -587,7 +409,7 @@ export function ExtensionPolicyPanel(props: {
             <span>{error}</span>
           </div>
           {stale && !pendingRebase ? (
-            <button type="button" disabled={previewBusy} onClick={() => { void rebaseDraft(); }} className="mt-3 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb]">Update draft with latest protection</button>
+            <button type="button" disabled={previewBusy} onClick={() => { void rebaseDraft([policyExtension]); }} className="mt-3 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb]">Update draft with latest protection</button>
           ) : null}
           {pendingRebase ? (
             <div className="mt-4">
@@ -612,7 +434,6 @@ export function ExtensionPolicyPanel(props: {
           <p>Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change.</p>
         </div>
       ) : null}
-
       {reviewOpen && preview ? <ReviewDrawer preview={preview} busy={previewBusy || applyBusy} onClose={() => setReviewOpen(false)} onApply={() => { void openApproval(); }} /> : null}
       {approvalOpen && preview ? (
         <ApprovalProofModal

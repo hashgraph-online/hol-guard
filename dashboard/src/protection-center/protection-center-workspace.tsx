@@ -55,6 +55,7 @@ import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { PROTECTION_TERMS, protectionCenterLoadError } from "./copy/protection-copy";
 import { ProtectionLandingExperience } from "./protection-landing-experience";
+import { PatternSearchConsole } from "./components/pattern-search-console";
 import { ProtectionModuleDetail } from "./protection-module-detail";
 import {
   EXTENSION_BODY_CLASS,
@@ -479,6 +480,8 @@ export function ProtectionCenterWorkspace() {
         <div className="mt-3"><ProtectionDensityControl value={density} onChange={setDensity} /></div>
       </details>
     </header>
+
+    <PatternSearchConsole catalog={catalogExtensions} effective={state.effective} onRefresh={load} />
 
     <div className="mt-6"><ProtectionStatusHero status={status} busy={recoveryBusy} onPrimaryAction={status.primaryAction === "none" ? undefined : handlePrimaryStatusAction}>
       <p className="text-xs text-brand-dark/70">Cloud continuity is separate from local protection. Signing out or losing Cloud connectivity does not turn local protection off.</p>

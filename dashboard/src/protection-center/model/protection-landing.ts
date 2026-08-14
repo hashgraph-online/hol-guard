@@ -1,5 +1,5 @@
 import type { CommandActivityItem, GuardAction } from "../../command-activity/command-activity-types";
-import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../../extension-controls-api";
+import type { EffectiveExtensionControls, ExtensionCatalogItem, ExtensionPermission } from "../../extension-controls-api";
 import type { GuardRuntimeSnapshot } from "../../guard-types";
 import { isExtensionEnabled } from "../../extensions-filters";
 import { protectionCategoryForExtension } from "./protection-categories";
@@ -224,4 +224,50 @@ export function evaluateProtectionHealth(
       : "One or more local protection checks need attention. Guard remains conservative when it cannot verify state.",
     checks,
   };
+}
+
+
+export type CommandPatternMatch = {
+  extension: ExtensionCatalogItem;
+  permission: ExtensionPermission;
+  score: number;
+};
+
+function patternSearchText(extension: ExtensionCatalogItem, permission: ExtensionPermission): string {
+  return [
+    permission.label,
+    permission.description,
+    permission.example_command ?? "",
+    permission.family ?? "",
+    permission.permission_id,
+    extension.name,
+    extension.extension_id,
+    ...extension.executables,
+  ].join(" ").toLowerCase();
+}
+
+export function searchCommandPatterns(
+  extensions: readonly ExtensionCatalogItem[],
+  rawQuery: string,
+  limit = 24,
+): CommandPatternMatch[] {
+  const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
+  if (!normalized) return [];
+  const terms = normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap);
+  const matches: CommandPatternMatch[] = [];
+  for (const extension of extensions) {
+    for (const permission of extension.permissions) {
+      const text = patternSearchText(extension, permission);
+      if (terms.every((term) => text.includes(term))) {
+        matches.push({ extension, permission, score: terms.length });
+      }
+    }
+  }
+  return matches
+    .sort((left, right) =>
+      right.permission.risk_tier.localeCompare(left.permission.risk_tier) ||
+      left.permission.label.localeCompare(right.permission.label) ||
+      left.extension.name.localeCompare(right.extension.name),
+    )
+    .slice(0, limit);
 }

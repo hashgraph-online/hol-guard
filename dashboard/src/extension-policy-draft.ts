@@ -104,3 +104,7 @@ export function newExtensionPolicyDraftIdentity(): { idempotencyKey: string; non
     nonce: crypto.randomUUID().replaceAll("-", ""),
   };
 }
+
+export function isCurrentExtensionPolicyDraft(generation: number, current: number): boolean {
+  return generation === current;
+}
