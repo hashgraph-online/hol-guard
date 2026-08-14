@@ -1,0 +1,29 @@
+name: Verify Rust P0 patch staging
+
+on:
+  push:
+    branches:
+      - feat/rust-p0-native-core-final
+    paths:
+      - .github/workflows/tmp-fetch-rust-p0-patch.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Download staged patch
+        shell: bash
+        env:
+          PATCH_FILE_ID: 1wMYrzPrf2-_Bl6tZrybCjH-13gXgKRaB
+          EXPECTED_SHA256: 61ba2eb56ac818fac9e736ca5babcdd61c015ffe99c737b6dbc248b006e01eea
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-all-errors \
+            "https://drive.usercontent.google.com/download?id=${PATCH_FILE_ID}&export=download&confirm=t" \
+            --output /tmp/rust-p0-final.patch
+          test "$(sha256sum /tmp/rust-p0-final.patch | awk '{print $1}')" = "$EXPECTED_SHA256"
+          test "$(wc -c < /tmp/rust-p0-final.patch)" = 670842
