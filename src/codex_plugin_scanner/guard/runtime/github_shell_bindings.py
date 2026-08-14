@@ -214,11 +214,11 @@ def conditional_pipeline_connectors(parts: list[str]) -> dict[int, str]:
                 pending_connector = None
                 in_pipeline = True
             continue
+        connector_follows_pipeline = in_pipeline
         if in_pipeline:
             completed_pipelines += 1
             in_pipeline = False
-        if token in {"&&", "||"}:
-            pending_connector = token
+        pending_connector = token if token in {"&&", "||"} and connector_follows_pipeline else None
     return connectors
 
 

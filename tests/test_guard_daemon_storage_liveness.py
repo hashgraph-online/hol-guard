@@ -269,7 +269,10 @@ def test_sqlite_timeout_override_is_scoped_to_current_context() -> None:
     assert sqlite_connect_timeout_seconds({}) == 30.0
 
 
-def test_store_promotes_rollback_journal_before_bounded_hook_writes(tmp_path: Path) -> None:
+def test_store_promotes_rollback_journal_before_bounded_hook_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     database_path = guard_home / "guard.db"
@@ -277,7 +280,26 @@ def test_store_promotes_rollback_journal_before_bounded_hook_writes(tmp_path: Pa
         legacy_connection.execute("create table legacy_marker (value integer)")
         assert legacy_connection.execute("pragma journal_mode").fetchone() == ("delete",)
 
+    traced_statements: list[str] = []
+    enable_wal_mode = GuardStore._enable_wal_mode
+
+    def enable_wal_mode_with_trace(connection: sqlite3.Connection) -> None:
+        connection.set_trace_callback(traced_statements.append)
+        enable_wal_mode(connection)
+
+    monkeypatch.setattr(GuardStore, "_enable_wal_mode", staticmethod(enable_wal_mode_with_trace))
     store = GuardStore(guard_home, prime_policy_integrity=False)
+    wal_index = next(
+        index for index, statement in enumerate(traced_statements) if statement.lower() == "pragma journal_mode=wal"
+    )
+    schema_dml_index = next(
+        index
+        for index, statement in enumerate(traced_statements)
+        if statement.lower().startswith(
+            ("create table", "create index", "alter table", "insert ", "update ", "delete ")
+        )
+    )
+    assert wal_index < schema_dml_index
     with sqlite3.connect(database_path) as verification_connection:
         assert verification_connection.execute("pragma journal_mode").fetchone() == ("wal",)
 
