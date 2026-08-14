@@ -10,7 +10,6 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 from codex_plugin_scanner.guard.runtime.command_permission_catalog import (
     CommandPermissionCatalog,
     CommandPermissionSpec,
-    permissions_for_rules,
 )
 from codex_plugin_scanner.guard.runtime.command_rules import (
     AnyMatcher,
@@ -101,7 +100,13 @@ def test_github_merge_family_groups_the_three_merge_variants() -> None:
     assert examples["command.github.permission.merge-admin"] == "gh pr merge 123 --admin"
 
 
-def _spec(permission_id: str, *, configurable: bool = True, family: str | None = None, example: str | None = "x y") -> CommandPermissionSpec:
+def _spec(
+    permission_id: str,
+    *,
+    configurable: bool = True,
+    family: str | None = None,
+    example: str | None = "x y",
+) -> CommandPermissionSpec:
     return CommandPermissionSpec(
         permission_id=permission_id,
         schema_version=1,
