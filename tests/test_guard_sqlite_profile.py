@@ -53,7 +53,9 @@ def test_store_profiles_connect_transaction_commit_and_lock(tmp_path: Path) -> N
             pytest.raises(sqlite3.OperationalError),
             store._connect() as connection,
         ):
-            connection.execute("insert into events (event_type, payload, timestamp) values ('x', '{}', 'now')")
+            connection.execute(
+                "insert into guard_events (event_name, payload_json, occurred_at) values ('x', '{}', 'now')"
+            )
     finally:
         lock.rollback()
         lock.close()
