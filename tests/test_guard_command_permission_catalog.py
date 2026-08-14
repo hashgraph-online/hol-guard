@@ -164,7 +164,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "df4b2e780ca79cc99e7b1df29b5e9a0bcf0ad8fc07239700a4a34f4bcfd4a114"
+    assert registry.catalog_digest == "2985205427161ab08e6a986e919493a52fb5bb7e3fae2c4c30113babc26b9578"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )
@@ -202,6 +202,7 @@ def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_refere
         deprecated=False,
         replacement_permission_id=None,
         safer_guidance=("Inspect the operation.",),
+        example_command="test inspect",
     )
 
     with pytest.raises(ValueError, match="duplicate permission ID"):

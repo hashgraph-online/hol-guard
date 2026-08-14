@@ -216,6 +216,7 @@ def _database_rule(
     safer_alternative: str,
     risk_classes: tuple[str, ...] = ("destructive_shell", "network_egress"),
     safe_variants: tuple[CommandSafeVariant, ...] = (),
+    example_command: str | None = None,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -227,12 +228,14 @@ def _database_rule(
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
         safe_variants=safe_variants,
+        example_command=example_command,
     )
 
 
 DATABASE_COMMAND_RULES = (
     _database_rule(
         rule_id="command.database.postgresql.drop",
+        example_command="dropdb production",
         title="PostgreSQL database removal",
         description="Identifies dropdb invocations that remove a PostgreSQL database.",
         matcher=_POSTGRES_DROP,
@@ -241,6 +244,7 @@ DATABASE_COMMAND_RULES = (
     ),
     _database_rule(
         rule_id="command.database.mysql.drop",
+        example_command="mysqladmin drop production",
         title="MySQL database removal",
         description="Identifies mysqladmin drop operations that remove a database and its tables.",
         matcher=_MYSQL_DROP,
@@ -265,6 +269,7 @@ DATABASE_COMMAND_RULES = (
     ),
     _database_rule(
         rule_id="command.database.redis.delete",
+        example_command="redis-cli --scan --pattern 'session:*' | xargs redis-cli del",
         title="Redis key deletion",
         description="Identifies Redis commands that delete keys from one or every database.",
         matcher=_REDIS_MUTATION,
@@ -273,6 +278,7 @@ DATABASE_COMMAND_RULES = (
     ),
     _database_rule(
         rule_id="command.database.sqlite.restore",
+        example_command="sqlite3 app.db '.restore backup.sql'",
         title="SQLite database restore",
         description="Identifies SQLite .restore operations that replace database content from a backup.",
         matcher=_SQLITE_RESTORE,

@@ -284,6 +284,19 @@ class AllMatcher:
         return tuple(evidence)
 
 
+_FAMILY_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_EXAMPLE_MAX_LENGTH = 120
+
+
+def _validate_example_or_family(rule_id: str, field_name: str, value: str) -> None:
+    if not value.strip():
+        raise ValueError(f"Command safety rule {rule_id} has an empty {field_name}")
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"Command safety rule {rule_id} has a multi-line {field_name}")
+    if len(value) > _EXAMPLE_MAX_LENGTH:
+        raise ValueError(f"Command safety rule {rule_id} has an over-long {field_name}")
+
+
 @dataclass(frozen=True, slots=True)
 class CommandSafetyRule:
     """Stable rule metadata owned by one command safety extension."""
@@ -300,6 +313,8 @@ class CommandSafetyRule:
     safe_variants: tuple[CommandSafeVariant, ...] = ()
     compatibility_fallback: bool = False
     rule_version: str = "1.0.0"
+    example_command: str | None = None
+    family: str | None = None
 
     def __post_init__(self) -> None:
         if not self.rule_id.startswith("command.") or self.rule_id != self.rule_id.lower():
@@ -325,6 +340,12 @@ class CommandSafetyRule:
         safe_variant_ids = [variant.variant_id for variant in self.safe_variants]
         if len(set(safe_variant_ids)) != len(safe_variant_ids):
             raise ValueError(f"Command safety rule {self.rule_id} has duplicate safe variant IDs")
+        if self.example_command is not None:
+            _validate_example_or_family(self.rule_id, "example command", self.example_command)
+        if self.family is not None:
+            if _FAMILY_PATTERN.fullmatch(self.family) is None:
+                raise ValueError(f"Command safety rule {self.rule_id} has invalid family: {self.family}")
+            _validate_example_or_family(self.rule_id, "family", self.family)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -363,6 +384,32 @@ class CommandSafeVariant:
             "title": self.title,
             "matcher_kind": type(self.matcher).__name__,
         }
+
+
+def example_for_matcher(matcher: CommandMatcher | None) -> str | None:
+    """Derive one representative example command from a structural matcher.
+
+    The derivation walks structural matcher leaves deterministically and
+    returns ``None`` for matcher shapes without a stable executable prefix.
+    """
+
+    if isinstance(matcher, ExecutableMatcher):
+        if not matcher.executables:
+            return None
+        parts = [sorted(matcher.executables)[0], *matcher.subcommands, *sorted(matcher.required_flags)]
+        return " ".join(parts)
+    if isinstance(matcher, ArgumentMatcher):
+        if not matcher.executables:
+            return None
+        parts = [sorted(matcher.executables)[0], *sorted(matcher.required_arguments)]
+        return " ".join(parts)
+    if isinstance(matcher, AnyMatcher):
+        for child in matcher.matchers:
+            derived = example_for_matcher(child)
+            if derived is not None:
+                return derived
+        return None
+    return None
 
 
 @dataclass(frozen=True, slots=True)

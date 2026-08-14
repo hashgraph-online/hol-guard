@@ -196,6 +196,7 @@ def _remote_rule(
     severity: CommandRuleSeverity,
     risk_classes: tuple[str, ...] = ("destructive_shell", "network_egress"),
     safe_variants: tuple[CommandSafeVariant, ...] = (),
+    example_command: str | None = None,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -207,12 +208,14 @@ def _remote_rule(
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
         safe_variants=safe_variants,
+        example_command=example_command,
     )
 
 
 REMOTE_COMMAND_RULES = (
     _remote_rule(
         rule_id="command.remote.ssh.execution",
+        example_command="ssh web-1 'sudo rm -rf /var/log/app'",
         title="Explicit SSH remote execution",
         description="Identifies SSH commands that provide an explicit command to execute after the destination.",
         matcher=_SSH_REMOTE_EXECUTION,
@@ -223,6 +226,7 @@ REMOTE_COMMAND_RULES = (
     ),
     _remote_rule(
         rule_id="command.remote.ssh.configured-execution",
+        example_command="ssh -o BatchMode=yes web-1 'uptime'",
         title="SSH configured command execution",
         description="Identifies SSH options that configure local, host-key, proxy, or remote shell commands.",
         matcher=_SSH_CONFIGURED_EXECUTION,
@@ -235,6 +239,7 @@ REMOTE_COMMAND_RULES = (
     ),
     _remote_rule(
         rule_id="command.remote.scp.transfer",
+        example_command="scp secrets.tar.gz backup-host:/srv/backup/",
         title="SCP file transfer",
         description="Identifies SCP transfers that can overwrite files at a local or remote destination.",
         matcher=_SCP_TRANSFER,

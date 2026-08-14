@@ -31,6 +31,7 @@ class CommandExtensionSpec:
     ecosystem_ids: tuple[str, ...] = ()
     executables: tuple[str, ...] = ()
     project_markers: tuple[str, ...] = ()
+    example_command: str | None = None
 
 
 class CommandExtensionValues(TypedDict):
@@ -71,6 +72,7 @@ def command_extension_values(
                 spec.name,
                 spec.description,
                 spec.safer_alternatives,
+                spec.example_command,
             ),
         )
     else:

@@ -48,6 +48,17 @@ def _identity_snapshot() -> dict[str, object]:
         ],
         "rule_count": sum(len(extension.rules) for extension in registry.extensions),
         "rule_ids": [rule.rule_id for extension in registry.extensions for rule in extension.rules],
+        "permission_examples": {
+            permission.permission_id: permission.example_command
+            for extension in registry.extensions
+            for permission in extension.permissions
+        },
+        "permission_families": {
+            permission.permission_id: permission.family
+            for extension in registry.extensions
+            for permission in extension.permissions
+            if permission.family is not None
+        },
     }
 
 
@@ -122,6 +133,11 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
                 "block",
             }
             assert isinstance(permission["configurable"], bool)
+            if permission["configurable"]:
+                assert isinstance(permission["example_command"], str) and permission["example_command"].strip()
+            else:
+                assert permission["example_command"] is None or permission["example_command"].strip()
+            assert permission["family"] is None or isinstance(permission["family"], str)
             assert isinstance(permission["dependencies"], list)
             assert isinstance(permission["conflicts"], list)
             assert isinstance(permission["implied_permissions"], list)

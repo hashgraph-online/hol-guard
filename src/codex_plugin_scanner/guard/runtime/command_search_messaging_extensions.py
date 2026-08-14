@@ -177,6 +177,7 @@ def _service_rule(
     action_class: str,
     safer_alternative: str,
     safe_variants: tuple[CommandSafeVariant, ...] = (),
+    example_command: str | None = None,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -188,12 +189,14 @@ def _service_rule(
         safer_alternatives=(safer_alternative,),
         matcher=matcher,
         safe_variants=safe_variants,
+        example_command=example_command,
     )
 
 
 SEARCH_MESSAGING_COMMAND_RULES = (
     _service_rule(
         rule_id="command.search.elasticsearch.delete",
+        example_command="curl -X DELETE 'https://localhost:9200/logs-old'",
         title="Elasticsearch resource deletion",
         description="Identifies explicit DELETE requests to recognizable Elasticsearch APIs.",
         matcher=_ELASTICSEARCH_DELETE,
@@ -214,6 +217,7 @@ SEARCH_MESSAGING_COMMAND_RULES = (
     ),
     _service_rule(
         rule_id="command.messaging.rabbitmq.delete",
+        example_command="rabbitmqctl delete_queue jobs",
         title="RabbitMQ resource deletion",
         description="Identifies queue, user, virtual-host, and broker reset operations.",
         matcher=_RABBITMQ_DELETE,
@@ -231,6 +235,7 @@ SEARCH_MESSAGING_COMMAND_RULES = (
     ),
     _service_rule(
         rule_id="command.messaging.nats.delete",
+        example_command="nats str rm ORDERS",
         title="NATS resource deletion",
         description="Identifies stream, consumer, key-value, and object-store removal operations.",
         matcher=_NATS_DELETE,

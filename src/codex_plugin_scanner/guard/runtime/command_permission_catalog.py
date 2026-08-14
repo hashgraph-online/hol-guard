@@ -10,11 +10,13 @@ from types import MappingProxyType
 from typing import Final, final
 
 from ..models import GuardAction
-from .command_rules import CommandRuleMode, CommandRuleSeverity, CommandSafetyRule
+from .command_rules import CommandRuleMode, CommandRuleSeverity, CommandSafetyRule, example_for_matcher
 
 PermissionRiskTier = CommandRuleSeverity
 COMMAND_PERMISSION_SCHEMA_VERSION: Final = 1
 _PERMISSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:-[a-z0-9]+)*$")
+_FAMILY_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_EXAMPLE_MAX_LENGTH = 120
 _MODE_FLOOR: Final[dict[CommandRuleMode, GuardAction]] = {
     "disabled": "allow",
     "monitor": "warn",
@@ -49,6 +51,8 @@ class CommandPermissionSpec:
     deprecated: bool
     replacement_permission_id: str | None
     safer_guidance: tuple[str, ...]
+    example_command: str | None = None
+    family: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -73,6 +77,8 @@ class CommandPermissionSpec:
             "deprecated": self.deprecated,
             "replacement_permission_id": self.replacement_permission_id,
             "safer_guidance": list(self.safer_guidance),
+            "example_command": self.example_command,
+            "family": self.family,
         }
 
 
@@ -116,6 +122,7 @@ class CommandPermissionCatalog:
             )
         _validate_references(ordered, by_id)
         _validate_dependency_cycles(ordered, by_id)
+        _validate_family_scope(ordered)
         self._permissions = ordered
         self._by_id = MappingProxyType(by_id)
         self._by_rule_id = MappingProxyType(by_rule_id)
@@ -187,6 +194,8 @@ def permission_for_rule(
         deprecated=False,
         replacement_permission_id=None,
         safer_guidance=rule.safer_alternatives,
+        example_command=rule.example_command or example_for_matcher(rule.matcher),
+        family=rule.family,
     )
 
 
@@ -220,6 +229,7 @@ def permissions_for_action_classes(
     safer_guidance: tuple[str, ...],
     *,
     configurable: bool,
+    example_command: str | None = None,
 ) -> tuple[CommandPermissionSpec, ...]:
     permissions: list[CommandPermissionSpec] = []
     for action_class in action_classes:
@@ -247,6 +257,7 @@ def permissions_for_action_classes(
                 deprecated=False,
                 replacement_permission_id=None,
                 safer_guidance=safer_guidance,
+                example_command=example_command,
             )
         )
     return tuple(permissions)
@@ -258,6 +269,7 @@ def delegated_permission(
     label: str,
     description: str,
     safer_guidance: tuple[str, ...],
+    example_command: str | None = None,
 ) -> CommandPermissionSpec:
     return CommandPermissionSpec(
         permission_id=f"{extension_id}.permission.package-protection",
@@ -281,7 +293,20 @@ def delegated_permission(
         deprecated=False,
         replacement_permission_id=None,
         safer_guidance=safer_guidance,
+        example_command=example_command,
     )
+
+
+def _validate_family_scope(permissions: tuple[CommandPermissionSpec, ...]) -> None:
+    family_extensions: dict[str, str] = {}
+    for permission in permissions:
+        if permission.family is None:
+            continue
+        owner = family_extensions.setdefault(permission.family, permission.extension_id)
+        if owner != permission.extension_id:
+            raise ValueError(
+                f"family {permission.family} spans extensions: {owner}, {permission.extension_id}"
+            )
 
 
 def _validate_permission(permission: CommandPermissionSpec) -> None:
@@ -297,6 +322,14 @@ def _validate_permission(permission: CommandPermissionSpec) -> None:
         raise ValueError(f"configurable permission has fixed reason: {permission.permission_id}")
     if not permission.configurable and not permission.fixed_reason:
         raise ValueError(f"fixed permission lacks reason: {permission.permission_id}")
+    if permission.configurable and not (permission.example_command or "").strip():
+        raise ValueError(f"configurable permission requires an example command: {permission.permission_id}")
+    if permission.example_command is not None:
+        example = permission.example_command
+        if not example.strip() or "\n" in example or "\r" in example or len(example) > _EXAMPLE_MAX_LENGTH:
+            raise ValueError(f"invalid example command for {permission.permission_id}")
+    if permission.family is not None and _FAMILY_PATTERN.fullmatch(permission.family) is None:
+        raise ValueError(f"invalid family for {permission.permission_id}: {permission.family}")
     for field_name, values in (
         ("typed capability", permission.typed_capabilities),
         ("action class", permission.action_classes),
