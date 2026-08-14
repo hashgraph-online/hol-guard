@@ -60,6 +60,7 @@ def test_test_lab_canonicalizes_extension_alias_and_filters_matches() -> None:
 
     for match in result["matches"]:
         assert match["extension_id"] == "command.git"
+        assert match["permission_id"] == "command.git.permission.hard-reset"
 
 
 def test_test_lab_rejects_unknown_or_oversized_inputs() -> None:

@@ -81,12 +81,14 @@ def evaluate_extension_control_test(
     match_payloads: list[dict[str, object]] = []
     for owned in relevant:
         rule = owned.match.rule
+        permission = registry.permission_for_rule_id(rule.rule_id)
         match_payloads.append(
             {
                 "extension_id": owned.extension.extension_id,
                 "extension_name": _bounded_text(owned.extension.name, limit=120),
                 "rule_id": rule.rule_id,
                 "rule_title": _bounded_text(rule.title, limit=160),
+                "permission_id": permission.permission_id if permission is not None else None,
                 "description": _bounded_text(rule.description),
                 "severity": rule.severity,
                 "risk_classes": list(rule.risk_classes[:16]),

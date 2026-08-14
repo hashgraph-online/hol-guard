@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HiMiniArrowLeft, HiMiniLockClosed } from "react-icons/hi2";
 
-import { controlProvenance, treatmentLabel } from "../extension-control-center-model";
+import { controlProvenance, permissionForRule, treatmentLabel } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
 import { ExtensionPolicyPanel } from "../extension-policy-panel";
 import { ProtectionDensityControl, TechnicalDetails, useProtectionDensity } from "./components/protection-primitives";
@@ -110,6 +110,25 @@ export function ProtectionModuleDetail(props: {
 }) {
   const [density, setDensity] = useProtectionDensity();
   const [policyDirty, setPolicyDirty] = useState(false);
+  useEffect(() => {
+    const anchor = window.location.hash;
+    let rowId: string | null = null;
+    if (anchor.startsWith("#pattern-")) {
+      rowId = anchor.slice(1);
+    } else if (anchor.startsWith("#rule-")) {
+      const ruleId = anchor.slice("#rule-".length);
+      const rule = props.extension.rules.find((item) => item.rule_id === ruleId);
+      const permission = rule ? permissionForRule(props.extension, rule) : null;
+      rowId = permission ? `pattern-${permission.permission_id}` : null;
+    }
+    if (!rowId) return;
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.add("guard-pattern-row-highlight");
+    const timer = window.setTimeout(() => row.classList.remove("guard-pattern-row-highlight"), 2400);
+    return () => window.clearTimeout(timer);
+  }, [props.extension.extension_id, props.extension.rules]);
   const requiredNote = requiredLine(props.extension);
   const extensionEnabled = !props.effective.layers.some((layer) =>
     layer.controls.some((control) => control.target_kind === "extension" && control.target_id === props.extension.extension_id && control.state === "disabled"),

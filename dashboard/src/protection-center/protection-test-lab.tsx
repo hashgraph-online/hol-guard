@@ -48,9 +48,9 @@ export function ProtectionTestLab({ extension }: { extension: ExtensionCatalogIt
     <div className="flex items-start gap-3">
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[rgba(85,153,254,0.1)] text-brand-blue" aria-hidden="true"><HiMiniBeaker className="size-5" /></span>
       <div className="min-w-0">
-        <p className={EXTENSION_KICKER_CLASS}>Try a command</p>
+        <p className={EXTENSION_KICKER_CLASS}>Paste the command Guard stopped</p>
         <h2 id="protection-test-lab-heading" className="mt-2 text-lg font-semibold text-brand-dark">Test Lab</h2>
-        <p className="mt-1 text-sm leading-6 text-brand-dark/80">See how Guard would handle a command without running it.</p>
+        <p className="mt-1 text-sm leading-6 text-brand-dark/80">See how Guard would handle a command without running it, then adjust the exact pattern it matched.</p>
       </div>
     </div>
     <p className="mt-5 max-w-2xl text-sm leading-6 text-brand-dark/80">
@@ -85,6 +85,9 @@ export function ProtectionTestLab({ extension }: { extension: ExtensionCatalogIt
             <span className="text-xs font-semibold capitalize text-brand-dark/55">{match.severity} risk</span>
           </div>
           <p className="mt-1 text-xs leading-5 text-brand-dark/70">{match.description}</p>
+          {match.permission_id ? (
+            <a href={`#pattern-${match.permission_id}`} onClick={(event) => { event.preventDefault(); document.getElementById(`pattern-${match.permission_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }} className="mt-2 inline-flex min-h-9 items-center rounded-lg px-1 text-xs font-semibold text-brand-blue hover:underline">Adjust this pattern</a>
+          ) : null}
         </div>)}</div>
       </div> : null}
       {result.safer_alternatives.length ? <div className="mt-4">

@@ -24750,7 +24750,22 @@ function MatchEvidence(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Evidence", value: matchClassLabel(props.match.match_class) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Policy floor", value: commandDecisionLabel(props.match.default_floor) })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-1.5", children: effects.length > 0 ? effects.map((effect) => /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { children: effect }, effect)) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: "Effect details unavailable" }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-1.5", children: effects.length > 0 ? effects.map((effect) => /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { children: effect }, effect)) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: "Effect details unavailable" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => {
+          const target = guardAwareHref(`/extensions/${props.match.extension_id}`);
+          const url = new URL(target, window.location.origin);
+          url.hash = `rule-${props.match.rule_id}`;
+          window.history.pushState({}, "", url.toString());
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        },
+        className: "mt-3 min-h-10 rounded-lg border border-brand-blue/25 bg-white px-3 text-left text-sm font-semibold text-brand-blue hover:bg-[rgba(85,153,254,0.08)]",
+        children: "Adjust protection"
+      }
+    )
   ] });
 }
 function CommandActivityDetail(props) {

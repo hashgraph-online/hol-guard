@@ -7643,6 +7643,19 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   opacity: .45;
 }
 
+.guard-pattern-row-highlight {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: .5rem;
+  background: var(--brand-blue);
+  border-radius: .5rem;
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  .guard-pattern-row-highlight {
+    background: color-mix(in srgb, var(--brand-blue) 6%, transparent);
+  }
+}
+
 @property --tw-translate-x {
   syntax: "*";
   inherits: false;

@@ -142,7 +142,7 @@ export function PermissionPolicyRow(props: {
   const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
   const example = props.permission.example_command ?? (props.extension.executables[0]?.trim() || props.permission.label);
   return (
-    <article className="guard-pattern-row" data-permission-id={props.permission.permission_id}>
+    <article id={`pattern-${props.permission.permission_id}`} className="guard-pattern-row" data-permission-id={props.permission.permission_id}>
       <div className="min-w-0">
         <h3 className="text-sm font-semibold text-brand-dark">{props.permission.label}</h3>
         <p className="guard-pattern-example mt-1">{example}</p>

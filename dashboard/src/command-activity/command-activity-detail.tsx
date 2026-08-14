@@ -1,6 +1,7 @@
 import { useCallback, type RefObject } from "react";
 import { HiMiniXMark } from "react-icons/hi2";
 
+import { guardAwareHref } from "../guard-api";
 import { Badge, SectionLabel } from "../approval-center-primitives";
 import {
   commandDecisionLabel,
@@ -73,6 +74,19 @@ function MatchEvidence(props: { match: CommandActivityItem["matches"][number]; c
       <div className="mt-3 flex flex-wrap gap-1.5">
         {effects.length > 0 ? effects.map((effect) => <Badge key={effect}>{effect}</Badge>) : <span className="text-xs text-slate-500">Effect details unavailable</span>}
       </div>
+      <button
+        type="button"
+        onClick={() => {
+          const target = guardAwareHref(`/extensions/${props.match.extension_id}`);
+          const url = new URL(target, window.location.origin);
+          url.hash = `rule-${props.match.rule_id}`;
+          window.history.pushState({}, "", url.toString());
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        }}
+        className="mt-3 min-h-10 rounded-lg border border-brand-blue/25 bg-white px-3 text-left text-sm font-semibold text-brand-blue hover:bg-[rgba(85,153,254,0.08)]"
+      >
+        Adjust protection
+      </button>
     </li>
   );
 }

@@ -639,3 +639,10 @@ a:focus-visible {
 .guard-tool-switch:disabled {
   opacity: 0.45;
 }
+
+.guard-pattern-row-highlight {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 0.5rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--brand-blue) 6%, transparent);
+}

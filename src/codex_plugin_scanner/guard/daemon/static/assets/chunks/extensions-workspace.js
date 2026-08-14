@@ -128,6 +128,9 @@ function controlProvenance(effective, kind, targetId2) {
   if (sources.length === 0) sources.push("Built-in default");
   return sources;
 }
+function permissionForRule(extension2, rule2) {
+  return extension2.permissions.find((permission2) => permission2.rule_ids.includes(rule2.rule_id)) ?? null;
+}
 function treatmentLabel(value) {
   const labels = {
     allow: "Allow",
@@ -2563,7 +2566,7 @@ function PermissionPolicyRow(props) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
   const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
   const example = props.permission.example_command ?? (props.extension.executables[0]?.trim() || props.permission.label);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "guard-pattern-row", "data-permission-id": props.permission.permission_id, children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { id: `pattern-${props.permission.permission_id}`, className: "guard-pattern-row", "data-permission-id": props.permission.permission_id, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: props.permission.label }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-pattern-example mt-1", children: example }),
@@ -3186,6 +3189,7 @@ function normalizeProtectionTestResult(value) {
       extension_id: boundedString(match.extension_id, "extension ID", 256),
       extension_name: boundedString(match.extension_name, "extension name", 120),
       rule_id: boundedString(match.rule_id, "rule ID", 256),
+      permission_id: typeof match.permission_id === "string" && match.permission_id.trim() ? match.permission_id : null,
       rule_title: boundedString(match.rule_title, "rule title", 160),
       description: boundedString(match.description, "rule description", 320),
       severity: match.severity,
@@ -3260,9 +3264,9 @@ function ProtectionTestLab({ extension: extension2 }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid size-10 shrink-0 place-items-center rounded-xl bg-[rgba(85,153,254,0.1)] text-brand-blue", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "size-5" }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: EXTENSION_KICKER_CLASS, children: "Try a command" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: EXTENSION_KICKER_CLASS, children: "Paste the command Guard stopped" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-test-lab-heading", className: "mt-2 text-lg font-semibold text-brand-dark", children: "Test Lab" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/80", children: "See how Guard would handle a command without running it." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/80", children: "See how Guard would handle a command without running it, then adjust the exact pattern it matched." })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-5 max-w-2xl text-sm leading-6 text-brand-dark/80", children: [
@@ -3317,7 +3321,11 @@ function ProtectionTestLab({ extension: extension2 }) {
               " risk"
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: match.description })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: match.description }),
+          match.permission_id ? /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: `#pattern-${match.permission_id}`, onClick: (event) => {
+            event.preventDefault();
+            document.getElementById(`pattern-${match.permission_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, className: "mt-2 inline-flex min-h-9 items-center rounded-lg px-1 text-xs font-semibold text-brand-blue hover:underline", children: "Adjust this pattern" }) : null
         ] }, `${match.extension_id}:${match.rule_id}`)) })
       ] }) : null,
       result.safer_alternatives.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
@@ -3395,6 +3403,25 @@ function DeveloperModuleDetails(props) {
 function ProtectionModuleDetail(props) {
   const [density, setDensity] = useProtectionDensity();
   const [policyDirty, setPolicyDirty] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    const anchor = window.location.hash;
+    let rowId = null;
+    if (anchor.startsWith("#pattern-")) {
+      rowId = anchor.slice(1);
+    } else if (anchor.startsWith("#rule-")) {
+      const ruleId = anchor.slice("#rule-".length);
+      const rule2 = props.extension.rules.find((item) => item.rule_id === ruleId);
+      const permission2 = rule2 ? permissionForRule(props.extension, rule2) : null;
+      rowId = permission2 ? `pattern-${permission2.permission_id}` : null;
+    }
+    if (!rowId) return;
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.add("guard-pattern-row-highlight");
+    const timer = window.setTimeout(() => row.classList.remove("guard-pattern-row-highlight"), 2400);
+    return () => window.clearTimeout(timer);
+  }, [props.extension.extension_id, props.extension.rules]);
   const requiredNote = requiredLine(props.extension);
   const extensionEnabled = !props.effective.layers.some(
     (layer) => layer.controls.some((control) => control.target_kind === "extension" && control.target_id === props.extension.extension_id && control.state === "disabled")

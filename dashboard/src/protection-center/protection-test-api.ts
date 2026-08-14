@@ -1,6 +1,7 @@
 import { fetchExtensionControlApi } from "../guard-api";
 
 export type ProtectionTestMatch = {
+  permission_id: string | null;
   extension_id: string;
   extension_name: string;
   rule_id: string;
@@ -62,6 +63,7 @@ function normalizeProtectionTestResult(value: unknown): ProtectionTestResult {
       extension_id: boundedString(match.extension_id, "extension ID", 256),
       extension_name: boundedString(match.extension_name, "extension name", 120),
       rule_id: boundedString(match.rule_id, "rule ID", 256),
+      permission_id: typeof match.permission_id === "string" && match.permission_id.trim() ? match.permission_id : null,
       rule_title: boundedString(match.rule_title, "rule title", 160),
       description: boundedString(match.description, "rule description", 320),
       severity: match.severity as ProtectionTestMatch["severity"],
