@@ -102,6 +102,8 @@ export const FIXED_PROTECTION_PERMISSION: ExtensionPermission = {
   deprecated: false,
   replacement_permission_id: null,
   safer_guidance: ["Create a checkpoint before rewriting repository history."],
+  example_command: null,
+  family: null,
 };
 
 export const FIXED_PROTECTION_MODULE = protectionModuleFixture({

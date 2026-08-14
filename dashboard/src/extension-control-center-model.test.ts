@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import type { EffectiveExtensionControls, ExtensionCatalogItem, ExtensionPermission, ExtensionRule } from "./extension-controls-api";
 import {
   canonicalExtensionId,
+  groupPermissionsByFamily,
   DEFAULT_EXTENSION_DETAIL_URL_STATE,
   extensionDetailHref,
   extensionDetailSearch,
@@ -39,6 +40,8 @@ function permission(index: number, risk: "low" | "medium" | "high" | "critical" 
     introduced_version: "1.0.0",
     deprecated: index % 17 === 0,
     replacement_permission_id: null,
+    example_command: null,
+    family: null,
     safer_guidance: [],
   };
 }
@@ -200,5 +203,26 @@ assert.equal(filteredRules[0]?.severity, "critical");
 const sortedById = filterDetailRules(extension, effective, { ...DEFAULT_EXTENSION_DETAIL_URL_STATE, tab: "commands", sort: "id" });
 assert.equal(sortedById[0]?.rule_id, "command.git.rule-0");
 assert.equal(sortedById.at(-1)?.rule_id, "command.git.rule-99");
+
+// Family grouping: shared-command heading, stable ordering, ungrouped passthrough.
+{
+  const variant = (index: number, family: string | null, example: string | null): ExtensionPermission => ({
+    ...permission(index),
+    family,
+    example_command: example,
+  });
+  const mergeSquash = variant(0, "gh-pr-merge", "gh pr merge 123 --squash");
+  const mergePlain = variant(1, "gh-pr-merge", "gh pr merge 123 --merge");
+  const mergeAdmin = variant(2, "gh-pr-merge", "gh pr merge 123 --admin");
+  const readRemote = variant(3, null, "gh pr view 123");
+  const grouped = groupPermissionsByFamily([readRemote, mergeAdmin, mergeSquash, mergePlain]);
+  assert.deepEqual(grouped.ungrouped.map((item) => item.permission_id), [readRemote.permission_id]);
+  assert.equal(grouped.families.length, 1);
+  assert.equal(grouped.families[0]!.family, "gh-pr-merge");
+  assert.equal(grouped.families[0]!.heading, "gh pr merge 123");
+  assert.equal(grouped.families[0]!.permissions.length, 3);
+  const noExamples = groupPermissionsByFamily([variant(4, "git-destructive", null)]);
+  assert.equal(noExamples.families[0]!.heading, noExamples.families[0]!.permissions[0]!.label);
+}
 
 console.log("extension-control-center-model.test.ts: all assertions passed");

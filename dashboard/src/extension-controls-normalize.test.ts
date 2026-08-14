@@ -32,6 +32,8 @@ function permission(id = "command.git.permission.reset-hard") {
     deprecated: false,
     replacement_permission_id: null,
     safer_guidance: ["Create a checkpoint first."],
+    example_command: "git reset --hard",
+    family: "git-destructive",
     additive_future_field: { ignored: true },
   };
 }
@@ -121,6 +123,8 @@ function effective() {
 const normalizedCatalog = normalizeExtensionCatalog(catalog());
 assert.equal(normalizedCatalog.extensions[0]?.rules[0]?.rule_id, "command.git.reset-hard");
 assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.safer_guidance[0], "Create a checkpoint first.");
+assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.example_command, "git reset --hard");
+assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.family, "git-destructive");
 assert.deepEqual(normalizedCatalog.extensions[0]?.reference_urls, ["https://git-scm.com/docs"]);
 assert.equal(normalizeEffectiveExtensionControls(effective()).controls[0]?.state, "disabled");
 assert.equal(normalizeEffectiveExtensionControls(effective()).projection?.revision, 7);
@@ -139,6 +143,16 @@ rejects((payload) => { payload.extensions[0]!.rules[0]!.severity = "super-critic
 rejects((payload) => { payload.extensions[0]!.rules.push(rule()); payload.extensions[0]!.rule_count = 2; }, /duplicate rule IDs/);
 rejects((payload) => { payload.extensions[0]!.permissions.push(permission()); payload.extensions[0]!.permission_count = 2; }, /duplicate permission IDs/);
 rejects((payload) => { payload.extensions[0]!.permissions[0]!.rule_ids = ["command.git.missing"]; }, /unknown rule/);
+
+{
+  const payload = catalog();
+  const legacyPermission = payload.extensions[0]!.permissions[0] as Record<string, unknown>;
+  delete legacyPermission.example_command;
+  delete legacyPermission.family;
+  const normalized = normalizeExtensionCatalog(payload);
+  assert.equal(normalized.extensions[0]?.permissions[0]?.example_command, null);
+  assert.equal(normalized.extensions[0]?.permissions[0]?.family, null);
+}
 rejects((payload) => { delete (payload.extensions[0] as Record<string, unknown>).name; }, /name must be a string/);
 
 const oversized = catalog();

@@ -29,6 +29,8 @@ function permission(id: string, extensionId = "command.git"): ExtensionPermissio
     introduced_version: "1.0.0",
     deprecated: false,
     replacement_permission_id: null,
+    example_command: null,
+    family: null,
     safer_guidance: [],
   };
 }

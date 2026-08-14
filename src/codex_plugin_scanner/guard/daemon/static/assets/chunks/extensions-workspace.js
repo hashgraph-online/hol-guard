@@ -143,6 +143,32 @@ function treatmentLabel(value) {
   };
   return labels[value] ?? value.replaceAll("-", " ");
 }
+function familyHeading(permissions) {
+  const examples = permissions.map((permission2) => permission2.example_command).filter((example) => Boolean(example)).map((example) => example.split(/\s+/));
+  if (!examples.length) return permissions[0]?.label ?? "";
+  const first = examples[0];
+  const shared = [];
+  for (let index = 0; index < first.length; index += 1) {
+    const token = first[index];
+    if (examples.every((parts) => parts[index] === token)) shared.push(token);
+    else break;
+  }
+  return shared.length ? shared.join(" ") : permissions[0]?.label ?? "";
+}
+function groupPermissionsByFamily(permissions) {
+  const byFamily = /* @__PURE__ */ new Map();
+  const ungrouped = [];
+  for (const permission2 of permissions) {
+    if (!permission2.family) ungrouped.push(permission2);
+    else {
+      const members = byFamily.get(permission2.family) ?? [];
+      members.push(permission2);
+      byFamily.set(permission2.family, members);
+    }
+  }
+  const families = [...byFamily.entries()].map(([family, members]) => ({ family, heading: familyHeading(members), permissions: members })).sort((left, right) => left.family.localeCompare(right.family));
+  return { ungrouped, families };
+}
 const DIGEST$2 = /^[a-f0-9]{64}$/;
 const EXTENSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -265,6 +291,9 @@ function optionalString(value, label) {
   if (value === null) return null;
   return string$1(value, label);
 }
+function catalogText(value) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
 function bool$1(value, label) {
   if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
   return value;
@@ -363,7 +392,9 @@ function permission(value, extensionId, label) {
     introduced_version: version(item.introduced_version, `${label}.introduced_version`),
     deprecated: bool$1(item.deprecated, `${label}.deprecated`),
     replacement_permission_id: replacement,
-    safer_guidance: stringList$1(item.safer_guidance, `${label}.safer_guidance`)
+    safer_guidance: stringList$1(item.safer_guidance, `${label}.safer_guidance`),
+    example_command: catalogText(item.example_command),
+    family: catalogText(item.family)
   };
 }
 function extension(value, label) {
@@ -2113,34 +2144,6 @@ function keepExtensionPolicyRebaseConflicts(result, latestEffective) {
   }
   return layers;
 }
-const PATTERN_EXAMPLES = {
-  "command.git.permission.hard-reset": "git reset --hard",
-  "command.git.permission.force-push": "git push --force",
-  "command.git.permission.force-clean": "git clean -f",
-  "command.git.permission.remote-branch-delete": "git push --delete",
-  "command.git.permission.local-branch-delete": "git branch -D",
-  "command.git.hard-reset": "git reset --hard",
-  "command.git.force-push": "git push --force",
-  "command.git.force-clean": "git clean -f",
-  "command.git.remote-branch-delete": "git push --delete",
-  "command.git.local-branch-delete": "git branch -D",
-  "command.github.permission.merge-remote": "gh pr merge",
-  "command.github.permission.merge-admin": "gh pr merge --admin",
-  "command.github.permission.routine-merge-remote": "gh pr merge --squash",
-  "command.filesystem.permission.recursive-delete": "rm -r",
-  "command.filesystem.permission.recursive-permission-change": "chmod -R"
-};
-function patternExampleCommand(permission2, extension2) {
-  const mapped = PATTERN_EXAMPLES[permission2.permission_id];
-  if (mapped) return mapped;
-  for (const ruleId of permission2.rule_ids) {
-    const fromRule = PATTERN_EXAMPLES[ruleId];
-    if (fromRule) return fromRule;
-  }
-  const executable = extension2.executables[0]?.trim();
-  if (executable) return executable;
-  return permission2.label;
-}
 function ProtectionSettingsHistory(props) {
   const [items, setItems] = reactExports.useState([]);
   const [loading, setLoading] = reactExports.useState(true);
@@ -2255,7 +2258,7 @@ function DraftControl(props) {
 function PermissionPolicyRow(props) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
   const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
-  const example = patternExampleCommand(props.permission, props.extension);
+  const example = props.permission.example_command ?? (props.extension.executables[0]?.trim() || props.permission.label);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "guard-pattern-row", "data-permission-id": props.permission.permission_id, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: props.permission.label }),
@@ -2670,18 +2673,35 @@ function ExtensionPolicyPanel(props) {
       " managed by your organization. This device can add stricter blocks but cannot weaken an organization block."
     ] }) : null,
     refreshRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "status", className: "mt-4 text-sm text-blue-950", children: "Settings applied. Editing stays locked until Guard reloads the current protected state." }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: policyExtension.permissions.map((permission2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PermissionPolicyRow,
-      {
-        permission: permission2,
-        extension: policyExtension,
-        effective: baseEffective,
-        draftState: localPermissionDraftState(draftLayers, permission2.permission_id),
-        disabled: refreshRequired,
-        onChange: (state) => setPermission(permission2, state)
-      },
-      permission2.permission_id
-    )) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: (() => {
+      const { ungrouped, families } = groupPermissionsByFamily(policyExtension.permissions);
+      const renderRow = (permission2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        PermissionPolicyRow,
+        {
+          permission: permission2,
+          extension: policyExtension,
+          effective: baseEffective,
+          draftState: localPermissionDraftState(draftLayers, permission2.permission_id),
+          disabled: refreshRequired,
+          onChange: (state) => setPermission(permission2, state)
+        },
+        permission2.permission_id
+      );
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        ungrouped.map(renderRow),
+        families.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": `${group.heading} variants`, className: "guard-pattern-family", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "guard-pattern-family-heading", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: group.heading }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              group.permissions.length,
+              " variant",
+              group.permissions.length === 1 ? "" : "s"
+            ] })
+          ] }),
+          group.permissions.map(renderRow)
+        ] }, group.family))
+      ] });
+    })() }),
     dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-review-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-brand-dark", children: [
         changeCount,

@@ -60,6 +60,8 @@ export type ExtensionPermission = {
   deprecated: boolean;
   replacement_permission_id: string | null;
   safer_guidance: string[];
+  example_command: string | null;
+  family: string | null;
 };
 
 export type ExtensionCatalogItem = {

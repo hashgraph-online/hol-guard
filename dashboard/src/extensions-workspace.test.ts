@@ -127,7 +127,7 @@ const extension: ExtensionCatalogItem = {
     risk_tier: "high", baseline_floor: "review", default_enabled: true, configurable: true, fixed_reason: null,
     typed_capabilities: [], action_classes: ["git.history.rewrite"], rule_ids: ["command.git.hard-reset"],
     dependencies: [], conflicts: [], implied_permissions: [], introduced_version: "1.0.0",
-    deprecated: false, replacement_permission_id: null, safer_guidance: [],
+    deprecated: false, replacement_permission_id: null, safer_guidance: [], example_command: null, family: null,
   }],
 };
 const effective: EffectiveExtensionControls = {

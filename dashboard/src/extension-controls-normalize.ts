@@ -59,6 +59,10 @@ function optionalString(value: unknown, label: string): string | null {
   return string(value, label);
 }
 
+function catalogText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 function bool(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
   return value;
@@ -168,6 +172,8 @@ function permission(value: unknown, extensionId: string, label: string): Extensi
     deprecated: bool(item.deprecated, `${label}.deprecated`),
     replacement_permission_id: replacement,
     safer_guidance: stringList(item.safer_guidance, `${label}.safer_guidance`),
+    example_command: catalogText(item.example_command),
+    family: catalogText(item.family),
   };
 }
 

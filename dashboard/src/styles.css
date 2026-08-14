@@ -534,6 +534,31 @@ a:focus-visible {
   color: color-mix(in srgb, var(--brand-dark) 72%, transparent);
 }
 
+.guard-pattern-family {
+  margin-top: 0.75rem;
+}
+
+.guard-pattern-family-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--brand-dark) 10%, transparent);
+}
+
+.guard-pattern-family-heading code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+
+.guard-pattern-family-heading span {
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--brand-dark) 60%, transparent);
+}
+
 .guard-segmented {
   display: inline-flex;
   min-height: 44px;

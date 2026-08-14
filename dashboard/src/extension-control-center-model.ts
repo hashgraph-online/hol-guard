@@ -335,3 +335,48 @@ export function treatmentLabel(value: string): string {
   };
   return labels[value] ?? value.replaceAll("-", " ");
 }
+
+
+export type PermissionFamilyGroup = {
+  family: string;
+  heading: string;
+  permissions: ExtensionPermission[];
+};
+
+export type PermissionFamilyView = {
+  ungrouped: ExtensionPermission[];
+  families: PermissionFamilyGroup[];
+};
+
+function familyHeading(permissions: ExtensionPermission[]): string {
+  const examples = permissions
+    .map((permission) => permission.example_command)
+    .filter((example): example is string => Boolean(example))
+    .map((example) => example.split(/\s+/));
+  if (!examples.length) return permissions[0]?.label ?? "";
+  const first = examples[0]!;
+  const shared: string[] = [];
+  for (let index = 0; index < first.length; index += 1) {
+    const token = first[index]!;
+    if (examples.every((parts) => parts[index] === token)) shared.push(token);
+    else break;
+  }
+  return shared.length ? shared.join(" ") : permissions[0]?.label ?? "";
+}
+
+export function groupPermissionsByFamily(permissions: ExtensionPermission[]): PermissionFamilyView {
+  const byFamily = new Map<string, ExtensionPermission[]>();
+  const ungrouped: ExtensionPermission[] = [];
+  for (const permission of permissions) {
+    if (!permission.family) ungrouped.push(permission);
+    else {
+      const members = byFamily.get(permission.family) ?? [];
+      members.push(permission);
+      byFamily.set(permission.family, members);
+    }
+  }
+  const families: PermissionFamilyGroup[] = [...byFamily.entries()]
+    .map(([family, members]) => ({ family, heading: familyHeading(members), permissions: members }))
+    .sort((left, right) => left.family.localeCompare(right.family));
+  return { ungrouped, families };
+}

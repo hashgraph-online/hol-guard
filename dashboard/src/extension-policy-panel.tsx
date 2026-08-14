@@ -34,10 +34,9 @@ import {
   type ExtensionPolicyRebaseConflict,
   type ExtensionPolicyRebaseResult,
 } from "./extension-policy-rebase";
-import { controlProvenance, treatmentLabel } from "./extension-control-center-model";
+import { controlProvenance, groupPermissionsByFamily, treatmentLabel } from "./extension-control-center-model";
 import { useModalDialog } from "./use-modal-dialog";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
-import { patternExampleCommand } from "./protection-center/pattern-example";
 import { ProtectionSettingsHistory } from "./protection-center/protection-settings-history";
 
 const RISK_TONE: Record<string, string> = {
@@ -158,7 +157,7 @@ function PermissionPolicyRow(props: {
 }) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
   const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
-  const example = patternExampleCommand(props.permission, props.extension);
+  const example = props.permission.example_command ?? (props.extension.executables[0]?.trim() || props.permission.label);
   return (
     <article className="guard-pattern-row" data-permission-id={props.permission.permission_id}>
       <div className="min-w-0">
@@ -536,17 +535,34 @@ export function ExtensionPolicyPanel(props: {
       ) : null}
 
       <div className="mt-4">
-        {policyExtension.permissions.map((permission) => (
-          <PermissionPolicyRow
-            key={permission.permission_id}
-            permission={permission}
-            extension={policyExtension}
-            effective={baseEffective}
-            draftState={localPermissionDraftState(draftLayers, permission.permission_id)}
-            disabled={refreshRequired}
-            onChange={(state) => setPermission(permission, state)}
-          />
-        ))}
+        {(() => {
+          const { ungrouped, families } = groupPermissionsByFamily(policyExtension.permissions);
+          const renderRow = (permission: ExtensionPermission) => (
+            <PermissionPolicyRow
+              key={permission.permission_id}
+              permission={permission}
+              extension={policyExtension}
+              effective={baseEffective}
+              draftState={localPermissionDraftState(draftLayers, permission.permission_id)}
+              disabled={refreshRequired}
+              onChange={(state) => setPermission(permission, state)}
+            />
+          );
+          return (
+            <>
+              {ungrouped.map(renderRow)}
+              {families.map((group) => (
+                <section key={group.family} aria-label={`${group.heading} variants`} className="guard-pattern-family">
+                  <h3 className="guard-pattern-family-heading">
+                    <code>{group.heading}</code>
+                    <span>{group.permissions.length} variant{group.permissions.length === 1 ? "" : "s"}</span>
+                  </h3>
+                  {group.permissions.map(renderRow)}
+                </section>
+              ))}
+            </>
+          );
+        })()}
       </div>
 
       {dirty ? (
