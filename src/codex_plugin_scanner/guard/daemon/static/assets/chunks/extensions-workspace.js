@@ -2240,6 +2240,7 @@ function useExtensionPolicyDraft(props) {
     setError(null);
     setStale(false);
     setPendingRebase(null);
+    setLastApplied(null);
   }, [baseEffective.catalog_digest]);
   const mutation = reactExports.useCallback(
     () => buildExtensionPolicyDraftMutation(baseEffective, baseEffective.catalog_digest, draftLayers, identity),
@@ -2404,6 +2405,7 @@ function useExtensionPolicyDraft(props) {
     setError(null);
     setStale(false);
     setPendingRebase(null);
+    setLastApplied(null);
   }, [baseEffective]);
   const useHistoricalDraft = reactExports.useCallback((historicalLayers) => {
     draftGeneration.current += 1;
@@ -3322,10 +3324,20 @@ function ProtectionTestLab({ extension: extension2 }) {
             ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: match.description }),
-          match.permission_id ? /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: `#pattern-${match.permission_id}`, onClick: (event) => {
-            event.preventDefault();
-            document.getElementById(`pattern-${match.permission_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-          }, className: "mt-2 inline-flex min-h-9 items-center rounded-lg px-1 text-xs font-semibold text-brand-blue hover:underline", children: "Adjust this pattern" }) : null
+          match.permission_id ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "a",
+            {
+              href: `#pattern-${match.permission_id}`,
+              onClick: (event) => {
+                event.preventDefault();
+                document.getElementById(`pattern-${match.permission_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                window.history.replaceState(null, "", `#pattern-${match.permission_id}`);
+                window.dispatchEvent(new HashChangeEvent("hashchange"));
+              },
+              className: "mt-2 inline-flex min-h-9 items-center rounded-lg px-1 text-xs font-semibold text-brand-blue hover:underline",
+              children: "Adjust this pattern"
+            }
+          ) : null
         ] }, `${match.extension_id}:${match.rule_id}`)) })
       ] }) : null,
       result.safer_alternatives.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
@@ -3404,23 +3416,47 @@ function ProtectionModuleDetail(props) {
   const [density, setDensity] = useProtectionDensity();
   const [policyDirty, setPolicyDirty] = reactExports.useState(false);
   reactExports.useEffect(() => {
-    const anchor = window.location.hash;
-    let rowId = null;
-    if (anchor.startsWith("#pattern-")) {
-      rowId = anchor.slice(1);
-    } else if (anchor.startsWith("#rule-")) {
-      const ruleId = anchor.slice("#rule-".length);
-      const rule2 = props.extension.rules.find((item) => item.rule_id === ruleId);
-      const permission2 = rule2 ? permissionForRule(props.extension, rule2) : null;
-      rowId = permission2 ? `pattern-${permission2.permission_id}` : null;
-    }
-    if (!rowId) return;
-    const row = document.getElementById(rowId);
-    if (!row) return;
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
-    row.classList.add("guard-pattern-row-highlight");
-    const timer = window.setTimeout(() => row.classList.remove("guard-pattern-row-highlight"), 2400);
-    return () => window.clearTimeout(timer);
+    let highlightTimer = 0;
+    let highlighted = null;
+    const clearHighlight = () => {
+      if (highlightTimer) window.clearTimeout(highlightTimer);
+      highlightTimer = 0;
+      highlighted?.classList.remove("guard-pattern-row-highlight");
+      highlighted = null;
+    };
+    const highlight = () => {
+      const anchor = window.location.hash;
+      let rowId = null;
+      let ruleId = null;
+      if (anchor.startsWith("#pattern-")) {
+        rowId = anchor.slice(1);
+      } else if (anchor.startsWith("#rule-")) {
+        ruleId = anchor.slice("#rule-".length);
+      } else {
+        const fragment = anchor.startsWith("#") ? anchor.slice(1) : anchor;
+        const requested = new URLSearchParams(fragment).get("rule");
+        if (requested) ruleId = requested;
+      }
+      if (ruleId) {
+        const rule2 = props.extension.rules.find((item) => item.rule_id === ruleId);
+        const permission2 = rule2 ? permissionForRule(props.extension, rule2) : null;
+        rowId = permission2 ? `pattern-${permission2.permission_id}` : null;
+      }
+      clearHighlight();
+      if (!rowId) return;
+      const row = document.getElementById(rowId);
+      if (!row) return;
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("guard-pattern-row-highlight");
+      highlighted = row;
+      highlightTimer = window.setTimeout(clearHighlight, 2400);
+    };
+    highlight();
+    window.addEventListener("hashchange", highlight);
+    return () => {
+      window.removeEventListener("hashchange", highlight);
+      clearHighlight();
+    };
   }, [props.extension.extension_id, props.extension.rules]);
   const requiredNote = requiredLine(props.extension);
   const extensionEnabled = !props.effective.layers.some(

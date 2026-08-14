@@ -86,7 +86,16 @@ export function ProtectionTestLab({ extension }: { extension: ExtensionCatalogIt
           </div>
           <p className="mt-1 text-xs leading-5 text-brand-dark/70">{match.description}</p>
           {match.permission_id ? (
-            <a href={`#pattern-${match.permission_id}`} onClick={(event) => { event.preventDefault(); document.getElementById(`pattern-${match.permission_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }} className="mt-2 inline-flex min-h-9 items-center rounded-lg px-1 text-xs font-semibold text-brand-blue hover:underline">Adjust this pattern</a>
+            <a
+              href={`#pattern-${match.permission_id}`}
+              onClick={(event) => {
+                event.preventDefault();
+                document.getElementById(`pattern-${match.permission_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                window.history.replaceState(null, "", `#pattern-${match.permission_id}`);
+                window.dispatchEvent(new HashChangeEvent("hashchange"));
+              }}
+              className="mt-2 inline-flex min-h-9 items-center rounded-lg px-1 text-xs font-semibold text-brand-blue hover:underline"
+            >Adjust this pattern</a>
           ) : null}
         </div>)}</div>
       </div> : null}

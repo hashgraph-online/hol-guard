@@ -24732,8 +24732,20 @@ function EvidenceField(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-sm font-medium text-brand-dark", children: props.value })
   ] });
 }
+function extensionPatternHref(extensionId, ruleId) {
+  const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  const params = new URLSearchParams(fragment);
+  params.set("rule", ruleId);
+  url.hash = params.toString();
+  return url.toString();
+}
 function MatchEvidence(props) {
   const effects = commandEffectLabels(props.match);
+  const openPatternFromRule = reactExports.useCallback(() => {
+    window.history.pushState({}, "", extensionPatternHref(props.match.extension_id, props.match.rule_id));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, [props.match.extension_id, props.match.rule_id]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "rounded-lg border border-slate-200 bg-slate-50/60 p-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: safeEvidenceId(props.match.rule_id) }),
@@ -24755,13 +24767,7 @@ function MatchEvidence(props) {
       "button",
       {
         type: "button",
-        onClick: () => {
-          const target = guardAwareHref(`/extensions/${props.match.extension_id}`);
-          const url = new URL(target, window.location.origin);
-          url.hash = `rule-${props.match.rule_id}`;
-          window.history.pushState({}, "", url.toString());
-          window.dispatchEvent(new PopStateEvent("popstate"));
-        },
+        onClick: openPatternFromRule,
         className: "mt-3 min-h-10 rounded-lg border border-brand-blue/25 bg-white px-3 text-left text-sm font-semibold text-brand-blue hover:bg-[rgba(85,153,254,0.08)]",
         children: "Adjust protection"
       }

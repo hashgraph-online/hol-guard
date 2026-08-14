@@ -78,8 +78,13 @@ def _mutation_payload(effective: dict[str, object], args: argparse.Namespace) ->
                 isinstance(item, dict) and item.get("target_kind") == target_kind and item.get("target_id") == target_id
             )
         ]
-        filtered.append({"target_kind": target_kind, "target_id": target_id, "state": state})
-        local["controls"] = filtered
+        if state == "recommended":
+            # Recommended removes the explicit local control so the pattern
+            # inherits Guard defaults and organization policy again.
+            local["controls"] = filtered
+        else:
+            filtered.append({"target_kind": target_kind, "target_id": target_id, "state": state})
+            local["controls"] = filtered
     return {
         "previous_revision": revision,
         "catalog_digest": catalog_digest,
@@ -167,6 +172,94 @@ def _recover_authority(
     return 0
 
 
+def _patterns(client: GuardSurfaceDaemonClient, args: argparse.Namespace, output_stream: TextIO | None) -> int:
+    catalog = client.extension_control_catalog()
+    effective = client.effective_extension_controls()
+    local_states: dict[str, str] = {}
+    layers = effective.get("layers")
+    if isinstance(layers, list):
+        for layer in layers:
+            if not isinstance(layer, dict) or layer.get("kind") != "local-admin":
+                continue
+            controls = layer.get("controls")
+            if not isinstance(controls, list):
+                continue
+            for control in controls:
+                if isinstance(control, dict) and control.get("target_kind") == "permission":
+                    permission_id = control.get("target_id")
+                    state = control.get("state")
+                    if isinstance(permission_id, str) and isinstance(state, str):
+                        local_states[permission_id] = state
+
+    query = str(getattr(args, "query", "") or "").strip().lower()
+    tool = str(getattr(args, "tool", "") or "").strip().lower() or None
+    rows: list[dict[str, object]] = []
+    extensions = catalog.get("extensions")
+    if not isinstance(extensions, list):
+        raise ValueError("daemon returned an invalid catalog")
+    for extension in extensions:
+        if not isinstance(extension, dict):
+            continue
+        extension_id = str(extension.get("extension_id", ""))
+        if tool and extension_id != tool:
+            continue
+        permissions = extension.get("permissions")
+        if not isinstance(permissions, list):
+            continue
+        for permission in permissions:
+            if not isinstance(permission, dict):
+                continue
+            permission_id = str(permission.get("permission_id", ""))
+            example = permission.get("example_command")
+            family = permission.get("family")
+            haystack = " ".join(
+                part
+                for part in (
+                    str(permission.get("label", "")),
+                    str(example or ""),
+                    str(family or ""),
+                    permission_id,
+                    str(extension.get("name", "")),
+                )
+                if part
+            ).lower()
+            if query and query not in haystack:
+                continue
+            rows.append(
+                {
+                    "permission_id": permission_id,
+                    "extension_id": extension_id,
+                    "extension_name": str(extension.get("name", "")),
+                    "label": str(permission.get("label", "")),
+                    "example_command": example if isinstance(example, str) else None,
+                    "family": family if isinstance(family, str) else None,
+                    "configurable": bool(permission.get("configurable")),
+                    "local_state": {"enabled": "allow", "disabled": "block"}.get(
+                        local_states.get(permission_id, ""), "recommended"
+                    ),
+                }
+            )
+    if getattr(args, "json", False):
+        _emit({"patterns": rows, "count": len(rows)}, output_stream)
+        return 0
+    stream = output_stream or sys.stdout
+    for row in rows:
+        example = row["example_command"] or ""
+        print(
+            f"{row['local_state']:>12}  {str(example)[:44]:<44}  {str(row['label'])[:40]:<40}  {row['permission_id']}",
+            file=stream,
+        )
+    print(f"{len(rows)} pattern(s)", file=stream)
+    return 0
+
+
+_SET_STATE_MAP: dict[str, tuple[str, str]] = {
+    "recommended": ("permission", "recommended"),
+    "allow": ("permission", "enabled"),
+    "block": ("permission", "disabled"),
+}
+
+
 def run_extension_controls_command(
     args: argparse.Namespace,
     *,
@@ -186,6 +279,16 @@ def run_extension_controls_command(
                 output_stream=output_stream,
             )
         client = _client(guard_home)
+        if command == "patterns":
+            return _patterns(client, args, output_stream)
+        if command == "set":
+            permission_id = str(args.permission_id)
+            requested = str(args.state)
+            target_kind, payload_state = _SET_STATE_MAP[requested]
+            args.target_kind = target_kind
+            args.target_id = permission_id
+            args.state = payload_state
+            command = "apply"
         if command == "status":
             _emit(client.effective_extension_controls(), output_stream)
             return 0

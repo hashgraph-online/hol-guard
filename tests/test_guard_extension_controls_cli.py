@@ -97,7 +97,7 @@ def test_controls_help_is_available_from_every_installed_alias(
 
     assert exit_info.value.code == 0
     assert (
-        "{status,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
+        "{status,patterns,set,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
     ) in capsys.readouterr().out
 
 
@@ -176,3 +176,96 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
 
     assert exit_code == 0
     assert calls == list(expected_calls)
+
+
+def test_recommended_state_removes_explicit_local_control() -> None:
+    effective = {
+        "revision": 5,
+        "catalog_digest": "a" * 64,
+        "layers": [
+            {
+                "schema_version": "1.0.0",
+                "kind": "local-admin",
+                "catalog_digest": "a" * 64,
+                "global_lockdown": False,
+                "controls": [
+                    {
+                        "target_kind": "permission",
+                        "target_id": "command.github.permission.merge-admin",
+                        "state": "disabled",
+                    }
+                ],
+            }
+        ],
+    }
+    payload = _mutation_payload(
+        effective,
+        argparse.Namespace(
+            controls_command="set",
+            target_kind="permission",
+            target_id="command.github.permission.merge-admin",
+            state="recommended",
+        ),
+    )
+
+    layers = payload["layers"]
+    assert isinstance(layers, list)
+    controls = layers[0]["controls"]
+    assert controls == []
+
+
+def test_patterns_filters_by_query_and_tool_and_reports_local_state(capsys: pytest.CaptureFixture[str]) -> None:
+    class FakeClient:
+        def extension_control_catalog(self) -> dict[str, object]:
+            return {
+                "extensions": [
+                    {
+                        "extension_id": "command.github",
+                        "name": "GitHub capability protection",
+                        "permissions": [
+                            {
+                                "permission_id": "command.github.permission.merge-remote",
+                                "label": "GitHub pull-request merge",
+                                "example_command": "gh pr merge 123 --merge",
+                                "family": "gh-pr-merge",
+                                "configurable": True,
+                            },
+                            {
+                                "permission_id": "command.github.permission.read-remote",
+                                "label": "remote GitHub state",
+                                "example_command": "gh pr view 123",
+                                "family": None,
+                                "configurable": True,
+                            },
+                        ],
+                    }
+                ]
+            }
+
+        def effective_extension_controls(self) -> dict[str, object]:
+            return {
+                "revision": 3,
+                "layers": [
+                    {
+                        "kind": "local-admin",
+                        "controls": [
+                            {
+                                "target_kind": "permission",
+                                "target_id": "command.github.permission.merge-remote",
+                                "state": "disabled",
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    exit_code = extension_controls_commands._patterns(
+        FakeClient(),
+        argparse.Namespace(query="merge", tool="command.github", json=False),
+        None,
+    )
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "gh pr merge 123 --merge" in out
+    assert "block" in out
+    assert "gh pr view 123" not in out

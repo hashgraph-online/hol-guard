@@ -56,8 +56,23 @@ function EvidenceField(props: { label: string; value: string }) {
   );
 }
 
+function extensionPatternHref(extensionId: string, ruleId: string): string {
+  // guardAwareHref carries the dashboard session in the fragment; append the
+  // rule anchor as one more fragment parameter instead of replacing it.
+  const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  const params = new URLSearchParams(fragment);
+  params.set("rule", ruleId);
+  url.hash = params.toString();
+  return url.toString();
+}
+
 function MatchEvidence(props: { match: CommandActivityItem["matches"][number]; controlling: boolean }) {
   const effects = commandEffectLabels(props.match);
+  const openPatternFromRule = useCallback(() => {
+    window.history.pushState({}, "", extensionPatternHref(props.match.extension_id, props.match.rule_id));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, [props.match.extension_id, props.match.rule_id]);
   return (
     <li className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -76,13 +91,7 @@ function MatchEvidence(props: { match: CommandActivityItem["matches"][number]; c
       </div>
       <button
         type="button"
-        onClick={() => {
-          const target = guardAwareHref(`/extensions/${props.match.extension_id}`);
-          const url = new URL(target, window.location.origin);
-          url.hash = `rule-${props.match.rule_id}`;
-          window.history.pushState({}, "", url.toString());
-          window.dispatchEvent(new PopStateEvent("popstate"));
-        }}
+        onClick={openPatternFromRule}
         className="mt-3 min-h-10 rounded-lg border border-brand-blue/25 bg-white px-3 text-left text-sm font-semibold text-brand-blue hover:bg-[rgba(85,153,254,0.08)]"
       >
         Adjust protection

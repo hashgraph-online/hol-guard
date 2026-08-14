@@ -123,6 +123,7 @@ export function useExtensionPolicyDraft(props: {
     setError(null);
     setStale(false);
     setPendingRebase(null);
+    setLastApplied(null);
   }, [baseEffective.catalog_digest]);
 
   const mutation = useCallback(
@@ -303,6 +304,7 @@ export function useExtensionPolicyDraft(props: {
     setError(null);
     setStale(false);
     setPendingRebase(null);
+    setLastApplied(null);
   }, [baseEffective]);
 
   const useHistoricalDraft = useCallback((historicalLayers: EffectiveExtensionControls["layers"]) => {

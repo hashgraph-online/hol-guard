@@ -111,23 +111,47 @@ export function ProtectionModuleDetail(props: {
   const [density, setDensity] = useProtectionDensity();
   const [policyDirty, setPolicyDirty] = useState(false);
   useEffect(() => {
-    const anchor = window.location.hash;
-    let rowId: string | null = null;
-    if (anchor.startsWith("#pattern-")) {
-      rowId = anchor.slice(1);
-    } else if (anchor.startsWith("#rule-")) {
-      const ruleId = anchor.slice("#rule-".length);
-      const rule = props.extension.rules.find((item) => item.rule_id === ruleId);
-      const permission = rule ? permissionForRule(props.extension, rule) : null;
-      rowId = permission ? `pattern-${permission.permission_id}` : null;
-    }
-    if (!rowId) return;
-    const row = document.getElementById(rowId);
-    if (!row) return;
-    row.scrollIntoView({ behavior: "smooth", block: "center" });
-    row.classList.add("guard-pattern-row-highlight");
-    const timer = window.setTimeout(() => row.classList.remove("guard-pattern-row-highlight"), 2400);
-    return () => window.clearTimeout(timer);
+    let highlightTimer = 0;
+    let highlighted: HTMLElement | null = null;
+    const clearHighlight = () => {
+      if (highlightTimer) window.clearTimeout(highlightTimer);
+      highlightTimer = 0;
+      highlighted?.classList.remove("guard-pattern-row-highlight");
+      highlighted = null;
+    };
+    const highlight = () => {
+      const anchor = window.location.hash;
+      let rowId: string | null = null;
+      let ruleId: string | null = null;
+      if (anchor.startsWith("#pattern-")) {
+        rowId = anchor.slice(1);
+      } else if (anchor.startsWith("#rule-")) {
+        ruleId = anchor.slice("#rule-".length);
+      } else {
+        const fragment = anchor.startsWith("#") ? anchor.slice(1) : anchor;
+        const requested = new URLSearchParams(fragment).get("rule");
+        if (requested) ruleId = requested;
+      }
+      if (ruleId) {
+        const rule = props.extension.rules.find((item) => item.rule_id === ruleId);
+        const permission = rule ? permissionForRule(props.extension, rule) : null;
+        rowId = permission ? `pattern-${permission.permission_id}` : null;
+      }
+      clearHighlight();
+      if (!rowId) return;
+      const row = document.getElementById(rowId);
+      if (!row) return;
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("guard-pattern-row-highlight");
+      highlighted = row;
+      highlightTimer = window.setTimeout(clearHighlight, 2400);
+    };
+    highlight();
+    window.addEventListener("hashchange", highlight);
+    return () => {
+      window.removeEventListener("hashchange", highlight);
+      clearHighlight();
+    };
   }, [props.extension.extension_id, props.extension.rules]);
   const requiredNote = requiredLine(props.extension);
   const extensionEnabled = !props.effective.layers.some((layer) =>
