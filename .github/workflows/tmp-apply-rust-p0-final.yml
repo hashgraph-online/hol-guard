@@ -1,0 +1,180 @@
+name: Apply and validate final Rust P0 migration
+
+on:
+  push:
+    branches:
+      - feat/rust-p0-native-core-final
+    paths:
+      - .github/workflows/tmp-apply-rust-p0-final.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-rust-p0-final-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply-validate-and-push:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/rust-p0-native-core-final
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+
+      - name: Reconstruct and verify exact migration patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .github/rust-p0-final-b64/part-000 \
+            .github/rust-p0-final-b64/part-001 \
+            .github/rust-p0-final-b64/part-002 \
+            .github/rust-p0-final-b64/block-01 \
+            .github/rust-p0-final-b64/block-02 \
+            .github/rust-p0-final-b64/block-03 \
+            .github/rust-p0-final-b64/block-04a \
+            .github/rust-p0-final-b64/block-04b \
+            .github/rust-p0-final-b64/block-05 \
+            .github/rust-p0-final-b64/block-06 \
+            .github/rust-p0-final-b64/block-07 \
+            .github/rust-p0-final-b64/block-08 \
+            .github/rust-p0-final-b64/block-09 \
+            > "$RUNNER_TEMP/rust-p0-final.patch.gz.b64"
+          test "$(wc -c < "$RUNNER_TEMP/rust-p0-final.patch.gz.b64")" = "186628"
+          printf '%s  %s\n' \
+            573db253edf2e3600c348a3485f6e17f021d307aa4461f715caeca3f5f8a96e8 \
+            "$RUNNER_TEMP/rust-p0-final.patch.gz.b64" | sha256sum --check --strict
+          base64 --decode "$RUNNER_TEMP/rust-p0-final.patch.gz.b64" | gzip --decompress --stdout \
+            > "$RUNNER_TEMP/rust-p0-final.patch"
+          test "$(wc -c < "$RUNNER_TEMP/rust-p0-final.patch")" = "670842"
+          printf '%s  %s\n' \
+            5b3f44a95b4f88851b236febcfde0c2db4895b598583db7488de6025d609edcf \
+            "$RUNNER_TEMP/rust-p0-final.patch" | sha256sum --check --strict
+
+      - name: Reset to immutable release head and apply migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_sha=$(git ls-remote --exit-code origin refs/heads/feat/rust-p0-native-core-final | awk '{print $1}')
+          test "$remote_sha" = "$GITHUB_SHA"
+          git fetch --force origin release/3.0
+          release_sha=$(git rev-parse origin/release/3.0)
+          test "$release_sha" = "fa7dd05f144fe276e2125fb69c5c29df14f2c7f9"
+          printf '%s\n' "$release_sha" > "$RUNNER_TEMP/release-sha"
+          git reset --hard "$release_sha"
+          git apply --check --binary "$RUNNER_TEMP/rust-p0-final.patch"
+          git apply --index --binary "$RUNNER_TEMP/rust-p0-final.patch"
+          test ! -e .github/workflows/tmp-apply-rust-p0-final.yml
+          test ! -e .github/rust-p0-final-b64
+          git diff --cached --check
+
+      - name: Install locked toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --extra publish --python 3.12
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+
+      - name: Format implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --manifest-path rust/Cargo.toml --all
+          mapfile -t python_files < <(git diff --name-only --diff-filter=AM origin/release/3.0 -- '*.py' | sort)
+          if (( ${#python_files[@]} )); then
+            uv run --no-sync ruff format "${python_files[@]}"
+          fi
+          git add -A
+          git diff --cached --check
+
+      - name: Build exact native runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(uv run --no-sync python - <<'PY'
+          from importlib.metadata import version
+          print(version("hol-guard"))
+          PY
+          )
+          export HOL_GUARD_PACKAGE_VERSION="$version"
+          export HOL_GUARD_BUILD_SHA="$(cat "$RUNNER_TEMP/release-sha")"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          rust/target/release/hol-guard-runtime self-test --json
+
+      - name: Validate complete Rust workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+
+      - name: Validate changed Python and contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t python_files < <(git diff --name-only --diff-filter=AM origin/release/3.0 -- '*.py' | sort)
+          if (( ${#python_files[@]} )); then
+            uv run --no-sync ruff check "${python_files[@]}"
+            uv run --no-sync ruff format --check "${python_files[@]}"
+          fi
+          mapfile -t typed_files < <(printf '%s\n' "${python_files[@]}" | grep -E '^(src|ci|scripts)/' || true)
+          if (( ${#typed_files[@]} )); then
+            uv run --no-sync basedpyright --level error "${typed_files[@]}"
+          fi
+          python -m json.tool docs/guard/contracts/rust-p0-native-core-ownership.v1.json >/dev/null
+          python -m json.tool tests/fixtures/rust-p0-native-core/contracts.v1.json >/dev/null
+          git diff --cached --check
+
+      - name: Run focused P0 Python suites
+        shell: bash
+        env:
+          HOL_GUARD_NATIVE_DEVELOPMENT: "1"
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          set -euo pipefail
+          mapfile -t focused_tests < <(
+            find tests ci -type f -name 'test_*.py' -print \
+              | grep -E '(rust_p0|native_core|native_path|command_model|safe_decode|archive|supply_chain|native_runtime)' \
+              | sort -u
+          )
+          test "${#focused_tests[@]}" -gt 0
+          uv run --no-sync pytest -q "${focused_tests[@]}" --tb=short
+
+      - name: Validate package and ownership boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv build
+          uv run --no-sync pytest -q tests/test_guard_rust_p0_native_core.py --tb=short
+          test ! -e src/codex_plugin_scanner/guard/runtime/offline_archive_policy.py
+          test ! -e src/codex_plugin_scanner/guard/runtime/offline_archive_sandbox.py
+          test ! -e src/codex_plugin_scanner/guard/runtime/offline_archive_worker.py
+          ! git grep -n 'offline_archive_policy\|offline_archive_sandbox\|offline_archive_worker' -- src tests ci scripts
+
+      - name: Commit validated migration and replace staging history
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_sha=$(git ls-remote --exit-code origin refs/heads/feat/rust-p0-native-core-final | awk '{print $1}')
+          test "$remote_sha" = "$GITHUB_SHA"
+          git add -A
+          git diff --cached --check
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git commit --signoff -m "feat(guard): move P0 local security paths to Rust"
+          git push --force-with-lease=refs/heads/feat/rust-p0-native-core-final:"$GITHUB_SHA" \
+            origin HEAD:refs/heads/feat/rust-p0-native-core-final
