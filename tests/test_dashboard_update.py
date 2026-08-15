@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import os
 import stat
@@ -18,6 +19,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
+from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -144,6 +146,70 @@ def test_build_guard_update_status_payload_shape(monkeypatch: pytest.MonkeyPatch
     assert payload["latest_version"] == "1.2.4"
     assert payload["auto_updatable"] is True
     assert payload["update_available"] is True
+
+
+def test_frozen_desktop_status_uses_embedded_version_without_package_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._is_frozen_runtime",
+        lambda: True,
+    )
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands.package_version.__version__",
+        "3.0.0a138",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands.importlib.metadata.version",
+        MagicMock(side_effect=importlib.metadata.PackageNotFoundError),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._status_installed_distribution",
+        MagicMock(side_effect=AssertionError("frozen Desktop must not probe package metadata")),
+    )
+    version_check = MagicMock(side_effect=AssertionError("Desktop manages Core updates"))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._version_check_payload",
+        version_check,
+    )
+
+    payload = build_guard_update_status_payload()
+
+    assert payload["installer"] == "desktop"
+    assert payload["current_version"] == "3.0.0a138"
+    assert payload["latest_version"] is None
+    assert payload["auto_updatable"] is False
+    assert payload["update_available"] is False
+    assert payload["blocked_reason"] == "Updates are managed by HOL Guard Desktop."
+    assert "reason_code" not in payload
+    assert payload["version_check"] == {
+        "source": "pypi",
+        "status": "managed",
+        "current_version": "3.0.0a138",
+        "latest_version": None,
+        "update_available": None,
+    }
+    version_check.assert_not_called()
+
+
+def test_frozen_runtime_without_desktop_marker_keeps_installer_detection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._is_frozen_runtime",
+        lambda: True,
+    )
+    monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.update_commands._installer_kind",
+        lambda: "pip",
+    )
+
+    payload = update_commands.build_guard_install_surface_payload()
+
+    assert payload["installer"] == "pip"
+    assert cast(dict[str, object], payload["binary_diagnostics"])["path_status"] != "bundled"
 
 
 def test_update_status_uses_persisted_alpha_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
