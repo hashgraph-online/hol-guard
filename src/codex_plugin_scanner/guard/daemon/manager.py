@@ -186,6 +186,10 @@ def _daemon_launcher_env(
             "PYTHONSAFEPATH": "1",
         }
     )
+    if getattr(sys, "frozen", False) is True:
+        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        if os.environ.get("HOL_GUARD_DESKTOP") == "1":
+            env["HOL_GUARD_DESKTOP"] = "1"
     if os.name == "nt":
         env["USERPROFILE"] = str(trusted_home)
     if guard_home is not None and not _guard_home_is_ephemeral(guard_home):

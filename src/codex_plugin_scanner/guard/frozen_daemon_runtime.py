@@ -125,10 +125,9 @@ def install_frozen_daemon_runtime() -> None:
     if not bool(getattr(sys, "frozen", False)):
         return
 
-    # A daemon is an independent invocation of the one-file executable. Force
-    # PyInstaller to create a fresh extraction root instead of treating it as a
-    # worker process that reuses the parent's private _MEI runtime directory.
-    os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    # The detached daemon launcher supplies this only for the independent
+    # one-file relaunch. Do not leak it to the daemon's multiprocessing workers.
+    os.environ.pop("PYINSTALLER_RESET_ENVIRONMENT", None)
 
     if _frozen_runtime_installed:
         return

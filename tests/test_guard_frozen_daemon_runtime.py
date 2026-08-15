@@ -137,16 +137,44 @@ def test_frozen_runtime_fingerprint_binds_exact_executable_bytes(
     assert frozen_daemon_runtime._frozen_runtime_fingerprint() == hashlib.sha256(payload).hexdigest()
 
 
-def test_frozen_runtime_forces_fresh_pyinstaller_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_frozen_runtime_consumes_pyinstaller_reset_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     inventory = manager._guard_daemon_process_inventory_for_guard_home
     monkeypatch.setattr(frozen_daemon_runtime.sys, "frozen", True, raising=False)
     monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_installed", False)
-    monkeypatch.delenv("PYINSTALLER_RESET_ENVIRONMENT", raising=False)
+    monkeypatch.setenv("PYINSTALLER_RESET_ENVIRONMENT", "1")
 
     frozen_daemon_runtime.install_frozen_daemon_runtime()
 
-    assert frozen_daemon_runtime.os.environ["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    assert "PYINSTALLER_RESET_ENVIRONMENT" not in frozen_daemon_runtime.os.environ
     monkeypatch.setattr(manager, "_guard_daemon_process_inventory_for_guard_home", inventory)
+
+
+def test_frozen_daemon_launcher_preserves_pyinstaller_reset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(manager.sys, "frozen", True, raising=False)
+    monkeypatch.setenv("PYINSTALLER_RESET_ENVIRONMENT", "untrusted-parent-value")
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+
+    child_env = manager._daemon_launcher_env(home_dir=tmp_path)
+
+    assert child_env["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    assert child_env["HOL_GUARD_DESKTOP"] == "1"
+
+
+def test_non_frozen_daemon_launcher_drops_pyinstaller_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(manager.sys, "frozen", False, raising=False)
+    monkeypatch.setenv("PYINSTALLER_RESET_ENVIRONMENT", "1")
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+
+    child_env = manager._daemon_launcher_env(home_dir=tmp_path)
+
+    assert "PYINSTALLER_RESET_ENVIRONMENT" not in child_env
+    assert "HOL_GUARD_DESKTOP" not in child_env
 
 
 def test_non_frozen_runtime_does_not_patch_daemon_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
