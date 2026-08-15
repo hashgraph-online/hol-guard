@@ -187,6 +187,37 @@ def test_windows_taskkill_failure_requires_job_containment_proof(
     assert retire_worker_slot(job_contained)
 
 
+def test_dead_pre_request_worker_can_be_replaced_without_isolation_proof() -> None:
+    process = _FakeProcess(3)
+    process.kill()
+    slot = HookWorkerSlot(
+        process=process,
+        connection=_SlowConnection(
+            entered=[0],
+            entered_lock=threading.Lock(),
+            all_entered=threading.Event(),
+        ),
+    )
+
+    assert retire_worker_slot(slot)
+
+
+def test_dead_post_request_worker_still_requires_containment_proof() -> None:
+    process = _FakeProcess(4)
+    process.kill()
+    slot = HookWorkerSlot(
+        process=process,
+        connection=_SlowConnection(
+            entered=[0],
+            entered_lock=threading.Lock(),
+            all_entered=threading.Event(),
+        ),
+        request_exposed=True,
+    )
+
+    assert not retire_worker_slot(slot)
+
+
 def test_slow_pi_reviews_release_every_slot_within_client_daemon_budget(
     tmp_path,
     monkeypatch,
