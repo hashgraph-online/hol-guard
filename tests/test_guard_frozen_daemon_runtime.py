@@ -3,19 +3,54 @@
 from __future__ import annotations
 
 import hashlib
+import runpy
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from codex_plugin_scanner.guard import frozen_daemon_runtime
 from codex_plugin_scanner.guard.daemon import manager
 
+ROOT = Path(__file__).resolve().parents[1]
+FROZEN_ENTRYPOINT = ROOT / "scripts" / "mdm" / "hol-guard-entry.py"
+
 
 def _daemon_command(executable: Path, guard_home: Path, home: Path, *, port: int = 4781) -> str:
-    return (
-        f"{executable} daemon --serve --guard-home {guard_home} "
-        f"--home {home} --port {port}"
-    )
+    return f"{executable} daemon --serve --guard-home {guard_home} --home {home} --port {port}"
+
+
+def test_frozen_entrypoint_dispatches_multiprocessing_before_guard_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    multiprocessing = ModuleType("multiprocessing")
+    daemon_runtime = ModuleType("codex_plugin_scanner.guard.frozen_daemon_runtime")
+    codex_runtime = ModuleType("codex_plugin_scanner.guard.frozen_codex_runtime")
+    cli = ModuleType("codex_plugin_scanner.cli")
+
+    multiprocessing.__dict__["freeze_support"] = lambda: events.append("freeze-support")
+    daemon_runtime.__dict__["install_frozen_daemon_runtime"] = lambda: events.append("daemon-runtime")
+    codex_runtime.__dict__["install_frozen_codex_runtime"] = lambda: events.append("codex-runtime")
+    codex_runtime.__dict__["run_frozen_internal_command"] = lambda: events.append("private-command")
+    cli.__dict__["main"] = lambda: events.append("public-cli") or 0
+    monkeypatch.setitem(sys.modules, "multiprocessing", multiprocessing)
+    monkeypatch.setitem(sys.modules, "codex_plugin_scanner.guard.frozen_daemon_runtime", daemon_runtime)
+    monkeypatch.setitem(sys.modules, "codex_plugin_scanner.guard.frozen_codex_runtime", codex_runtime)
+    monkeypatch.setitem(sys.modules, "codex_plugin_scanner.cli", cli)
+
+    with pytest.raises(SystemExit) as exit_info:
+        _ = runpy.run_path(str(FROZEN_ENTRYPOINT), run_name="__main__")
+
+    assert exit_info.value.code == 0
+    assert events == [
+        "freeze-support",
+        "daemon-runtime",
+        "codex-runtime",
+        "private-command",
+        "public-cli",
+    ]
 
 
 def test_frozen_runtime_proves_same_executable_bootloader_parent(

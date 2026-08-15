@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.frozen_daemon_runtime import install_frozen_daemon_runtime
+from multiprocessing import freeze_support
 
 if __name__ == "__main__":
+    # Dispatch PyInstaller multiprocessing children before importing Guard.
+    # Otherwise private resource-tracker argv is parsed as a public CLI command.
+    freeze_support()
+
+    from codex_plugin_scanner.guard.frozen_daemon_runtime import install_frozen_daemon_runtime
+
     install_frozen_daemon_runtime()
 
     from codex_plugin_scanner.guard.frozen_codex_runtime import (
