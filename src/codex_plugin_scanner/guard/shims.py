@@ -696,9 +696,7 @@ def package_shim_dashboard_status(context: HarnessContext) -> dict[str, object]:
         return status
     details = _dict_items(status.get("manager_details"))
     detail_by_manager = {
-        str(detail.get("manager")): detail
-        for detail in details
-        if isinstance(detail.get("manager"), str)
+        str(detail.get("manager")): detail for detail in details if isinstance(detail.get("manager"), str)
     }
     if any(detail_by_manager.get(manager, {}).get("integrity") != "ok" for manager in installed_managers):
         return status
