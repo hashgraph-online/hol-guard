@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.shims import (
     ensure_guard_shim_path_in_shell_profile,
     ensure_package_shim_path_in_shell_profile,
     install_package_shims,
+    package_shim_dashboard_status,
     package_shim_status,
     remove_guard_profile_blocks,
 )
@@ -170,6 +171,60 @@ class TestStripManagedMarkerBlocks:
 
 
 class TestEnsureWritesStablePath:
+    def test_dashboard_uses_persistent_profile_activation_not_daemon_path(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        guard_home = home / ".hol-guard"
+        context = _context(home, guard_home)
+        monkeypatch.setenv("SHELL", "/bin/bash")
+        monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims._is_transient_path", lambda _path: False)
+        install_package_shims(context, managers=("npm", "pip"))
+        ensure_package_shim_path_in_shell_profile(context)
+
+        raw_status = package_shim_status(context)
+        dashboard_status = package_shim_dashboard_status(context)
+
+        assert raw_status["path_status"] == "restart_required"
+        assert raw_status["process_path_status"] == "profile_staged"
+        assert dashboard_status["path_status"] == "in_path"
+        assert dashboard_status["restart_shell_required"] is False
+        assert dashboard_status["protected_managers"] == ["npm", "pip"]
+        assert dashboard_status["process_path_status"] == "profile_staged"
+        assert all(detail["path_active"] is True for detail in dashboard_status["manager_details"])
+        for detail in dashboard_status["manager_details"]:
+            path_status = detail["path_status"]
+            assert path_status["foreign_shim_bypass"] is False
+            assert path_status["foreign_shim_path_index"] is None
+            assert path_status["shim_path_index"] is None
+            assert path_status["real_binary_path_index"] is None
+
+    def test_dashboard_does_not_project_tampered_shim_as_active(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        guard_home = home / ".hol-guard"
+        context = _context(home, guard_home)
+        monkeypatch.setenv("SHELL", "/bin/bash")
+        monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
+        monkeypatch.setattr("codex_plugin_scanner.guard.shims._is_transient_path", lambda _path: False)
+        install_package_shims(context, managers=("npm",))
+        ensure_package_shim_path_in_shell_profile(context)
+        (guard_home / "package-shims" / "bin" / "npm").write_text("tampered\n", encoding="utf-8")
+
+        dashboard_status = package_shim_dashboard_status(context)
+
+        assert dashboard_status["path_status"] == "restart_required"
+        assert dashboard_status["restart_shell_required"] is True
+        assert dashboard_status["protected_managers"] == []
+
     def test_package_shim_writes_single_stable_entry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         home = tmp_path / "home"
         home.mkdir()

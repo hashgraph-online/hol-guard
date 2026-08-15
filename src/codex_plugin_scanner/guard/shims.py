@@ -677,6 +677,73 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
     )
 
 
+def package_shim_dashboard_status(context: HarnessContext) -> dict[str, object]:
+    """Project persistent shell activation instead of the daemon's inherited PATH.
+
+    The resident daemon does not source interactive shell profiles. Treating its
+    process PATH as the user's shell PATH leaves the dashboard permanently stuck
+    on "restart required" even after a new login. The dashboard may regard the
+    setup as active when every installed shim is intact and all managed profiles
+    still contain the Guard PATH block. Raw CLI status continues to report the
+    calling process PATH unchanged.
+    """
+
+    status = package_shim_status(context)
+    if status.get("path_status") != "restart_required" or not status.get("shell_profile_configured"):
+        return status
+    installed_managers = _string_items(status.get("installed_managers"))
+    if not installed_managers or status.get("missing_managers"):
+        return status
+    details = _dict_items(status.get("manager_details"))
+    detail_by_manager = {
+        str(detail.get("manager")): detail for detail in details if isinstance(detail.get("manager"), str)
+    }
+    if any(detail_by_manager.get(manager, {}).get("integrity") != "ok" for manager in installed_managers):
+        return status
+
+    projected_details: list[dict[str, object]] = []
+    for detail in details:
+        manager = detail.get("manager")
+        if manager not in installed_managers:
+            projected_details.append(detail)
+            continue
+        path_detail = detail.get("path_status")
+        projected_path_detail = (
+            {
+                **path_detail,
+                "path_broken": False,
+                "shim_in_path": True,
+                "shim_precedes_real": True,
+                "shim_path_index": None,
+                "real_binary_path_index": None,
+                "foreign_shim_bypass": False,
+                "foreign_shim_path_index": None,
+            }
+            if isinstance(path_detail, dict)
+            else path_detail
+        )
+        projected_details.append(
+            {
+                **detail,
+                "path_active": True,
+                "path_status": projected_path_detail,
+            }
+        )
+    return {
+        **status,
+        "bypasses": [],
+        "manager_details": projected_details,
+        "path_active": True,
+        "path_broken_managers": [],
+        "pathBrokenManagers": [],
+        "path_contains_shim_dir": True,
+        "path_status": "in_path",
+        "protected_managers": list(installed_managers),
+        "protectedManagers": list(installed_managers),
+        "restart_shell_required": False,
+    }
+
+
 def package_shim_cloud_coverage(
     context: HarnessContext,
     *,
@@ -1527,6 +1594,7 @@ __all__ = [
     "install_guard_shim",
     "install_package_shims",
     "package_shim_cloud_coverage",
+    "package_shim_dashboard_status",
     "package_shim_status",
     "package_shim_supported_managers",
     "probe_package_shim_intercepts",
