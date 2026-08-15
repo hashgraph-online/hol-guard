@@ -192,6 +192,7 @@ from ..runtime.runner import (
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..shims import (
     activate_package_shims,
+    package_shim_dashboard_status,
     package_shim_status,
     package_shim_supported_managers,
     probe_package_shim_intercepts,
@@ -3584,7 +3585,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _handle_supply_chain_package_firewall_status(self) -> None:
         entitlement = self._supply_chain_entitlement()
-        status = package_shim_status(self._harness_context({}))
+        status = package_shim_dashboard_status(self._harness_context({}))
         audit_workspace_dir = self._resolve_supply_chain_workspace_dir({})
         self._write_json(
             {

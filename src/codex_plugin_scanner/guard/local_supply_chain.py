@@ -71,7 +71,7 @@ from .runtime.workspace_path_guard import (
     read_text_within_workspace,
     resolve_path_within_workspace,
 )
-from .shims import package_shim_status, package_shim_supported_managers
+from .shims import package_shim_dashboard_status, package_shim_supported_managers
 from .stable_digest import stable_digest_hex
 from .store import GuardStore
 
@@ -3034,7 +3034,7 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
         workspace_dir=None,
         guard_home=store.guard_home,
     )
-    status = package_shim_status(context)
+    status = package_shim_dashboard_status(context)
     shim_dir = Path(str(status.get("shim_dir") or store.guard_home / "package-shims" / "bin"))
     installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
     active_managers = sorted(set(_string_items(status.get("active_managers"))))
