@@ -464,6 +464,35 @@ def test_non_idempotent_review_does_not_retry_transient_evaluator_not_ready(tmp_
     assert connection.send.call_count == 1
 
 
+def test_failed_send_does_not_mark_request_as_exposed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1, timeout_seconds=1)
+    runner._started = True  # pyright: ignore[reportPrivateUsage]
+    process = MagicMock()
+    process.pid = 4243
+    process.is_alive.return_value = False
+    connection = MagicMock()
+    connection.send.side_effect = BrokenPipeError
+    slot = HookWorkerSlot(process=process, connection=connection)
+    runner._slots.put_nowait(slot)  # pyright: ignore[reportPrivateUsage]
+    runner._ready_slot_ids.add(process.pid)  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(runner, "_replace_slot_async", lambda _slot: None)
+
+    result = runner.review(
+        payload={"hook_event_name": "SessionStart"},
+        harness="pi",
+        home_dir=tmp_path,
+        guard_home=tmp_path,
+        workspace=tmp_path,
+        hook_env={},
+    )
+
+    assert result == HookProcessReview(None, "daemon_hook_process_failed")
+    assert not slot.request_exposed
+
+
 def test_idempotent_review_bounds_transient_not_ready_retries(tmp_path: Path) -> None:
     runner, connection = _transient_not_ready_test_runner(
         tmp_path,
