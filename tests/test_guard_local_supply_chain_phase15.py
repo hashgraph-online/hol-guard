@@ -838,7 +838,7 @@ def test_package_manager_protection_scopes_health_to_detected_managers(
     )
     monkeypatch.setattr(
         local_supply_chain_module,
-        "package_shim_status",
+        "package_shim_dashboard_status",
         lambda _context: {
             "shim_dir": str(tmp_path / "shims"),
             "detected_managers": ["npm", "npx", "pnpm"],
