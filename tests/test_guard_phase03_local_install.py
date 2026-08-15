@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import subprocess
@@ -140,13 +141,18 @@ def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monk
             "guard_home": str(context.guard_home),
             "home_dir": str(context.home_dir),
         }
-        return subprocess.CompletedProcess(command, 0, '{"status":"restarted","retired":[123]}', "")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            '{"status":"restarted","retired":[123],"runtime_verified":true}',
+            "",
+        )
 
     monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
 
     payload, note = update_commands.refresh_guard_daemon_after_update(context)
 
-    assert payload == {"status": "restarted", "retired": [123]}
+    assert payload == {"status": "restarted", "retired": [123], "runtime_verified": True}
     assert note == "Restarted the Guard daemon to load the updated package."
 
 
@@ -172,7 +178,7 @@ def test_daemon_refresh_authorizes_breakaway_only_for_restart_child(tmp_path: Pa
             calls.append((script, dict(kwargs)))
             return SimpleNamespace(
                 returncode=0,
-                stdout='{"status":"restarted"}',
+                stdout='{"status":"restarted","runtime_verified":true}',
                 stderr="",
                 output_limited=False,
             )
@@ -182,7 +188,7 @@ def test_daemon_refresh_authorizes_breakaway_only_for_restart_child(tmp_path: Pa
         update_context=FakeUpdateContext(),  # type: ignore[arg-type]
     )
 
-    assert payload == {"status": "restarted"}
+    assert payload == {"status": "restarted", "runtime_verified": True}
     assert note == "Restarted the Guard daemon to load the updated package."
     assert calls == [
         (
@@ -199,6 +205,102 @@ def test_daemon_refresh_authorizes_breakaway_only_for_restart_child(tmp_path: Pa
             },
         )
     ]
+
+
+def test_daemon_refresh_rejects_unverified_runtime_handoff(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    context.guard_home.mkdir(parents=True)
+    (context.guard_home / "daemon-state.json").write_text("{}", encoding="utf-8")
+
+    class FakeUpdateContext:
+        def python_command(self, script: str, *_args: str) -> list[str]:
+            return ["/trusted/python", script]
+
+        def run(self, command: list[str], **_kwargs: object) -> SimpleNamespace:
+            if command[-1] == update_commands._DAEMON_REFRESH_SCRIPT:
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout='{"status":"restarted"}',
+                    stderr="",
+                    output_limited=False,
+                )
+            return SimpleNamespace(
+                returncode=0,
+                stdout='{"status":"cleaned","retired":[],"remaining":[]}',
+                stderr="",
+                output_limited=False,
+            )
+
+    payload, note = update_commands.refresh_guard_daemon_after_update(
+        context,
+        update_context=FakeUpdateContext(),  # type: ignore[arg-type]
+    )
+
+    assert payload == {"status": "restarted"}
+    assert note == "Could not restart the Guard daemon after update: updated runtime was not confirmed"
+
+
+def test_daemon_refresh_script_retries_a_retirement_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from codex_plugin_scanner.guard.daemon import manager
+
+    context = _context(tmp_path)
+    context.home_dir.mkdir(parents=True)
+    context.guard_home.mkdir(parents=True)
+    (context.guard_home / "daemon-state.json").write_text('{"port":5474}', encoding="utf-8")
+    retirement_checks = iter([False, True])
+    monotonic_values = iter([0.0, 6.0, 10.0])
+    retire_calls: list[Path] = []
+
+    def fake_retire(guard_home: Path) -> list[int]:
+        retire_calls.append(guard_home)
+        return [101]
+
+    def fake_ensure(
+        _guard_home: Path,
+        *,
+        home_dir: Path | None = None,
+        preferred_port: int | None = None,
+        allow_windows_job_breakaway: bool = False,
+    ) -> str:
+        assert home_dir == context.home_dir
+        assert preferred_port == 5474
+        assert allow_windows_job_breakaway
+        return "http://127.0.0.1:5474"
+
+    monkeypatch.setattr(manager, "retire_all_guard_daemons_for_home", fake_retire)
+    monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", lambda _home: next(retirement_checks))
+    monkeypatch.setattr(manager, "clear_guard_daemon_state", lambda _home: None)
+    monkeypatch.setattr(manager, "repair_approval_center_locator", lambda _home: None)
+    monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", fake_ensure)
+    monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(update_commands.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        update_commands.sys,
+        "stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "guard_home": str(context.guard_home),
+                    "home_dir": str(context.home_dir),
+                }
+            )
+        ),
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        exec(update_commands._DAEMON_REFRESH_SCRIPT, {})
+
+    assert exit_info.value.code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "restarted"
+    assert payload["runtime_verified"] is True
+    assert payload["attempts"] == 2
+    assert retire_calls == [context.guard_home, context.guard_home]
 
 
 def test_daemon_refresh_failure_runs_contained_cleanup_without_breakaway(tmp_path: Path) -> None:
