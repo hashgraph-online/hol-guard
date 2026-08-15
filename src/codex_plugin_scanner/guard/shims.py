@@ -714,6 +714,10 @@ def package_shim_dashboard_status(context: HarnessContext) -> dict[str, object]:
                 "path_broken": False,
                 "shim_in_path": True,
                 "shim_precedes_real": True,
+                "shim_path_index": None,
+                "real_binary_path_index": None,
+                "foreign_shim_bypass": False,
+                "foreign_shim_path_index": None,
             }
             if isinstance(path_detail, dict)
             else path_detail

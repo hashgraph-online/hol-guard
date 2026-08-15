@@ -196,6 +196,12 @@ class TestEnsureWritesStablePath:
         assert dashboard_status["protected_managers"] == ["npm", "pip"]
         assert dashboard_status["process_path_status"] == "profile_staged"
         assert all(detail["path_active"] is True for detail in dashboard_status["manager_details"])
+        for detail in dashboard_status["manager_details"]:
+            path_status = detail["path_status"]
+            assert path_status["foreign_shim_bypass"] is False
+            assert path_status["foreign_shim_path_index"] is None
+            assert path_status["shim_path_index"] is None
+            assert path_status["real_binary_path_index"] is None
 
     def test_dashboard_does_not_project_tampered_shim_as_active(
         self,
