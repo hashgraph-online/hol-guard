@@ -118,6 +118,54 @@ class StoreApprovalsMixin:
         with self._connect() as connection:
             return load_next_pending_request(connection, exclude_ids=exclude_ids)
 
+    def resolve_harness_native_approval_request(
+        self,
+        request_id: str,
+        *,
+        reason: str | None,
+        resolved_at: str,
+        expected_harness: str,
+        expected_artifact_id: str | None = None,
+        expected_artifact_hash: str | None = None,
+    ) -> bool:
+        """Close an inbox request after a verified harness-native Accept.
+
+        Cursor (and similar) native prompts are the user's approval. Requiring
+        the local approval-gate password/MFA a second time left the request
+        inbox pending after Accept. This path is artifact-scoped allow-only.
+        """
+
+        if not request_id.strip():
+            return False
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            request = load_approval_request(connection, request_id)
+            if request is None:
+                return False
+            if str(request.get("status") or "") != "pending":
+                return False
+            if str(request.get("harness") or "") != expected_harness:
+                return False
+            request_artifact_id = str(request.get("artifact_id") or "")
+            if expected_artifact_id is not None and request_artifact_id != expected_artifact_id:
+                return False
+            request_artifact_hash = str(request.get("artifact_hash") or "")
+            if expected_artifact_hash is not None and request_artifact_hash != expected_artifact_hash:
+                return False
+            try:
+                require_resolvable_approval_request(request)
+            except ValueError:
+                return False
+            persist_approval_resolution(
+                connection,
+                request_id,
+                resolution_action="allow",
+                resolution_scope="artifact",
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+        return True
+
     def resolve_approval_request(
         self,
         request_id: str,

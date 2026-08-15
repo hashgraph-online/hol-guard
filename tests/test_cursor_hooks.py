@@ -1221,6 +1221,174 @@ def test_cursor_native_shell_session_allow_after_trusted_after_shell(tmp_path: P
     )
 
 
+def test_cursor_native_accept_resolves_inbox_when_approval_gate_enabled(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.models import GuardApprovalRequest
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    update_approval_gate_settings(
+        store.guard_home,
+        {
+            "enabled": True,
+            "new_password": "cursor-native-accept-gate",
+            "confirm_password": "cursor-native-accept-gate",
+            "cooldown_seconds": 0,
+            "strict_all_decisions": False,
+        },
+    )
+    conversation_id = "conv-cursor-native-inbox"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    generation_id = "gen-cursor-native-inbox"
+    request_id = "req-cursor-native-inbox"
+    artifact = _cursor_shell_artifact(workspace_dir=workspace_dir, command=command)
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id=request_id,
+            harness="cursor",
+            artifact_id=artifact.artifact_id,
+            artifact_name=artifact.name,
+            artifact_hash="hash-cursor-shell",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("tool_action_request",),
+            source_scope="project",
+            config_path=artifact.config_path,
+            review_command=f"hol-guard approvals approve {request_id}",
+            approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
+        ),
+        "2026-08-15T00:00:00+00:00",
+    )
+    _record_cursor_pending_for_test(
+        store=store,
+        guard_home=home_dir,
+        guard_commands_module=guard_commands_module,
+        conversation_id=conversation_id,
+        command=command,
+        workspace_dir=workspace_dir,
+        generation_id=generation_id,
+    )
+    guard_commands_module._attach_cursor_pending_approval_request_ids(
+        store=store,
+        payload={
+            "conversation_id": conversation_id,
+            "hook_event_name": "beforeShellExecution",
+            "command": command,
+            "cwd": str(workspace_dir),
+            "generation_id": generation_id,
+        },
+        response_payload={"approval_request_ids": [request_id]},
+    )
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "generation_id": generation_id,
+                "hook_event_name": "afterShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+                "duration": 15,
+            }
+        ),
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        hook_env=_trusted_cursor_after_shell_env(
+            home_dir,
+            conversation_id=conversation_id,
+            command=command,
+            workspace_dir=workspace_dir,
+            approval_binding=generation_id,
+        ),
+    )
+    resolved = store.get_approval_request(request_id)
+
+    assert saved is True
+    assert resolved is not None
+    assert resolved.get("status") == "resolved"
+    assert resolved.get("resolution_action") == "allow"
+    assert store.list_approval_requests(status="pending", harness="cursor") == []
+
+
+def test_cursor_native_accept_resolves_inbox_by_artifact_when_ids_missing(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.models import GuardApprovalRequest
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-native-inbox-fallback"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    generation_id = "gen-cursor-native-inbox-fallback"
+    request_id = "req-cursor-native-inbox-fallback"
+    artifact = _cursor_shell_artifact(workspace_dir=workspace_dir, command=command)
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id=request_id,
+            harness="cursor",
+            artifact_id=artifact.artifact_id,
+            artifact_name=artifact.name,
+            artifact_hash="hash-cursor-shell",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("tool_action_request",),
+            source_scope="project",
+            config_path=artifact.config_path,
+            review_command=f"hol-guard approvals approve {request_id}",
+            approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
+        ),
+        "2026-08-15T00:00:00+00:00",
+    )
+    _record_cursor_pending_for_test(
+        store=store,
+        guard_home=home_dir,
+        guard_commands_module=guard_commands_module,
+        conversation_id=conversation_id,
+        command=command,
+        workspace_dir=workspace_dir,
+        generation_id=generation_id,
+    )
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "generation_id": generation_id,
+                "hook_event_name": "afterShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+                "duration": 15,
+            }
+        ),
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        hook_env=_trusted_cursor_after_shell_env(
+            home_dir,
+            conversation_id=conversation_id,
+            command=command,
+            workspace_dir=workspace_dir,
+            approval_binding=generation_id,
+        ),
+    )
+    resolved = store.get_approval_request(request_id)
+
+    assert saved is True
+    assert resolved is not None
+    assert resolved.get("status") == "resolved"
+
+
 def test_cursor_tampered_pending_shell_cannot_bootstrap_signed_native_allow(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
     from codex_plugin_scanner.guard.cli import commands as guard_commands_module

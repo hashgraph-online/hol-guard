@@ -32,6 +32,8 @@ Guard installs command hooks documented by Cursor:
 
 Hooks call a managed bridge script (`.cursor/hooks/hol-guard-cursor-hook.py`) that forwards stdin JSON to `hol-guard hook --harness cursor --json` and maps Guard policy results to Cursor `permission` responses (`allow`, `deny`, `ask`).
 
+Review decisions still appear in the approval inbox so the same request is visible outside Cursor. Accepting the native Cursor prompt resolves that inbox item after the attested `afterShellExecution` or `afterMCPExecution` observer runs. The native Accept is the approval; the inbox should not require a second decision.
+
 Restart Cursor after install so hook config reloads.
 
 ## Claude-compatible hooks inside Cursor
