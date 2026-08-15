@@ -206,6 +206,7 @@ class HookProcessRunner:
             except queue.Empty:
                 return HookProcessReview(None, "daemon_hook_process_not_ready")
             try:
+                slot.request_exposed = True
                 slot.connection.send(("review", request))
                 remaining_seconds = max(0.0, review_deadline - time.monotonic())
                 if not slot.connection.poll(remaining_seconds):
@@ -242,6 +243,7 @@ class HookProcessRunner:
                         return HookProcessReview(None, "daemon_hook_process_failed")
                 slot = retry_slot
                 try:
+                    slot.request_exposed = True
                     slot.connection.send(("review", request))
                     remaining_seconds = max(0.0, review_deadline - time.monotonic())
                     if not slot.connection.poll(remaining_seconds):

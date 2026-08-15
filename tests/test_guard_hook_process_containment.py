@@ -64,13 +64,14 @@ class _ProtocolConnection(_Connection):
         return True
 
 
-def test_unknown_isolation_does_not_signal_group_without_live_guardian(
+def test_post_request_unknown_isolation_does_not_signal_group_without_live_guardian(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     slot = HookWorkerSlot(
         process=_DeadGuardian(),
         connection=_Connection(),
         retire_lock=threading.Lock(),
+        request_exposed=True,
     )
     monkeypatch.setattr(
         hook_worker_module.os,

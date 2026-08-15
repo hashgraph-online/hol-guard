@@ -42,6 +42,7 @@ class HookWorkerSlot:
     windows_job_contained: bool = False
     isolation_ready: bool = False
     pre_isolation_contained: bool = False
+    request_exposed: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +125,10 @@ def retire_worker_slot(slot: HookWorkerSlot, *, graceful: bool = False) -> bool:
             slot.process.kill()
         tree_contained = False
     else:
-        tree_contained = slot.windows_job_contained
+        # A worker that died before the parent sent it a review request never
+        # handled untrusted input. Its dead bootstrap process cannot retain
+        # request-derived descendants, so the supervisor may safely replace it.
+        tree_contained = slot.windows_job_contained or not slot.request_exposed
     slot.process.join(timeout=_WORKER_RETIRE_JOIN_TIMEOUT_SECONDS)
     contained = (tree_contained or slot.windows_job_contained) and not slot.process.is_alive()
     if not contained:
