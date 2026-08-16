@@ -1,0 +1,61 @@
+name: Daemon edge final-tree shepherd
+
+on:
+  push:
+    branches:
+      - fix/rust-daemon-ux-hardening-definitive
+    paths:
+      - .github/workflows/daemon-edge-final-tree-shepherd.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daemon-edge-final-tree-shepherd
+  cancel-in-progress: false
+
+jobs:
+  clean:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/rust-daemon-ux-hardening-definitive
+          fetch-depth: 0
+      - name: Wait for integration and source-fix commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS+7200))
+          while ((SECONDS<deadline)); do
+            git fetch origin fix/rust-daemon-ux-hardening-definitive
+            git reset --hard origin/fix/rust-daemon-ux-hardening-definitive
+            if grep -q '@native_resident_admission' src/codex_plugin_scanner/guard/native_runtime_resident.py \
+              && grep -q 'hardening::request_expired' rust/crates/guard-runtime/src/main.rs \
+              && test ! -e scripts/ci/apply_daemon_edge_hardening.py \
+              && test ! -e .github/workflows/daemon-edge-source-fix-shepherd.yml; then exit 0; fi
+            sleep 30
+          done
+          exit 1
+      - name: Remove all one-shot delivery residue
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/daemon-edge-cleanup-shepherd.yml
+          rm -f .github/workflows/daemon-edge-final-tree-shepherd.yml
+          find .github/workflows -maxdepth 1 -type f -name 'tmp-*' -delete
+          rm -f test-inventory.json rust-migration-audit.json
+          rm -rf dist build
+          git add -A
+          git diff --cached --check
+      - name: Publish final clean tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git commit --signoff -m "chore(guard): finalize daemon hardening tree hygiene"
+          git push origin HEAD:fix/rust-daemon-ux-hardening-definitive
