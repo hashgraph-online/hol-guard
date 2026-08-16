@@ -163,13 +163,8 @@ def test_invalid_posture_rejected_on_update(tmp_path: Path) -> None:
 
 def test_custom_risk_override_still_wins(tmp_path: Path) -> None:
     guard_home = tmp_path / ".hol-guard"
-    loaded = update_guard_settings(
-        guard_home,
-        {
-            "protection_posture": "protected",
-            "risk_actions": {"network_egress": "block"},
-        },
-    )
+    update_guard_settings(guard_home, {"protection_posture": "protected"})
+    loaded = update_guard_settings(guard_home, {"risk_actions": {"network_egress": "block"}})
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "block"
     assert resolve_risk_action(loaded, "package_script", harness="codex") == "require-reapproval"
 
