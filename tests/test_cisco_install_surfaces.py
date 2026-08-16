@@ -121,8 +121,9 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
     assert "uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13" in ci_workflow
     assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
-    assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
-    assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
+    assert "Release 3.1 publisher retired" in publish_workflow
+    assert "uv sync --frozen --extra dev --extra publish --extra cisco" not in publish_workflow
+    assert 'uv tool install "hol-guard[cisco]==' not in publish_workflow
     assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile
     assert "FROM python:3.13-slim@" in dockerfile
     assert "FROM python:3.14-slim" not in dockerfile
@@ -156,11 +157,12 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "uv sync --extra dev --extra cisco --group cisco-mcp" in contributing
 
 
-def test_publish_workflow_builds_only_guard_and_scanner_packages() -> None:
+def test_retired_publish_workflow_builds_no_packages() -> None:
     publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
 
-    assert "Build Guard package (hol-guard)" in publish_workflow
-    assert "Build scanner package (plugin-scanner)" in publish_workflow
+    assert "Release 3.1 publisher retired" in publish_workflow
+    assert "Build Guard package (hol-guard)" not in publish_workflow
+    assert "Build scanner package (plugin-scanner)" not in publish_workflow
     assert "Build codex compatibility alias" not in publish_workflow
     assert 'name = "codex-plugin-scanner"' not in publish_workflow
     assert 'codex-plugin-scanner = "codex_plugin_scanner.cli:main"' not in publish_workflow
