@@ -61,8 +61,8 @@ def _action_step(steps: list[dict[str, object]], prefix: str) -> dict[str, objec
 
 
 def test_build_binds_subject_to_exact_pull_request_head_and_artifact() -> None:
-    if _workflow().get("name") == "Publish HOL Guard 3.1 alpha":
-        pytest.skip("release/3.1 uses its dedicated pull-request source checkout proof")
+    if _workflow().get("name") == "Release 3.1 publisher retired":
+        pytest.skip("release/3.1 publishing is retired")
     build = _job("build")
     steps = _steps(build)
     checkout = _action_step(steps, "actions/checkout")

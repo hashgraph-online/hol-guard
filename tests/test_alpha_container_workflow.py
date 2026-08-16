@@ -10,8 +10,8 @@ PUBLISH_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 
 def test_container_refuses_to_mutate_an_existing_alpha_image() -> None:
     workflow = yaml.safe_load(PUBLISH_WORKFLOW.read_text(encoding="utf-8"))
-    if workflow.get("name") == "Publish HOL Guard 3.1 alpha":
-        pytest.skip("release/3.1 publishes Python artifacts only")
+    if workflow.get("name") == "Release 3.1 publisher retired":
+        pytest.skip("release/3.1 publishing is retired")
     steps = workflow["jobs"]["publish-container"]["steps"]
     inspect_step = next(step for step in steps if step.get("name") == "Inspect existing immutable image")
     publish_step = next(step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action@"))
