@@ -1,22 +1,23 @@
 """Fail-closed contract for the retired release/3.1 publisher."""
 
-# pyright: reportAny=false, reportExplicitAny=false, reportMissingModuleSource=false, reportUnknownVariableType=false
-
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import cast
 
-import yaml
+import yaml  # pyright: ignore[reportMissingModuleSource]
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLISH = ROOT / ".github" / "workflows" / "publish.yml"
 
 
-def workflow() -> dict[object, Any]:
-    value = yaml.safe_load(PUBLISH.read_text(encoding="utf-8"))
+def _mapping(value: object) -> dict[object, object]:
     assert isinstance(value, dict)
-    return value
+    return cast(dict[object, object], value)
+
+
+def workflow() -> dict[object, object]:
+    return _mapping(cast(object, yaml.safe_load(PUBLISH.read_text(encoding="utf-8"))))
 
 
 def test_retired_train_has_no_automatic_trigger() -> None:
@@ -27,12 +28,13 @@ def test_retired_train_has_no_automatic_trigger() -> None:
 def test_retired_train_has_no_repository_or_oidc_permissions() -> None:
     value = workflow()
     assert value["permissions"] == {}
-    assert value["jobs"]["retired"]["permissions"] == {}
+    jobs = _mapping(value["jobs"])
+    assert _mapping(jobs["retired"])["permissions"] == {}
 
 
 def test_manual_dispatch_fails_closed_without_release_actions() -> None:
     value = workflow()
-    job = value["jobs"]["retired"]
+    job = _mapping(_mapping(value["jobs"])["retired"])
     assert job["name"] == "Reject retired release train"
     assert job["steps"] == [
         {
