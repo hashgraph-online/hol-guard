@@ -14,6 +14,4 @@ ENV PATH="/hol-guard/.venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE="1" \
     PYTHONUNBUFFERED="1"
 
-USER nobody
-
 ENTRYPOINT ["python"]
