@@ -1,0 +1,58 @@
+name: Daemon edge cleanup shepherd
+
+on:
+  push:
+    branches:
+      - fix/rust-daemon-ux-hardening-definitive
+    paths:
+      - .github/workflows/daemon-edge-cleanup-shepherd.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daemon-edge-cleanup-shepherd
+  cancel-in-progress: false
+
+jobs:
+  clean:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Wait for the coordinated implementation commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS+5400))
+          while ((SECONDS<deadline)); do
+            message=$(gh api "/repos/${GITHUB_REPOSITORY}/commits/fix/rust-daemon-ux-hardening-definitive" --jq '.commit.message' 2>/dev/null || true)
+            if grep -q 'harden native daemon edge behavior' <<<"$message"; then exit 0; fi
+            sleep 30
+          done
+          exit 1
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/rust-daemon-ux-hardening-definitive
+          fetch-depth: 0
+      - name: Remove generated and one-shot delivery assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f test-inventory.json
+          rm -rf dist build
+          find . -maxdepth 3 -type f \( -name '*.profraw' -o -name '*.gcda' -o -name 'rust-migration-audit.json' \) -delete
+          rm .github/workflows/daemon-edge-cleanup-shepherd.yml
+          git add -A
+          git diff --cached --check
+      - name: Publish clean exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git commit --signoff -m "chore(guard): remove daemon hardening build residue"
+          git push origin HEAD:fix/rust-daemon-ux-hardening-definitive
