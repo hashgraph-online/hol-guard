@@ -8,7 +8,7 @@ from pathlib import Path
 from ..secret_sensitivity import classify_secret_path
 
 _DYNAMIC_PATH_MARKERS = ("$", "`", "*", "?", "[", "]", "{", "}", "\x00")
-_SHELL_CONTROL_CHARACTERS = frozenset(";&|<>()")
+_SHELL_CONTROL_CHARACTERS = frozenset(";&|<>()\r\n")
 _PROTECTED_DIRECTORY_NAMES = frozenset({".aws", ".codex", ".docker", ".git", ".gnupg", ".hol-guard", ".kube", ".ssh"})
 
 
@@ -22,7 +22,6 @@ def is_safe_routine_directory_creation(
 
     if "\n" in command_text or "\r" in command_text:
         return False
-
     try:
         lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|<>()")
         lexer.whitespace_split = True

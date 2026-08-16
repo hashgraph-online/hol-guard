@@ -156,7 +156,7 @@ def _run_apps_command(
     return 0
 
 def _apps_disconnect_confirm_command(harness: str, confirmation_phrase: str, *, surface: str | None) -> str:
-    surface_args = f" --surface {surface}" if surface in {"editor", "cli"} else ""
+    surface_args = f" --surface {surface}" if surface else ""
     return f"hol-guard apps disconnect {harness}{surface_args} --confirm {confirmation_phrase}"
 
 def _open_guard_cloud_app(

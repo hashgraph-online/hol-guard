@@ -39,7 +39,8 @@ def _benign(command: str, *, repository: Path, home: Path) -> bool:
 
 def _trust_guard_executable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     executable_directory = "Scripts" if sys.platform == "win32" else "bin"
-    executable = tmp_path / executable_directory / "hol-guard"
+    executable_name = "hol-guard.exe" if sys.platform == "win32" else "hol-guard"
+    executable = tmp_path / executable_directory / executable_name
     executable.parent.mkdir()
     _ = executable.write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr(sys, "prefix", str(tmp_path))
@@ -53,6 +54,16 @@ def _trust_guard_executable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         "_which_for_execution_cwd",
         trusted_guard_path,
     )
+
+
+def test_windows_managed_guard_launcher_is_trusted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    _trust_guard_executable(tmp_path, monkeypatch)
+
+    assert _benign("hol-guard status", repository=tmp_path, home=tmp_path)
 
 
 def test_mcp_search_query_is_data_but_name_alone_is_not_trust_proof() -> None:

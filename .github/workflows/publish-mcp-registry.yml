@@ -1,0 +1,140 @@
+name: Publish to MCP Registry
+
+on:
+  push:
+    branches: [main, release/3.0]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: hol-guard-mcp-registry-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish verified MCP metadata
+    if: >-
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      !contains(github.event.head_commit.message || '', '[skip release publish]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out immutable release source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Wait for the canonical release tag
+        id: release
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          tag=""
+          for attempt in $(seq 1 180); do
+            git fetch --force --tags origin
+            if [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
+              tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.0a*' | sort -V | tail -n 1)
+            elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
+              tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
+            else
+              echo "Unsupported release ref: $SOURCE_REF" >&2
+              exit 1
+            fi
+            if [[ -n "$tag" ]]; then
+              break
+            fi
+            if [[ "$attempt" == "180" ]]; then
+              echo "No canonical release tag appeared for $SOURCE_SHA" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+          if [[ "$tag" == alpha/v* ]]; then
+            version="${tag#alpha/v}"
+          else
+            version="${tag#v}"
+          fi
+          if [[ -z "$version" || "$version" == "$tag" ]]; then
+            echo "Could not derive package version from tag: $tag" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved MCP Registry version $version from $tag"
+
+      - name: Wait for the exact PyPI package
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error \
+              --proto '=https' --tlsv1.2 \
+              "https://pypi.org/pypi/hol-guard/${VERSION}/json" \
+              --output /tmp/hol-guard-pypi.json; then
+              jq -e --arg version "$VERSION" '.info.version == $version' /tmp/hol-guard-pypi.json >/dev/null
+              exit 0
+            fi
+            if [[ "$attempt" == "60" ]]; then
+              echo "hol-guard ${VERSION} did not become available on PyPI" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Stamp and verify Registry manifest
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          grep -Fq '<!-- mcp-name: io.github.hashgraph-online/hol-guard -->' README.md
+          jq --arg version "$VERSION" \
+            '.version = $version | .packages[0].version = $version' \
+            server.json > server.json.tmp
+          mv server.json.tmp server.json
+          jq -e '
+            (.description | type) == "string" and
+            (.description | length) >= 1 and
+            (.description | length) <= 100
+          ' server.json >/dev/null || {
+            echo "server.json description must be a non-empty string no longer than 100 characters" >&2
+            exit 1
+          }
+          jq -e --arg version "$VERSION" \
+            '.name == "io.github.hashgraph-online/hol-guard" and
+             .repository.url == "https://github.com/hashgraph-online/hol-guard" and
+             .packages[0].registryType == "pypi" and
+             .packages[0].identifier == "hol-guard" and
+             .packages[0].version == $version and
+             .version == $version and
+             .packages[0].transport.type == "stdio" and
+             [.packages[0].packageArguments[].value] == ["mcp", "serve", "--stdio"]' \
+            server.json >/dev/null
+
+      - name: Install pinned MCP Registry publisher
+        env:
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+          MCP_PUBLISHER_VERSION: v1.8.1
+        run: |
+          set -euo pipefail
+          archive=mcp-publisher_linux_amd64.tar.gz
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${archive}" \
+            --output "$archive"
+          printf '%s  %s\n' "$MCP_PUBLISHER_SHA256" "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" mcp-publisher
+          chmod 0755 mcp-publisher
+          ./mcp-publisher --help >/dev/null
+
+      - name: Authenticate with GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish immutable MCP server metadata
+        run: ./mcp-publisher publish

@@ -1,4 +1,4 @@
-import { parseAppDetail, PROTECT_ROUTE, resolveView, shouldFetchArtifactDiff, viewTitle } from "./app";
+import { parseAppDetail, PROTECT_ROUTE, resolveView, viewTitle } from "./app";
 import { harnessDisplayName, isDisplayableHarness, normalizeHarnessFilter, normalizeHarnessSlug } from "./approval-center-utils";
 import { appSetupTarget, isConnectableAppHarness } from "./apps/harness-setup-target";
 
@@ -23,10 +23,10 @@ assert(resolveView("/apps/*") === "fleet", "wildcard app route falls back to fle
 assert(resolveView("/apps/%2A") === "fleet", "encoded wildcard app route falls back to fleet");
 assert(resolveView(PROTECT_ROUTE) === "fleet", "/protect resolves to protect workspace view");
 assert(resolveView("/about") === "about", "/about resolves to about view");
+assert(resolveView("/extensions/command.git") === "extensions", "canonical extension detail route resolves to extensions view");
+assert(resolveView("/extensions/%2Fetc%2Fpasswd") === "extensions", "invalid nested extension route stays inside extensions fail-closed view");
 assert(viewTitle("about") === "About", "about view title is About");
-assert(!shouldFetchArtifactDiff("package_request"), "package approvals do not request unsupported artifact diffs");
-assert(shouldFetchArtifactDiff("mcp_server"), "configuration approvals continue to request artifact diffs");
-assert(!shouldFetchArtifactDiff("future_request"), "unknown approval types do not request unsupported artifact diffs");
+assert(viewTitle("extensions") === "Extensions", "extensions view uses Extensions title");
 
 assert(normalizeHarnessSlug(" OpenCode ") === "opencode", "normalizer trims and lowercases app slugs");
 assert(normalizeHarnessSlug("*") === null, "normalizer rejects wildcard pseudo-harness");

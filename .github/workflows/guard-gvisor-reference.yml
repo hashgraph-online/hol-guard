@@ -1,0 +1,67 @@
+name: Guard gVisor reference runtime
+
+on:
+  pull_request:
+    branches: [release/3.0]
+    paths:
+      - "src/codex_plugin_scanner/guard/runtime/gvisor_reference_runtime.py"
+      - "tests/test_guard_gvisor_reference_runtime.py"
+      - ".github/workflows/guard-gvisor-reference.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runsc-isolation-corpus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Python dependencies
+        run: uv sync --extra dev --frozen
+      - name: Install pinned gVisor and static BusyBox
+        env:
+          RUNSC_URL: https://storage.googleapis.com/gvisor/releases/release/20260727.0/x86_64/runsc
+          RUNSC_SHA512: ab99ea1b0e2d169ec95473ea6c44abdac9b6b63d9c483f898487fd2b3c32d63bfa9ea104a3d5eed217b90cfc880ceb7a1130a9f7daef6e50656b6e028a8f52e3
+        run: |
+          python - <<'PY'
+          import hashlib
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          destination = Path("/tmp/runsc")
+          with urllib.request.urlopen(os.environ["RUNSC_URL"], timeout=60) as response:
+              payload = response.read()
+          observed = hashlib.sha512(payload).hexdigest()
+          if observed != os.environ["RUNSC_SHA512"]:
+              raise SystemExit(f"runsc checksum mismatch: {observed}")
+          destination.write_bytes(payload)
+          destination.chmod(0o755)
+          PY
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq busybox-static
+          /tmp/runsc --version
+      - name: Run real isolation corpus
+        id: corpus
+        continue-on-error: true
+        env:
+          HOL_GUARD_RUNSC_INTEGRATION: "1"
+          HOL_GUARD_RUNSC_PATH: /tmp/runsc
+          HOL_GUARD_BUSYBOX_PATH: /usr/bin/busybox
+          HOST_SECRET: must-not-cross-runtime-boundary
+        run: sudo --preserve-env=HOL_GUARD_RUNSC_INTEGRATION,HOL_GUARD_RUNSC_PATH,HOL_GUARD_BUSYBOX_PATH,HOST_SECRET .venv/bin/python -m pytest -q tests/test_guard_gvisor_reference_runtime.py
+      - name: Diagnose corpus setup failure
+        if: steps.corpus.outcome == 'failure'
+        run: |
+          set +e
+          sudo /tmp/hol-guard-test/runsc --debug --debug-log=/tmp/runsc-debug.log --root /tmp/hol-guard-test/state --network none --platform systrap run --bundle /tmp/hol-guard-test/bundles/guard-breakout guard-diagnostic
+          code=$?
+          sudo tail -n 80 /tmp/runsc-debug.log
+          exit "$code"
+      - name: Verify no residual runsc state
+        if: always()
+        run: |
+          sudo test ! -d /tmp/hol-guard-test/state || sudo test -z "$(sudo find /tmp/hol-guard-test/state -mindepth 1 -print -quit)"

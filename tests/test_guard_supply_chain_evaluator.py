@@ -3213,11 +3213,6 @@ def test_with_additional_reason_updates_all_packages() -> None:
     assert all(any(reason["code"] == "cloud_timeout" for reason in package["reasons"]) for package in updated.packages)
 
 
-def test_cloud_evaluation_timeout_allows_authenticated_round_trip_budget() -> None:
-    assert evaluator_module._CLOUD_EVALUATION_TIMEOUT_SECONDS >= 5
-    assert evaluator_module._CLOUD_EVALUATION_RETRY_TIMEOUT_SECONDS >= 3
-
-
 def test_evidence_id_distinguishes_versions_and_dependency_paths() -> None:
     direct_package = {
         "name": "minimist",

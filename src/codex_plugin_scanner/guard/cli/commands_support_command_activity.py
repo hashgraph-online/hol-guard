@@ -11,6 +11,7 @@ from typing import cast
 
 from ..action_lattice import guard_action_severity
 from ..models import GuardAction
+from ..native_command_model import native_command_shadow_proposal
 from ..runtime.command_activity_contract import (
     ActivityApprovalReuseStatus,
     ActivityDecisionReason,
@@ -108,6 +109,10 @@ def record_pre_hook_command_activity_best_effort(
             return False
         shadow, shadow_failed = _build_shadow_best_effort(
             evaluation=evaluation,
+            command_text=_payload_command_text(payload),
+            guard_home=guard_home,
+            cwd=cwd,
+            home_dir=home_dir,
             policy_action=policy_action,
             activity_id=activity_id,
             occurred_at=occurred_at,
@@ -260,15 +265,43 @@ def record_command_activity_failure_best_effort(store: GuardStore, error_code: s
     _record_persistence_failure(store, error_code)
 
 
+def _compatibility_context(
+    evaluation: CompositeCommandEvaluation,
+) -> tuple[str | None, str | None]:
+    """Return only an explicit compatibility fallback already used by Python."""
+
+    for owned in evaluation.matches:
+        if owned.match.rule.compatibility_fallback and not owned.match.matcher_evidence:
+            return evaluation.controlling_action_class, evaluation.controlling_reason
+    return None, None
+
+
 def _build_shadow_best_effort(
     *,
     evaluation: CompositeCommandEvaluation,
+    command_text: str | None,
+    guard_home: Path,
+    cwd: Path | None,
+    home_dir: Path | None,
     policy_action: GuardAction,
     activity_id: str,
     occurred_at: datetime,
 ) -> tuple[CommandShadowObservation | None, bool]:
     try:
         proposal = baseline_command_shadow_proposal(evaluation)
+        if command_text is not None:
+            compatibility_action_class, compatibility_reason = _compatibility_context(evaluation)
+            with suppress(Exception):
+                native_proposal = native_command_shadow_proposal(
+                    command_text,
+                    guard_home=guard_home,
+                    cwd=cwd,
+                    home_dir=home_dir,
+                    compatibility_action_class=compatibility_action_class,
+                    compatibility_reason=compatibility_reason,
+                )
+                if native_proposal is not None:
+                    proposal = native_proposal
         return (
             build_command_shadow_observation(
                 evaluation,

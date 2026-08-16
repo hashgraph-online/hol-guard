@@ -10,11 +10,23 @@ function assert(condition: boolean, message: string): void {
 }
 
 function testSupportedAppSlugs(): void {
-  const expected = ["codex", "claude-code", "opencode", "copilot", "cursor", "gemini", "hermes", "openclaw", "kimi", "grok"];
+  const expected = [
+    "codex",
+    "claude-code",
+    "opencode",
+    "copilot",
+    "cursor",
+    "cline",
+    "gemini",
+    "hermes",
+    "openclaw",
+    "kimi",
+    "grok",
+  ];
   for (const slug of expected) {
     assert(SUPPORTED_APP_SLUGS.includes(slug as typeof SUPPORTED_APP_SLUGS[number]), `SUPPORTED_APP_SLUGS missing: ${slug}`);
   }
-  assert(SUPPORTED_APP_SLUGS.length === 10, `Expected 10 slugs, got ${SUPPORTED_APP_SLUGS.length}`);
+  assert(SUPPORTED_APP_SLUGS.length === expected.length, `Expected ${expected.length} slugs, got ${SUPPORTED_APP_SLUGS.length}`);
 }
 
 function testSupportedAppsBriefMentionsAllApps(): void {
@@ -22,6 +34,7 @@ function testSupportedAppsBriefMentionsAllApps(): void {
   assert(brief.includes("codex"), "SUPPORTED_APPS_BRIEF should mention Codex");
   assert(brief.includes("copilot"), "SUPPORTED_APPS_BRIEF should mention Copilot");
   assert(brief.includes("cursor"), "SUPPORTED_APPS_BRIEF should mention Cursor");
+  assert(brief.includes("cline"), "SUPPORTED_APPS_BRIEF should mention Cline");
   assert(brief.includes("grok"), "SUPPORTED_APPS_BRIEF should mention Grok");
   assert(SUPPORTED_APPS_BRIEF.length > 20, "SUPPORTED_APPS_BRIEF should be a non-trivial string");
 }

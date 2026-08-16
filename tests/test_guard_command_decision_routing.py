@@ -37,6 +37,10 @@ from codex_plugin_scanner.guard.runtime.effect_decision import (
     EffectDecisionRequest,
     evaluate_effect_decision,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -45,6 +49,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
     ExtensionControl,
     ExtensionControlLayer,
+)
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
+    ExtensionControlRuntimeSnapshot,
 )
 
 
@@ -107,6 +114,7 @@ def _registry(
         action_classes=action_classes,
         safer_alternatives=("Preview the operation.",),
         default_mode=mode,
+        example_command="test-tool inspect",
         matcher=cast(ExecutableMatcher, matcher)
         if matcher is not None
         else ExecutableMatcher(executables=frozenset({"test-tool"})),
@@ -204,6 +212,25 @@ def test_disabled_extension_blocks_an_observed_safe_variant() -> None:
     assert evaluation.minimum_action == "block"
     assert evaluation.decision_plane.action == "block"
     assert evaluation.control_resolution.blocked
+
+
+def test_unavailable_runtime_control_authority_fails_closed_with_private_evidence() -> None:
+    registry = _registry("disabled")
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(AuthorityHealth.UNENROLLED, 0, registry.catalog_digest, ())
+    )
+
+    evaluation = evaluate_command(
+        "test-tool target",
+        registry=registry,
+        extension_control_snapshot=snapshot,
+    )
+
+    assert evaluation.minimum_action == "block"
+    assert evaluation.control_resolution.blocked
+    assert [failure.code.value for failure in evaluation.control_resolution.failures] == ["authority-unavailable"]
+    assert evaluation.private_control_evidence == snapshot.private_evidence
+    assert "private_control_evidence" not in evaluation.to_dict()
 
 
 def test_required_extension_floors_remain_monotonic() -> None:

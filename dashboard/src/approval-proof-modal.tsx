@@ -9,12 +9,14 @@ type ApprovalProofModalProps = {
   detail: string;
   confirmLabel: string;
   approvalGate: GuardApprovalGatePublicConfig | null;
+  busy?: boolean;
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (credentials: { approval_password?: string; approval_totp_code?: string }) => void;
 };
 
 export function ApprovalProofModal(props: ApprovalProofModalProps) {
-  const { title, detail, confirmLabel, approvalGate, onCancel, onConfirm } = props;
+  const { title, detail, confirmLabel, approvalGate, busy = false, error = null, onCancel, onConfirm } = props;
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
 
@@ -33,14 +35,19 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
   const confirmDisabled = isApprovalProofSubmitDisabled(
     approvalGate,
     { approvalPassword: password, approvalTotpCode: totpCode },
-    false,
+    busy,
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="approval-proof-modal-title"
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+      >
         <SectionLabel>Approval required</SectionLabel>
-        <h2 className="mt-2 text-base font-semibold text-brand-dark">{title}</h2>
+        <h2 id="approval-proof-modal-title" className="mt-2 text-base font-semibold text-brand-dark">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">{detail}</p>
         <div className="mt-4">
           <ApprovalProofFieldInputs
@@ -51,12 +58,17 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
             onApprovalTotpCodeChange={handleTotpChange}
           />
         </div>
+        {error ? (
+          <p role="alert" className="mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention">
+            {error}
+          </p>
+        ) : null}
         <div className="mt-5 flex justify-end gap-2">
-          <ActionButton variant="outline" onClick={onCancel}>
+          <ActionButton variant="outline" onClick={onCancel} disabled={busy}>
             Cancel
           </ActionButton>
           <ActionButton onClick={handleConfirm} disabled={confirmDisabled}>
-            {confirmLabel}
+            {busy ? "Repairing…" : confirmLabel}
           </ActionButton>
         </div>
       </div>

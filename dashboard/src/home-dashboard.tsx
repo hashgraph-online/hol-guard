@@ -416,11 +416,7 @@ export function HomeWorkspace(props: {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <DeviceProofCard
-          device={snapshot.device}
-          proofStatus={snapshot.proof_status}
-          connectUrl={snapshot.connect_url}
-        />
+        <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
 
         <CloudStatusCard
           snapshot={snapshot}

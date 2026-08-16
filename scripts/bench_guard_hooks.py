@@ -23,6 +23,7 @@ Threshold mode:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import statistics
 import sys
@@ -37,7 +38,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
 from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookSourceFileRef, HookOutputSummary
+from codex_plugin_scanner.guard.runtime.hook_review_types import HookOutputSummary, HookReviewRequest, HookSourceFileRef
 from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -256,9 +257,7 @@ def _setup_cases(tmp: Path, workspace: Path) -> dict[str, HookReviewRequest]:
     )
 
     # output-scan-secret: secret in tool_response, no source_ref
-    scan_secret_content = (
-        'x = 1;\nconst credential = "BENCH_FIXTURE_CREDENTIAL_VALUE";\n' + "y = 2;\n" * 100
-    )
+    scan_secret_content = 'x = 1;\nconst credential = "BENCH_FIXTURE_CREDENTIAL_VALUE";\n' + "y = 2;\n" * 100
     cases["output-scan-secret"] = _make_request(
         harness="claude-code",
         event_name="PostToolUse",
@@ -285,10 +284,8 @@ def _parse_thresholds(threshold_str: str) -> dict[str, float]:
         name, value = part.split("=", 1)
         name = name.strip()
         value = value.strip().rstrip("ms").strip()
-        try:
+        with contextlib.suppress(ValueError):
             thresholds[name] = float(value)
-        except ValueError:
-            pass
     return thresholds
 
 
@@ -296,7 +293,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark HOL Guard fast hook review")
     parser.add_argument("--harness", default="pi", help="Harness name")
     parser.add_argument("--daemon", default="warm", help="Daemon state (warm/cold)")
-    parser.add_argument("--cases", default="small-post,read-ts-250kb,read-md-1mb,secret-early", help="Comma-separated case names")
+    parser.add_argument(
+        "--cases", default="small-post,read-ts-250kb,read-md-1mb,secret-early", help="Comma-separated case names"
+    )
     parser.add_argument("--iterations", type=int, default=50, help="Iterations per case")
     parser.add_argument("--json", default=None, help="Output JSON file path")
     parser.add_argument("--fail-p95", default=None, help="Threshold mode: case=p95ms,...")
@@ -338,9 +337,8 @@ def main() -> int:
 
         print(f"  {case_name}: p50={result['p50_ms']}ms p95={result['p95_ms']}ms p99={result['p99_ms']}ms")
 
-        if case_name in thresholds:
-            if result["p95_ms"] > thresholds[case_name]:
-                failed.append(f"{case_name}: p95={result['p95_ms']}ms > {thresholds[case_name]}ms")
+        if case_name in thresholds and result["p95_ms"] > thresholds[case_name]:
+            failed.append(f"{case_name}: p95={result['p95_ms']}ms > {thresholds[case_name]}ms")
 
     if args.json:
         output_path = Path(args.json)

@@ -6,6 +6,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..runtime.extension_control_runtime import (
+    ExtensionControlRuntimeSnapshot,
+    use_extension_control_snapshot,
+)
+
 if TYPE_CHECKING:
     from ..runtime.hook_review_types import HookOutputSummary, HookSourceFileRef
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
@@ -79,6 +85,10 @@ def _run_guard_hook_command(
         input_text=input_text,
         harness=args.harness,
     )
+    if _canonical_harness_name(args.harness) == "cline":
+        from ..adapters.cline_hook_payload import prepare_cline_hook_payload
+
+        payload = _normalize_hook_payload(prepare_cline_hook_payload(payload), harness=args.harness)
     if _canonical_harness_name(args.harness) == "cursor":
         from ..adapters.cursor_hooks import prepare_cursor_hook_payload
 
@@ -248,15 +258,21 @@ def _run_guard_hook_command(
     if result is not None:
         return result
     data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
-    runtime_artifact = _hook_runtime_artifact(
-        harness=args.harness,
-        payload=payload,
-        action_envelope=action_envelope,
-        data_flow_signals=data_flow_signals,
-        home_dir=context.home_dir,
-        guard_home=context.guard_home,
-        workspace=runtime_workspace,
+    extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        store.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        )
     )
+    with use_extension_control_snapshot(extension_control_snapshot):
+        runtime_artifact = _hook_runtime_artifact(
+            harness=args.harness,
+            payload=payload,
+            action_envelope=action_envelope,
+            data_flow_signals=data_flow_signals,
+            home_dir=context.home_dir,
+            guard_home=context.guard_home,
+            workspace=runtime_workspace,
+        )
     result = _run_hook_claude_permission_request(
         args,
         config=config,
@@ -315,15 +331,21 @@ def _run_guard_hook_command(
                 fresh_action_envelope,
                 workspace=runtime_workspace,
             )
-            fresh_runtime_artifact = _hook_runtime_artifact(
-                harness=args.harness,
-                payload=payload,
-                action_envelope=fresh_action_envelope,
-                data_flow_signals=fresh_data_flow_signals,
-                home_dir=context.home_dir,
-                guard_home=context.guard_home,
-                workspace=runtime_workspace,
+            fresh_extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+                store.read_extension_control_authority(
+                    catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+                )
             )
+            with use_extension_control_snapshot(fresh_extension_control_snapshot):
+                fresh_runtime_artifact = _hook_runtime_artifact(
+                    harness=args.harness,
+                    payload=payload,
+                    action_envelope=fresh_action_envelope,
+                    data_flow_signals=fresh_data_flow_signals,
+                    home_dir=context.home_dir,
+                    guard_home=context.guard_home,
+                    workspace=runtime_workspace,
+                )
             if fresh_runtime_artifact is None:
                 return None
             return _evaluate_runtime_artifact_hook(

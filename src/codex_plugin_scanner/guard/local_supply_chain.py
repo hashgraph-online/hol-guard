@@ -2194,7 +2194,7 @@ def _resolve_stored_package_policy_override(
         store=store,
     )
     fresh_local_approval = isinstance(decision, dict) and (
-        _is_fresh_artifact_approval(decision) or legacy_local_approval
+        _is_fresh_artifact_approval(decision, store=store) or legacy_local_approval
     )
     reuse = evaluate_approval_reuse(
         effective_current_action,
@@ -2292,15 +2292,25 @@ def _resolve_stored_package_policy_override(
     return _StoredPackagePolicyResolution(_package_evaluation_with_rejected_reuse(current_evaluation, reuse))
 
 
-def _is_fresh_artifact_approval(decision: dict[str, object]) -> bool:
+def _is_fresh_artifact_approval(decision: dict[str, object], *, store: Any) -> bool:
     decision_id = decision.get("decision_id")
-    return (
+    if not (
         isinstance(decision_id, int)
         and not isinstance(decision_id, bool)
         and decision.get("source") == "approval-gate"
         and decision.get("scope") == "artifact"
         and isinstance(decision.get("expires_at"), str)
-    )
+    ):
+        return False
+    request_id = decision.get("request_id")
+    request_getter = getattr(store, "get_approval_request", None)
+    if not isinstance(request_id, str) or not request_id or not callable(request_getter):
+        return False
+    try:
+        request = request_getter(request_id)
+    except Exception:
+        return False
+    return isinstance(request, dict) and request.get("resolution_scope") == "artifact"
 
 
 def _is_legacy_package_local_approval(decision: dict[str, object], *, store: Any) -> bool:
@@ -2654,16 +2664,32 @@ def _package_matched_cached_advisory_ids(store: Any, artifact: GuardArtifact) ->
     return tuple(sorted(matched_ids))
 
 
+def _package_feed_snapshot_hash(store: Any) -> str | None:
+    workspace_id = store.get_cloud_workspace_id()
+    if workspace_id is None:
+        return None
+    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
+    if not isinstance(cached_bundle, dict):
+        return None
+    bundle = cached_bundle.get("bundle")
+    if not isinstance(bundle, dict):
+        return None
+    value = bundle.get("feedSnapshotHash")
+    return value if isinstance(value, str) and value else None
+
+
 def _package_policy_gate_context(
     store: Any,
     artifact: GuardArtifact,
     evaluation: Any,
 ) -> dict[str, object]:
     return {
+        "bundle_version": evaluation.bundle_version,
         "decision": evaluation.decision,
         "enforcement": evaluation.enforcement,
         "entitlement_state": evaluation.entitlement_state,
         "exception_id": evaluation.exception_id,
+        "feed_snapshot_hash": _package_feed_snapshot_hash(store),
         "matched_advisory_ids": list(_package_matched_cached_advisory_ids(store, artifact)),
         "matched_rule_id": evaluation.matched_rule_id,
         "packages": list(evaluation.packages),

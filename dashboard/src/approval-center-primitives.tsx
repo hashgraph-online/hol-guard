@@ -25,6 +25,7 @@ import {
   HiMiniBugAnt,
   HiMiniCog6Tooth,
   HiMiniSquares2X2,
+  HiMiniPuzzlePiece,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -42,6 +43,7 @@ export type AppView =
   | "fleet"
   | "evidence"
   | "settings"
+  | "extensions"
   | "app-detail"
   | "supply-chain"
   | "audit"
@@ -164,6 +166,7 @@ const sidebarLinks = [
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
+  { href: "/extensions", label: "Extensions", view: "extensions", icon: HiMiniPuzzlePiece },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
   { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }
 ] as const;
@@ -279,16 +282,11 @@ export function ShellSidebar(props: {
                     {props.queuedCount > 0 ? "Review" : "Clear"}
                   </span>
                 </div>
-                {props.queuedCount > 0 ? (
-                  <a
-                    href={guardAwareHref("/inbox")}
-                    className="block text-[11px] font-medium leading-relaxed text-brand-blue underline underline-offset-2 hover:no-underline"
-                  >
-                    {props.queuedCount} local {props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision. Open Inbox to review.
-                  </a>
-                ) : (
-                  <p className="text-[11px] leading-relaxed text-brand-dark/70">No local approvals are waiting.</p>
-                )}
+                <p className="text-[11px] leading-relaxed text-brand-dark/70">
+                  {props.queuedCount > 0
+                    ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.`
+                    : "No local approvals are waiting."}
+                </p>
                 <GuardUpdatePanel
                   guardVersion={props.guardVersion}
                   updateStatus={props.updateStatus}

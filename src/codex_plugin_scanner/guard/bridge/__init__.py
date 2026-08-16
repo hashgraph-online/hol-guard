@@ -18,8 +18,12 @@ import requests
 
 from ..config import resolve_guard_home
 from ..daemon.manager import load_guard_daemon_auth_token
-from ..mdm.network import managed_requests_required, managed_requests_session
+from ..mdm.network import managed_requests_session
 from ..store import GuardStore
+
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_DAEMON_SESSION = requests.Session()
+_DAEMON_SESSION.trust_env = False
 
 
 @dataclass
@@ -148,8 +152,6 @@ class WebhookBackend(NotificationBackend):
 
 
 def _managed_post(url: str, *, payload: Mapping[str, object], timeout: int) -> requests.Response:
-    if not managed_requests_required():
-        return requests.post(url, json=payload, timeout=timeout)
     return managed_requests_session().post(url, json=payload, timeout=timeout)
 
 
@@ -220,6 +222,33 @@ def _validate_webhook_url(url: str) -> str:
     return parsed.geturl()
 
 
+def _validate_guard_daemon_url(url: str) -> str:
+    """Keep the daemon auth token on authenticated loopback IPC only."""
+
+    parsed = urlparse(url)
+    if parsed.scheme != "http" or parsed.hostname is None:
+        raise ValueError("Guard Bridge daemon URL must use loopback HTTP.")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.params:
+        raise ValueError("Guard Bridge daemon URL must be a credential-free loopback origin.")
+    if parsed.path not in {"", "/"}:
+        raise ValueError("Guard Bridge daemon URL must not contain a path.")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Guard Bridge daemon URL port is invalid.") from exc
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("Guard Bridge daemon URL port is invalid.")
+    hostname = parsed.hostname.lower()
+    if hostname not in _LOOPBACK_HOSTS:
+        try:
+            address = ipaddress.ip_address(hostname)
+        except ValueError as exc:
+            raise ValueError("Guard Bridge daemon URL must target loopback.") from exc
+        if not address.is_loopback:
+            raise ValueError("Guard Bridge daemon URL must target loopback.")
+    return f"http://{parsed.netloc}"
+
+
 class GuardBridge:
     """Bridge daemon that polls Guard daemon and sends notifications."""
 
@@ -237,12 +266,13 @@ class GuardBridge:
 
     def _fetch_pending_requests(self, guard_url: str) -> list[PendingRequest]:
         """Fetch pending requests from Guard daemon."""
+        guard_url = _validate_guard_daemon_url(guard_url)
         auth_token = load_guard_daemon_auth_token(self.store.guard_home)
         if auth_token is None:
             print("[Guard Bridge] No daemon auth token found - skipping poll.", file=sys.stderr)
             return []
         try:
-            resp = requests.get(
+            resp = _DAEMON_SESSION.get(
                 f"{guard_url}/v1/requests",
                 headers={"X-Guard-Token": auth_token},
                 timeout=10,
@@ -257,13 +287,13 @@ class GuardBridge:
 
     def _execute_resolution(self, action: str, request_id: str) -> bool:
         """Resolve requests through the Guard daemon contract."""
-        guard_url = self.config.guard_url or "http://127.0.0.1:4999"
+        guard_url = _validate_guard_daemon_url(self.config.guard_url or "http://127.0.0.1:4999")
         action_path = "approve" if action == "approve" else "block"
         auth_token = load_guard_daemon_auth_token(self.store.guard_home)
         if auth_token is None:
             return False
         try:
-            response = requests.post(
+            response = _DAEMON_SESSION.post(
                 f"{guard_url}/v1/requests/{request_id}/{action_path}",
                 json={
                     "scope": "artifact",
@@ -281,7 +311,7 @@ class GuardBridge:
 
     def run(self) -> None:
         """Run the polling loop."""
-        guard_url = self.config.guard_url or "http://127.0.0.1:4999"
+        guard_url = _validate_guard_daemon_url(self.config.guard_url or "http://127.0.0.1:4999")
         poll_interval = self.config.poll_interval
         self._running = True
 

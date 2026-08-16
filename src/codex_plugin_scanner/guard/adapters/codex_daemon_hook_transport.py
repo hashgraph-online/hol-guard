@@ -110,13 +110,17 @@ def _daemon_response_once(
             hook_event=hook_event,
         )
         current_state, current_key = _authenticated_state(state_path)
-        if current_state != state or not secrets.compare_digest(current_key, discovery_key):
+        if _daemon_generation_identity(current_state) != _daemon_generation_identity(
+            state
+        ) or not secrets.compare_digest(current_key, discovery_key):
             raise _DaemonGenerationChangedError("daemon state changed during identity verification")
         try:
             auth_token = _daemon_auth_token(state_path, state)
         except ValueError as error:
             current_state, current_key = _authenticated_state(state_path)
-            if current_state != state or not secrets.compare_digest(current_key, discovery_key):
+            if _daemon_generation_identity(current_state) != _daemon_generation_identity(
+                state
+            ) or not secrets.compare_digest(current_key, discovery_key):
                 raise _DaemonGenerationChangedError("daemon state changed before token authentication") from error
             raise
         remaining = _remaining_seconds(deadline)

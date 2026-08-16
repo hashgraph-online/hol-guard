@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -36,7 +38,6 @@ def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], 
         workspace_dir=workspace,
         guard_home=tmp_path / "Guard home with spaces",
         home_override_explicit=True,
-        workspace_override_explicit=True,
     )
     CodexHarnessAdapter().install(context)
     bridge_command = codex_adapter._hook_command_parts(context)
@@ -139,8 +140,7 @@ def test_verified_fallback_ignores_workspace_and_ambient_python_imports(
     assert trusted.cwd == Path(str(config["manifest_path"])).parent.resolve(strict=True)
     assert trusted.cwd != workspace.resolve()
     assert {"PYTHONPATH", "PYTHONSTARTUP", "VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT"}.isdisjoint(trusted.environment)
-    workspace_index = fallback_command.index("--workspace")
-    assert fallback_command[workspace_index + 1] == str(workspace)
+    assert "--workspace" not in fallback_command
     assert fallback_command[:3] == [str(Path(sys.executable).absolute()), "-I", "-c"]
     assert not marker.exists()
 
@@ -316,6 +316,61 @@ def test_isolated_process_closes_descendant_held_pipes_after_parent_exit(tmp_pat
     assert result.returncode == 0
     assert elapsed < 1
     assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Unix resident runtimes use an inherited liveness pipe")
+def test_parent_liveness_stops_child_after_supervisor_is_killed(tmp_path: Path) -> None:
+    cwd = tmp_path / "neutral"
+    cwd.mkdir(mode=0o700)
+    child_pid_path = tmp_path / "child.pid"
+    child = (
+        "import os;from pathlib import Path;"
+        f"Path({str(child_pid_path)!r}).write_text(str(os.getpid()));"
+        "descriptor=int(os.environ['HOL_GUARD_PARENT_LIVENESS_FD']);"
+        "os.fdopen(os.dup(descriptor),'rb',closefd=True).read(1)"
+    )
+    package_source = Path(launch_runtime.__file__).resolve().parents[2]
+    supervisor_code = (
+        "import sys;from pathlib import Path;"
+        "from codex_plugin_scanner.guard.codex_hook_launch_runtime import "
+        "isolated_hook_environment,run_isolated_hook_process;"
+        f"run_isolated_hook_process([sys.executable,'-I','-c',{child!r}],"
+        f"input_text='',cwd=Path({str(cwd)!r}),environment=isolated_hook_environment(),"
+        "timeout_seconds=60,parent_liveness=True)"
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(package_source)
+    supervisor = subprocess.Popen(
+        [sys.executable, "-c", supervisor_code],
+        cwd=cwd,
+        env=environment,
+    )
+    child_pid: int | None = None
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not child_pid_path.exists():
+            time.sleep(0.02)
+        assert child_pid_path.exists()
+        child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+
+        supervisor.kill()
+        supervisor.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.kill(child_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.02)
+        else:
+            pytest.fail("child outlived its supervisor liveness pipe")
+    finally:
+        if supervisor.poll() is None:
+            supervisor.kill()
+            supervisor.wait(timeout=5)
+        if child_pid is not None:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(child_pid, signal.SIGKILL)
 
 
 def test_isolated_process_returns_when_tree_termination_cannot_be_confirmed(

@@ -682,7 +682,7 @@ def test_pip_execution_argv_is_isolated_absolute_and_source_pinned(
         "pip",
         "--isolated",
         "--disable-pip-version-check",
-        "--no-input",
+        "--no-input", "--no-cache-dir",
         "install",
         "--upgrade",
         "hol-guard",
@@ -716,7 +716,7 @@ def test_manager_recovery_pip_uses_authenticated_python_and_pinned_source(
         "pip",
         "--isolated",
         "--disable-pip-version-check",
-        "--no-input",
+        "--no-input", "--no-cache-dir",
         "install",
         "hol-guard==2.2.3",
         "--index-url",
@@ -790,11 +790,10 @@ def test_pipx_execution_argv_is_absolute_and_source_pinned(
         "install",
         "--index-url",
         "https://pypi.org/simple",
-        "--python",
-        str(context.python.launch_path),
         *display[2:],
+        "--pip-args=--no-cache-dir",
     ]
-    assert context.installer is not None
+    assert "--python" not in command and context.installer is not None
     assert context.installer.canonical_path == manager.resolve()
     assert context.environment["PIPX_HOME"].endswith("/pipx")
     assert Path(context.environment["PIPX_HOME"]) / "venvs" / "hol-guard" == Path(
@@ -840,7 +839,7 @@ def test_pipx_runpip_execution_is_source_pinned(
         "install",
         "--upgrade",
         "--force-reinstall",
-        "--pre",
+        "--pre", "--no-cache-dir",
         "hol-guard==3.0.0a116",
         "--index-url",
         "https://packages.enterprise.example/simple",

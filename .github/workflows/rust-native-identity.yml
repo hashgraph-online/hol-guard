@@ -1,0 +1,47 @@
+name: Native runtime identity
+
+on:
+  pull_request:
+    paths:
+      - "src/codex_plugin_scanner/guard/native_runtime.py"
+      - "ci/native_runtime/test_native_runtime_manifest.py"
+      - "scripts/build_native_hol_guard_wheel.py"
+      - ".github/workflows/rust-native-identity.yml"
+  push:
+    branches: [release/3.0]
+    paths:
+      - "src/codex_plugin_scanner/guard/native_runtime.py"
+      - "ci/native_runtime/test_native_runtime_manifest.py"
+      - "scripts/build_native_hol_guard_wheel.py"
+      - ".github/workflows/rust-native-identity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-native-identity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  identity-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Lint native identity boundary
+        run: |
+          uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/native_runtime.py ci/native_runtime/test_native_runtime_manifest.py
+          uv run --no-sync python -m ruff format --check src/codex_plugin_scanner/guard/native_runtime.py
+      - name: Run manifest identity contracts
+        run: uv run --no-sync pytest ci/native_runtime/test_native_runtime_manifest.py --tb=short

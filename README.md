@@ -1,5 +1,7 @@
 # HOL Guard: Open-Source Antivirus for AI Agents
 
+<!-- mcp-name: io.github.hashgraph-online/hol-guard -->
+
 [![HOL Guard Version](https://img.shields.io/pypi/v/hol-guard.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/hol-guard/)
 [![Plugin Scanner Version](https://img.shields.io/pypi/v/plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/plugin-scanner/)
 [![HOL Guard Downloads](https://img.shields.io/pypi/dm/hol-guard?logo=pypi&logoColor=white)](https://pypi.org/project/hol-guard/)
@@ -29,7 +31,15 @@ hol-guard init
 
 `hol-guard init` discovers compatible AI agents, explains each setup change before applying it, and guides you through your first protected action.
 
-[Install guide](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md) · [Supported agents](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md) · [Local vs. cloud](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/local-vs-cloud.md) · [Security policy](https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md)
+Guard 3.x alphas are opt-in and do not replace the stable 2.x release selected by normal installers. To evaluate a published alpha, pin its exact version from the [GitHub prereleases](https://github.com/hashgraph-online/hol-guard/releases):
+
+```bash
+pipx install --force "hol-guard==3.0.0a1"
+```
+
+Return to the stable 2.x channel with `pipx install --force "hol-guard<3"`.
+
+[Install guide](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md) · [GuardPolicy v1alpha1](https://github.com/hashgraph-online/hol-guard/blob/main/spec/guard-policy/v1alpha1/README.md) · [Supported agents](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-support.md) · [Local vs. cloud](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/local-vs-cloud.md) · [Security policy](https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md)
 
 ## What HOL Guard Protects
 

@@ -1,4 +1,4 @@
-import { X as getDefaultExportFromCjs, r as reactExports, Y as React, j as jsxRuntimeExports, I as useFocusTrap, Z as HiMiniKey, S as SectionLabel, A as ActionButton, q as HiMiniShieldCheck, _ as HiMiniLockClosed, $ as HiMiniBellAlert, a0 as HiMiniAdjustmentsHorizontal, a1 as HiMiniCircleStack, a2 as TabBar, c as HiMiniChevronRight, a3 as resolveProtectionLevelCopy, a4 as fetchSettings, a5 as fetchRuntimeSnapshot, a6 as updateSettings, a7 as clearPolicy, a8 as clearReviewQueue, a9 as revokeApprovalGateCooldown, aa as disableApprovalGateTotp, ab as importSettings, ac as resetSettings, ad as enrollApprovalGateTotp, ae as verifyApprovalGateTotp, af as clearEvidence, ag as exportDiagnostics, ah as repairApprovalCenter, ai as exportSettings, aj as setupDesktopNotifications, k as EmptyState, n as GuardHero, ak as Tag, al as HiMiniMagnifyingGlass, am as HiMiniCog6Tooth, z as HiMiniChevronDown, m as HiMiniCheckCircle, K as HiMiniExclamationTriangle, an as approvalGateCooldownLabel, x as HiMiniXMark } from "../guard-dashboard.js";
+import { W as getDefaultExportFromCjs, r as reactExports, X as React, j as jsxRuntimeExports, F as useFocusTrap, Y as HiMiniKey, S as SectionLabel, A as ActionButton, o as HiMiniShieldCheck, Z as HiMiniLockClosed, _ as HiMiniBellAlert, $ as HiMiniAdjustmentsHorizontal, a0 as HiMiniCircleStack, a1 as TabBar, c as HiMiniChevronRight, a2 as resolveProtectionLevelCopy, a3 as fetchSettings, a4 as fetchRuntimeSnapshot, a5 as updateSettings, a6 as clearPolicy, a7 as clearReviewQueue, a8 as revokeApprovalGateCooldown, a9 as disableApprovalGateTotp, aa as importSettings, ab as resetSettings, ac as enrollApprovalGateTotp, ad as verifyApprovalGateTotp, ae as clearEvidence, af as exportDiagnostics, ag as repairApprovalCenter, ah as exportSettings, ai as setupDesktopNotifications, i as EmptyState, m as GuardHero, aj as Tag, ak as HiMiniMagnifyingGlass, al as HiMiniCog6Tooth, y as HiMiniChevronDown, l as HiMiniCheckCircle, J as HiMiniExclamationTriangle, am as approvalGateCooldownLabel, w as HiMiniXMark } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 var propTypes$2 = { exports: {} };
 var ReactPropTypesSecret_1;
@@ -2276,15 +2276,15 @@ function SettingsSectionShell({
     id: `settings-tab-${item.key}`
   }));
   const activeItem = localSettingsNavItems.find((item) => item.key === activeTab);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col gap-6", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-settings-shell flex min-h-0 flex-1 flex-col gap-6", children: [
     intro,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-settings-layout flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "nav",
         {
           "aria-label": "Settings section navigation",
           "data-testid": "settings-section-nav",
-          className: "hidden w-full shrink-0 lg:block lg:w-60",
+          className: "guard-settings-side-nav hidden w-full shrink-0 lg:block lg:w-60",
           children: /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-col gap-0.5 p-0", children: localSettingsNavGroups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400", children: group.label }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-col gap-0.5", children: localSettingsNavItems.filter((item) => item.group === group.key).map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2300,16 +2300,16 @@ function SettingsSectionShell({
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 min-w-0 flex-1 flex-col gap-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "-mx-1 overflow-x-auto px-1 lg:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs: mobileTabs, active: activeTab, onChange: onTabChange }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-settings-mobile-tabs -mx-1 overflow-x-auto px-1 lg:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs: mobileTabs, active: activeTab, onChange: onTabChange }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
             role: "tabpanel",
             id: `settings-panel-${activeTab}`,
             "aria-label": activeItem ? `${activeItem.label} settings` : void 0,
-            className: "guard-tab-enter flex min-h-[min(28rem,calc(100dvh-18rem))] flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-4 sm:p-6",
+            className: "guard-settings-panel guard-tab-enter flex min-h-[min(28rem,calc(100dvh-18rem))] flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-4 sm:p-6",
             children: [
-              activeItem ? /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mb-5 shrink-0 border-b border-slate-100 pb-4 lg:hidden", children: [
+              activeItem ? /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "guard-settings-mobile-heading mb-5 shrink-0 border-b border-slate-100 pb-4 lg:hidden", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: activeItem.label }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: activeItem.summary })
               ] }) : null,

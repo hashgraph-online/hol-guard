@@ -119,5 +119,7 @@ delivery, retry, and tests ship for each provider.
 
 - Guard architecture: [architecture.md](./architecture.md)
 - Incident response: [incident-response.md](./incident-response.md)
+- Protection incident response: [protection-incident-response-runbook.md](./protection-incident-response-runbook.md)
+- Protection credential rotation: [protection-credential-rotation-runbook.md](./protection-credential-rotation-runbook.md)
 - Remediation patterns: [remediation.md](./remediation.md)
 - Cloud API inventory: `hol-points-portal/docs/guard-cloud-api-inventory.generated.md`

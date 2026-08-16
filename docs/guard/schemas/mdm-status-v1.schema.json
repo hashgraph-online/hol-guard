@@ -10,7 +10,76 @@
     "scope": {"enum": ["machine", "user"]},
     "healthy": {"type": "boolean"},
     "state": {"enum": ["absent", "installed", "activated", "protected", "degraded", "repairable", "policy-invalid", "tampered", "unsupported"]},
-    "reasonCodes": {"type": "array", "items": {"type": ["string", "null"]}}
+    "reasonCodes": {"type": "array", "items": {"type": ["string", "null"]}},
+    "managedPolicy": {"type": "object"},
+    "results": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/networkDiagnostic"}
+    }
   },
+  "$defs": {
+    "networkDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint",
+        "dns",
+        "proxy",
+        "tls",
+        "clock",
+        "clockSkewSeconds",
+        "reachability",
+        "reasonCode"
+      ],
+      "properties": {
+        "endpoint": {"type": "string", "minLength": 1},
+        "dns": {"enum": ["ok", "failed", "not-tested", "invalid", "blocked"]},
+        "proxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "selected", "endpointHash", "dns", "authenticated"],
+          "properties": {
+            "mode": {"enum": ["system", "explicit", "none"]},
+            "selected": {"type": "boolean"},
+            "endpointHash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+            "dns": {"enum": ["ok", "failed", "not-tested"]},
+            "authenticated": {"type": "boolean"}
+          }
+        },
+        "tls": {"enum": ["trusted", "failed", "not-tested"]},
+        "clock": {"enum": ["ok", "skewed", "not-tested"]},
+        "clockSkewSeconds": {"type": ["integer", "null"], "minimum": 0},
+        "reachability": {"enum": ["reachable", "failed", "not-tested", "blocked"]},
+        "reasonCode": {
+          "enum": [
+            "endpoint_invalid",
+            "managed_public_registry_disabled",
+            "dns_resolution_failed",
+            "managed_proxy_url_mode_mismatch",
+            "managed_proxy_url_required",
+            "managed_proxy_url_invalid",
+            "managed_system_proxy_invalid",
+            "managed_proxy_credentials_forbidden",
+            "managed_proxy_credentials_invalid",
+            "managed_system_trust_invalid",
+            "managed_ca_bundle_invalid",
+            "proxy_resolution_failed",
+            "proxy_auth_required",
+            "proxy_unreachable",
+            "tls_trust_failed",
+            "clock_skew_detected",
+            "endpoint_unreachable",
+            "endpoint_reachable"
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "network-diagnose"}}},
+      "then": {"required": ["healthy", "managedPolicy", "results"]}
+    }
+  ],
   "additionalProperties": true
 }

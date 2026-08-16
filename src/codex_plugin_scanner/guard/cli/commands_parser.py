@@ -12,6 +12,7 @@ import argparse
 from ...argparse_utils import FriendlyArgumentParser
 from ._commands_shared import _GUARD_HELP_GROUPS
 from .commands_parser_cloud import _configure_guard_cloud_parsers
+from .commands_parser_desktop import _configure_guard_desktop_parser
 from .commands_parser_helpers import (
     _add_aibom_cli_args,
     _add_guard_cisco_mode_arg,
@@ -22,6 +23,7 @@ from .commands_parser_helpers import (
 from .commands_parser_local import _configure_guard_local_parsers
 from .commands_parser_mdm import _configure_guard_mdm_parsers
 from .commands_parser_policy import _configure_guard_policy_parsers
+from .commands_parser_risk_report import configure_guard_risk_report_parser
 
 
 def add_guard_parser(
@@ -51,7 +53,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         parser_class=FriendlyArgumentParser,
         metavar=(
-            "{start,status,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
+            "{start,status,risk-report,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
             "test-eval,command,verified-read,contained-write,mdm,"
             "receipts,inventory,abom,aibom,approvals,explain,allow,deny,policies,trust,exceptions,advisories,events,doctor,connect,"
             "remote-pair,disconnect,"
@@ -59,6 +61,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         ),
     )
     _configure_guard_local_parsers(guard_subparsers)
+    configure_guard_risk_report_parser(guard_subparsers)
+    _configure_guard_desktop_parser(guard_subparsers)
     _configure_guard_mdm_parsers(guard_subparsers)
     _configure_guard_policy_parsers(guard_subparsers)
     _configure_guard_cloud_parsers(guard_subparsers)

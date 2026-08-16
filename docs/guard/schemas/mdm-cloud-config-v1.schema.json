@@ -1,0 +1,129 @@
+{
+  "$id": "https://hol.org/schemas/guard/mdm-cloud-config-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "deviceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "expiresAt": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "type": "string"
+    },
+    "installationGeneration": {
+      "pattern": "^[0-9a-f]{32}$",
+      "type": "string"
+    },
+    "issuedAt": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "type": "string"
+    },
+    "notBefore": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "type": "string"
+    },
+    "policy": {
+      "properties": {
+        "schemaVersion": {
+          "const": "hol-guard-mdm-policy.v1"
+        }
+      },
+      "required": [
+        "schemaVersion"
+      ],
+      "type": "object"
+    },
+    "policyHash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "previousPolicyHash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "revision": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "rollback": {
+      "additionalProperties": false,
+      "properties": {
+        "authorized": {
+          "type": "boolean"
+        },
+        "fromRevision": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "authorized",
+        "fromRevision",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": "hol-guard-mdm-cloud-config.v1"
+    },
+    "signature": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "rsa-pss-sha256"
+        },
+        "value": {
+          "contentEncoding": "base64",
+          "maxLength": 16384,
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "value"
+      ],
+      "type": "object"
+    },
+    "signingKeyId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "workspaceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "workspaceId",
+    "deviceId",
+    "installationGeneration",
+    "revision",
+    "issuedAt",
+    "notBefore",
+    "expiresAt",
+    "policy",
+    "policyHash",
+    "previousPolicyHash",
+    "rollback",
+    "signingKeyId",
+    "signature"
+  ],
+  "title": "HOL Guard Cloud-managed MDM configuration v1",
+  "type": "object"
+}

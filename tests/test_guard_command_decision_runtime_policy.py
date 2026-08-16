@@ -8,6 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_artifact_policy_action
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime import secret_file_requests
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
@@ -34,6 +35,7 @@ def _failing_registry() -> CommandSafetyExtensionRegistry:
         risk_classes=("destructive_shell",),
         action_classes=(),
         safer_alternatives=("Review the operation.",),
+        example_command="test-tool inspect",
         matcher=_FailingMatcher(),
     )
     return CommandSafetyExtensionRegistry(
@@ -85,4 +87,28 @@ def test_matcher_failure_central_block_reaches_final_runtime_policy(
     artifact.metadata["command_action_floor"] = "invalid"
     assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
     artifact.metadata["command_action_floor"] = floor
+    assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"
+
+
+def test_verified_pytest_restricted_profile_overrides_generic_execution_floor(tmp_path: Path) -> None:
+    artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:pytest",
+        name="Bash pytest repository-code execution",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={
+            "action_class": "pytest repository-code execution",
+            "command_action_floor": "block",
+            "guard_default_action": "sandbox-required",
+            "reason_code": "pytest_restricted_profile_required",
+            "restricted_profile_version": "pytest-restricted-v1",
+        },
+    )
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path, default_action="allow")
+
+    assert _runtime_artifact_policy_action(config, artifact, "codex") == "sandbox-required"
+
+    artifact.metadata.pop("restricted_profile_version")
     assert _runtime_artifact_policy_action(config, artifact, "codex") == "block"

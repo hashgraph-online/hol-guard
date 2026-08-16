@@ -23,6 +23,12 @@ from .policy_bundle_trusted_keys import (
     policy_bundle_key_fingerprint,
     resolve_authorized_policy_bundle_signing_key,
 )
+from .policy_bundle_v2 import (
+    POLICY_BUNDLE_MAX_BYTES,
+    POLICY_BUNDLE_MAX_COLLECTION_ITEMS,
+    POLICY_BUNDLE_MAX_DEPTH,
+    POLICY_BUNDLE_MAX_STRING_LENGTH,
+)
 
 _POLICY_BUNDLE_CORE_KEYS = (
     "contractVersion",
@@ -138,6 +144,43 @@ _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS = frozenset(
         "unsupported_daemon_version",
     }
 )
+
+
+def _policy_bundle_resource_limit_error(value: object) -> str | None:
+    stack: list[tuple[object, int]] = [(value, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > POLICY_BUNDLE_MAX_DEPTH:
+            return "limit_depth"
+        if isinstance(current, str):
+            if len(current.encode("utf-8")) > POLICY_BUNDLE_MAX_STRING_LENGTH:
+                return "limit_string"
+            continue
+        if current is None or isinstance(current, (bool, int, float)):
+            continue
+        if isinstance(current, dict):
+            if len(current) > POLICY_BUNDLE_MAX_COLLECTION_ITEMS:
+                return "limit_collection"
+            if not all(isinstance(key, str) for key in current):
+                return "invalid_json_value"
+            stack.extend((item, depth + 1) for item in current.values())
+            continue
+        if isinstance(current, list):
+            if len(current) > POLICY_BUNDLE_MAX_COLLECTION_ITEMS:
+                return "limit_collection"
+            stack.extend((item, depth + 1) for item in current)
+            continue
+        return "invalid_json_value"
+    try:
+        encoded = json.dumps(
+            value,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (RecursionError, TypeError, ValueError):
+        return "invalid_json_value"
+    return "limit_bytes" if len(encoded) > POLICY_BUNDLE_MAX_BYTES else None
 
 
 def _stable_serialize(value: object) -> str:
@@ -317,6 +360,8 @@ def policy_bundle_daemon_version_supported(policy_bundle: dict[str, object]) -> 
 def policy_bundle_is_enforceable(policy_bundle: dict[str, object]) -> bool:
     """Return whether an authenticated rollout is intended as live authority."""
 
+    if policy_bundle.get("contractVersion") == "guard-policy-bundle.v2":
+        return True
     return policy_bundle.get("rolloutState") in _POLICY_BUNDLE_ENFORCEABLE_ROLLOUT_STATES
 
 
@@ -348,6 +393,17 @@ def policy_bundle_is_version_downgrade(
 
     if not isinstance(accepted_bundle, dict) or not accepted_bundle:
         return False
+    accepted_v2_version = accepted_bundle.get("bundleVersion")
+    candidate_v2_version = candidate_bundle.get("bundleVersion")
+    if (
+        isinstance(accepted_v2_version, int)
+        and not isinstance(accepted_v2_version, bool)
+        and isinstance(candidate_v2_version, int)
+        and not isinstance(candidate_v2_version, bool)
+    ):
+        if candidate_v2_version != accepted_v2_version:
+            return candidate_v2_version < accepted_v2_version
+        return accepted_bundle.get("bundleHash") != candidate_bundle.get("bundleHash")
     accepted_workspace = _non_empty_string(accepted_bundle.get("workspaceId"))
     candidate_workspace = _non_empty_string(candidate_bundle.get("workspaceId"))
     if accepted_workspace is not None and candidate_workspace is not None and accepted_workspace != candidate_workspace:
@@ -517,6 +573,9 @@ def validated_policy_bundle_payload(
     expected_workspace_id: str | None = None,
     now: float | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
+    resource_error = _policy_bundle_resource_limit_error(policy_bundle)
+    if resource_error is not None:
+        return None, resource_error
     required_top_level = (*_POLICY_BUNDLE_CORE_KEYS, "bundleHash", "acknowledgements")
     if any(key not in policy_bundle for key in required_top_level):
         return None, "missing_required_field"
@@ -605,7 +664,7 @@ def validated_policy_bundle_payload(
     canonical_payload = canonical_policy_bundle_payload(policy_bundle)
     payload_hash = _non_empty_string(policy_bundle.get("payloadHash"))
     computed_payload_hash = hashlib.sha256(canonical_payload).hexdigest()
-    if payload_hash is None:
+    if payload_hash is None or payload_hash != payload_hash.strip():
         return None, "invalid_payload_hash"
     if payload_hash.lower() not in {computed_payload_hash, f"sha256:{computed_payload_hash}"}:
         return None, "payload_hash_mismatch"

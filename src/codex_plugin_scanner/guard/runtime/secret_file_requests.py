@@ -21,6 +21,7 @@ from .secret_file_request_services import docker_requests as _docker_requests
 from .secret_file_request_services import encoded_payloads as _encoded_payloads
 from .secret_file_request_services import git_routines as _git_routines
 from .secret_file_request_services import github_pr_body_safety as _github_pr_body_safety
+from .secret_file_request_services import github_pr_ephemeral_body as _github_pr_ephemeral_body
 from .secret_file_request_services import github_pr_expansion as _github_pr_expansion
 from .secret_file_request_services import github_shell_capabilities as _github_shell_capabilities
 from .secret_file_request_services import interpreter_identity as _interpreter_identity
@@ -140,6 +141,7 @@ _SERVICE_MODULES = (
     _source_edit_context,
     _shell_quote_parsing,
     _github_pr_expansion,
+    _github_pr_ephemeral_body,
     _python_pytest_entrypoints,
     _pytest_target_detection,
     _github_pr_body_safety,

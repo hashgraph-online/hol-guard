@@ -1,0 +1,103 @@
+#![forbid(unsafe_code)]
+
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+
+pub const RULE_CONTRACT_SCHEMA: &str = "hol-guard-native-rule-contract.v2";
+const RULE_CONTRACT_DOMAIN: &[u8] = b"hol-guard-native-rule-contract.v2\0";
+
+const COMPONENTS: [(&str, &[u8]); 4] = [
+    (
+        "guard-rules",
+        include_bytes!("../../guard-rules/src/lib.rs"),
+    ),
+    (
+        "guard-scanner",
+        include_bytes!("../../guard-scanner/src/lib.rs"),
+    ),
+    (
+        "guard-secure-fs",
+        include_bytes!("../../guard-secure-fs/src/lib.rs"),
+    ),
+    (
+        "guard-hook-core",
+        include_bytes!("../../guard-hook-core/src/lib.rs"),
+    ),
+];
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleComponentDigest {
+    pub name: &'static str,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleContract {
+    pub schema: &'static str,
+    pub components: Vec<RuleComponentDigest>,
+    pub rule_digest: String,
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+pub fn rule_contract() -> RuleContract {
+    let components: Vec<RuleComponentDigest> = COMPONENTS
+        .iter()
+        .map(|(name, bytes)| RuleComponentDigest {
+            name,
+            sha256: sha256_hex(bytes),
+        })
+        .collect();
+
+    let mut combined = Sha256::new();
+    combined.update(RULE_CONTRACT_DOMAIN);
+    for component in &components {
+        combined.update(component.name.as_bytes());
+        combined.update([0]);
+        combined.update(component.sha256.as_bytes());
+        combined.update([0]);
+    }
+
+    RuleContract {
+        schema: RULE_CONTRACT_SCHEMA,
+        components,
+        rule_digest: hex::encode(combined.finalize()),
+    }
+}
+
+pub fn rule_digest() -> String {
+    rule_contract().rule_digest
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contract_is_stable_and_complete() {
+        let first = rule_contract();
+        let second = rule_contract();
+        assert_eq!(first, second);
+        assert_eq!(first.schema, RULE_CONTRACT_SCHEMA);
+        assert_eq!(
+            first
+                .components
+                .iter()
+                .map(|component| component.name)
+                .collect::<Vec<_>>(),
+            vec![
+                "guard-rules",
+                "guard-scanner",
+                "guard-secure-fs",
+                "guard-hook-core",
+            ]
+        );
+        assert!(first
+            .components
+            .iter()
+            .all(|component| component.sha256.len() == 64));
+        assert_eq!(first.rule_digest.len(), 64);
+    }
+}

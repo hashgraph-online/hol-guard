@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "researched_at": "2026-08-06",
+  "vscode_extension": {
+    "version": "4.1.6",
+    "tag_commit": "81cce3d70e10244cdde40dbd0eb0bb711c93006d",
+    "default_guard_transport": "hooks"
+  },
+  "cli": {
+    "package": "@cline/cli",
+    "version": "3.0.51",
+    "guard_transport": "plugin_when_live_proven"
+  },
+  "core": {
+    "package": "@cline/core",
+    "version": "0.0.71",
+    "guard_transport": "plugin_when_live_proven"
+  },
+  "jetbrains": {
+    "guard_status": "detect_only_unverified"
+  }
+}

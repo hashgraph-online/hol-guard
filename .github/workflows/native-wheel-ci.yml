@@ -1,0 +1,226 @@
+name: Native wheel CI
+
+on:
+  pull_request:
+    branches: [release/3.0]
+    paths:
+      - "rust/**"
+      - "scripts/build_native_hol_guard_wheel.py"
+      - "ci/native_runtime/test_native_hol_guard_wheel.py"
+      - "ci/native_runtime/probe_native_default_auto.py"
+      - "src/codex_plugin_scanner/guard/native_runtime.py"
+      - ".github/workflows/native-wheel-ci.yml"
+  push:
+    branches: [release/3.0]
+    paths:
+      - "rust/**"
+      - "scripts/build_native_hol_guard_wheel.py"
+      - "ci/native_runtime/test_native_hol_guard_wheel.py"
+      - "ci/native_runtime/probe_native_default_auto.py"
+      - "src/codex_plugin_scanner/guard/native_runtime.py"
+      - ".github/workflows/native-wheel-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-wheel-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Run wheel-builder contracts
+        run: uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py --tb=short
+      - name: Install pinned Rust toolchain and musl target
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Build pure Python wheel
+        run: uv run --no-sync python -m build --wheel --outdir pure-dist
+      - name: Build static native runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target x86_64-unknown-linux-musl -p hol-guard-runtime
+          runtime="rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime"
+          LDD_OUTPUT=$(ldd "$runtime" 2>&1 || true)
+          if grep -Eq 'not a dynamic executable|statically linked' <<< "$LDD_OUTPUT"; then
+            echo "Runtime is static"
+          else
+            echo "Linux runtime must be statically linked" >&2
+            printf '%s\n' "$LDD_OUTPUT" >&2
+            exit 1
+          fi
+          "$runtime" self-test --json
+      - name: Assemble and install native wheel
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          runtime="rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime"
+          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir native-dist \
+            --version "$VERSION" \
+            --platform-tag manylinux_2_17_x86_64 \
+            --target x86_64-unknown-linux-musl \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST"
+          uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
+          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY
+          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-guard-native-wheel-linux-x64
+          path: native-dist/*.whl
+          if-no-files-found: error
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            platform_tag: macosx_13_0_x86_64
+            target: x86_64-apple-darwin
+            deployment_target: "13.0"
+          - runner: macos-15
+            platform_tag: macosx_11_0_arm64
+            target: aarch64-apple-darwin
+            deployment_target: "11.0"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build pure Python wheel
+        run: uv run --no-sync python -m build --wheel --outdir pure-dist
+      - name: Build native runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          rust/target/release/hol-guard-runtime self-test --json
+      - name: Assemble and install native wheel
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          PLATFORM_TAG: ${{ matrix.platform_tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          runtime="rust/target/release/hol-guard-runtime"
+          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir native-dist \
+            --version "$VERSION" \
+            --platform-tag "$PLATFORM_TAG" \
+            --target "$TARGET" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST"
+          uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
+          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY
+          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-guard-native-wheel-${{ matrix.target }}
+          path: native-dist/*.whl
+          if-no-files-found: error
+
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build pure Python wheel
+        run: uv run --no-sync python -m build --wheel --outdir pure-dist
+      - name: Build native runtime
+        shell: pwsh
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          $version = uv run --no-sync python scripts/sync_repo_version.py --check
+          $env:HOL_GUARD_PACKAGE_VERSION = $version.Trim()
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          .\rust\target\release\hol-guard-runtime.exe self-test --json
+      - name: Assemble and install native wheel
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
+          $runtime = "rust\target\release\hol-guard-runtime.exe"
+          $caps = & $runtime capabilities --json | ConvertFrom-Json
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py `
+            --wheel "pure-dist\hol_guard-$version-py3-none-any.whl" `
+            --runtime $runtime `
+            --output-dir native-dist `
+            --version $version `
+            --platform-tag win_amd64 `
+            --target x86_64-pc-windows-msvc `
+            --source-sha $env:SOURCE_SHA `
+            --rule-digest $caps.rule_digest
+          $wheel = (Get-ChildItem native-dist\*.whl).FullName
+          uv pip install --python .venv\Scripts\python.exe --no-deps --force-reinstall $wheel
+          Remove-Item Env:HOL_GUARD_NATIVE -ErrorAction SilentlyContinue
+          Remove-Item Env:HOL_GUARD_NATIVE_BINARY -ErrorAction SilentlyContinue
+          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-guard-native-wheel-windows-x64
+          path: native-dist/*.whl
+          if-no-files-found: error

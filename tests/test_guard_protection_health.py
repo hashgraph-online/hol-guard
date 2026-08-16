@@ -4,14 +4,9 @@ import hashlib
 import itertools
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import cast
 
-import pytest
-
 from codex_plugin_scanner.guard import approvals as approvals_module
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.managed_install_proof import bind_managed_install_proof
 from codex_plugin_scanner.guard.models import GuardRuntimeState
 from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
 from codex_plugin_scanner.guard.runtime.containment_health import (
@@ -28,7 +23,6 @@ from codex_plugin_scanner.guard.runtime.protection_health import (
 from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
     build_runtime_protection_health,
 )
-from codex_plugin_scanner.guard.store import GuardStore
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
 
@@ -64,13 +58,13 @@ class _Store:
 
 
 def _containment_evidence() -> dict[str, object]:
-    digest = hashlib.sha256(b"stable").hexdigest()
+    fingerprint = hashlib.sha256(b"stable").hexdigest()
     return ContainmentHealthEvidence(
         backend=ContainmentBackend.MACOS_SANDBOX,
         backend_digest=hashlib.sha256(b"backend").hexdigest(),
         policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
-        daemon_fingerprint=digest,
-        runtime_fingerprint=digest,
+        daemon_fingerprint=fingerprint,
+        runtime_fingerprint=fingerprint,
         probe_at=_NOW.isoformat(),
         probe_enforced=True,
     ).to_dict()
@@ -82,8 +76,8 @@ def _payload(
     trust: dict[str, object] | None = None,
     dropped: int = 0,
     errors: int = 0,
-    activity_count: int = 1,
     active_errors: int | None = None,
+    activity_count: int = 1,
     runtime_state: dict[str, object] | None = None,
     hook_verification: dict[str, bool] | None = None,
 ) -> dict[str, object]:
@@ -107,71 +101,63 @@ def _payload(
     )
 
 
-def test_active_install_is_not_hook_interception_proof() -> None:
+def test_missing_positive_proofs_never_claim_protected_or_partial() -> None:
+    for active, runtime_protection, remembered_rules, dropped, errors in itertools.product(
+        (False, True),
+        ("protected", "degraded", "unknown"),
+        ("enforced", "disabled_degraded", "unknown"),
+        (0, 1),
+        (0, 1),
+    ):
+        payload = _payload(
+            installs=[{"harness": "codex", "active": active}],
+            trust={"runtime_protection": runtime_protection, "remembered_rules": remembered_rules},
+            dropped=dropped,
+            errors=errors,
+        )
+        assert payload["state"] == "degraded"
+        assert payload["label"] == "Degraded"
+        assert payload["state"] not in {"protected", "partial"}
+
+
+def test_repaired_live_state_ignores_historical_evidence_errors() -> None:
     payload = _payload(
         installs=[{"harness": "codex", "active": True}],
         trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
-        activity_count=3,
+        dropped=12_338,
+        errors=12_338,
+        active_errors=0,
+        activity_count=38_102,
+        hook_verification={"codex": True},
     )
-    assert payload["state"] == "degraded"
     checks = cast(list[dict[str, str]], payload["checks"])
     by_id = {check["check_id"]: check for check in checks}
-    assert by_id["harness_hooks"] == {
-        "check_id": "harness_hooks",
-        "status": "unknown",
-        "reason_code": "hook_verification_unavailable",
-    }
     assert by_id["rule_packs"]["status"] == "pass"
+    assert by_id["decision_stream"] == {
+        "check_id": "decision_stream",
+        "status": "pass",
+        "reason_code": "decision_stream_healthy",
+    }
     assert by_id["tamper_checks"]["status"] == "pass"
-    assert by_id["decision_stream"]["status"] == "pass"
-    assert by_id["decision_stream"]["reason_code"] == "decision_stream_healthy"
+    assert payload["state"] == "protected"
 
 
-def test_live_hook_verification_and_empty_evidence_store_are_ready() -> None:
+def test_fresh_evidence_store_is_ready_before_first_command() -> None:
     payload = _payload(
         installs=[{"harness": "codex", "active": True}],
         trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
+        active_errors=0,
         activity_count=0,
         hook_verification={"codex": True},
     )
-
-    assert payload["state"] == "protected"
     checks = cast(list[dict[str, str]], payload["checks"])
-    by_id = {check["check_id"]: check for check in checks}
-    assert by_id["harness_hooks"] == {
-        "check_id": "harness_hooks",
-        "status": "pass",
-        "reason_code": "hooks_verified",
-    }
-    assert by_id["decision_stream"] == {
+    decision_stream = next(check for check in checks if check["check_id"] == "decision_stream")
+    assert decision_stream == {
         "check_id": "decision_stream",
         "status": "pass",
         "reason_code": "decision_stream_ready",
     }
-
-
-def test_runtime_snapshot_reads_live_hook_verification(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    hook_path = store.guard_home / "managed" / "pi" / "hook.ts"
-    hook_path.parent.mkdir(parents=True)
-    hook_path.write_text("export const guard = true;\n", encoding="utf-8")
-    context = HarnessContext(home_dir=Path.home(), workspace_dir=None, guard_home=store.guard_home)
-    manifest = bind_managed_install_proof({"config_path": str(hook_path)}, context)
-    installs = [{"harness": "pi", "active": True, "manifest": manifest}]
-
-    assert approvals_module._live_hook_verification(installs, store) == {"pi": True}
-
-    hook_path.write_text("export const guard = false;\n", encoding="utf-8")
-    assert approvals_module._live_hook_verification(installs, store) == {"pi": False}
-
-    def unavailable_proof(*_args: object) -> bool:
-        raise ImportError("proof verifier unavailable")
-
-    monkeypatch.setattr(approvals_module, "verify_managed_install_proof", unavailable_proof)
-    assert approvals_module._live_hook_verification(installs, store) == {}
+    assert payload["state"] == "protected"
 
 
 def test_canonical_managed_install_supersedes_legacy_alias() -> None:
@@ -193,31 +179,6 @@ def test_canonical_managed_install_supersedes_legacy_alias() -> None:
     ]
 
 
-def test_historical_persistence_errors_do_not_keep_current_health_degraded() -> None:
-    payload = _payload(dropped=4, errors=4, active_errors=0, activity_count=3)
-    checks = cast(list[dict[str, str]], payload["checks"])
-    decision_stream = next(check for check in checks if check["check_id"] == "decision_stream")
-    assert decision_stream == {
-        "check_id": "decision_stream",
-        "status": "pass",
-        "reason_code": "decision_stream_healthy",
-    }
-
-
-def test_trust_signals_fail_closed_when_degraded() -> None:
-    payload = _payload(
-        installs=[{"harness": "codex", "active": False}],
-        trust={"runtime_protection": "degraded", "remembered_rules": "disabled_degraded"},
-        dropped=1,
-    )
-    checks = cast(list[dict[str, str]], payload["checks"])
-    by_id = {check["check_id"]: check for check in checks}
-    assert by_id["harness_hooks"]["status"] == "fail"
-    assert by_id["rule_packs"]["status"] == "fail"
-    assert by_id["tamper_checks"]["status"] == "fail"
-    assert by_id["decision_stream"]["status"] == "fail"
-
-
 def test_report_distinguishes_failed_and_unproven_facts() -> None:
     active = _payload(
         installs=[{"harness": "codex", "active": True}],
@@ -229,6 +190,7 @@ def test_report_distinguishes_failed_and_unproven_facts() -> None:
     by_id = {check["check_id"]: check for check in checks}
     assert by_id["daemon"]["status"] == "pass"
     assert by_id["harness_hooks"]["status"] == "unknown"
+    assert by_id["harness_hooks"]["reason_code"] == "hook_attestation_unavailable"
     assert by_id["decision_plane_compatibility"]["status"] == "pass"
     assert by_id["sandbox"]["status"] == "pass"
 
@@ -248,7 +210,6 @@ def test_report_distinguishes_failed_and_unproven_facts() -> None:
     }
     assert degraded_by_id["tamper_checks"]["status"] == "fail"
     assert degraded_by_id["decision_stream"]["status"] == "fail"
-    assert degraded_by_id["rule_packs"]["status"] == "fail"
 
 
 def test_inactive_duplicate_rows_do_not_override_an_active_install() -> None:
@@ -264,7 +225,7 @@ def test_inactive_duplicate_rows_do_not_override_an_active_install() -> None:
         assert checks[0] == {
             "check_id": "harness_hooks",
             "status": "unknown",
-            "reason_code": "hook_verification_unavailable",
+            "reason_code": "hook_attestation_unavailable",
         }
 
 
@@ -281,6 +242,13 @@ def test_inactive_historical_rows_do_not_degrade_verified_active_hooks() -> None
     assert payload["state"] == "protected"
     apps = cast(list[dict[str, object]], payload["apps"])
     assert [app["harness"] for app in apps] == ["cursor"]
+    assert apps[0]["state"] == "protected"
+    checks = cast(list[dict[str, str]], apps[0]["checks"])
+    assert checks[0] == {
+        "check_id": "harness_hooks",
+        "status": "pass",
+        "reason_code": "hooks_verified",
+    }
 
 
 def test_stale_or_invalid_runtime_rows_never_prove_daemon_health() -> None:

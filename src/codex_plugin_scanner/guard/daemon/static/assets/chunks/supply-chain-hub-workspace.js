@@ -1,5 +1,6 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { aM as isSupplyChainAuditIncomplete, aN as isSupplyChainAuditEvidence, r as reactExports, aO as buildApprovalProofCredentials, aP as isApprovalProofSubmitDisabled, j as jsxRuntimeExports, S as SectionLabel, aQ as ApprovalProofFieldInputs, A as ActionButton, aG as GuardHarnessActionError, aR as readString$1, aS as isRecord$1, m as HiMiniCheckCircle, aI as HiMiniArrowPath, K as HiMiniExclamationTriangle, ak as Tag, t as formatRelativeTime, aT as HiMiniClock, aU as IconActionButton, U as HiMiniXCircle, aJ as HiMiniTrash, q as HiMiniShieldCheck, P as HiMiniWrenchScrewdriver, aV as HiMiniBeaker, aW as ActivationSummary, aX as ActionResultPanel, al as HiMiniMagnifyingGlass, k as EmptyState, aY as HiMiniBugAnt, a4 as fetchSettings, x as HiMiniXMark, aZ as GuardModalLayer, a_ as ConnectFlowCard, a$ as ApprovalProofInline, b0 as HiMiniArrowTopRightOnSquare, b1 as HiMiniCloudArrowDown, b2 as fetchPackageFirewallStatus, b3 as runPackageAudit, b4 as resolveSupplyChainAuditFailure, b5 as runPackageSync, b6 as startPackageFirewallConnect, b7 as openPackageFirewallAuthorizeFallback, b8 as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, b9 as repairSupplyChainProtection, ba as runPackageFirewallAction, bb as parseInterceptProofSnapshot, bc as activatePackageFirewallRuntime, bd as EntitlementNotice, be as fetchReceipts, bf as WorkspacePageHeader, bg as __vitePreload } from "../guard-dashboard.js";
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/use-resolved-approval-gate.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
+import { aQ as isSupplyChainAuditIncomplete, aR as isSupplyChainAuditEvidence, aL as GuardHarnessActionError, aS as readString$1, aT as isRecord$1, r as reactExports, j as jsxRuntimeExports, l as HiMiniCheckCircle, ao as HiMiniArrowPath, J as HiMiniExclamationTriangle, aj as Tag, s as formatRelativeTime, aU as HiMiniClock, aV as IconActionButton, T as HiMiniXCircle, aN as HiMiniTrash, o as HiMiniShieldCheck, N as HiMiniWrenchScrewdriver, aW as HiMiniBeaker, aX as ActivationSummary, aY as ActionResultPanel, ak as HiMiniMagnifyingGlass, i as EmptyState, A as ActionButton, aZ as HiMiniBugAnt, w as HiMiniXMark, as as buildApprovalProofCredentials, a_ as GuardModalLayer, a$ as ConnectFlowCard, b0 as ApprovalProofInline, b1 as HiMiniArrowTopRightOnSquare, b2 as HiMiniCloudArrowDown, b3 as fetchPackageFirewallStatus, b4 as runPackageAudit, b5 as resolveSupplyChainAuditFailure, b6 as runPackageSync, b7 as startPackageFirewallConnect, b8 as openPackageFirewallAuthorizeFallback, b9 as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, ba as repairSupplyChainProtection, bb as runPackageFirewallAction, bc as parseInterceptProofSnapshot, bd as activatePackageFirewallRuntime, S as SectionLabel, be as EntitlementNotice, bf as fetchReceipts, au as WorkspacePageHeader, bg as __vitePreload } from "../guard-dashboard.js";
+import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -377,44 +378,6 @@ function packageWorkbenchEcosystems(findings) {
   return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
 }
 const SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS = "min-w-0 max-w-full space-y-6 overflow-x-hidden";
-function ApprovalProofModal(props) {
-  const { title, detail, confirmLabel, approvalGate, onCancel, onConfirm } = props;
-  const [password, setPassword] = reactExports.useState("");
-  const [totpCode, setTotpCode] = reactExports.useState("");
-  const handlePasswordChange = reactExports.useCallback((event) => {
-    setPassword(event.target.value);
-  }, []);
-  const handleTotpChange = reactExports.useCallback((event) => {
-    setTotpCode(event.target.value);
-  }, []);
-  const handleConfirm = reactExports.useCallback(() => {
-    onConfirm(buildApprovalProofCredentials(approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }));
-  }, [approvalGate, onConfirm, password, totpCode]);
-  const confirmDisabled = isApprovalProofSubmitDisabled(
-    approvalGate,
-    { approvalPassword: password, approvalTotpCode: totpCode },
-    false
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "mt-2 text-base font-semibold text-brand-dark", children: title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: detail }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalProofFieldInputs,
-      {
-        approvalGate,
-        approvalPassword: password,
-        approvalTotpCode: totpCode,
-        onApprovalPasswordChange: handlePasswordChange,
-        onApprovalTotpCodeChange: handleTotpChange
-      }
-    ) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onCancel, children: "Cancel" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConfirm, disabled: confirmDisabled, children: confirmLabel })
-    ] })
-  ] }) });
-}
 const APPROVAL_GATE_REQUIRED_CODES = /* @__PURE__ */ new Set([
   "approval_gate_required",
   "approval_gate_password_required",
@@ -941,7 +904,7 @@ function FailureBanner({ failed }) {
   );
 }
 function FirewallControlsView({
-  activationAssist,
+  activationAssistError,
   activatingRuntime,
   data,
   pendingOp,
@@ -1014,7 +977,7 @@ function FirewallControlsView({
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ActivationSummary,
       {
-        activationAssist,
+        activationAssistError,
         lastAuditProofAt: data.last_audit_proof_at,
         activatingRuntime,
         onActivateRuntime,
@@ -1082,26 +1045,6 @@ function FirewallControlsView({
       );
     }) })
   ] });
-}
-function useResolvedApprovalGate(initialGate) {
-  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(initialGate);
-  reactExports.useEffect(() => {
-    setResolvedApprovalGate(initialGate);
-  }, [initialGate]);
-  const resolveApprovalGate = reactExports.useCallback(async () => {
-    if (resolvedApprovalGate !== null) {
-      return resolvedApprovalGate;
-    }
-    try {
-      const payload = await fetchSettings();
-      const gate = payload.settings.approval_gate ?? null;
-      setResolvedApprovalGate(gate);
-      return gate;
-    } catch {
-      return null;
-    }
-  }, [resolvedApprovalGate]);
-  return { resolvedApprovalGate, resolveApprovalGate };
 }
 function ManagerProofRow({
   manager,
@@ -1622,7 +1565,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
   const [lastFailed, setLastFailed] = reactExports.useState(null);
   const [connectError, setConnectError] = reactExports.useState(null);
-  const [activationAssist, setActivationAssist] = reactExports.useState(null);
+  const [activationAssistError, setActivationAssistError] = reactExports.useState(null);
   const [startingConnect, setStartingConnect] = reactExports.useState(false);
   const [activatingRuntime, setActivatingRuntime] = reactExports.useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = reactExports.useState(null);
@@ -1707,7 +1650,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setPendingOp({ op: "audit", manager: null });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssist(null);
+      setActivationAssistError(null);
       onAuditErrorChange?.(null);
       onAuditStarted?.();
       onAuditRunningChange?.(true);
@@ -1855,7 +1798,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const handleStartConnect = reactExports.useCallback(async () => {
     setStartingConnect(true);
     setConnectError(null);
-    setActivationAssist(null);
+    setActivationAssistError(null);
     try {
       const connectFlow = await startPackageFirewallConnect();
       const popupBlocked = Boolean(
@@ -2075,7 +2018,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setPendingOp({ op, manager });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssist(null);
+      setActivationAssistError(null);
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
@@ -2115,7 +2058,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       setPendingOp({ op, manager: null });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssist(null);
+      setActivationAssistError(null);
       try {
         const response = await runPackageSync();
         setLastCompleted({ op, manager: null, response });
@@ -2198,17 +2141,13 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const handleRetry = reactExports.useCallback(() => void load(), [load]);
   const handleActivateRuntime = reactExports.useCallback(async () => {
     setActivatingRuntime(true);
-    setActivationAssist(null);
+    setActivationAssistError(null);
     try {
-      const message = await activatePackageFirewallRuntime();
-      setActivationAssist({ message, isError: false });
+      await activatePackageFirewallRuntime();
       await refreshAfterOp();
       await onStateChanged?.();
     } catch (error) {
-      setActivationAssist({
-        message: error instanceof Error ? error.message : "Unable to activate package protection.",
-        isError: true
-      });
+      setActivationAssistError(error instanceof Error ? error.message : "Unable to activate package protection.");
     } finally {
       setActivatingRuntime(false);
     }
@@ -2331,7 +2270,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
           onRefreshStatus: handleRetry,
           onOpenManagerDetails: handleOpenManagerDetails,
           activatingRuntime,
-          activationAssist
+          activationAssistError
         }
       )
     ] }),
@@ -2504,10 +2443,10 @@ function useSupplyChainAuditSession({
   };
 }
 const SupplyChainWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
+  () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
 );
 const AuditWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([6,1,2,5]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
+  () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([7,1,2,6,5]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
 );
 const FeedHealthWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./feed-health-workspace.js"), true ? __vite__mapDeps([3,1,2]) : void 0).then((m) => ({ default: m.FeedHealthWorkspace }))
@@ -2612,7 +2551,6 @@ const supplyChainHubWorkspace = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Ob
   hubTitleForTab
 }, Symbol.toStringTag, { value: "Module" }));
 export {
-  ApprovalProofModal as A,
   SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS as S,
   supplyChainFixAllButtonLabel as a,
   sortPackageWorkbenchFindings as b,
@@ -2620,6 +2558,5 @@ export {
   filterPackageWorkbenchFindings as f,
   isApprovalGateRequiredError as i,
   packageWorkbenchEcosystems as p,
-  supplyChainFixAllIsPending as s,
-  useResolvedApprovalGate as u
+  supplyChainFixAllIsPending as s
 };

@@ -71,6 +71,18 @@ class _DaemonHandler(BaseHTTPRequestHandler):
             )
             if type(self).challenge_mode == "wrong-proof":
                 response["proof"] = "0" * 64
+            if type(self).challenge_mode == "refresh-trust-status":
+                daemon_manager.write_guard_daemon_state(
+                    guard_home,
+                    int(state["port"]),
+                    type(self).auth_token,
+                    pid=int(state["pid"]),
+                    write_auth_token=False,
+                    host=str(state["host"]),
+                    state_id=str(state["state_id"]),
+                    started_at=str(state["started_at"]),
+                    trust_status={"status": f"refreshed-{type(self).challenge_count}"},
+                )
             if type(self).challenge_mode == "replace-state":
                 daemon_manager.write_guard_daemon_state(
                     guard_home,

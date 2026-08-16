@@ -282,22 +282,12 @@ const restartRequiredProtection: PackageManagerProtection = {
 const restartRequiredCopy = resolvePackageManagerProtectionCopy(restartRequiredProtection);
 assert(restartRequiredCopy.pathTone === "blue", "SC2b: restart_required tone should use blue");
 assert(
-  restartRequiredCopy.pathLabel.toLowerCase().includes("new terminal"),
-  `SC2b: restart_required label should explain the required terminal lifecycle — got: "${restartRequiredCopy.pathLabel}"`
+  restartRequiredCopy.pathLabel.toLowerCase().includes("activation"),
+  `SC2b: restart_required label should direct activation — got: "${restartRequiredCopy.pathLabel}"`
 );
 assert(
-  restartRequiredCopy.pathDetail.toLowerCase().includes("source the matching profile") &&
-    restartRequiredCopy.pathDetail.toLowerCase().includes("only if that app runs package managers"),
-  `SC2b: restart_required detail should explain terminal and AI-app restart scope — got: "${restartRequiredCopy.pathDetail}"`
-);
-
-const unconfiguredProfileCopy = resolvePackageManagerProtectionCopy({
-  ...restartRequiredProtection,
-  shell_profile_configured: false,
-});
-assert(
-  unconfiguredProfileCopy.pathDetail.includes("still needs the shim directory on PATH"),
-  `SC2c: unconfigured profile should explain the remaining PATH requirement — got: "${unconfiguredProfileCopy.pathDetail}"`,
+  restartRequiredCopy.pathDetail.toLowerCase().includes("finish activation"),
+  `SC2b: restart_required detail should explain the recovery action — got: "${restartRequiredCopy.pathDetail}"`
 );
 
 const absentCopy = resolvePackageManagerProtectionCopy(undefined);

@@ -73,6 +73,7 @@ def test_canonical_harnesses_match_launch_harnesses_and_existing_contracts() -> 
         "opencode",
         "copilot",
         "cursor",
+        "cline",
         "gemini",
         "hermes",
         "openclaw",
@@ -192,12 +193,14 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert routes["/protect"].writes_state is True
     assert routes["/apps/{slug}"].writes_state is True
     assert routes["/evidence"].writes_state is True
+    assert routes["/extensions"].writes_state is True
     assert routes["/supply-chain"].writes_state is True
     assert routes["/audit"].writes_state is True
     assert routes["/policy"].writes_state is True
     assert routes["/feed-health"].writes_state is True
     for route in routes:
         assert _GuardDaemonHandler._is_dashboard_route(route)
+    assert _GuardDaemonHandler._is_dashboard_route("/extensions/command.git")
     apis_by_method = {(api.method, api.path): api for api in LOCAL_API_OWNERSHIP}
     assert apis_by_method[("POST", "/v1/initialize")].auth_required is False
     assert apis_by_method[("GET", "/v1/connect/state")].writes_state is False

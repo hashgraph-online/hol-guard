@@ -1081,37 +1081,35 @@ class StoreSecretPolicyIntegrityMixin:
 
         def compute_prepared_state(base_state: dict[str, object]) -> dict[str, object]:
             connect_timeout_seconds = sqlite_connect_timeout_seconds()
-            with self._hold_storage_gate(exclusive=False):
-                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-                connection.row_factory = sqlite3.Row
-                try:
-                    connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                    return self._prepared_startup_policy_integrity_state(
-                        connection,
-                        key=raw_key,
-                        key_id=key_id,
-                        trusted_state=base_state,
-                    )
-                finally:
-                    connection.close()
+            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+            connection.row_factory = sqlite3.Row
+            try:
+                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
+                return self._prepared_startup_policy_integrity_state(
+                    connection,
+                    key=raw_key,
+                    key_id=key_id,
+                    trusted_state=base_state,
+                )
+            finally:
+                connection.close()
 
         prepared_state = compute_prepared_state(trusted_state)
         current_trusted_state = self._load_policy_integrity_control_state(create=False)
         if current_trusted_state is None:
             connect_timeout_seconds = sqlite_connect_timeout_seconds()
-            with self._hold_storage_gate(exclusive=False):
-                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-                connection.row_factory = sqlite3.Row
-                try:
-                    connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                    still_matches = self._prefetched_startup_state_still_matches_local_rows(
-                        connection,
-                        key=raw_key,
-                        key_id=key_id,
-                        trusted_state=trusted_state,
-                    )
-                finally:
-                    connection.close()
+            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+            connection.row_factory = sqlite3.Row
+            try:
+                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
+                still_matches = self._prefetched_startup_state_still_matches_local_rows(
+                    connection,
+                    key=raw_key,
+                    key_id=key_id,
+                    trusted_state=trusted_state,
+                )
+            finally:
+                connection.close()
             if prepared_state == trusted_state and still_matches:
                 self._startup_prefetched_policy_integrity_trusted_state = trusted_state
                 return

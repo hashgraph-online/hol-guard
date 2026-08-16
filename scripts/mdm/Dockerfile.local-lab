@@ -1,24 +1,19 @@
-FROM python:3.13-slim@sha256:c33f0bc4364a6881bed1ec0cc2665e6c53c87a43e774aaeab88e6f17af105e4f
+FROM ghcr.io/astral-sh/uv:0.9.26-python3.12-bookworm-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/hol-guard-source/src
+WORKDIR /hol-guard
 
-WORKDIR /hol-guard-source
+COPY pyproject.toml uv.lock README.md ./
+COPY docs ./docs
+COPY src ./src
+COPY tests ./tests
+COPY scripts/mdm ./scripts/mdm
 
-COPY docker-requirements.txt /tmp/docker-requirements.txt
-RUN python3 -m venv /hol-guard/.venv && \
-    /hol-guard/.venv/bin/python -m pip install --no-deps --require-hashes -r /tmp/docker-requirements.txt && \
-    /hol-guard/.venv/bin/python -c "import site; from pathlib import Path; Path(site.getsitepackages()[0], 'hol_guard_source.pth').write_text('/hol-guard-source/src\n')"
+RUN uv sync --extra dev --frozen
 
-COPY src /hol-guard-source/src
-COPY scripts/mdm/run-local-lab.py /hol-guard-source/scripts/mdm/run-local-lab.py
-RUN groupadd --system guardlab && \
-    useradd --system --gid guardlab --create-home --home-dir /home/guardlab guardlab && \
-    chown -R guardlab:guardlab /hol-guard /home/guardlab
+RUN useradd --create-home --uid 10001 guard && chown -R guard:guard /hol-guard
 
-USER guardlab
+ENV PATH="/hol-guard/.venv/bin:${PATH}"
 
-ENTRYPOINT ["/hol-guard/.venv/bin/python", "/hol-guard-source/scripts/mdm/run-local-lab.py"]
-CMD ["--json"]
+USER 10001:10001
+
+ENTRYPOINT ["python", "scripts/mdm/run-local-lab.py", "--json"]

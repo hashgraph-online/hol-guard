@@ -73,7 +73,8 @@ def _run_trusted_module(
             "-c",
             _TRUSTED_MODULE_BOOTSTRAP,
             json.dumps([str(site_packages)], separators=(",", ":")),
-            json.dumps([str(path) for path in extra_import_paths], separators=(",", ":")), str(python.parent.parent),
+            json.dumps([str(path) for path in extra_import_paths], separators=(",", ":")),
+            str(python.parent.parent),
             module,
             *args,
         ],
@@ -93,7 +94,9 @@ def test_trusted_pip_bootstrap_uses_validated_pipx_shared_path_without_site_hook
     pip_package.mkdir()
     (pip_package / "__init__.py").write_text("", encoding="utf-8")
     (pip_package / "__main__.py").write_text(
-        f"import json, sys\nassert sys.prefix == {str(python.parent.parent)!r}, (sys.prefix, sys.base_prefix)\nprint(json.dumps({{'marker': 'pipx-shared-pip', 'argv': sys.argv[1:]}}))\n",
+        "import json, sys\n"
+        f"assert sys.prefix == {str(python.parent.parent)!r}, (sys.prefix, sys.base_prefix)\n"
+        "print(json.dumps({'marker': 'pipx-shared-pip', 'argv': sys.argv[1:]}))\n",
         encoding="utf-8",
     )
     hook_marker = tmp_path / "pth-hook-ran"

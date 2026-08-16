@@ -1,0 +1,112 @@
+{
+  "schema": "hol-guard.native-capability-ownership.v1",
+  "source_default": "off",
+  "public_package": "hol-guard",
+  "native_runtime": "hol-guard-runtime",
+  "capabilities": [
+    {
+      "id": "post_tool_output_traversal",
+      "authority": "rust_eligible_python_reference",
+      "rust_owner": "guard-hook-core::extract_payload_output",
+      "python_owner": "guard.runtime.hook_review_engine",
+      "supported_native_platforms": [
+        "linux_x86_64",
+        "macos_x86_64",
+        "macos_arm64",
+        "windows_x86_64"
+      ],
+      "fallback": "python_reference",
+      "python_removal_status": "retain_supported_reference"
+    },
+    {
+      "id": "post_tool_secret_scan",
+      "authority": "rust_eligible_python_reference",
+      "rust_owner": "guard-scanner::scan_text",
+      "python_owner": "guard.runtime.hook_content_scanner.ContentScanner",
+      "supported_native_platforms": [
+        "linux_x86_64",
+        "macos_x86_64",
+        "macos_arm64",
+        "windows_x86_64"
+      ],
+      "fallback": "python_reference",
+      "python_removal_status": "retain_supported_reference"
+    },
+    {
+      "id": "post_tool_secure_source_read",
+      "authority": "rust_eligible_python_reference",
+      "rust_owner": "guard-secure-fs",
+      "python_owner": "guard.runtime.hook_review_engine",
+      "supported_native_platforms": [
+        "linux_x86_64",
+        "macos_x86_64",
+        "macos_arm64",
+        "windows_x86_64"
+      ],
+      "fallback": "python_reference",
+      "python_removal_status": "retain_supported_reference"
+    },
+    {
+      "id": "pre_tool_command_model",
+      "authority": "python_authoritative_rust_shadow",
+      "rust_owner": "guard-command::parse_command",
+      "python_owner": "guard.runtime.command_model",
+      "supported_native_platforms": [
+        "linux_x86_64",
+        "macos_x86_64",
+        "macos_arm64",
+        "windows_x86_64"
+      ],
+      "fallback": "python_authoritative",
+      "python_removal_status": "retain_authoritative"
+    },
+    {
+      "id": "prompt_injection",
+      "authority": "python_authoritative",
+      "rust_owner": null,
+      "python_owner": "guard.runtime.prompt_injection",
+      "supported_native_platforms": [],
+      "fallback": "not_applicable",
+      "python_removal_status": "retain_authoritative"
+    },
+    {
+      "id": "approvals_and_durable_grants",
+      "authority": "python_authoritative",
+      "rust_owner": null,
+      "python_owner": "guard.approvals and guard.store_approvals",
+      "supported_native_platforms": [],
+      "fallback": "not_applicable",
+      "python_removal_status": "retain_control_plane"
+    },
+    {
+      "id": "policy_authoring_and_receipts",
+      "authority": "python_authoritative",
+      "rust_owner": "guard-policy-snapshot (bounded evidence only)",
+      "python_owner": "guard config, policy, store, and receipt modules",
+      "supported_native_platforms": [],
+      "fallback": "not_applicable",
+      "python_removal_status": "retain_control_plane"
+    },
+    {
+      "id": "native_backend_response_selector",
+      "authority": "hook_worker_direct",
+      "rust_owner": null,
+      "python_owner": "guard.native_runtime.choose_post_tool_response",
+      "supported_native_platforms": [],
+      "fallback": "not_applicable",
+      "python_removal_status": "removed",
+      "evidence": {
+        "definition": "src/codex_plugin_scanner/guard/native_runtime.py::choose_post_tool_response",
+        "call_graph": "no supported callers in repository source, tests, scripts, actions, or dashboard",
+        "deletion_task": "NRH-T112",
+        "removal": "src/codex_plugin_scanner/guard/native_runtime.py no longer defines or exports choose_post_tool_response"
+      }
+    }
+  ],
+  "baseline": {
+    "branch": "release/3.0",
+    "commit": "0432719ee0d638443b7ef5208b4e16fc4ab70d80"
+  },
+  "retained_python_rule": "A Python backend is retained only when it is a named supported configuration and is exercised by installed-artifact CI.",
+  "dead_python_rule": "A replaced, unreachable, or untested Python runtime implementation is deleted in the same authority-cutover wave."
+}

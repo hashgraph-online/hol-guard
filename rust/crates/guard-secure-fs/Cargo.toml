@@ -1,0 +1,16 @@
+[package]
+name = "guard-secure-fs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+guard-rules = { path = "../guard-rules" }
+libc.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

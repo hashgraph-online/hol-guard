@@ -28,14 +28,16 @@ on:
     branches: [main, release/3.0]
   pull_request:
     branches: [main, release/3.0]
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, labeled, closed]
 
 permissions:
   contents: read
   pull-requests: read
 
 concurrency:
-  group: hol-guard-publish-${{ github.ref }}
+  # Serialize publish-capable events for one release branch while keeping
+  # ordinary pull-request validation isolated by its merge ref.
+  group: hol-guard-publish-${{ github.event.pull_request.merged && format('refs/heads/{0}', github.event.pull_request.base.ref) || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -79,8 +81,10 @@ jobs:
   build:
     name: Build + Verify
     if: >-
+      (github.event.action != 'closed' || github.event.pull_request.merged) &&
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
       (github.event_name != 'push' || github.run_attempt == 1) &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip release publish]')) &&
       (github.event.action != 'labeled' || github.event.label.name == 'publish-testpypi-canary')
     needs: authorize-release
     runs-on: ubuntu-latest
@@ -93,7 +97,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ (github.event.pull_request.merged && github.event.pull_request.merge_commit_sha) || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -119,7 +123,13 @@ jobs:
           GITHUB_REF: ${{ github.ref }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_ACTION: ${{ github.event.action }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_ACTOR_ID: ${{ github.actor_id }}
@@ -199,18 +209,25 @@ jobs:
           print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
           PY
             )
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]] || [[ "$GITHUB_EVENT_NAME" == "pull_request" && "$GITHUB_EVENT_ACTION" == "closed" && "$PR_MERGED" == "true" && "$PR_BASE_REF" == "release/3.0" && "$PR_HEAD_REPO" == "$GITHUB_REPOSITORY" && -n "$PR_MERGE_SHA" ]]; then
             if [[ "$RELEASE_PUBLISHING_ENABLED" != "true" ]]; then
               echo "Release publishing is disabled until protected environments are verified" >&2
               exit 1
             fi
-            if [[ "$SOURCE_SHA" != "$GITHUB_SHA" ]]; then
-              echo "Checked-out source does not match the immutable push source" >&2
+            TRAIN="3.0"
+            TRAIN_REF="refs/heads/release/${TRAIN}"
+            ACTUAL_REF="$GITHUB_REF"
+            EXPECTED_SOURCE="$GITHUB_SHA"
+            if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+              SOURCE_SHA="$PR_MERGE_SHA"
+              EXPECTED_SOURCE="$PR_MERGE_SHA"
+              ACTUAL_REF="$TRAIN_REF"
+            fi
+            if [[ "$SOURCE_SHA" != "$EXPECTED_SOURCE" ]]; then
+              echo "Checked-out source does not match the immutable release source" >&2
               exit 1
             fi
             CHANNEL="alpha"
-            TRAIN="3.0"
-            TRAIN_REF="refs/heads/release/${TRAIN}"
             PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
               list-versions --registry pypi)
             TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
@@ -246,7 +263,7 @@ jobs:
               --channel "$CHANNEL"
               --version "$RELEASE_VERSION"
               --git-ref "$TRAIN_REF"
-              --actual-ref "$GITHUB_REF"
+              --actual-ref "$ACTUAL_REF"
               --github-sha "$SOURCE_SHA"
               --expected-sha "$SOURCE_SHA"
             )
@@ -382,6 +399,183 @@ jobs:
           if-no-files-found: error
 
 
+
+  build-native-guard-wheels:
+    name: Build native Guard wheel (${{ matrix.target }})
+    if: >-
+      needs.build.result == 'success' &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.build.outputs.channel == 'canary'
+        ) ||
+        (
+          needs.build.outputs.channel == 'alpha' &&
+          (
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository) ||
+            (github.event_name == 'workflow_dispatch' && github.event.inputs.release_train == '3.0')
+          )
+        )
+      )
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform_tag: manylinux_2_17_x86_64
+            target: x86_64-unknown-linux-musl
+            runtime: rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime
+          - runner: macos-15-intel
+            platform_tag: macosx_13_0_x86_64
+            target: x86_64-apple-darwin
+            runtime: rust/target/x86_64-apple-darwin/release/hol-guard-runtime
+          - runner: macos-15
+            platform_tag: macosx_11_0_arm64
+            target: aarch64-apple-darwin
+            runtime: rust/target/aarch64-apple-darwin/release/hol-guard-runtime
+          - runner: windows-latest
+            platform_tag: win_amd64
+            target: x86_64-pc-windows-msvc
+            runtime: rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: ${{ needs.build.outputs.source_sha }}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distributions
+          path: base-dist/
+      - name: Install pinned Rust target
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+          rustup target add "$RUST_TARGET"
+      - name: Install Linux static toolchain
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Build version-matched runtime
+        shell: bash
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
+          HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          RUST_TARGET: ${{ matrix.target }}
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" -p hol-guard-runtime
+          "$RUNTIME" self-test --json
+      - name: Verify Linux runtime is static
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          LDD_OUTPUT=$(ldd "$RUNTIME" 2>&1 || true)
+          if ! grep -Eq 'not a dynamic executable|statically linked' <<< "$LDD_OUTPUT"; then
+            printf '%s\n' "$LDD_OUTPUT" >&2
+            exit 1
+          fi
+      - name: Assemble native wheel
+        shell: bash
+        env:
+          PLATFORM_TAG: ${{ matrix.platform_tag }}
+          RUNTIME: ${{ matrix.runtime }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          RULE_DIGEST=$("$RUNTIME" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "base-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$RUNTIME" \
+            --output-dir native-dist \
+            --version "$VERSION" \
+            --platform-tag "$PLATFORM_TAG" \
+            --target "$TARGET" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-guard-wheel-${{ matrix.platform_tag }}
+          path: native-dist/*.whl
+          if-no-files-found: error
+
+  assemble-native-guard-distributions:
+    name: Assemble native Guard distributions
+    if: >-
+      needs.build.result == 'success' &&
+      needs.build-native-guard-wheels.result == 'success'
+    needs: [build, build-native-guard-wheels]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: ${{ needs.build.outputs.source_sha }}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --extra publish --python 3.12
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distributions
+          path: dist/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: native-guard-wheel-*
+          path: dist/
+          merge-multiple: true
+      - name: Validate exact native artifact set
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          uv run --no-sync python scripts/verify_native_runtime_release.py validate-local \
+            --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" \
+            --dist-dir dist
+          uv run --no-sync twine check dist/*
+      - name: Record aggregate immutable hashes
+        run: |
+          find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256-native.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: distributions-native
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: distribution-sha256-native
+          path: distribution-sha256-native.txt
+          if-no-files-found: error
+
   publish-testpypi:
     name: Publish PR canary to TestPyPI
     if: >-
@@ -389,7 +583,7 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary')
-    needs: build
+    needs: [build, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -397,7 +591,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distributions
+          name: distributions-native
           path: dist/
       - name: Keep only the Guard canary distribution
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
@@ -444,7 +638,7 @@ jobs:
           bun-version: "1.3.14"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distributions
+          name: distributions-native
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -586,7 +780,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
       )
     needs: [build]
     runs-on: ubuntu-latest
@@ -636,14 +830,16 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      vars.ALPHA_TESTPYPI_ENABLED == 'true' &&
       needs.build.result == 'success' &&
+      needs.assemble-native-guard-distributions.result == 'success' &&
       needs.reserve-alpha-tag.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
       )
-    needs: [build, reserve-alpha-tag]
+    needs: [build, reserve-alpha-tag, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -658,13 +854,13 @@ jobs:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distributions
+          name: distributions-native
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distribution-sha256
+          name: distribution-sha256-native
       - name: Verify immutable build artifact
-        run: sha256sum --check distribution-sha256.txt
+        run: sha256sum --check distribution-sha256-native.txt
       - name: Keep only the Guard release distribution
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - name: Revalidate alpha source before TestPyPI
@@ -684,30 +880,32 @@ jobs:
             echo "Alpha tag targets a different source" >&2
             exit 1
           fi
-      - name: Inspect TestPyPI release state
+      - name: Plan TestPyPI release upload
         id: testpypi
         env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-            verify-release --registry testpypi --version "$VERSION" --dist-dir dist)
-          status=$(jq -r '.status' <<< "$result")
-          if [[ "$status" == "absent" ]]; then
+          rm -rf upload-dist
+          result=$(uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
+            plan-upload --registry testpypi --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" --dist-dir dist --output-dir upload-dist)
+          file_count=$(jq '.files | length' <<< "$result")
+          if [[ "$file_count" -gt 0 ]]; then
             echo "upload=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$status" == "exact" ]]; then
-            echo "upload=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Unexpected TestPyPI status: $status" >&2
-            exit 1
+            echo "upload=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.testpypi.outputs.upload == 'true'
         with:
           repository-url: https://test.pypi.org/legacy/
+          packages-dir: upload-dist/
       - name: Remove generated upload attestations
-        run: rm -f dist/*.publish.attestation
+        run: rm -f dist/*.publish.attestation upload-dist/*.publish.attestation
       - name: Download and verify exact TestPyPI artifacts
         env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           for attempt in {1..60}; do
@@ -726,9 +924,12 @@ jobs:
             fi
             sleep 5
           done
-          wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$result")
+          wheel=$(jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$result")
           [[ -n "$wheel" ]]
           [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
+          uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
+            verify-published --registry testpypi --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" --dist-dir dist
 
   publish-alpha-pypi:
     name: Publish alpha to PyPI
@@ -736,14 +937,14 @@ jobs:
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       needs.build.result == 'success' &&
+      needs.assemble-native-guard-distributions.result == 'success' &&
       needs.reserve-alpha-tag.result == 'success' &&
-      needs.publish-alpha-testpypi.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
       )
-    needs: [build, reserve-alpha-tag, publish-alpha-testpypi]
+    needs: [build, reserve-alpha-tag, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -759,31 +960,15 @@ jobs:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distributions
+          name: distributions-native
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distribution-sha256
+          name: distribution-sha256-native
       - name: Verify the TestPyPI-proven artifact
-        run: sha256sum --check distribution-sha256.txt
+        run: sha256sum --check distribution-sha256-native.txt
       - name: Keep only the Guard release distribution
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
-      - name: Inspect PyPI release state
-        id: pypi
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-            verify-release --registry pypi --version "$VERSION" --dist-dir dist)
-          status=$(jq -r '.status' <<< "$result")
-          if [[ "$status" == "absent" ]]; then
-            echo "upload=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$status" == "exact" ]]; then
-            echo "upload=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Unexpected PyPI status: $status" >&2
-            exit 1
-          fi
       - name: Revalidate alpha publication authorization
         env:
           ACTUAL_REF: ${{ github.ref }}
@@ -821,12 +1006,31 @@ jobs:
             [[ -z "$existing_version" ]] || validator_args+=(--existing-version "$existing_version")
           done
           uv run --with packaging==25.0 python scripts/validate_alpha_release.py "${validator_args[@]}"
+      - name: Plan PyPI release upload
+        id: pypi
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          rm -rf upload-dist
+          result=$(uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
+            plan-upload --registry pypi --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" --dist-dir dist --output-dir upload-dist)
+          file_count=$(jq '.files | length' <<< "$result")
+          if [[ "$file_count" -gt 0 ]]; then
+            echo "upload=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.pypi.outputs.upload == 'true'
+        with:
+          packages-dir: upload-dist/
       - name: Remove generated upload attestations
-        run: rm -f dist/*.publish.attestation
+        run: rm -f dist/*.publish.attestation upload-dist/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
         env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           for attempt in {1..60}; do
@@ -845,9 +1049,12 @@ jobs:
             fi
             sleep 5
           done
-          wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$result")
+          wheel=$(jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$result")
           [[ -n "$wheel" ]]
           [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
+          uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
+            verify-published --registry pypi --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" --dist-dir dist
 
   publish-main-testpypi:
     name: Verify main artifact on TestPyPI
@@ -1176,7 +1383,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
       )
     needs: [build, publish-alpha-pypi]
     runs-on: ubuntu-latest
@@ -1191,11 +1398,11 @@ jobs:
           ref: ${{ needs.build.outputs.source_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distributions
+          name: distributions-native
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distribution-sha256
+          name: distribution-sha256-native
       - name: Download release toolchain SBOM
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -1203,7 +1410,7 @@ jobs:
           path: dist/
       - name: Verify and select release assets
         run: |
-          sha256sum --check distribution-sha256.txt
+          sha256sum --check distribution-sha256-native.txt
           rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - name: Attest alpha release assets
         id: provenance
@@ -1285,7 +1492,7 @@ jobs:
         (
           (
             (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
           ) &&
           needs.build.outputs.channel == 'alpha' &&
           needs.publish-alpha-pypi.result == 'success' &&

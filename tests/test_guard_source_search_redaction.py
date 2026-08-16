@@ -222,5 +222,3 @@ def test_source_search_secret_never_leaks_from_live_request_payload(tmp_path: Pa
     assert event is not None
     assert secret not in json.dumps(event, sort_keys=True)
     assert "[redacted]" in str(event["rawCommand"])
-
-

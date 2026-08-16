@@ -1,0 +1,68 @@
+name: Cline MCP Marketplace
+
+on:
+  pull_request:
+    branches: [release/3.0]
+    paths:
+      - llms-install.md
+      - server.json
+      - .github/workflows/cline-marketplace.yml
+  push:
+    branches: [release/3.0]
+    paths:
+      - llms-install.md
+      - server.json
+      - .github/workflows/cline-marketplace.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Cline install contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+
+      - name: Set up Node for Cline CLI
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Install pinned official Cline CLI
+        run: |
+          set -euo pipefail
+          npm install --global --no-audit --no-fund cline@3.0.55
+          cline --version
+
+      - name: Verify current Cline CLI exposes MCP installation
+        run: |
+          set -euo pipefail
+          cline mcp install --help > /tmp/cline-mcp-help.txt
+          grep -Fq 'install' /tmp/cline-mcp-help.txt
+          grep -Fq -- '--transport' /tmp/cline-mcp-help.txt
+
+      - name: Verify install guide matches official Registry transport
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path("server.json").read_text(encoding="utf-8"))
+          guide = Path("llms-install.md").read_text(encoding="utf-8")
+          package = manifest["packages"][0]
+          assert package["identifier"] == "hol-guard"
+          assert package["transport"] == {"type": "stdio"}
+          args = [item["value"] for item in package["packageArguments"]]
+          assert args == ["mcp", "serve", "--stdio"]
+          expected = "cline mcp install hol-guard -- uvx --from hol-guard hol-guard " + " ".join(args)
+          assert expected in guide
+          assert '"command": "uvx"' in guide
+          assert '"--stdio"' in guide
+          assert "hol-guard guard mcp serve" not in guide
+          PY

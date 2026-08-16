@@ -39,6 +39,7 @@ from ..windows_paths import (
 )
 
 _DEFAULT_INDEX_URL = "https://pypi.org/simple"
+_PIP_NO_CACHE_ARG = "--no-cache-dir"
 _DEFAULT_TIMEOUT_SECONDS = 10 * 60.0
 _DEFAULT_OUTPUT_LIMIT_BYTES = 256 * 1024
 _PROCESS_MONITOR_INTERVAL_SECONDS = 0.01
@@ -487,6 +488,7 @@ class TrustedUpdateContext:
                 "--isolated",
                 "--disable-pip-version-check",
                 "--no-input",
+                _PIP_NO_CACHE_ARG,
                 *pip_args,
             )
             return _append_pip_source(command, self.source.index_url)
@@ -522,6 +524,7 @@ class TrustedUpdateContext:
             "--isolated",
             "--disable-pip-version-check",
             "--no-input",
+            _PIP_NO_CACHE_ARG,
             *display_command[3:],
         )
         return _append_pip_source(command, self.source.index_url)
@@ -1574,19 +1577,40 @@ def _uv_execution_command(executable: str, args: list[str], *, python: str, inde
     ]
 
 
+def _with_pipx_no_cache_args(args: list[str]) -> list[str]:
+    rest = list(args)
+    for index, token in enumerate(rest):
+        if token == "--pip-args":
+            if index + 1 >= len(rest):
+                rest.append(_PIP_NO_CACHE_ARG)
+                return rest
+            value = rest[index + 1]
+            if _PIP_NO_CACHE_ARG not in value.split():
+                rest[index + 1] = f"{value} {_PIP_NO_CACHE_ARG}".strip()
+            return rest
+        if token.startswith("--pip-args="):
+            value = token.split("=", 1)[1]
+            if _PIP_NO_CACHE_ARG not in value.split():
+                if value:
+                    rest[index] = f"--pip-args={value} {_PIP_NO_CACHE_ARG}"
+                else:
+                    rest[index] = f"--pip-args={_PIP_NO_CACHE_ARG}"
+            return rest
+    rest.append(f"--pip-args={_PIP_NO_CACHE_ARG}")
+    return rest
+
+
 def _pipx_execution_command(executable: str, args: list[str], *, python: str, index_url: str) -> list[str]:
     if not args:
         raise UpdateSubprocessError("update_installer_command_invalid")
-    if args[0] in {"install", "upgrade"}:
-        return [
-            executable,
-            args[0],
-            "--index-url",
-            index_url,
-            "--python",
-            python,
-            *args[1:],
-        ]
+    action = args[0]
+    if action in {"install", "upgrade"}:
+        rest = _with_pipx_no_cache_args(list(args[1:]))
+        command = [executable, action, "--index-url", index_url]
+        if action == "install" and "--force" not in rest:
+            command.extend(["--python", python])
+        command.extend(rest)
+        return command
     if len(args) >= 5 and args[:3] == ["runpip", "hol-guard", "install"]:
         install_args = args[3:]
         target = install_args[-1]
@@ -1597,6 +1621,8 @@ def _pipx_execution_command(executable: str, args: list[str], *, python: str, in
             ["--upgrade", "--force-reinstall", "--pre"],
         )
         if flags in allowed_flags and target and not target.startswith("-"):
+            if _PIP_NO_CACHE_ARG not in flags:
+                flags = [*flags, _PIP_NO_CACHE_ARG]
             return [
                 executable,
                 "runpip",

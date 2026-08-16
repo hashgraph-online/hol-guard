@@ -186,6 +186,10 @@ def _daemon_launcher_env(
             "PYTHONSAFEPATH": "1",
         }
     )
+    if getattr(sys, "frozen", False) is True:
+        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        if os.environ.get("HOL_GUARD_DESKTOP") == "1":
+            env["HOL_GUARD_DESKTOP"] = "1"
     if os.name == "nt":
         env["USERPROFILE"] = str(trusted_home)
     if guard_home is not None and not _guard_home_is_ephemeral(guard_home):
@@ -285,6 +289,23 @@ def _guard_daemon_launch_command(
     gate_on_stdin: bool = False,
 ) -> list[str]:
     trusted_home = _trusted_daemon_home(home_dir)
+    if bool(getattr(sys, "frozen", False)):
+        executable = Path(sys.executable).expanduser()
+        if not executable.is_absolute() or not executable.is_file():
+            raise RuntimeError("Frozen Guard daemon requires the signed Guard executable.")
+        if gate_on_stdin:
+            raise RuntimeError("Frozen Guard daemon gated launch is unavailable on this platform.")
+        return [
+            str(executable.resolve(strict=True)),
+            "daemon",
+            "--serve",
+            "--guard-home",
+            str(guard_home),
+            "--home",
+            str(trusted_home),
+            "--port",
+            str(port),
+        ]
     return _isolated_python_module_command(
         "codex_plugin_scanner.cli",
         _trusted_daemon_import_paths(),

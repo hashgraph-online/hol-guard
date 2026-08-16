@@ -287,13 +287,9 @@ class TestPiInstall:
         assert "the saved HOL Guard approval should allow it" not in text
         assert "Do not call ask for this HOL Guard approval" in text
         assert 'option labeled "I\'ve approved this request in HOL Guard"' in text
-        assert "const openedApprovalCenters = new Set<string>()" in text
-        assert "return new URL(approvalUrl).origin" in text
-        assert "openedApprovalCenters.has(approvalCenter)" in text
-        assert "if (details.kind === 'input') void openApprovalUrl(response, openedApprovalCenters)" in text
+        assert "void openApprovalUrl(response, openedApprovalUrls)" in text
         assert "trySpawnOpen(command, args)" in text
         assert "child.once('error', () => settle(false))" in text
-
         assert "pollApprovalResolution" in text
         assert "GUARD_APPROVAL_RESUME_FETCH_TIMEOUT_MS" in text
         assert "controller?.abort()" in text
@@ -306,7 +302,6 @@ class TestPiInstall:
         assert '"hook", "--json", "--guard-home"' in text
         assert '"guard", "hook"' not in text
         assert '"--harness", "pi"' in text
-        assert '"hook", "--json"' in text
         assert '"--home"' in text
         assert "ctx.cwd" in text
         assert "const timeoutHandle = setTimeout(() => {" in text
@@ -369,28 +364,6 @@ class TestPiInstall:
         # Reviewed excerpt still returned when not proven safe
         assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
 
-    def test_reinstall_migrates_existing_extension_to_deadline_retry_contract(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
-        adapter = get_adapter("pi")
-        first = adapter.install(ctx)
-        extension_path = Path(str(first["config_path"]))
-        extension_path.write_text("// stale managed Pi extension\n", encoding="utf-8")
-
-        adapter.install(ctx)
-
-        migrated = extension_path.read_text(encoding="utf-8")
-        assert "guard_remaining_ms" in migrated
-        assert "transient_overload" in migrated
-        assert "25 + Math.floor(Math.random() * 51)" in migrated
-
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
@@ -406,7 +379,10 @@ class TestPiInstall:
         assert "[...GUARD_CLI_WRAPPER_ARGS, JSON.stringify(args)]" in text
         assert "async function daemonGuardResponse(" in text
         assert "await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?" in text
-        assert "serializedPayload, cwd, GUARD_DAEMON_TIMEOUT_MS, deadlineAt," in text
+        assert "serializedPayload, cwd, GUARD_DAEMON_TIMEOUT_MS, deadlineAt" in text
+        assert "parsedPayload.guard_remaining_ms" in text
+        assert "body: daemonPayload" in text
+        assert 'recoveryKind: "authenticated-control-plane-failure",\n        };' in text
         assert "const response = await runGuard(" in text
         assert "if (result.error) {" in text
         assert "const errorMessage = result.error.message;" in text
@@ -415,8 +391,6 @@ class TestPiInstall:
         assert "errorCode === 'ETIMEDOUT'" in text
         assert "could not complete fallback review before the Pi deadline" in text
         assert "HOL Guard Pi hook failed before completing review" in text
-        assert "GUARD_COMPATIBILITY_VERSION" in text
-        assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in text
 
     def test_install_writes_managed_extension_that_truncates_post_tool_payloads(
         self,
@@ -483,6 +457,30 @@ class TestPiInstall:
         # When truncated, the reviewed excerpt (not the full unreviewed output) is
         # returned to Pi so omitted content never reaches the model.
         assert "function reviewedToolResult(" in text
+        assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
+        assert "guardPayload.tool_response = event.content" in text
+        assert "stdout: toolOutput" in text
+        assert "contentText(event.content)" not in text
+        assert "options?.enforceSizeCap === true" in text
+        assert 'payloadToSend.hook_event_name === "PostToolUse"' not in text
+        assert "delete reducedPayload.stdout;" not in text
+        # Source-ref fast path support
+        assert "guard_source_ref" in text
+        assert "digestOutputText" in text
+        assert "sourceFileRefForPostToolUse" in text
+        assert "GUARD_SOURCE_REF_MAX_OUTPUT_CHARS" in text
+        assert "GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES" in text
+        assert "reviewed_output_sha256" in text
+        assert 'response.model_output_action === "allow_original"' in text
+        assert "response.reviewed_output_sha256 === digest.sha256" in text
+        # digestOutputText must only hash text-bearing fields, not metadata
+        # like {type: "text"} — otherwise structured source reads never match
+        assert "record.type === 'text'" in text
+        assert "record.text" in text
+        assert "OUTPUT_TEXT_KEYS" in text
+        # guard_payload_ref fallback still present
+        assert "guard_payload_ref" in text
+        # Reviewed excerpt still returned when not proven safe
         assert "return reviewedToolResult(reviewedContent, event.details, event.isError === true);" in text
 
     def test_omp_install_writes_only_omp_extension(self, tmp_path: Path, monkeypatch) -> None:

@@ -29,7 +29,6 @@ _API_OPTIONS_WITH_VALUES = frozenset(
     }
 )
 _API_BOOLEAN_OPTIONS = frozenset({"--include", "--paginate", "--silent", "--slurp", "--verbose", "-i"})
-_API_OUTPUT_FORMAT_OPTIONS = frozenset({"--jq", "--template"})
 _METHOD_OVERRIDE_HEADER = re.compile(r"\Ax-http-method-override\s*:", re.IGNORECASE)
 _SAFE_ACCEPT_HEADER = re.compile(
     r"\Aaccept\s*:\s*application/vnd\.github(?:\+[a-z0-9.+-]+|\.[a-z0-9.+-]+)\Z",
@@ -263,7 +262,7 @@ def _parse_api_arguments(args: Sequence[str]) -> GitHubApiArguments | GitHubComm
                 has_dynamic_option_value = has_dynamic_option_value or _value_is_dynamic(value)
             elif option_name == "--input":
                 has_input = True
-            elif option_name not in _API_OUTPUT_FORMAT_OPTIONS and _value_is_dynamic(value):
+            elif _value_is_dynamic(value):
                 has_dynamic_option_value = True
             index += consumed
             continue
@@ -329,8 +328,21 @@ def _routine_review_thread_arguments_are_static(args: Sequence[str]) -> bool:
         return False
     index = 1
     field_names: list[str] = []
+    jq_count = 0
     while index < len(args):
         token = args[index]
+        if token == "--jq":
+            jq_count += 1
+            if jq_count > 1 or index + 1 >= len(args) or args[index + 1] != ".data":
+                return False
+            index += 2
+            continue
+        if token.startswith("--jq="):
+            jq_count += 1
+            if jq_count > 1 or token.removeprefix("--jq=") != ".data":
+                return False
+            index += 1
+            continue
         option_name, separator, attached_value = token.partition("=")
         if not separator and len(token) > 2 and token[:2] == "-f":
             option_name = "-f"

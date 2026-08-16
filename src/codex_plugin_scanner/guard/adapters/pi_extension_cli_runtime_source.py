@@ -14,29 +14,6 @@ let guardCliContainmentFailed = false;
 let guardDaemonRecoveryInFlight: Promise<boolean> | null = null;
 const GUARD_WINDOWS_JOB_MARKER = 'HOL_GUARD_WINDOWS_JOB_CONTAINED\n';
 
-type GuardStderrMarkerState = {
-  pending: string;
-  contained: boolean;
-};
-
-function consumeGuardStderrChunk(
-  state: GuardStderrMarkerState,
-  chunk: string,
-  flush: boolean,
-): string {
-  state.pending += chunk;
-  if (state.pending.includes(GUARD_WINDOWS_JOB_MARKER)) {
-    state.contained = true;
-    state.pending = state.pending.replaceAll(GUARD_WINDOWS_JOB_MARKER, '');
-  }
-  const retainedChars = flush
-    ? 0
-    : Math.min(state.pending.length, GUARD_WINDOWS_JOB_MARKER.length - 1);
-  const emitted = state.pending.slice(0, state.pending.length - retainedChars);
-  state.pending = state.pending.slice(state.pending.length - retainedChars);
-  return emitted;
-}
-
 function waitForGuardCliChildExit(
   child: ReturnType<typeof spawn>,
   timeoutMs: number,
@@ -176,7 +153,6 @@ function runGuardCliCommand(
     let stdout = '';
     let stderr = '';
     let windowsJobContained = false;
-    const stderrMarkerState: GuardStderrMarkerState = { pending: '', contained: false };
     let escalationHandle: ReturnType<typeof setTimeout> | undefined;
     let forcedSettleHandle: ReturnType<typeof setTimeout> | undefined;
     const timeoutError = () => Object.assign(
@@ -186,10 +162,6 @@ function runGuardCliCommand(
     const settle = (result: GuardCliResult) => {
       if (settled) return;
       settled = true;
-      stderr = (
-        stderr + consumeGuardStderrChunk(stderrMarkerState, '', true)
-      ).slice(-GUARD_TEXT_LIMIT_CHARS);
-      result.stderr = stderr;
       clearTimeout(timeoutHandle);
       if (escalationHandle !== undefined) clearTimeout(escalationHandle);
       if (forcedSettleHandle !== undefined) clearTimeout(forcedSettleHandle);
@@ -246,10 +218,11 @@ function runGuardCliCommand(
       stdout = (stdout + chunk).slice(-GUARD_TEXT_LIMIT_CHARS);
     });
     child.stderr?.on('data', (chunk: string) => {
-      stderr = (
-        stderr + consumeGuardStderrChunk(stderrMarkerState, chunk, false)
-      ).slice(-GUARD_TEXT_LIMIT_CHARS);
-      windowsJobContained = stderrMarkerState.contained;
+      if (chunk.includes(GUARD_WINDOWS_JOB_MARKER)) {
+        windowsJobContained = true;
+        chunk = chunk.replaceAll(GUARD_WINDOWS_JOB_MARKER, '');
+      }
+      stderr = (stderr + chunk).slice(-GUARD_TEXT_LIMIT_CHARS);
     });
     child.once('error', (error) => {
       if (!timedOut) settle({ status: null, stdout, stderr, error });

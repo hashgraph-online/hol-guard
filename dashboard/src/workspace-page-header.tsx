@@ -32,9 +32,9 @@ function WorkspacePageHeaderToolbar<T extends string>(props: {
   }
 
   return (
-    <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4">
+    <div className="guard-page-header__toolbar">
       {props.tabConfig ? (
-        <div className="w-full min-w-0 sm:w-auto">
+        <div className="guard-page-header__tabs">
           <TabBar
             tabs={props.tabConfig.tabs}
             active={props.tabConfig.activeTab}
@@ -43,7 +43,7 @@ function WorkspacePageHeaderToolbar<T extends string>(props: {
         </div>
       ) : null}
       {props.actions ? (
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{props.actions}</div>
+        <div className="guard-page-header__actions">{props.actions}</div>
       ) : null}
     </div>
   );
@@ -61,13 +61,15 @@ export function WorkspacePageHeader<T extends string>(props: WorkspacePageHeader
       : null;
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{eyebrow}</p>
-        <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{title}</h1>
-        {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+    <div className="guard-page-header">
+      <div className="guard-page-header__layout">
+        <div className="guard-page-header__copy space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{eyebrow}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{title}</h1>
+          {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+        </div>
+        <WorkspacePageHeaderToolbar tabConfig={tabConfig} actions={actions} />
       </div>
-      <WorkspacePageHeaderToolbar tabConfig={tabConfig} actions={actions} />
     </div>
   );
 }

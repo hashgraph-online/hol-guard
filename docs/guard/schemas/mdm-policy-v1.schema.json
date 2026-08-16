@@ -50,10 +50,32 @@
       "additionalProperties": false,
       "properties": {
         "proxyMode": {"enum": ["system", "explicit", "none"]},
-        "proxyUrl": {"type": ["string", "null"]},
-        "caBundlePath": {"type": ["string", "null"]},
+        "proxyUrl": {
+          "type": ["string", "null"],
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]://(?:\\[[^\\]\\s/?#@]+\\]|[^:\\s/?#@]+)(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/?$"
+        },
+        "caBundlePath": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "pattern": "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"
+        },
         "allowPublicRegistries": {"type": "boolean"}
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["proxyMode"],
+            "properties": {"proxyMode": {"const": "explicit"}}
+          },
+          "then": {
+            "required": ["proxyUrl"],
+            "properties": {"proxyUrl": {"type": "string"}}
+          },
+          "else": {
+            "properties": {"proxyUrl": {"type": "null"}}
+          }
+        }
+      ]
     },
     "update": {
       "type": "object",
@@ -69,6 +91,23 @@
           "type": ["string", "null"],
           "minLength": 1,
           "pattern": "^[Hh][Tt][Tt][Pp][Ss]://(?:\\[[^\\]\\s/?#@]+\\]|[^:\\s/?#@]+)(?::(?:0*(?:[0-9]{1,4}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?)?(?:/[^\\s?#]*)?$"
+        }
+      }
+    },
+    "integrityTrust": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "releasePublicKeys": {
+          "type": "object",
+          "propertyNames": {"minLength": 1},
+          "additionalProperties": {"type": "string", "contentEncoding": "base64"}
+        },
+        "macosTeamId": {"type": ["string", "null"], "minLength": 1},
+        "windowsSignerThumbprints": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Fa-f0-9 ]{40,59}$"}
         }
       }
     },

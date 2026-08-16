@@ -12,11 +12,13 @@ import stat
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from email.message import Message
 from pathlib import Path
-from typing import Final, Protocol, cast
+from typing import IO, Final, cast
 
-import certifi
-
+from ..mdm.contracts import ManagedNetworkPolicy
+from ..mdm.network import active_network_policy, managed_opener
+from ..mdm.network_urlopen import ManagedOpener
 from .effect_contract import (
     ContainmentRequirement,
     DecisionBasis,
@@ -61,21 +63,6 @@ _REQUIREMENTS: Final = frozenset(
 )
 
 
-class _Headers(Protocol):
-    def get(self, name: str, default: str | None = None) -> str | None: ...
-
-
-class _UrlResponse(Protocol):
-    status: int
-    headers: _Headers
-
-    def geturl(self) -> str: ...
-
-    def read(self, amount: int) -> bytes: ...
-
-    def close(self) -> None: ...
-
-
 @dataclass(frozen=True, slots=True)
 class VerifiedGitHubReadResult:
     stdout: str
@@ -92,7 +79,7 @@ def try_read_verified_public_github_pull_request(
     fields: tuple[str, ...] = ("number", "state", "mergeable"),
     timeout_seconds: float = 15.0,
 ) -> VerifiedGitHubReadResult | None:
-    """Read one public pull request without credentials, proxies, or redirects."""
+    """Read one public pull request without origin credentials or redirects."""
 
     try:
         raw_timeout = cast(object, timeout_seconds)
@@ -105,27 +92,33 @@ def try_read_verified_public_github_pull_request(
             return None
         normalized_fields = _validate_request(owner, repository, pull_number, fields)
         source_digest = _source_digest()
-        tls_context, ca_bundle_digest = _tls_context()
+        network_policy = active_network_policy()
+        ca_bundle_digest = _ca_bundle_digest(network_policy)
+        network_policy_identity = network_policy.to_dict()
+        if ca_bundle_digest is not None:
+            network_policy_identity["caBundleSha256"] = ca_bundle_digest
+        network_policy_digest = verified_read_digest(network_policy_identity)
+        opener = managed_opener(network_policy, redirect_handler=_RejectRedirects())
         full_name = f"{owner}/{repository}"
         repository_url = f"{_API_ORIGIN}/repos/{owner}/{repository}"
         pull_url = f"{repository_url}/pulls/{pull_number}"
         repository_payload = _public_get_json(
             repository_url,
             timeout_seconds=bounded_timeout,
-            tls_context=tls_context,
+            opener=opener,
         )
         if repository_payload.get("private") is not False:
             return None
         observed_name = repository_payload.get("full_name")
         if not isinstance(observed_name, str) or observed_name.casefold() != full_name.casefold():
             return None
-        pull_payload = _public_get_json(pull_url, timeout_seconds=bounded_timeout, tls_context=tls_context)
+        pull_payload = _public_get_json(pull_url, timeout_seconds=bounded_timeout, opener=opener)
         if pull_payload.get("number") != pull_number or not _pull_belongs_to_repository(pull_payload, full_name):
             return None
         if not _valid_pull_fields(pull_payload):
             return None
         output = {field: pull_payload.get(field) for field in normalized_fields}
-        if _source_digest() != source_digest:
+        if _source_digest() != source_digest or _ca_bundle_digest(network_policy) != ca_bundle_digest:
             return None
     except (OSError, RuntimeError, TypeError, ValueError, urllib.error.URLError):
         return None
@@ -136,7 +129,7 @@ def try_read_verified_public_github_pull_request(
         pull_number=pull_number,
         fields=normalized_fields,
         source_digest=source_digest,
-        ca_bundle_digest=ca_bundle_digest,
+        network_policy_digest=network_policy_digest,
         repository_payload=repository_payload,
         pull_payload=pull_payload,
         stdout=stdout,
@@ -173,7 +166,7 @@ def _public_get_json(
     url: str,
     *,
     timeout_seconds: float,
-    tls_context: ssl.SSLContext,
+    opener: ManagedOpener,
 ) -> dict[str, object]:
     if not url.startswith(f"{_API_ORIGIN}/") or "?" in url or "#" in url:
         raise ValueError("GitHub URL must use the exact public API origin")
@@ -186,13 +179,7 @@ def _public_get_json(
         },
         method="GET",
     )
-    opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({}),
-        urllib.request.HTTPSHandler(context=tls_context),
-        _RejectRedirects(),
-    )
-    raw_response = opener.open(request, timeout=timeout_seconds)  # pyright: ignore[reportAny]
-    response = cast(_UrlResponse, raw_response)
+    response = opener.open(request, timeout=timeout_seconds)
     try:
         if response.status != 200 or response.geturl() != url:
             raise ValueError("GitHub public read did not return the exact resource")
@@ -211,15 +198,15 @@ def _public_get_json(
 
 
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
-    def redirect_request(  # pyright: ignore[reportImplicitOverride]
+    def redirect_request(
         self,
         req: urllib.request.Request,
-        fp: object,
+        fp: IO[bytes],
         code: int,
         msg: str,
-        headers: object,
+        headers: Message,
         newurl: str,
-    ) -> None:
+    ) -> urllib.request.Request | None:
         del req, fp, code, msg, headers, newurl
         return None
 
@@ -249,7 +236,7 @@ def _proof(
     pull_number: int,
     fields: tuple[str, ...],
     source_digest: str,
-    ca_bundle_digest: str,
+    network_policy_digest: str,
     repository_payload: dict[str, object],
     pull_payload: dict[str, object],
     stdout: str,
@@ -270,11 +257,11 @@ def _proof(
         "target": target,
         "fields": fields,
         "method": "GET",
-        "credential_mode": "none",
-        "proxy_mode": "disabled",
+        "origin_credential_mode": "none",
+        "network_transport": "enterprise-managed",
+        "network_policy": network_policy_digest,
         "redirect_mode": "rejected",
         "executor_source": source_digest,
-        "ca_bundle": ca_bundle_digest,
         "tls_runtime": verified_read_digest(ssl.OPENSSL_VERSION),
         "repository_response": verified_read_digest(repository_payload),
         "pull_response": verified_read_digest(pull_payload),
@@ -317,13 +304,11 @@ def _source_digest() -> str:
     return digest
 
 
-def _tls_context() -> tuple[ssl.SSLContext, str]:
-    ca_payload, ca_digest = _bounded_identity_file(Path(certifi.where()))
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.check_hostname = True
-    context.verify_mode = ssl.CERT_REQUIRED
-    context.load_verify_locations(cadata=ca_payload.decode("ascii"))
-    return context, ca_digest
+def _ca_bundle_digest(policy: ManagedNetworkPolicy) -> str | None:
+    if policy.ca_bundle_path is None:
+        return None
+    _payload, digest = _bounded_identity_file(Path(policy.ca_bundle_path))
+    return digest
 
 
 def _bounded_identity_file(path: Path) -> tuple[bytes, str]:

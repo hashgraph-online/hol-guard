@@ -68,6 +68,7 @@ from .runtime.github_workflow_runtime import (
 from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
+    _global_runtime_scoped_exact_match_key,
     _is_runtime_scoped_exact_match_key,
     _runtime_scoped_exact_match_key,
     browser_mcp_exact_match_context,
@@ -1061,7 +1062,10 @@ def _broad_runtime_exact_match_key(request: Mapping[str, object], scope: str) ->
             ),
             permission_mode=_request_permission_mode(request),
         )
-        return _runtime_scoped_exact_match_key(artifact_id, runtime_tool_action_portable_match_context(context))
+        portable_context = runtime_tool_action_portable_match_context(context)
+        if scope == "global":
+            return _global_runtime_scoped_exact_match_key(artifact_id, portable_context)
+        return _runtime_scoped_exact_match_key(artifact_id, portable_context)
     return _runtime_scoped_exact_match_key(artifact_id)
 
 

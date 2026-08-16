@@ -1,0 +1,81 @@
+name: Guarded Repository
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        description: HOL Guard scanner policy profile
+        required: false
+        type: string
+        default: strict-security
+      min_score:
+        description: Minimum accepted scanner score
+        required: false
+        type: number
+        default: 0
+      fail_on_severity:
+        description: Fail when a finding reaches this severity
+        required: false
+        type: string
+        default: critical
+      upload_sarif:
+        description: Upload SARIF to GitHub code scanning
+        required: false
+        type: boolean
+        default: true
+      visibility:
+        description: Portal verification visibility, public or private
+        required: false
+        type: string
+        default: private
+    outputs:
+      score:
+        description: Scanner score
+        value: ${{ jobs.scan.outputs.score }}
+      grade:
+        description: Scanner grade
+        value: ${{ jobs.scan.outputs.grade }}
+      verification_status:
+        description: Portal verification status
+        value: ${{ jobs.scan.outputs.verification_status }}
+      verification_url:
+        description: Public verification URL when visibility is public
+        value: ${{ jobs.scan.outputs.verification_url }}
+      badge_url:
+        description: Expiring public badge URL when visibility is public
+        value: ${{ jobs.scan.outputs.badge_url }}
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      score: ${{ steps.guard.outputs.score }}
+      grade: ${{ steps.guard.outputs.grade }}
+      verification_status: ${{ steps.guard.outputs.verification_status }}
+      verification_url: ${{ steps.guard.outputs.verification_url }}
+      badge_url: ${{ steps.guard.outputs.badge_url }}
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+
+      - name: Scan, attest, and register
+        id: guard
+        uses: hashgraph-online/hol-guard/guarded-repository@4f2dbdfc45c232c5e4c6dabedd66f3ffa43e578a
+        with:
+          profile: ${{ inputs.profile }}
+          min_score: ${{ inputs.min_score }}
+          fail_on_severity: ${{ inputs.fail_on_severity }}
+          upload_sarif: ${{ inputs.upload_sarif }}
+          visibility: ${{ inputs.visibility }}
+          register_verification: true
+          verification_endpoint: https://hol.org/api/guard/repository-attestations

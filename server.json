@@ -1,0 +1,38 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.hashgraph-online/hol-guard",
+  "title": "HOL Guard",
+  "description": "Local-first AI agent security evidence and approval workflows through HOL Guard's stdio MCP server.",
+  "websiteUrl": "https://hol.org/guard",
+  "repository": {
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "source": "github"
+  },
+  "version": "2.2.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "hol-guard",
+      "version": "2.2.0",
+      "runtimeHint": "uvx",
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        },
+        {
+          "type": "positional",
+          "value": "serve"
+        },
+        {
+          "type": "positional",
+          "value": "--stdio"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

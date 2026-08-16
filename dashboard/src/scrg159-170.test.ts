@@ -289,9 +289,14 @@ const auditWithRestartInstalled = deriveFrontendAuditResults(
   },
 );
 const restartPnpmIssue = auditWithRestartInstalled.find((r) => r.id === "unprotected-pnpm");
+assert(restartPnpmIssue !== undefined, "SCRG162-F6: restart-required installed manager should appear");
 assert(
-  restartPnpmIssue === undefined,
-  "SCRG162-F6: staged profile activation stays guidance instead of an unresolved audit finding",
+  restartPnpmIssue!.title.includes("waiting for restart"),
+  "SCRG162-F7: restart-required manager should prompt for restart",
+);
+assert(
+  restartPnpmIssue!.remediationAction === null,
+  "SCRG162-F8: restart-required manager should not expose install remediation",
 );
 
 const receiptNow = new Date().toISOString();

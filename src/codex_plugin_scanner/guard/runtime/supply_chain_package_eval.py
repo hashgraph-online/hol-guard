@@ -112,8 +112,6 @@ _DECISION_RANK = {"allow": 0, "monitor": 1, "warn": 2, "ask": 3, "block": 4}
 _SEVERITY_RANK = {"unknown": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 _TIMEOUT_SECONDS = 1
 _RETRY_TIMEOUT_SECONDS = 1
-_CLOUD_EVALUATION_TIMEOUT_SECONDS = 5
-_CLOUD_EVALUATION_RETRY_TIMEOUT_SECONDS = 3
 _CLOUD_INBOX_URL_RE = re.compile(r"https?://[^\s]+/guard/inbox/?", re.IGNORECASE)
 _LOCAL_REVIEW_INSTRUCTION = "Review this request in HOL Guard, then retry."
 _LOCAL_REVIEW_INSTRUCTION_RE = re.compile(re.escape(_LOCAL_REVIEW_INSTRUCTION), re.IGNORECASE)
@@ -1263,8 +1261,8 @@ def _evaluate_with_cloud(
     try:
         response_payload = _urlopen_json_with_timeout_retry(
             request=request,
-            timeout_seconds=_CLOUD_EVALUATION_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_CLOUD_EVALUATION_RETRY_TIMEOUT_SECONDS,
+            timeout_seconds=_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
         )
     except urllib.error.HTTPError as error:
         status_code: int | None = error.code
@@ -1277,8 +1275,8 @@ def _evaluate_with_cloud(
                 )
                 response_payload = _urlopen_json_with_timeout_retry(
                     request=evaluation_request(refreshed_auth_context),
-                    timeout_seconds=_CLOUD_EVALUATION_TIMEOUT_SECONDS,
-                    retry_timeout_seconds=_CLOUD_EVALUATION_RETRY_TIMEOUT_SECONDS,
+                    timeout_seconds=_TIMEOUT_SECONDS,
+                    retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
                 )
             except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError, RuntimeError):
                 response_payload = None

@@ -27,6 +27,10 @@ def _build_pending_request() -> PendingRequest:
     )
 
 
+def test_guard_bridge_daemon_session_ignores_environment_proxy_authority() -> None:
+    assert guard_bridge_module._DAEMON_SESSION.trust_env is False
+
+
 def test_guard_bridge_fetch_pending_requests_sends_guard_token_header(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     token_path = store.guard_home / "daemon-auth-token"
@@ -60,7 +64,7 @@ def test_guard_bridge_fetch_pending_requests_sends_guard_token_header(tmp_path, 
             },
         )
 
-    monkeypatch.setattr(guard_bridge_module.requests, "get", fake_get)
+    monkeypatch.setattr(guard_bridge_module._DAEMON_SESSION, "get", fake_get)
 
     requests_list = bridge._fetch_pending_requests("http://127.0.0.1:4455")
 
@@ -85,15 +89,50 @@ def test_guard_bridge_fetch_pending_requests_fails_closed_without_daemon_token(t
     def fake_get(*args, **kwargs):
         nonlocal called
         called = True
-        raise AssertionError("requests.get should not run without daemon auth token")
+        raise AssertionError("daemon session should not run without daemon auth token")
 
-    monkeypatch.setattr(guard_bridge_module.requests, "get", fake_get)
+    monkeypatch.setattr(guard_bridge_module._DAEMON_SESSION, "get", fake_get)
 
     requests_list = bridge._fetch_pending_requests("http://127.0.0.1:4455")
 
     assert requests_list == []
     assert called is False
     assert "No daemon auth token found" in capsys.readouterr().err
+
+
+def test_guard_bridge_resolution_uses_proxy_independent_daemon_session(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    token_path = store.guard_home / "daemon-auth-token"
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    token_path.write_text("bridge-token", encoding="utf-8")
+    token_path.chmod(0o600)
+    bridge = GuardBridge(
+        config=BridgeConfig(guard_url="http://127.0.0.1:4455", dry_run=False),
+        store=store,
+    )
+    post_calls: list[tuple[str, dict[str, str], dict[str, str], int]] = []
+
+    def fake_post(
+        url: str,
+        *,
+        json: dict[str, str],
+        headers: dict[str, str],
+        timeout: int,
+    ):
+        post_calls.append((url, json, headers, timeout))
+        return SimpleNamespace(status_code=200, json=lambda: {"resolved": True})
+
+    monkeypatch.setattr(guard_bridge_module._DAEMON_SESSION, "post", fake_post)
+
+    assert bridge._execute_resolution("approve", "req-bridge") is True
+    assert post_calls == [
+        (
+            "http://127.0.0.1:4455/v1/requests/req-bridge/approve",
+            {"scope": "artifact", "reason": "resolved from Guard Bridge"},
+            {"X-Guard-Token": "bridge-token"},
+            30,
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -121,7 +160,11 @@ def test_webhook_backend_redacts_artifact_details_by_default(monkeypatch):
         post_calls.append((url, json, timeout))
         return SimpleNamespace(status_code=200)
 
-    monkeypatch.setattr(guard_bridge_module.requests, "post", fake_post)
+    monkeypatch.setattr(
+        guard_bridge_module,
+        "managed_requests_session",
+        lambda: SimpleNamespace(post=fake_post),
+    )
 
     sent = backend.send_notification(request, "raw notification with artifact details")
 

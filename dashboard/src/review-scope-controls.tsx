@@ -15,24 +15,21 @@ type ReviewScopeControlsProps = {
   rememberExactAction: boolean;
   allowScope: DecisionScope;
   blockScope: DecisionScope;
-  showAllowScopes?: boolean;
   onAllowScopeChange: (scope: DecisionScope) => void;
   onBlockScopeChange: (scope: DecisionScope) => void;
   onRememberExactActionChange: (checked: boolean) => void;
 };
 
 export function ReviewScopeControls(props: ReviewScopeControlsProps) {
-  const showAllowScopes = props.showAllowScopes !== false;
-  const showApprovalControls = showAllowScopes || props.exactActionPersistenceEligible;
   return (
     <div className="mt-6 space-y-2">
-      <SectionLabel>{showApprovalControls ? "Approval scope" : "Block scope"}</SectionLabel>
-      {showAllowScopes && !props.hasAllowScope && (
+      <SectionLabel>Approval scope</SectionLabel>
+      {!props.hasAllowScope && (
         <p className="text-sm text-brand-attention" role="status">
           This action cannot be approved under its current Guard policy.
         </p>
       )}
-      {showAllowScopes && <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
         {props.commonScopeOptions.map((choice) => (
           <ScopeChoiceButton
             key={choice.value}
@@ -41,14 +38,14 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
             onScopeChange={props.onAllowScopeChange}
           />
         ))}
-      </div>}
+      </div>
       {props.exactActionPersistenceEligible && props.allowScope === "artifact" && (
         <ExactActionPersistenceChoice
           checked={props.rememberExactAction}
           onChange={props.onRememberExactActionChange}
         />
       )}
-      {showAllowScopes && props.broaderScopeOptions.length > 0 && (
+      {props.broaderScopeOptions.length > 0 && (
         <details className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3">
           <summary className="cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue">
             Save for project or app
@@ -68,7 +65,7 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
           </div>
         </details>
       )}
-      {showAllowScopes && props.advancedScopeOptions.length > 0 && (
+      {props.advancedScopeOptions.length > 0 && (
         <details className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3">
           <summary className="cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention">
             Advanced: save everywhere on this machine
@@ -88,7 +85,7 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
           </div>
         </details>
       )}
-      {showAllowScopes && props.taskCapabilityCopy !== null && (
+      {props.taskCapabilityCopy !== null && (
         <div className="flex items-start gap-2 pt-1 text-xs text-brand-dark/70">
           <HiMiniKey className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
           <p>{props.taskCapabilityCopy}</p>
@@ -148,9 +145,7 @@ function ExactActionPersistenceChoice(props: { checked: boolean; onChange: (chec
             className="sr-only"
           />
           <span className="block text-sm font-semibold text-brand-dark">Always allow exact action</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            Changed commands still need review.
-          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">Changed commands still need review.</span>
         </label>
       </div>
     </fieldset>

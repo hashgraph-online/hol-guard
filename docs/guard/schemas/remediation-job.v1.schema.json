@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/remediation-job.v1.schema.json",
+  "title": "HOL Guard remediation job v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "jobId", "workspaceId", "deviceId", "installationGeneration", "action", "targetVersion", "idempotencyKey", "issuedAt", "validForSeconds", "attemptLimit", "signature"],
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"enum": ["install", "version-converge"]}}, "required": ["action"]},
+      "then": {"properties": {"targetVersion": {"type": "string", "minLength": 1, "maxLength": 128}}}
+    }
+  ],
+  "properties": {
+    "schemaVersion": {"const": "remediation-job.v1"},
+    "jobId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
+    "workspaceId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
+    "deviceId": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
+    "installationGeneration": {"$ref": "self-protection-common.v1.schema.json#/$defs/hex32"},
+    "action": {"enum": ["install", "repair", "policy-refresh", "service-register", "version-converge"]},
+    "targetVersion": {"type": ["string", "null"], "maxLength": 128},
+    "idempotencyKey": {"$ref": "self-protection-common.v1.schema.json#/$defs/safeId"},
+    "issuedAt": {"$ref": "self-protection-common.v1.schema.json#/$defs/timestamp"},
+    "validForSeconds": {"type": "integer", "minimum": 60, "maximum": 3600},
+    "attemptLimit": {"type": "integer", "minimum": 1, "maximum": 5},
+    "signature": {"$ref": "self-protection-common.v1.schema.json#/$defs/signature"}
+  }
+}

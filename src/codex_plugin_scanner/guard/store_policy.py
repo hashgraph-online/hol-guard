@@ -196,6 +196,7 @@ def _bounded_non_consuming_policy_rows(
     artifact_id: str | None,
     artifact_hash: str | None,
     runtime_exact_match_key: str | None,
+    global_runtime_exact_match_key: str | None,
     workspace_key: str | None,
     workspace: str | None,
     publisher: str | None,
@@ -291,7 +292,7 @@ def _bounded_non_consuming_policy_rows(
                 _hash_partition_probes(
                     base_predicate="scope = 'global' and harness = ? and artifact_id = ?",
                     base_parameters=(harness_selector, artifact_selector),
-                    exact_hashes=(artifact_hash, runtime_exact_match_key),
+                    exact_hashes=(artifact_hash, global_runtime_exact_match_key),
                     exact_index="idx_policy_decisions_lookup_global",
                     legacy_index="idx_policy_decisions_lookup_global_legacy",
                     exact_first=True,
@@ -301,7 +302,7 @@ def _bounded_non_consuming_policy_rows(
             _hash_partition_probes(
                 base_predicate="scope = 'global' and harness = ? and artifact_id is null",
                 base_parameters=(harness_selector,),
-                exact_hashes=(artifact_hash, runtime_exact_match_key),
+                exact_hashes=(artifact_hash, global_runtime_exact_match_key),
                 exact_index="idx_policy_decisions_lookup_global",
                 legacy_index="idx_policy_decisions_lookup_global_legacy",
                 exact_first=True,
@@ -1153,6 +1154,14 @@ class StorePolicyMixin:
             if artifact_hash is not None and runtime_exact_match_context is not None
             else None
         )
+        global_runtime_exact_match_key = (
+            _global_runtime_scoped_exact_match_key(
+                artifact_id,
+                runtime_tool_action_portable_match_context(runtime_exact_match_context),
+            )
+            if artifact_hash is not None and runtime_exact_match_context is not None
+            else None
+        )
         events: list[tuple[str, dict[str, object]]] = []
         selected_payload: dict[str, object] | None = None
         ignored_local_integrity: dict[str, object] | None = None
@@ -1283,6 +1292,7 @@ class StorePolicyMixin:
                     artifact_id=artifact_id,
                     artifact_hash=artifact_hash,
                     runtime_exact_match_key=runtime_exact_match_key,
+                    global_runtime_exact_match_key=global_runtime_exact_match_key,
                     workspace_key=workspace_key,
                     workspace=workspace,
                     publisher=publisher,
@@ -1307,7 +1317,7 @@ class StorePolicyMixin:
                   or (
                     scope = 'workspace' and (workspace = ? or workspace = ?) and (
                       artifact_id is null or (
-                        artifact_id = ? and (
+                        (artifact_id = ? or artifact_id = ?) and (
                           artifact_hash is null or (? is not null and artifact_hash = ?)
                         )
                       )
@@ -1360,6 +1370,7 @@ class StorePolicyMixin:
                         workspace_key,
                         workspace,
                         artifact_id,
+                        action_family_key,
                         artifact_hash,
                         artifact_hash,
                         publisher,
@@ -1371,8 +1382,8 @@ class StorePolicyMixin:
                         artifact_id,
                         action_family_key,
                         artifact_hash,
-                        runtime_exact_match_key,
-                        runtime_exact_match_key,
+                        global_runtime_exact_match_key,
+                        global_runtime_exact_match_key,
                         current_time,
                         _NON_CONSUMING_POLICY_MATCH_LIMIT + 1 if not consume_one_shot else -1,
                     ),
@@ -1455,6 +1466,7 @@ class StorePolicyMixin:
                         requested_artifact_hash=artifact_hash,
                         requested_runtime_exact_match_key=runtime_exact_match_key,
                         requested_portable_exact_match_key=portable_runtime_exact_match_key,
+                        requested_global_exact_match_key=global_runtime_exact_match_key,
                     ):
                         continue
                     integrity_result = self._policy_integrity_result_for_row(
@@ -1551,6 +1563,7 @@ class StorePolicyMixin:
                     requested_artifact_hash=artifact_hash,
                     requested_runtime_exact_match_key=runtime_exact_match_key,
                     requested_portable_exact_match_key=portable_runtime_exact_match_key,
+                    requested_global_exact_match_key=global_runtime_exact_match_key,
                 ):
                     continue
                 integrity_result = self._policy_integrity_result_for_row(
@@ -2014,11 +2027,16 @@ class StorePolicyMixin:
                     create_key=False,
                 )
                 policy_integrity_key, policy_integrity_key_id = self._policy_integrity_secret_material(create=False)
-        local_integrity_key: bytes | None = None
-        local_integrity_key_id: str | None = None
         if local_rows:
             local_integrity_key, local_integrity_key_id = self._policy_integrity_secret_material(create=False)
-        candidate_failures: list[str] = []
+            for row in local_rows:
+                integrity_result = _verify_local_once_approval(
+                    dict(row),
+                    key=local_integrity_key,
+                    key_id=local_integrity_key_id,
+                )
+                if integrity_result.status != "valid":
+                    return "approval_reuse_integrity_failure"
         for row in (*local_rows, *policy_rows):
             row_keys = set(row.keys())
             if "claimed_at" in row_keys and row["claimed_at"] is not None:
@@ -2036,15 +2054,6 @@ class StorePolicyMixin:
             )
             if not (same_identity or same_content or publisher_scope or (broad_scope and stored_artifact_id is None)):
                 continue
-            if "approval_id" in row_keys:
-                integrity_result = _verify_local_once_approval(
-                    dict(row),
-                    key=local_integrity_key,
-                    key_id=local_integrity_key_id,
-                )
-                if integrity_result.status != "valid":
-                    candidate_failures.append("approval_reuse_integrity_failure")
-                    continue
             if "decision_id" in row_keys and not is_remote_policy_source(str(row["source"])):
                 integrity_result = self._policy_integrity_result_for_row(
                     row,
@@ -2058,45 +2067,25 @@ class StorePolicyMixin:
                     policy_integrity_state,
                     source=str(row["source"]),
                 ):
-                    candidate_failures.append("approval_reuse_integrity_failure")
-                    continue
+                    return "approval_reuse_integrity_failure"
             expires_at = str(row["expires_at"]) if row["expires_at"] is not None else None
             if expires_at is not None and _timestamp_has_expired(expires_at, now=current_time):
-                candidate_failures.append("approval_reuse_expired")
-                continue
+                return "approval_reuse_expired"
             if _is_approval_context_token(stored_artifact_hash) or _is_approval_context_token(artifact_hash):
                 context_reason = approval_context_tokens_validation_reason(stored_artifact_hash, artifact_hash)
                 if context_reason is not None:
-                    candidate_failures.append(context_reason)
-                    continue
+                    return context_reason
             if stored_artifact_hash is not None and artifact_hash is not None and stored_artifact_hash != artifact_hash:
-                candidate_failures.append("approval_reuse_content_changed")
-                continue
+                return "approval_reuse_content_changed"
             stored_workspace = str(row["workspace"]) if row["workspace"] is not None else None
             stored_publisher = str(row["publisher"]) if row["publisher"] is not None else None
             if stored_workspace is not None and stored_workspace not in {workspace, workspace_key}:
-                candidate_failures.append("approval_reuse_identity_changed")
-                continue
+                return "approval_reuse_identity_changed"
             if stored_publisher is not None and stored_publisher != publisher:
-                candidate_failures.append("approval_reuse_identity_changed")
-                continue
+                return "approval_reuse_identity_changed"
             if not same_identity:
-                candidate_failures.append("approval_reuse_identity_changed")
-                continue
-            if "scope" in row_keys and _scoped_runtime_row_requires_exact_match(
-                scope=str(row["scope"]),
-                stored_artifact_id=stored_artifact_id,
-                stored_artifact_hash=stored_artifact_hash,
-                source=str(row["source"]),
-                requested_artifact_id=artifact_id,
-                requested_artifact_hash=artifact_hash,
-            ):
-                candidate_failures.append("approval_reuse_identity_changed")
-                continue
-            # At least one relevant row remains valid. Old or narrower stale rows
-            # must not make a newer reusable approval look rejected.
-            return None
-        return candidate_failures[0] if candidate_failures else None
+                return "approval_reuse_identity_changed"
+        return None
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:

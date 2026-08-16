@@ -16,6 +16,7 @@ class PackageCommandExtensionSpec:
     executables: tuple[str, ...]
     project_markers: tuple[str, ...]
     reference_urls: tuple[str, ...]
+    example_command: str
 
 
 PACKAGE_COMMAND_EXTENSION_SPECS = (
@@ -39,6 +40,7 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
             "https://yarnpkg.com/cli/add",
             "https://bun.sh/docs/pm/cli/add",
         ),
+        example_command="npm install left-pad",
     ),
     PackageCommandExtensionSpec(
         extension_id="command.package.python",
@@ -63,6 +65,7 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
             "https://python-poetry.org/docs/cli/",
             "https://pipenv.pypa.io/en/latest/commands.html",
         ),
+        example_command="pip install requests",
     ),
     PackageCommandExtensionSpec(
         extension_id="command.package.rust",
@@ -72,6 +75,7 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
         executables=("cargo",),
         project_markers=("Cargo.toml", "Cargo.lock"),
         reference_urls=("https://doc.rust-lang.org/cargo/commands/cargo-install.html",),
+        example_command="cargo install ripgrep",
     ),
     PackageCommandExtensionSpec(
         extension_id="command.package.go",
@@ -81,6 +85,7 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
         executables=("go",),
         project_markers=("go.mod", "go.sum", "go.work", "go.work.sum"),
         reference_urls=("https://go.dev/ref/mod#go-install",),
+        example_command="go install golang.org/x/tools/cmd/goimports@latest",
     ),
     PackageCommandExtensionSpec(
         extension_id="command.package.jvm",
@@ -100,6 +105,7 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
             "https://maven.apache.org/plugins/maven-dependency-plugin/examples/managing-dependencies.html",
             "https://docs.gradle.org/current/userguide/dependency_locking.html",
         ),
+        example_command="mvn dependency:copy-dependencies",
     ),
     PackageCommandExtensionSpec(
         extension_id="command.package.ruby",
@@ -112,6 +118,7 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
             "https://guides.rubygems.org/command-reference/#gem-install",
             "https://bundler.io/man/bundle-install.1.html",
         ),
+        example_command="gem install rails",
     ),
     PackageCommandExtensionSpec(
         extension_id="command.package.php",
@@ -121,6 +128,7 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
         executables=("composer",),
         project_markers=("composer.json", "composer.lock"),
         reference_urls=("https://getcomposer.org/doc/03-cli.md#require-r",),
+        example_command="composer require monolog/monolog",
     ),
     PackageCommandExtensionSpec(
         extension_id="command.package.system",
@@ -133,5 +141,6 @@ PACKAGE_COMMAND_EXTENSION_SPECS = (
             "https://docs.brew.sh/Manpage#install-options-formulacask-",
             "https://manpages.debian.org/bookworm/apt/apt-get.8.en.html",
         ),
+        example_command="brew install wget",
     ),
 )

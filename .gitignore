@@ -11,6 +11,7 @@ dist/
 build/
 *.egg-info/
 *.egg
+rust/target/
 
 # Virtual environments
 .venv/

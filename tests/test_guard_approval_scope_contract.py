@@ -618,32 +618,6 @@ def test_exact_action_persistence_accepts_envelope_raw_command_text(tmp_path: Pa
     assert request_scope_contract(row).exact_action_persistence_eligible is True
 
 
-def test_exact_action_persistence_accepts_context_bound_generic_tool_action(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    context_token = build_approval_context_token(
-        identity={"harness": "codex", "tool": "Bash"},
-        content={"command": "npm run guard:acquisition-loop"},
-        capabilities={"action_type": "shell_command"},
-        policy={"action": "require-reapproval"},
-        sandbox={"mode": "workspace-write"},
-    )
-    request = replace(
-        _request(
-            "generic-tool-action",
-            artifact_id="codex:project:Bash",
-            artifact_hash=context_token,
-        ),
-        action_envelope_json={
-            "action_type": "shell_command",
-            "tool_name": "Bash",
-            "command": "npm run guard:acquisition-loop",
-        },
-    )
-    row = _store_request(store, request)
-
-    assert request_scope_contract(row).exact_action_persistence_eligible is True
-
-
 def test_exact_action_persistence_accepts_context_bound_tool_call(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     context_token = build_approval_context_token(

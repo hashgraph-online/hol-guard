@@ -6,6 +6,7 @@ from __future__ import annotations
 from .store_base import *
 from .store_base import (
     SystemKeyringSecretStore,
+    _global_runtime_scoped_exact_match_key,
     _is_runtime_scoped_exact_match_key,
     _runtime_scoped_exact_match_key,
     browser_mcp_exact_match_context,
@@ -26,6 +27,7 @@ from .store_event_receipts import StoreEventReceiptsMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
 from .store_evidence_facade import StoreEvidenceMixin
 from .store_inventory import StoreInventoryMixin
+from .store_policy_document import StorePolicyDocumentMixin
 from .store_live_request_outbox import StoreLiveRequestOutboxMixin
 from .store_oauth import StoreOAuthConnectMixin
 from .store_portable_project_memory import StorePortableProjectMemoryMixin
@@ -74,6 +76,7 @@ class GuardStore(
     StoreOAuthConnectMixin,
     StoreSessionsMixin,
     StoreEvidenceMixin,
+    StorePolicyDocumentMixin,
     StoreReadStateMixin,
     StoreTemporaryMcpMixin,
     StoreWorkflowCapabilitiesMixin,

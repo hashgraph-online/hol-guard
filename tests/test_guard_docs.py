@@ -156,7 +156,8 @@ def test_project_metadata_declares_apache_license() -> None:
     pyproject_text = _read_repo_file("pyproject.toml")
     readme_text = _read_repo_file("README.md")
 
-    assert "SPDX-License-Identifier: Apache-2.0" in license_text
+    assert "Apache License" in license_text
+    assert "Version 2.0, January 2004" in license_text
     pyproject_data = tomllib.loads(pyproject_text)
     assert pyproject_data.get("project", {}).get("license") == "Apache-2.0"
     readme_parts = readme_text.split("## License", 1)

@@ -9,6 +9,7 @@ from ..command_model import CanonicalCommand
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..self_approval import SELF_APPROVAL_ACTION_CLASS, SELF_APPROVAL_REASON, is_guard_approval_mutation_command
 from .destructive_shell_detection import _contains_shell_credential_exfiltration
+from .github_pr_ephemeral_body import gh_pr_create_uses_safe_ephemeral_body
 from .github_pr_expansion import (
     _gh_pr_create_body_has_shell_command_substitution,
     _gh_pr_create_has_active_shell_expansion,
@@ -44,6 +45,22 @@ def initial_shell_risk_match(
     )
     if match is not None:
         return True, match
+    if extension_interaction.priority is not None:
+        return True, ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=extension_interaction.priority.action_class,
+            reason=extension_interaction.priority.reason,
+            canonical_command=canonical_command,
+            interpreter_executable_identities=interpreter_executable_identities,
+        )
+    if gh_pr_create_uses_safe_ephemeral_body(detection_command_text) and (
+        raw_command_text is None
+        or raw_command_text == detection_command_text
+        or gh_pr_create_uses_safe_ephemeral_body(raw_command_text)
+    ):
+        return True, None
     match = _github_shell_risk_match(
         tool_name=tool_name,
         normalized_tool_name=normalized_tool_name,
@@ -55,16 +72,6 @@ def initial_shell_risk_match(
     )
     if match is not None:
         return True, match
-    if extension_interaction.priority is not None:
-        return True, ToolActionRequestMatch(
-            tool_name=tool_name,
-            normalized_tool_name=normalized_tool_name,
-            command_text=command_text,
-            action_class=extension_interaction.priority.action_class,
-            reason=extension_interaction.priority.reason,
-            canonical_command=canonical_command,
-            interpreter_executable_identities=interpreter_executable_identities,
-        )
     if is_nonexecuting_github_actions_read_workflow(detection_command_text, cwd=cwd) and (
         raw_command_text is None
         or raw_command_text == detection_command_text

@@ -197,7 +197,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
   const [lastFailed, setLastFailed] = useState<FailedOp | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
-  const [activationAssist, setActivationAssist] = useState<{ message: string; isError: boolean } | null>(null);
+  const [activationAssistError, setActivationAssistError] = useState<string | null>(null);
   const [startingConnect, setStartingConnect] = useState(false);
   const [activatingRuntime, setActivatingRuntime] = useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = useState<string | null>(null);
@@ -294,7 +294,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setPendingOp({ op: "audit", manager: null });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssist(null);
+      setActivationAssistError(null);
       onAuditErrorChange?.(null);
       onAuditStarted?.();
       onAuditRunningChange?.(true);
@@ -448,7 +448,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const handleStartConnect = useCallback(async () => {
     setStartingConnect(true);
     setConnectError(null);
-    setActivationAssist(null);
+    setActivationAssistError(null);
     try {
       const connectFlow = await startPackageFirewallConnect();
       const popupBlocked = Boolean(
@@ -696,7 +696,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setPendingOp({ op, manager });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssist(null);
+      setActivationAssistError(null);
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
@@ -741,7 +741,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       setPendingOp({ op, manager: null });
       setLastFailed(null);
       setConnectError(null);
-      setActivationAssist(null);
+      setActivationAssistError(null);
       try {
         const response = await runPackageSync();
         setLastCompleted({ op, manager: null, response });
@@ -826,17 +826,13 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const handleRetry = useCallback(() => void load(), [load]);
   const handleActivateRuntime = useCallback(async () => {
     setActivatingRuntime(true);
-    setActivationAssist(null);
+    setActivationAssistError(null);
     try {
-      const message = await activatePackageFirewallRuntime();
-      setActivationAssist({ message, isError: false });
+      await activatePackageFirewallRuntime();
       await refreshAfterOp();
       await onStateChanged?.();
     } catch (error) {
-      setActivationAssist({
-        message: error instanceof Error ? error.message : "Unable to activate package protection.",
-        isError: true,
-      });
+      setActivationAssistError(error instanceof Error ? error.message : "Unable to activate package protection.");
     } finally {
       setActivatingRuntime(false);
     }
@@ -985,7 +981,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             onRefreshStatus={handleRetry}
             onOpenManagerDetails={handleOpenManagerDetails}
             activatingRuntime={activatingRuntime}
-            activationAssist={activationAssist}
+            activationAssistError={activationAssistError}
           />
         </>
       )}

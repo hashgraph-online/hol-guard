@@ -73,6 +73,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
           go-version: "1.23"
@@ -85,25 +86,68 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BEFORE_SHA: ${{ github.event.before }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-          HEAD_SHA: ${{ github.sha }}
+          EVENT_HEAD_SHA: ${{ github.sha }}
         run: |
-          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PR_BASE_SHA" ]; then
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PR_BASE_SHA" ] && [ -n "$PR_HEAD_SHA" ]; then
             echo "mode=git" >> "$GITHUB_OUTPUT"
-            echo "log_opts=${PR_BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+            echo "head_sha=$PR_HEAD_SHA" >> "$GITHUB_OUTPUT"
           elif [ "$EVENT_NAME" = "merge_group" ] && [ -n "$MERGE_GROUP_BASE_SHA" ]; then
             echo "mode=git" >> "$GITHUB_OUTPUT"
-            echo "log_opts=${MERGE_GROUP_BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$MERGE_GROUP_BASE_SHA" >> "$GITHUB_OUTPUT"
+            echo "head_sha=$EVENT_HEAD_SHA" >> "$GITHUB_OUTPUT"
           elif [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
             echo "mode=git" >> "$GITHUB_OUTPUT"
-            echo "log_opts=${BEFORE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$BEFORE_SHA" >> "$GITHUB_OUTPUT"
+            echo "head_sha=$EVENT_HEAD_SHA" >> "$GITHUB_OUTPUT"
           else
             echo "mode=dir" >> "$GITHUB_OUTPUT"
           fi
-      - name: Run Gitleaks on commit range
+      - name: Prepare isolated Gitleaks commit range
+        id: gitleaks-range
         if: steps.gitleaks-scope.outputs.mode == 'git'
-        run: gitleaks git --log-opts="${{ steps.gitleaks-scope.outputs.log_opts }}" --no-banner --redact --exit-code 1 .
+        env:
+          BASE_SHA: ${{ steps.gitleaks-scope.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.gitleaks-scope.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git cat-file -e "${HEAD_SHA}^{commit}"
+
+          scan_repo="${RUNNER_TEMP}/gitleaks-range-repository"
+          rm -rf "$scan_repo"
+          git clone --no-hardlinks --no-checkout . "$scan_repo"
+          git -C "$scan_repo" checkout --detach "$HEAD_SHA"
+
+          while IFS= read -r ref; do
+            [ -z "$ref" ] || git -C "$scan_repo" update-ref -d "$ref"
+          done < <(git -C "$scan_repo" for-each-ref --format='%(refname)')
+
+          git -C "$scan_repo" update-ref refs/gitleaks/base "$BASE_SHA"
+          git -C "$scan_repo" update-ref refs/gitleaks/head "$HEAD_SHA"
+
+          mapfile -t refs < <(git -C "$scan_repo" for-each-ref --format='%(refname)' | sort)
+          expected=(refs/gitleaks/base refs/gitleaks/head)
+          if [ "${refs[*]}" != "${expected[*]}" ]; then
+            printf 'Unexpected refs in isolated Gitleaks repository: %s\n' "${refs[*]}" >&2
+            exit 1
+          fi
+
+          echo "repository=$scan_repo" >> "$GITHUB_OUTPUT"
+          echo "log_opts=${BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Run Gitleaks on isolated commit range
+        if: steps.gitleaks-scope.outputs.mode == 'git'
+        run: >-
+          gitleaks git
+          --log-opts="${{ steps.gitleaks-range.outputs.log_opts }}"
+          --no-banner
+          --redact
+          --exit-code 1
+          "${{ steps.gitleaks-range.outputs.repository }}"
       - name: Run Gitleaks on working tree
         if: steps.gitleaks-scope.outputs.mode == 'dir'
         run: gitleaks dir --no-banner --redact --exit-code 1 .

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./app";
 import "./styles.css";
+import "./responsive-layout.css";
 
 const container = document.getElementById("guard-dashboard-root");
 

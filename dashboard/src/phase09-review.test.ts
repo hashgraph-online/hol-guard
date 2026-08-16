@@ -1270,15 +1270,15 @@ assert(
   allowCopy.includes("retry within 15 minutes"),
   "GR223-01: buildRetryAfterApprovalCopy for allow includes return/resume guidance"
 );
-assert(
-  allowCopy.includes(harnessDisplayName(BASE_REQUEST.harness)),
-  "GR223-02: buildRetryAfterApprovalCopy for allow includes the harness display name"
-);
 const rememberedAllowCopy = buildRetryAfterApprovalCopy(BASE_REQUEST, "allow", true);
 assert(
   rememberedAllowCopy.includes("allow this exact action next time") &&
     rememberedAllowCopy.includes("changed commands still need review"),
   "GR223-02a: remembered approval copy states its exact security boundary"
+);
+assert(
+  allowCopy.includes(harnessDisplayName(BASE_REQUEST.harness)),
+  "GR223-02: buildRetryAfterApprovalCopy for allow includes the harness display name"
 );
 
 const blockCopy = buildRetryAfterApprovalCopy(BASE_REQUEST, "block");

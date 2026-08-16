@@ -156,7 +156,6 @@ def corpus_record_count() -> int:
         PR_MERGE_ADMIN_CAPABILITY_CASES,
         UNRELATED_DYNAMIC_COMMAND_CASES,
     )
-    from tests.test_guard_package_shims import PACKAGE_SHIM_GUARD_CASES
     from tests.test_guard_js_semver_phase11 import (
         SEMVER_OR_CLAUSE_CASES,
         SEMVER_ORDINARY_RANGE_CASES,
@@ -164,6 +163,7 @@ def corpus_record_count() -> int:
         SEMVER_SUPPORTED_RANGE_CASES,
         SEMVER_ZERO_MAJOR_CASES,
     )
+    from tests.test_guard_package_shims import PACKAGE_SHIM_GUARD_CASES
     from tests.test_guard_risk import (
         ENCODED_EXEC_PIPELINE_CASES,
         LOCAL_COMPOSE_SAFE_CASES,

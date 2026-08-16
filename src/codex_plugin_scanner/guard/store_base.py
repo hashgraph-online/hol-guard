@@ -1372,6 +1372,17 @@ def _runtime_scoped_exact_match_key(
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
 
 
+def _global_runtime_scoped_exact_match_key(
+    artifact_id: str | None,
+    runtime_exact_match_context: str | None = None,
+) -> str | None:
+    family_key = _artifact_family_key(artifact_id)
+    if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
+        return None
+    canonical_artifact_id = f"global:portable:{_family_key_value(family_key)}"
+    return _runtime_scoped_exact_match_key(canonical_artifact_id, runtime_exact_match_context)
+
+
 def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:
     """Return a scoped family identity for one exact runtime tool action."""
 
@@ -1487,6 +1498,7 @@ def _scoped_runtime_row_requires_exact_match(
     requested_artifact_hash: str | None = None,
     requested_runtime_exact_match_key: str | None = None,
     requested_portable_exact_match_key: str | None = None,
+    requested_global_exact_match_key: str | None = None,
 ) -> bool:
     if scope not in {"harness", "global"}:
         return False
@@ -1502,6 +1514,7 @@ def _scoped_runtime_row_requires_exact_match(
             _runtime_scoped_exact_match_key(requested_artifact_id),
             requested_runtime_exact_match_key,
             requested_portable_exact_match_key,
+            requested_global_exact_match_key,
         )
         if key is not None
     }

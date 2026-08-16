@@ -155,9 +155,27 @@ _OBJECT_NAMES: Final = (
     ("trigger", "trg_guard_workflow_transition_require_parents"),
 )
 
+# One-time follow-up migration that drops an index the workflow-capability
+# schema owned and registered in an earlier release (it backed receipt-by-event
+# lookups). The index was later retired from the schema, but databases created
+# under the older version still own it, and the strict owned-object equality
+# check then raises ``owned_objects`` on every reopen. This is a discrete
+# migration step with its own ``schema_migrations`` version, not an ongoing
+# compatibility surface: the drop is idempotent (``if exists``) so it runs on
+# every schema ensure without effect on databases that never owned the index,
+# while the strict tamper-detection guarantee (set(actual) == set(expected))
+# stays intact.
+WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION: Final = 22
+WORKFLOW_CAPABILITY_RETIRED_RECEIPT_EVENT_INDEX: Final = "idx_guard_workflow_receipt_event"
+
 
 def ensure_workflow_capability_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
-    """Apply migration 14 atomically and validate every owned schema object."""
+    """Apply the workflow-capability schema migrations and validate owned objects."""
+    # Drop the retired receipt-event index before opening the validation savepoint. Doing the
+    # drop inside the savepoint was unsafe: if validation raised, the savepoint rollback undid
+    # the drop and the orphan index survived, failing every reopen on databases created under
+    # the older schema. Run it first so it survives a validation rollback.
+    _drop_retired_receipt_event_index_once(connection, applied_at=applied_at)
     connection.execute("savepoint workflow_capability_schema_v14")
     try:
         for statement in _SCHEMA_STATEMENTS:
@@ -182,6 +200,22 @@ def ensure_workflow_capability_schema(connection: sqlite3.Connection, *, applied
         connection.execute("release workflow_capability_schema_v14")
         raise
     connection.execute("release workflow_capability_schema_v14")
+
+
+def _drop_retired_receipt_event_index_once(connection: sqlite3.Connection, *, applied_at: str) -> None:
+    """Drop the retired receipt-event index so the owned-object equality check passes.
+
+    ``drop index if exists`` is idempotent and a no-op on databases that never owned the
+    index, so it runs on every schema ensure. The distinct ``schema_migrations`` row records
+    that this migration step exists; only the drop itself is what keeps validation strict on
+    every reopen, because nothing in the current schema re-creates the index.
+    """
+
+    connection.execute(f"drop index if exists {WORKFLOW_CAPABILITY_RETIRED_RECEIPT_EVENT_INDEX}")
+    connection.execute(
+        "insert or ignore into schema_migrations (version, applied_at) values (?, ?)",
+        (WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION, applied_at),
+    )
 
 
 def _validate_schema_objects(connection: sqlite3.Connection) -> None:

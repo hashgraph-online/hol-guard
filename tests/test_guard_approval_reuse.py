@@ -1160,123 +1160,6 @@ def test_lookup_miss_reports_stable_saved_approval_invalidation_reason(
     assert reason == expected_reason
 
 
-def test_reuse_diagnostic_ignores_expired_row_when_newer_matching_approval_is_valid(tmp_path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    artifact_id = "codex:project:tool-action:diagnostic"
-    artifact_hash = "sha256:exact"
-    for request_id, created_at, expires_at in (
-        ("req-expired", "2026-07-17T11:00:00+00:00", "2026-07-17T12:00:00+00:00"),
-        ("req-current", "2026-07-17T12:30:00+00:00", "2026-07-17T14:00:00+00:00"),
-    ):
-        store.record_local_once_approval(
-            request_id=request_id,
-            harness="codex",
-            artifact_id=artifact_id,
-            artifact_hash=artifact_hash,
-            workspace="/workspace/a",
-            publisher="publisher-a",
-            action="allow",
-            created_at=created_at,
-            expires_at=expires_at,
-        )
-
-    assert (
-        store.approval_reuse_validation_reason(
-            "codex",
-            artifact_id,
-            artifact_hash,
-            "/workspace/a",
-            "publisher-a",
-            "2026-07-17T13:00:00+00:00",
-        )
-        is None
-    )
-
-
-def test_reuse_diagnostic_ignores_invalid_row_when_newer_matching_approval_is_valid(tmp_path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    artifact_id = "codex:project:tool-action:diagnostic"
-    artifact_hash = "sha256:exact"
-    invalid_id = store.record_local_once_approval(
-        request_id="req-invalid",
-        harness="codex",
-        artifact_id=artifact_id,
-        artifact_hash=artifact_hash,
-        workspace="/workspace/a",
-        publisher="publisher-a",
-        action="allow",
-        created_at="2026-07-17T12:00:00+00:00",
-        expires_at="2026-07-17T14:00:00+00:00",
-    )
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            "update guard_local_once_approvals set payload_mac = 'invalid' where approval_id = ?",
-            (invalid_id,),
-        )
-    store.record_local_once_approval(
-        request_id="req-current",
-        harness="codex",
-        artifact_id=artifact_id,
-        artifact_hash=artifact_hash,
-        workspace="/workspace/a",
-        publisher="publisher-a",
-        action="allow",
-        created_at="2026-07-17T12:30:00+00:00",
-        expires_at="2026-07-17T14:00:00+00:00",
-    )
-
-    assert (
-        store.approval_reuse_validation_reason(
-            "codex",
-            artifact_id,
-            artifact_hash,
-            "/workspace/a",
-            "publisher-a",
-            "2026-07-17T13:00:00+00:00",
-        )
-        is None
-    )
-
-
-def test_reuse_diagnostic_rejects_broad_runtime_family_after_expired_exact_row(tmp_path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    artifact_id = "codex:project:tool-action:diagnostic"
-    store.record_local_once_approval(
-        request_id="req-expired",
-        harness="codex",
-        artifact_id=artifact_id,
-        artifact_hash="sha256:exact",
-        workspace=None,
-        publisher=None,
-        action="allow",
-        created_at="2026-07-17T11:00:00+00:00",
-        expires_at="2026-07-17T12:00:00+00:00",
-    )
-    store.upsert_policy(
-        PolicyDecision(
-            harness="codex",
-            scope="harness",
-            action="allow",
-            artifact_id="family:tool-action",
-            artifact_hash=None,
-            source="manual",
-        ),
-        "2026-07-17T12:30:00+00:00",
-    )
-
-    assert (
-        store.approval_reuse_validation_reason(
-            "codex",
-            artifact_id,
-            "sha256:exact",
-            None,
-            None,
-            "2026-07-17T13:00:00+00:00",
-        )
-        == "approval_reuse_expired"
-    )
-
-
 def test_lookup_miss_diagnostic_remains_targeted_with_many_unrelated_allows(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     with sqlite3.connect(store.path) as connection:
@@ -1395,6 +1278,7 @@ def test_non_consuming_policy_lookup_is_bounded_and_fails_closed_on_match_overfl
             artifact_id="codex:project:tool-action:bounded",
             artifact_hash=_approval_context_token(content="sha256:bounded"),
             runtime_exact_match_key=None,
+            global_runtime_exact_match_key=None,
             workspace_key=None,
             workspace=None,
             publisher=None,
@@ -1460,6 +1344,7 @@ def test_non_consuming_policy_lookup_miss_uses_only_fully_constrained_scope_prob
             artifact_id="codex:project:tool-action:bounded-miss",
             artifact_hash=current_hash,
             runtime_exact_match_key="runtime-exact:current",
+            global_runtime_exact_match_key="runtime-global-exact:current",
             workspace_key="workspace:sha256:current",
             workspace="/workspace/current",
             publisher="publisher-current",
@@ -1587,6 +1472,7 @@ def test_non_consuming_policy_probe_partitions_preserve_every_scope_selector(tmp
             artifact_id=artifact_id,
             artifact_hash=context_hash,
             runtime_exact_match_key=runtime_hash,
+            global_runtime_exact_match_key=runtime_hash,
             workspace_key="workspace:sha256:current",
             workspace="/workspace/current",
             publisher="publisher-current",

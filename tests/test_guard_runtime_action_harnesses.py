@@ -313,7 +313,12 @@ def test_shared_action_envelope_contract_covers_every_registered_harness(tmp_pat
     """Every registered native-hook harness preserves the safe common shell shape."""
 
     payload = {"tool_name": "Bash", "tool_input": {"command": "cat ~/.npmrc"}}
-    expected_harnesses = {"claude": "claude-code", "zai": "zcode"}
+    expected_harnesses = {
+        "claude": "claude-code",
+        "cline-cli": "cline",
+        "cline-vscode": "cline",
+        "zai": "zcode",
+    }
     for harness in action_envelope_harnesses():
         envelope = normalize_harness_payload(
             harness,

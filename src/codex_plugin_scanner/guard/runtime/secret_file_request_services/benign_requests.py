@@ -33,6 +33,7 @@ from .git_routines import (
     _looks_like_safe_git_status_command,
     _looks_like_safe_standalone_git_routine,
 )
+from .github_pr_ephemeral_body import gh_pr_create_uses_safe_ephemeral_body
 from .github_shell_capabilities import (
     _ShellTokenWithQuoteContext,
     classify_github_shell_capabilities,
@@ -98,6 +99,9 @@ def is_explicitly_benign_tool_action_request(
         if not stripped_command:
             continue
         if is_nonexecuting_github_actions_read_workflow(stripped_command, cwd=cwd):
+            found_benign_candidate = True
+            continue
+        if gh_pr_create_uses_safe_ephemeral_body(stripped_command):
             found_benign_candidate = True
             continue
         github_assessment = classify_github_shell_capabilities(stripped_command, home_dir=home_dir)
@@ -329,7 +333,7 @@ def build_tool_action_request_artifact(
     *,
     config_path: str,
     source_scope: str,
-    extension_control_layers: tuple[ExtensionControlLayer, ...] = (),
+    extension_control_layers: tuple[ExtensionControlLayer, ...] | None = None,
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 
@@ -402,6 +406,15 @@ def build_tool_action_request_artifact(
             "extension_control_resolution": {
                 "blocked": evaluation.control_resolution.blocked,
                 "failures": [failure.code.value for failure in evaluation.control_resolution.failures],
+                **(
+                    {
+                        "explicitly_enabled_permission_ids": list(
+                            evaluation.control_resolution.explicitly_enabled_permission_ids
+                        )
+                    }
+                    if evaluation.control_resolution.explicitly_enabled_permission_ids
+                    else {}
+                ),
             },
             "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
             "risk_classes": list(evaluation.risk_classes),

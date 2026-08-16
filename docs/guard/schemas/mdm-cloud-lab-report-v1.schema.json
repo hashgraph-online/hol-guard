@@ -1,0 +1,90 @@
+{
+  "$id": "https://hol.org/schemas/guard/mdm-cloud-lab-report-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "generatedAt": {
+      "type": "string"
+    },
+    "healthy": {
+      "type": "boolean"
+    },
+    "nativeCertification": {
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "const": "not-evaluated"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "requiredGates": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "outcome",
+        "reason",
+        "requiredGates"
+      ],
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": "hol-guard-mdm-cloud-integration-lab.v1"
+    },
+    "stepCount": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "steps": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "durationMs": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "evidence": {},
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "passed",
+          "durationMs",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "workspaceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "workspaceId",
+    "healthy",
+    "stepCount",
+    "steps",
+    "nativeCertification"
+  ],
+  "title": "HOL Guard multi-device MDM Cloud lab report v1",
+  "type": "object"
+}

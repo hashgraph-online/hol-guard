@@ -1,0 +1,76 @@
+name: Rust command model differential
+
+on:
+  pull_request:
+    paths:
+      - "rust/Cargo.toml"
+      - "rust/Cargo.lock"
+      - "rust/crates/guard-command/**"
+      - "rust/crates/guard-runtime/**"
+      - "ci/native_runtime/test_command_model_differential.py"
+      - ".github/workflows/rust-command-model-differential.yml"
+  push:
+    branches: [release/3.0]
+    paths:
+      - "rust/Cargo.toml"
+      - "rust/Cargo.lock"
+      - "rust/crates/guard-command/**"
+      - "rust/crates/guard-runtime/**"
+      - "ci/native_runtime/test_command_model_differential.py"
+      - ".github/workflows/rust-command-model-differential.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-command-model-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  command-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+      - name: Normalize changed Rust sources
+        run: |
+          rustfmt --edition 2021 rust/crates/guard-command/src/lib.rs rust/crates/guard-runtime/src/main.rs
+          git diff --check -- rust/crates/guard-command/src/lib.rs rust/crates/guard-runtime/src/main.rs
+      - name: Validate locked command workspace
+        run: |
+          cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps > /dev/null
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - name: Normalize and check Python differential harness
+        run: |
+          uv run --no-sync python -m ruff format ci/native_runtime/test_command_model_differential.py
+          uv run --no-sync python -m ruff check ci/native_runtime/test_command_model_differential.py
+          git diff --check -- ci/native_runtime/test_command_model_differential.py
+      - name: Build version-matched runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          rust/target/release/hol-guard-runtime self-test --json
+          rust/target/release/hol-guard-runtime rule-contract --json
+      - name: Compare Python and Rust command models
+        run: >-
+          uv run --no-sync python ci/native_runtime/test_command_model_differential.py
+          --binary "${{ github.workspace }}/rust/target/release/hol-guard-runtime"

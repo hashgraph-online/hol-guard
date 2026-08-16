@@ -139,6 +139,7 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
     digest = hashlib.sha256()
     overlap = ""
     guarded_classes: list[str] = []
+    classification_cache: dict[tuple[int, bytes], tuple[str, ...]] = {}
     inherited_secret_read_state: tuple[int, bool] | None = None
     total_bytes = 0
     while raw_chunk := os.read(descriptor, _ATTACHMENT_SCAN_CHUNK_BYTES):
@@ -150,6 +151,7 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
         window = f"{overlap}{decoded_chunk}"
         window_classes, inherited_secret_read_state = _classify_stream_window(
             window,
+            classification_cache=classification_cache,
             inherited_secret_read_state=inherited_secret_read_state,
         )
         guarded_classes.extend(window_classes)
@@ -158,6 +160,7 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
     if final_text:
         window_classes, _ = _classify_stream_window(
             f"{overlap}{final_text}",
+            classification_cache=classification_cache,
             inherited_secret_read_state=inherited_secret_read_state,
         )
         guarded_classes.extend(window_classes)
@@ -167,16 +170,20 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
 def _classify_stream_window(
     content_window: str,
     *,
+    classification_cache: dict[tuple[int, bytes], tuple[str, ...]] | None = None,
     inherited_secret_read_state: tuple[int, bool] | None,
 ) -> tuple[tuple[str, ...], tuple[int, bool] | None]:
-    classes = list(_guarded_classes(content_window))
+    classes = list(_cached_guarded_classes(content_window, classification_cache))
     prefix = ""
     if inherited_secret_read_state is not None:
         distance, positive = inherited_secret_read_state
         verb = "Read" if positive else "Do not read"
         prefix = f"{verb} " if distance == 0 else f"{verb} something. "
     inherited_window = f"{prefix}{content_window}"
-    if inherited_secret_read_state is not None and "secret_read" in _guarded_classes(inherited_window):
+    if inherited_secret_read_state is not None and "secret_read" in _cached_guarded_classes(
+        inherited_window,
+        classification_cache,
+    ):
         classes.append("secret_read")
     return tuple(dict.fromkeys(classes)), _trailing_secret_read_state(inherited_window)
 
@@ -207,6 +214,22 @@ def _guarded_classes(content_window: str) -> tuple[str, ...]:
         for request in extract_prompt_requests(content_window)
         if request.request_class in _GUARDED_ATTACHMENT_CLASSES
     )
+
+
+def _cached_guarded_classes(
+    content_window: str,
+    cache: dict[tuple[int, bytes], tuple[str, ...]] | None,
+) -> tuple[str, ...]:
+    if cache is None:
+        return _guarded_classes(content_window)
+    encoded_window = content_window.encode()
+    cache_key = (len(encoded_window), hashlib.sha256(encoded_window).digest())
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    classes = _guarded_classes(content_window)
+    cache[cache_key] = classes
+    return classes
 
 
 def _scan_failure(requested_path: str, reason: str, config_path: str) -> GuardArtifact:

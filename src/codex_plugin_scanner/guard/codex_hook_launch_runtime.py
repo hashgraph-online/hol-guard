@@ -155,12 +155,12 @@ def isolated_daemon_start_command(
         "import os,sys;"
         f"sys.path.insert(0, {str(package_root.resolve())!r});"
         "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon import schedule_guard_daemon_recovery;"
+        "from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure;"
         "failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');"
         "failure_kind=failure_kind if failure_kind in"
         " {'overload','transport-failure','authenticated-control-plane-failure'}"
         " else 'transport-failure';"
-        f"schedule_guard_daemon_recovery(Path({str(guard_home)!r}),"
+        f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}),"
         f"home_dir=Path({str(resolved_home_dir)!r}),failure_kind=failure_kind)"
     )
     return (python_executable, "-I", "-c", bootstrap)
@@ -209,12 +209,21 @@ def run_isolated_hook_process(
     timeout_seconds: float,
     output_limit: int = _HOOK_SUBPROCESS_OUTPUT_LIMIT,
     allow_windows_breakaway: bool = False,
+    stop_event: threading.Event | None = None,
+    parent_liveness: bool = False,
 ) -> BoundedHookProcessResult:
-    """Run one child with bounded input lifetime and combined output bytes."""
+    """Run one child with bounded input lifetime and combined output bytes.
+
+    ``stop_event`` lets a long-lived reviewed helper terminate through the same
+    process-group / Windows Job containment path used for deadlines. Existing
+    one-shot callers do not need to supply it.
+    """
 
     if _HOOK_PROCESS_CONTAINMENT_FAILED.is_set() and not _retry_quarantined_hook_processes():
         return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     windows_job: WindowsHookJob | None = None
+    liveness_read_fd: int | None = None
+    liveness_write_fd: int | None = None
     try:
         if os.name == "nt":
             process, windows_job = spawn_windows_hook_process(
@@ -224,17 +233,30 @@ def run_isolated_hook_process(
                 allow_breakaway=allow_windows_breakaway,
             )
         else:
+            child_environment = dict(environment)
+            pass_fds: tuple[int, ...] = ()
+            if parent_liveness:
+                liveness_read_fd, liveness_write_fd = os.pipe()
+                os.set_inheritable(liveness_read_fd, True)
+                child_environment["HOL_GUARD_PARENT_LIVENESS_FD"] = str(liveness_read_fd)
+                pass_fds = (liveness_read_fd,)
             process = subprocess.Popen(
                 list(command),
                 cwd=cwd,
-                env=dict(environment),
+                env=child_environment,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 start_new_session=True,
+                pass_fds=pass_fds,
             )
     except OSError:
+        for descriptor in (liveness_read_fd, liveness_write_fd):
+            if descriptor is not None:
+                os.close(descriptor)
         return BoundedHookProcessResult(None, "", False, False)
+    if liveness_read_fd is not None:
+        os.close(liveness_read_fd)
 
     stdout_bytes = bytearray()
     output_bytes = 0
@@ -277,6 +299,9 @@ def run_isolated_hook_process(
     timed_out = False
     containment_confirmed = True
     while process.poll() is None:
+        if stop_event is not None and stop_event.is_set():
+            containment_confirmed = _kill_hook_process(process, windows_job)
+            break
         if output_limit_exceeded.is_set():
             containment_confirmed = _kill_hook_process(process, windows_job)
             break
@@ -317,6 +342,8 @@ def run_isolated_hook_process(
             containment_confirmed = False
     if not containment_confirmed:
         _quarantine_hook_process(process, windows_job, io_threads)
+    if liveness_write_fd is not None:
+        os.close(liveness_write_fd)
     with output_lock:
         stdout_decoded = stdout_bytes.decode("utf-8", errors="replace")
     return BoundedHookProcessResult(

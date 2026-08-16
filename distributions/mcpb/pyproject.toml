@@ -1,0 +1,8 @@
+[project]
+name = "hol-guard-mcpb-runtime"
+version = "2.2.87"
+description = "Runtime wrapper for the HOL Guard MCP Bundle"
+requires-python = ">=3.10,<4"
+dependencies = [
+    "hol-guard==2.2.87",
+]

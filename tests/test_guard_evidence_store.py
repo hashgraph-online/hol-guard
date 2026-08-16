@@ -398,8 +398,7 @@ class TestLargeScalePagination:
             ),
             (
                 "harness/category/severity",
-                query_prefix
-                + "where harness = ? and category = ? and severity = ? order by created_at desc limit ?",
+                query_prefix + "where harness = ? and category = ? and severity = ? order by created_at desc limit ?",
                 ("codex", "secret", "high", 100),
                 "idx_evidence_harness_category_severity_created",
             ),

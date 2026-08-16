@@ -2,18 +2,21 @@
 
 This worker avoids Python startup/import cost and avoids calling the
 CLI path for normal daemon hooks. It builds a ``HookReviewRequest``
-from the HTTP payload and calls ``HookReviewEngine.review()``.
+from the HTTP payload and calls the configured local decision backend.
 
 Security:
 - Never lets unreviewed tool output reach the model.
 - Never falls back to legacy CLI after a worker exception for a
   request that supplied only ``guard_source_ref`` without full output.
 - Never calls ``run_guard_command()``.
+- Native authority is limited to PostToolUse and falls back to Python on
+  any unavailable, incompatible, timeout, transport, or invalid-response case.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, final
 
@@ -22,6 +25,7 @@ from ..cli.commands_support_command_activity import (
     record_post_hook_command_activity_best_effort,
 )
 from ..config import load_guard_config
+from ..native_runtime import native_mode, review_post_tool_native
 from ..runtime.hook_content_scanner import ContentScanner
 from ..runtime.hook_decision_cache import HookDecisionCache
 from ..runtime.hook_review_engine import HookReviewEngine
@@ -96,30 +100,13 @@ class HookWorker:
     ) -> dict[str, object]:
         """Review a hook HTTP payload and return harness JSON.
 
-        Builds a ``HookReviewRequest`` from the payload, calls the engine,
-        and returns ``HookReviewResponse.to_harness_json()``.
-
-        Raises ``HookWorkerUnsupported`` if the request cannot be handled
-        by the fast path (caller should fall back to legacy CLI).
-
-        The fast path handles ``PostToolUse`` events:
-        + With ``guard_source_ref`` (Pi/OMP): uses the source-read fast
-        + path with hash verification and file-system caching.
-        + Without ``guard_source_ref`` (claude-code, codex, grok, zcode,
-        + etc.): uses the server-side output scanning path. The engine
-        + extracts the full tool output from the payload, scans it for
-        + secrets, and returns ``allow_original`` if clean.
-
-        All other events (``PreToolUse``, ``UserPromptSubmit``,
-        ``PermissionRequest``) must fall through to the legacy CLI path
-        so that existing policy, permission, and approval logic is not
-        bypassed.
+        ``off`` keeps the Python engine authoritative. ``shadow`` evaluates
+        Python first and exercises native only as non-authoritative evidence.
+        ``auto`` and ``force`` try the native runtime first and invoke Python
+        only when native cannot produce a valid local result.
         """
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
-
-        # Only PostToolUse is eligible for the fast path. Everything else
-        # needs the full CLI policy/permission engine.
         if event_name != "PostToolUse":
             raise HookWorkerUnsupported(f"fast path only supports PostToolUse, got event={event_name}")
 
@@ -132,7 +119,26 @@ class HookWorker:
             workspace=workspace,
             deadline=deadline,
         )
-        response = self.engine.review(request)
+        mode = native_mode()
+        if mode in {"auto", "force"}:
+            config = self._load_config(guard_home, workspace)
+            response = review_post_tool_native(
+                request,
+                observe_mode=config.mode == "observe",
+            )
+            if response is None:
+                response = self.engine.review(request)
+        else:
+            response = self.engine.review(request)
+            if mode == "shadow":
+                # Shadow evidence is explicitly non-authoritative. No native
+                # failure may replace or discard the completed Python result.
+                with suppress(Exception):
+                    _ = review_post_tool_native(
+                        request,
+                        observe_mode=response.observe_mode,
+                    )
+
         succeeded = hook_post_succeeded(event_name, payload)
         if self.activity_writer is not None:
             _ = self.activity_writer.submit_command_activity(
@@ -169,7 +175,6 @@ class HookWorker:
         workspace: Path | None,
         deadline: float | None = None,
     ) -> HookReviewRequest:
-        """Build a typed review request from the HTTP payload."""
         event_name = self._hook_event_name(payload)
         payload_kind = self._payload_kind(payload)
         output_summary = self._parse_output_summary(payload)
@@ -178,7 +183,6 @@ class HookWorker:
         config_path = payload.get("config_path")
         if not isinstance(config_path, str):
             config_path = None
-
         return HookReviewRequest(
             harness=harness,
             event_name=event_name,
@@ -244,22 +248,13 @@ class HookWorker:
         output_chars = ref.get("output_chars")
         tool_input_path = ref.get("tool_input_path")
         adapter_stat = ref.get("adapter_stat")
-
-        # Invalid shape: return a ref with version -1 so the engine fails safe.
         if not isinstance(version, int) or not isinstance(path, str) or not isinstance(output_sha256, str):
-            return HookSourceFileRef(
-                version=-1,
-                path="",
-                output_sha256="",
-                output_chars=0,
-            )
-
+            return HookSourceFileRef(version=-1, path="", output_sha256="", output_chars=0)
         if not isinstance(output_chars, int):
             output_chars = 0
         if not isinstance(tool_input_path, str):
             tool_input_path = None
         stat_dict = dict(adapter_stat) if isinstance(adapter_stat, Mapping) else {}
-
         return HookSourceFileRef(
             version=version,
             path=path,
@@ -268,18 +263,6 @@ class HookWorker:
             tool_input_path=tool_input_path,
             adapter_stat=stat_dict,
         )
-
-    # Server-side output scanning:
-    # Harnesses without client-side guard_source_ref (claude-code, codex,
-    # grok, zcode, etc.) are handled by the engine's server-side output
-    # scanning path. The engine extracts the full tool output from the
-    # payload (tool_response, stdout, etc.), scans it for secrets, and
-    # returns allow_original if clean. This is more secure than the legacy
-    # CLI path because the full output is scanned, not just a bounded excerpt.
-    #
-    # The source-read fast path (with guard_source_ref) remains available
-    # for Pi/OMP, which provides a client-computed hash for file-system
-    # caching and exact-match verification.
 
 
 def _canonical_hook_harness(harness: str) -> str:

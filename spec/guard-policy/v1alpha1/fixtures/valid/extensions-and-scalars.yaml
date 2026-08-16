@@ -1,0 +1,40 @@
+apiVersion: guard.hashgraphonline.com/v1alpha1
+kind: GuardPolicy
+metadata:
+  id: policy.scalar-fixtures
+  name: YAML 1.2 scalar fixtures
+  revision: 1
+  labels:
+    yes-value: yes
+    no-value: no
+    on-value: on
+    off-value: off
+    tilde-value: ~
+    leading-zero: 0123
+    sexagesimal: 12:34:56
+    infinity: .inf
+    not-a-number: .nan
+    timestamp-text: 2026-07-15
+  x-owner-context:
+    display: portable
+spec:
+  defaults:
+    mode: observe
+    x-mode-note: yes
+  rules:
+    - id: rule.allow-once
+      enabled: true
+      effect: allow
+      match: {}
+      lifetime:
+        mode: once
+      provenance:
+        source: import
+        createdAt: 2026-07-15T12:00:00Z
+      x-editor:
+        node:
+          x: 120
+          y: 80
+  x-layout:
+    direction: horizontal
+x-document-note: on

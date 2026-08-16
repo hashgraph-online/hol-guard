@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -10,8 +9,6 @@ import pytest
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import (
     HookDecisionCache,
-    SOURCE_CACHE_SCANNER_NAME,
-    SOURCE_CACHE_VERSION,
     SourceReadCacheMaterial,
     hook_config_fingerprint,
 )

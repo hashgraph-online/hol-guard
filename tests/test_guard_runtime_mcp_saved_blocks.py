@@ -360,7 +360,7 @@ def _seed_exact_package_block(
     return artifact.artifact_id
 
 
-def test_nonpackage_authenticated_saved_block_is_observed_without_inline_or_queue(
+def test_nonpackage_authenticated_saved_block_is_terminal_without_inline_or_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -392,13 +392,12 @@ def test_nonpackage_authenticated_saved_block_is_observed_without_inline_or_queu
         inline_approval_callback=_forbidden_inline,
     )
 
-    assert marker_path.exists()
+    assert not marker_path.exists()
     event = result["events"][2]
-    assert event["decision"] == "allow"
-    assert event["policy_action"] == "allow"
-    assert event["observed_policy_action"] == "require-reapproval"
+    assert event["decision"] == "block-stored-policy"
+    assert event["policy_action"] == "block"
     assert store.list_approval_requests(limit=10) == []
-    assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == "block"
 
 
 @pytest.mark.parametrize("approval_surface", ["inline", "native"])
@@ -945,8 +944,8 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
         ("review", "allow", [], [], "allow", "review"),
         ("allow", "review", [], [], "allow", "review"),
         ("review", "require-reapproval", [], [], "allow", "require-reapproval"),
-        ("block", "allow", [], [], "allow", "block"),
-        ("allow", "block", [], [], "allow", "block"),
+        ("block", "allow", [], [], "block", "block"),
+        ("allow", "block", [], [], "block", "block"),
         ("warn", "allow", [], [], "warn", None),
         ("allow", "warn", [], [], "warn", None),
     ],
@@ -1042,6 +1041,11 @@ def test_package_observe_mode_records_each_authority_without_approval_requests(
     monkeypatch.setattr(proxy, "_drain_and_validate_catalog_authority", lambda **_kwargs: True)
     monkeypatch.setattr(proxy, "_resolve_tool_call_authority", lambda **_kwargs: tool_authority)
     monkeypatch.setattr(proxy, "_resolve_package_policy", lambda **_kwargs: package_resolution)
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:5474",
+    )
 
     def capture_forward(**kwargs: object) -> tuple[dict[str, Any], dict[str, Any]]:
         forwarded.update(kwargs)
@@ -1070,6 +1074,11 @@ def test_package_observe_mode_records_each_authority_without_approval_requests(
 
     assert tool_queues == expected_tool_queue
     assert package_queues == expected_package_queue
+    if expected_executed == "block":
+        assert forwarded == {}
+        assert event["decision"] in {"terminal-block", "terminal-package-block"}
+        assert event["policy_action"] == "block"
+        return
     assert forwarded["policy_action"] == expected_executed
     assert event["decision"] == expected_executed
     assert event["policy_action"] == expected_executed

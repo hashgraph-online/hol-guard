@@ -80,7 +80,7 @@ function FailureBanner({ failed }: { failed: FirewallFailedOp }) {
 }
 
 export type FirewallControlsViewProps = {
-  activationAssist: { message: string; isError: boolean } | null;
+  activationAssistError: string | null;
   activatingRuntime: boolean;
   data: PackageFirewallStatusResponse;
   pendingOp: FirewallPendingOp | null;
@@ -107,7 +107,7 @@ export type FirewallControlsViewProps = {
 };
 
 export function FirewallControlsView({
-  activationAssist,
+  activationAssistError,
   activatingRuntime,
   data,
   pendingOp,
@@ -188,7 +188,7 @@ export function FirewallControlsView({
       </div>
 
       <ActivationSummary
-        activationAssist={activationAssist}
+        activationAssistError={activationAssistError}
         lastAuditProofAt={data.last_audit_proof_at}
         activatingRuntime={activatingRuntime}
         onActivateRuntime={onActivateRuntime}

@@ -1159,11 +1159,7 @@ def _run_hook_generic_payload(
             executable_action=policy_action,
             observed_policy_action=observed_policy_action,
             redaction_level=config.receipt_redaction_level,
-            risk_summary=(
-                "Watch-only mode allowed an action that current policy would stop."
-                if observed_policy_action is not None
-                else "Watch-only mode recorded this action without blocking it."
-            ),
+            risk_summary="Watch-only mode allowed an action that current policy would stop.",
             scanner_evidence=scanner_evidence,
             store=store,
         )

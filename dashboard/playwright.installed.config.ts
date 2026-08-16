@@ -8,7 +8,7 @@ if (!origin) throw new Error("GUARD_INSTALLED_ORIGIN is required");
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "installed-command-activity.spec.ts",
+  testMatch: ["installed-command-activity.spec.ts", "installed-extension-control-center.spec.ts"],
   fullyParallel: false,
   retries: 0,
   reporter: "list",

@@ -1,0 +1,152 @@
+name: MCPB Distribution
+
+on:
+  pull_request:
+    branches: [release/3.0]
+  push:
+    branches: [main, release/3.0]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate one-click MCP bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Validate Python wrapper
+        run: python -m compileall -q distributions/mcpb/server
+      - name: Validate and pack with pinned MCPB CLI
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+        run: |
+          set -euo pipefail
+          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb validate distributions/mcpb
+          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb pack distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
+          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb info "$RUNNER_TEMP/hol-guard.mcpb"
+          test -s "$RUNNER_TEMP/hol-guard.mcpb"
+
+  publish:
+    name: Attach versioned MCPB to release
+    if: >-
+      github.event_name == 'push' &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      !contains(github.event.head_commit.message || '', '[skip release publish]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - name: Check out exact release source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Wait for canonical release tag
+        id: release
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          tag=""
+          for attempt in $(seq 1 180); do
+            git fetch --force --tags origin
+            if [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
+              tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.0a*' | sort -V | tail -n 1)
+            elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
+              tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
+            else
+              echo "Unsupported release ref: $SOURCE_REF" >&2
+              exit 1
+            fi
+            [[ -n "$tag" ]] && break
+            [[ "$attempt" == "180" ]] && { echo "No canonical release tag appeared for $SOURCE_SHA" >&2; exit 1; }
+            sleep 10
+          done
+          if [[ "$tag" == alpha/v* ]]; then
+            version="${tag#alpha/v}"
+          else
+            version="${tag#v}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for exact PyPI package and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            pypi_ok=false
+            release_ok=false
+            curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+              "https://pypi.org/pypi/hol-guard/${VERSION}/json" -o /tmp/pypi.json && \
+              jq -e --arg version "$VERSION" '.info.version == $version' /tmp/pypi.json >/dev/null && pypi_ok=true
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && release_ok=true
+            if [[ "$pypi_ok" == true && "$release_ok" == true ]]; then exit 0; fi
+            [[ "$attempt" == "120" ]] && { echo "Release prerequisites did not become available" >&2; exit 1; }
+            sleep 10
+          done
+
+      - name: Stamp exact release into isolated bundle source
+        id: bundle
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          bundle_dir="$RUNNER_TEMP/hol-guard-mcpb"
+          cp -R distributions/mcpb "$bundle_dir"
+          python - "$bundle_dir" "$VERSION" <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          version = sys.argv[2]
+          manifest_path = root / "manifest.json"
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          manifest["version"] = version
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+          pyproject_path = root / "pyproject.toml"
+          text = pyproject_path.read_text(encoding="utf-8")
+          text = re.sub(r'(?m)^version = "[^"]+"$', f'version = "{version}"', text, count=1)
+          text = re.sub(r'"hol-guard==[^"]+"', f'"hol-guard=={version}"', text, count=1)
+          pyproject_path.write_text(text, encoding="utf-8")
+          PY
+          artifact="$RUNNER_TEMP/hol-guard-${VERSION}.mcpb"
+          echo "dir=$bundle_dir" >> "$GITHUB_OUTPUT"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and pack immutable bundle
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+          BUNDLE_DIR: ${{ steps.bundle.outputs.dir }}
+          ARTIFACT: ${{ steps.bundle.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb validate "$BUNDLE_DIR"
+          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb pack "$BUNDLE_DIR" "$ARTIFACT"
+          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb info "$ARTIFACT"
+          sha256sum "$ARTIFACT" > "${ARTIFACT}.sha256"
+
+      - name: Attach bundle and checksum to canonical release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          ARTIFACT: ${{ steps.bundle.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" "$ARTIFACT" "${ARTIFACT}.sha256" --clobber --repo "$GITHUB_REPOSITORY"

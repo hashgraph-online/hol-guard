@@ -1,0 +1,47 @@
+{
+  "$id": "https://hol.org/schemas/guard/mdm-cloud-enrollment-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "deviceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "installationGeneration": {
+      "pattern": "^[0-9a-f]{32}$",
+      "type": "string"
+    },
+    "keyId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "publicKeyPem": {
+      "maxLength": 16384,
+      "minLength": 1,
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "hol-guard-mdm-enrollment.v1"
+    },
+    "token": {
+      "maxLength": 512,
+      "minLength": 1,
+      "type": "string"
+    },
+    "workspaceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "workspaceId",
+    "deviceId",
+    "installationGeneration",
+    "keyId",
+    "publicKeyPem",
+    "token"
+  ],
+  "title": "HOL Guard one-time MDM device enrollment v1",
+  "type": "object"
+}

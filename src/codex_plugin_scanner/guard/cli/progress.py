@@ -78,8 +78,6 @@ class GuardProgress:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        if exc_type is not None:
-            self.failed(f"{self._title or 'Operation'} did not complete")
         if self._use_rich and self._progress is not None:
             self._progress.__exit__(exc_type, exc_val, exc_tb)
 
@@ -115,14 +113,3 @@ class GuardProgress:
             )
         else:
             print(f"hol-guard: ✓ {description}", file=sys.stderr, flush=True)
-
-    def failed(self, description: str = "Failed") -> None:
-        """Finish the bar with an explicit failure state."""
-        if self._use_rich and self._progress is not None and self._task is not None:
-            self._progress.update(
-                self._task,
-                description=f"✗ {description}",
-                completed=self._total,
-            )
-        else:
-            print(f"hol-guard: ✗ {description}", file=sys.stderr, flush=True)

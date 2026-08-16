@@ -464,6 +464,7 @@ def _load_hook_payload(
 _ACTION_ENVELOPE_HARNESSES = frozenset(
     {
         "codex",
+        "cline",
         "claude-code",
         "opencode",
         "copilot",

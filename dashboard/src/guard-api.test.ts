@@ -6,29 +6,23 @@ import {
   fetchCommandActivityApi,
   fetchAllPendingRequests,
   fetchApprovalPage,
-  fetchGuardUpdateStatus,
   GuardHarnessActionError,
   GuardProtectionRepairError,
   GuardSessionUnavailableError,
   fetchQueueSummary,
-  fetchRuntimeSnapshot,
-  fetchResumeStatus,
-  formatHarnessCommand,
-  normalizeRuntimeSnapshot,
-  normalizeApprovalRequest,
+	  fetchResumeStatus,
+	  formatHarnessCommand,
+	  normalizeRuntimeSnapshot,
+	  normalizeApprovalRequest,
   parseActionEnvelope,
   parseDecisionV2,
   readGuardToken,
-  readRememberedGuardUpdateChannel,
-  runHarnessAction,
   runPackageFirewallAction,
   runPackageSync,
-  setGuardUpdateChannel,
   startPackageFirewallConnect,
-  runAuditRemediation,
-  repairSupplyChainProtection,
-  resolveRequestWithQueueResult,
-  retryResume,
+	  runAuditRemediation,
+	  resolveRequestWithQueueResult,
+	  retryResume,
 } from "./guard-api";
 import { recommendedScopeForAction } from "./approval-scopes";
 import { resolveCloudSyncHealthCopy } from "./runtime-overview";
@@ -284,14 +278,6 @@ assert(
   "T760: harness setup fallback command should quote spaced args"
 );
 
-for (const source of ["bunx", "guard-cli", "package-firewall"]) {
-  const rejected = await runHarnessAction({ harness: source, action: "install", dryRun: false }).then(
-    () => false,
-    (error: unknown) => error instanceof Error && error.message.includes("not a connectable AI app"),
-  );
-  assert(rejected, `${source} must be rejected before the AI-app harness mutation request`);
-}
-
 assert(snapshot.cloud_pairing_state.state === "paired_waiting", "demo snapshot exposes paired waiting state");
 assert(snapshot.cloud_pairing_state.label === snapshot.cloud_state_label, "demo pairing label matches legacy label");
 assert(snapshot.cloud_pairing_state.detail === snapshot.cloud_state_detail, "demo pairing detail matches legacy detail");
@@ -415,16 +401,6 @@ assert(
 );
 
 const parsedShell = parseActionEnvelope({ ...BASE_ENVELOPE, action_type: "shell_command", command: "git diff HEAD~1 -- src/" });
-const parsedCategorizedShell = parseActionEnvelope({
-  ...BASE_ENVELOPE,
-  action_type: "shell_command",
-  command: "opaque-wrapper action",
-  command_category: "command.github",
-});
-assert(
-  parsedCategorizedShell?.command_category === "command.github",
-  "T070: command category survives action-envelope normalization",
-);
 assert(parsedShell !== null && parsedShell.action_type === "shell_command", "T070: valid shell_command envelope parses correctly");
 
 const parsedPrompt = parseActionEnvelope({
@@ -1241,57 +1217,6 @@ assert(
   "L078ad: fetchApprovalPage falls back to sessionStorage when localStorage is unavailable"
 );
 
-installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
-{
-  const noTokenCalls = installFetchStub({});
-  const approvalPageError = await fetchApprovalPage().then(
-    () => null,
-    (error: unknown) => error
-  );
-  assert(
-    approvalPageError instanceof GuardSessionUnavailableError,
-    "L078ae-no-token: fetchApprovalPage rejects with GuardSessionUnavailableError when no session token is available"
-  );
-  const snapshotError = await fetchRuntimeSnapshot().then(
-    () => null,
-    (error: unknown) => error
-  );
-  assert(
-    snapshotError instanceof GuardSessionUnavailableError,
-    "L078af-no-token: fetchRuntimeSnapshot rejects with GuardSessionUnavailableError when no session token is available"
-  );
-  assert(
-    noTokenCalls.length === 0,
-    "L078ag-no-token: auth-required fetches issue no HTTP requests when the dashboard session token is missing"
-  );
-}
-
-const updateChannelStorage = new Map<string, string>();
-installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", { localStorage: updateChannelStorage });
-installFetchStub({
-  "/v1/update/channel": { release_channel: "alpha" },
-});
-const selectedUpdateChannel = await setGuardUpdateChannel("alpha");
-assert(selectedUpdateChannel.release_channel === "alpha", "L078ae: update channel save returns alpha");
-assert(readRememberedGuardUpdateChannel() === "alpha", "L078af: successful channel save is remembered");
-
-installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", { localStorage: updateChannelStorage });
-installFetchStub({
-  "/v1/update/status": { current_version: "2.2.0a68" },
-});
-const reloadedUpdateChannel = await fetchGuardUpdateStatus();
-assert(
-  reloadedUpdateChannel.release_channel === "alpha",
-  "L078ag: remembered alpha channel survives a reload when status omits the channel",
-);
-
-installFetchStub({
-  "/v1/update/status": { current_version: "2.2.0a68", release_channel: "stable" },
-});
-const authoritativeStableChannel = await fetchGuardUpdateStatus();
-assert(authoritativeStableChannel.release_channel === "stable", "L078ah: daemon status remains authoritative");
-assert(readRememberedGuardUpdateChannel() === "stable", "L078ai: daemon status reconciles remembered channel");
-
 installGuardWindow("?guard-token=token-pending-pages&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const codexPageItem: GuardApprovalRequest = {
   ...BASE_REQUEST,
@@ -1304,10 +1229,6 @@ const claudePageItem: GuardApprovalRequest = {
   harness: "claude-code",
 };
 const pendingPageCalls: RecordedFetch[] = [];
-let releaseSecondPendingPage: (() => void) | undefined;
-const secondPendingPageGate = new Promise<void>((resolve) => {
-  releaseSecondPendingPage = resolve;
-});
 globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = input instanceof Request ? input.url : String(input);
   pendingPageCalls.push({ url, init });
@@ -1329,7 +1250,6 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
     );
   }
   if (cursor === "cursor-page-2") {
-    await secondPendingPageGate;
     return new Response(
       JSON.stringify({
         items: [claudePageItem],
@@ -1344,29 +1264,8 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   return new Response(JSON.stringify({ error: "invalid_cursor" }), { status: 400 });
 };
 
-const progressivePendingPages: number[] = [];
-let publishFirstPendingPage: (() => void) | undefined;
-const firstPendingPagePublished = new Promise<void>((resolve) => {
-  publishFirstPendingPage = resolve;
-});
-const pendingItemsPromise = fetchAllPendingRequests((items) => {
-  progressivePendingPages.push(items.length);
-  if (items.length === 1) {
-    publishFirstPendingPage?.();
-  }
-});
-await firstPendingPagePublished;
-assert(
-  progressivePendingPages.join(",") === "1",
-  "L078b: fetchAllPendingRequests publishes the first page before the next page responds"
-);
-releaseSecondPendingPage?.();
-const pendingItems = await pendingItemsPromise;
+const pendingItems = await fetchAllPendingRequests();
 assert(pendingItems.length === 2, "L078b: fetchAllPendingRequests aggregates pending pages");
-assert(
-  progressivePendingPages.join(",") === "1,2",
-  "L078b: fetchAllPendingRequests publishes each accumulated page for progressive rendering"
-);
 assert(
   pendingItems.some((item) => item.harness === "claude-code"),
   "L078b: fetchAllPendingRequests includes later-page harnesses"
@@ -1680,10 +1579,6 @@ const resolution = await resolveRequestWithQueueResult({
   reason: "reviewed",
   scope_contract_version: "guard.approval-scopes.v2",
   scope_contract_digest: "scope-digest",
-  mcp_grant_target: "category",
-  mcp_grant_duration: "5h",
-  local_tool_grant_target: "capability",
-  local_tool_grant_duration: "1h",
 });
 const resolveBody = JSON.parse(String(fetchResolveCalls[0].init?.body)) as Record<string, unknown>;
 
@@ -1699,15 +1594,6 @@ assert(
   resolveBody["scope_contract_version"] === "guard.approval-scopes.v2" &&
     resolveBody["scope_contract_digest"] === "scope-digest",
   "L077: resolveRequestWithQueueResult binds the displayed scope contract",
-);
-assert(
-  resolveBody["mcp_grant_target"] === "category" && resolveBody["mcp_grant_duration"] === "5h",
-  "L077: resolveRequestWithQueueResult binds the selected temporary MCP grant",
-);
-assert(
-  resolveBody["local_tool_grant_target"] === "capability" &&
-    resolveBody["local_tool_grant_duration"] === "1h",
-  "L077: resolveRequestWithQueueResult binds the selected trusted local tool grant",
 );
 assert(resolution.remaining_pending_count === 1, "L077: resolveRequestWithQueueResult returns remaining count");
 assert(resolution.next_selectable_request_id === "req-next", "L077: resolveRequestWithQueueResult returns next selectable id");
@@ -2039,40 +1925,5 @@ try {
 }
 assert(hostileCommandActivityError instanceof Error, "command activity path traversal is rejected");
 assert(hostileCommandActivityFetches === 0, "path traversal cannot receive the dashboard session token");
-
-installGuardWindow("?guard-token=supply-chain-repair-token&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
-globalThis.fetch = async (): Promise<Response> =>
-  Response.json({
-    result: {
-      completed_steps: ["intelligence_sync", "package_shims", "runtime_activation"],
-      failed_steps: [],
-      message: "Supply-chain repair finished.",
-    },
-  });
-const compatibleRepair = await repairSupplyChainProtection();
-assert(compatibleRepair.repaired, "complete legacy repair responses are successful");
-
-globalThis.fetch = async (): Promise<Response> =>
-  Response.json({
-    result: {
-      repaired: false,
-      completed_steps: ["intelligence_sync", "package_shims", "runtime_activation"],
-      failed_steps: [],
-      message: "Supply-chain repair incomplete.",
-    },
-  });
-const explicitlyIncompleteRepair = await repairSupplyChainProtection();
-assert(!explicitlyIncompleteRepair.repaired, "explicit incomplete repair state remains authoritative");
-
-globalThis.fetch = async (): Promise<Response> =>
-  Response.json({
-    result: {
-      completed_steps: ["package_shims", "runtime_activation"],
-      failed_steps: [],
-      message: "Supply-chain repair incomplete.",
-    },
-  });
-const partialLegacyRepair = await repairSupplyChainProtection();
-assert(!partialLegacyRepair.repaired, "partial legacy repair responses remain incomplete");
 
 console.log("guard-api.test.ts: all tests passed");

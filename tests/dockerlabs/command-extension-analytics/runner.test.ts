@@ -205,8 +205,8 @@ describe("command extension analytics Dockerlabs orchestration", () => {
       expect(server).toContain(`_run_installed_hook(\"${harness}\"`);
     }
     expect(server).toContain("subprocess.run(");
-    expect(server).toContain('"hol-guard",\n        "hook",');
-    expect(server).not.toContain('"hol-guard",\n        "guard",\n        "hook",');
+    expect(server).toContain('[\n        "hol-guard",\n        "hook",');
+    expect(server).not.toContain('[\n        "hol-guard",\n        "guard",\n        "hook",');
     expect(server).toContain('"git status --short"');
     expect(server).toContain('"git diff --stat"');
     expect(server).toContain('"git push --delete origin stale-lab-branch"');

@@ -49,12 +49,18 @@ WORKSPACE_ID = "2de4fcb4-a5b2-447a-a67f-21c6eb4c5f3c"
 
 
 def test_normalized_supply_chain_batch_url_preserves_sync_prefix() -> None:
-    assert local_supply_chain_module._normalized_supply_chain_batch_url(
-        "https://guard.example/api/guard/receipts/sync", WORKSPACE_ID
-    ) == f"https://guard.example/api/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
-    assert local_supply_chain_module._normalized_supply_chain_batch_url(
-        "https://guard.example/registry/api/v1/guard/receipts/sync?workspaceId=old", WORKSPACE_ID
-    ) == f"https://guard.example/registry/api/v1/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
+    assert (
+        local_supply_chain_module._normalized_supply_chain_batch_url(
+            "https://guard.example/api/guard/receipts/sync", WORKSPACE_ID
+        )
+        == f"https://guard.example/api/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
+    )
+    assert (
+        local_supply_chain_module._normalized_supply_chain_batch_url(
+            "https://guard.example/registry/api/v1/guard/receipts/sync?workspaceId=old", WORKSPACE_ID
+        )
+        == f"https://guard.example/registry/api/v1/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
+    )
 
 
 def test_cloud_workspace_audit_renews_dpop_proof_for_each_page(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -868,9 +874,12 @@ def test_workspace_context_redacts_path_and_handles_hostname_failure(
     assert payload["folderPath"] == "~/projects/app"
     assert payload["machine"] is None
     assert local_supply_chain_module._redacted_workspace_folder_path(Path("/workspace/app")) == "…/workspace/app"
-    assert local_supply_chain_module._codebase_label_from_remote(
-        "git@gitlab.com:team/backend/service.git",
-    ) == "team/backend/service"
+    assert (
+        local_supply_chain_module._codebase_label_from_remote(
+            "git@gitlab.com:team/backend/service.git",
+        )
+        == "team/backend/service"
+    )
 
 
 def test_run_cloud_workspace_audit_falls_back_after_page_limit(monkeypatch: pytest.MonkeyPatch) -> None:

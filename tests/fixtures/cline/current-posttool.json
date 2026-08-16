@@ -1,0 +1,13 @@
+{
+  "hookName": "PostToolUse",
+  "taskId": "fixture-current-posttool",
+  "workspaceRoots": ["/workspace"],
+  "tool_result": {
+    "id": "tool-2",
+    "name": "read_files",
+    "input": {
+      "paths": ["README.md"]
+    },
+    "output": "fixture output"
+  }
+}

@@ -1,0 +1,235 @@
+/*
+ * Responsive layout corrections for the local Guard dashboard.
+ *
+ * The desktop shell removes usable width before individual workspaces render,
+ * so viewport-only breakpoints can make a nominally wide window behave like a
+ * narrow one. These rules are imported after styles.css and respond to the
+ * actual workspace width where possible.
+ */
+
+#guard-dashboard-root {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+#guard-dashboard-root main,
+#guard-dashboard-root main > div {
+  min-width: 0;
+}
+
+/*
+ * Keep the compact header through intermediate desktop widths. At this size a
+ * 16rem sidebar plus page padding leaves too little room for settings, tables,
+ * and multi-action page headers, especially at browser zoom above 100%.
+ */
+@media (min-width: 64rem) and (max-width: 79.999rem) {
+  #guard-dashboard-root > div > header {
+    display: flex !important;
+  }
+
+  #guard-dashboard-root > div > aside {
+    display: none !important;
+  }
+
+  #guard-dashboard-root > div > aside + div {
+    min-height: calc(100dvh - 4rem);
+    padding-left: 0 !important;
+  }
+
+  #guard-dashboard-root main {
+    padding: clamp(1.25rem, 3vw, 2rem) !important;
+  }
+}
+
+/* Workspace title, tabs, and actions respond to their content width. */
+.guard-page-header {
+  min-width: 0;
+  container: guard-page-header / inline-size;
+}
+
+.guard-page-header__layout,
+.guard-page-header__copy,
+.guard-page-header__toolbar,
+.guard-page-header__tabs {
+  min-width: 0;
+}
+
+.guard-page-header__layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.guard-page-header__copy h1,
+.guard-page-header__copy p {
+  overflow-wrap: anywhere;
+}
+
+.guard-page-header__toolbar {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.guard-page-header__tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.guard-page-header__actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.guard-page-header__tabs [role="tablist"],
+.guard-settings-mobile-tabs [role="tablist"] {
+  width: max-content;
+  min-width: 100%;
+  flex-wrap: nowrap !important;
+}
+
+.guard-page-header__tabs [role="tab"],
+.guard-settings-mobile-tabs [role="tab"] {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@container guard-page-header (min-width: 58rem) {
+  .guard-page-header__layout {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .guard-page-header__copy {
+    flex: 0 0 min(18rem, 28%);
+    min-width: 10rem;
+  }
+
+  .guard-page-header__toolbar {
+    width: auto;
+    flex: 1 1 auto;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 1rem;
+  }
+
+  .guard-page-header__tabs {
+    flex: 1 1 auto;
+  }
+
+  .guard-page-header__actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+  }
+}
+
+/* Settings navigation switches from rail to tabs using workspace width. */
+.guard-settings-shell {
+  min-width: 0;
+  container: guard-settings / inline-size;
+}
+
+.guard-settings-layout,
+.guard-settings-panel,
+.guard-settings-panel > div {
+  min-width: 0;
+}
+
+.guard-settings-side-nav button > span:last-child {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+@container guard-settings (max-width: 55.999rem) {
+  .guard-settings-layout {
+    flex-direction: column !important;
+  }
+
+  .guard-settings-side-nav {
+    display: none !important;
+  }
+
+  .guard-settings-mobile-tabs,
+  .guard-settings-mobile-heading {
+    display: block !important;
+  }
+
+  .guard-settings-panel [aria-label="Save settings"] {
+    position: static !important;
+    bottom: auto !important;
+  }
+}
+
+@container guard-settings (min-width: 56rem) {
+  .guard-settings-layout {
+    flex-direction: row !important;
+    align-items: stretch !important;
+  }
+
+  .guard-settings-side-nav {
+    display: block !important;
+  }
+
+  .guard-settings-mobile-tabs,
+  .guard-settings-mobile-heading {
+    display: none !important;
+  }
+}
+
+/*
+ * Protection cards must preserve a readable minimum width. The source utility
+ * uses four columns at the viewport lg breakpoint, which is too aggressive
+ * once both dashboard and settings rails have consumed space.
+ */
+#settings-panel-protection fieldset > div:has(> button[aria-pressed]) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15.5rem), 1fr)) !important;
+  align-items: stretch;
+}
+
+#settings-panel-protection fieldset > div:has(> button[aria-pressed]) > button {
+  min-width: 0;
+  height: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* Avoid covering the form in the laptop-height desktop window. */
+@media (max-height: 68.75rem) {
+  #guard-dashboard-root [aria-label="Save settings"] {
+    position: static !important;
+    bottom: auto !important;
+  }
+}
+
+/* Evidence controls remain usable instead of squeezing below touch size. */
+@media (max-width: 40rem) {
+  #guard-dashboard-root [aria-label="Evidence filters"] > div:first-child {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+
+  #guard-dashboard-root [aria-label="Evidence filters"] > div:first-child > label:first-child {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  #guard-dashboard-root [aria-label="Evidence filters"] > div:first-child > select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #guard-dashboard-root [aria-label="Evidence filters"] > div:first-child > button {
+    justify-self: start;
+  }
+}

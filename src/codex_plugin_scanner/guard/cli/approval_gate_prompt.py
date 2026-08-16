@@ -6,16 +6,19 @@ import getpass
 import sys
 from pathlib import Path
 
-from ..approval_gate import ApprovalGateError, ApprovalGateInput, public_config
+from ..approval_gate import ApprovalGateError, ApprovalGateInput, public_config, recent_totp_satisfied
 
 
 def prompt_for_approval_gate(
     guard_home: Path,
     *,
     use_cooldown: bool = True,
+    summary: str | None = None,
 ) -> ApprovalGateInput | None:
     gate = public_config(guard_home)
     if not gate.enabled:
+        return None
+    if gate.totp_enabled and recent_totp_satisfied(guard_home):
         return None
     if not sys.stdin.isatty():
         proof_name = "Authenticator code" if gate.totp_enabled else "Approval password"
@@ -23,6 +26,8 @@ def prompt_for_approval_gate(
             "approval_gate_interactive_required",
             f"{proof_name} is required from an interactive terminal.",
         )
+    if summary:
+        print(summary, file=sys.stderr)
     password = None if gate.totp_enabled else getpass.getpass("Approval password: ")
     totp_code = getpass.getpass("Authenticator code: ") if gate.totp_enabled else None
     return ApprovalGateInput(

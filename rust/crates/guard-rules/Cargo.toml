@@ -1,0 +1,13 @@
+[package]
+name = "guard-rules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hex.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

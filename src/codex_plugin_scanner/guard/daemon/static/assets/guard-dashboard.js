@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/harness-setup-target.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/extensions-workspace.js","assets/chunks/use-resolved-approval-gate.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -15313,6 +15313,35 @@ function computePeriodComparison(receipts, days, now2) {
     totalDelta: currentTotal - previousTotal
   };
 }
+function nonNegativeNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+function isRecord$4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function normalizeOperatorHealth(raw) {
+  if (!isRecord$4(raw)) {
+    return void 0;
+  }
+  const state = raw["state"];
+  const cause = raw["cause"];
+  const automaticRecovery = raw["automatic_recovery"];
+  if (!["healthy", "backlogged", "saturated", "store-contended"].includes(String(state)) || typeof cause !== "string" || typeof automaticRecovery !== "string") {
+    return void 0;
+  }
+  return {
+    state,
+    cause,
+    automatic_recovery: automaticRecovery,
+    repairable: raw["repairable"] === true,
+    queue_depth: nonNegativeNumber(raw["queue_depth"]),
+    queue_limit: nonNegativeNumber(raw["queue_limit"]),
+    oldest_wait_ms: nonNegativeNumber(raw["oldest_wait_ms"]),
+    workers_busy: nonNegativeNumber(raw["workers_busy"]),
+    workers_ready: nonNegativeNumber(raw["workers_ready"]),
+    workers_configured: nonNegativeNumber(raw["workers_configured"])
+  };
+}
 const PROTECTION_CHECK_IDS = [
   "harness_hooks",
   "daemon",
@@ -15445,326 +15474,6 @@ function protectionHealthFor(snapshot, harness = null) {
   if (scoped) return scoped;
   const fallback = healthFromChecks(fallbackChecks());
   return { harness: STABLE_ID$1.test(harness) && harness.length <= 64 ? harness : "unknown", ...fallback };
-}
-const TARGETS$1 = /* @__PURE__ */ new Set(["exact", "category", "server"]);
-const DURATIONS$1 = /* @__PURE__ */ new Set(["once", "15m", "1h", "5h"]);
-const ROUTINE_BROWSER_OPERATIONS = /* @__PURE__ */ new Set([
-  "accept_dialog",
-  "accessibility_snapshot",
-  "click",
-  "close_page",
-  "dismiss_dialog",
-  "drag",
-  "emulate",
-  "fill_form",
-  "fill_input",
-  "focus_element",
-  "get_console",
-  "get_console_message",
-  "get_dom",
-  "get_html",
-  "get_network",
-  "get_performance",
-  "get_snapshot",
-  "go_back",
-  "go_forward",
-  "handle_dialog",
-  "hover",
-  "lighthouse_audit",
-  "list_console_messages",
-  "list_network_requests",
-  "list_pages",
-  "list_resources",
-  "navigate_page",
-  "new_page",
-  "performance_analyze_insight",
-  "performance_start_trace",
-  "performance_stop_trace",
-  "performance_trace",
-  "press_key",
-  "read_console",
-  "read_network",
-  "reload_page",
-  "resize_page",
-  "scroll",
-  "select_dropdown",
-  "select_page",
-  "submit_form",
-  "take_screenshot",
-  "take_snapshot",
-  "type_text",
-  "wait_for"
-]);
-function nonEmpty$1(value) {
-  return typeof value === "string" && value.trim().length > 0;
-}
-function validTargets$1(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((item) => TARGETS$1.has(item)))];
-}
-function validDurations$1(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((item) => DURATIONS$1.has(item)))];
-}
-function parseTemporaryMcpApproval(value) {
-  if (typeof value !== "object" || value === null) return void 0;
-  const raw = value;
-  if (raw.eligible !== true || !nonEmpty$1(raw.server_name) || !nonEmpty$1(raw.server_identity_hash) || !nonEmpty$1(raw.category)) {
-    return void 0;
-  }
-  const allowedTargets = validTargets$1(raw.allowed_targets);
-  const allowedDurations = validDurations$1(raw.allowed_durations);
-  if (allowedTargets.length === 0 || allowedDurations.length === 0) return void 0;
-  return {
-    eligible: true,
-    server_name: raw.server_name.trim(),
-    server_identity_hash: raw.server_identity_hash,
-    category: raw.category.trim(),
-    target_label: nonEmpty$1(raw.target_label) ? raw.target_label.trim() : null,
-    allowed_targets: allowedTargets,
-    allowed_durations: allowedDurations,
-    hard_risk_exclusions: Array.isArray(raw.hard_risk_exclusions) ? raw.hard_risk_exclusions.filter(nonEmpty$1).map((entry) => entry.trim()) : []
-  };
-}
-function temporaryMcpApprovalOptions(item) {
-  const value = parseTemporaryMcpApproval(item.temporary_mcp_approval);
-  if (value === void 0) return null;
-  const { eligible: _, ...options } = value;
-  return options;
-}
-function temporaryMcpApprovalNeedsRetry(item) {
-  if (temporaryMcpApprovalOptions(item) !== null || item.artifact_type !== "tool_call") {
-    return false;
-  }
-  const operation = item.artifact_name?.split(":", 2)[1] ?? "";
-  return /^[^:]+:runtime:(?:global|project):[^:]+:[^:]+$/.test(item.artifact_id) && ROUTINE_BROWSER_OPERATIONS.has(operation);
-}
-function defaultTemporaryMcpTarget(options) {
-  if (options.allowed_targets.includes("category")) return "category";
-  return options.allowed_targets[0];
-}
-function defaultTemporaryMcpDuration(options) {
-  if (options.allowed_durations.includes("1h")) return "1h";
-  return options.allowed_durations[0];
-}
-function validTemporaryMcpSelection(options, target, duration) {
-  if (options === null) return { target: "exact", duration: "once" };
-  return {
-    target: options.allowed_targets.includes(target) ? target : defaultTemporaryMcpTarget(options),
-    duration: options.allowed_durations.includes(duration) ? duration : defaultTemporaryMcpDuration(options)
-  };
-}
-function temporaryMcpTargetLabel(target, options) {
-  if (target === "exact") return "This exact call";
-  if (target === "category") return "This browser capability";
-  return `All routine calls from ${options.server_name}`;
-}
-function browserCapabilityLabel(category) {
-  const labels = {
-    browser_navigation: "Navigate",
-    browser_inspection: "Inspect",
-    browser_interaction: "Interact"
-  };
-  return labels[category] ?? category.replace(/^browser_/, "").replaceAll("_", " ");
-}
-function temporaryMcpDurationLabel(duration) {
-  return { once: "Once", "15m": "15 min", "1h": "1 hour", "5h": "5 hours" }[duration];
-}
-function temporaryMcpAllowButtonLabel(duration) {
-  return duration === "once" ? "Approve once" : `Allow for ${temporaryMcpDurationLabel(duration)}`;
-}
-function temporaryMcpExpiryLabel(duration, now2 = /* @__PURE__ */ new Date()) {
-  if (duration === "once") return null;
-  const milliseconds = { "15m": 15 * 6e4, "1h": 60 * 6e4, "5h": 5 * 60 * 6e4 }[duration];
-  return new Intl.DateTimeFormat(void 0, {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(now2.getTime() + milliseconds));
-}
-function temporaryMcpSummary(options, target, duration) {
-  const coverage = target === "server" ? "Routine tools" : browserCapabilityLabel(options.category);
-  return ["Allow", options.server_name, coverage, options.target_label, temporaryMcpDurationLabel(duration)].filter(nonEmpty$1).join(" · ");
-}
-function buildTemporaryMcpResolutionFields(options, target, duration, persistExactAction = false) {
-  if (persistExactAction || options === null || duration === "once" || !options.allowed_targets.includes(target) || !options.allowed_durations.includes(duration)) {
-    return {};
-  }
-  return { mcp_grant_target: target, mcp_grant_duration: duration };
-}
-const TARGETS = /* @__PURE__ */ new Set(["capability", "version"]);
-const DURATIONS = /* @__PURE__ */ new Set(["once", "15m", "1h", "5h", "version", "always"]);
-function nonEmpty(value) {
-  return typeof value === "string" && value.trim().length > 0;
-}
-function validTargets(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(
-    value.filter(
-      (item) => TARGETS.has(item)
-    )
-  )];
-}
-function validDurations(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(
-    value.filter(
-      (item) => DURATIONS.has(item)
-    )
-  )];
-}
-function parseLocalToolApproval(value) {
-  if (typeof value !== "object" || value === null) return void 0;
-  const raw = value;
-  if (raw.eligible !== true || !nonEmpty(raw.tool_name) || !nonEmpty(raw.tool_identity_hash) || !nonEmpty(raw.capability) || !nonEmpty(raw.read_only_reason)) {
-    return void 0;
-  }
-  const allowedTargets = validTargets(raw.allowed_targets);
-  const allowedDurations = validDurations(raw.allowed_durations);
-  if (allowedTargets.length === 0 || allowedDurations.length === 0) return void 0;
-  return {
-    eligible: true,
-    tool_name: raw.tool_name.trim(),
-    tool_identity_hash: raw.tool_identity_hash,
-    capability: raw.capability.trim(),
-    read_only_reason: raw.read_only_reason.trim(),
-    trust_basis: raw.trust_basis === "package-profile" ? "package-profile" : "verified-files",
-    indefinite_allowed: raw.indefinite_allowed === true,
-    allowed_targets: allowedTargets,
-    allowed_durations: allowedDurations,
-    hard_risk_exclusions: Array.isArray(raw.hard_risk_exclusions) ? raw.hard_risk_exclusions.filter(nonEmpty).map((entry) => entry.trim()) : []
-  };
-}
-function localToolApprovalOptions(item) {
-  const value = parseLocalToolApproval(item.local_tool_approval);
-  if (value === void 0) return null;
-  const { eligible: _, ...options } = value;
-  return options;
-}
-function defaultLocalToolTarget(options) {
-  if (options.allowed_targets.includes("capability")) return "capability";
-  return options.allowed_targets[0];
-}
-function defaultLocalToolDuration(options) {
-  if (options.allowed_durations.includes("once")) return "once";
-  return options.allowed_durations[0];
-}
-function validLocalToolSelection(options, target, duration) {
-  if (options === null) return { target: "capability", duration: "once" };
-  return {
-    target: options.allowed_targets.includes(target) ? target : defaultLocalToolTarget(options),
-    duration: options.allowed_durations.includes(duration) ? duration : defaultLocalToolDuration(options)
-  };
-}
-function localToolTargetLabel(target, options) {
-  return target === "capability" ? `Only ${options.capability} calls` : "All recognized read-only calls";
-}
-function localToolDurationLabel(duration) {
-  const labels = {
-    once: "Once",
-    "15m": "15 min",
-    "1h": "1 hour",
-    "5h": "5 hours",
-    version: "Until tool changes",
-    always: "Always"
-  };
-  return labels[duration];
-}
-function localToolReadOnlyReasonLabel(reason) {
-  if (reason.startsWith("http_")) {
-    return `an HTTP ${reason.slice(5).toUpperCase()} request`;
-  }
-  if (reason.startsWith("operation_")) {
-    return `the read-only ${reason.slice(10)} operation`;
-  }
-  return "a recognized read-only operation";
-}
-function localToolAllowButtonLabel(duration) {
-  if (duration === "once") return "Approve once";
-  if (duration === "version") return "Trust this version";
-  if (duration === "always") return "Always trust safe calls";
-  return `Allow for ${localToolDurationLabel(duration)}`;
-}
-function localToolExpiryLabel(duration, now2 = /* @__PURE__ */ new Date()) {
-  if (duration === "once" || duration === "version" || duration === "always") return null;
-  const milliseconds = { "15m": 15 * 6e4, "1h": 60 * 6e4, "5h": 5 * 60 * 6e4 }[duration];
-  return new Intl.DateTimeFormat(void 0, {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(now2.getTime() + milliseconds));
-}
-function localToolSummary(options, target, duration) {
-  const coverage = target === "capability" ? options.capability : "recognized read-only calls";
-  return ["Allow", options.tool_name, coverage, localToolDurationLabel(duration)].join(" · ");
-}
-function buildLocalToolResolutionFields(options, target, duration) {
-  if (options === null || duration === "once" || !options.allowed_targets.includes(target) || !options.allowed_durations.includes(duration)) {
-    return {};
-  }
-  return {
-    local_tool_grant_target: target,
-    local_tool_grant_duration: duration
-  };
-}
-const CONNECTABLE_HARNESS_ALIASES = /* @__PURE__ */ new Set([
-  "codex",
-  "claude-code",
-  "claude",
-  "copilot",
-  "cursor",
-  "antigravity",
-  "gemini",
-  "grok",
-  "grok-build",
-  "grok-build-cli",
-  "xai-grok",
-  "hermes",
-  "kimi",
-  "kimi-code",
-  "kimi-cli",
-  "pi",
-  "pi-agent",
-  "pi-coding-agent",
-  "omp",
-  "oh-my-pi",
-  "openclaw",
-  "opencode",
-  "zcode",
-  "zai",
-  "z-code",
-  "zai-zcode"
-]);
-const PACKAGE_FIREWALL_SOURCES = /* @__PURE__ */ new Set([
-  "package-firewall",
-  "brew",
-  "bun",
-  "bunx",
-  "bundle",
-  "cargo",
-  "composer",
-  "go",
-  "gradle",
-  "mvn",
-  "npm",
-  "npx",
-  "pip",
-  "pip3",
-  "pipenv",
-  "pipx",
-  "pnpm",
-  "poetry",
-  "uv",
-  "uvx",
-  "yarn"
-]);
-function appSetupTarget(harness) {
-  const normalized = typeof harness === "string" ? harness.trim().toLowerCase() : "";
-  if (CONNECTABLE_HARNESS_ALIASES.has(normalized)) return "harness";
-  if (PACKAGE_FIREWALL_SOURCES.has(normalized)) return "package-firewall";
-  if (normalized === "guard-cli" || normalized === "hol-guard") return "guard-settings";
-  return "activity-only";
-}
-function isConnectableAppHarness(harness) {
-  return appSetupTarget(harness) === "harness";
 }
 const now = "2026-04-11T12:00:00Z";
 const demoRequests = [
@@ -16392,7 +16101,6 @@ async function fetchGuardUpdateStatusAtOrigin(origin, guardToken) {
   }
   const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/v1/update/status`, {
     headers: guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {},
-    cache: "no-store",
     redirect: "error"
   });
   if (!response.ok) {
@@ -16557,6 +16265,13 @@ async function fetchCommandActivityApi(input, init) {
   }
   return fetchWithGuardAuth(input, init);
 }
+async function fetchExtensionControlApi(input, init) {
+  const approvedPath = typeof input === "string" && /^\/v1\/extension-controls\/(?:catalog|effective|history|preview|test|apply|refresh|recover-authority|acknowledge-degraded)$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid extension-control API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -16694,7 +16409,6 @@ function parseActionEnvelope(raw) {
   const mcpTool = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
-  const commandCategory = raw["command_category"];
   const packageIntentKind = raw["package_intent_kind"];
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
@@ -16704,7 +16418,7 @@ function parseActionEnvelope(raw) {
   if (typeof schemaVersion !== "number" || typeof actionId !== "string" || typeof harness !== "string" || typeof eventName !== "string" || !isGuardActionType(actionType)) {
     return null;
   }
-  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || commandCategory !== void 0 && !isStringOrNull(commandCategory) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
+  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
     return null;
   }
   if (!isStringArray(targetPaths) || !isStringArray(networkHosts) || packageTargets !== void 0 && !isStringArray(packageTargets)) {
@@ -16731,7 +16445,6 @@ function parseActionEnvelope(raw) {
     mcp_tool: mcpTool,
     package_manager: packageManager,
     package_name: packageName,
-    command_category: isStringOrNull(commandCategory) ? commandCategory : null,
     package_intent_kind: isStringOrNull(packageIntentKind) ? packageIntentKind : null,
     package_targets: isStringArray(packageTargets) ? packageTargets : [],
     pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,
@@ -16783,10 +16496,9 @@ function parseDecisionV2(raw) {
   const dashboardPrimaryDetail = raw["dashboard_primary_detail"];
   const approvalScopes = raw["approval_scopes"];
   const retryInstruction = raw["retry_instruction"];
-  const packageReviewCloudReasonCode = raw["package_review_cloud_reason_code"];
   const signals = raw["signals"];
   const confidence = raw["confidence"];
-  if (!isGuardAction(guardAction) || !isDecisionV2Action(action) || action !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !(packageReviewCloudReasonCode === void 0 || isStringOrNull(packageReviewCloudReasonCode)) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
+  if (!isGuardAction(guardAction) || !isDecisionV2Action(action) || action !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
     return null;
   }
   return {
@@ -16799,7 +16511,6 @@ function parseDecisionV2(raw) {
     dashboard_primary_detail: dashboardPrimaryDetail,
     approval_scopes: approvalScopes,
     retry_instruction: retryInstruction,
-    package_review_cloud_reason_code: packageReviewCloudReasonCode,
     signals,
     confidence
   };
@@ -16897,8 +16608,6 @@ function normalizeApprovalRequest(item) {
     } : void 0,
     scope_restrictions: hasScopeContract ? scopeRestrictions ?? [] : void 0,
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : void 0,
-    temporary_mcp_approval: parseTemporaryMcpApproval(item.temporary_mcp_approval),
-    local_tool_approval: parseLocalToolApproval(item.local_tool_approval),
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
@@ -17048,32 +16757,6 @@ function normalizeCloudCommandCapability(raw) {
     pending_commands: pending,
     enable_command: typeof raw["enable_command"] === "string" ? raw["enable_command"] : "hol-guard commands enable --operations read-only",
     revoke_command: typeof raw["revoke_command"] === "string" ? raw["revoke_command"] : "hol-guard commands revoke --confirm revoke"
-  };
-}
-function nonNegativeNumber(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
-}
-function normalizeOperatorHealth(raw) {
-  if (!isRecord$1(raw)) {
-    return void 0;
-  }
-  const state = raw["state"];
-  const cause = raw["cause"];
-  const automaticRecovery = raw["automatic_recovery"];
-  if (!["healthy", "backlogged", "saturated", "store-contended"].includes(String(state)) || typeof cause !== "string" || typeof automaticRecovery !== "string") {
-    return void 0;
-  }
-  return {
-    state,
-    cause,
-    automatic_recovery: automaticRecovery,
-    repairable: raw["repairable"] === true,
-    queue_depth: nonNegativeNumber(raw["queue_depth"]),
-    queue_limit: nonNegativeNumber(raw["queue_limit"]),
-    oldest_wait_ms: nonNegativeNumber(raw["oldest_wait_ms"]),
-    workers_busy: nonNegativeNumber(raw["workers_busy"]),
-    workers_ready: nonNegativeNumber(raw["workers_ready"]),
-    workers_configured: nonNegativeNumber(raw["workers_configured"])
   };
 }
 function normalizeRuntimeSnapshot(snapshot) {
@@ -17233,11 +16916,9 @@ function queuePath(basePath, params) {
 }
 const PENDING_QUEUE_PAGE_LIMIT = 200;
 const MAX_PENDING_QUEUE_PAGES = 50;
-async function fetchAllPendingRequests(onPage) {
+async function fetchAllPendingRequests() {
   if (isGuardDemoMode()) {
-    const demoRequests2 = getDemoRequests();
-    onPage?.(demoRequests2);
-    return demoRequests2;
+    return getDemoRequests();
   }
   const items = [];
   let cursor;
@@ -17249,7 +16930,6 @@ async function fetchAllPendingRequests(onPage) {
       includeTotals: pageIndex === 0
     });
     items.push(...page.items);
-    onPage?.([...items]);
     if (!page.next_cursor || page.next_cursor === cursor) {
       return items;
     }
@@ -17270,23 +16950,11 @@ function runtimeSnapshotSearchParams(input = {}) {
   }
   return params;
 }
-class GuardSessionUnavailableError extends Error {
-  constructor() {
-    super("Guard dashboard session is not available. Reopen the Guard dashboard from the authenticated URL.");
-    this.name = "GuardSessionUnavailableError";
-  }
-}
-function requireGuardSessionToken() {
-  if (!readGuardToken()) {
-    throw new GuardSessionUnavailableError();
-  }
-}
 async function fetchInboxState(input = {}) {
   if (isGuardDemoMode()) {
     const snapshot = buildDemoRuntimeSnapshot();
     return { snapshot, items: snapshot.items };
   }
-  requireGuardSessionToken();
   const [snapshotPayload, items] = await Promise.all([
     readJson(
       queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false, includeReceipts: false }))
@@ -17309,7 +16977,6 @@ async function fetchApprovalPage(input = {}) {
       status: input.status ?? "pending"
     };
   }
-  requireGuardSessionToken();
   const payload = await readJson(queuePath("/v1/requests", queueSearchParams(input)));
   return normalizeApprovalPage(payload, input.status ?? "pending");
 }
@@ -17317,7 +16984,6 @@ async function fetchRuntimeSnapshot(input = {}) {
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
-  requireGuardSessionToken();
   const params = runtimeSnapshotSearchParams(input);
   const query = params.toString();
   const path = query.length > 0 ? `/v1/runtime?${query}` : "/v1/runtime";
@@ -17381,18 +17047,6 @@ function buildDemoRuntimeSnapshot() {
       started_at: now2,
       last_heartbeat_at: now2,
       approval_center_url: "http://127.0.0.1:4455"
-    },
-    operator_health: {
-      state: "healthy",
-      cause: "Local reviews are processing within available capacity.",
-      automatic_recovery: "Guard drains queued work and adjusts ready workers automatically.",
-      repairable: false,
-      queue_depth: 0,
-      queue_limit: 256,
-      oldest_wait_ms: 0,
-      workers_busy: 1,
-      workers_ready: 3,
-      workers_configured: 4
     },
     device: {
       installation_id: "demo-device-7f4a9c2d",
@@ -17521,7 +17175,6 @@ async function fetchSettings() {
         approval_browser_immediate_severity: "critical",
         telemetry: false,
         sync: false,
-        receipt_redaction_level: "full",
         billing: false
       }
     };
@@ -17813,16 +17466,15 @@ function normalizeGuardCloudConnectStatus(value) {
     connect_flow: normalizePackageFirewallConnectFlow(value.connect_flow)
   };
 }
-async function fetchGuardCloudConnectStatus(signal) {
-  return normalizeGuardCloudConnectStatus(await readJson("/v1/cloud/connect", { signal }));
+async function fetchGuardCloudConnectStatus() {
+  return normalizeGuardCloudConnectStatus(await readJson("/v1/cloud/connect"));
 }
-async function startGuardCloudConnect(signal) {
+async function startGuardCloudConnect() {
   return normalizeGuardCloudConnectStatus(
     await readJson("/v1/cloud/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-      signal
+      body: JSON.stringify({})
     })
   );
 }
@@ -17947,9 +17599,6 @@ function formatHarnessCommand(command) {
   return command.map((part) => /\s/.test(part) ? JSON.stringify(part) : part).join(" ");
 }
 async function runHarnessAction(input) {
-  if (!isConnectableAppHarness(input.harness)) {
-    throw new Error(`${input.harness} is not a connectable AI app.`);
-  }
   if (isGuardDemoMode()) {
     return {
       harness: input.harness,
@@ -18121,10 +17770,6 @@ async function resolveRequestWithQueueResult(input) {
       reason: input.reason || void 0,
       ...input.scope_contract_version !== void 0 ? { scope_contract_version: input.scope_contract_version } : {},
       ...input.scope_contract_digest !== void 0 ? { scope_contract_digest: input.scope_contract_digest } : {},
-      ...input.mcp_grant_target !== void 0 ? { mcp_grant_target: input.mcp_grant_target } : {},
-      ...input.mcp_grant_duration !== void 0 ? { mcp_grant_duration: input.mcp_grant_duration } : {},
-      ...input.local_tool_grant_target !== void 0 ? { local_tool_grant_target: input.local_tool_grant_target } : {},
-      ...input.local_tool_grant_duration !== void 0 ? { local_tool_grant_duration: input.local_tool_grant_duration } : {},
       ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
       ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {},
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
@@ -18740,13 +18385,10 @@ async function activatePackageFirewallRuntime() {
     },
     body: JSON.stringify({})
   });
-  const payloadBody = await response.json().catch(() => null);
   if (response.ok) {
-    if (isRecord$1(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
-      return payloadBody.message;
-    }
-    return "Guard verified the shell setup. Open a new terminal to inherit the updated PATH.";
+    return;
   }
+  const payloadBody = await response.json().catch(() => null);
   if (isRecord$1(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
     throw new Error(payloadBody.message);
   }
@@ -18881,6 +18523,116 @@ async function repairSupplyChainProtection(credentials) {
     completed_steps: completedSteps,
     failed_steps: failures,
     message: stringValue$1(result.message) ?? "Supply-chain repair finished."
+  };
+}
+const MCP_POLICY_TERMINAL_STATUSES = {
+  applied: true,
+  declined: true,
+  expired: true,
+  failed: true,
+  pending: false
+};
+function normalizeMcpPolicyStatus(value) {
+  if (typeof value === "string" && value in MCP_POLICY_TERMINAL_STATUSES) {
+    return value;
+  }
+  return "pending";
+}
+function normalizeMcpPolicyApplyResult(value) {
+  const record2 = isRecord$1(value) ? value : {};
+  const inserted = record2["inserted"];
+  const replaced = record2["replaced"];
+  return {
+    inserted: typeof inserted === "number" && Number.isFinite(inserted) ? inserted : 0,
+    replaced: typeof replaced === "number" && Number.isFinite(replaced) ? replaced : 0
+  };
+}
+function asStringList(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+}
+function normalizeMcpPolicyWritePlan(value) {
+  const record2 = isRecord$1(value) ? value : {};
+  return {
+    additions: asStringList(record2["additions"]),
+    replacements: asStringList(record2["replacements"]),
+    removals: asStringList(record2["removals"])
+  };
+}
+function normalizeMcpPolicySemanticDiff(value) {
+  const record2 = isRecord$1(value) ? value : {};
+  const additionCount = record2["additionCount"];
+  const replacementCount = record2["replacementCount"];
+  const removalCount = record2["removalCount"];
+  return {
+    additionCount: typeof additionCount === "number" && Number.isFinite(additionCount) ? additionCount : 0,
+    replacementCount: typeof replacementCount === "number" && Number.isFinite(replacementCount) ? replacementCount : 0,
+    removalCount: typeof removalCount === "number" && Number.isFinite(removalCount) ? removalCount : 0
+  };
+}
+function normalizeMcpPolicyRequest(raw) {
+  const record2 = isRecord$1(raw) ? raw : {};
+  const expectedPolicyGeneration = record2["expectedPolicyGeneration"];
+  return {
+    requestId: typeof record2["requestId"] === "string" ? record2["requestId"] : "",
+    status: normalizeMcpPolicyStatus(record2["status"]),
+    documentId: typeof record2["documentId"] === "string" ? record2["documentId"] : "",
+    candidateDigest: typeof record2["candidateDigest"] === "string" ? record2["candidateDigest"] : "",
+    expectedCurrentDigest: typeof record2["expectedCurrentDigest"] === "string" ? record2["expectedCurrentDigest"] : null,
+    expectedPolicyGeneration: typeof expectedPolicyGeneration === "number" && Number.isFinite(expectedPolicyGeneration) ? expectedPolicyGeneration : null,
+    mode: record2["mode"] === "replace" ? "replace" : "merge",
+    createdAt: typeof record2["createdAt"] === "string" ? record2["createdAt"] : "",
+    expiresAt: typeof record2["expiresAt"] === "string" ? record2["expiresAt"] : "",
+    resolvedAt: typeof record2["resolvedAt"] === "string" ? record2["resolvedAt"] : null,
+    failureCode: typeof record2["failureCode"] === "string" ? record2["failureCode"] : null,
+    isTerminal: record2["isTerminal"] === true,
+    isExpired: record2["isExpired"] === true,
+    result: normalizeMcpPolicyApplyResult(record2["result"]),
+    writePlan: normalizeMcpPolicyWritePlan(record2["writePlan"]),
+    semanticDiff: normalizeMcpPolicySemanticDiff(record2["semanticDiff"]),
+    activeEnforcementWarning: record2["activeEnforcementWarning"] === true
+  };
+}
+async function fetchMcpPolicyRequest(requestId) {
+  const response = await fetchGuardApi(`/v1/mcp-policy/requests/${encodeURIComponent(requestId)}`, {
+    method: "GET"
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
+  }
+  const payload = await response.json().catch(() => null);
+  return normalizeMcpPolicyRequest(payload);
+}
+async function resolveMcpPolicyRequest(input) {
+  const response = await fetchGuardApi(
+    `/v1/mcp-policy/requests/${encodeURIComponent(input.requestId)}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: input.action,
+        ...input.approval_password ? { approval_password: input.approval_password } : {},
+        ...input.approval_totp_code ? { approval_totp_code: input.approval_totp_code } : {}
+      })
+    }
+  );
+  const payloadBody = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
+    );
+  }
+  const record2 = isRecord$1(payloadBody) ? payloadBody : {};
+  return {
+    resolved: record2["resolved"] === true,
+    requestId: typeof record2["requestId"] === "string" ? record2["requestId"] : "",
+    status: normalizeMcpPolicyStatus(record2["status"]),
+    resolvedAt: typeof record2["resolvedAt"] === "string" ? record2["resolvedAt"] : null,
+    failureCode: typeof record2["failureCode"] === "string" ? record2["failureCode"] : null,
+    message: typeof record2["message"] === "string" ? record2["message"] : void 0
   };
 }
 const GITHUB_ISSUE_BASE_URL = "https://github.com/hashgraph-online/hol-guard/issues/new";
@@ -19923,6 +19675,7 @@ const sidebarLinks = [
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
+  { href: "/extensions", label: "Extensions", view: "extensions", icon: HiMiniPuzzlePiece },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
   { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }
 ];
@@ -19996,19 +19749,7 @@ function ShellSidebar(props) {
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue", children: props.queuedCount > 0 ? "Review" : "Clear" })
           ] }),
-          props.queuedCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "a",
-            {
-              href: guardAwareHref("/inbox"),
-              className: "block text-[11px] font-medium leading-relaxed text-brand-blue underline underline-offset-2 hover:no-underline",
-              children: [
-                props.queuedCount,
-                " local ",
-                props.queuedCount === 1 ? "action needs" : "actions need",
-                " a Guard decision. Open Inbox to review."
-              ]
-            }
-          ) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: "No local approvals are waiting." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: props.queuedCount > 0 ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.` : "No local approvals are waiting." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             GuardUpdatePanel,
             {
@@ -22518,14 +22259,6 @@ function DeviceProofCard(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: copy.detail }),
-    props.proofStatus.state !== "synced" && props.proofStatus.state !== "pending" && props.proofStatus.state !== "waiting" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, variant: "secondary", children: "Connect Guard Cloud" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
-        "If browser sign-in does not pair this machine, run ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "hol-guard connect" }),
-        " in a terminal."
-      ] })
-    ] }) : null,
     timeValue !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: formatRelativeTime(timeValue) }) : null
   ] });
 }
@@ -22541,8 +22274,8 @@ function resolvePackageManagerProtectionCopy(protection) {
   }
   if (protection.path_status === "restart_required") {
     return {
-      pathLabel: "Open a new terminal to activate protection",
-      pathDetail: protection.shell_profile_configured ? `Guard already updated your shell profile for ${protection.shim_dir}. Open a new terminal, or source the matching profile in this terminal. Restart an AI app only if that app runs package managers.` : `Guard installed shims in ${protection.shim_dir}, but your shell profile still needs the shim directory on PATH.`,
+      pathLabel: "Finish activation in Guard",
+      pathDetail: protection.shell_profile_configured ? `Guard saved the shell setup for ${protection.shim_dir}. Finish activation in the package firewall, then run a protection check.` : `Guard installed shims in ${protection.shim_dir}, but activation is still waiting in this Guard session.`,
       pathTone: "blue",
       protectedList: protection.protected_managers,
       unprotectedList: protection.unprotected_managers
@@ -22924,11 +22657,11 @@ function EntitlementNotice({
 function activationHeadline(protection) {
   if (protection === null) return "Activation status unavailable";
   if (protection.path_status === "in_path") return "Protection live now";
-  if (protection.path_status === "restart_required") return "New terminal required";
+  if (protection.path_status === "restart_required") return "Finish activation in Guard";
   return "Fix PATH to finish activation";
 }
 function ActivationSummary({
-  activationAssist,
+  activationAssistError,
   lastAuditProofAt = null,
   activatingRuntime,
   onActivateRuntime,
@@ -22953,10 +22686,10 @@ function ActivationSummary({
         formatRelativeTime(lastAuditProofAt)
       ] }),
       protection.path_status === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: [
-        canActivateRuntime && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onActivateRuntime, disabled: activatingRuntime, children: activatingRuntime ? "Verifying setup…" : "Verify shell setup" }),
+        canActivateRuntime && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onActivateRuntime, disabled: activatingRuntime, children: activatingRuntime ? "Finishing activation…" : "Finish activation" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRefreshStatus, disabled: activatingRuntime, children: "Refresh status" })
       ] }),
-      activationAssist !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-xs ${activationAssist.isError ? "text-brand-attention" : "text-slate-600"}`, children: activationAssist.message })
+      activationAssistError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-attention", children: activationAssistError })
     ] })
   ] }) });
 }
@@ -23064,9 +22797,6 @@ function openPackageFirewallAuthorizeFallback(authorizeUrl, browserOpened) {
 }
 function FiShare2(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "circle", "attr": { "cx": "18", "cy": "5", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "6", "cy": "12", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "18", "cy": "19", "r": "3" }, "child": [] }, { "tag": "line", "attr": { "x1": "8.59", "y1": "13.51", "x2": "15.42", "y2": "17.49" }, "child": [] }, { "tag": "line", "attr": { "x1": "15.41", "y1": "6.51", "x2": "8.59", "y2": "10.49" }, "child": [] }] })(props);
-}
-function FiRefreshCw(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "polyline", "attr": { "points": "23 4 23 10 17 10" }, "child": [] }, { "tag": "polyline", "attr": { "points": "1 20 1 14 7 14" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" }, "child": [] }] })(props);
 }
 function FiCopy(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "rect", "attr": { "x": "9", "y": "9", "width": "13", "height": "13", "rx": "2", "ry": "2" }, "child": [] }, { "tag": "path", "attr": { "d": "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" }, "child": [] }] })(props);
@@ -24810,8 +24540,8 @@ function WorkspacePageHeaderToolbar(props) {
   if (!props.tabConfig && !props.actions) {
     return null;
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4", children: [
-    props.tabConfig ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full min-w-0 sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-page-header__toolbar", children: [
+    props.tabConfig ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-page-header__tabs", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       TabBar,
       {
         tabs: props.tabConfig.tabs,
@@ -24819,7 +24549,7 @@ function WorkspacePageHeaderToolbar(props) {
         onChange: props.tabConfig.onTabChange
       }
     ) }) : null,
-    props.actions ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center justify-end gap-2", children: props.actions }) : null
+    props.actions ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-page-header__actions", children: props.actions }) : null
   ] });
 }
 function WorkspacePageHeader(props) {
@@ -24829,14 +24559,14 @@ function WorkspacePageHeader(props) {
     activeTab: props.activeTab,
     onTabChange: props.onTabChange
   } : null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-page-header", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-page-header__layout", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-page-header__copy space-y-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: eyebrow }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: title }),
       description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: description }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(WorkspacePageHeaderToolbar, { tabConfig, actions })
-  ] });
+  ] }) });
 }
 const DECISION_LABELS = {
   allow: "Allowed",
@@ -24966,7 +24696,7 @@ function homeCommandActivityModel(analytics) {
 }
 function commandHealthCopy(analytics) {
   if (analytics.health.status === "healthy") return null;
-  return "Guard could not record some recent command activity. Counts may be incomplete. Guard retries automatically; check again after the next command.";
+  return "Command activity evidence is degraded. Counts may be incomplete.";
 }
 function commandWindowLabel(analytics) {
   return `${analytics.window.days}-day window ending ${analytics.window.through}`;
@@ -25002,8 +24732,20 @@ function EvidenceField(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-sm font-medium text-brand-dark", children: props.value })
   ] });
 }
+function extensionPatternHref(extensionId, ruleId) {
+  const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  const params = new URLSearchParams(fragment);
+  params.set("rule", ruleId);
+  url.hash = params.toString();
+  return url.toString();
+}
 function MatchEvidence(props) {
   const effects = commandEffectLabels(props.match);
+  const openPatternFromRule = reactExports.useCallback(() => {
+    window.history.pushState({}, "", extensionPatternHref(props.match.extension_id, props.match.rule_id));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, [props.match.extension_id, props.match.rule_id]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "rounded-lg border border-slate-200 bg-slate-50/60 p-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: safeEvidenceId(props.match.rule_id) }),
@@ -25020,7 +24762,16 @@ function MatchEvidence(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Evidence", value: matchClassLabel(props.match.match_class) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceField, { label: "Policy floor", value: commandDecisionLabel(props.match.default_floor) })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-1.5", children: effects.length > 0 ? effects.map((effect) => /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { children: effect }, effect)) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: "Effect details unavailable" }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-1.5", children: effects.length > 0 ? effects.map((effect) => /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { children: effect }, effect)) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: "Effect details unavailable" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: openPatternFromRule,
+        className: "mt-3 min-h-10 rounded-lg border border-brand-blue/25 bg-white px-3 text-left text-sm font-semibold text-brand-blue hover:bg-[rgba(85,153,254,0.08)]",
+        children: "Adjust protection"
+      }
+    )
   ] });
 }
 function CommandActivityDetail(props) {
@@ -25475,13 +25226,7 @@ function CommandActivitySummary(props) {
   const healthCopy = commandHealthCopy(analytics);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "min-w-0 max-w-full space-y-5", "aria-label": "Command activity summary", children: [
     props.outsideTableFilters ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700", role: "status", children: "Summary and trend totals do not include every active filter below." }) : null,
-    healthCopy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: healthCopy }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: props.onRetry, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(FiRefreshCw, { "aria-hidden": "true" }),
-        "Check again"
-      ] })
-    ] }) : null,
+    healthCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: healthCopy }) : null,
     props.state.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: "Refresh failed. Showing the last loaded command activity summary." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 xl:grid-cols-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(Metric, { label: "Commands checked", value: metrics.commandsChecked, detail: "One per recorded activity" }),
@@ -26390,8 +26135,7 @@ function CommandActivityWorkspace(props) {
       CommandActivitySummary,
       {
         state: activity.analytics,
-        outsideTableFilters: commandSummaryIsOutsideTableFilters(activity.filters),
-        onRetry: activity.retry
+        outsideTableFilters: commandSummaryIsOutsideTableFilters(activity.filters)
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600", children: commandExecutionEvidenceCopy(props.harness ?? null, hasPostProof) }),
@@ -28189,210 +27933,11 @@ function buildEvidenceItems(item) {
   }
   return items;
 }
-const validationEvidencePhrases = [
-  // Queued requests can outlive the daemon version that created their copy.
-  "could not verify registry identity or package intelligence",
-  "cloud evaluation could not validate",
-  "cloud evaluation endpoint was not trusted",
-  "cloud evaluation returned http",
-  "cloud evaluation returned an invalid",
-  "cloud evaluation timed out",
-  "current package safety data was unavailable"
-];
-const authorizationEvidencePhrases = [
-  "cloud evaluation was not authorized",
-  "cloud authorization expired",
-  "cloud evaluation could not establish a trusted session",
-  "cloud sign-in is missing or stale"
-];
-const validationReasonCodes = /* @__PURE__ */ new Set([
-  "cloud_validation_error",
-  "cloud_http_error",
-  "cloud_timeout"
-]);
-function packageReviewCloudRecoveryKind(item) {
-  const packageRequest = item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || item.artifact_type.endsWith("_package");
-  if (!packageRequest) return null;
-  const reasonCode = item.decision_v2_json?.package_review_cloud_reason_code;
-  if (reasonCode === "cloud_auth_error") return "authorization";
-  if (typeof reasonCode === "string" && validationReasonCodes.has(reasonCode)) return "validation";
-  const evidence = [item.risk_headline, item.risk_summary, ...item.risk_signals ?? []].filter((value) => typeof value === "string").join(" ").toLowerCase();
-  if (authorizationEvidencePhrases.some((phrase) => evidence.includes(phrase))) {
-    return "authorization";
-  }
-  return validationEvidencePhrases.some((phrase) => evidence.includes(phrase)) ? "validation" : null;
-}
-async function withCloudRequestTimeout(request, parentSignal) {
-  if (parentSignal?.aborted) {
-    throw new DOMException("Cloud connection request stopped", "AbortError");
-  }
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  parentSignal?.addEventListener("abort", abort, { once: true });
-  const timeout = globalThis.setTimeout(() => controller.abort(), 5e3);
-  try {
-    return await request(controller.signal);
-  } finally {
-    globalThis.clearTimeout(timeout);
-    parentSignal?.removeEventListener("abort", abort);
-  }
-}
-function waitForPoll(delayMs, signal) {
-  if (signal.aborted) {
-    return Promise.reject(new DOMException("Cloud connection polling stopped", "AbortError"));
-  }
-  return new Promise((resolve, reject) => {
-    const finish = () => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    };
-    const timeout = globalThis.setTimeout(finish, delayMs);
-    const abort = () => {
-      globalThis.clearTimeout(timeout);
-      reject(new DOMException("Cloud connection polling stopped", "AbortError"));
-    };
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
-async function waitForAuthorizeUrl(initialStatus, signal) {
-  if (signal.aborted) {
-    throw new DOMException("Cloud connection polling stopped", "AbortError");
-  }
-  let status = initialStatus;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const flow = status.connect_flow;
-    if (!status.connect_required || flow?.authorize_url || !flow || !["starting", "running"].includes(flow.state)) {
-      return status;
-    }
-    const pollDelayMs = Math.max(100, Math.min(5e3, flow.poll_after_ms ?? 1e3));
-    await waitForPoll(pollDelayMs, signal);
-    status = await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
-  }
-  return status;
-}
-async function waitForCloudConnection(initialStatus, {
-  signal,
-  fetchStatus = fetchGuardCloudConnectStatus,
-  wait = waitForPoll,
-  maxAttempts = 300
-}) {
-  if (signal.aborted) {
-    throw new DOMException("Cloud connection polling stopped", "AbortError");
-  }
-  let status = initialStatus;
-  for (let attempt = 0; attempt < maxAttempts && status.connect_required; attempt += 1) {
-    if (status.connect_flow?.state === "failed") return status;
-    const pollDelayMs = Math.max(250, Math.min(5e3, status.connect_flow?.poll_after_ms ?? 1e3));
-    await wait(pollDelayMs, signal);
-    status = await withCloudRequestTimeout(fetchStatus, signal);
-  }
-  return status;
-}
-function cloudRecoveryContent(connected, kind = "authorization") {
-  if (kind === "validation") {
-    return {
-      title: "Optional Cloud check unavailable",
-      detail: "Local Guard is still active. Retry the install, or approve it once if you trust the package."
-    };
-  }
-  return connected ? {
-    title: "Guard Cloud connected",
-    detail: "Run the install command again for a current package safety check."
-  } : {
-    title: "Optional: add a Guard Cloud check",
-    detail: "Local Guard is working and still needs your decision. Approve this install once, or connect Guard Cloud for live package reputation."
-  };
-}
-function ReviewCloudRecovery({ item }) {
-  const recoveryKind = packageReviewCloudRecoveryKind(item);
-  const [connecting, setConnecting] = reactExports.useState(false);
-  const [connected, setConnected] = reactExports.useState(false);
-  const [message, setMessage] = reactExports.useState(null);
-  const [manualConnectUrl, setManualConnectUrl] = reactExports.useState(null);
-  const connectControllerRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    connectControllerRef.current?.abort();
-    setConnecting(false);
-    setConnected(false);
-    setMessage(null);
-    setManualConnectUrl(null);
-    return () => connectControllerRef.current?.abort();
-  }, [item.request_id]);
-  const handleConnect = reactExports.useCallback(async () => {
-    connectControllerRef.current?.abort();
-    const controller = new AbortController();
-    connectControllerRef.current = controller;
-    setConnecting(true);
-    setConnected(false);
-    setMessage(null);
-    setManualConnectUrl(null);
-    try {
-      const status = await waitForAuthorizeUrl(
-        await withCloudRequestTimeout(startGuardCloudConnect, controller.signal),
-        controller.signal
-      );
-      const flow = status.connect_flow;
-      if (flow?.authorize_url) {
-        setManualConnectUrl(flow.authorize_url);
-        setMessage(
-          openPackageFirewallAuthorizeFallback(flow.authorize_url, flow.browser_opened) ? "Complete sign-in in the opened window. This page will update automatically." : PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE
-        );
-        const connectedStatus = await waitForCloudConnection(status, { signal: controller.signal });
-        if (!connectedStatus.connect_required) {
-          setConnected(true);
-          setManualConnectUrl(null);
-          setMessage(null);
-          return;
-        }
-        setMessage("Sign-in is still pending. Complete it in the opened window, or open sign-in again.");
-        return;
-      }
-      if (status.connect_required && flow?.connect_url) {
-        setMessage("Open sign-in to continue. This page will update automatically.");
-        setManualConnectUrl(flow.connect_url);
-        const connectedStatus = await waitForCloudConnection(status, { signal: controller.signal });
-        if (!connectedStatus.connect_required) {
-          setConnected(true);
-          setManualConnectUrl(null);
-          setMessage(null);
-          return;
-        }
-        setMessage("Sign-in is still pending. Complete it in the opened window, or open sign-in again.");
-        return;
-      }
-      setMessage(
-        status.connect_required ? "Guard could not finish starting sign-in. Try again." : null
-      );
-      setConnected(!status.connect_required);
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      setMessage(error instanceof Error ? error.message : "Guard could not start sign-in. Try again.");
-    } finally {
-      if (!controller.signal.aborted) setConnecting(false);
-    }
-  }, []);
-  if (recoveryKind === null) return null;
-  const content = cloudRecoveryContent(connected, recoveryKind);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: content.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-muted-foreground", children: content.detail }),
-    !connected && recoveryKind === "authorization" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleConnect, disabled: connecting, variant: "outline", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "h-4 w-4", "aria-hidden": "true" }),
-        connecting ? "Waiting for sign-in..." : "Connect Guard Cloud"
-      ] }),
-      manualConnectUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: manualConnectUrl, variant: "quiet", children: "Open sign-in" }) : null,
-      message ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", role: "status", children: message }) : null
-    ] }) : null
-  ] });
-}
 function ReviewScopeControls(props) {
-  const showAllowScopes = props.showAllowScopes !== false;
-  const showApprovalControls = showAllowScopes || props.exactActionPersistenceEligible;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: showApprovalControls ? "Approval scope" : "Block scope" }),
-    showAllowScopes && !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: "This action cannot be approved under its current Guard policy." }),
-    showAllowScopes && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval scope" }),
+    !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: "This action cannot be approved under its current Guard policy." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       ScopeChoiceButton,
       {
         choice,
@@ -28408,7 +27953,7 @@ function ReviewScopeControls(props) {
         onChange: props.onRememberExactActionChange
       }
     ),
-    showAllowScopes && props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
+    props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Save for project or app" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These options save a decision that skips review for matching actions going forward. Choose the narrowest scope that fits what you meant to allow." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", children: props.broaderScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -28421,7 +27966,7 @@ function ReviewScopeControls(props) {
         choice.value
       )) })
     ] }),
-    showAllowScopes && props.advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
+    props.advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention", children: "Advanced: save everywhere on this machine" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "This saves a decision that applies across all your projects on this machine. Matching actions skip review permanently. Only use this if you fully trust this action everywhere." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2", children: props.advancedScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -28434,7 +27979,7 @@ function ReviewScopeControls(props) {
         choice.value
       )) })
     ] }),
-    showAllowScopes && props.taskCapabilityCopy !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 pt-1 text-xs text-brand-dark/70", children: [
+    props.taskCapabilityCopy !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 pt-1 text-xs text-brand-dark/70", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.taskCapabilityCopy })
     ] }),
@@ -28692,161 +28237,6 @@ function pastDecisionVerb(decision) {
       return "blocked";
   }
 }
-const EXCLUSION_COPY = "Privileged browser access, file transfer, secrets, command execution, destructive actions, and shared-profile access still require review.";
-function TemporaryMcpRetryNotice() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 border-l-2 border-brand-blue bg-brand-blue/[0.04] px-4 py-3", role: "status", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Timed access is not available for this request." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: "You can approve this browser action once below. Routine browser actions also show time and access choices when Guard can safely verify them." })
-  ] });
-}
-function TemporaryMcpApprovalControls(props) {
-  const expiry = temporaryMcpExpiryLabel(props.duration);
-  const descriptionId = "temporary-mcp-boundary";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { "aria-describedby": descriptionId, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "How long should this choice last?" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4", children: props.options.allowed_durations.map((duration) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "label",
-        {
-          className: `flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 text-sm font-medium transition-colors focus-within:ring-2 focus-within:ring-brand-blue/30 ${props.duration === duration ? "border-brand-blue bg-brand-blue/[0.06] text-brand-dark" : "border-slate-200/70 bg-white text-brand-dark hover:bg-slate-50"}`,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                className: "sr-only",
-                type: "radio",
-                name: "temporary-mcp-duration",
-                value: duration,
-                checked: props.duration === duration,
-                onChange: () => props.onDurationChange(duration)
-              }
-            ),
-            temporaryMcpDurationLabel(duration)
-          ]
-        },
-        duration
-      )) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { "aria-describedby": descriptionId, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "What should it cover?" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid grid-cols-1 gap-2 md:grid-cols-2", children: props.options.allowed_targets.map((target) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "label",
-        {
-          className: `flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-brand-blue/30 ${props.target === target ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                className: "mt-0.5 h-4 w-4 shrink-0 accent-brand-blue",
-                type: "radio",
-                name: "temporary-mcp-target",
-                value: target,
-                checked: props.target === target,
-                onChange: () => props.onTargetChange(target)
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-medium text-brand-dark", children: temporaryMcpTargetLabel(target, props.options) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: target === "exact" ? "Only the current tool call." : target === "category" ? `${browserCapabilityLabel(props.options.category)} calls from this exact server.` : "Eligible routine browser calls from this exact server. High-risk calls stay blocked." })
-            ] })
-          ]
-        },
-        target
-      )) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-y border-slate-200/70 py-3", "aria-live": "polite", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: temporaryMcpSummary(props.options, props.target, props.duration) }),
-      expiry !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
-        "Expires around ",
-        expiry,
-        ". The Guard service sets the final expiry."
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: descriptionId, className: "text-xs leading-5 text-brand-dark/70", children: EXCLUSION_COPY })
-  ] });
-}
-function LocalToolApprovalControls(props) {
-  const expiry = localToolExpiryLabel(props.duration);
-  const durationDescriptionId = "local-tool-duration-description";
-  const targetDescriptionId = "local-tool-target-description";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-y border-slate-200/70 py-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
-        "Trust read-only calls from ",
-        props.options.tool_name
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs leading-5 text-muted-foreground", children: [
-        "Guard identified this as ",
-        localToolReadOnlyReasonLabel(props.options.read_only_reason),
-        ". Argument values may vary, but the tool files, option names, and selected capability must still match."
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { "aria-describedby": durationDescriptionId, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "How long should this choice last?" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: durationDescriptionId, className: "mt-1 text-xs text-muted-foreground", children: "Choose one-time approval or an explicit reusable trust window." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5", children: props.options.allowed_durations.map((duration) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "label",
-        {
-          className: `flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 text-center text-sm font-medium transition-colors focus-within:ring-2 focus-within:ring-brand-blue/30 ${props.duration === duration ? "border-brand-blue bg-brand-blue/[0.06] text-brand-dark" : "border-slate-200/70 bg-white text-brand-dark hover:bg-slate-50"}`,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                className: "sr-only",
-                type: "radio",
-                name: "local-tool-duration",
-                value: duration,
-                checked: props.duration === duration,
-                onChange: () => props.onDurationChange(duration)
-              }
-            ),
-            localToolDurationLabel(duration)
-          ]
-        },
-        duration
-      )) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { "aria-describedby": targetDescriptionId, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "What should it cover?" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: targetDescriptionId, className: "mt-1 text-xs text-muted-foreground", children: "Limit trust to this capability, or include other calls Guard independently recognizes as read-only." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid grid-cols-1 gap-2 md:grid-cols-2", children: props.options.allowed_targets.map((target) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "label",
-        {
-          className: `flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-brand-blue/30 ${props.target === target ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                className: "mt-0.5 h-4 w-4 shrink-0 accent-brand-blue",
-                type: "radio",
-                name: "local-tool-target",
-                value: target,
-                checked: props.target === target,
-                onChange: () => props.onTargetChange(target)
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-medium text-brand-dark", children: localToolTargetLabel(target, props.options) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: target === "capability" ? "The selected read-only operation may use different IDs, filters, and timestamps." : "Other operations run only when Guard independently recognizes them as read-only." })
-            ] })
-          ]
-        },
-        target
-      )) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-y border-slate-200/70 py-3", "aria-live": "polite", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: localToolSummary(props.options, props.target, props.duration) }),
-      expiry !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
-        "Expires around ",
-        expiry,
-        ". The Guard service sets the final expiry."
-      ] }),
-      props.duration === "version" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: "Trust ends automatically when the executable, script, or approved output processor changes." }),
-      props.duration === "always" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: "Guard still checks package safety, command behavior, paths, and environment settings on every call." })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/70", children: props.options.trust_basis === "package-profile" ? "Only recognized local scan calls are covered. Package risks, URLs, writes, unsafe paths, shell composition, and changed runner files still require review." : "Guard rechecks the executable and script before every call. Writes, shell chaining, redirects, embedded commands, environment overrides, and changed tool files still require review." })
-  ] });
-}
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
 function resolvedActionCopy(item, action, persistedExactAction) {
   if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
@@ -28870,10 +28260,6 @@ function ReviewDecisionCard(props) {
   const [useCooldown, setUseCooldown] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
-  const [mcpGrantTarget, setMcpGrantTarget] = reactExports.useState("exact");
-  const [mcpGrantDuration, setMcpGrantDuration] = reactExports.useState("once");
-  const [localToolGrantTarget, setLocalToolGrantTarget] = reactExports.useState("capability");
-  const [localToolGrantDuration, setLocalToolGrantDuration] = reactExports.useState("once");
   const [rememberExactAction, setRememberExactAction] = reactExports.useState(false);
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
@@ -28898,15 +28284,6 @@ function ReviewDecisionCard(props) {
     [item]
   );
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
-  const temporaryMcpOptions = reactExports.useMemo(
-    () => item ? temporaryMcpApprovalOptions(item) : null,
-    [item]
-  );
-  const temporaryMcpRetryRequired = item !== null && temporaryMcpApprovalNeedsRetry(item);
-  const localToolOptions = reactExports.useMemo(
-    () => item ? localToolApprovalOptions(item) : null,
-    [item]
-  );
   const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
   const decisionContractKey = item ? `${item.request_id}:${item.scope_contract_version ?? "legacy"}:${item.scope_contract_digest ?? "legacy"}` : null;
@@ -28924,37 +28301,14 @@ function ReviewDecisionCard(props) {
       setPendingAction(null);
       setPendingContractKey(null);
       setRememberExactAction(false);
-      const nextTemporaryOptions = temporaryMcpApprovalOptions(item);
-      if (nextTemporaryOptions !== null) {
-        setMcpGrantTarget(defaultTemporaryMcpTarget(nextTemporaryOptions));
-        setMcpGrantDuration(defaultTemporaryMcpDuration(nextTemporaryOptions));
-      } else {
-        setMcpGrantTarget("exact");
-        setMcpGrantDuration("once");
-      }
-      const nextLocalToolOptions = localToolApprovalOptions(item);
-      if (nextLocalToolOptions !== null) {
-        setLocalToolGrantTarget(defaultLocalToolTarget(nextLocalToolOptions));
-        setLocalToolGrantDuration(defaultLocalToolDuration(nextLocalToolOptions));
-      } else {
-        setLocalToolGrantTarget("capability");
-        setLocalToolGrantDuration("once");
-      }
     }
   }, [item?.request_id, item?.scope_contract_version, item?.scope_contract_digest]);
   reactExports.useEffect(() => {
-    const selection = validTemporaryMcpSelection(temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration);
-    if (selection.target !== mcpGrantTarget) setMcpGrantTarget(selection.target);
-    if (selection.duration !== mcpGrantDuration) setMcpGrantDuration(selection.duration);
-  }, [temporaryMcpOptions, mcpGrantTarget, mcpGrantDuration]);
-  reactExports.useEffect(() => {
-    const selection = validLocalToolSelection(localToolOptions, localToolGrantTarget, localToolGrantDuration);
-    if (selection.target !== localToolGrantTarget) setLocalToolGrantTarget(selection.target);
-    if (selection.duration !== localToolGrantDuration) setLocalToolGrantDuration(selection.duration);
-  }, [localToolOptions, localToolGrantTarget, localToolGrantDuration]);
-  reactExports.useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
   const handleResolve = reactExports.useCallback(
@@ -28983,14 +28337,7 @@ function ReviewDecisionCard(props) {
           }),
           ...includeGateFields && needsPassword ? { approval_password: approvalPassword } : {},
           ...includeGateFields && !needsPassword ? { approval_totp_code: approvalTotpCode } : {},
-          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {},
-          ...action === "allow" ? buildTemporaryMcpResolutionFields(
-            temporaryMcpOptions,
-            mcpGrantTarget,
-            mcpGrantDuration,
-            rememberExactAction
-          ) : {},
-          ...action === "allow" && temporaryMcpOptions === null ? buildLocalToolResolutionFields(localToolOptions, localToolGrantTarget, localToolGrantDuration) : {}
+          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
         setResolved({ action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
@@ -28998,6 +28345,10 @@ function ReviewDecisionCard(props) {
         setUseCooldown(false);
         setPendingAction(null);
         setPendingContractKey(null);
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
         timerRef.current = setTimeout(() => setResolved(null), 2e3);
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
@@ -29016,13 +28367,7 @@ function ReviewDecisionCard(props) {
       approvalPassword,
       approvalTotpCode,
       useCooldown,
-      resolutionBlockReason,
-      temporaryMcpOptions,
-      mcpGrantTarget,
-      mcpGrantDuration,
-      localToolOptions,
-      localToolGrantTarget,
-      localToolGrantDuration
+      resolutionBlockReason
     ]
   );
   const handleRequestResolve = reactExports.useCallback(
@@ -29143,16 +28488,11 @@ function ReviewDecisionCard(props) {
   const topAlertItems = buildTopAlertItems(item);
   const evidenceItems = buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
   const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
+  let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
   if (persistExactAllow) {
     resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
-  }
-  if (temporaryMcpOptions !== null && !rememberExactAction) {
-    resolvedAllowButtonLabel = temporaryMcpAllowButtonLabel(mcpGrantDuration);
-  } else if (localToolOptions !== null) {
-    resolvedAllowButtonLabel = localToolAllowButtonLabel(localToolGrantDuration);
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -29200,7 +28540,6 @@ function ReviewDecisionCard(props) {
         ] })
       ] }) }),
       topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
-      resolutionBlockReason === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewCloudRecovery, { item }, item.request_id) : null,
       whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
@@ -29218,48 +28557,24 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      resolutionBlockReason === null && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        temporaryMcpOptions !== null && !rememberExactAction && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          TemporaryMcpApprovalControls,
-          {
-            options: temporaryMcpOptions,
-            target: mcpGrantTarget,
-            duration: mcpGrantDuration,
-            onTargetChange: setMcpGrantTarget,
-            onDurationChange: setMcpGrantDuration
-          }
-        ),
-        temporaryMcpRetryRequired && /* @__PURE__ */ jsxRuntimeExports.jsx(TemporaryMcpRetryNotice, {}),
-        temporaryMcpOptions === null && localToolOptions !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          LocalToolApprovalControls,
-          {
-            options: localToolOptions,
-            target: localToolGrantTarget,
-            duration: localToolGrantDuration,
-            onTargetChange: setLocalToolGrantTarget,
-            onDurationChange: setLocalToolGrantDuration
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ReviewScopeControls,
-          {
-            commonScopeOptions,
-            broaderScopeOptions,
-            advancedScopeOptions,
-            blockScopeOptions,
-            hasAllowScope,
-            taskCapabilityCopy,
-            exactActionPersistenceEligible: item.exact_action_persistence_eligible === true && localToolOptions === null,
-            rememberExactAction,
-            allowScope,
-            blockScope,
-            showAllowScopes: temporaryMcpOptions === null && localToolOptions === null,
-            onAllowScopeChange: setAllowScope,
-            onBlockScopeChange: setBlockScope,
-            onRememberExactActionChange: setRememberExactAction
-          }
-        )
-      ] }),
+      resolutionBlockReason === null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ReviewScopeControls,
+        {
+          commonScopeOptions,
+          broaderScopeOptions,
+          advancedScopeOptions,
+          blockScopeOptions,
+          hasAllowScope,
+          taskCapabilityCopy,
+          exactActionPersistenceEligible: item.exact_action_persistence_eligible === true,
+          rememberExactAction,
+          allowScope,
+          blockScope,
+          onAllowScopeChange: setAllowScope,
+          onBlockScopeChange: setBlockScope,
+          onRememberExactActionChange: setRememberExactAction
+        }
+      ),
       errorMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-purple", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
@@ -30165,6 +29480,9 @@ function QueueConnectionError(props) {
     ] })
   ] }) });
 }
+const McpPolicyRequestPanel = reactExports.lazy(
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+);
 function renderInboxContent(props) {
   if (props.requests.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
@@ -30181,6 +29499,25 @@ function renderInboxContent(props) {
         approvalUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null,
         onRetry: props.onRetry,
         onRepair: props.onRepair
+      }
+    );
+  }
+  if (props.detail.kind === "mcp-policy") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      reactExports.Suspense,
+      {
+        fallback: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-72" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-24 w-full" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-40 w-full" })
+        ] }),
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          McpPolicyRequestPanel,
+          {
+            requestId: props.detail.requestId,
+            approvalGate: props.approvalGate ?? null
+          }
+        )
       }
     );
   }
@@ -30227,6 +29564,9 @@ function renderViewContent(props) {
   }
   if (props.view === "app-detail") {
     return props.appDetailContent;
+  }
+  if (props.view === "extensions") {
+    return props.extensionsContent;
   }
   if (props.view === "settings") {
     return props.settingsContent;
@@ -30278,8 +29618,7 @@ function ApprovalCenterLayout(props) {
     updateStatus,
     updatePhase,
     onUpdateGuard,
-    onReinstallGuard,
-    onSetUpdateChannel
+    onReinstallGuard
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -30307,8 +29646,6 @@ function ApprovalCenterLayout(props) {
         updatePhase,
         onUpdateGuard,
         onReinstallGuard,
-        onSetUpdateChannel,
-        approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
         planId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.plan_id ?? null : null
@@ -30451,16 +29788,22 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([2,3]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([4,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const ExtensionsWorkspace = reactExports.lazy(
+  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([6,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+);
+const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+);
+reactExports.lazy(
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 const AboutWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
@@ -30502,6 +29845,7 @@ function viewTitle(view) {
   if (view === "policy") return "Policy";
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
+  if (view === "extensions") return "Extensions";
   return "App detail";
 }
 function parseAppDetail(pathname) {
@@ -30521,6 +29865,9 @@ function resolveView(pathname) {
   }
   if (pathname.startsWith("/apps/")) {
     return "fleet";
+  }
+  if (pathname === "/extensions" || pathname.startsWith("/extensions/")) {
+    return "extensions";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -30555,7 +29902,7 @@ async function loadDetail(requestId) {
   try {
     const item = await fetchRequest(requestId);
     const [diff, receipt, policy] = await Promise.all([
-      shouldFetchArtifactDiff(item.artifact_type) ? fetchDiff(item.artifact_id, item.harness) : Promise.resolve(null),
+      fetchDiff(item.artifact_id, item.harness),
       fetchLatestReceipt(item.artifact_id, item.harness),
       fetchPolicy(item.harness)
     ]);
@@ -30563,6 +29910,13 @@ async function loadDetail(requestId) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("404")) {
+      try {
+        const mcpRequest = await fetchMcpPolicyRequest(requestId);
+        if (mcpRequest !== null) {
+          return { kind: "mcp-policy", requestId };
+        }
+      } catch {
+      }
       return { kind: "stale" };
     }
     return {
@@ -30570,9 +29924,6 @@ async function loadDetail(requestId) {
       message: message.length > 0 ? message : "Unable to load the approval request."
     };
   }
-}
-function shouldFetchArtifactDiff(artifactType) {
-  return (/* @__PURE__ */ new Set(["mcp_server", "skill", "skill_file"])).has(artifactType);
 }
 function App() {
   const pathname = usePathname();
@@ -30655,11 +30006,7 @@ function App() {
       const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
       let pendingRequests;
       if (needsFullQueue) {
-        pendingRequests = fetchAllPendingRequests((items) => {
-          if (!cancelled && !resolutionInFlight.current) {
-            setRequests({ kind: "ready", items });
-          }
-        }).then((items) => {
+        pendingRequests = fetchAllPendingRequests().then((items) => {
           if (!cancelled && !resolutionInFlight.current) {
             setRequests({ kind: "ready", items });
           }
@@ -30818,7 +30165,7 @@ function App() {
   const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
   const handleOpenInsights = reactExports.useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = reactExports.useCallback(() => navigate("/evidence?view=commands"), [navigate]);
-  const handleOpenSettings = reactExports.useCallback((pathname2 = "/settings") => navigate(pathname2), []);
+  const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = reactExports.useCallback(() => navigate("/supply-chain"), []);
   reactExports.useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = reactExports.useCallback(() => setHelpOpen(true), []);
@@ -31200,6 +30547,7 @@ function App() {
           }
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
+        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, {}) }),
         settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) }),
         supplyChainHubContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           SupplyChainHubWorkspace,
@@ -31241,136 +30589,138 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniBellAlert as $,
+  HiMiniAdjustmentsHorizontal as $,
   ActionButton as A,
-  resolveCloudIntelCopy as B,
-  HiMiniCloud as C,
+  HiMiniCloud as B,
+  HiMiniQuestionMarkCircle as C,
   DeviceProofCard as D,
   EvidenceInsightsShareButton as E,
-  HiMiniQuestionMarkCircle as F,
+  useFocusTrap as F,
   GuardStatMetric as G,
   HomeInsightsMetrics as H,
-  useFocusTrap as I,
-  approvalProofRequiresPassword as J,
-  HiMiniExclamationTriangle as K,
-  HiMiniBolt as L,
-  Badge as M,
-  HiMiniMinusCircle as N,
+  approvalProofRequiresPassword as I,
+  HiMiniExclamationTriangle as J,
+  HiMiniBolt as K,
+  Badge as L,
+  HiMiniMinusCircle as M,
+  HiMiniWrenchScrewdriver as N,
   OperatorHealthCard as O,
-  HiMiniWrenchScrewdriver as P,
-  HiMiniExclamationCircle as Q,
-  ProofStrip as R,
+  HiMiniExclamationCircle as P,
+  ProofStrip as Q,
+  HiMiniEye as R,
   SectionLabel as S,
-  HiMiniEye as T,
-  HiMiniXCircle as U,
-  HiMiniClipboardDocumentCheck as V,
-  HiMiniClipboard as W,
-  getDefaultExportFromCjs as X,
-  React as Y,
-  HiMiniKey as Z,
-  HiMiniLockClosed as _,
+  HiMiniXCircle as T,
+  HiMiniClipboardDocumentCheck as U,
+  HiMiniClipboard as V,
+  getDefaultExportFromCjs as W,
+  React as X,
+  HiMiniKey as Y,
+  HiMiniLockClosed as Z,
+  HiMiniBellAlert as _,
   EvidenceActivityHeatmapMini as a,
-  ApprovalProofInline as a$,
-  HiMiniAdjustmentsHorizontal as a0,
-  HiMiniCircleStack as a1,
-  TabBar as a2,
-  resolveProtectionLevelCopy as a3,
-  fetchSettings as a4,
-  fetchRuntimeSnapshot as a5,
-  updateSettings as a6,
-  clearPolicy as a7,
-  clearReviewQueue as a8,
-  revokeApprovalGateCooldown as a9,
-  EvidenceInsightStrip as aA,
-  EvidenceActionList as aB,
-  EvidenceActionDetail as aC,
-  policyIdentityKey as aD,
-  HiMiniChartBar as aE,
-  runHarnessAction as aF,
-  GuardHarnessActionError as aG,
-  HiMiniRocketLaunch as aH,
-  HiMiniArrowPath as aI,
-  HiMiniTrash as aJ,
-  clearLabelForScope as aK,
-  formatHarnessCommand as aL,
-  isSupplyChainAuditIncomplete as aM,
-  isSupplyChainAuditEvidence as aN,
-  buildApprovalProofCredentials as aO,
-  isApprovalProofSubmitDisabled as aP,
-  ApprovalProofFieldInputs as aQ,
-  readString$1 as aR,
-  isRecord$2 as aS,
-  HiMiniClock as aT,
-  IconActionButton as aU,
-  HiMiniBeaker as aV,
-  ActivationSummary as aW,
-  ActionResultPanel as aX,
-  HiMiniBugAnt as aY,
-  GuardModalLayer as aZ,
-  ConnectFlowCard as a_,
-  disableApprovalGateTotp as aa,
-  importSettings as ab,
-  resetSettings as ac,
-  enrollApprovalGateTotp as ad,
-  verifyApprovalGateTotp as ae,
-  clearEvidence as af,
-  exportDiagnostics as ag,
-  repairApprovalCenter as ah,
-  exportSettings as ai,
-  setupDesktopNotifications as aj,
-  Tag as ak,
-  HiMiniMagnifyingGlass as al,
-  HiMiniCog6Tooth as am,
-  approvalGateCooldownLabel as an,
-  fetchApprovalPage as ao,
-  fetchPolicy as ap,
-  HiMiniArrowLeft as aq,
-  HiMiniHome as ar,
-  appSetupTarget as as,
-  guardActionPresentation as at,
-  DEFAULT_FILTER_STATE as au,
-  filterEvidence as av,
-  sortEvidence as aw,
-  computeMetrics as ax,
-  CommandActivityWorkspace as ay,
-  EvidenceFilterBar as az,
+  ConnectFlowCard as a$,
+  HiMiniCircleStack as a0,
+  TabBar as a1,
+  resolveProtectionLevelCopy as a2,
+  fetchSettings as a3,
+  fetchRuntimeSnapshot as a4,
+  updateSettings as a5,
+  clearPolicy as a6,
+  clearReviewQueue as a7,
+  revokeApprovalGateCooldown as a8,
+  disableApprovalGateTotp as a9,
+  filterEvidence as aA,
+  sortEvidence as aB,
+  computeMetrics as aC,
+  CommandActivityWorkspace as aD,
+  EvidenceFilterBar as aE,
+  EvidenceInsightStrip as aF,
+  EvidenceActionList as aG,
+  EvidenceActionDetail as aH,
+  policyIdentityKey as aI,
+  HiMiniChartBar as aJ,
+  runHarnessAction as aK,
+  GuardHarnessActionError as aL,
+  HiMiniRocketLaunch as aM,
+  HiMiniTrash as aN,
+  clearLabelForScope as aO,
+  formatHarnessCommand as aP,
+  isSupplyChainAuditIncomplete as aQ,
+  isSupplyChainAuditEvidence as aR,
+  readString$1 as aS,
+  isRecord$2 as aT,
+  HiMiniClock as aU,
+  IconActionButton as aV,
+  HiMiniBeaker as aW,
+  ActivationSummary as aX,
+  ActionResultPanel as aY,
+  HiMiniBugAnt as aZ,
+  GuardModalLayer as a_,
+  importSettings as aa,
+  resetSettings as ab,
+  enrollApprovalGateTotp as ac,
+  verifyApprovalGateTotp as ad,
+  clearEvidence as ae,
+  exportDiagnostics as af,
+  repairApprovalCenter as ag,
+  exportSettings as ah,
+  setupDesktopNotifications as ai,
+  Tag as aj,
+  HiMiniMagnifyingGlass as ak,
+  HiMiniCog6Tooth as al,
+  approvalGateCooldownLabel as am,
+  fetchExtensionControlApi as an,
+  HiMiniArrowPath as ao,
+  HiMiniInformationCircle as ap,
+  isApprovalProofSubmitDisabled as aq,
+  ApprovalProofFieldInputs as ar,
+  buildApprovalProofCredentials as as,
+  HiMiniArrowLeft as at,
+  WorkspacePageHeader as au,
+  fetchApprovalPage as av,
+  fetchPolicy as aw,
+  HiMiniHome as ax,
+  guardActionPresentation as ay,
+  DEFAULT_FILTER_STATE as az,
   HiMiniCommandLine as b,
-  HiMiniArrowTopRightOnSquare as b0,
-  HiMiniCloudArrowDown as b1,
-  fetchPackageFirewallStatus as b2,
-  runPackageAudit as b3,
-  resolveSupplyChainAuditFailure as b4,
-  runPackageSync as b5,
-  startPackageFirewallConnect as b6,
-  openPackageFirewallAuthorizeFallback as b7,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as b8,
-  repairSupplyChainProtection as b9,
-  PolicyStatField as bA,
-  PaginationControls as bB,
-  HiMiniNoSymbol as bC,
-  HiMiniCube as bD,
-  HiMiniArrowDownTray as bE,
-  HiMiniQueueList as bF,
-  Surface as bG,
-  HiMiniCheckBadge as bH,
-  fetchSupplyChainBundle as bI,
-  isSupplyChainScannerEvidence as bJ,
-  isBlockedGuardAction as bK,
-  HiMiniDocumentMagnifyingGlass as bL,
-  HiMiniShieldExclamation as bM,
-  HiMiniComputerDesktop as bN,
-  HiMiniChevronLeft as bO,
-  HiMiniFunnel as bP,
-  HiMiniArrowDown as bQ,
-  HiMiniArrowUp as bR,
-  runAuditRemediation as bS,
-  HiMiniSignal as bT,
-  runPackageFirewallAction as ba,
-  parseInterceptProofSnapshot as bb,
-  activatePackageFirewallRuntime as bc,
-  EntitlementNotice as bd,
-  fetchReceipts as be,
-  WorkspacePageHeader as bf,
+  ApprovalProofInline as b0,
+  HiMiniArrowTopRightOnSquare as b1,
+  HiMiniCloudArrowDown as b2,
+  fetchPackageFirewallStatus as b3,
+  runPackageAudit as b4,
+  resolveSupplyChainAuditFailure as b5,
+  runPackageSync as b6,
+  startPackageFirewallConnect as b7,
+  openPackageFirewallAuthorizeFallback as b8,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as b9,
+  PaginationControls as bA,
+  HiMiniNoSymbol as bB,
+  HiMiniCube as bC,
+  HiMiniArrowDownTray as bD,
+  HiMiniQueueList as bE,
+  fetchMcpPolicyRequest as bF,
+  resolveMcpPolicyRequest as bG,
+  HiMiniDocumentPlus as bH,
+  HiMiniDocumentMagnifyingGlass as bI,
+  Surface as bJ,
+  HiMiniCheckBadge as bK,
+  fetchSupplyChainBundle as bL,
+  isSupplyChainScannerEvidence as bM,
+  isBlockedGuardAction as bN,
+  HiMiniShieldExclamation as bO,
+  HiMiniComputerDesktop as bP,
+  HiMiniChevronLeft as bQ,
+  HiMiniFunnel as bR,
+  HiMiniArrowDown as bS,
+  HiMiniArrowUp as bT,
+  runAuditRemediation as bU,
+  HiMiniSignal as bV,
+  repairSupplyChainProtection as ba,
+  runPackageFirewallAction as bb,
+  parseInterceptProofSnapshot as bc,
+  activatePackageFirewallRuntime as bd,
+  EntitlementNotice as be,
+  fetchReceipts as bf,
   __vitePreload as bg,
   scopeLabel as bh,
   guardAwareHref as bi,
@@ -31381,38 +30731,38 @@ export {
   HiMiniClipboardDocument as bn,
   HiMiniUsers as bo,
   HiMiniFolder as bp,
-  HiMiniInformationCircle as bq,
-  HiMiniIdentification as br,
-  policyActionLabel as bs,
-  createCloudExceptionRequest as bt,
-  HiMiniArrowRight as bu,
-  HiMiniPuzzlePiece as bv,
-  HiMiniGlobeAlt as bw,
-  fetchCloudExceptions as bx,
-  fetchCloudExceptionRequests as by,
-  downloadBlob as bz,
+  HiMiniIdentification as bq,
+  policyActionLabel as br,
+  createCloudExceptionRequest as bs,
+  HiMiniArrowRight as bt,
+  HiMiniPuzzlePiece as bu,
+  HiMiniGlobeAlt as bv,
+  fetchCloudExceptions as bw,
+  fetchCloudExceptionRequests as bx,
+  downloadBlob as by,
+  PolicyStatField as bz,
   HiMiniChevronRight as c,
   createCommandActivityClient as d,
   harnessDisplayName as e,
   fetchCommandActivityApi as f,
   getHeatmapLevel as g,
   homeCommandActivityModel as h,
-  isConnectableAppHarness as i,
+  EmptyState as i,
   jsxRuntimeExports as j,
-  EmptyState as k,
-  EvidenceInsightsShareModal as l,
-  HiMiniCheckCircle as m,
-  GuardHero as n,
-  formatNumber as o,
+  EvidenceInsightsShareModal as k,
+  HiMiniCheckCircle as l,
+  GuardHero as m,
+  formatNumber as n,
+  HiMiniShieldCheck as o,
   protectionHealthFor as p,
-  HiMiniShieldCheck as q,
+  guardActionDisposition as q,
   reactExports as r,
-  guardActionDisposition as s,
-  formatRelativeTime as t,
+  formatRelativeTime as s,
+  guardActionActivityCopy as t,
   useReceiptAnalytics as u,
-  guardActionActivityCopy as v,
-  HiMiniSparkles as w,
-  HiMiniXMark as x,
-  HiMiniChevronUp as y,
-  HiMiniChevronDown as z
+  HiMiniSparkles as v,
+  HiMiniXMark as w,
+  HiMiniChevronUp as x,
+  HiMiniChevronDown as y,
+  resolveCloudIntelCopy as z
 };

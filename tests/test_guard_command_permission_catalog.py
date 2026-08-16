@@ -99,10 +99,8 @@ def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -
 
     admin = registry.permission_for_typed_capability("admin_merge_remote")
     ordinary = registry.permission_for_typed_capability("merge_remote")
-    routine = registry.permission_for_typed_capability("routine_merge_remote")
     assert admin is not None
     assert ordinary is not None
-    assert routine is not None
     assert admin.permission_id == "command.github.permission.merge-admin"
     assert admin.rule_ids == ("command.github.admin-merge",)
     assert admin.action_classes == ("GitHub administrator pull-request merge command",)
@@ -118,12 +116,9 @@ def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -
     assert ordinary.permission_id == "command.github.permission.merge-remote"
     assert ordinary.rule_ids == ("command.github.merge",)
     assert ordinary.baseline_floor == "require-reapproval"
-    assert routine.rule_ids == ()
-    assert routine.action_classes == ()
-    assert routine.baseline_floor == "allow"
 
 
-@pytest.mark.parametrize("lookup", ["rule", "action", "capability"])
+@pytest.mark.parametrize("lookup", ["rule", "capability"])
 def test_permission_indexes_map_each_enforceable_identifier_exactly_once(lookup: str) -> None:
     registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
@@ -131,16 +126,37 @@ def test_permission_indexes_map_each_enforceable_identifier_exactly_once(lookup:
         for permission in extension.permissions:
             values = {
                 "rule": permission.rule_ids,
-                "action": permission.action_classes,
                 "capability": permission.typed_capabilities,
             }[lookup]
             for value in values:
                 resolved = {
                     "rule": registry.permission_for_rule_id,
-                    "action": registry.permission_for_action_class,
                     "capability": registry.permission_for_typed_capability,
                 }[lookup](value)
                 assert resolved is permission
+
+
+def test_shared_action_classes_keep_unique_rule_permissions() -> None:
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    git = next(extension for extension in registry.extensions if extension.extension_id == "command.git")
+    assert {permission.permission_id for permission in git.permissions} == {
+        "command.git.permission.force-clean",
+        "command.git.permission.force-push",
+        "command.git.permission.hard-reset",
+        "command.git.permission.local-branch-delete",
+        "command.git.permission.remote-branch-delete",
+    }
+    assert all(permission.configurable for permission in git.permissions)
+    assert all(permission.action_classes == ("git destructive command",) for permission in git.permissions)
+    first = min(git.permissions, key=lambda permission: permission.permission_id)
+    assert registry.permission_for_action_class("git destructive command") is first
+    for permission in git.permissions:
+        assert registry.permission_for_rule_id(permission.rule_ids[0]) is permission
+
+    self_protection = next(
+        extension for extension in registry.extensions if extension.extension_id == "command.guard-self-protection"
+    )
+    assert all(not permission.configurable for permission in self_protection.permissions)
 
 
 def test_permission_catalog_serialization_and_digest_are_deterministic() -> None:
@@ -148,7 +164,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "90594f7b6f30208ba301c26722602dbd6cf9d1c19d0c7bfd2fa2e6491e1f30db"
+    assert registry.catalog_digest == "3df2c037f37be76855ef527036a5e91e361bc6cb44daeb83c09ff43e1d6bef23"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )
@@ -186,25 +202,27 @@ def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_refere
         deprecated=False,
         replacement_permission_id=None,
         safer_guidance=("Inspect the operation.",),
+        example_command="test inspect",
     )
 
     with pytest.raises(ValueError, match="duplicate permission ID"):
         CommandPermissionCatalog((base, base))
     with pytest.raises(ValueError, match="mapped by multiple permissions"):
         CommandPermissionCatalog((base, replace(base, permission_id="command.test.permission.other")))
-    with pytest.raises(ValueError, match=r"action class .* mapped by multiple permissions"):
-        CommandPermissionCatalog(
-            (
+    shared_action = CommandPermissionCatalog(
+        (
+            base,
+            replace(
                 base,
-                replace(
-                    base,
-                    permission_id="command.test.permission.normalized-collision",
-                    typed_capabilities=("test_normalized_collision",),
-                    action_classes=(" TEST BASE ACTION ",),
-                    rule_ids=("command.test.normalized-collision",),
-                ),
-            )
+                permission_id="command.test.permission.normalized-collision",
+                typed_capabilities=("test_normalized_collision",),
+                action_classes=(" TEST BASE ACTION ",),
+                rule_ids=("command.test.normalized-collision",),
+            ),
         )
+    )
+    assert shared_action.for_action_class("test base action") is base
+    assert shared_action.for_rule_id("command.test.normalized-collision") is not None
     with pytest.raises(ValueError, match=r"rule .* mapped by multiple permissions"):
         CommandPermissionCatalog(
             (

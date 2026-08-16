@@ -22,7 +22,7 @@ const request: GuardApprovalRequest = {
   policy_action: "require-reapproval",
   recommended_scope: "artifact",
   allowed_scopes: ["artifact", "workspace", "harness", "global"],
-  scope_contract_version: "guard.approval-scopes.v4",
+  scope_contract_version: "guard.approval-scopes.v5",
   scope_contract_digest: "scope-contract-digest",
   allowed_scopes_by_action: {
     allow: ["artifact", "workspace", "harness", "global"],
@@ -128,7 +128,7 @@ test("approval review renders action-eligible scopes and binds the selected cont
   expect(resolutionBodies[0]).toMatchObject({
     action: "block",
     scope: "global",
-    scope_contract_version: "guard.approval-scopes.v4",
+    scope_contract_version: "guard.approval-scopes.v5",
     scope_contract_digest: "scope-contract-digest",
   });
 });
@@ -198,46 +198,4 @@ test("keyboard approval uses gate settings that arrive after request detail", as
 
   await expect(page.getByRole("dialog", { name: "Approval password required" })).toBeVisible();
   expect(resolutionBodies).toHaveLength(0);
-});
-
-test("browser MCP review offers bounded capability access on mobile", async ({ page }) => {
-  const resolutionBodies: Array<Record<string, unknown>> = [];
-  const browserRequest: GuardApprovalRequest = {
-    ...request,
-    request_id: "browser-mcp-e2e",
-    artifact_id: "codex:project:mcp-tool-call:chrome-devtools:new-page",
-    artifact_name: "chrome-devtools:new_page",
-    artifact_type: "mcp_tool_call",
-    launch_target: "chrome-devtools new_page hol.org",
-    changed_fields: ["runtime_browser_tool_call"],
-    policy_action: "review",
-    temporary_mcp_approval: {
-      eligible: true,
-      server_name: "chrome-devtools",
-      server_identity_hash: "sha256:browser-e2e",
-      category: "browser_navigation",
-      target_label: "hol.org",
-      allowed_targets: ["exact", "category", "server"],
-      allowed_durations: ["once", "15m", "1h", "5h"],
-      hard_risk_exclusions: ["browser_privileged", "browser_transfer"],
-    },
-  };
-  await page.setViewportSize({ width: 390, height: 844 });
-  await mountApprovalFixture(page, resolutionBodies, browserRequest);
-  await page.goto(`/requests/${browserRequest.request_id}?${DAEMON}`);
-
-  await expect(page.getByRole("heading", { name: "chrome-devtools:new_page" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: "1 hour" })).toBeChecked();
-  await expect(page.getByRole("radio", { name: "This browser capability" })).toBeChecked();
-  await expect(page.getByText(/Privileged browser access.*still require review/)).toBeVisible();
-  await page.getByText("5 hours", { exact: true }).click();
-  await page.getByRole("button", { name: "Allow for 5 hours" }).click();
-
-  await expect.poll(() => resolutionBodies.length).toBe(1);
-  expect(resolutionBodies[0]).toMatchObject({
-    action: "allow",
-    scope: "artifact",
-    mcp_grant_target: "category",
-    mcp_grant_duration: "5h",
-  });
 });

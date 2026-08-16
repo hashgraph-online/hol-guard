@@ -31,6 +31,7 @@ def _package_values(spec: PackageCommandExtensionSpec) -> CommandExtensionValues
             ecosystem_ids=spec.ecosystem_ids,
             executables=spec.executables,
             project_markers=spec.project_markers,
+            example_command=spec.example_command,
         ),
         (),
     )

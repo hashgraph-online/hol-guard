@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.cli.commands_hook_generic import _should_relax_c
 from codex_plugin_scanner.guard.cli.commands_support_codex_prompt_attachments import (
     _ATTACHMENT_SCAN_CHUNK_BYTES,
     _ATTACHMENT_SCAN_MAX_BYTES,
+    _classify_stream_window,
     _codex_prompt_attachment_artifact,
 )
 
@@ -147,6 +148,27 @@ def test_large_benign_codex_attachment_streams_without_review(tmp_path: Path) ->
 
     assert artifact is None
     assert elapsed_cpu_seconds < 6.0
+
+
+def test_repeated_attachment_windows_reuse_guarded_classification() -> None:
+    cache: dict[tuple[int, bytes], tuple[str, ...]] = {}
+
+    with patch(
+        "codex_plugin_scanner.guard.cli.commands_support_codex_prompt_attachments._guarded_classes",
+        return_value=(),
+    ) as classify:
+        assert _classify_stream_window(
+            "Routine release note.",
+            classification_cache=cache,
+            inherited_secret_read_state=None,
+        ) == ((), None)
+        assert _classify_stream_window(
+            "Routine release note.",
+            classification_cache=cache,
+            inherited_secret_read_state=None,
+        ) == ((), None)
+
+    classify.assert_called_once_with("Routine release note.")
 
 
 def test_large_benign_codex_attachment_has_bounded_peak_memory(tmp_path: Path) -> None:

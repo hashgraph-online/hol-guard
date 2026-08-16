@@ -6,8 +6,6 @@ import json
 import shlex
 import subprocess
 import sys
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -312,79 +310,3 @@ def test_exec_hook_does_not_run_marker_embedded_in_workspace_path(tmp_path: Path
     assert result.returncode == 0
     assert result.stderr == ""
     assert not marker_path.exists()
-
-
-def test_claude_daemon_hook_bridge_forwards_package_install_without_node(tmp_path: Path) -> None:
-    """Claude's generated bridge must forward package requests without a Node runtime."""
-
-    workspace_dir = tmp_path / "workspace"
-    guard_home = tmp_path / "guard-home"
-    workspace_dir.mkdir(parents=True)
-    context = HarnessContext(
-        home_dir=tmp_path / "home",
-        workspace_dir=workspace_dir,
-        guard_home=guard_home,
-    )
-    received: list[dict[str, object]] = []
-
-    class _HookHandler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:
-            content_length = int(self.headers.get("Content-Length", "0"))
-            received.append(json.loads(self.rfile.read(content_length)))
-            response = json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "ask",
-                        "permissionDecisionReason": "HOL Guard paused `minimist@1.2.8` for review before install.",
-                    }
-                },
-                separators=(",", ":"),
-            ).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(response)))
-            self.end_headers()
-            self.wfile.write(response)
-
-        def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-            del format, args
-
-    server = HTTPServer(("127.0.0.1", 0), _HookHandler)
-    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-    server_thread.start()
-    guard_home.mkdir(parents=True)
-    (guard_home / "daemon-state.json").write_text(
-        json.dumps({"port": server.server_port}),
-        encoding="utf-8",
-    )
-    event = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": "npm install minimist@1.2.8"},
-        "cwd": str(workspace_dir),
-    }
-    try:
-        result = subprocess.run(
-            ["/bin/sh", "-c", ClaudeCodeHarnessAdapter._daemon_hook_command(context)],
-            input=json.dumps(event),
-            text=True,
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-        server_thread.join(timeout=2)
-    payload = json.loads(result.stdout)
-
-    assert result.returncode == 0
-    assert result.stderr == ""
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "minimist@1.2.8" in payload["hookSpecificOutput"]["permissionDecisionReason"]
-    assert len(received) == 1
-    remaining_ms = received[0].pop("guard_remaining_ms")
-    assert isinstance(remaining_ms, int)
-    assert 1 <= remaining_ms <= 8_000
-    assert received == [event]

@@ -1,0 +1,48 @@
+{
+  "manifest_version": "0.4",
+  "name": "hol-guard",
+  "display_name": "HOL Guard",
+  "version": "2.2.87",
+  "description": "Local-first AI agent security evidence and approval workflows through HOL Guard's MCP server.",
+  "long_description": "HOL Guard exposes sanitized local Guard status, security receipts, inventory, policy validation, and approval-backed policy workflows over stdio. The MCP bundle installs the open-source hol-guard Python package locally with uv and does not require Guard Cloud.",
+  "author": {
+    "name": "Hashgraph Online",
+    "email": "support@hol.org",
+    "url": "https://hol.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hashgraph-online/hol-guard.git"
+  },
+  "homepage": "https://hol.org/guard",
+  "documentation": "https://github.com/hashgraph-online/hol-guard/tree/main/docs/guard",
+  "support": "https://github.com/hashgraph-online/hol-guard/issues",
+  "icon": "https://raw.githubusercontent.com/hashgraph-online/hol-guard-plugin/main/assets/icon.png",
+  "server": {
+    "type": "uv",
+    "entry_point": "server/main.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "server/main.py"
+      ]
+    }
+  },
+  "tools": [
+    {"name": "search", "description": "Search sanitized local Guard receipts and inventory."},
+    {"name": "fetch", "description": "Fetch one sanitized Guard receipt or inventory item by opaque ID."},
+    {"name": "get_guard_status", "description": "Report local Guard availability and data freshness."},
+    {"name": "validate_policy", "description": "Validate candidate HOL Guard policy YAML without writing it."},
+    {"name": "create_policy", "description": "Request an approval-backed HOL Guard policy write when local policy authoring is enabled."},
+    {"name": "get_policy_creation", "description": "Inspect a pending or completed policy creation request."}
+  ],
+  "keywords": ["security", "ai-agent-security", "mcp-security", "guardrails", "policy", "audit"],
+  "license": "Apache-2.0",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {"python": ">=3.10.0 <4"}
+  }
+}

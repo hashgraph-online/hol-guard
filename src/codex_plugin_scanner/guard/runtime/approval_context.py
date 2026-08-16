@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Literal, TypeGuard, cast
 
 from .env_wrapper import parse_env_wrapper
+from .extension_control_runtime import current_extension_control_binding_digest
 
 APPROVAL_CONTEXT_TOKEN_PREFIX = "guard-approval-context:v1:"
 
@@ -92,7 +93,13 @@ def build_approval_context_token(
         identity_hash=_component_hash("identity", identity),
         content_hash=_component_hash("content", content),
         capabilities_hash=_component_hash("capabilities", capabilities),
-        policy_hash=_component_hash("policy", policy),
+        policy_hash=_component_hash(
+            "policy",
+            {
+                "extension_control_digest": current_extension_control_binding_digest(),
+                "policy": policy,
+            },
+        ),
         sandbox_hash=_component_hash("sandbox", sandbox),
     )
     payload = json.dumps(

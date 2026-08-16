@@ -66,12 +66,15 @@ def resolve_extension_controls(
     permission_ids: tuple[str, ...],
     surface: ControlSurface,
     observations: tuple[str, ...] = (),
+    authority_failure: ResolverFailureCode | None = None,
 ) -> ControlResolution:
     """Resolve controls for classified catalog identities without suppressing observations."""
 
     layer_values = tuple(islice(layers, _MAX_LAYERS + 1))
     composed = compose_control_layers(layer_values)
     failures = set(composed.failures)
+    if authority_failure is not None and surface is not ControlSurface.TRUSTED_LOCAL_PROOF:
+        failures.add(ControlResolverFailure(authority_failure))
     if (
         len(layer_values) > _MAX_LAYERS
         or any(len(layer.controls) > _MAX_CONTROLS_PER_LAYER for layer in layer_values)
@@ -118,7 +121,26 @@ def resolve_extension_controls(
         for permission_id in expanded_permissions
     ):
         return _resolution(composed, failures, observations, reason="control.disabled-permission")
-    return ControlResolution(composed, False, (), (), observations)
+    explicitly_enabled_permission_ids = tuple(
+        sorted(
+            permission_id
+            for permission_id in permission_ids
+            if _has_explicit_enabled_permission(composed, permission_id)
+        )
+    )
+    return ControlResolution(
+        composed,
+        False,
+        (),
+        (),
+        observations,
+        explicitly_enabled_permission_ids,
+    )
+
+
+def _has_explicit_enabled_permission(composed: ComposedExtensionControls, permission_id: str) -> bool:
+    target = ControlTarget(ControlTargetKind.PERMISSION, permission_id)
+    return any(control.target == target and control.state is ControlState.ENABLED for control in composed.controls)
 
 
 def _validate_layer_targets(

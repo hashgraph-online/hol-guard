@@ -1,0 +1,113 @@
+name: MDM Cloud integration lab
+
+on:
+  pull_request:
+    branches: [release/3.0]
+    paths:
+      - "src/codex_plugin_scanner/guard/mdm/**"
+      - "scripts/mdm/**"
+      - "tests/test_guard_mdm_cloud_*.py"
+      - "docs/guard/mdm-cloud-integration-lab-*.md"
+      - "docs/guard/schemas/mdm-cloud-*.json"
+      - ".github/workflows/mdm-cloud-integration-lab.yml"
+  push:
+    branches: [release/3.0]
+    paths:
+      - "src/codex_plugin_scanner/guard/mdm/**"
+      - "scripts/mdm/**"
+      - "tests/test_guard_mdm_cloud_*.py"
+      - "docs/guard/mdm-cloud-integration-lab-*.md"
+      - "docs/guard/schemas/mdm-cloud-*.json"
+      - ".github/workflows/mdm-cloud-integration-lab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mdm-cloud-lab-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HOL_MDM_LAB_PROJECT: mdm-cloud-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          save-cache: false
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Run focused contract and real-HTTP tests
+        run: |
+          uv run --no-sync pytest -q \
+            tests/test_guard_mdm_cloud_control.py \
+            tests/test_guard_mdm_cloud_schemas.py \
+            tests/test_guard_mdm_cloud_lab_registration.py \
+            tests/test_guard_mdm_cloud_lab_integration.py
+      - name: Run standalone multi-device Docker lab
+        run: |
+          mkdir -p artifacts/mdm-cloud-lab
+          uv run --no-sync python scripts/mdm/run-cloud-integration-lab.py \
+            --project "$HOL_MDM_LAB_PROJECT" \
+            --artifacts artifacts/mdm-cloud-lab
+      - name: Validate bounded report
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('artifacts/mdm-cloud-lab/mdm-cloud-integration-report.json').read_text())
+          assert report['schemaVersion'] == 'hol-guard-mdm-cloud-integration-lab.v1'
+          assert report['healthy'] is True
+          assert report['stepCount'] >= 25
+          assert report['nativeCertification']['outcome'] == 'not-evaluated'
+          assert all(step['passed'] is True for step in report['steps'])
+          PY
+      - name: Collect bounded Compose logs on failure
+        if: failure()
+        run: |
+          mkdir -p artifacts/mdm-cloud-lab
+          docker compose \
+            --project-name "$HOL_MDM_LAB_PROJECT" \
+            --file scripts/mdm/cloud-lab/docker-compose.yml \
+            logs --no-color --tail 400 > artifacts/mdm-cloud-lab/compose.log 2>&1 || true
+      - name: Upload MDM Cloud lab evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mdm-cloud-integration-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/mdm-cloud-lab
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Tear down lab
+        if: always()
+        run: |
+          docker compose \
+            --project-name "$HOL_MDM_LAB_PROJECT" \
+            --file scripts/mdm/cloud-lab/docker-compose.yml \
+            down --volumes --remove-orphans || true

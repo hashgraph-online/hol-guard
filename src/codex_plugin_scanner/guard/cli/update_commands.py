@@ -25,6 +25,7 @@ from urllib.parse import ParseResult, urlparse
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from ... import version as package_version
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from ..adapters.cursor_hooks import cursor_native_hook_state
@@ -37,12 +38,13 @@ from ..adapters.opencode_pretool import (
 from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
 from ..adapters.pi_extension_source import managed_extension_source
 from ..adapters.pi_support import json_payload
-from ..codex_hook_integrity import CodexHookIntegrityError, load_authenticated_hook_manifest
 from ..config import load_guard_config, resolve_guard_home
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
 from ..redaction import redact_sensitive_text
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..runtime.extension_control_authority import AuthorityHealth
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .update_artifact import (
@@ -158,7 +160,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.manager import (
     clear_guard_daemon_state,
-    ensure_approval_center,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
     load_guard_daemon_url,
@@ -210,7 +211,6 @@ for attempt in range(1, 4):
     clear_guard_daemon_state(guard_home)
     repair_approval_center_locator(guard_home)
     daemon_url = ensure_guard_daemon_after_update(guard_home, **refresh_kwargs)
-    ensure_approval_center(guard_home)
     # A separately installed desktop app can race the refresh and replace the
     # just-started daemon with older bytes. Require the updated fingerprint to
     # remain bound across a short stability window before reporting success.
@@ -323,6 +323,27 @@ def _read_direct_url_dir_info(direct_url: dict[str, object] | None) -> dict[str,
         return {}
     dir_info = direct_url.get("dir_info")
     return dir_info if isinstance(dir_info, dict) else {}
+
+
+def _authority_blocks_downgrade(
+    store: GuardStore | None,
+    *,
+    guard_home: Path,
+    current_version: str,
+    candidate_version: str | None,
+) -> bool:
+    if candidate_version is None:
+        return False
+    try:
+        if Version(candidate_version) >= Version(current_version):
+            return False
+    except InvalidVersion:
+        return False
+    authority_store = store or GuardStore(guard_home)
+    authority = authority_store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+    return authority.health is not AuthorityHealth.UNENROLLED
 
 
 def run_guard_update(
@@ -511,6 +532,24 @@ def run_guard_update(
             )
         except UpdateArtifactError as error:
             return _trusted_update_failure(payload, UpdateSubprocessError(error.reason_code))
+    downgrade_candidate = trusted_wheel.version if trusted_wheel is not None else target_version
+    if _authority_blocks_downgrade(
+        store,
+        guard_home=resolved_guard_home,
+        current_version=current_version,
+        candidate_version=downgrade_candidate,
+    ):
+        if trusted_wheel is not None:
+            trusted_wheel.cleanup()
+        payload.update(
+            {
+                "status": "blocked",
+                "changed": False,
+                "reason_code": "extension_control_authority_downgrade_blocked",
+                "message": "HOL Guard cannot downgrade while extension-control authority is active.",
+            }
+        )
+        return payload, 1
     command = _update_command(
         installer,
         use_pypi=use_pypi,
@@ -606,6 +645,10 @@ def run_guard_update(
     active_command = execution_command
     active_display_command = command
     attempted_force_retry = False
+
+    def finish_update(result: tuple[dict[str, object], int]) -> tuple[dict[str, object], int]:
+        return result
+
     attempted_pipx_recovery = False
     propagation_retries = 0
     installer_execution_started = False
@@ -616,39 +659,47 @@ def run_guard_update(
             installer_execution_started = True
             result = update_context.run(active_command)
         except UpdateArtifactError as error:
-            return _trusted_update_failure(
-                payload,
-                UpdateSubprocessError(error.reason_code),
-                trusted_wheel=trusted_wheel,
-                retain_trusted_wheel=installer_execution_started,
+            return finish_update(
+                _trusted_update_failure(
+                    payload,
+                    UpdateSubprocessError(error.reason_code),
+                    trusted_wheel=trusted_wheel,
+                    retain_trusted_wheel=installer_execution_started,
+                )
             )
         except UpdateSubprocessError as error:
-            return _trusted_update_failure(
-                payload,
-                error,
-                trusted_wheel=trusted_wheel,
-                retain_trusted_wheel=installer_execution_started,
+            return finish_update(
+                _trusted_update_failure(
+                    payload,
+                    error,
+                    trusted_wheel=trusted_wheel,
+                    retain_trusted_wheel=installer_execution_started,
+                )
             )
         payload["command"] = active_display_command
         payload["stdout"] = _normalize_output_text(result.stdout)
         payload["stderr"] = _normalize_output_text(result.stderr)
         payload["return_code"] = result.returncode
         if result.output_limited:
-            return _trusted_update_failure(
-                payload,
-                UpdateSubprocessError("update_installer_output_limit"),
-                trusted_wheel=trusted_wheel,
-                retain_trusted_wheel=installer_execution_started,
+            return finish_update(
+                _trusted_update_failure(
+                    payload,
+                    UpdateSubprocessError("update_installer_output_limit"),
+                    trusted_wheel=trusted_wheel,
+                    retain_trusted_wheel=installer_execution_started,
+                )
             )
         importlib.invalidate_caches()
         try:
             payload["resulting_version"] = _current_version_from_subprocess(update_context)
         except UpdateSubprocessError as error:
-            return _trusted_update_failure(
-                payload,
-                error,
-                trusted_wheel=trusted_wheel,
-                retain_trusted_wheel=installer_execution_started,
+            return finish_update(
+                _trusted_update_failure(
+                    payload,
+                    error,
+                    trusted_wheel=trusted_wheel,
+                    retain_trusted_wheel=installer_execution_started,
+                )
             )
         initial_version_check = payload.get("version_check")
         resulting_version = str(payload.get("resulting_version") or current_version)
@@ -705,29 +756,33 @@ def run_guard_update(
                 payload.pop("retry_command", None)
                 if trusted_wheel is not None:
                     _retain_local_wheel_staging(payload)
-                return payload, 1
+                return finish_update((payload, 1))
             payload["status"] = "failed"
             payload["changed"] = False
             payload["reason_code"] = "update_installer_failed"
             payload["message"] = "HOL Guard update failed."
             if trusted_wheel is not None:
                 _retain_local_wheel_staging(payload)
-            return payload, 1
+            return finish_update((payload, 1))
         if trusted_wheel is not None:
             try:
                 if Version(resulting_version) != Version(trusted_wheel.version):
-                    return _trusted_update_failure(
+                    return finish_update(
+                        _trusted_update_failure(
+                            payload,
+                            UpdateSubprocessError("update_version_mismatch"),
+                            trusted_wheel=trusted_wheel,
+                            retain_trusted_wheel=installer_execution_started,
+                        )
+                    )
+            except InvalidVersion:
+                return finish_update(
+                    _trusted_update_failure(
                         payload,
-                        UpdateSubprocessError("update_version_mismatch"),
+                        UpdateSubprocessError("update_version_output_invalid"),
                         trusted_wheel=trusted_wheel,
                         retain_trusted_wheel=installer_execution_started,
                     )
-            except InvalidVersion:
-                return _trusted_update_failure(
-                    payload,
-                    UpdateSubprocessError("update_version_output_invalid"),
-                    trusted_wheel=trusted_wheel,
-                    retain_trusted_wheel=installer_execution_started,
                 )
         if trusted_wheel is not None:
             _record_verified_local_wheel_receipt(
@@ -770,7 +825,7 @@ def run_guard_update(
                 try:
                     active_command = update_context.build_installer_command(retry_command)
                 except UpdateSubprocessError as error:
-                    return _trusted_update_failure(payload, error, trusted_wheel=trusted_wheel)
+                    return finish_update(_trusted_update_failure(payload, error, trusted_wheel=trusted_wheel))
                 payload["upgrade_source"] = update_context.source.public_name
                 continue
         break
@@ -820,15 +875,21 @@ def run_guard_update(
         if len(repaired_installs) == 1:
             payload["managed_install"] = repaired_installs[0]
     if context is not None:
-        daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
-            context,
-            update_context=update_context,
-        )
+        package_changed = _version_changed(current_version, resulting_version)
+        if package_changed:
+            daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
+                context,
+                update_context=update_context,
+            )
+        else:
+            daemon_refresh, daemon_refresh_note = None, None
         if daemon_refresh is not None:
             payload["daemon_refresh"] = daemon_refresh
         _append_payload_note(payload, daemon_refresh_note)
-        if daemon_refresh_required and not (
-            isinstance(daemon_refresh, dict) and daemon_refresh.get("status") == "restarted"
+        if (
+            daemon_refresh_required
+            and package_changed
+            and not (isinstance(daemon_refresh, dict) and daemon_refresh.get("status") == "restarted")
         ):
             payload.update(
                 {
@@ -837,8 +898,8 @@ def run_guard_update(
                     "message": "HOL Guard was updated, but its daemon could not be restarted safely.",
                 }
             )
-            return payload, 1
-    return payload, 0
+            return finish_update((payload, 1))
+    return finish_update((payload, 0))
 
 
 def _record_verified_local_wheel_receipt(
@@ -1007,6 +1068,16 @@ def _expected_script_dir(installer_binary: str, installer: str) -> Path | None:
 
 
 def build_guard_install_surface_payload() -> dict[str, object]:
+    if _is_desktop_managed_runtime():
+        return {
+            "installer": "desktop",
+            "binary_diagnostics": {
+                "resolved_hol_guard": str(Path(sys.executable).resolve()),
+                "installer_binary": None,
+                "expected_script_dir": None,
+                "path_status": "bundled",
+            },
+        }
     installer = _installer_kind()
     return {
         "installer": installer,
@@ -1112,10 +1183,7 @@ def _stale_retry_command(payload: dict[str, object]) -> str:
         return ""
     version_check = payload.get("version_check")
     if isinstance(version_check, dict) and version_check.get("update_available") is True:
-        command = ["hol-guard", "update"]
-        if payload.get("release_channel") == "alpha":
-            command.append("--alpha")
-        return _shell_command(command)
+        return _shell_command(["hol-guard", "update"])
     retry_command = payload.get("retry_command")
     if isinstance(retry_command, str) and retry_command.strip():
         return retry_command.strip()
@@ -1505,7 +1573,15 @@ def _current_version() -> str:
     try:
         return importlib.metadata.version("hol-guard")
     except importlib.metadata.PackageNotFoundError:
-        return "unknown"
+        return package_version.__version__ if _is_frozen_runtime() else "unknown"
+
+
+def _is_frozen_runtime() -> bool:
+    return getattr(sys, "frozen", False) is True
+
+
+def _is_desktop_managed_runtime() -> bool:
+    return _is_frozen_runtime() and os.environ.get("HOL_GUARD_DESKTOP") == "1"
 
 
 def _installer_kind() -> str:
@@ -2415,7 +2491,9 @@ def _repair_cursor_install(
     if not isinstance(manifest, dict):
         return None, "Could not inspect Cursor protection during update: managed manifest is invalid"
     surface_value = manifest.get("surface")
-    surface = surface_value if surface_value in {"editor", "all"} else None
+    surface: str | None = (
+        surface_value if isinstance(surface_value, str) and surface_value in {"editor", "all"} else None
+    )
     if surface is None:
         return None, None
     try:
@@ -2426,6 +2504,7 @@ def _repair_cursor_install(
     if hook_state["protection_active"] is True:
         return None, None
     try:
+        repair_surface = None if surface == "all" else surface
         payload = apply_managed_install(
             "install",
             "cursor",
@@ -2434,9 +2513,9 @@ def _repair_cursor_install(
             store,
             repair_workspace or workspace,
             now,
-            surface=surface,
+            surface=repair_surface,
         )
-    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
         return None, f"Could not repair Cursor protection during update: {error}"
     repaired = payload.get("managed_install")
     if not isinstance(repaired, dict):
@@ -2483,20 +2562,12 @@ def _repair_context_from_managed_install(
     managed_workspace = managed_install.get("workspace")
     if isinstance(managed_workspace, str) and managed_workspace.strip():
         workspace_path = Path(managed_workspace).expanduser().resolve()
-        manifest = managed_install.get("manifest")
-        explicit_value = manifest.get("hook_workspace_explicit") if isinstance(manifest, dict) else None
-        workspace_override_explicit = (
-            explicit_value
-            if isinstance(explicit_value, bool)
-            else _legacy_codex_workspace_was_explicit(context, managed_install, workspace_path)
-        )
         return (
             HarnessContext(
                 home_dir=context.home_dir,
                 workspace_dir=workspace_path,
                 guard_home=context.guard_home,
                 home_override_explicit=context.home_override_explicit,
-                workspace_override_explicit=workspace_override_explicit,
             ),
             str(workspace_path),
         )
@@ -2509,25 +2580,6 @@ def _repair_context_from_managed_install(
         ),
         None,
     )
-
-
-def _legacy_codex_workspace_was_explicit(
-    context: HarnessContext,
-    managed_install: dict[str, object],
-    workspace_path: Path,
-) -> bool:
-    if managed_install.get("harness") != "codex":
-        return True
-    try:
-        authenticated = load_authenticated_hook_manifest(
-            context.guard_home,
-            CodexHarnessAdapter._hook_config_path(context),
-        )
-    except (CodexHookIntegrityError, OSError):
-        return False
-    manifest_context = authenticated.get("context")
-    bound_workspace = manifest_context.get("workspace_dir") if isinstance(manifest_context, dict) else None
-    return isinstance(bound_workspace, str) and Path(bound_workspace).resolve() == workspace_path
 
 
 def _repair_codex_install(
@@ -2615,7 +2667,15 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
     blocked_reason: str | None = None
     trusted_failure_reason: str | None = None
     recovery_reinstall_available = False
-    installed_distribution: InstalledDistribution | None = None
+    installed_distribution = (
+        InstalledDistribution(
+            name="hol-guard",
+            version=_current_version(),
+            root=Path(sys.executable).resolve().parent,
+        )
+        if installer == "desktop"
+        else None
+    )
 
     if managed_state.status != "absent" and managed_policy is None:
         auto_updatable = False
@@ -2630,6 +2690,9 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
     ):
         auto_updatable = False
         blocked_reason = "An organization-configured package source is required."
+    elif installer == "desktop":
+        auto_updatable = False
+        blocked_reason = "Updates are managed by HOL Guard Desktop."
     else:
         try:
             installed_distribution = _status_installed_distribution(
@@ -2658,11 +2721,11 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             network_policy=(managed_policy.network if managed_policy is not None else ManagedNetworkPolicy()),
             include_alpha=include_alpha,
         )
-        if installed_distribution is not None
+        if installed_distribution is not None and installer != "desktop"
         else {
             "source": source_kind,
-            "status": "unavailable",
-            "current_version": None,
+            "status": "managed" if installer == "desktop" else "unavailable",
+            "current_version": current_version if installer == "desktop" else None,
             "latest_version": None,
             "update_available": None,
         }

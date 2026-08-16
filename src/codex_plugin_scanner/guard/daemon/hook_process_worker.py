@@ -37,6 +37,7 @@ class WorkerConnection(Protocol):
 class HookWorkerSlot:
     process: WorkerProcess
     connection: WorkerConnection
+    handshake_lock: threading.RLock = field(default_factory=threading.RLock)
     retire_lock: threading.Lock = field(default_factory=threading.Lock)
     retired: bool = False
     windows_job_contained: bool = False

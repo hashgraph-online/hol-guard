@@ -1,0 +1,67 @@
+name: Rust runtime rule contract
+
+on:
+  pull_request:
+    paths:
+      - "rust/**"
+      - "ci/native_runtime/test_native_rule_contract.py"
+      - ".github/workflows/rust-runtime-rule-contract.yml"
+  push:
+    branches: [release/3.0]
+    paths:
+      - "rust/**"
+      - "ci/native_runtime/test_native_rule_contract.py"
+      - ".github/workflows/rust-runtime-rule-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-runtime-rule-contract-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rule-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+      - name: Validate locked Rust workspace
+        run: |
+          cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps > /dev/null
+          rustfmt --edition 2021 --check rust/crates/guard-rule-contract/src/lib.rs rust/crates/guard-runtime/src/main.rs
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - name: Check Python rule-contract verifier
+        run: |
+          uv run --no-sync python -m ruff format ci/native_runtime/test_native_rule_contract.py
+          uv run --no-sync python -m ruff check ci/native_runtime/test_native_rule_contract.py
+          git diff --check -- ci/native_runtime/test_native_rule_contract.py
+      - name: Build version-matched runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          rust/target/release/hol-guard-runtime self-test --json
+          rust/target/release/hol-guard-runtime rule-contract --json
+      - name: Prove runtime digest binds exact component source bytes
+        env:
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: uv run --no-sync pytest ci/native_runtime/test_native_rule_contract.py --tb=short

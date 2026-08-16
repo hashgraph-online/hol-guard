@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main, release/3.0]
+    branches: [main, release/3.0, release/3.1]
   pull_request:
     branches: [main, release/3.0]
   schedule:
@@ -9,7 +9,15 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
+
+env:
+  CI_UV_CACHE_DEPENDENCY_GLOB: |
+    pyproject.toml
+    uv.lock
+    requirements.txt
+    docker-requirements.txt
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -33,12 +41,16 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - name: Retry uv setup after transient download failure
         if: steps.setup-uv-primary.outcome == 'failure'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Validate protected test invariants
         run: uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
@@ -68,14 +80,88 @@ jobs:
             exit 1
           fi
 
-  tests:
+  test-plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        id: setup-uv-primary
+        continue-on-error: true
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - name: Retry uv setup after transient download failure
+        if: steps.setup-uv-primary.outcome == 'failure'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Restore latest trusted duration telemetry
+        id: latest-duration-telemetry
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read -r artifact_id run_id < <(
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts?name=pytest-duration-manifest-candidate&per_page=100" \
+              --jq '.artifacts | map(select(.expired == false and .workflow_run.head_branch == "release/3.0")) | sort_by(.created_at) | reverse | .[0] | [.id, .workflow_run.id] | @tsv'
+          )
+          test -n "$artifact_id"
+          read -r event conclusion branch workflow_path < <(
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" \
+              --jq '[.event, .conclusion, .head_branch, .path] | @tsv'
+          )
+          test "$event" = "push"
+          test "$conclusion" = "success"
+          test "$branch" = "release/3.0"
+          test "$workflow_path" = ".github/workflows/ci.yml"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/duration-manifest.zip
+          unzip -p /tmp/duration-manifest.zip pytest-duration-manifest-candidate.json.gz \
+            > /tmp/pytest-duration-manifest.json.gz
+          gzip -t /tmp/pytest-duration-manifest.json.gz
+          mv /tmp/pytest-duration-manifest.json.gz pytest-duration-manifest.latest.json.gz
+      - name: Collect once and build 96 affinity-aware pytest shards
+        shell: bash
+        run: |
+          manifest=ci/pytest-duration-manifest.json.gz
+          if test -s pytest-duration-manifest.latest.json.gz; then
+            manifest=pytest-duration-manifest.latest.json.gz
+          fi
+          uv run --no-sync python scripts/ci/build_pytest_shard_plan.py \
+            --shard-count 96 \
+            --duration-manifest "$manifest" \
+            --max-manifest-age-days 28 \
+            --output-directory pytest-shards
+      - name: Publish pytest shard plan
+        run: cat pytest-shards/plan.json
+      - name: Upload pytest shard plan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-shard-plan
+          path: pytest-shards
+          if-no-files-found: error
+          retention-days: 1
+
+  tests:
+    needs: test-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
-        shard-index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        shard-index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -88,12 +174,16 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - name: Retry uv setup after transient download failure
         if: steps.setup-uv-primary.outcome == 'failure'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - name: Secure the CI virtualenv interpreter
         shell: bash
@@ -109,18 +199,18 @@ jobs:
           fi
           secured_mode="$(stat -c '%a' "$(realpath "$interpreter")")"
           (( (8#$secured_mode & 2) == 0 ))
+      - name: Download pytest shard plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pytest-shard-plan
+          path: pytest-shards
       - name: Run pytest shard ${{ matrix.shard-index }}
         shell: bash
         run: |
-          uv run --no-sync python scripts/ci/pytest_shard.py \
-            --shard-index "${{ matrix.shard-index }}" \
-            --shard-count 16 \
-            --granularity node \
-            --duration-manifest ci/pytest-duration-manifest.json.gz \
-            --max-manifest-age-days 28 > pytest-nodes.txt
-          test -s pytest-nodes.txt
+          shard_file=$(printf 'pytest-shards/shard-%02d.txt' "${{ matrix.shard-index }}")
+          test -s "$shard_file"
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
-            uv run --no-sync pytest -p pytest_duration_report @pytest-nodes.txt --tb=short
+            uv run --no-sync pytest -p pytest_duration_report "@$shard_file" --tb=short
       - name: Upload pytest duration artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -128,24 +218,17 @@ jobs:
           name: pytest-durations-${{ matrix.shard-index }}
           path: pytest-durations.json
           if-no-files-found: warn
+          retention-days: 7
 
   duration-manifest-candidate:
     if: needs.tests.result == 'success'
     needs: tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
-        with:
-          version: "0.9.26"
-          enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
       - name: Download pytest duration reports
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -156,8 +239,8 @@ jobs:
         run: |
           shopt -s globstar nullglob
           reports=(duration-reports/**/pytest-durations.json)
-          test "${#reports[@]}" -eq 16
-          uv run --no-sync python scripts/ci/build_pytest_duration_manifest.py \
+          test "${#reports[@]}" -eq 96
+          python3 scripts/ci/build_pytest_duration_manifest.py \
             --output pytest-duration-manifest-candidate.json.gz \
             --observed-at "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" \
             "${reports[@]}"
@@ -167,6 +250,7 @@ jobs:
           name: pytest-duration-manifest-candidate
           path: pytest-duration-manifest-candidate.json.gz
           if-no-files-found: error
+          retention-days: 90
 
   compatibility:
     runs-on: ubuntu-latest
@@ -184,6 +268,8 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - name: Run cross-version compatibility contracts
         run: >-
@@ -214,10 +300,9 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
-      # Current GitHub toolcache images ship 3.10/3.11/3.13 interpreters with
-      # mode 777 (other-writable); the hook manifest integrity check rightly
-      # refuses them. Replace with a private 0755 copy, same as the tests job.
       - name: Secure the CI virtualenv interpreter
         shell: bash
         run: |
@@ -257,6 +342,8 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Run command parser mutation baseline
         run: uv run --no-sync mutmut run --max-children 4
@@ -268,17 +355,19 @@ jobs:
   ci-python-312:
     name: ci (3.12)
     if: always()
-    needs: [quality, tests, compatibility]
+    needs: [quality, test-plan, tests, compatibility]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Verify Python CI dependencies
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
+          TEST_PLAN_RESULT: ${{ needs.test-plan.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
         run: |
           test "$QUALITY_RESULT" = "success"
+          test "$TEST_PLAN_RESULT" = "success"
           test "$TESTS_RESULT" = "success"
           test "$COMPATIBILITY_RESULT" = "success"
 
@@ -313,12 +402,16 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          cache-suffix: cisco
       - name: Retry uv setup after transient download failure
         if: steps.setup-uv-primary.outcome == 'failure'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          cache-suffix: cisco
       - run: python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt
       - run: uv sync --frozen --extra dev --extra cisco --group cisco-mcp --python 3.13
       - run: uv run --no-sync pytest tests/test_cisco_install_surfaces.py tests/test_mcp_security.py tests/test_cli.py tests/test_action_runner.py tests/test_live_cisco_smoke.py --tb=short
@@ -341,12 +434,16 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - name: Retry uv setup after transient download failure
         if: steps.setup-uv-primary.outcome == 'failure'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - name: Run cross-platform Guard regressions
         run: >-
@@ -395,12 +492,16 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - name: Retry uv setup after transient download failure
         if: steps.setup-uv-primary.outcome == 'failure'
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           version: "0.9.26"
           enable-cache: true
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+          save-cache: false
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - name: Run trusted updater and daemon regressions
         run: >-

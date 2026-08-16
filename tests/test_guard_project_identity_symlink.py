@@ -12,7 +12,7 @@ def _write_git_identity_metadata(git_dir: Path, remote: str) -> None:
         encoding="utf-8",
     )
     (git_dir / "logs" / "HEAD").write_text(
-        f'{"0" * 40} {"1" * 40} Guard Test <guard@example.invalid> 0 +0000\tclone: from {remote}\n',
+        f"{'0' * 40} {'1' * 40} Guard Test <guard@example.invalid> 0 +0000\tclone: from {remote}\n",
         encoding="utf-8",
     )
 

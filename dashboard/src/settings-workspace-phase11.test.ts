@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import {
   filterSettingsBySearch,
   securityLevelLabel,
@@ -74,6 +76,48 @@ function testRiskControlConsequencesHasAllKeys(): void {
   }
 }
 
+function testResponsiveLayoutContract(): void {
+  const settingsShellSource = readFileSync(
+    new URL("./settings/settings-section-shell.tsx", import.meta.url),
+    "utf8",
+  );
+  const responsiveCss = readFileSync(
+    new URL("./responsive-layout.css", import.meta.url),
+    "utf8",
+  );
+  const mainSource = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
+
+  assert(
+    settingsShellSource.includes("guard-settings-shell"),
+    "Settings shell should expose a container-query root",
+  );
+  assert(
+    settingsShellSource.includes("guard-settings-side-nav")
+      && settingsShellSource.includes("guard-settings-mobile-tabs"),
+    "Settings shell should expose both responsive navigation surfaces",
+  );
+  assert(
+    responsiveCss.includes("container: guard-settings / inline-size"),
+    "Responsive CSS should evaluate Settings using available workspace width",
+  );
+  assert(
+    responsiveCss.includes("minmax(min(100%, 15.5rem), 1fr)"),
+    "Protection cards should preserve a readable minimum width",
+  );
+  assert(
+    responsiveCss.includes("(min-width: 64rem) and (max-width: 79.999rem)"),
+    "Intermediate desktop widths should use the compact shell",
+  );
+  assert(
+    responsiveCss.includes('[aria-label="Save settings"]'),
+    "Short or narrow windows should keep the save bar from covering form content",
+  );
+  assert(
+    mainSource.includes('import "./responsive-layout.css"'),
+    "The responsive stylesheet should be included in the dashboard bundle",
+  );
+}
+
 testFilterSettingsBySearchReturnsMatchingItems();
 testFilterSettingsBySearchEmptyQueryReturnsEmpty();
 testFilterSettingsBySearchWhitespaceReturnsEmpty();
@@ -83,5 +127,6 @@ testSecurityLevelLabelBalanced();
 testSecurityLevelLabelStrict();
 testSecurityLevelLabelCustom();
 testRiskControlConsequencesHasAllKeys();
+testResponsiveLayoutContract();
 
 console.log("settings-workspace-phase11.test.ts: all tests passed");

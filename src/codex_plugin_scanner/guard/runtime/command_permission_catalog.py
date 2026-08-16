@@ -10,26 +10,19 @@ from types import MappingProxyType
 from typing import Final, final
 
 from ..models import GuardAction
-from .command_rules import CommandRuleMode, CommandRuleSeverity, CommandSafetyRule
+from .command_rules import CommandRuleMode, CommandRuleSeverity, CommandSafetyRule, example_for_matcher
 
 PermissionRiskTier = CommandRuleSeverity
 COMMAND_PERMISSION_SCHEMA_VERSION: Final = 1
 _PERMISSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:-[a-z0-9]+)*$")
+_FAMILY_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_EXAMPLE_MAX_LENGTH = 120
 _MODE_FLOOR: Final[dict[CommandRuleMode, GuardAction]] = {
     "disabled": "allow",
     "monitor": "warn",
     "review": "review",
     "enforce": "block",
     "required": "review",
-}
-_RISK_RANK: Final[dict[PermissionRiskTier, int]] = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-_ACTION_RANK: Final[dict[GuardAction, int]] = {
-    "allow": 0,
-    "warn": 1,
-    "review": 2,
-    "require-reapproval": 3,
-    "sandbox-required": 4,
-    "block": 5,
 }
 
 
@@ -58,6 +51,8 @@ class CommandPermissionSpec:
     deprecated: bool
     replacement_permission_id: str | None
     safer_guidance: tuple[str, ...]
+    example_command: str | None = None
+    family: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -82,6 +77,8 @@ class CommandPermissionSpec:
             "deprecated": self.deprecated,
             "replacement_permission_id": self.replacement_permission_id,
             "safer_guidance": list(self.safer_guidance),
+            "example_command": self.example_command,
+            "family": self.family,
         }
 
 
@@ -110,11 +107,10 @@ class CommandPermissionCatalog:
                 raise ValueError(f"duplicate permission ID: {permission.permission_id}")
             by_id[permission.permission_id] = permission
             _index_unique(by_rule_id, permission.rule_ids, permission, "rule", normalize=True)
-            _index_unique(
+            _index_first(
                 by_action_class,
                 permission.action_classes,
                 permission,
-                "action class",
                 normalize=True,
             )
             _index_unique(
@@ -126,6 +122,7 @@ class CommandPermissionCatalog:
             )
         _validate_references(ordered, by_id)
         _validate_dependency_cycles(ordered, by_id)
+        _validate_family_scope(ordered)
         self._permissions = ordered
         self._by_id = MappingProxyType(by_id)
         self._by_rule_id = MappingProxyType(by_rule_id)
@@ -155,6 +152,12 @@ class CommandPermissionCatalog:
         return self._by_rule_id.get(rule_id.strip().lower())
 
     def for_action_class(self, action_class: str) -> CommandPermissionSpec | None:
+        """Return one permission for a shared action class.
+
+        Compatibility lookups remain action-class keyed. Independent floors use
+        ``for_rule_id`` because several rules may share one action class.
+        """
+
         return self._by_action_class.get(action_class.strip().lower())
 
     def for_typed_capability(self, capability: str) -> CommandPermissionSpec | None:
@@ -191,6 +194,8 @@ def permission_for_rule(
         deprecated=False,
         replacement_permission_id=None,
         safer_guidance=rule.safer_alternatives,
+        example_command=rule.example_command or example_for_matcher(rule.matcher),
+        family=rule.family,
     )
 
 
@@ -201,70 +206,20 @@ def permissions_for_rules(
     *,
     configurable: bool,
 ) -> tuple[CommandPermissionSpec, ...]:
-    remaining = set(rules)
-    groups: list[tuple[CommandSafetyRule, ...]] = []
-    while remaining:
-        group = {min(remaining, key=lambda rule: rule.rule_id)}
-        remaining -= group
-        action_classes = {action for rule in group for action in rule.action_classes}
-        changed = True
-        while changed:
-            connected = {rule for rule in remaining if action_classes.intersection(rule.action_classes)}
-            changed = bool(connected)
-            group.update(connected)
-            remaining -= connected
-            action_classes.update(action for rule in connected for action in rule.action_classes)
-        groups.append(tuple(sorted(group, key=lambda rule: rule.rule_id)))
-
-    permissions: list[CommandPermissionSpec] = []
-    for group in groups:
-        if len(group) == 1:
-            permissions.append(
+    return tuple(
+        sorted(
+            (
                 permission_for_rule(
                     extension_id,
                     implementation_version,
-                    group[0],
+                    rule,
                     configurable=configurable,
                 )
-            )
-            continue
-        first = group[0]
-        suffix = first.rule_id.removeprefix(f"{extension_id}.")
-        risk_tier: PermissionRiskTier = max(
-            (rule.severity for rule in group),
-            key=_RISK_RANK.__getitem__,
+                for rule in rules
+            ),
+            key=lambda permission: permission.permission_id,
         )
-        baseline_floor: GuardAction = max(
-            (_MODE_FLOOR[rule.default_mode] for rule in group),
-            key=_ACTION_RANK.__getitem__,
-        )
-        group_action_classes = tuple(sorted({action_class for rule in group for action_class in rule.action_classes}))
-        permissions.append(
-            CommandPermissionSpec(
-                permission_id=f"{extension_id}.permission.{suffix}",
-                schema_version=COMMAND_PERMISSION_SCHEMA_VERSION,
-                extension_id=extension_id,
-                implementation_version=implementation_version,
-                label=first.title,
-                description=" ".join(dict.fromkeys(rule.description for rule in group)),
-                risk_tier=risk_tier,
-                baseline_floor=baseline_floor,
-                default_enabled=True,
-                configurable=configurable,
-                fixed_reason=None if configurable else "This safety permission is immutable.",
-                typed_capabilities=(),
-                action_classes=group_action_classes,
-                rule_ids=tuple(rule.rule_id for rule in group),
-                dependencies=(),
-                conflicts=(),
-                implied_permissions=(),
-                introduced_version="2.2.0",
-                deprecated=False,
-                replacement_permission_id=None,
-                safer_guidance=tuple(dict.fromkeys(guidance for rule in group for guidance in rule.safer_alternatives)),
-            )
-        )
-    return tuple(sorted(permissions, key=lambda permission: permission.permission_id))
+    )
 
 
 def permissions_for_action_classes(
@@ -274,6 +229,7 @@ def permissions_for_action_classes(
     safer_guidance: tuple[str, ...],
     *,
     configurable: bool,
+    example_command: str | None = None,
 ) -> tuple[CommandPermissionSpec, ...]:
     permissions: list[CommandPermissionSpec] = []
     for action_class in action_classes:
@@ -301,6 +257,7 @@ def permissions_for_action_classes(
                 deprecated=False,
                 replacement_permission_id=None,
                 safer_guidance=safer_guidance,
+                example_command=example_command,
             )
         )
     return tuple(permissions)
@@ -312,6 +269,7 @@ def delegated_permission(
     label: str,
     description: str,
     safer_guidance: tuple[str, ...],
+    example_command: str | None = None,
 ) -> CommandPermissionSpec:
     return CommandPermissionSpec(
         permission_id=f"{extension_id}.permission.package-protection",
@@ -335,7 +293,18 @@ def delegated_permission(
         deprecated=False,
         replacement_permission_id=None,
         safer_guidance=safer_guidance,
+        example_command=example_command,
     )
+
+
+def _validate_family_scope(permissions: tuple[CommandPermissionSpec, ...]) -> None:
+    family_extensions: dict[str, str] = {}
+    for permission in permissions:
+        if permission.family is None:
+            continue
+        owner = family_extensions.setdefault(permission.family, permission.extension_id)
+        if owner != permission.extension_id:
+            raise ValueError(f"family {permission.family} spans extensions: {owner}, {permission.extension_id}")
 
 
 def _validate_permission(permission: CommandPermissionSpec) -> None:
@@ -351,6 +320,14 @@ def _validate_permission(permission: CommandPermissionSpec) -> None:
         raise ValueError(f"configurable permission has fixed reason: {permission.permission_id}")
     if not permission.configurable and not permission.fixed_reason:
         raise ValueError(f"fixed permission lacks reason: {permission.permission_id}")
+    if permission.configurable and not (permission.example_command or "").strip():
+        raise ValueError(f"configurable permission requires an example command: {permission.permission_id}")
+    if permission.example_command is not None:
+        example = permission.example_command
+        if not example.strip() or "\n" in example or "\r" in example or len(example) > _EXAMPLE_MAX_LENGTH:
+            raise ValueError(f"invalid example command for {permission.permission_id}")
+    if permission.family is not None and _FAMILY_PATTERN.fullmatch(permission.family) is None:
+        raise ValueError(f"invalid family for {permission.permission_id}: {permission.family}")
     for field_name, values in (
         ("typed capability", permission.typed_capabilities),
         ("action class", permission.action_classes),
@@ -379,6 +356,18 @@ def _index_unique(
             message += f", {permission.permission_id}"
             raise ValueError(message)
         index[key] = permission
+
+
+def _index_first(
+    index: dict[str, CommandPermissionSpec],
+    values: tuple[str, ...],
+    permission: CommandPermissionSpec,
+    *,
+    normalize: bool = False,
+) -> None:
+    for value in values:
+        key = value.strip().lower() if normalize else value
+        index.setdefault(key, permission)
 
 
 def _validate_references(

@@ -14,6 +14,9 @@ from ..runtime.github_actions_read_workflow import is_nonexecuting_github_action
 from ..runtime.jsonc import loads_jsonc
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
 from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
+from ..runtime.secret_file_request_services.github_pr_ephemeral_body import (
+    gh_pr_create_uses_safe_ephemeral_body,
+)
 from ..runtime.shell_command_wrappers import normalize_transparent_shell_command
 from ..runtime.shell_execution_context import (
     model_shell_execution_context,
@@ -332,7 +335,9 @@ def _unmodeled_shell_runtime_artifact(
     workspace: Path | None,
     home_dir: Path,
 ) -> GuardArtifact | None:
-    if is_nonexecuting_github_actions_read_workflow(command_text):
+    if is_nonexecuting_github_actions_read_workflow(command_text) or gh_pr_create_uses_safe_ephemeral_body(
+        command_text
+    ):
         return None
     canonical_command = parse_shell_command(command_text, cwd=workspace, home_dir=home_dir)
     execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
@@ -560,7 +565,7 @@ def _hook_runtime_artifact(
 ) -> GuardArtifact | None:
     harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
-    if harness in {"codex", "pi", "omp"} and event_name == "PostToolUse":
+    if harness in {"codex", "cline", "pi", "omp"} and event_name == "PostToolUse":
         output_artifact = _codex_post_tool_output_artifact(
             harness=harness,
             payload=payload,
@@ -850,7 +855,7 @@ def _codex_post_tool_output_artifact(
     home_dir: Path | None = None,
 ) -> GuardArtifact | None:
     canonical_harness = _canonical_harness_name(harness)
-    harness_label = {"pi": "Pi", "omp": "Oh My Pi"}.get(canonical_harness, "Codex")
+    harness_label = {"cline": "Cline", "pi": "Pi", "omp": "Oh My Pi"}.get(canonical_harness, "Codex")
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
     stdout_text = _optional_string(payload.get("stdout"))
     if stdout_text:

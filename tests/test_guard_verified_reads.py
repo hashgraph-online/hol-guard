@@ -12,21 +12,15 @@ from typing import BinaryIO
 import pytest
 
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
+from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.runtime import verified_github_reads as github_reads
 from codex_plugin_scanner.guard.runtime import verified_read_execution as local_reads
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-from codex_plugin_scanner.guard.runtime.command_verified_read_candidates import (
-    verified_read_candidate_operation,
-)
+from codex_plugin_scanner.guard.runtime.command_verified_read_candidates import verified_read_candidate_operation
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
-from codex_plugin_scanner.guard.runtime.launch_identity_binding import (
-    RuleVersionBinding,
-    observe_launch_identity_binding,
-)
-from codex_plugin_scanner.guard.runtime.verified_github_reads import (
-    try_read_verified_public_github_pull_request,
-)
+from codex_plugin_scanner.guard.runtime.launch_identity_binding import RuleVersionBinding, observe_launch_identity_binding
+from codex_plugin_scanner.guard.runtime.verified_github_reads import try_read_verified_public_github_pull_request
 from codex_plugin_scanner.guard.runtime.verified_read_execution import try_execute_verified_local_read
 from tests.guard_command_corpus import iter_benign_corpus
 from tests.guard_command_corpus_oracle import iter_benign_oracle
@@ -83,10 +77,7 @@ def test_git_read_overlap_reaches_the_frozen_cdx_064_pair_baseline() -> None:
     assert evaluation.decision_plane.proof_routes == frozenset()
 
 
-def test_owned_direct_local_execution_returns_silent_verified(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_owned_direct_local_execution_returns_silent_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _workspace_path, _repository, cwd = _workspace(tmp_path)
     monkeypatch.chdir(cwd)
 
@@ -145,10 +136,7 @@ def test_local_executor_rejects_untrusted_workspace_and_context_drift(
     assert try_execute_verified_local_read(("pwd",)) is None
 
 
-def test_local_executor_fails_closed_on_output_and_time_bounds(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_local_executor_fails_closed_on_output_and_time_bounds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _workspace_path, _repository, cwd = _workspace(tmp_path)
     monkeypatch.chdir(cwd)
     monkeypatch.setattr(local_reads, "_MAX_OUTPUT_BYTES", 1)
@@ -156,10 +144,7 @@ def test_local_executor_fails_closed_on_output_and_time_bounds(
     assert "timeout_seconds" not in inspect.signature(try_execute_verified_local_read).parameters
 
 
-def test_local_executor_rejects_target_identity_drift(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_local_executor_rejects_target_identity_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _workspace_path, _repository, cwd = _workspace(tmp_path)
     _ = (cwd / "main.py").write_text("line one\nline two\n", encoding="utf-8")
     monkeypatch.chdir(cwd)
@@ -178,10 +163,7 @@ def test_local_executor_rejects_target_identity_drift(
     assert try_execute_verified_local_read(("head", "-1", "main.py")) is None
 
 
-def test_local_executor_rejects_parent_directory_swap(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_local_executor_rejects_parent_directory_swap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _workspace_path, _repository, cwd = _workspace(tmp_path)
     safe = cwd / "safe"
     safe.mkdir()
@@ -206,10 +188,7 @@ def test_local_executor_rejects_parent_directory_swap(
     assert try_execute_verified_local_read(("head", "-1", "safe/main.py")) is None
 
 
-def test_local_executor_rejects_file_growth_after_open(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_local_executor_rejects_file_growth_after_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _workspace_path, _repository, cwd = _workspace(tmp_path)
     source = cwd / "main.py"
     _ = source.write_text("safe\n", encoding="utf-8")
@@ -226,10 +205,7 @@ def test_local_executor_rejects_file_growth_after_open(
     assert try_execute_verified_local_read(("head", "-1", "main.py")) is None
 
 
-def test_verified_read_cli_owns_local_execution(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_verified_read_cli_owns_local_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _workspace_path, _repository, cwd = _workspace(tmp_path)
     monkeypatch.chdir(cwd)
     parser = argparse.ArgumentParser()
@@ -241,10 +217,7 @@ def test_verified_read_cli_owns_local_execution(
     assert output.getvalue() == f"{cwd}\n"
 
 
-def test_local_executor_accepts_a_bound_git_worktree_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_local_executor_accepts_a_bound_git_worktree_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repository = tmp_path / "worktree"
     cwd = repository / "service"
     git_directory = tmp_path / "common.git" / "worktrees" / "feature"
@@ -280,14 +253,9 @@ def test_owned_public_github_get_returns_silent_verified(monkeypatch: pytest.Mon
     responses = iter(_github_payloads())
     urls: list[str] = []
 
-    def public_get(
-        url: str,
-        *,
-        timeout_seconds: float,
-        tls_context: object,
-    ) -> dict[str, object]:
+    def public_get(url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
         assert timeout_seconds == 15.0
-        assert tls_context is not None
+        assert opener is not None
         urls.append(url)
         return next(responses)
 
@@ -310,8 +278,8 @@ def test_github_executor_rejects_private_dynamic_and_drifted_reads(monkeypatch: 
     private["private"] = True
     responses = iter((private, pull))
 
-    def private_get(_url: str, *, timeout_seconds: float, tls_context: object) -> dict[str, object]:
-        del timeout_seconds, tls_context
+    def private_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
+        del timeout_seconds, opener
         return next(responses)
 
     monkeypatch.setattr(github_reads, "_public_get_json", private_get)
@@ -322,14 +290,41 @@ def test_github_executor_rejects_private_dynamic_and_drifted_reads(monkeypatch: 
 
     responses = iter(_github_payloads())
 
-    def drift_get(_url: str, *, timeout_seconds: float, tls_context: object) -> dict[str, object]:
-        del timeout_seconds, tls_context
+    def drift_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
+        del timeout_seconds, opener
         return next(responses)
 
     monkeypatch.setattr(github_reads, "_public_get_json", drift_get)
     digests = iter(("0" * 64, "1" * 64))
     monkeypatch.setattr(github_reads, "_source_digest", lambda: next(digests))
     assert try_read_verified_public_github_pull_request("public-owner", "public-repo", 17) is None
+
+
+def test_github_verified_read_proof_binds_managed_ca_contents(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ca_bundle = tmp_path / "managed-ca.pem"
+    ca_bundle.write_bytes(b"first-managed-ca")
+    ca_bundle.chmod(0o600)
+    policy = ManagedNetworkPolicy(proxy_mode="none", ca_bundle_path=str(ca_bundle))
+    monkeypatch.setattr(github_reads, "active_network_policy", lambda: policy)
+    monkeypatch.setattr(github_reads, "managed_opener", lambda *_args, **_kwargs: object())
+
+    def read_once() -> github_reads.VerifiedGitHubReadResult:
+        responses = iter(_github_payloads())
+
+        def public_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
+            del timeout_seconds, opener
+            return next(responses)
+
+        monkeypatch.setattr(github_reads, "_public_get_json", public_get)
+        result = try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
+        assert result is not None
+        return result
+
+    first = read_once()
+    ca_bundle.write_bytes(b"second-managed-ca")
+    second = read_once()
+
+    assert first.proof.binding_digest != second.proof.binding_digest
 
 
 def test_proof_apis_do_not_accept_syntax_proof_or_transport_injection(tmp_path: Path) -> None:

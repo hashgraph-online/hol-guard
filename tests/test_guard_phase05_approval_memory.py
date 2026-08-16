@@ -863,9 +863,10 @@ def test_gr117_broad_runtime_allow_is_bound_to_exact_action(
         raw_command_text="cat ~/.ssh/id_rsa",
     )
     lookup_harness = "pi" if scope == "global" else "codex"
+    lookup_artifact_id = "pi:project:tool-action:shell" if scope == "global" else shell_request.artifact_id
     same_action = store.resolve_policy_decision(
         lookup_harness,
-        shell_request.artifact_id,
+        lookup_artifact_id,
         "hash-new",
         now="2026-05-13T00:03:00+00:00",
         runtime_exact_match_context=same_action_context,
@@ -875,7 +876,7 @@ def test_gr117_broad_runtime_allow_is_bound_to_exact_action(
     assert (
         store.resolve_policy_decision(
             lookup_harness,
-            shell_request.artifact_id,
+            lookup_artifact_id,
             "hash-new",
             now="2026-05-13T00:03:00+00:00",
             runtime_exact_match_context=changed_action_context,

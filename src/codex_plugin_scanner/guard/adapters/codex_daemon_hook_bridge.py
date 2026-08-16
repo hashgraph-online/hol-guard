@@ -160,6 +160,15 @@ def _fail_closed(event_name: str, reason: str = _FAIL_CLOSED_REASON) -> dict[str
     }
 
 
+def _unavailable_response(event_name: str, reason: str) -> dict[str, object]:
+    if event_name == "UserPromptSubmit":
+        return {
+            "continue": True,
+            "systemMessage": reason,
+        }
+    return _fail_closed(event_name, reason)
+
+
 def _run_daemon_start(
     start_command: Sequence[str],
     *,
@@ -361,7 +370,7 @@ def main(
             if launch_integrity_failed
             else _FAIL_CLOSED_REASON
         )
-        response = _fail_closed(event_name, failure_reason)
+        response = _unavailable_response(event_name, failure_reason)
     sys.stdout.write(json.dumps(_codex_hook_response(response, event_name=event_name), separators=(",", ":")))
     return 0
 

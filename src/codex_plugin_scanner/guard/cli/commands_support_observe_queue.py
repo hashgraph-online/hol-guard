@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
@@ -83,7 +84,7 @@ def queue_observe_mode_request(
             notify=False,
             redaction_level=redaction_level,
         )
-    except Exception:
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         # Watch-only telemetry must never alter the executable hook decision.
         return []
 

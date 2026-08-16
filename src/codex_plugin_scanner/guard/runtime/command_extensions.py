@@ -72,7 +72,7 @@ class CommandSafetyExtension:
                 self.extension_id,
                 self.version,
                 self.rules,
-                configurable=not self.required,
+                configurable="policy_bypass" not in self.risk_classes,
             )
         elif self.delegated_protection is not None:
             permissions = (
@@ -90,7 +90,7 @@ class CommandSafetyExtension:
                 self.version,
                 self.action_classes,
                 self.safer_alternatives,
-                configurable=not self.required,
+                configurable="policy_bypass" not in self.risk_classes,
             )
         object.__setattr__(self, "permissions", permissions)
 

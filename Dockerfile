@@ -4,6 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+LABEL io.modelcontextprotocol.server.name="io.github.hashgraph-online/hol-guard"
+
 WORKDIR /app
 
 COPY docker-requirements.txt LICENSE README.md /app/

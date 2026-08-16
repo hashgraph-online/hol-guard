@@ -118,7 +118,6 @@ class TestRawOversizedOutputNeverUnreviewed:
         file_path = workspace / "src" / "large.ts"
         file_path.write_text(content)
 
-        stripped = content.rstrip("\n")
         ref = _source_ref(path="src/large.ts", text=content)
         request = _request(source_ref=ref, cwd=workspace, home_dir=home_dir, guard_home=guard_home)
 
@@ -362,12 +361,8 @@ class TestCacheStaleOnConfigChange:
         config1 = GuardConfig(guard_home=guard_home, workspace=workspace, default_action="warn")
         config2 = GuardConfig(guard_home=guard_home, workspace=workspace, default_action="block")
 
-        engine1 = HookReviewEngine(
-            store=store, scanner=scanner, cache=cache, config_loader=lambda gh, ws: config1
-        )
-        engine2 = HookReviewEngine(
-            store=store, scanner=scanner, cache=cache, config_loader=lambda gh, ws: config2
-        )
+        engine1 = HookReviewEngine(store=store, scanner=scanner, cache=cache, config_loader=lambda gh, ws: config1)
+        engine2 = HookReviewEngine(store=store, scanner=scanner, cache=cache, config_loader=lambda gh, ws: config2)
 
         content = "export const x = 1;\n"
         file_path = workspace / "src" / "foo.ts"
@@ -447,14 +442,13 @@ class TestSourceRefTargetMismatch:
         assert response.model_output_action != "allow_original"
         assert response.decision != "allow" or response.model_output_action != "allow_original"
 
+
 class TestPreToolUseFallsBackToLegacy:
     """Regression: PreToolUse must not be handled by the fast worker.
     It must raise HookWorkerUnsupported so the server falls through to
     the legacy CLI path, preserving policy/permission checks."""
 
-    def test_pre_tool_use_raises_unsupported(
-        self, workspace: Path, home_dir: Path, guard_home: Path
-    ) -> None:
+    def test_pre_tool_use_raises_unsupported(self, workspace: Path, home_dir: Path, guard_home: Path) -> None:
         from codex_plugin_scanner.guard.daemon.hook_worker import HookWorkerUnsupported
 
         store = GuardStore(guard_home)

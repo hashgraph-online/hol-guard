@@ -83,13 +83,13 @@ export function SettingsSectionShell({
   const activeItem = localSettingsNavItems.find((item) => item.key === activeTab);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6">
+    <div className="guard-settings-shell flex min-h-0 flex-1 flex-col gap-6">
       {intro}
-      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch">
+      <div className="guard-settings-layout flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch">
         <nav
           aria-label="Settings section navigation"
           data-testid="settings-section-nav"
-          className="hidden w-full shrink-0 lg:block lg:w-60"
+          className="guard-settings-side-nav hidden w-full shrink-0 lg:block lg:w-60"
         >
           <ul className="flex flex-col gap-0.5 p-0">
             {localSettingsNavGroups.map((group) => (
@@ -115,17 +115,17 @@ export function SettingsSectionShell({
         </nav>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-          <div className="-mx-1 overflow-x-auto px-1 lg:hidden">
+          <div className="guard-settings-mobile-tabs -mx-1 overflow-x-auto px-1 lg:hidden">
             <TabBar tabs={mobileTabs} active={activeTab} onChange={onTabChange} />
           </div>
           <div
             role="tabpanel"
             id={`settings-panel-${activeTab}`}
             aria-label={activeItem ? `${activeItem.label} settings` : undefined}
-            className="guard-tab-enter flex min-h-[min(28rem,calc(100dvh-18rem))] flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-4 sm:p-6"
+            className="guard-settings-panel guard-tab-enter flex min-h-[min(28rem,calc(100dvh-18rem))] flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-4 sm:p-6"
           >
             {activeItem ? (
-              <header className="mb-5 shrink-0 border-b border-slate-100 pb-4 lg:hidden">
+              <header className="guard-settings-mobile-heading mb-5 shrink-0 border-b border-slate-100 pb-4 lg:hidden">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                   {activeItem.label}
                 </p>

@@ -1,0 +1,63 @@
+name: Rust runtime recovery
+
+on:
+  pull_request:
+    branches: [release/3.0]
+    paths:
+      - "rust/**"
+      - "ci/native_runtime/**"
+      - "src/codex_plugin_scanner/guard/native_runtime.py"
+      - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+      - "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py"
+      - ".github/workflows/rust-runtime-recovery.yml"
+  push:
+    branches: [release/3.0]
+    paths:
+      - "rust/**"
+      - "ci/native_runtime/**"
+      - "src/codex_plugin_scanner/guard/native_runtime.py"
+      - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+      - "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py"
+      - ".github/workflows/rust-runtime-recovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-runtime-recovery-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build version-matched runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          rust/target/release/hol-guard-runtime self-test --json
+      - name: Run downgrade and recovery drills
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: uv run --no-sync pytest ci/native_runtime/test_native_runtime_recovery.py --tb=short

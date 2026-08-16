@@ -1,0 +1,46 @@
+{
+  "schema": "hol-guard.emergency-safe-profile.v1",
+  "default": "pause",
+  "identity_requirements": [
+    "package_version_match",
+    "rule_digest_match",
+    "policy_snapshot_current",
+    "authenticated_daemon_generation"
+  ],
+  "global_prohibitions": [
+    "network_access",
+    "secret_or_sensitive_path_access",
+    "subprocess_or_shell_nesting",
+    "package_execution_or_install",
+    "process_control",
+    "guard_configuration_or_state_mutation",
+    "filesystem_content_read",
+    "filesystem_write_or_delete",
+    "database_or_infrastructure_access",
+    "uncertain_parse"
+  ],
+  "allowed_operations": [
+    {
+      "id": "guard_runtime_status",
+      "kind": "guard_internal_read_only",
+      "exact_argv": ["hol-guard", "runtime", "status", "--json"]
+    },
+    {
+      "id": "guard_native_doctor",
+      "kind": "guard_internal_read_only",
+      "exact_argv": ["hol-guard", "doctor", "--native", "--json"]
+    },
+    {
+      "id": "guard_daemon_repair",
+      "kind": "guard_internal_repair",
+      "exact_argv": ["hol-guard", "daemon", "repair"],
+      "requires_local_confirmation": true
+    },
+    {
+      "id": "git_status_metadata",
+      "kind": "workspace_metadata_read",
+      "exact_argv": ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+      "requires_workspace_binding": true
+    }
+  ]
+}

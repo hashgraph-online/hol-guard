@@ -1,0 +1,93 @@
+{
+  "$id": "https://hol.org/schemas/guard/mdm-cloud-ack-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "properties": {
+          "reasonCode": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "applied"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reasonCode": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "deviceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "installationGeneration": {
+      "pattern": "^[0-9a-f]{32}$",
+      "type": "string"
+    },
+    "observedAt": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "type": "string"
+    },
+    "policyHash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "reasonCode": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "requestId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "schemaVersion": {
+      "const": "hol-guard-mdm-cloud-ack.v1"
+    },
+    "status": {
+      "enum": [
+        "applied",
+        "rejected",
+        "deferred",
+        "superseded"
+      ]
+    },
+    "workspaceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "workspaceId",
+    "deviceId",
+    "installationGeneration",
+    "revision",
+    "policyHash",
+    "status",
+    "reasonCode",
+    "observedAt",
+    "requestId"
+  ],
+  "title": "HOL Guard Cloud MDM acknowledgement v1",
+  "type": "object"
+}

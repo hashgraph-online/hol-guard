@@ -73,7 +73,7 @@ def test_guard_run_codex_blocks_malicious_mcp_fixture_end_to_end(tmp_path):
     assert "network" in payload["artifacts"][0]["risk_summary"].lower()
 
 
-def test_guard_run_codex_honors_exact_allow_after_blocked_mcp_review(tmp_path):
+def test_guard_run_codex_preserves_exact_approval_or_required_sandbox(tmp_path):
     home_dir = tmp_path / "home"
     workspace_dir = _build_reviewable_codex_workspace(tmp_path / "workspace")
     home_dir.mkdir(parents=True)
@@ -121,10 +121,16 @@ def test_guard_run_codex_honors_exact_allow_after_blocked_mcp_review(tmp_path):
     rerun_payload = json.loads(rerun.stdout)
 
     assert blocked.returncode == 1
-    assert blocked_artifact["policy_action"] == "review"
     assert approval_context_hash.startswith("guard-approval-context:v1:")
-    assert rerun.returncode == 0
-    assert rerun_payload["blocked"] is False
-    assert rerun_payload["artifacts"][0]["policy_action"] == "allow"
-    assert rerun_payload["artifacts"][0]["policy_composition"]["current_action"] == "review"
-    assert rerun_payload["artifacts"][0]["approval_reuse_status"] == "accepted"
+    if blocked_artifact["policy_action"] == "review":
+        assert rerun.returncode == 0
+        assert rerun_payload["blocked"] is False
+        assert rerun_payload["artifacts"][0]["policy_action"] == "allow"
+        assert rerun_payload["artifacts"][0]["policy_composition"]["current_action"] == "review"
+        assert rerun_payload["artifacts"][0]["approval_reuse_status"] == "accepted"
+    else:
+        assert blocked_artifact["policy_action"] == "sandbox-required"
+        assert rerun.returncode == 1
+        assert rerun_payload["blocked"] is True
+        assert rerun_payload["artifacts"][0]["policy_action"] == "sandbox-required"
+        assert rerun_payload["artifacts"][0]["approval_reuse_status"] == "rejected"

@@ -43,6 +43,16 @@ Current Guard support in this repo:
   - leaves native Cursor tool approval in place for `ask` decisions and focuses Guard on artifact trust plus runtime interception
   - managed MCP package-manager tool calls are routed through the supply-chain decision engine before Cursor receives the tool result
   - uses the Cursor local/cloud contract in [cursor-local-cloud-contract.md](cursor-local-cloud-contract.md) to keep editor and CLI status, repair, receipts, and Cloud sync distinct under one Cursor app
+- `cline`
+  - detects the Cline CLI, VS Code installations, conservative JetBrains signals, supported global hook/plugin roots, and Cline MCP settings
+  - installs Guard-owned global `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, lifecycle hooks, or a Cline AgentPlugin transport without overwriting user-owned hooks/plugins
+  - evaluates `PreToolUse` synchronously and fails closed when Guard is unavailable, payloads are malformed/contradictory, action-bearing tools are unmapped, or bounded bridge limits are exceeded
+  - preserves Cline `run_commands` parallel semantics by reviewing each command independently rather than synthesizing sequential shell syntax
+  - uses AgentPlugin `beforeTool` for pre-execution blocking and `afterTool` for model-visible output replacement when plugin transport is active
+  - treats native `PostToolUse` as observation-only because native hooks cannot reliably replace a result already returned to the model
+  - proxies eligible local stdio MCP servers through Guard while keeping raw MCP secret values out of persisted evidence and preserving exact, conservative restore backups
+  - records synthetic bridge canaries separately from live Cline runtime proofs and does not mark a transport ready from file presence alone
+  - reports JetBrains protection as unverified until a live pre-tool proof exists; see [Cline local protection contract](cline-local-protection-contract.md)
 - `antigravity`
   - detects Antigravity user settings, installed extension profiles, and Antigravity-owned MCP and skill roots
   - supports wrapper-mode management state
@@ -151,6 +161,8 @@ Explicit non-support:
 - Current Copilot proof should come from Guard-owned CLI hook responses, Guard runtime receipts, or an MCP client that explicitly answers Guard elicitation.
 - Guard does not add `guard run vscode-copilot`.
 - Guard treats `~/.copilot/*` as read-only detection input and does not auto-write user-level Copilot config.
+- Guard does not claim Cline JetBrains pre-execution protection without a live Guard pre-tool proof from that host.
+- Guard does not claim native Cline `PostToolUse` output replacement; model-visible post-tool replacement is a Cline AgentPlugin capability.
 - Guard does not add Cisco AIBOM runtime or policy integration in this pass. If revisited later, AIBOM belongs on evidence or export surfaces.
 - Guard does not currently ship a Goose adapter in this repository. There is no Goose detection, install, hook, or proxy surface here to protect yet.
 
@@ -165,6 +177,7 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `opencode` | `opencode` | ❌ | ✅ | ❌ | shell, mcp_tool |
 | `copilot` | `copilot` | ✅ | ✅ | ✅ | shell, prompt |
 | `cursor` | `cursor` | ❌ | ✅ | ❌ | shell, mcp_tool, file_read |
+| `cline` | `cline`, `cline-cli`, `cline-vscode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, file_write, tool_result, network_request |
 | `gemini` | `gemini` | ❌ | ✅ | ❌ | shell, mcp_tool |
 | `hermes` | `hermes` | ❌ | ✅ | ❌ | shell, mcp_tool, prompt |
 | `openclaw` | `openclaw` | ❌ | ✅ | ❌ | mcp_tool |

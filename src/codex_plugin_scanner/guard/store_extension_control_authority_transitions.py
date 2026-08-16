@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import cast
 
@@ -16,6 +17,7 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
     layers_from_json,
+    layers_to_json,
     verify_authenticated_record,
 )
 from .store_extension_control_authority_support import (
@@ -137,11 +139,27 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
                 AuthorityAnchor(revision, _row_str(row, "snapshot_digest"), AuthorityPhase.COMMITTED),
                 key=key,
             )
-            resumed = self._read_extension_control_authority_locked(catalog_digest, bootstrap=False)
+            self._queue_extension_control_change_event(
+                connection,
+                revision=revision,
+                previous_revision=previous_revision,
+                layers_json=layers_json,
+                occurred_at=_row_str(row, "created_at"),
+            )
+            connection.commit()
+            resumed = self._read_extension_control_authority_locked(catalog_digest)
             if resumed.health is not AuthorityHealth.PROTECTED or resumed.revision != revision:
                 raise ExtensionControlAuthorityError("idempotent transition recovery failed")
             return resumed
         if current.health is AuthorityHealth.PROTECTED and current.revision == revision:
+            self._queue_extension_control_change_event(
+                connection,
+                revision=revision,
+                previous_revision=previous_revision,
+                layers_json=layers_json,
+                occurred_at=_row_str(row, "created_at"),
+            )
+            connection.commit()
             return current
         raise ExtensionControlAuthorityError("idempotent transition state mismatch")
 
@@ -214,6 +232,62 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             prior_snapshot_digest = _row_str(row, "snapshot_digest")
         if prior_snapshot_digest is not None and prior_snapshot_digest != current_snapshot_digest:
             raise ExtensionControlAuthorityError("extension control transition head mismatch")
+
+    def list_extension_control_authority_history(
+        self,
+        *,
+        catalog_digest: str,
+        limit: int = 20,
+    ) -> list[dict[str, object]]:
+        """Return authenticated, privacy-safe prior snapshots for the current catalog."""
+
+        if type(limit) is not int or limit < 1 or limit > 50:
+            raise ExtensionControlAuthorityError("invalid extension control history limit")
+        with self._extension_control_authority_lock():
+            current = self._read_extension_control_authority_locked(catalog_digest)
+            if current.health is not AuthorityHealth.PROTECTED:
+                raise ExtensionControlAuthorityError("extension control history unavailable")
+            if current.revision <= 0:
+                return []
+            key = self._authority_key(required=True)
+            assert key is not None
+            anchor = self._read_anchor(key=key)
+            if anchor is None or anchor.phase is not AuthorityPhase.COMMITTED or anchor.revision != current.revision:
+                raise ExtensionControlAuthorityError("extension control history anchor mismatch")
+            self._validate_transition_chain(
+                current.revision,
+                current_snapshot_digest=anchor.snapshot_digest,
+                key=key,
+            )
+            with self._connect() as connection:
+                rows = cast(
+                    list[sqlite3.Row],
+                    connection.execute(
+                        """
+                        select * from extension_control_authority_transition
+                        where phase = ? and catalog_digest = ? and revision < ?
+                        order by revision desc limit ?
+                        """,
+                        (AuthorityPhase.COMMITTED.value, catalog_digest, current.revision, limit),
+                    ).fetchall(),
+                )
+            history: list[dict[str, object]] = []
+            for row in rows:
+                layers_json = _row_str(row, "layers_json")
+                self._validate_serialized_layers(layers_json)
+                layers = layers_from_json(layers_json)
+                self._validate_layers(layers, catalog_digest)
+                occurred_at = _row_optional_str(row, "committed_at") or _row_str(row, "created_at")
+                history.append(
+                    {
+                        "revision": _row_int(row, "revision"),
+                        "previous_revision": _row_int(row, "previous_revision"),
+                        "occurred_at": occurred_at,
+                        "catalog_digest": catalog_digest,
+                        "layers": json.loads(layers_to_json(layers)),
+                    }
+                )
+            return history
 
     def _commit_pending_transition(self, connection: sqlite3.Connection, row: sqlite3.Row) -> None:
         self._validate_serialized_layers(_row_str(row, "layers_json"))

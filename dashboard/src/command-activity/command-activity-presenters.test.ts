@@ -114,8 +114,5 @@ assert(
 );
 assert(homeCommandActivityModel({ ...analytics, commands_checked: 0 }) === null, "home card stays absent without activity");
 assert(homeCommandActivityModel(analytics)?.health?.includes("incomplete") === true, "home model carries degraded health");
-assert(
-  commandHealthCopy(analytics)?.includes("Guard retries automatically") === true,
-  "degraded health explains automatic recovery",
-);
+assert(commandHealthCopy(analytics)?.includes("incomplete") === true, "degraded health is explicit");
 assert(!Object.values(commandMetricSummary(analytics)).some((value) => Number.isNaN(value)), "zero denominators are unnecessary");

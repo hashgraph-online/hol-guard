@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import importlib
 import json
 import os
@@ -17,6 +19,7 @@ from ..action_lattice import is_guard_action, most_restrictive_guard_action, nor
 from .contracts import (
     MDM_POLICY_SCHEMA_VERSION,
     InstallOwner,
+    ManagedIntegrityTrust,
     ManagedNetworkPolicy,
     ManagedPolicy,
     ManagedPolicyState,
@@ -37,7 +40,9 @@ _TOP_LEVEL_KEYS = {
     "network",
     "update",
     "daemonStartup",
+    "integrityTrust",
 }
+_NETWORK_KEYS = {"proxyMode", "proxyUrl", "caBundlePath", "allowPublicRegistries"}
 
 
 class ManagedPolicyError(ValueError):
@@ -73,9 +78,21 @@ def _optional_https_url(value: object, name: str) -> str | None:
     if parsed.scheme.lower() != "https" or not parsed.netloc or parsed.hostname is None:
         raise ManagedPolicyError(f"{name} must be an absolute HTTPS URL")
     if parsed.username is not None or parsed.password is not None:
+        if name == "network.proxyUrl":
+            raise ManagedPolicyError("network proxy credentials are forbidden in managed policy")
         raise ManagedPolicyError(f"{name} credentials are forbidden in managed policy")
     if "?" in url or "#" in url:
         raise ManagedPolicyError(f"{name} must not contain a query or fragment")
+    return url
+
+
+def _optional_proxy_url(value: object) -> str | None:
+    url = _optional_https_url(value, "network.proxyUrl")
+    if url is None:
+        return None
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.path not in {"", "/"} or parsed.netloc.endswith(":") or parsed.port == 0:
+        raise ManagedPolicyError("network.proxyUrl must be an absolute HTTPS proxy origin")
     return url
 
 
@@ -86,6 +103,37 @@ def _validate_settings(value: object) -> dict[str, object]:
     except (TypeError, ValueError) as exc:
         raise ManagedPolicyError("settings must contain only JSON values") from exc
     return settings
+
+
+def _parse_integrity_trust(value: object) -> ManagedIntegrityTrust:
+    raw = _expect_mapping(value, "integrityTrust")
+    unknown = set(raw) - {"releasePublicKeys", "macosTeamId", "windowsSignerThumbprints"}
+    if unknown:
+        raise ManagedPolicyError(f"unknown integrityTrust keys: {', '.join(sorted(unknown))}")
+    keys_raw = _expect_mapping(raw.get("releasePublicKeys", {}), "integrityTrust.releasePublicKeys")
+    release_keys: dict[str, bytes] = {}
+    for key_id, encoded in keys_raw.items():
+        if not key_id or not isinstance(encoded, str):
+            raise ManagedPolicyError("release public keys must map non-empty ids to base64 strings")
+        try:
+            decoded = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise ManagedPolicyError("release public key is not valid base64") from exc
+        if len(decoded) != 32:
+            raise ManagedPolicyError("release public keys must be 32-byte Ed25519 keys")
+        release_keys[key_id] = decoded
+    thumbprints_raw = raw.get("windowsSignerThumbprints", [])
+    if not isinstance(thumbprints_raw, list) or not all(isinstance(item, str) and item for item in thumbprints_raw):
+        raise ManagedPolicyError("integrityTrust.windowsSignerThumbprints must be an array of strings")
+    thumbprints_raw = cast(list[str], thumbprints_raw)
+    thumbprints = tuple(sorted({item.replace(" ", "").upper() for item in thumbprints_raw}))
+    if any(len(item) != 40 or any(character not in "0123456789ABCDEF" for character in item) for item in thumbprints):
+        raise ManagedPolicyError("Windows signer thumbprints must be SHA-1 certificate thumbprints")
+    return ManagedIntegrityTrust(
+        release_public_keys=release_keys,
+        macos_team_id=_optional_string(raw.get("macosTeamId"), "integrityTrust.macosTeamId"),
+        windows_signer_thumbprints=thumbprints,
+    )
 
 
 def _validate_policy_bundle_keyring(value: object) -> dict[str, object]:
@@ -132,24 +180,28 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
         raise ManagedPolicyError("requiredHarnesses must be an array of names")
 
     network_raw = _expect_mapping(root.get("network", {}), "network")
+    unknown_network = set(network_raw) - _NETWORK_KEYS
+    if unknown_network:
+        raise ManagedPolicyError(f"unknown network keys: {', '.join(sorted(unknown_network))}")
     proxy_mode = network_raw.get("proxyMode", "system")
-    if proxy_mode not in {"system", "explicit", "none"}:
+    if not isinstance(proxy_mode, str) or proxy_mode not in {"system", "explicit", "none"}:
         raise ManagedPolicyError("network.proxyMode is invalid")
     proxy_mode = cast(ProxyMode, proxy_mode)
-    proxy_url = _optional_string(network_raw.get("proxyUrl"), "network.proxyUrl")
+    proxy_url = _optional_proxy_url(network_raw.get("proxyUrl"))
     if proxy_mode == "explicit" and proxy_url is None:
         raise ManagedPolicyError("network.proxyUrl is required for explicit proxy mode")
-    if proxy_url is not None:
-        parsed_proxy = urllib.parse.urlsplit(proxy_url)
-        if parsed_proxy.username is not None or parsed_proxy.password is not None:
-            raise ManagedPolicyError("proxy credentials are forbidden in managed policy")
+    if proxy_mode != "explicit" and proxy_url is not None:
+        raise ManagedPolicyError("network.proxyUrl is only valid for explicit proxy mode")
+    ca_bundle_path = _optional_string(network_raw.get("caBundlePath"), "network.caBundlePath")
+    if ca_bundle_path is not None and not Path(ca_bundle_path).is_absolute():
+        raise ManagedPolicyError("network.caBundlePath must be absolute")
     allow_registries = network_raw.get("allowPublicRegistries", True)
     if not isinstance(allow_registries, bool):
         raise ManagedPolicyError("network.allowPublicRegistries must be boolean")
     network = ManagedNetworkPolicy(
         proxy_mode=proxy_mode,
         proxy_url=proxy_url,
-        ca_bundle_path=_optional_string(network_raw.get("caBundlePath"), "network.caBundlePath"),
+        ca_bundle_path=ca_bundle_path,
         allow_public_registries=allow_registries,
     )
 
@@ -176,6 +228,7 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
     if daemon_startup not in {"on-demand", "login"}:
         raise ManagedPolicyError("daemonStartup is invalid")
     daemon_startup = cast(Literal["on-demand", "login"], daemon_startup)
+    integrity_trust = _parse_integrity_trust(root.get("integrityTrust", {}))
 
     canonical = dict(root)
     return ManagedPolicy(
@@ -186,6 +239,7 @@ def parse_managed_policy(payload: object) -> ManagedPolicy:
         required_harnesses=tuple(sorted(set(cast(list[str], harnesses_raw)))),
         network=network,
         update=update,
+        integrity_trust=integrity_trust,
         daemon_startup=daemon_startup,
         content_hash=canonical_payload_hash(canonical),
     )
@@ -308,7 +362,12 @@ def _load_policy_cache(system_name: str) -> ManagedPolicyState | None:
         )
 
 
-def load_managed_policy(*, policy_path: Path | None = None, system_name: str | None = None) -> ManagedPolicyState:
+def load_managed_policy(
+    *,
+    policy_path: Path | None = None,
+    system_name: str | None = None,
+    write_cache: bool = True,
+) -> ManagedPolicyState:
     """Load machine authority only from an explicit test path or native machine source."""
 
     resolved_system = system_name or platform.system()
@@ -339,7 +398,7 @@ def load_managed_policy(*, policy_path: Path | None = None, system_name: str | N
                 )
             payload = _read_policy_file(native_path)
         policy = parse_managed_policy(payload)
-        if policy_path is None:
+        if policy_path is None and write_cache:
             _write_policy_cache(payload, resolved_system)
         return ManagedPolicyState("active", source, policy=policy)
     except PermissionError:

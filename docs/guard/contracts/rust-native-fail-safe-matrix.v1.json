@@ -1,0 +1,46 @@
+{
+  "schema": "hol-guard.native-fail-safe-matrix.v1",
+  "conditions": {
+    "rust_unavailable_python_healthy": {
+      "pre_tool": "python_reference",
+      "post_tool": "python_reference_withhold_until_complete",
+      "prompt_and_permission": "python_reference"
+    },
+    "rust_overloaded_python_available": {
+      "pre_tool": "python_reference_within_deadline",
+      "post_tool": "python_reference_within_deadline",
+      "prompt_and_permission": "python_reference_within_deadline"
+    },
+    "all_evaluators_overloaded": {
+      "pre_tool": "emergency_safe_only_else_pause",
+      "post_tool": "withhold_or_block",
+      "prompt_and_permission": "pause_or_deny"
+    },
+    "python_daemon_unavailable": {
+      "pre_tool": "authenticated_emergency_safe_only_else_pause",
+      "post_tool": "withhold_or_block",
+      "prompt_and_permission": "fail_closed"
+    },
+    "policy_snapshot_stale_or_invalid": {
+      "pre_tool": "not_valid_for_allow",
+      "post_tool": "not_valid_for_allow",
+      "prompt_and_permission": "fail_closed"
+    },
+    "native_python_mismatch": {
+      "pre_tool": "more_restrictive",
+      "post_tool": "more_restrictive_output_action",
+      "prompt_and_permission": "more_restrictive"
+    },
+    "native_crash_loop": {
+      "pre_tool": "python_reference_or_pause",
+      "post_tool": "python_reference_or_block",
+      "prompt_and_permission": "python_reference_or_fail_closed"
+    }
+  },
+  "invariants": [
+    "No native, daemon, transport, policy, timeout, overload, or parser failure becomes allow.",
+    "PostToolUse output is withheld until an authoritative review completes.",
+    "One-shot and Python fallbacks are bounded and may not amplify overload into process creation.",
+    "After Rust authority cutover, resident Rust then verified one-shot Rust then fail-safe pause is the only supported chain."
+  ]
+}

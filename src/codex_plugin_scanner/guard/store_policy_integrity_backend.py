@@ -14,7 +14,6 @@ from pathlib import Path
 from .store_base import (
     _POLICY_INTEGRITY_SERVICE_NAME,
     EncryptedFileSecretStore,
-    MigratingFallbackSecretStore,
     SecretStore,
     SystemKeyringSecretStore,
 )
@@ -37,10 +36,7 @@ def build_policy_integrity_secret_store(
         )
 
     if SystemKeyringSecretStore._backend_is_available():
-        return MigratingFallbackSecretStore(
-            SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME),
-            EncryptedFileSecretStore(guard_home),
-        )
+        return SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME)
     return EncryptedFileSecretStore(guard_home)
 
 

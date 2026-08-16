@@ -1,5 +1,6 @@
-import { j as jsxRuntimeExports, ak as Tag, t as formatRelativeTime, r as reactExports, A as ActionButton, bO as HiMiniChevronLeft, c as HiMiniChevronRight, aU as IconActionButton, x as HiMiniXMark, aZ as GuardModalLayer, bP as HiMiniFunnel, al as HiMiniMagnifyingGlass, bQ as HiMiniArrowDown, bR as HiMiniArrowUp, S as SectionLabel, aI as HiMiniArrowPath, aY as HiMiniBugAnt, k as EmptyState, a0 as HiMiniAdjustmentsHorizontal, a_ as ConnectFlowCard, K as HiMiniExclamationTriangle, bS as runAuditRemediation, M as Badge, bK as isBlockedGuardAction, aN as isSupplyChainAuditEvidence, m as HiMiniCheckCircle, U as HiMiniXCircle, e as harnessDisplayName, bj as HiMiniDocumentText, bi as guardAwareHref, q as HiMiniShieldCheck } from "../guard-dashboard.js";
-import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, b as sortPackageWorkbenchFindings, u as useResolvedApprovalGate, i as isApprovalGateRequiredError, A as ApprovalProofModal } from "./supply-chain-hub-workspace.js";
+import { j as jsxRuntimeExports, aj as Tag, s as formatRelativeTime, r as reactExports, A as ActionButton, bQ as HiMiniChevronLeft, c as HiMiniChevronRight, aV as IconActionButton, w as HiMiniXMark, a_ as GuardModalLayer, bR as HiMiniFunnel, ak as HiMiniMagnifyingGlass, bS as HiMiniArrowDown, bT as HiMiniArrowUp, S as SectionLabel, ao as HiMiniArrowPath, aZ as HiMiniBugAnt, i as EmptyState, $ as HiMiniAdjustmentsHorizontal, a$ as ConnectFlowCard, J as HiMiniExclamationTriangle, bU as runAuditRemediation, L as Badge, bN as isBlockedGuardAction, aR as isSupplyChainAuditEvidence, l as HiMiniCheckCircle, T as HiMiniXCircle, e as harnessDisplayName, bj as HiMiniDocumentText, bi as guardAwareHref, o as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
+import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, b as sortPackageWorkbenchFindings, i as isApprovalGateRequiredError } from "./supply-chain-hub-workspace.js";
 import { r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 const STEPS = [
   { id: "preparing", label: "Prepare workspace" },
@@ -935,7 +936,21 @@ function buildPackageManagerAuditResult(manager, protection, generatedAt) {
   if (coverage === "protected") {
     return null;
   }
-  if (coverage === "restart_required") return null;
+  if (coverage === "restart_required") {
+    return {
+      id: `unprotected-${manager}`,
+      severity: "medium",
+      title: `${manager} is waiting for restart`,
+      detail: `Guard added ${manager} to its managed shell profiles. Open a new terminal or source the matching profile to use it. The dashboard cannot observe a PATH change made in another terminal.`,
+      harness: "global",
+      workspace: null,
+      timestamp: generatedAt,
+      remediation: "Open a new terminal or source the matching shell profile. Restart AI apps only when they run package managers.",
+      remediationAction: null,
+      resolved: false,
+      evidenceHref: null
+    };
+  }
   if (coverage === "path_repair") {
     return {
       id: `unprotected-${manager}`,
