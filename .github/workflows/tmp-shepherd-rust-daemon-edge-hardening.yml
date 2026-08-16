@@ -1,0 +1,128 @@
+name: Shepherd Rust daemon edge hardening
+
+on:
+  push:
+    branches:
+      - fix/rust-daemon-ux-hardening-definitive
+    paths:
+      - .github/workflows/tmp-shepherd-rust-daemon-edge-hardening.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: shepherd-rust-daemon-edge-hardening
+  cancel-in-progress: false
+
+jobs:
+  shepherd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Wait for integration workflow to publish its validated commit
+        shell: bash
+        run: sleep 300
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/rust-daemon-ux-hardening-definitive
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Wait until temporary integration assets are gone
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 1200))
+          while test -e scripts/ci/apply_daemon_edge_hardening.py || test -e .github/workflows/tmp-apply-rust-daemon-edge-hardening.yml; do
+            (( SECONDS < deadline )) || { echo 'integration workflow did not complete'; exit 1; }
+            sleep 30
+            git fetch origin fix/rust-daemon-ux-hardening-definitive
+            git reset --hard origin/fix/rust-daemon-ux-hardening-definitive
+          done
+      - name: Apply review hardening and remove shepherd
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          admission = Path('src/codex_plugin_scanner/guard/native_runtime_admission.py')
+          text = admission.read_text()
+          text = text.replace('last_error: BaseException | None', 'last_error: Exception | None')
+          text = text.replace('except BaseException as error:', 'except Exception as error:')
+          text = text.replace('def _retryable(error: BaseException)', 'def _retryable(error: Exception)')
+          text = text.replace('def _client_abort(error: BaseException)', 'def _client_abort(error: Exception)')
+          admission.write_text(text)
+
+          test = Path('tests/test_daemon_bounded_http.py')
+          source = test.read_text()
+          source = source.replace(
+              '    entered = threading.Event()\n',
+              '    entered = threading.Event()\n    entered_count = 0\n    entered_condition = threading.Condition()\n',
+          )
+          source = source.replace(
+              '            self.entered.set()\n            self.release.wait(timeout=2)\n',
+              '            with self.entered_condition:\n                type(self).entered_count += 1\n                self.entered.set()\n                self.entered_condition.notify_all()\n            self.release.wait(timeout=2)\n',
+          )
+          source = source.replace(
+              '    _Handler.entered.clear()\n',
+              '    _Handler.entered.clear()\n    _Handler.entered_count = 0\n',
+          )
+          source = source.replace(
+              '            assert _Handler.entered.wait(timeout=1)\n            deadline = time.monotonic() + 1\n',
+              '            assert _Handler.entered.wait(timeout=1)\n            with _Handler.entered_condition:\n                assert _Handler.entered_condition.wait_for(lambda: _Handler.entered_count == 2, timeout=1)\n            deadline = time.monotonic() + 1\n',
+          )
+          test.write_text(source)
+          PY
+          rm .github/workflows/tmp-shepherd-rust-daemon-edge-hardening.yml
+      - name: Validate exact branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --python 3.12
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+          uv run --no-sync ruff format \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py
+          cargo fmt --manifest-path rust/Cargo.toml --all
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py \
+            tests/test_native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py
+          uv run --no-sync basedpyright --level error \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py
+          uv run --no-sync pytest -q \
+            tests/test_native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py \
+            tests/test_native_runtime_resilience.py \
+            tests/test_native_runtime_supervisor.py \
+            tests/test_hook_worker.py \
+            tests/test_guard_surface_server.py \
+            --tb=short
+          git diff --check
+      - name: Publish reviewed exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git commit --signoff -m "fix(daemon): stabilize edge-hardening gates"
+          git push origin HEAD:fix/rust-daemon-ux-hardening-definitive
