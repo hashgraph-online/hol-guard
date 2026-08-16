@@ -43,7 +43,7 @@ def _workflow() -> dict[object, object]:
 
 def _job(name: str) -> dict[str, object]:
     jobs = _mapping(_workflow()["jobs"])
-    if name not in jobs and _workflow().get("name") == "Publish HOL Guard 3.1 alpha":
+    if name not in jobs and _workflow().get("name") == "Release 3.1 publisher retired":
         pytest.skip("release/3.1 does not publish installed pull-request canaries")
     return _mapping(jobs[name])
 
