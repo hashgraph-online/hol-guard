@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _skip_for_release_31(workflow: dict[object, object]) -> None:
-    if workflow.get("name") == "Publish HOL Guard 3.1 alpha":
-        pytest.skip("release/3.1 uses its dedicated pull-request build contract")
+    if workflow.get("name") == "Release 3.1 publisher retired":
+        pytest.skip("release/3.1 publishing is retired")
 
 
 def test_pr_canary_requires_maintainer_opt_in_for_same_repository_prs() -> None:

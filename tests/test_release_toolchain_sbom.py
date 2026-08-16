@@ -14,6 +14,11 @@ from scripts.write_release_toolchain_sbom import ToolchainVerificationError, wri
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _skip_retired_release_train(workflow: dict[object, object]) -> None:
+    if workflow.get("name") == "Release 3.1 publisher retired":
+        pytest.skip("release/3.1 publishing is retired")
+
+
 def _fake_uv(path: Path, version: str) -> Path:
     path.write_text(f"#!/bin/sh\nprintf 'uv {version}\\n'\n", encoding="utf-8")
     path.chmod(0o755)
@@ -59,8 +64,7 @@ def test_release_toolchain_sbom_rejects_runtime_version_mismatch(tmp_path: Path)
 
 def test_publish_workflow_attests_toolchain_sbom_without_sending_it_to_pypi() -> None:
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8"))
-    if workflow.get("name") == "Publish HOL Guard 3.1 alpha":
-        pytest.skip("release/3.1 has a dedicated release provenance contract")
+    _skip_retired_release_train(workflow)
     jobs = workflow["jobs"]
     build_steps = jobs["build"]["steps"]
     release_steps = jobs["release-alpha"]["steps"]
@@ -89,6 +93,7 @@ def test_publish_workflow_attests_toolchain_sbom_without_sending_it_to_pypi() ->
 
 def test_publish_workflow_limits_ambient_credentials_and_has_no_version_sync() -> None:
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8"))
+    _skip_retired_release_train(workflow)
     jobs = workflow["jobs"]
 
     assert workflow["permissions"] == {"contents": "read", "pull-requests": "read"}
