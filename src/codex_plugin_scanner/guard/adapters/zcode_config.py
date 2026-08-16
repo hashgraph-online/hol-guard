@@ -15,6 +15,7 @@ file, ``hooks/hooks.json``, ``.mcp.json``, ``skills/`` and ``commands/`` trees.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -114,12 +115,35 @@ def is_guard_managed_hook_command(command: object) -> bool:
     )
 
 
+def _entry_key(entry: object) -> str:
+    try:
+        return json.dumps(entry, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return repr(entry)
+
+
+def dedupe_hook_entries(entries: list[object]) -> list[object]:
+    """Drop equal duplicate group entries so a handler listed in both schema
+    layouts is not inventoried or persisted twice (ZCode would run it twice)."""
+
+    seen: set[str] = set()
+    unique: list[object] = []
+    for entry in entries:
+        key = _entry_key(entry)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(entry)
+    return unique
+
+
 def hook_event_groups(hooks_section: object) -> dict[str, list[object]]:
     """Collect ``{event_name: entries}`` from both hooks schema generations.
 
     Current ZCode stores event groups under ``hooks.events``; older builds put
     them directly under ``hooks``. Both are read so inventories keep working
-    for configs written by either generation.
+    for configs written by either generation. Entries that already exist in the
+    nested layout are not duplicated from the legacy one.
     """
 
     if not isinstance(hooks_section, dict):
@@ -135,7 +159,7 @@ def hook_event_groups(hooks_section: object) -> dict[str, list[object]]:
             continue
         if isinstance(entries, list):
             groups.setdefault(event_name, []).extend(entries)
-    return groups
+    return {event_name: dedupe_hook_entries(entries) for event_name, entries in groups.items()}
 
 
 def _string_args(server_config: dict[str, object]) -> tuple[str, ...]:
@@ -613,6 +637,7 @@ __all__ = [
     "append_marketplace_artifacts",
     "append_plugin_manifest_artifacts",
     "append_skill_artifacts",
+    "dedupe_hook_entries",
     "hook_event_groups",
     "is_guard_managed_hook_command",
 ]

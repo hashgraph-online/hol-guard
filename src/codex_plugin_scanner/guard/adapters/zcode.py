@@ -55,6 +55,7 @@ from .zcode_config import (
     append_found_path,
     append_marketplace_artifacts,
     append_plugin_manifest_artifacts,
+    dedupe_hook_entries,
     is_guard_managed_hook_command,
 )
 
@@ -269,9 +270,11 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         if getattr(sys, "frozen", False):
             # Frozen Guard builds parse their own CLI argv and cannot emulate
             # interpreter flags like ``-c``, so the bounded-bridge bootstrap is
-            # unusable there. Invoke the Guard ``hook`` subcommand directly; it
-            # reads the same stdin payload and emits the same native response.
-            return (sys.executable, *guard_args)
+            # unusable there. The frozen ``hol-guard`` entry point registers
+            # Guard subcommands at the root (no ``guard`` group token), so invoke
+            # the ``hook`` subcommand directly; it reads the same stdin payload
+            # and emits the same native response.
+            return (sys.executable, *guard_args[1:])
         return bounded_cli_hook_command(
             python_executable=sys.executable,
             package_root=Path(__file__).resolve().parents[3],
@@ -423,8 +426,9 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         """Fold legacy flat ``hooks.<Event>`` groups into the ``events`` mapping.
 
         User settings keys beside ``events`` (``enabled``, ``timeoutMs``,
-        ``maxOutputBytes``) are preserved untouched. Returns the events mapping,
-        stored back onto ``hooks`` by the caller.
+        ``maxOutputBytes``) are preserved untouched, and legacy entries that
+        already exist in ``events`` are not duplicated. Returns the events
+        mapping, stored back onto ``hooks`` by the caller.
         """
 
         events_value = hooks.get(ZCODE_HOOKS_EVENTS_KEY)
@@ -437,7 +441,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             existing = events.get(event_name)
             merged = list(existing) if isinstance(existing, list) else []
             merged.extend(entries)
-            events[event_name] = merged
+            events[event_name] = dedupe_hook_entries(merged)
             hooks.pop(event_name, None)
         hooks[ZCODE_HOOKS_EVENTS_KEY] = events
         return events

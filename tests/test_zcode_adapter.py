@@ -252,6 +252,23 @@ class TestZCodeDetect:
         assert len(hooks) == 1
         assert hooks[0].command == "echo legacy-hook"
 
+    def test_detect_deduplicates_identical_handlers_across_layouts(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        user_handler = {"type": "command", "command": "echo both-layouts"}
+        group = {"matcher": "Bash", "hooks": [user_handler]}
+        _write_cli_config(
+            ctx.home_dir,
+            {
+                "hooks": {
+                    "events": {"PreToolUse": [dict(group)]},
+                    "PreToolUse": [dict(group)],
+                }
+            },
+        )
+        result = ZCodeHarnessAdapter().detect(ctx)
+        hooks = [a for a in result.artifacts if a.artifact_type == "hook" and a.command == "echo both-layouts"]
+        assert len(hooks) == 1
+
     def test_detect_uses_v2_config_as_install_signal(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         v2_config = ctx.home_dir / ".zcode" / "v2" / "config.json"
@@ -336,10 +353,45 @@ class TestZCodeInstallUninstall:
         handler = payload["hooks"]["events"]["PreToolUse"][0]["hooks"][0]
         command = handler["command"]
         # Frozen Guard builds cannot emulate ``python -c``; the hook must call
-        # the Guard CLI hook subcommand directly instead.
-        assert "guard" in command and "hook" in command and "--harness" in command
+        # the Guard CLI hook subcommand directly instead. The frozen
+        # ``hol-guard`` entry point registers Guard subcommands at the root,
+        # so the command must not carry a standalone ``guard`` group token.
         assert "bounded_cli_hook_bridge" not in command
+        assert " hook " in command and "--harness" in command
+        import shlex
+
+        tokens = shlex.split(command.split(" # ", 1)[0])
+        assert tokens[1] == "hook", tokens[:3]
         assert GUARD_MANAGED_MARKER in command
+
+    def test_install_deduplicates_handlers_present_in_both_layouts(self, tmp_path: Path, monkeypatch) -> None:
+        ctx = _ctx(tmp_path)
+        user_handler = {"type": "command", "command": "echo user-pretool"}
+        _write_cli_config(
+            ctx.home_dir,
+            {
+                "hooks": {
+                    "events": {
+                        "PreToolUse": [
+                            {"matcher": "Bash", "hooks": [dict(user_handler)]},
+                        ]
+                    },
+                    "PreToolUse": [
+                        {"matcher": "Bash", "hooks": [dict(user_handler)]},
+                    ],
+                }
+            },
+        )
+        self._patch_shims(monkeypatch, ctx)
+        ZCodeHarnessAdapter().install(ctx)
+        payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
+        events = payload["hooks"]["events"]
+        assert "PreToolUse" not in payload["hooks"], "legacy keys must be migrated away"
+        bash_entry = next(e for e in events["PreToolUse"] if e.get("matcher") == "Bash")
+        user_commands = [
+            handler["command"] for handler in bash_entry["hooks"] if handler.get("command") == "echo user-pretool"
+        ]
+        assert user_commands == ["echo user-pretool"]
 
     def test_install_preserves_user_mcp_and_plugins(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
