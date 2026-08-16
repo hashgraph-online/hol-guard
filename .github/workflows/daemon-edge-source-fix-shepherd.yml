@@ -1,0 +1,87 @@
+name: Daemon edge source-fix shepherd
+
+on:
+  push:
+    branches:
+      - fix/rust-daemon-ux-hardening-definitive
+    paths:
+      - .github/workflows/daemon-edge-source-fix-shepherd.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daemon-edge-source-fix-shepherd
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/rust-daemon-ux-hardening-definitive
+          fetch-depth: 0
+      - name: Wait for integrated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS+5400))
+          while ((SECONDS<deadline)); do
+            git fetch origin fix/rust-daemon-ux-hardening-definitive
+            git reset --hard origin/fix/rust-daemon-ux-hardening-definitive
+            if test ! -e scripts/ci/apply_daemon_edge_hardening.py \
+              && grep -q '@native_resident_admission' src/codex_plugin_scanner/guard/native_runtime_resident.py \
+              && grep -q 'BoundedThreadingHTTPServer' src/codex_plugin_scanner/guard/daemon/server.py \
+              && grep -q 'hardening::request_expired' rust/crates/guard-runtime/src/main.rs; then exit 0; fi
+            sleep 30
+          done
+          exit 1
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Apply safe source fixes and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --python 3.12
+          uv run --no-sync ruff check --fix \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py \
+            src/codex_plugin_scanner/guard/native_runtime_resident.py \
+            src/codex_plugin_scanner/guard/daemon/server.py \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py \
+            tests/test_native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py
+          uv run --no-sync ruff format \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py \
+            src/codex_plugin_scanner/guard/native_runtime_resident.py \
+            src/codex_plugin_scanner/guard/daemon/server.py \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py \
+            tests/test_native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py
+          uv run --no-sync basedpyright --level error src/codex_plugin_scanner/guard/native_runtime_admission.py src/codex_plugin_scanner/guard/daemon/bounded_http.py
+          uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
+          rm .github/workflows/daemon-edge-source-fix-shepherd.yml
+          rm -f test-inventory.json
+          rm -rf dist build
+          git add -A
+          git diff --cached --check
+      - name: Publish source-clean head
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git commit --signoff -m "style(daemon): finalize edge-hardening source hygiene"
+          git push origin HEAD:fix/rust-daemon-ux-hardening-definitive
