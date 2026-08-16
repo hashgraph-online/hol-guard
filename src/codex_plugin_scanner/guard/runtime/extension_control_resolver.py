@@ -121,7 +121,26 @@ def resolve_extension_controls(
         for permission_id in expanded_permissions
     ):
         return _resolution(composed, failures, observations, reason="control.disabled-permission")
-    return ControlResolution(composed, False, (), (), observations)
+    explicitly_enabled_permission_ids = tuple(
+        sorted(
+            permission_id
+            for permission_id in permission_ids
+            if _has_explicit_enabled_permission(composed, permission_id)
+        )
+    )
+    return ControlResolution(
+        composed,
+        False,
+        (),
+        (),
+        observations,
+        explicitly_enabled_permission_ids,
+    )
+
+
+def _has_explicit_enabled_permission(composed: ComposedExtensionControls, permission_id: str) -> bool:
+    target = ControlTarget(ControlTargetKind.PERMISSION, permission_id)
+    return any(control.target == target and control.state is ControlState.ENABLED for control in composed.controls)
 
 
 def _validate_layer_targets(

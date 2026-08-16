@@ -9,7 +9,7 @@ from codex_plugin_scanner.guard.runtime.github_command_capabilities import class
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 
-def test_exact_failed_job_rerun_is_prompt_free() -> None:
+def test_exact_failed_job_rerun_requires_confirmation() -> None:
     args = ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard", "--failed")
 
     assessment = classify_github_cli(args)
@@ -17,7 +17,9 @@ def test_exact_failed_job_rerun_is_prompt_free() -> None:
 
     assert assessment.capabilities == ("routine_workflow_remote",)
     assert assessment.reason_code == "github.command.routine-failed-run-rerun"
-    assert match is None
+    assert assessment.action_floor == "require-reapproval"
+    assert match is not None
+    assert match.action_class == "GitHub workflow rerun"
 
 
 @pytest.mark.parametrize(

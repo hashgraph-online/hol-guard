@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "2985205427161ab08e6a986e919493a52fb5bb7e3fae2c4c30113babc26b9578",
+  "catalog_digest": "3df2c037f37be76855ef527036a5e91e361bc6cb44daeb83c09ff43e1d6bef23",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -307,7 +307,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 84,
+  "rule_count": 85,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -346,6 +346,7 @@
     "command.git.force-push",
     "command.git.remote-branch-delete",
     "command.git.local-branch-delete",
+    "command.github.workflow-mutation",
     "command.github.local-write",
     "command.github.maintenance",
     "command.github.content",

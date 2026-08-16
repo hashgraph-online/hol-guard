@@ -406,6 +406,15 @@ def build_tool_action_request_artifact(
             "extension_control_resolution": {
                 "blocked": evaluation.control_resolution.blocked,
                 "failures": [failure.code.value for failure in evaluation.control_resolution.failures],
+                **(
+                    {
+                        "explicitly_enabled_permission_ids": list(
+                            evaluation.control_resolution.explicitly_enabled_permission_ids
+                        )
+                    }
+                    if evaluation.control_resolution.explicitly_enabled_permission_ids
+                    else {}
+                ),
             },
             "command_rule_matches": [owned.to_dict() for owned in evaluation.matches],
             "risk_classes": list(evaluation.risk_classes),

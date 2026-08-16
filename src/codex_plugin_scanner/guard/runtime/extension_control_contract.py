@@ -141,3 +141,4 @@ class ControlResolution:
     factors: tuple[DecisionFactor, ...]
     failures: tuple[ControlResolverFailure, ...]
     observations: tuple[str, ...]
+    explicitly_enabled_permission_ids: tuple[str, ...] = ()

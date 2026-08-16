@@ -86,12 +86,15 @@ _MAX_LAUNCHER_CHILDREN = 256
 def command_critical_floor_factors(
     command: CanonicalCommand,
     authorization: GitHubWorkflowAuthorization | None = None,
+    *,
+    explicitly_allowed_github_capabilities: frozenset[str] = frozenset(),
 ) -> tuple[DecisionFactor, ...]:
     """Return monotonic floors derived only from the canonical parsed command."""
 
     factors = _command_critical_floor_factors(
         command,
         authorization=authorization,
+        explicitly_allowed_github_capabilities=explicitly_allowed_github_capabilities,
         depth=0,
         remaining_launcher_children=[_MAX_LAUNCHER_CHILDREN],
     )
@@ -102,6 +105,7 @@ def _command_critical_floor_factors(
     command: CanonicalCommand,
     *,
     authorization: GitHubWorkflowAuthorization | None,
+    explicitly_allowed_github_capabilities: frozenset[str],
     depth: int,
     remaining_launcher_children: list[int],
 ) -> tuple[DecisionFactor, ...]:
@@ -136,6 +140,7 @@ def _command_critical_floor_factors(
             index,
             executable,
             authorized_action_class=authorized_action_class,
+            explicitly_allowed_capabilities=explicitly_allowed_github_capabilities,
             indirect=depth > 0 or bool(command.wrapper_chain) or str(segment.executable or "").lower().endswith(".exe"),
         )
         if github_factor is not None:
@@ -155,6 +160,7 @@ def _command_critical_floor_factors(
                     _command_critical_floor_factors(
                         child,
                         authorization=None,
+                        explicitly_allowed_github_capabilities=frozenset(),
                         depth=depth + 1,
                         remaining_launcher_children=remaining_launcher_children,
                     )
@@ -171,11 +177,19 @@ def _github_factor(
     executable: str,
     *,
     authorized_action_class: str | None,
+    explicitly_allowed_capabilities: frozenset[str],
     indirect: bool,
 ) -> DecisionFactor | None:
     if executable != "gh":
         return None
     assessment = classify_github_cli(segment.arguments)
+    if (
+        not indirect
+        and assessment.action_floor != "block"
+        and "unknown" not in assessment.capabilities
+        and set(assessment.capabilities).issubset(explicitly_allowed_capabilities)
+    ):
+        return None
     if (
         authorized_action_class is not None
         and assessment.action_floor != "allow"

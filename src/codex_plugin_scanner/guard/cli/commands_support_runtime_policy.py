@@ -802,6 +802,7 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         artifact.publisher,
     )
     command_action_floor = _runtime_artifact_command_action_floor(artifact)
+    explicit_permission_allow = _runtime_artifact_has_explicit_permission_allow(artifact)
     pytest_restricted_sandbox = (
         artifact.metadata.get("action_class") == "pytest repository-code execution"
         and artifact.metadata.get("reason_code") == "pytest_restricted_profile_required"
@@ -812,7 +813,11 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         # Artifact/publisher/harness settings are more-specific resolutions of
         # the global default, not additional inputs.  Scanner/risk results are
         # independent and therefore remain a floor even for an exact allow.
-        current_config_action = configured_override if configured_override is not None else config.default_action
+        current_config_action = (
+            configured_override
+            if configured_override is not None
+            else ("allow" if explicit_permission_allow else config.default_action)
+        )
         effective_command_floor = (
             None
             if action == "sandbox-required" and pytest_restricted_sandbox
@@ -834,6 +839,8 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         resolved_actions = [action for action in risk_actions if coerce_guard_action(action) is not None]
         if resolved_actions:
             return with_config_policy(most_restrictive_guard_action(*resolved_actions))
+    if explicit_permission_allow:
+        return with_config_policy(command_action_floor or "allow")
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
     if (
         guard_default_action == "sandbox-required" and pytest_restricted_sandbox
@@ -869,6 +876,40 @@ def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardActi
     if "command_action_floor" not in artifact.metadata:
         return None
     return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
+
+
+def _runtime_artifact_has_explicit_permission_allow(artifact: GuardArtifact) -> bool:
+    if _runtime_artifact_command_action_floor(artifact) != "allow":
+        return False
+    resolution = artifact.metadata.get("extension_control_resolution")
+    if not isinstance(resolution, Mapping) or resolution.get("blocked") is not False:
+        return False
+    permission_ids = resolution.get("explicitly_enabled_permission_ids")
+    if (
+        not isinstance(permission_ids, Sequence)
+        or isinstance(permission_ids, str)
+        or not permission_ids
+        or any(not isinstance(item, str) or not item.startswith("command.") for item in permission_ids)
+    ):
+        return False
+    decision = artifact.metadata.get("command_decision_plane")
+    if not isinstance(decision, Mapping) or decision.get("action") != "allow":
+        return False
+    routes = decision.get("proof_routes")
+    reasons = decision.get("controlling_reasons")
+    return (
+        isinstance(routes, Sequence)
+        and not isinstance(routes, str)
+        and "verified" in routes
+        and isinstance(reasons, Sequence)
+        and not isinstance(reasons, str)
+        and any(
+            isinstance(reason, Mapping)
+            and reason.get("source") == "control"
+            and reason.get("reason_code") == "control.explicitly-enabled-permission"
+            for reason in reasons
+        )
+    )
 
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,

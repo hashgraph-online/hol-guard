@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -25,11 +27,13 @@ from .command_model import CanonicalCommand, parse_shell_command
 from .command_rules import CommandRuleMatch, CommandRuleMode, CommandSafetyRule
 from .command_verified_read_candidates import verified_read_candidate_factor
 from .command_workspace_write_candidates import workspace_write_candidate_factors
-from .effect_contract import UncertaintyKind
+from .effect_contract import DecisionBasis, ProofRequirement, ProofRoute, UncertaintyKind
 from .effect_decision import (
     DecisionFactor,
+    DecisionFactorSource,
     EffectDecision,
     EffectDecisionRequest,
+    PositiveProof,
     evaluate_effect_decision,
 )
 from .extension_control_contract import ControlResolution, ControlSurface, ExtensionControlLayer
@@ -144,9 +148,10 @@ def evaluate_command(
     if compatibility_action_class is not None:
         extension = registry.for_action_class(compatibility_action_class)
         rule = registry.rule_for_action_class(compatibility_action_class)
-        if extension is not None and rule is not None and rule.rule_id not in selected_rule_ids:
-            selected.append((extension, rule, ()))
+        if extension is not None and rule is not None:
             compatibility_rule = (extension, rule)
+            if rule.rule_id not in selected_rule_ids:
+                selected.append((extension, rule, ()))
 
     owned_matches: list[OwnedCommandRuleMatch] = []
     for extension, rule, evidence in selected:
@@ -167,6 +172,44 @@ def evaluate_command(
             )
         )
 
+    extension_ids = tuple(sorted({observation.extension.extension_id for observation in observations}))
+    permission_ids = tuple(
+        sorted(
+            {
+                permission.permission_id
+                for owned in owned_matches
+                if (permission := registry.permission_for_rule_id(owned.match.rule.rule_id)) is not None
+            }
+        )
+    )
+    control_resolution = resolve_extension_controls(
+        control_layers,
+        registry,
+        extension_ids=extension_ids,
+        permission_ids=permission_ids,
+        surface=ControlSurface.COMMAND_EVALUATION,
+        observations=tuple(
+            f"{observation.extension.extension_id}:{observation.rule.rule_id}" for observation in observations
+        ),
+        authority_failure=runtime_snapshot.authority_failure if runtime_snapshot is not None else None,
+    )
+    explicitly_enabled_permissions = frozenset(control_resolution.explicitly_enabled_permission_ids)
+    relaxable_enabled_permissions = (
+        frozenset(
+            permission_id
+            for permission_id in explicitly_enabled_permissions
+            if (permission := registry.permission(permission_id)) is not None and permission.configurable
+        )
+        if runtime_snapshot is not None and runtime_snapshot.authority_failure is None
+        else frozenset()
+    )
+    explicitly_enabled_rule_ids = frozenset(
+        rule_id
+        for permission_id in relaxable_enabled_permissions
+        for permission in (registry.permission(permission_id),)
+        if permission is not None
+        for rule_id in permission.rule_ids
+    )
     controlling_match = max(owned_matches, key=_match_precedence_key, default=None)
     controlling_action_class = compatibility_action_class
     controlling_reason = compatibility_reason
@@ -175,8 +218,16 @@ def evaluate_command(
         controlling_reason = controlling_match.match.reason
     minimum_action: CommandDecisionFloor = "allow"
     for owned in owned_matches:
+        if owned.match.rule.rule_id in explicitly_enabled_rule_ids:
+            continue
         minimum_action = _stronger_floor(minimum_action, _rule_floor(owned))
-    if compatibility_action_class is not None:
+    compatibility_owned_rule_ids = frozenset(
+        owned.match.rule.rule_id for owned in owned_matches if owned.match.action_class == compatibility_action_class
+    )
+    compatibility_explicitly_enabled = (
+        bool(compatibility_owned_rule_ids) and compatibility_owned_rule_ids.issubset(explicitly_enabled_rule_ids)
+    ) or (compatibility_rule is not None and compatibility_rule[1].rule_id in explicitly_enabled_rule_ids)
+    if compatibility_action_class is not None and not compatibility_explicitly_enabled:
         minimum_action = _stronger_floor(minimum_action, "review")
     if command.confidence != "exact" and (compatibility_action_class is not None or owned_matches):
         minimum_action = _stronger_floor(minimum_action, "review")
@@ -184,6 +235,13 @@ def evaluate_command(
     if observation_uncertainties:
         minimum_action = "block"
     evidence_batch = extension_evidence_batch(command, observations)
+    effective_evidence_batch = type(evidence_batch)(
+        tuple(
+            evidence
+            for evidence in evidence_batch.evidence
+            if evidence.identity.rule_id not in explicitly_enabled_rule_ids or evidence.uncertainty_reasons
+        )
+    )
     contained_routine_candidate = contained_routine_candidate_factor(command)
     verified_read_candidate = verified_read_candidate_factor(command)
     workspace_write_candidates = workspace_write_candidate_factors(command)
@@ -192,10 +250,25 @@ def evaluate_command(
         command_identity=command.security_identity,
     )
     baseline_critical_floor_factors = command_critical_floor_factors(command)
-    critical_floor_factors = (
-        baseline_critical_floor_factors
-        if workflow_authorization is None
-        else command_critical_floor_factors(command, workflow_authorization)
+    explicitly_allowed_github_capabilities = frozenset(
+        capability
+        for permission_id in relaxable_enabled_permissions
+        for permission in (registry.permission(permission_id),)
+        if permission is not None
+        for capability in permission.typed_capabilities
+    )
+    explicit_permission_allow_factors = _explicit_permission_allow_factors(
+        command,
+        control_layers,
+        relaxable_enabled_permissions,
+        runtime_snapshot.private_evidence if runtime_snapshot is not None else None,
+    )
+    critical_floor_factors = command_critical_floor_factors(
+        command,
+        workflow_authorization,
+        explicitly_allowed_github_capabilities=(
+            explicitly_allowed_github_capabilities if command.confidence == "exact" else frozenset()
+        ),
     )
     authorized_action_class = authorization_evidence[1] if authorization_evidence is not None else None
     if contained_routine_candidate is not None:
@@ -212,14 +285,15 @@ def evaluate_command(
     )
     decision_compatibility_action_class = (
         None
-        if authorized_action_class is not None and compatibility_action_class == authorized_action_class
+        if compatibility_explicitly_enabled
+        or (authorized_action_class is not None and compatibility_action_class == authorized_action_class)
         else compatibility_action_class
     )
     current_decision_factors = (
-        baseline_decision_factors
+        decision_factors(effective_evidence_batch, compatibility_action_class=None)
         if decision_compatibility_action_class is None
         else decision_factors(
-            evidence_batch,
+            effective_evidence_batch,
             compatibility_action_class=decision_compatibility_action_class,
             compatibility_rule=compatibility_rule,
         )
@@ -251,27 +325,6 @@ def evaluate_command(
             )
         )
     )
-    extension_ids = tuple(sorted({observation.extension.extension_id for observation in observations}))
-    permission_ids = tuple(
-        sorted(
-            {
-                permission.permission_id
-                for owned in owned_matches
-                if (permission := registry.permission_for_rule_id(owned.match.rule.rule_id)) is not None
-            }
-        )
-    )
-    control_resolution = resolve_extension_controls(
-        control_layers,
-        registry,
-        extension_ids=extension_ids,
-        permission_ids=permission_ids,
-        surface=ControlSurface.COMMAND_EVALUATION,
-        observations=tuple(
-            f"{observation.extension.extension_id}:{observation.rule.rule_id}" for observation in observations
-        ),
-        authority_failure=runtime_snapshot.authority_failure if runtime_snapshot is not None else None,
-    )
     if control_resolution.blocked:
         minimum_action = _stronger_floor(minimum_action, "block")
     decision_plane = evaluate_effect_decision(
@@ -283,6 +336,7 @@ def evaluate_command(
                 *workspace_write_candidates,
                 *critical_floor_factors,
                 *control_resolution.factors,
+                *explicit_permission_allow_factors,
             ),
             uncertainties=decision_uncertainties,
         )
@@ -301,6 +355,75 @@ def evaluate_command(
         control_resolution=control_resolution,
         private_control_evidence=runtime_snapshot.private_evidence if runtime_snapshot is not None else None,
     )
+
+
+def _explicit_permission_allow_factors(
+    command: CanonicalCommand,
+    layers: tuple[ExtensionControlLayer, ...],
+    permission_ids: frozenset[str],
+    authority_evidence: ExtensionControlDecisionEvidence | None,
+) -> tuple[DecisionFactor, ...]:
+    if command.confidence != "exact" or not permission_ids:
+        return ()
+    canonical_layers = [
+        {
+            "kind": layer.kind.value,
+            "catalog_digest": layer.catalog_digest,
+            "global_lockdown": layer.global_lockdown,
+            "controls": [
+                {
+                    "kind": control.target.kind.value,
+                    "target_id": control.target.target_id,
+                    "state": control.state.value,
+                }
+                for control in sorted(
+                    layer.controls,
+                    key=lambda item: (item.target.kind.value, item.target.target_id),
+                )
+            ],
+        }
+        for layer in sorted(layers, key=lambda item: item.kind.value)
+    ]
+    requirements = frozenset(
+        {
+            ProofRequirement.CONFIGURATION_IDENTITY,
+            ProofRequirement.PARSER_CONFIDENCE,
+            ProofRequirement.CAPABILITY_CONSTRAINTS,
+        }
+    )
+    factors: list[DecisionFactor] = []
+    for permission_id in sorted(permission_ids):
+        binding_digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "command_security_identity": command.security_identity,
+                    "permission_id": permission_id,
+                    "layers": canonical_layers,
+                    "authority": (
+                        {
+                            "revision": authority_evidence.revision,
+                            "effective_digest": authority_evidence.effective_digest,
+                        }
+                        if authority_evidence is not None
+                        else None
+                    ),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        proof = PositiveProof(ProofRoute.VERIFIED, binding_digest, requirements)
+        factors.append(
+            DecisionFactor(
+                source=DecisionFactorSource.CONTROL,
+                reason_code="control.explicitly-enabled-permission",
+                basis=DecisionBasis("allow", ProofRoute.VERIFIED),
+                producer_ref=f"control:{permission_id}",
+                evidence_digest=binding_digest,
+                proof=proof,
+            )
+        )
+    return tuple(factors)
 
 
 def _rule_floor(owned: OwnedCommandRuleMatch) -> CommandDecisionFloor:
