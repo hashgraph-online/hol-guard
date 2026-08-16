@@ -342,9 +342,11 @@ def validate_remediation(value: object, workspace: str, device: str, generation:
     if expires <= created or (expires - created).total_seconds() > 3600:
         raise ContractError("remediation_time_invalid")
     action = root["action"]
-    if action not in ACTIONS or not isinstance(root["parameters"], dict) or set(root["parameters"]) != ACTIONS[action]:
+    if not isinstance(action, str) or action not in ACTIONS:
         raise ContractError("remediation_action_invalid")
     params = root["parameters"]
+    if not isinstance(params, dict) or set(params) != ACTIONS[action]:
+        raise ContractError("remediation_action_invalid")
     if action == "repair" and params.get("scope") not in {"machine", "users"}:
         raise ContractError("remediation_action_invalid")
     if action == "service-register" and params.get("service") not in {"machine-health", "supervisor"}:
@@ -394,8 +396,8 @@ def verify_proof(
         raise ContractError("request_proof_invalid", 401) from error
 
 
-def public_pem(key: object) -> str:
-    return key.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()  # type: ignore[attr-defined]
+def public_pem(key: rsa.RSAPublicKey | ec.EllipticCurvePublicKey) -> str:
+    return key.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()
 
 
 def load_public_pem(value: str) -> object:
