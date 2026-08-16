@@ -5,7 +5,6 @@ import { controlProvenance, permissionForRule, treatmentLabel } from "../extensi
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
 import { ExtensionPolicyPanel } from "../extension-policy-panel";
 import { TechnicalDetails } from "./components/protection-primitives";
-import { ProtectionRepairCard } from "./protection-repair-card";
 import { ProtectionTestLab } from "./protection-test-lab";
 
 function sourceForTarget(
@@ -207,7 +206,6 @@ export function ProtectionModuleDetail(props: {
           </p>
         ) : null}
       </header>
-      <ProtectionRepairCard effective={props.effective} onRefresh={props.onRefresh} />
       <div className="mt-2">
         <ExtensionPolicyPanel
           extension={props.extension}

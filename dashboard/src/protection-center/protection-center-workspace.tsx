@@ -8,7 +8,6 @@ import {
   HiMiniXMark,
 } from "react-icons/hi2";
 
-import { ApprovalProofModal } from "../approval-proof-modal";
 import {
   ApprovalProofFieldInputs,
   buildApprovalProofCredentials,
@@ -42,6 +41,7 @@ import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { PROTECTION_TERMS, protectionCenterLoadError } from "./copy/protection-copy";
 import { PatternSearchConsole } from "./components/pattern-search-console";
+import { ProtectionAuthorityNotice } from "./components/protection-authority-notice";
 import { ProtectionModuleDetail } from "./protection-module-detail";
 import {
   EXTENSION_PANEL_CLASS,
@@ -64,14 +64,6 @@ export type ProtectionPendingChange = { extension: ExtensionMutationTarget; enab
 
 type RouteState = { route: ExtensionRoute; detail: ExtensionDetailUrlState };
 
-export type ExtensionRecoveryAction = {
-  actionLabel?: string;
-  copyLabel: string;
-  command: string;
-  description: string;
-  title: string;
-};
-
 export function currentExtensionRouteState(): RouteState {
   return {
     route: parseExtensionRoute(window.location.pathname),
@@ -79,45 +71,33 @@ export function currentExtensionRouteState(): RouteState {
   };
 }
 
-export function extensionRecoveryAction(health: EffectiveExtensionControls["health"]): ExtensionRecoveryAction | null {
-  if (health === "protected") return null;
-  if (health === "tampered" || health === "recovery-required") {
-    return {
-      title: "Repair extension controls",
-      actionLabel: "Repair now",
-      copyLabel: "Copy repair command",
-      description: "Guard locked these settings after detecting damaged authority data. Authenticate on this device to rebuild trusted authority.",
-      command: "hol-guard command controls recover-authority",
-    };
-  }
-  if (health === "degraded-unacknowledged") {
-    return {
-      title: "Acknowledge degraded extension controls",
-      actionLabel: "Acknowledge degraded state",
-      copyLabel: "Copy status command",
-      description: "Guard is failing closed because extension-control authority is degraded. Authenticate to acknowledge the degraded state. Acknowledgement does not restore protected authority.",
-      command: "hol-guard status",
-    };
-  }
-  if (health === "degraded-acknowledged") {
-    return {
-      title: "Degraded extension controls acknowledged",
-      copyLabel: "Copy status command",
-      description: "Guard remains fail-closed while extension-control authority is degraded. Restore protected authority before changing extension policy.",
-      command: "hol-guard status",
-    };
-  }
-  return {
-    title: "Finish local enrollment",
-    copyLabel: "Copy enrollment command",
-    description: "Authenticate in this device's terminal to protect extension settings, then check again.",
-    command: "hol-guard command controls enroll",
-  };
-}
-
 export function requiresExtensionRecoveryApproval(error: unknown): boolean {
   return error instanceof ExtensionControlApiError &&
     (error.code === "approval_required" || error.code?.startsWith("approval_gate_") === true);
+}
+
+/**
+ * Never surface a raw protocol code for authority actions. Every failure gets
+ * a plain-language cause and a next step so the operator is never stuck.
+ */
+export function authorityActionErrorMessage(error: unknown): string {
+  if (error instanceof ExtensionControlApiError) {
+    if (error.code === "authority_not_recoverable") {
+      return "Guard could not start this repair because the protection state changed underneath it. Guard reloaded the latest status. If protection still needs attention, run `hol-guard command controls recover-authority` in your terminal.";
+    }
+    if (error.code === "authority_recovery_failed" || error.code === "authority_recovery_incomplete") {
+      return "Guard started the repair but could not verify a fully protected state. Protection stays fail-safe. Try again, or run `hol-guard command controls recover-authority` in your terminal.";
+    }
+    if (error.code === "authority_not_degraded") {
+      return "The limited state already changed. Guard reloaded the latest status.";
+    }
+    if (requiresExtensionRecoveryApproval(error)) {
+      return "Guard needs your approval password to continue. Enter it and try again.";
+    }
+  }
+  return error instanceof Error && error.message && !/^authority_|^approval_/.test(error.message)
+    ? error.message
+    : "Guard could not complete this action. Local protection continues. Try again, or run `hol-guard command controls recover-authority` in your terminal.";
 }
 
 function randomToken(): string {
@@ -163,34 +143,6 @@ export function buildExtensionMutation(
     idempotency_key: randomToken(),
     nonce: randomToken(),
   };
-}
-
-export function ExtensionStatusBanner(props: {
-  busy?: boolean;
-  effective: EffectiveExtensionControls;
-  error?: string | null;
-  status?: string | null;
-  onRecover?: () => void;
-  onRetry: () => void;
-}) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const recovery = extensionRecoveryAction(props.effective.health);
-  const handleCopy = useCallback(async () => {
-    if (!recovery) return;
-    try {
-      await navigator.clipboard.writeText(recovery.command);
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-  }, [recovery]);
-
-  if (props.effective.health === "protected") {
-    return <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"><HiMiniShieldCheck className="size-5 shrink-0" aria-hidden="true" /><span><strong>Protected authority</strong> · revision {props.effective.revision}</span></div>;
-  }
-  const repairable = props.effective.health === "tampered" || props.effective.health === "recovery-required" || props.effective.health === "degraded-unacknowledged";
-  const busyLabel = props.effective.health === "degraded-unacknowledged" ? "Acknowledging…" : "Repairing…";
-  return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-start gap-3"><span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800"><HiMiniExclamationTriangle className="size-5" aria-hidden="true" /></span><div className="min-w-0 flex-1"><h2 className="font-semibold text-amber-950">{recovery?.title}</h2><p className="mt-1 text-sm leading-6 text-amber-950">{recovery?.description}</p><div className="mt-4 flex flex-wrap items-center gap-2">{repairable && props.onRecover ? <button type="button" aria-busy={props.busy} disabled={props.busy} onClick={props.onRecover} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{props.busy ? <HiMiniArrowPath className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <HiMiniShieldCheck className="size-4" aria-hidden="true" />}{props.busy ? busyLabel : recovery?.actionLabel}</button> : null}<button type="button" onClick={props.onRetry} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100"><HiMiniArrowPath className="size-4" aria-hidden="true" />Check again</button></div><div className="mt-4 border-t border-amber-200 pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-amber-900">Command-line fallback</p><div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center"><code className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-950">{recovery?.command}</code><button type="button" onClick={handleCopy} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-brand-blue">{copyState === "copied" ? <HiMiniClipboardDocumentCheck className="size-4" aria-hidden="true" /> : <HiMiniClipboard className="size-4" aria-hidden="true" />}{copyState === "copied" ? "Copied" : recovery?.copyLabel}</button></div>{copyState === "failed" ? <span role="status" className="mt-2 block text-sm text-red-800">Copy failed. Select the command above.</span> : null}</div>{props.error ? <p role="alert" className="mt-3 text-sm font-medium text-red-800">{props.error}</p> : null}{props.status ? <p role="status" className="mt-3 text-sm font-medium text-amber-950">{props.status}</p> : null}</div></div></div>;
 }
 
 export function ReviewModal(props: {
@@ -262,14 +214,13 @@ export function ProtectionCenterWorkspace() {
   const [pending, setPending] = useState<ProtectionPendingChange | null>(null);
   const [busy, setBusy] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const [recoveryApprovalOpen, setRecoveryApprovalOpen] = useState(false);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const aliasRedirected = useRef<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<EffectiveExtensionControls | null> => {
     // Keep the already-rendered protection data mounted while a refresh is in
     // flight so an applied change's confirmation toast survives the reload.
     setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
@@ -277,8 +228,13 @@ export function ProtectionCenterWorkspace() {
       const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
       if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
       setState({ kind: "ready", catalog, effective });
+      return effective;
     } catch (error) {
-      setState({ kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
+      // A failed refresh after an authority action must not unmount the page
+      // (and with it the mapped action error); only an initial load may fall
+      // back to the full-page error state.
+      setState((current) => (current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" }));
+      return null;
     }
   }, []);
 
@@ -354,16 +310,16 @@ export function ProtectionCenterWorkspace() {
     }
   }, [load, pending, state]);
 
-  const recover = useCallback(async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
-    const acknowledgingDegraded = state.kind === "ready" && state.effective.health === "degraded-unacknowledged";
+  const runAuthorityAction = useCallback(async (kind: "repair" | "acknowledge", credentials: { approval_password?: string; approval_totp_code?: string }) => {
+    const startHealth = state.kind === "ready" ? state.effective.health : null;
     setRecoveryBusy(true);
     setRecoveryError(null);
-    setRecoveryStatus(acknowledgingDegraded ? "Confirming the limited state…" : "Repairing local protection…");
+    setRecoveryStatus(null);
     try {
-      const effective = acknowledgingDegraded
+      const effective = kind === "acknowledge"
         ? await acknowledgeDegradedExtensionControlAuthority(credentials)
         : await recoverExtensionControlAuthority(credentials);
-      if (acknowledgingDegraded) {
+      if (kind === "acknowledge") {
         if (effective.health !== "degraded-acknowledged") throw new Error("Guard could not confirm the limited state.");
         setRecoveryStatus("The limited state is acknowledged. Guard remains fail-safe until trusted protection can be restored.");
       } else {
@@ -371,25 +327,41 @@ export function ProtectionCenterWorkspace() {
         setRecoveryStatus("Local protection repaired and verified.");
       }
       if (state.kind === "ready") setState({ ...state, effective });
-      setRecoveryApprovalOpen(false);
     } catch (error) {
-      if (!credentials && requiresExtensionRecoveryApproval(error)) {
-        try {
-          await resolveApprovalGate({ failClosed: true });
-          setRecoveryApprovalOpen(true);
-          setRecoveryStatus(null);
-        } catch {
-          setRecoveryError("Guard could not load local approval settings. Check the local connection and try again.");
-          setRecoveryStatus(null);
-        }
+      // The authority state can change underneath the attempt (a repair that
+      // rebuilt authority but failed its verification response, or a repair
+      // that finished in another tab). Reload the truth before deciding what
+      // to tell the operator so the page never disagrees with the daemon.
+      const fresh = await load();
+      const wanted = kind === "acknowledge" ? "degraded-acknowledged" : "protected";
+      if (fresh && fresh.health === wanted) {
+        setRecoveryError(null);
+        setRecoveryStatus(kind === "acknowledge"
+          ? "The limited state is acknowledged. Guard remains fail-safe until trusted protection can be restored."
+          : "Local protection repaired and verified.");
+      } else if (fresh && startHealth !== null && fresh.health !== startHealth) {
+        // The state moved on during the attempt; the original error describes
+        // a view that no longer exists. Show the transition, not the stale error.
+        setRecoveryError(null);
+        setRecoveryStatus("The protection state changed during the attempt. This page now shows the latest status.");
       } else {
-        setRecoveryError(error instanceof Error ? error.message : "Guard could not repair local protection.");
         setRecoveryStatus(null);
+        setRecoveryError(authorityActionErrorMessage(error));
       }
     } finally {
       setRecoveryBusy(false);
     }
-  }, [resolveApprovalGate, state]);
+  }, [load, state]);
+
+  // Resolve the approval gate once the authority needs attention so the
+  // notice's proof modal opens with the right password/TOTP shape.
+  const authorityNeedsAttention = state.kind === "ready" && state.effective.health !== "protected";
+  useEffect(() => {
+    if (!authorityNeedsAttention) return;
+    void resolveApprovalGate({ failClosed: true }).catch(() => {
+      setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
+    });
+  }, [authorityNeedsAttention, resolveApprovalGate]);
 
   if (state.kind === "loading") return <div className="grid min-h-[60vh] place-items-center" aria-busy="true"><HiMiniArrowPath className="size-7 animate-spin text-brand-blue motion-reduce:animate-none" aria-label="Loading Extensions" /></div>;
   if (state.kind === "error") {
@@ -397,34 +369,39 @@ export function ProtectionCenterWorkspace() {
     return <div className="mx-auto max-w-4xl"><div className={`${EXTENSION_PANEL_CLASS} guard-extensions-tone-danger`}><h1 className="text-xl font-semibold text-red-950">{loadError.title}</h1><p role="alert" className="mt-2 text-sm text-red-800">{loadError.detail}</p><p className="mt-3 text-xs font-medium text-red-900">Local protection continues on this device.</p><button type="button" onClick={load} className="mt-4 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-white">Try again</button></div></div>;
   }
 
-  const recoveryModal = recoveryApprovalOpen ? <ApprovalProofModal
-    title={state.effective.health === "degraded-unacknowledged" ? "Confirm limited protection state" : "Repair local protection"}
-    detail={state.effective.health === "degraded-unacknowledged" ? "Authenticate this acknowledgement on your device. It does not restore full protection." : "Authenticate this repair on your device. Guard uses the proof once and does not store it."}
-    confirmLabel={state.effective.health === "degraded-unacknowledged" ? "Acknowledge limited state" : "Repair protection"}
-    approvalGate={resolvedApprovalGate}
+  const authorityNotice = state.kind === "ready" ? <ProtectionAuthorityNotice
+    effective={state.effective}
     busy={recoveryBusy}
     error={recoveryError}
-    onCancel={() => { if (!recoveryBusy) setRecoveryApprovalOpen(false); }}
-    onConfirm={(credentials) => { void recover(credentials); }}
+    status={recoveryStatus}
+    approvalGate={resolvedApprovalGate}
+    onAction={(kind, credentials) => { void runAuthorityAction(kind, credentials); }}
+    onCheckAgain={() => {
+      void load();
+      // Re-resolve the approval gate too so a failed load does not leave the
+      // action disabled until a full page reload.
+      setRecoveryError(null);
+      void resolveApprovalGate({ failClosed: true }).catch(() => {
+        setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
+      });
+    }}
   /> : null;
 
   if (routeState.route.kind === "detail" && selectedExtension) {
-    return <><ProtectionModuleDetail extension={selectedExtension} effective={state.effective} catalogDigest={state.catalog.catalog_digest} onBack={closeExtension} onRefresh={load} onRequestExtensionChange={(extension, enabled) => requestChange({ extension: { extension_id: extension.extension_id, name: extension.name }, enabled })} />{pending ? <ReviewModal change={pending} busy={busy} error={mutationError} approvalGate={resolvedApprovalGate} onCancel={() => { if (!busy) setPending(null); }} onConfirm={confirm} /> : null}{recoveryModal}</>;
+    return <>{authorityNotice}{recoveryStatus && state.effective.health === "protected" ? <p role="status" className="mb-3 text-sm font-medium text-emerald-800">{recoveryStatus}</p> : null}<ProtectionModuleDetail extension={selectedExtension} effective={state.effective} catalogDigest={state.catalog.catalog_digest} onBack={closeExtension} onRefresh={load} onRequestExtensionChange={(extension, enabled) => requestChange({ extension: { extension_id: extension.extension_id, name: extension.name }, enabled })} />{pending ? <ReviewModal change={pending} busy={busy} error={mutationError} approvalGate={resolvedApprovalGate} onCancel={() => { if (!busy) setPending(null); }} onConfirm={confirm} /> : null}</>;
   }
 
   if (routeState.route.kind === "detail" || routeState.route.kind === "invalid") {
-    return <><div className="mx-auto max-w-4xl"><div className={`${EXTENSION_PANEL_CLASS} guard-extensions-tone-attention`}><h1 className="font-semibold text-amber-950">Extension not found</h1><p className="mt-2 text-sm text-amber-900">This link does not match an extension in the current Guard catalog.</p><button type="button" onClick={closeExtension} className="mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white">Back to Extensions</button></div></div>{recoveryModal}</>;
+    return <><div className="mx-auto max-w-4xl"><div className={`${EXTENSION_PANEL_CLASS} guard-extensions-tone-attention`}><h1 className="font-semibold text-amber-950">Extension not found</h1><p className="mt-2 text-sm text-amber-900">This link does not match an extension in the current Guard catalog.</p><button type="button" onClick={closeExtension} className="mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white">Back to Extensions</button></div></div>{authorityNotice}</>;
   }
 
   const status = deriveProtectionStatus(state.effective);
   const healthBroken = state.effective.health !== "protected";
 
   const handlePrimaryStatusAction = () => {
-    if (status.primaryAction === "repair" || status.primaryAction === "retry-repair") {
-      void recover();
-    } else if (status.primaryAction === "review-lockdown") {
-      requestChange({ globalLockdown: false });
-    }
+    // Authority repair actions live in the authority notice below; the status
+    // line keeps only the lockdown review action.
+    requestChange({ globalLockdown: false });
   };
 
   return <div className="w-full">
@@ -434,13 +411,10 @@ export function ProtectionCenterWorkspace() {
       description="Pick a tool to see the commands Guard watches and change how they're handled."
     />
     <div className="mt-6">
-      <ProtectionStatusHero
-        status={status}
-        busy={recoveryBusy}
-        onPrimaryAction={status.primaryAction === "none" || status.primaryAction === "finish-setup" ? () => document.getElementById("extension-recovery-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }) : handlePrimaryStatusAction}
-      />
+      <ProtectionStatusHero status={status} onPrimaryAction={status.primaryAction === "review-lockdown" ? handlePrimaryStatusAction : undefined} />
+      {recoveryStatus && !healthBroken ? <p role="status" className="mt-3 text-sm font-medium text-emerald-800">{recoveryStatus}</p> : null}
     </div>
-    {healthBroken ? <div className="mt-4" id="extension-recovery-panel"><ExtensionStatusBanner busy={recoveryBusy} effective={state.effective} error={recoveryError} status={recoveryStatus} onRecover={() => { void recover(); }} onRetry={load} /></div> : null}
+    {healthBroken ? authorityNotice : null}
     {mutationError && !pending ? <div className="mt-4"><InlineError message={mutationError} /></div> : null}
 
     <PatternSearchConsole catalog={catalogExtensions} effective={state.effective} onRefresh={load} onOpenExtension={openExtension} />
@@ -465,6 +439,5 @@ export function ProtectionCenterWorkspace() {
     </section>
 
     {pending ? <ReviewModal change={pending} busy={busy} error={mutationError} approvalGate={resolvedApprovalGate} onCancel={() => { if (!busy) setPending(null); }} onConfirm={confirm} /> : null}
-    {recoveryModal}
   </div>;
 }

@@ -12,9 +12,9 @@ import {
 } from "./extension-control-center-model";
 import { ExtensionControlApiError, type ExtensionCatalogItem, type EffectiveExtensionControls } from "./extension-controls-api";
 import {
+  authorityActionErrorMessage,
   buildExtensionMutation,
-  ExtensionStatusBanner,
-  extensionRecoveryAction,
+  ProtectionAuthorityNotice,
   ReviewModal,
   requiresExtensionRecoveryApproval,
 } from "./extensions-workspace";
@@ -25,39 +25,70 @@ import {
   nextExtensionPolicyRadioIndex,
 } from "./extension-policy-panel";
 
-assert.equal(extensionRecoveryAction("protected"), null);
-assert.deepEqual(extensionRecoveryAction("recovery-required"), extensionRecoveryAction("tampered"));
-assert.equal(extensionRecoveryAction("degraded-unacknowledged")?.actionLabel, "Acknowledge degraded state");
-assert.equal(extensionRecoveryAction("degraded-unacknowledged")?.command, "hol-guard status");
-assert.match(extensionRecoveryAction("degraded-unacknowledged")?.description ?? "", /failing closed/);
-assert.equal(extensionRecoveryAction("degraded-acknowledged")?.actionLabel, undefined);
-assert.match(extensionRecoveryAction("degraded-acknowledged")?.description ?? "", /fail-closed/);
-assert.equal(requiresExtensionRecoveryApproval(new ExtensionControlApiError("approval_gate_required", 403, "approval_gate_required")), true);
-assert.equal(requiresExtensionRecoveryApproval(new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable")), false);
-
-const recoveryMarkup = renderToStaticMarkup(createElement(ExtensionStatusBanner, {
-  effective: {
-    schema_version: "1.0.0", health: "tampered", revision: 4, catalog_digest: "a".repeat(64),
-    global_lockdown: false, controls: [], failures: [{ code: "anchor_mismatch" }], layers: [],
-  },
-  onRecover: () => undefined,
-  onRetry: () => undefined,
+// Every authority action failure maps to plain language with a next step;
+// raw protocol codes never reach the operator.
+assert.match(
+  authorityActionErrorMessage(new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable")),
+  /state changed underneath it/,
+);
+assert.match(
+  authorityActionErrorMessage(new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable")),
+  /recover-authority.{0,40}in your terminal/,
+);
+assert.match(
+  authorityActionErrorMessage(new ExtensionControlApiError("authority_recovery_failed", 503, "authority_recovery_failed")),
+  /could not verify a fully protected state/,
+);
+assert.doesNotMatch(
+  authorityActionErrorMessage(new ExtensionControlApiError("authority_not_recoverable", 409, "authority_not_recoverable")),
+  /authority_not_recoverable/,
+);
+const baseEffective: EffectiveExtensionControls = {
+  schema_version: "1.0.0", health: "recovery-required", revision: 4, catalog_digest: "a".repeat(64),
+  global_lockdown: false, controls: [], failures: [], layers: [],
+};
+const repairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: baseEffective,
+  approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
 }));
-assert.match(recoveryMarkup, /hol-guard command controls recover-authority/);
-assert.match(recoveryMarkup, /Repair now/);
-assert.match(recoveryMarkup, /Check again/);
+assert.match(repairMarkup, /Protection needs repair/);
+assert.match(repairMarkup, /Repair protection/);
+assert.match(repairMarkup, /Check again/);
+assert.match(repairMarkup, /hol-guard command controls recover-authority/);
+assert.match(repairMarkup, /Copy command/);
+assert.match(repairMarkup, /bg-amber-50/, "repair states use the warning treatment");
+assert.match(repairMarkup, /bg-brand-blue/, "the primary action uses the brand primary button");
 
-const degradedMarkup = renderToStaticMarkup(createElement(ExtensionStatusBanner, {
-  effective: {
-    schema_version: "1.0.0", health: "degraded-unacknowledged", revision: 5, catalog_digest: "a".repeat(64),
-    global_lockdown: true, controls: [], failures: [{ code: "cloud_layer_missing" }], layers: [],
-  },
-  onRecover: () => undefined,
-  onRetry: () => undefined,
+const degradedAckMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "degraded-acknowledged" },
+  approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
 }));
-assert.match(degradedMarkup, /Acknowledge degraded state/);
-assert.match(degradedMarkup, /hol-guard status/);
-assert.doesNotMatch(degradedMarkup, /Finish local enrollment/);
+assert.match(degradedAckMarkup, /Protection is limited/);
+assert.match(degradedAckMarkup, /Copy repair command/);
+assert.doesNotMatch(degradedAckMarkup, /Repair protection/, "dashboard repair is not offered in a state the daemon refuses");
+
+const unenrolledMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "unenrolled" },
+  approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+}));
+assert.match(unenrolledMarkup, /Finish setting up protection/);
+assert.match(unenrolledMarkup, /command controls enroll/);
+assert.match(unenrolledMarkup, /Copy setup command/);
+assert.doesNotMatch(unenrolledMarkup, /bg-amber-50/, "setup guidance is informational, not a failure");
+
+const protectedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "protected" },
+  approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+}));
+assert.equal(protectedMarkup, "", "no authority surface renders when protection is healthy");
 
 const totpRecoveryMarkup = renderToStaticMarkup(createElement(ApprovalProofModal, {
   title: "Repair extension controls",
