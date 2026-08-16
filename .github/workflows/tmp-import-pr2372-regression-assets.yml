@@ -1,0 +1,77 @@
+name: Import permanent Rust regression coverage from PR 2372
+
+on:
+  push:
+    branches:
+      - fix/rust-daemon-ux-hardening-definitive
+    paths:
+      - .github/workflows/tmp-import-pr2372-regression-assets.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-pr2372-regression-assets
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Let daemon integration publish first
+        run: sleep 600
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/rust-daemon-ux-hardening-definitive
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Copy permanent reviewed assets only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin fix/rust-p0-p2-regression-hardening
+          paths=(
+            .github/workflows/rust-migration-regression.yml
+            ci/run_rust_migration_regression.py
+            ci/rust-migration-regression-baseline.json
+            ci/rust_migration_regression_audit.py
+            docs/guard/rust-p0-p2-regression-remediation-prd.md
+            docs/guard/rust-p0-p2-regression-remediation-takeaway-prompt.md
+            docs/guard/rust-p0-p2-regression-remediation-todo.md
+            tests/test_rust_migration_regression_audit.py
+          )
+          for path in "${paths[@]}"; do
+            mkdir -p "$(dirname "$path")"
+            git show "origin/fix/rust-p0-p2-regression-hardening:$path" > "$path"
+          done
+          rm .github/workflows/tmp-import-pr2372-regression-assets.yml
+      - name: Validate retained audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --python 3.12
+          uv run --no-sync ruff format ci/run_rust_migration_regression.py ci/rust_migration_regression_audit.py tests/test_rust_migration_regression_audit.py
+          uv run --no-sync ruff check ci/run_rust_migration_regression.py ci/rust_migration_regression_audit.py tests/test_rust_migration_regression_audit.py
+          uv run --no-sync pytest -q tests/test_rust_migration_regression_audit.py --tb=short
+          uv run --no-sync python ci/rust_migration_regression_audit.py --root . --json-output rust-migration-audit.json
+          jq -e '.blocking_count == 0' rust-migration-audit.json
+          rm rust-migration-audit.json
+          git diff --check
+      - name: Publish permanent regression coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git commit --signoff -m "test(guard): retain Rust migration regression audit"
+          git push origin HEAD:fix/rust-daemon-ux-hardening-definitive
