@@ -49,6 +49,12 @@ class TestZCodeHookPayload:
         assert normalized["tool_name"] == "Read"
         assert normalized["session_id"] == "s"
 
+    def test_prepare_payload_maps_post_tool_use_failure_event(self) -> None:
+        normalized = prepare_zcode_hook_payload(
+            {"hookEventName": "PostToolUseFailure", "toolName": "Bash", "toolInput": {"command": "ls"}}
+        )
+        assert normalized["hook_event_name"] == "PostToolUseFailure"
+
     def test_prepare_payload_malformed_is_safe(self) -> None:
         assert prepare_zcode_hook_payload({}) == {}
 

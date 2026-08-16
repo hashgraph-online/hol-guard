@@ -48,13 +48,14 @@ class TestZCodeMcpToolCoverage:
         )
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
+        pretool_entries = payload["hooks"]["events"]["PreToolUse"]
         matchers = {
             entry.get("matcher")
-            for entry in payload["hooks"]["PreToolUse"]
+            for entry in pretool_entries
             if isinstance(entry, dict) and isinstance(entry.get("matcher"), str)
         }
         assert "mcp__.*" in matchers, "Guard must install an mcp__.* PreToolUse matcher so MCP tools are intercepted"
-        mcp_entry = next(entry for entry in payload["hooks"]["PreToolUse"] if entry.get("matcher") == "mcp__.*")
+        mcp_entry = next(entry for entry in pretool_entries if entry.get("matcher") == "mcp__.*")
         assert any(
             is_guard_managed_hook_command(handler.get("command"))
             for handler in mcp_entry.get("hooks", [])
