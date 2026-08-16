@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = ROOT / "scripts" / "mdm" / "cloud-lab" / "docker-compose.yml"
 DEFAULT_ARTIFACTS = ROOT / "artifacts" / "mdm-cloud-lab"
+REPORT_NAME = "mdm-cloud-integration-report.json"
 
 
 def main() -> int:
@@ -26,26 +27,31 @@ def main() -> int:
 
     artifacts = args.artifacts.resolve()
     artifacts.mkdir(parents=True, exist_ok=True)
+    report = artifacts / REPORT_NAME
+    report.unlink(missing_ok=True)
     env = dict(os.environ)
-    env.update(
-        {
-            "HOL_MDM_LAB_PROJECT": args.project,
-            "HOL_MDM_LAB_ARTIFACTS": str(artifacts),
-        }
-    )
+    env["HOL_MDM_LAB_PROJECT"] = args.project
     base = ["docker", "compose", "--project-name", args.project, "--file", str(COMPOSE_FILE)]
     up = [*base, "up", "--abort-on-container-exit", "--exit-code-from", "orchestrator"]
     if not args.no_build:
         up.append("--build")
+    copy_report = [*base, "cp", f"orchestrator:/artifacts/{REPORT_NAME}", str(report)]
     down = [*base, "down", "--volumes", "--remove-orphans"]
     if args.dry_run:
-        print(json.dumps({"up": up, "down": down, "artifacts": str(artifacts)}, sort_keys=True))
+        print(
+            json.dumps(
+                {"up": up, "copyReport": copy_report, "down": down, "artifacts": str(artifacts)},
+                sort_keys=True,
+            )
+        )
         return 0
 
     status = 1
     try:
         status = subprocess.run(up, cwd=ROOT, env=env, check=False).returncode
-        report = artifacts / "mdm-cloud-integration-report.json"
+        copy_status = subprocess.run(copy_report, cwd=ROOT, env=env, check=False).returncode
+        if copy_status != 0 and status == 0:
+            status = copy_status
         if not report.exists():
             print("MDM Cloud lab did not produce its bounded report artifact", file=sys.stderr)
             return status or 1

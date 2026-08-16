@@ -87,7 +87,7 @@ services:
       - device-a-state:/state
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /etc/hol-guard:size=8m,mode=0700
+      - /etc/hol-guard:size=8m,mode=0700,uid=10001,gid=10001
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/healthz', timeout=2).read()"]
       interval: 2s
@@ -115,7 +115,7 @@ services:
       - device-b-state:/state
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /etc/hol-guard:size=8m,mode=0700
+      - /etc/hol-guard:size=8m,mode=0700,uid=10001,gid=10001
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/healthz', timeout=2).read()"]
       interval: 2s
@@ -143,7 +143,7 @@ services:
       - device-c-state:/state
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /etc/hol-guard:size=8m,mode=0700
+      - /etc/hol-guard:size=8m,mode=0700,uid=10001,gid=10001
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/healthz', timeout=2).read()"]
       interval: 2s
@@ -179,7 +179,7 @@ services:
       HOL_MDM_DEVICE_B_URL: http://device-b:8070
       HOL_MDM_DEVICE_C_URL: http://device-c:8070
     volumes:
-      - ${HOL_MDM_LAB_ARTIFACTS:-../../../artifacts/mdm-cloud-lab}:/artifacts
+      - lab-artifacts:/artifacts
     mem_limit: 512m
     cpus: 1
 
@@ -192,3 +192,4 @@ volumes:
   device-a-state:
   device-b-state:
   device-c-state:
+  lab-artifacts:
