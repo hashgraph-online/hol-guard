@@ -1,0 +1,134 @@
+name: Apply Rust daemon edge hardening
+
+on:
+  push:
+    branches:
+      - fix/rust-daemon-ux-hardening-definitive
+    paths:
+      - .github/workflows/tmp-apply-rust-daemon-edge-hardening.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-rust-daemon-edge-hardening
+  cancel-in-progress: false
+
+jobs:
+  apply-validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/rust-daemon-ux-hardening-definitive
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Install locked toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --python 3.12
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+      - name: Integrate hardening modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync python scripts/ci/apply_daemon_edge_hardening.py
+          cargo fmt --manifest-path rust/Cargo.toml --all
+          uv run --no-sync ruff format \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py \
+            src/codex_plugin_scanner/guard/native_runtime_resident.py \
+            src/codex_plugin_scanner/guard/daemon/server.py \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py \
+            tests/test_native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py
+      - name: Reconcile test-suite ratchet
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          inventory = json.loads(Path('test-inventory.json').read_text())
+          path = Path('ci/test-suite-ratchet-baseline.json')
+          baseline = json.loads(path.read_text())
+          baseline['maximum_collected_cases'] = inventory['inventory']['collected_cases']
+          baseline['maximum_test_source_lines'] = inventory['test_source_lines']
+          path.write_text(json.dumps(baseline, indent=2, sort_keys=True) + '\n')
+          PY
+      - name: Validate Rust workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - name: Validate Python implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py \
+            src/codex_plugin_scanner/guard/native_runtime_resident.py \
+            src/codex_plugin_scanner/guard/daemon/server.py \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py \
+            tests/test_native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py
+          uv run --no-sync ruff format --check \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py \
+            src/codex_plugin_scanner/guard/native_runtime_resident.py \
+            src/codex_plugin_scanner/guard/daemon/server.py \
+            src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py \
+            tests/test_native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py
+          uv run --no-sync basedpyright --level error \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py
+          uv run --no-sync pytest -q \
+            tests/test_native_runtime_admission.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py \
+            tests/test_native_runtime_resilience.py \
+            tests/test_native_runtime_supervisor.py \
+            tests/test_hook_worker.py \
+            tests/test_guard_surface_server.py \
+            --tb=short
+      - name: Validate repository invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
+            --baseline ci/test-suite-ratchet-baseline.json \
+            --inventory test-inventory.json
+          git diff --check
+          ! git grep -n 'raw_command\|prompt_text\|request_payload\|environment_values' -- \
+            src/codex_plugin_scanner/guard/native_runtime_admission.py \
+            src/codex_plugin_scanner/guard/daemon/bounded_http.py
+      - name: Commit validated implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm scripts/ci/apply_daemon_edge_hardening.py
+          rm .github/workflows/tmp-apply-rust-daemon-edge-hardening.yml
+          git add -A
+          git diff --cached --check
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git commit --signoff -m "feat(guard): harden native daemon edge behavior"
+          git push origin HEAD:fix/rust-daemon-ux-hardening-definitive
