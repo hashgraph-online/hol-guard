@@ -28,6 +28,8 @@ _MAX_HOOK_RESPONSE_BYTES = 1_000_000
 _FAILURE_REASON = "HOL Guard could not complete this review before the hook deadline. Retry the action."
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DAEMON_TIMEOUT_BUDGET_SECONDS = 5.0
+_FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
+_FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
 
 
 def _assert_loopback_http_url(url: str) -> None:
@@ -70,6 +72,7 @@ def bounded_cli_hook_command(
 ) -> tuple[str, ...]:
     """Build a shell-free hook command backed by a process-tree deadline."""
 
+    frozen_launcher = bool(getattr(sys, "frozen", False))
     config = {
         "python_executable": python_executable,
         "package_root": str(package_root.resolve()),
@@ -77,6 +80,7 @@ def bounded_cli_hook_command(
         "cli_args": list(cli_args),
         "harness": harness,
         "timeout_seconds": timeout_seconds,
+        "frozen_launcher": frozen_launcher,
     }
     bootstrap = (
         "import sys;"
@@ -84,6 +88,12 @@ def bounded_cli_hook_command(
         "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv;"
         "raise SystemExit(main_from_argv(sys.argv[1:]))"
     )
+    if frozen_launcher:
+        return (
+            python_executable,
+            _FROZEN_BRIDGE_COMMAND,
+            json.dumps(config, ensure_ascii=True, separators=(",", ":")),
+        )
     return (
         python_executable,
         "-I",
@@ -98,6 +108,42 @@ def _bounded_stdin() -> str | None:
     if len(raw) > _MAX_HOOK_INPUT_BYTES:
         return None
     return raw.decode("utf-8", errors="replace")
+
+
+def _validated_frozen_cli_args(
+    cli_args: Sequence[str],
+    *,
+    guard_home: Path,
+    harness: str,
+) -> tuple[str, ...] | None:
+    expected_prefix = (
+        "guard",
+        "hook",
+        "--guard-home",
+        str(guard_home),
+        "--harness",
+        harness,
+    )
+    if tuple(cli_args[: len(expected_prefix)]) != expected_prefix:
+        return None
+    tail = cli_args[len(expected_prefix) :]
+    json_output = bool(tail and tail[-1] == "--json")
+    if json_output:
+        tail = tail[:-1]
+    if len(tail) % 2 != 0:
+        return None
+    seen_flags: set[str] = set()
+    for index in range(0, len(tail), 2):
+        flag, value = tail[index : index + 2]
+        if flag not in _FROZEN_OPTIONAL_PATH_FLAGS or flag in seen_flags:
+            return None
+        if not Path(value).is_absolute():
+            return None
+        seen_flags.add(flag)
+    command = ("hook", *cli_args[2 : len(cli_args) - int(json_output)])
+    if json_output:
+        command = (*command, "--json")
+    return command
 
 
 def _json_object(text: str) -> dict[str, object] | None:
@@ -432,6 +478,7 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
     cli_args_value = config.get("cli_args")
     harness = config.get("harness")
     timeout_seconds = config.get("timeout_seconds")
+    frozen_launcher = config.get("frozen_launcher", False)
     if (
         not isinstance(python_executable, str)
         or not isinstance(package_root_value, str)
@@ -439,6 +486,7 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
         or not isinstance(cli_args_value, list)
         or not isinstance(harness, str)
         or not isinstance(timeout_seconds, (int, float))
+        or not isinstance(frozen_launcher, bool)
         or timeout_seconds <= 0
     ):
         return _emit_failure(harness=str(harness or "unknown"), input_text=input_text)
@@ -463,11 +511,21 @@ def run_bounded_cli_hook(config: Mapping[str, object], *, input_text: str) -> in
         if daemon_stderr:
             print(daemon_stderr, file=sys.stderr)
         return daemon_exit
-    command = isolated_guard_cli_command(
-        python_executable,
-        package_root,
-        cli_args,
-    )
+    if frozen_launcher:
+        direct_cli_args = _validated_frozen_cli_args(
+            cli_args,
+            guard_home=guard_home,
+            harness=harness,
+        )
+        if direct_cli_args is None:
+            return _emit_failure(harness=harness, input_text=input_text)
+        command = (sys.executable, *direct_cli_args)
+    else:
+        command = isolated_guard_cli_command(
+            python_executable,
+            package_root,
+            cli_args,
+        )
     result = run_isolated_hook_process(
         command,
         input_text=input_text,
@@ -510,4 +568,9 @@ def main_from_argv(argv: Sequence[str]) -> int:
     return run_bounded_cli_hook(config, input_text=input_text)
 
 
-__all__ = ["bounded_cli_hook_command", "main_from_argv", "run_bounded_cli_hook"]
+__all__ = [
+    "_FROZEN_BRIDGE_COMMAND",
+    "bounded_cli_hook_command",
+    "main_from_argv",
+    "run_bounded_cli_hook",
+]

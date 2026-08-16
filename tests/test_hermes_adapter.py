@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hermes import (
     HermesHarnessAdapter,
@@ -55,7 +57,11 @@ def _seed_cloud_profile(context: HarnessContext, runtime: str = "hermes") -> Non
     )
 
 
-def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Path):
+def test_install_generates_guard_managed_overlay_and_pretool_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
     _write(
         tmp_path / ".hermes" / "config.yaml",
         (
@@ -84,6 +90,8 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Pat
     assert overlay_path.exists() is True
     assert pretool_path.exists() is True
     bridge_config = json.loads(pretool_payload["command"][-1])
+    assert pretool_payload["command"][1] == "__guard-bounded-hook"
+    assert bridge_config["cli_args"][-1] == "--json"
     assert bridge_config["harness"] == "hermes"
     assert bridge_config["timeout_seconds"] == 3
     assert pretool_payload["timeout_seconds"] == 5

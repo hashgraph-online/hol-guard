@@ -51,6 +51,19 @@ def test_copilot_recognizes_bounded_hook_with_python_isolation_flag() -> None:
     assert copilot_module._is_managed_hook_command(command) is True
 
 
+def test_copilot_recognizes_frozen_bounded_hook() -> None:
+    config = json.dumps(
+        {
+            "harness": "copilot",
+            "cli_args": ["guard", "hook", "--harness", "copilot"],
+        },
+        separators=(",", ":"),
+    )
+    command = shlex.join(["/Applications/HOL Guard.app/Contents/MacOS/hol-guard", "__guard-bounded-hook", config])
+
+    assert copilot_module._is_managed_hook_command(command) is True
+
+
 def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()

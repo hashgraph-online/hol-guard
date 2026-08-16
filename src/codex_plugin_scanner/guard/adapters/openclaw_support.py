@@ -71,17 +71,18 @@ def overlay_payload(detection: HarnessDetection) -> dict[str, object]:
 
 def pretool_payload(*, context: HarnessContext) -> dict[str, object]:
     cli_args = [
+        "guard",
         "hook",
-        "--harness",
-        "openclaw",
         "--guard-home",
         str(context.guard_home),
+        "--harness",
+        "openclaw",
         "--home",
         str(context.home_dir),
-        "--json",
     ]
     if context.workspace_dir is not None:
         cli_args.extend(["--workspace", str(context.workspace_dir)])
+    cli_args.append("--json")
     command = bounded_cli_hook_command(
         python_executable=sys.executable,
         package_root=Path(__file__).resolve().parents[3],

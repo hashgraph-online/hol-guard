@@ -132,6 +132,20 @@ def _is_managed_hook_command(command: str) -> bool:
         tokens = shlex.split(command)
     except ValueError:
         return False
+    if len(tokens) == 3 and tokens[1] == "__guard-bounded-hook":
+        if Path(tokens[0]).name.lower() not in {"hol guard", "hol-guard", "hol-guard.exe"}:
+            return False
+        try:
+            raw_config: object = json.loads(tokens[2])
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(raw_config, dict) or raw_config.get("harness") != "copilot":
+            return False
+        cli_args = raw_config.get("cli_args")
+        if not isinstance(cli_args, list):
+            return False
+        normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
+        return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
     if len(tokens) < 3:
         return False
     executable = Path(tokens[0]).name.lower()

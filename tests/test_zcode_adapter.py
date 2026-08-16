@@ -352,16 +352,13 @@ class TestZCodeInstallUninstall:
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         handler = payload["hooks"]["events"]["PreToolUse"][0]["hooks"][0]
         command = handler["command"]
-        # Frozen Guard builds cannot emulate ``python -c``; the hook must call
-        # the Guard CLI hook subcommand directly instead. The frozen
-        # ``hol-guard`` entry point registers Guard subcommands at the root,
-        # so the command must not carry a standalone ``guard`` group token.
-        assert "bounded_cli_hook_bridge" not in command
-        assert " hook " in command and "--harness" in command
         import shlex
 
         tokens = shlex.split(command.split(" # ", 1)[0])
-        assert tokens[1] == "hook", tokens[:3]
+        assert tokens[1] == "__guard-bounded-hook", tokens[:3]
+        bridge_config = json.loads(tokens[2])
+        assert bridge_config["harness"] == "zcode"
+        assert bridge_config["frozen_launcher"] is True
         assert GUARD_MANAGED_MARKER in command
 
     def test_install_deduplicates_handlers_present_in_both_layouts(self, tmp_path: Path, monkeypatch) -> None:
@@ -467,11 +464,7 @@ class TestZCodeInstallUninstall:
         assert hooks["timeoutMs"] == 60000
         assert set(hooks.keys()) == {"enabled", "timeoutMs", "events"}
         events = hooks["events"]
-        user_start = [
-            handler["command"]
-            for entry in events["SessionStart"]
-            for handler in entry.get("hooks", [])
-        ]
+        user_start = [handler["command"] for entry in events["SessionStart"] for handler in entry.get("hooks", [])]
         assert user_start == ["echo user-start"]
         bash_entry = next(e for e in events["PreToolUse"] if e.get("matcher") == "Bash")
         bash_commands = [handler["command"] for handler in bash_entry["hooks"]]
@@ -527,9 +520,7 @@ class TestZCodeInstallUninstall:
             if handler.get("command") == "echo user-start"
         ]
         assert session_commands == ["echo user-start"]
-        pretool_commands = [
-            handler["command"] for entry in events["PreToolUse"] for handler in entry.get("hooks", [])
-        ]
+        pretool_commands = [handler["command"] for entry in events["PreToolUse"] for handler in entry.get("hooks", [])]
         assert pretool_commands == ["echo user-pretool"]
         assert GUARD_MANAGED_MARKER not in json.dumps(payload)
 
@@ -555,9 +546,7 @@ class TestZCodeInstallUninstall:
         ZCodeHarnessAdapter().uninstall(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         pretool_commands = [
-            handler["command"]
-            for entry in payload["hooks"]["PreToolUse"]
-            for handler in entry.get("hooks", [])
+            handler["command"] for entry in payload["hooks"]["PreToolUse"] for handler in entry.get("hooks", [])
         ]
         assert pretool_commands == ["echo user-pretool"]
         assert GUARD_MANAGED_MARKER not in json.dumps(payload)

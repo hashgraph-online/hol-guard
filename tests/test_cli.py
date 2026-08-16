@@ -22,6 +22,27 @@ NONEXISTENT_PLUGIN_DIR = Path("/nonexistent/plugin-dir").resolve()
 EXPECTED_GOOD_PLUGIN_SCORE = 91
 
 
+def test_internal_bounded_hook_dispatches_before_argument_parser(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: list[str] = []
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.main_from_argv",
+        lambda argv: observed.extend(argv) or 7,
+    )
+
+    assert main(["__guard-bounded-hook", '{"harness":"grok"}']) == 7
+    assert observed == ['{"harness":"grok"}']
+
+
+def test_internal_bounded_hook_is_not_available_from_python_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    with pytest.raises(SystemExit):
+        main(["__guard-bounded-hook", "{}"])
+
+
 class TestFormatJson:
     def test_good_plugin_json_output_has_expected_schema_and_category_structure(self):
         result = scan_plugin(FIXTURES / "good-plugin")

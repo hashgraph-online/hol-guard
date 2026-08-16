@@ -70,6 +70,31 @@ def test_managed_cli_hooks_use_bounded_process_bridge(
 @pytest.mark.parametrize(
     ("harness", "factory"),
     [
+        ("copilot", _copilot_command),
+        ("grok", GrokHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
+        ("kimi", KimiHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
+        ("zcode", ZCodeHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
+    ],
+)
+def test_frozen_managed_cli_hooks_enter_supported_bridge_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    harness: str,
+    factory: CommandFactory,
+) -> None:
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+
+    command = factory(_context(tmp_path))
+
+    assert command[:2] == (command[0], "__guard-bounded-hook")
+    config = cast(dict[str, object], json.loads(command[2]))
+    assert config["frozen_launcher"] is True
+    assert config["harness"] == harness
+
+
+@pytest.mark.parametrize(
+    ("harness", "factory"),
+    [
         ("hermes", hermes_pretool_payload),
         ("openclaw", openclaw_pretool_payload),
     ],

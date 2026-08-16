@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -376,7 +377,11 @@ def test_openclaw_skill_artifact_ids_include_skill_directory_identity(tmp_path: 
     assert len(reviewer_ids) == 2
 
 
-def test_install_exports_guard_managed_openclaw_overlay(tmp_path: Path) -> None:
+def test_install_exports_guard_managed_openclaw_overlay(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
     context = _ctx(tmp_path)
     _write(
         context.home_dir / ".openclaw" / "openclaw.json",
@@ -393,6 +398,8 @@ def test_install_exports_guard_managed_openclaw_overlay(tmp_path: Path) -> None:
     assert overlay_path.exists() is True
     assert pretool_path.exists() is True
     bridge_config = json.loads(pretool["command"][-1])
+    assert pretool["command"][1] == "__guard-bounded-hook"
+    assert bridge_config["cli_args"][-1] == "--json"
     assert bridge_config["cli_args"][bridge_config["cli_args"].index("--home") + 1] == str(context.home_dir)
     assert bridge_config["timeout_seconds"] == 3
     assert pretool["timeout_seconds"] == 5

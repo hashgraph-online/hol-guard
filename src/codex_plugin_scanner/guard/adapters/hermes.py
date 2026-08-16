@@ -1121,16 +1121,18 @@ def _mcp_proxy_command(*, context: HarnessContext, server_key: str) -> list[str]
 
 def _pretool_payload(*, context: HarnessContext) -> dict[str, object]:
     cli_args = [
-        "hermes",
-        "pretool",
+        "guard",
+        "hook",
         "--guard-home",
         str(context.guard_home),
-        "--json",
+        "--harness",
+        "hermes",
     ]
     if context.home_dir.resolve() != Path.home().resolve():
         cli_args.extend(["--home", str(context.home_dir)])
     if context.workspace_dir is not None:
         cli_args.extend(["--workspace", str(context.workspace_dir)])
+    cli_args.append("--json")
     return {
         "command": list(
             bounded_cli_hook_command(

@@ -267,14 +267,6 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             guard_args.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
             guard_args.extend(["--workspace", str(context.workspace_dir)])
-        if getattr(sys, "frozen", False):
-            # Frozen Guard builds parse their own CLI argv and cannot emulate
-            # interpreter flags like ``-c``, so the bounded-bridge bootstrap is
-            # unusable there. The frozen ``hol-guard`` entry point registers
-            # Guard subcommands at the root (no ``guard`` group token), so invoke
-            # the ``hook`` subcommand directly; it reads the same stdin payload
-            # and emits the same native response.
-            return (sys.executable, *guard_args[1:])
         return bounded_cli_hook_command(
             python_executable=sys.executable,
             package_root=Path(__file__).resolve().parents[3],
