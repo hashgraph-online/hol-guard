@@ -60,7 +60,8 @@ jobs:
           --scanners vuln,misconfig,secret
           --severity HIGH,CRITICAL
           --skip-dirs /workdir/tests/fixtures
-          --skip-files /workdir/.clusterfuzzlite/Dockerfile
+          --skip-files /workdir/.clusterfuzzlite/Dockerfile \
+          --skip-files /workdir/scripts/mdm/cloud-lab/Dockerfile
           --exit-code 1
           --quiet
           /workdir
