@@ -4454,24 +4454,6 @@
     text-decoration-line: underline;
   }
 
-  .decoration-brand-blue\/45 {
-    -webkit-text-decoration-color: var(--brand-blue);
-    -webkit-text-decoration-color: var(--brand-blue);
-    text-decoration-color: var(--brand-blue);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .decoration-brand-blue\/45 {
-      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 45%, transparent);
-      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 45%, transparent);
-      text-decoration-color: color-mix(in oklab, var(--brand-blue) 45%, transparent);
-    }
-  }
-
-  .underline-offset-\[3px\] {
-    text-underline-offset: 3px;
-  }
-
   .accent-brand-blue {
     accent-color: var(--brand-blue);
   }
@@ -5232,12 +5214,6 @@
 
     .hover\:underline:hover {
       text-decoration-line: underline;
-    }
-
-    .hover\:decoration-brand-blue:hover {
-      -webkit-text-decoration-color: var(--brand-blue);
-      -webkit-text-decoration-color: var(--brand-blue);
-      text-decoration-color: var(--brand-blue);
     }
 
     .hover\:opacity-85:hover {
@@ -6310,7 +6286,22 @@ body {
   line-height: 1.4;
 }
 
+.guard-quiet-link {
+  text-underline-offset: 3px;
+  transition: text-decoration-thickness .15s var(--ease-out-quart);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+}
+
+.guard-quiet-link:hover {
+  text-decoration-thickness: 1.5px;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .guard-quiet-link {
+    transition: none;
+  }
+
   .guard-tab-enter {
     animation: none;
   }

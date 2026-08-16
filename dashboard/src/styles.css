@@ -114,6 +114,26 @@ body {
   line-height: 1.4;
 }
 
+/* Quiet inline link treatment for the Local Guard card: a thin offset
+   underline in the text color that thickens on hover. Color-less by design —
+   the build's CSS prefixer duplicates any text-decoration-color declaration. */
+.guard-quiet-link {
+  text-decoration-line: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-thickness 150ms var(--ease-out-quart);
+}
+
+.guard-quiet-link:hover {
+  text-decoration-thickness: 1.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guard-quiet-link {
+    transition: none;
+  }
+}
+
 .guard-tab-enter {
   animation: guard-tab-enter 220ms var(--ease-out-quart) both;
 }

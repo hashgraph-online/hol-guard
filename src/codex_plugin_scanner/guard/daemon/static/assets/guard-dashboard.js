@@ -19395,7 +19395,7 @@ function GuardUpdatePanel(props) {
                 disabled: busy,
                 "aria-label": "Manage alpha updates",
                 title: "Manage alpha updates",
-                className: "rounded-sm text-[11px] font-medium leading-4 text-brand-blue underline decoration-brand-blue/45 underline-offset-[3px] transition-colors hover:decoration-brand-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+                className: "rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
                 children: "Manage"
               }
             )
@@ -19407,7 +19407,7 @@ function GuardUpdatePanel(props) {
           type: "button",
           onClick: handleOpenAlphaModal,
           disabled: busy,
-          className: "shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue underline decoration-brand-blue/45 underline-offset-[3px] transition-colors hover:decoration-brand-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+          className: "shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
           children: "Try alpha updates"
         }
       )
@@ -20010,7 +20010,7 @@ function ShellSidebar(props) {
             "a",
             {
               href: guardAwareHref("/inbox"),
-              className: "block text-[11px] font-medium leading-relaxed text-brand-blue underline decoration-brand-blue/45 underline-offset-[3px] transition-colors hover:decoration-brand-blue",
+              className: "block text-[11px] font-medium leading-relaxed text-brand-blue guard-quiet-link",
               children: [
                 props.queuedCount,
                 " local ",
