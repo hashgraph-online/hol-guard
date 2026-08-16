@@ -19366,47 +19366,57 @@ function GuardUpdatePanel(props) {
     setAlphaApprovalTotpCode(event.target.value);
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
-    version ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/60", "aria-label": `Guard version ${version}`, children: [
+    props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+      version ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "p",
+        {
+          className: "min-w-0 truncate font-mono text-[10px] leading-4 text-brand-dark/70",
+          "aria-label": `Guard version ${version}`,
+          children: [
+            "v",
+            version
+          ]
+        }
+      ) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 flex-1", "aria-hidden": "true" }),
+      useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "inline-flex min-w-0 shrink-0 items-center gap-1.5",
+          role: "status",
+          "aria-label": "Alpha updates enabled",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold leading-4 text-brand-blue", children: "Alpha updates" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleOpenAlphaModal,
+                disabled: busy,
+                "aria-label": "Manage alpha updates",
+                title: "Manage alpha updates",
+                className: "rounded-sm text-[11px] font-medium leading-4 text-brand-blue underline decoration-brand-blue/45 underline-offset-[3px] transition-colors hover:decoration-brand-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+                children: "Manage"
+              }
+            )
+          ]
+        }
+      ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleOpenAlphaModal,
+          disabled: busy,
+          className: "shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue underline decoration-brand-blue/45 underline-offset-[3px] transition-colors hover:decoration-brand-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+          children: "Try alpha updates"
+        }
+      )
+    ] }) : version ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version}`, children: [
       "v",
       version
     ] }) : null,
     props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
     helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
-    props.onSetUpdateChannel && useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: "flex items-center justify-between gap-2 rounded-md border border-brand-blue/20 bg-brand-blue/[0.06] px-2 py-1.5",
-        role: "status",
-        "aria-label": "Alpha updates enabled",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-brand-blue", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3.5 w-3.5 shrink-0", "aria-hidden": "true" }),
-            "Alpha updates"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: handleOpenAlphaModal,
-              disabled: busy,
-              "aria-label": "Manage alpha updates",
-              title: "Manage alpha updates",
-              className: "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-brand-blue transition-colors hover:bg-brand-blue/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4", "aria-hidden": "true" })
-            }
-          )
-        ]
-      }
-    ) : props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: handleOpenAlphaModal,
-        disabled: busy,
-        className: "inline-flex min-h-9 w-full items-center justify-center rounded-lg border border-brand-blue/25 bg-white px-3 py-2 text-xs font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-        children: "Try alpha updates"
-      }
-    ) : null,
     showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
@@ -20000,7 +20010,7 @@ function ShellSidebar(props) {
             "a",
             {
               href: guardAwareHref("/inbox"),
-              className: "block text-[11px] font-medium leading-relaxed text-brand-blue underline underline-offset-2 hover:no-underline",
+              className: "block text-[11px] font-medium leading-relaxed text-brand-blue underline decoration-brand-blue/45 underline-offset-[3px] transition-colors hover:decoration-brand-blue",
               children: [
                 props.queuedCount,
                 " local ",
