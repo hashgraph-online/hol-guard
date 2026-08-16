@@ -1,7 +1,10 @@
 """Strict signed contracts shared by the provider-neutral MDM Cloud lab."""
 from __future__ import annotations
 
-import base64, hashlib, json, re
+import base64
+import hashlib
+import json
+import re
 from datetime import datetime, timezone
 from typing import Mapping
 from cryptography.exceptions import InvalidSignature
