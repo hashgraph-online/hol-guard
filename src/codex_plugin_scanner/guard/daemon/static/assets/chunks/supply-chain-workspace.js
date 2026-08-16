@@ -3,7 +3,7 @@ import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 import { b as buildSupplyChainStats, r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 import { s as supplyChainFixAllIsPending, a as supplyChainFixAllButtonLabel, S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
-import "./use-resolved-approval-gate.js";
+import "./approval-proof-modal.js";
 function SeverityBadge({ severity }) {
   const tone = severity === "critical" || severity === "high" ? "destructive" : severity === "medium" ? "attention" : "default";
   return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone, children: severity });

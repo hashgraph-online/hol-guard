@@ -1,5 +1,5 @@
-import { an as fetchExtensionControlApi, r as reactExports, j as jsxRuntimeExports, Z as HiMiniLockClosed, J as HiMiniExclamationTriangle, ao as HiMiniArrowPath, o as HiMiniShieldCheck, ap as HiMiniInformationCircle, aq as isApprovalProofSubmitDisabled, w as HiMiniXMark, ar as ApprovalProofFieldInputs, as as buildApprovalProofCredentials, l as HiMiniCheckCircle, c as HiMiniChevronRight, y as HiMiniChevronDown, ak as HiMiniMagnifyingGlass, N as HiMiniWrenchScrewdriver, at as HiMiniArrowLeft, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, au as WorkspacePageHeader } from "../guard-dashboard.js";
-import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
+import { an as fetchExtensionControlApi, r as reactExports, j as jsxRuntimeExports, Z as HiMiniLockClosed, J as HiMiniExclamationTriangle, ao as HiMiniArrowPath, o as HiMiniShieldCheck, ap as HiMiniInformationCircle, aq as isApprovalProofSubmitDisabled, w as HiMiniXMark, ar as ApprovalProofFieldInputs, as as buildApprovalProofCredentials, l as HiMiniCheckCircle, c as HiMiniChevronRight, y as HiMiniChevronDown, ak as HiMiniMagnifyingGlass, U as HiMiniClipboardDocumentCheck, V as HiMiniClipboard, at as HiMiniArrowLeft, au as WorkspacePageHeader } from "../guard-dashboard.js";
+import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const DEFAULT_EXTENSION_DETAIL_URL_STATE = {
@@ -2062,52 +2062,173 @@ function PatternSearchConsole(props) {
     ) : null
   ] });
 }
-function ProtectionRepairCard(props) {
-  const repairable = props.effective.health === "tampered" || props.effective.health === "recovery-required";
-  const [open, setOpen] = reactExports.useState(false);
-  const [busy, setBusy] = reactExports.useState(false);
-  const [error, setError] = reactExports.useState(null);
-  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
-  if (!repairable) return null;
-  const begin = async () => {
+function authorityNoticeView(health) {
+  switch (health) {
+    case "tampered":
+    case "recovery-required":
+      return {
+        tone: "warning",
+        title: "Protection needs repair",
+        body: "Guard found a problem with this device's trusted protection settings and is staying fail-safe. Protection changes stay locked until the settings are rebuilt with your approval. Commands keep being checked in the meantime.",
+        action: { kind: "repair" },
+        actionLabel: "Repair protection",
+        actionDetail: "Rebuilding the trusted settings needs your approval password. Guard verifies the repair before protection changes unlock again.",
+        command: "hol-guard command controls recover-authority",
+        commandLabel: "Repair from the terminal",
+        copyButtonLabel: "Copy repair command",
+        terminalSummary: "Run this in your terminal if the button above cannot reach the approval gate."
+      };
+    case "degraded-unacknowledged":
+      return {
+        tone: "warning",
+        title: "Protection is limited",
+        body: "Guard cannot fully verify the trusted protection settings and is staying fail-safe until that is resolved. Acknowledging records the limited state honestly — it does not restore full protection.",
+        action: { kind: "acknowledge" },
+        actionLabel: "Acknowledge limited state",
+        actionDetail: "Acknowledging the limited state needs your approval password. Guard keeps protecting fail-safe afterwards.",
+        command: "hol-guard command controls recover-authority",
+        commandLabel: "Repair from the terminal",
+        copyButtonLabel: "Copy repair command",
+        terminalSummary: "A full repair runs from your terminal."
+      };
+    case "degraded-acknowledged":
+      return {
+        tone: "warning",
+        title: "Protection is limited",
+        body: "The limited state is acknowledged. Guard keeps protection changes locked until the trusted settings are rebuilt from this device's terminal. Commands keep being checked in the meantime.",
+        action: { kind: "none" },
+        actionLabel: null,
+        actionDetail: null,
+        command: "hol-guard command controls recover-authority",
+        commandLabel: "Repair from the terminal",
+        copyButtonLabel: "Copy repair command",
+        terminalSummary: "Run this in your terminal to rebuild the trusted settings."
+      };
+    default:
+      return {
+        tone: "info",
+        title: "Finish setting up protection",
+        body: "Command protection settings are not enrolled on this device yet. One command in your terminal creates this device's trusted settings. Local command checking already runs without them.",
+        action: { kind: "none" },
+        actionLabel: null,
+        actionDetail: null,
+        command: "hol-guard command controls enroll",
+        commandLabel: "Enroll from the terminal",
+        copyButtonLabel: "Copy setup command",
+        terminalSummary: "Run this in your terminal to create the trusted settings."
+      };
+  }
+}
+function ProtectionAuthorityNotice(props) {
+  const health = props.effective.health;
+  if (health === "protected") return null;
+  const view = authorityNoticeView(health);
+  const [proofOpen, setProofOpen] = reactExports.useState(false);
+  const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const [copyState, setCopyState] = reactExports.useState("idle");
+  reactExports.useEffect(() => {
+    if (props.status) setProofOpen(false);
+  }, [props.status]);
+  const gatePending = props.approvalGate === null;
+  const copyCommand = async () => {
     try {
-      await resolveApprovalGate({ failClosed: true });
-      setError(null);
-      setOpen(true);
+      await navigator.clipboard.writeText(view.command);
+      setCopyState("copied");
     } catch {
-      setError("Guard could not load the local approval gate. Repair was not started.");
+      setCopyState("failed");
     }
   };
-  const repair = async (credentials) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await recoverExtensionControlAuthority(credentials);
-      setOpen(false);
-      await props.onRefresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Guard could not repair settings integrity.");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "protection-repair-heading", className: "guard-extensions-panel guard-extensions-tone-attention mt-5 p-5 sm:p-6", children: [
+  const warning2 = view.tone === "warning";
+  const panelClass = warning2 ? "border border-amber-200 bg-amber-50" : "border border-brand-blue/25 bg-[rgba(85,153,254,0.06)]";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "protection-authority-notice-heading", className: `mt-4 rounded-2xl p-5 sm:p-6 ${panelClass}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mt-0.5 size-5 shrink-0 text-amber-800", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-repair-heading", className: "font-semibold text-amber-950", children: "Repair protection settings integrity" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-amber-900", children: "Guard is staying fail-safe because the authenticated local settings state cannot be trusted. Repair rebuilds a protected local authority after explicit approval. Organization policy is not weakened." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => {
-          void begin();
-        }, className: "mt-4 min-h-11 rounded-xl bg-amber-900 px-4 text-sm font-semibold text-white", children: "Repair safely" }),
-        error && !open ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-800", children: error }) : null
+      warning2 ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0 text-amber-600", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-authority-notice-heading", className: `text-base font-semibold ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: view.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 max-w-3xl text-sm leading-6 ${warning2 ? "text-amber-950/90" : "text-brand-dark/80"}`, children: view.body }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-2", children: [
+          view.actionLabel && view.action.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              "aria-busy": props.busy,
+              disabled: props.busy || gatePending,
+              onClick: () => {
+                setPendingAction(view.action.kind === "repair" ? "repair" : "acknowledge");
+                setProofOpen(true);
+              },
+              className: "inline-flex min-h-11 items-center rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60",
+              children: gatePending && !props.error ? "Loading approval settings…" : view.actionLabel
+            }
+          ) : null,
+          view.action.kind === "none" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: () => {
+                void copyCommand();
+              },
+              className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark",
+              children: [
+                copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
+                copyState === "copied" ? "Command copied" : view.copyButtonLabel
+              ]
+            }
+          ) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: props.busy,
+              onClick: props.onCheckAgain,
+              className: "inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark hover:border-brand-blue/40 disabled:opacity-60",
+              children: "Check again"
+            }
+          )
+        ] }),
+        props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
+        props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
+        props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: `cursor-pointer text-sm font-semibold ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: view.commandLabel }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-sm leading-6 ${warning2 ? "text-amber-950/80" : "text-brand-dark/70"}`, children: view.terminalSummary }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-brand-dark", children: view.command }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                onClick: () => {
+                  void copyCommand();
+                },
+                className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-blue hover:border-brand-blue/40",
+                children: [
+                  copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
+                  copyState === "copied" ? "Copied" : "Copy command"
+                ]
+              }
+            )
+          ] })
+        ] })
       ] })
     ] }),
-    open ? /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofModal, { title: "Repair protection settings", detail: "Authenticate this local recovery. Guard will rebuild settings integrity fail-safe and then reload the current protected state.", confirmLabel: "Repair settings", approvalGate: resolvedApprovalGate, busy, error, onCancel: () => {
-      if (!busy) setOpen(false);
-    }, onConfirm: (credentials) => {
-      void repair(credentials);
-    } }) : null
+    proofOpen && view.action.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofModal,
+      {
+        title: view.action.kind === "repair" ? "Repair protection" : "Acknowledge limited state",
+        detail: view.actionDetail ?? "",
+        confirmLabel: view.actionLabel ?? "Confirm",
+        approvalGate: props.approvalGate,
+        busy: props.busy,
+        error: props.error,
+        onCancel: () => {
+          if (!props.busy) setProofOpen(false);
+        },
+        onConfirm: (credentials) => {
+          props.onAction(view.action.kind === "repair" ? "repair" : "acknowledge", credentials);
+        }
+      }
+    ) : null
   ] });
 }
 const DECISIONS = /* @__PURE__ */ new Set(["allowed", "ask-first", "blocked"]);
@@ -2440,7 +2561,6 @@ function ProtectionModuleDetail(props) {
         "Emergency Lockdown currently controls this module. Matching optional actions remain blocked."
       ] }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRepairCard, { effective: props.effective, onRefresh: props.onRefresh }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       ExtensionPolicyPanel,
       {
@@ -2530,43 +2650,25 @@ function currentExtensionRouteState() {
     detail: readExtensionDetailUrlState(window.location.search)
   };
 }
-function extensionRecoveryAction(health) {
-  if (health === "protected") return null;
-  if (health === "tampered" || health === "recovery-required") {
-    return {
-      title: "Repair extension controls",
-      actionLabel: "Repair now",
-      copyLabel: "Copy repair command",
-      description: "Guard locked these settings after detecting damaged authority data. Authenticate on this device to rebuild trusted authority.",
-      command: "hol-guard command controls recover-authority"
-    };
-  }
-  if (health === "degraded-unacknowledged") {
-    return {
-      title: "Acknowledge degraded extension controls",
-      actionLabel: "Acknowledge degraded state",
-      copyLabel: "Copy status command",
-      description: "Guard is failing closed because extension-control authority is degraded. Authenticate to acknowledge the degraded state. Acknowledgement does not restore protected authority.",
-      command: "hol-guard status"
-    };
-  }
-  if (health === "degraded-acknowledged") {
-    return {
-      title: "Degraded extension controls acknowledged",
-      copyLabel: "Copy status command",
-      description: "Guard remains fail-closed while extension-control authority is degraded. Restore protected authority before changing extension policy.",
-      command: "hol-guard status"
-    };
-  }
-  return {
-    title: "Finish local enrollment",
-    copyLabel: "Copy enrollment command",
-    description: "Authenticate in this device's terminal to protect extension settings, then check again.",
-    command: "hol-guard command controls enroll"
-  };
-}
 function requiresExtensionRecoveryApproval(error) {
   return error instanceof ExtensionControlApiError && (error.code === "approval_required" || error.code?.startsWith("approval_gate_") === true);
+}
+function authorityActionErrorMessage(error) {
+  if (error instanceof ExtensionControlApiError) {
+    if (error.code === "authority_not_recoverable") {
+      return "Guard could not start this repair because the protection state changed underneath it. Guard reloaded the latest status. If protection still needs attention, run `hol-guard command controls recover-authority` in your terminal.";
+    }
+    if (error.code === "authority_recovery_failed" || error.code === "authority_recovery_incomplete") {
+      return "Guard started the repair but could not verify a fully protected state. Protection stays fail-safe. Try again, or run `hol-guard command controls recover-authority` in your terminal.";
+    }
+    if (error.code === "authority_not_degraded") {
+      return "The limited state already changed. Guard reloaded the latest status.";
+    }
+    if (requiresExtensionRecoveryApproval(error)) {
+      return "Guard needs your approval password to continue. Enter it and try again.";
+    }
+  }
+  return error instanceof Error && error.message && !/^authority_|^approval_/.test(error.message) ? error.message : "Guard could not complete this action. Local protection continues. Try again, or run `hol-guard command controls recover-authority` in your terminal.";
 }
 function randomToken() {
   return crypto.randomUUID().replaceAll("-", "");
@@ -2607,61 +2709,6 @@ function buildExtensionMutation(state, change) {
     idempotency_key: randomToken(),
     nonce: randomToken()
   };
-}
-function ExtensionStatusBanner(props) {
-  const [copyState, setCopyState] = reactExports.useState("idle");
-  const recovery = extensionRecoveryAction(props.effective.health);
-  const handleCopy = reactExports.useCallback(async () => {
-    if (!recovery) return;
-    try {
-      await navigator.clipboard.writeText(recovery.command);
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-  }, [recovery]);
-  if (props.effective.health === "protected") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-5 shrink-0", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Protected authority" }),
-        " · revision ",
-        props.effective.revision
-      ] })
-    ] });
-  }
-  const repairable = props.effective.health === "tampered" || props.effective.health === "recovery-required" || props.effective.health === "degraded-unacknowledged";
-  const busyLabel = props.effective.health === "degraded-unacknowledged" ? "Acknowledging…" : "Repairing…";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-amber-200 bg-amber-50 p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-5", "aria-hidden": "true" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "font-semibold text-amber-950", children: recovery?.title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-amber-950", children: recovery?.description }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-2", children: [
-        repairable && props.onRecover ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", "aria-busy": props.busy, disabled: props.busy, onClick: props.onRecover, className: "inline-flex min-h-11 items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60", children: [
-          props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin motion-reduce:animate-none", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4", "aria-hidden": "true" }),
-          props.busy ? busyLabel : recovery?.actionLabel
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onRetry, className: "inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4", "aria-hidden": "true" }),
-          "Check again"
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 border-t border-amber-200 pt-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-amber-900", children: "Command-line fallback" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-950", children: recovery?.command }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: handleCopy, className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-brand-blue", children: [
-            copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
-            copyState === "copied" ? "Copied" : recovery?.copyLabel
-          ] })
-        ] }),
-        copyState === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "status", className: "mt-2 block text-sm text-red-800", children: "Copy failed. Select the command above." }) : null
-      ] }),
-      props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm font-medium text-red-800", children: props.error }) : null,
-      props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-amber-950", children: props.status }) : null
-    ] })
-  ] }) });
 }
 function ReviewModal(props) {
   const [password, setPassword] = reactExports.useState("");
@@ -2709,7 +2756,6 @@ function ProtectionCenterWorkspace() {
   const [pending, setPending] = reactExports.useState(null);
   const [busy, setBusy] = reactExports.useState(false);
   const [mutationError, setMutationError] = reactExports.useState(null);
-  const [recoveryApprovalOpen, setRecoveryApprovalOpen] = reactExports.useState(false);
   const [recoveryBusy, setRecoveryBusy] = reactExports.useState(false);
   const [recoveryError, setRecoveryError] = reactExports.useState(null);
   const [recoveryStatus, setRecoveryStatus] = reactExports.useState(null);
@@ -2721,8 +2767,10 @@ function ProtectionCenterWorkspace() {
       const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
       if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
       setState({ kind: "ready", catalog, effective });
+      return effective;
     } catch (error) {
-      setState({ kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
+      setState((current) => current.kind === "ready" ? current : { kind: "error", message: error instanceof Error ? error.message : "Extensions are unavailable" });
+      return null;
     }
   }, []);
   reactExports.useEffect(() => {
@@ -2789,14 +2837,14 @@ function ProtectionCenterWorkspace() {
       setBusy(false);
     }
   }, [load, pending, state]);
-  const recover = reactExports.useCallback(async (credentials) => {
-    const acknowledgingDegraded = state.kind === "ready" && state.effective.health === "degraded-unacknowledged";
+  const runAuthorityAction = reactExports.useCallback(async (kind, credentials) => {
+    const startHealth = state.kind === "ready" ? state.effective.health : null;
     setRecoveryBusy(true);
     setRecoveryError(null);
-    setRecoveryStatus(acknowledgingDegraded ? "Confirming the limited state…" : "Repairing local protection…");
+    setRecoveryStatus(null);
     try {
-      const effective = acknowledgingDegraded ? await acknowledgeDegradedExtensionControlAuthority(credentials) : await recoverExtensionControlAuthority(credentials);
-      if (acknowledgingDegraded) {
+      const effective = kind === "acknowledge" ? await acknowledgeDegradedExtensionControlAuthority(credentials) : await recoverExtensionControlAuthority(credentials);
+      if (kind === "acknowledge") {
         if (effective.health !== "degraded-acknowledged") throw new Error("Guard could not confirm the limited state.");
         setRecoveryStatus("The limited state is acknowledged. Guard remains fail-safe until trusted protection can be restored.");
       } else {
@@ -2804,25 +2852,30 @@ function ProtectionCenterWorkspace() {
         setRecoveryStatus("Local protection repaired and verified.");
       }
       if (state.kind === "ready") setState({ ...state, effective });
-      setRecoveryApprovalOpen(false);
     } catch (error) {
-      if (!credentials && requiresExtensionRecoveryApproval(error)) {
-        try {
-          await resolveApprovalGate({ failClosed: true });
-          setRecoveryApprovalOpen(true);
-          setRecoveryStatus(null);
-        } catch {
-          setRecoveryError("Guard could not load local approval settings. Check the local connection and try again.");
-          setRecoveryStatus(null);
-        }
+      const fresh = await load();
+      const wanted = kind === "acknowledge" ? "degraded-acknowledged" : "protected";
+      if (fresh && fresh.health === wanted) {
+        setRecoveryError(null);
+        setRecoveryStatus(kind === "acknowledge" ? "The limited state is acknowledged. Guard remains fail-safe until trusted protection can be restored." : "Local protection repaired and verified.");
+      } else if (fresh && startHealth !== null && fresh.health !== startHealth) {
+        setRecoveryError(null);
+        setRecoveryStatus("The protection state changed during the attempt. This page now shows the latest status.");
       } else {
-        setRecoveryError(error instanceof Error ? error.message : "Guard could not repair local protection.");
         setRecoveryStatus(null);
+        setRecoveryError(authorityActionErrorMessage(error));
       }
     } finally {
       setRecoveryBusy(false);
     }
-  }, [resolveApprovalGate, state]);
+  }, [load, state]);
+  const authorityNeedsAttention = state.kind === "ready" && state.effective.health !== "protected";
+  reactExports.useEffect(() => {
+    if (!authorityNeedsAttention) return;
+    void resolveApprovalGate({ failClosed: true }).catch(() => {
+      setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
+    });
+  }, [authorityNeedsAttention, resolveApprovalGate]);
   if (state.kind === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid min-h-[60vh] place-items-center", "aria-busy": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-7 animate-spin text-brand-blue motion-reduce:animate-none", "aria-label": "Loading Extensions" }) });
   if (state.kind === "error") {
     const loadError = protectionCenterLoadError(state.message);
@@ -2833,30 +2886,34 @@ function ProtectionCenterWorkspace() {
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: load, className: "mt-4 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-white", children: "Try again" })
     ] }) });
   }
-  const recoveryModal = recoveryApprovalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-    ApprovalProofModal,
+  const authorityNotice = state.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ProtectionAuthorityNotice,
     {
-      title: state.effective.health === "degraded-unacknowledged" ? "Confirm limited protection state" : "Repair local protection",
-      detail: state.effective.health === "degraded-unacknowledged" ? "Authenticate this acknowledgement on your device. It does not restore full protection." : "Authenticate this repair on your device. Guard uses the proof once and does not store it.",
-      confirmLabel: state.effective.health === "degraded-unacknowledged" ? "Acknowledge limited state" : "Repair protection",
-      approvalGate: resolvedApprovalGate,
+      effective: state.effective,
       busy: recoveryBusy,
       error: recoveryError,
-      onCancel: () => {
-        if (!recoveryBusy) setRecoveryApprovalOpen(false);
+      status: recoveryStatus,
+      approvalGate: resolvedApprovalGate,
+      onAction: (kind, credentials) => {
+        void runAuthorityAction(kind, credentials);
       },
-      onConfirm: (credentials) => {
-        void recover(credentials);
+      onCheckAgain: () => {
+        void load();
+        setRecoveryError(null);
+        void resolveApprovalGate({ failClosed: true }).catch(() => {
+          setRecoveryError("Guard could not load the local approval settings yet. Check the connection and try again, or run `hol-guard command controls recover-authority` in your terminal.");
+        });
       }
     }
   ) : null;
   if (routeState.route.kind === "detail" && selectedExtension) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      authorityNotice,
+      recoveryStatus && state.effective.health === "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mb-3 text-sm font-medium text-emerald-800", children: recoveryStatus }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionModuleDetail, { extension: selectedExtension, effective: state.effective, catalogDigest: state.catalog.catalog_digest, onBack: closeExtension, onRefresh: load, onRequestExtensionChange: (extension2, enabled) => requestChange({ extension: { extension_id: extension2.extension_id, name: extension2.name }, enabled }) }),
       pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewModal, { change: pending, busy, error: mutationError, approvalGate: resolvedApprovalGate, onCancel: () => {
         if (!busy) setPending(null);
-      }, onConfirm: confirm }) : null,
-      recoveryModal
+      }, onConfirm: confirm }) : null
     ] });
   }
   if (routeState.route.kind === "detail" || routeState.route.kind === "invalid") {
@@ -2866,17 +2923,13 @@ function ProtectionCenterWorkspace() {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-amber-900", children: "This link does not match an extension in the current Guard catalog." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: closeExtension, className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", children: "Back to Extensions" })
       ] }) }),
-      recoveryModal
+      authorityNotice
     ] });
   }
   const status = deriveProtectionStatus(state.effective);
   const healthBroken = state.effective.health !== "protected";
   const handlePrimaryStatusAction = () => {
-    if (status.primaryAction === "repair" || status.primaryAction === "retry-repair") {
-      void recover();
-    } else if (status.primaryAction === "review-lockdown") {
-      requestChange({ globalLockdown: false });
-    }
+    requestChange({ globalLockdown: false });
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2887,17 +2940,11 @@ function ProtectionCenterWorkspace() {
         description: "Pick a tool to see the commands Guard watches and change how they're handled."
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ProtectionStatusHero,
-      {
-        status,
-        busy: recoveryBusy,
-        onPrimaryAction: status.primaryAction === "none" || status.primaryAction === "finish-setup" ? () => document.getElementById("extension-recovery-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }) : handlePrimaryStatusAction
-      }
-    ) }),
-    healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", id: "extension-recovery-panel", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionStatusBanner, { busy: recoveryBusy, effective: state.effective, error: recoveryError, status: recoveryStatus, onRecover: () => {
-      void recover();
-    }, onRetry: load }) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionStatusHero, { status, onPrimaryAction: status.primaryAction === "review-lockdown" ? handlePrimaryStatusAction : void 0 }),
+      recoveryStatus && !healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-emerald-800", children: recoveryStatus }) : null
+    ] }),
+    healthBroken ? authorityNotice : null,
     mutationError && !pending ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: mutationError }) }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(PatternSearchConsole, { catalog: catalogExtensions, effective: state.effective, onRefresh: load, onOpenExtension: openExtension }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
@@ -2926,16 +2973,15 @@ function ProtectionCenterWorkspace() {
     ] }),
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewModal, { change: pending, busy, error: mutationError, approvalGate: resolvedApprovalGate, onCancel: () => {
       if (!busy) setPending(null);
-    }, onConfirm: confirm }) : null,
-    recoveryModal
+    }, onConfirm: confirm }) : null
   ] });
 }
 export {
-  ExtensionStatusBanner,
   ProtectionCenterWorkspace as ExtensionsWorkspace,
+  ProtectionAuthorityNotice,
   ReviewModal,
+  authorityActionErrorMessage,
   buildExtensionMutation,
   currentExtensionRouteState,
-  extensionRecoveryAction,
   requiresExtensionRecoveryApproval
 };

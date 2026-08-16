@@ -1,5 +1,5 @@
 import { j as jsxRuntimeExports, aj as Tag, s as formatRelativeTime, r as reactExports, A as ActionButton, bQ as HiMiniChevronLeft, c as HiMiniChevronRight, aV as IconActionButton, w as HiMiniXMark, a_ as GuardModalLayer, bR as HiMiniFunnel, ak as HiMiniMagnifyingGlass, bS as HiMiniArrowDown, bT as HiMiniArrowUp, S as SectionLabel, ao as HiMiniArrowPath, aZ as HiMiniBugAnt, i as EmptyState, $ as HiMiniAdjustmentsHorizontal, a$ as ConnectFlowCard, J as HiMiniExclamationTriangle, bU as runAuditRemediation, L as Badge, bN as isBlockedGuardAction, aR as isSupplyChainAuditEvidence, l as HiMiniCheckCircle, T as HiMiniXCircle, e as harnessDisplayName, bj as HiMiniDocumentText, bi as guardAwareHref, o as HiMiniShieldCheck } from "../guard-dashboard.js";
-import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
+import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./approval-proof-modal.js";
 import { p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, b as sortPackageWorkbenchFindings, i as isApprovalGateRequiredError } from "./supply-chain-hub-workspace.js";
 import { r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 const STEPS = [
