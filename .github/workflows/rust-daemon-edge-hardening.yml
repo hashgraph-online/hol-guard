@@ -1,0 +1,141 @@
+name: Rust daemon edge hardening
+
+on:
+  pull_request:
+    branches: [release/3.0]
+    paths:
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_runtime*.py"
+      - "src/codex_plugin_scanner/guard/daemon/**"
+      - "src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py"
+      - "tests/test_native_runtime_admission.py"
+      - "tests/test_daemon_bounded_http.py"
+      - "tests/test_rust_daemon_edge_hardening_contracts.py"
+      - ".github/workflows/rust-daemon-edge-hardening.yml"
+      - "docs/guard/rust-daemon-edge-hardening-*.md"
+  push:
+    branches: [release/3.0]
+    paths:
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_runtime*.py"
+      - "src/codex_plugin_scanner/guard/daemon/**"
+      - "src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py"
+      - "tests/test_native_runtime_admission.py"
+      - "tests/test_daemon_bounded_http.py"
+      - "tests/test_rust_daemon_edge_hardening_contracts.py"
+      - ".github/workflows/rust-daemon-edge-hardening.yml"
+  schedule:
+    - cron: "37 4 * * 2,5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-daemon-edge-${{ github.event.pull_request.number || github.ref }}-${{ matrix.os || 'plan' }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - run: uv run --no-sync ruff check src/codex_plugin_scanner/guard/native_runtime_admission.py src/codex_plugin_scanner/guard/daemon/bounded_http.py tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py
+      - run: uv run --no-sync ruff format --check src/codex_plugin_scanner/guard/native_runtime_admission.py src/codex_plugin_scanner/guard/daemon/bounded_http.py tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py
+      - run: uv run --no-sync basedpyright --level error src/codex_plugin_scanner/guard/native_runtime_admission.py src/codex_plugin_scanner/guard/daemon/bounded_http.py
+      - run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
+
+  cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Install Rust 1.88
+        shell: bash
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Validate native workspace
+        shell: bash
+        run: |
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - name: Validate daemon and resident edge behavior
+        shell: bash
+        run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
+
+  low-descriptor:
+    if: runner.os == 'Linux'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Run with a constrained descriptor budget
+        shell: bash
+        run: |
+          ulimit -n 128
+          uv run --no-sync pytest -q tests/test_daemon_bounded_http.py tests/test_native_runtime_admission.py --tb=short
+
+  soak:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Run 100000 bounded admission operations
+        shell: bash
+        run: |
+          uv run --no-sync python - <<'PY'
+          from codex_plugin_scanner.guard.native_runtime_admission import native_resident_admission
+
+          @native_resident_admission
+          def operation(index: int, *, operation: str) -> int:
+              return index
+
+          for index in range(100_000):
+              assert operation(index, operation="command_model") == index
+          PY
