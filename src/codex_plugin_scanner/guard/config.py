@@ -871,7 +871,9 @@ def _sync_protection_posture_payload(
             posture,
             current_security_level=str(next_level or current_config.security_level),
         )
-        if "mode" not in incoming:
+        if posture == "watch":
+            synced["mode"] = "observe"
+        elif "mode" not in incoming:
             synced["mode"] = dual_mode
         if "security_level" not in incoming and dual_level is not None:
             synced["security_level"] = dual_level
@@ -880,7 +882,17 @@ def _sync_protection_posture_payload(
         synced.pop("protection_posture", None)
         return synced
     if current_config.protection_posture_explicit:
+        incoming_level = synced.get("security_level", current_config.security_level)
+        incoming_mode = synced.get("mode", current_config.mode)
+        if "security_level" in incoming and incoming_level != current_config.security_level:
+            synced.pop("protection_posture", None)
+            return synced
+        if current_config.protection_posture == "watch" and incoming_mode != "observe":
+            synced.pop("protection_posture", None)
+            return synced
         synced["protection_posture"] = current_config.protection_posture
+        if current_config.protection_posture == "watch":
+            synced["mode"] = "observe"
         return synced
     synced.pop("protection_posture", None)
     return synced
@@ -897,7 +909,10 @@ def _incoming_selects_protection_posture(
     if incoming.get("protection_posture_explicit") is False:
         return False
     if incoming.get("protection_posture_explicit") is True:
-        return True
+        incoming_posture = coerce_protection_posture(incoming.get("protection_posture"))
+        if not current_config.protection_posture_explicit:
+            return True
+        return incoming_posture != current_config.protection_posture
     if not {"mode", "security_level", "risk_actions"} & set(incoming):
         return True
     incoming_posture = coerce_protection_posture(incoming.get("protection_posture"))
@@ -1035,24 +1050,21 @@ def _reapply_managed_config(config: GuardConfig) -> GuardConfig:
     composed_mode = _coerce_loaded_guard_mode(composed.get("mode"), config.mode)
     composed_level = _coerce_loaded_security_level(composed.get("security_level"))
     composed_posture = coerce_loaded_protection_posture(composed.get("protection_posture"))
-    managed_locks_posture = bool(
-        {"mode", "security_level", "protection_posture"} & set(config.managed_locked_settings)
-    )
+    managed_locks_level = "security_level" in config.managed_locked_settings
+    if managed_locks_level:
+        next_posture = derive_protection_posture(composed_mode, composed_level)
+        next_explicit = False
+    elif composed_posture is not None:
+        next_posture = composed_posture
+        next_explicit = True
+    else:
+        next_posture = derive_protection_posture(composed_mode, composed_level)
+        next_explicit = False
     return replace(
         config,
         mode=composed_mode,
-        protection_posture=(
-            derive_protection_posture(composed_mode, composed_level)
-            if managed_locks_posture
-            else composed_posture
-            if composed_posture is not None
-            else derive_protection_posture(composed_mode, composed_level)
-        ),
-        protection_posture_explicit=(
-            False
-            if managed_locks_posture
-            else composed_posture is not None or config.protection_posture_explicit
-        ),
+        protection_posture=next_posture,
+        protection_posture_explicit=next_explicit,
         security_level=composed_level,
         default_action=_coerce_loaded_guard_action_or_default(composed.get("default_action"), config.default_action),
         unknown_publisher_action=_coerce_loaded_guard_action_or_default(

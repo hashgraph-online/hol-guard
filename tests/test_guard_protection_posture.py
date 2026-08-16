@@ -243,3 +243,53 @@ def test_watch_auto_revert_hours_round_trip(tmp_path: Path) -> None:
     assert loaded.watch_auto_revert_hours == 0
     loaded = update_guard_settings(guard_home, {"watch_auto_revert_hours": 48})
     assert loaded.watch_auto_revert_hours == 48
+
+
+def test_explicit_protected_survives_mode_lock_overlay(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.config import _reapply_managed_config
+
+    guard_home = tmp_path / ".hol-guard"
+    loaded = update_guard_settings(guard_home, {"protection_posture": "protected"})
+    locked = replace(
+        loaded,
+        managed_policy=SimpleNamespace(settings={"mode": "enforce"}, locked_settings=frozenset({"mode"})),
+        managed_locked_settings=("mode",),
+    )
+    overlaid = _reapply_managed_config(locked)
+    assert overlaid.protection_posture_explicit is True
+    assert resolve_risk_action(overlaid, "package_script", harness="codex") == "require-reapproval"
+
+
+def test_level_change_on_explicit_posture_returns_to_level_maps(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    update_guard_settings(guard_home, {"protection_posture": "protected"})
+    loaded = update_guard_settings(
+        guard_home,
+        {
+            "mode": "enforce",
+            "security_level": "strict",
+            "protection_posture": "protected",
+            "protection_posture_explicit": True,
+        },
+    )
+    assert loaded.protection_posture_explicit is False
+    assert loaded.security_level == "strict"
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
+    assert resolve_risk_action(loaded, "mcp_dangerous_tool", harness="codex") == "block"
+
+
+def test_watch_forces_observe_even_when_mode_is_in_payload(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    loaded = update_guard_settings(
+        guard_home,
+        {
+            "protection_posture": "watch",
+            "protection_posture_explicit": True,
+            "mode": "prompt",
+            "security_level": "balanced",
+        },
+    )
+    assert loaded.mode == "observe"
+    assert loaded.protection_posture == "watch"
