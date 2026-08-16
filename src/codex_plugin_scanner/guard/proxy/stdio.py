@@ -106,6 +106,14 @@ def build_sensitive_read_approval_hash(
             "managed_policy_hash": config.managed_policy_hash,
             "managed_policy_status": config.managed_policy_status,
             "mode": config.mode,
+            **(
+                {
+                    "protection_posture": config.protection_posture,
+                    "protection_posture_explicit": True,
+                }
+                if config.protection_posture_explicit
+                else {}
+            ),
             "security_level": config.security_level,
         }
         sandbox_context: dict[str, object] = {"analysis": config.sandbox_analysis}

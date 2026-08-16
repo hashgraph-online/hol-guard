@@ -179,6 +179,16 @@ def _configure_guard_policy_parsers(
         required=True,
         parser_class=FriendlyArgumentParser,
     )
+    settings_protection_parser = settings_set_subparsers.add_parser(
+        "protection",
+        help="Set Guard protection posture",
+    )
+    settings_protection_parser.add_argument(
+        "protection_posture",
+        choices=("protected", "extra-careful", "extra_careful", "watch"),
+    )
+    _add_guard_common_args(settings_protection_parser)
+    settings_protection_parser.add_argument("--json", action="store_true")
     settings_security_parser = settings_set_subparsers.add_parser("security-level", help="Set Guard security level")
     settings_security_parser.add_argument("security_level", choices=tuple(sorted(VALID_SECURITY_LEVELS)))
     _add_guard_common_args(settings_security_parser)

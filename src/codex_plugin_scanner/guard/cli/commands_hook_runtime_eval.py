@@ -497,6 +497,21 @@ def _evaluate_runtime_artifact_hook(
             "data_flow_exfiltration",
             harness=policy_harness,
         )
+        from ..protection_posture import apply_posture_confidence, is_high_confidence
+
+        data_flow_confidence = (
+            "strong"
+            if any(is_high_confidence(getattr(signal, "confidence", None)) for signal in data_flow_signals)
+            else None
+        )
+        if configured_data_flow_action is not None:
+            configured_data_flow_action = apply_posture_confidence(
+                posture=config.protection_posture,
+                explicit=config.protection_posture_explicit,
+                risk_class="data_flow_exfiltration",
+                action=configured_data_flow_action,
+                confidence=data_flow_confidence,
+            )
         data_flow_action = _resolved_guard_action(configured_data_flow_action, policy_action)
         approval_context_data_flow_action = _resolved_guard_action(
             configured_data_flow_action,

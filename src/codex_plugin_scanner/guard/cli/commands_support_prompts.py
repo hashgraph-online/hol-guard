@@ -158,6 +158,10 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
             cloud_sync_entitled=bool(entitlement.get("allowed")),
         )
 
+    if settings_command == "protection":
+        from ..protection_posture import coerce_protection_posture
+
+        return persist_settings({"protection_posture": coerce_protection_posture(args.protection_posture)})
     if settings_command == "security-level":
         payload: dict[str, object] = {"security_level": args.security_level}
         if args.security_level in _NAMED_SECURITY_LEVELS:

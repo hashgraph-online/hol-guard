@@ -63,6 +63,14 @@ def hook_config_fingerprint(config: GuardConfig) -> str:
     material = {
         "mode": config.mode,
         "security_level": config.security_level,
+        **(
+            {
+                "protection_posture": config.protection_posture,
+                "protection_posture_explicit": True,
+            }
+            if config.protection_posture_explicit
+            else {}
+        ),
         "default_action": config.default_action,
         "unknown_publisher_action": config.unknown_publisher_action,
         "changed_hash_action": config.changed_hash_action,

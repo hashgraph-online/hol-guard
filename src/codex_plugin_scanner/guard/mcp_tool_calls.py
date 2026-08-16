@@ -400,6 +400,14 @@ def _tool_call_policy_context(config: GuardConfig, artifact: GuardArtifact) -> d
         "managed_policy_hash": config.managed_policy_hash,
         "managed_policy_status": config.managed_policy_status,
         "mode": config.mode,
+        **(
+            {
+                "protection_posture": config.protection_posture,
+                "protection_posture_explicit": True,
+            }
+            if config.protection_posture_explicit
+            else {}
+        ),
         "security_level": config.security_level,
     }
 
@@ -812,7 +820,12 @@ def _evaluate_current_tool_call(
     )
     if configured_risk_action is not None:
         source = "policy"
-        if explicit_risk_action is None and config.mode == "prompt" and config.security_level == DEFAULT_SECURITY_LEVEL:
+        if (
+            explicit_risk_action is None
+            and not config.protection_posture_explicit
+            and config.mode == "prompt"
+            and config.security_level == DEFAULT_SECURITY_LEVEL
+        ):
             configured_risk_action = "review"
             source = "risk-policy"
         return with_current_config(
