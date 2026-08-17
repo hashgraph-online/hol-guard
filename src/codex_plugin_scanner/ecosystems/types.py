@@ -13,6 +13,7 @@ class Ecosystem(str, Enum):
     CODEX = "codex"
     CLAUDE = "claude"
     GEMINI = "gemini"
+    KIMI = "kimi"
     OPENCODE = "opencode"
 
 

@@ -53,12 +53,14 @@ def test_detect_packages_skips_symlinked_manifest_files_outside_root(tmp_path: P
     (outside / "marketplace.json").write_text("{}", encoding="utf-8")
     (outside / "gemini-extension.json").write_text("{}", encoding="utf-8")
     (outside / "opencode.json").write_text("{}", encoding="utf-8")
+    (outside / "kimi.plugin.json").write_text('{"name":"outside"}', encoding="utf-8")
 
     _symlink_or_skip(tmp_path / "codex-plugin" / ".codex-plugin" / "plugin.json", outside / "plugin.json")
     _symlink_or_skip(tmp_path / "claude-plugin" / ".claude-plugin" / "plugin.json", outside / "plugin.json")
     _symlink_or_skip(tmp_path / "claude-market" / ".claude-plugin" / "marketplace.json", outside / "marketplace.json")
     _symlink_or_skip(tmp_path / "gemini-ext" / "gemini-extension.json", outside / "gemini-extension.json")
     _symlink_or_skip(tmp_path / "opencode-workspace" / "opencode.json", outside / "opencode.json")
+    _symlink_or_skip(tmp_path / "kimi-plugin" / "kimi.plugin.json", outside / "kimi.plugin.json")
 
     assert detect_packages(tmp_path) == []
 
@@ -234,6 +236,7 @@ def test_cli_lists_supported_ecosystems(capsys) -> None:
     assert "codex" in captured.out
     assert "claude" in captured.out
     assert "gemini" in captured.out
+    assert "kimi" in captured.out
     assert "opencode" in captured.out
 
 

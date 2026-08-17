@@ -116,7 +116,7 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
     scan_parser.add_argument("--cisco-policy", choices=("permissive", "balanced", "strict"), default="balanced")
     scan_parser.add_argument(
         "--ecosystem",
-        choices=("auto", "codex", "claude", "gemini", "opencode"),
+        choices=("auto", "codex", "claude", "gemini", "kimi", "opencode"),
         default="auto",
         help="Target one ecosystem explicitly or auto-detect all supported ecosystems.",
     )

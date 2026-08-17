@@ -20,8 +20,17 @@ SHELL_INJECT_RE = re.compile(
 )
 
 
-def _find_code_files(plugin_dir: Path) -> list[Path]:
-    files = []
+def _find_code_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> list[Path]:
+    if files is not None:
+        return [
+            path
+            for path in files
+            if path.is_file()
+            and not path.is_symlink()
+            and path.suffix in CODE_EXTS
+            and resolves_within_root(plugin_dir, path, require_exists=True)
+        ]
+    discovered: list[Path] = []
     for p in plugin_dir.rglob("*"):
         if not p.is_file() or p.suffix not in CODE_EXTS:
             continue
@@ -29,13 +38,13 @@ def _find_code_files(plugin_dir: Path) -> list[Path]:
             continue
         if not resolves_within_root(plugin_dir, p, require_exists=True):
             continue
-        files.append(p)
-    return files
+        discovered.append(p)
+    return discovered
 
 
-def check_no_eval(plugin_dir: Path) -> CheckResult:
+def check_no_eval(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
     findings: list[str] = []
-    for fpath in _find_code_files(plugin_dir):
+    for fpath in _find_code_files(plugin_dir, files):
         try:
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
@@ -73,9 +82,9 @@ def check_no_eval(plugin_dir: Path) -> CheckResult:
     )
 
 
-def check_no_shell_injection(plugin_dir: Path) -> CheckResult:
+def check_no_shell_injection(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
     findings: list[str] = []
-    for fpath in _find_code_files(plugin_dir):
+    for fpath in _find_code_files(plugin_dir, files):
         try:
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:

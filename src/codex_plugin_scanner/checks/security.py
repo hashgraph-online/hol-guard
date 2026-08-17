@@ -158,9 +158,18 @@ APACHE_LICENSE_VERSION_RE = re.compile(r"apache\s+license\s*,?\s*version\s+2\.0"
 LICENSE_URL_RE = re.compile(r"https?://[^\s<>()\"']+")
 
 
-def _scan_all_files(plugin_dir: Path) -> list[Path]:
+def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> list[Path]:
     """Recursively find all files, skipping excluded dirs."""
-    files = []
+    if files is not None:
+        return [
+            path
+            for path in files
+            if path.is_file()
+            and not path.is_symlink()
+            and path.suffix.lower() not in BINARY_EXTS
+            and resolves_within_root(plugin_dir, path, require_exists=True)
+        ]
+    discovered: list[Path] = []
     for p in plugin_dir.rglob("*"):
         if not p.is_file():
             continue
@@ -170,8 +179,8 @@ def _scan_all_files(plugin_dir: Path) -> list[Path]:
             continue
         if not resolves_within_root(plugin_dir, p, require_exists=True):
             continue
-        files.append(p)
-    return files
+        discovered.append(p)
+    return discovered
 
 
 def _is_example_surface(relative_path: Path) -> bool:
@@ -451,9 +460,9 @@ def check_license(plugin_dir: Path) -> CheckResult:
         )
 
 
-def check_no_hardcoded_secrets(plugin_dir: Path) -> CheckResult:
+def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
     findings: list[tuple[str, int]] = []
-    for fpath in _scan_all_files(plugin_dir):
+    for fpath in _scan_all_files(plugin_dir, files):
         try:
             content = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
@@ -677,9 +686,9 @@ def check_mcp_transport_security(plugin_dir: Path) -> CheckResult:
     )
 
 
-def check_no_approval_bypass_defaults(plugin_dir: Path) -> CheckResult:
+def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
     findings: list[str] = []
-    for file_path in _scan_all_files(plugin_dir):
+    for file_path in _scan_all_files(plugin_dir, files):
         try:
             content = file_path.read_text(encoding="utf-8", errors="ignore")
         except OSError:

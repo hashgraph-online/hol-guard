@@ -1,0 +1,25 @@
+{
+  "name": "demo-memory",
+  "version": "1.2.3",
+  "description": "A native Kimi Code plugin fixture.",
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "commands": "./commands/",
+  "systemPromptPath": "./SYSTEM.md",
+  "sessionStart": {
+    "skill": "using-demo"
+  },
+  "mcpServers": {
+    "demo": {
+      "command": "npx",
+      "args": ["-y", "demo-memory@1.2.3", "serve"],
+      "env": {
+        "DEMO_MODE": "read-only"
+      }
+    }
+  },
+  "interface": {
+    "displayName": "Demo Memory",
+    "shortDescription": "A Kimi plugin scanner fixture"
+  }
+}
