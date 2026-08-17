@@ -2,16 +2,142 @@
 
 from __future__ import annotations
 
+import errno
 import gc
+import socket
 import threading
 import weakref
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def test_occupied_port_preserves_bind_error_during_partial_server_cleanup(tmp_path: Path) -> None:
+    diagnostics_threads_before = {
+        thread.ident
+        for thread in threading.enumerate()
+        if thread.name == "guard-daemon-diagnostics" and thread.is_alive()
+    }
+    executor_threads_before = {
+        thread.ident for thread in threading.enumerate() if thread.name.startswith("guard-http-")
+    }
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    port = listener.getsockname()[1]
+
+    try:
+        with pytest.raises(OSError) as error:
+            _ = GuardDaemonServer(
+                GuardStore(tmp_path / "guard-home"),
+                host="127.0.0.1",
+                port=port,
+                idle_timeout_seconds=0,
+            )
+    finally:
+        listener.close()
+
+    assert error.value.errno == errno.EADDRINUSE
+    assert "request_executors_stopped" not in str(error.value)
+    assert not any(
+        thread.ident not in diagnostics_threads_before
+        and thread.name == "guard-daemon-diagnostics"
+        and thread.is_alive()
+        for thread in threading.enumerate()
+    )
+    assert not any(
+        thread.ident not in executor_threads_before and thread.name.startswith("guard-http-") and thread.is_alive()
+        for thread in threading.enumerate()
+    )
+
+
+def test_executor_construction_failure_rolls_back_threads_before_bind(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    executor_threads_before = {
+        thread.ident for thread in threading.enumerate() if thread.name.startswith("guard-http-")
+    }
+    real_executor = daemon_server_module._BoundedRequestExecutor
+    construction_count = 0
+
+    def fail_second_executor(
+        *,
+        name: str,
+        workers: int,
+        queue_limit: int,
+        run: Callable[[socket.socket, tuple[str, int]], None],
+        discard: Callable[[socket.socket], None],
+    ) -> object:
+        nonlocal construction_count
+        construction_count += 1
+        if construction_count == 2:
+            raise RuntimeError("injected executor exhaustion")
+        return real_executor(name=name, workers=workers, queue_limit=queue_limit, run=run, discard=discard)
+
+    monkeypatch.setattr(daemon_server_module, "_BoundedRequestExecutor", fail_second_executor)
+
+    with pytest.raises(RuntimeError, match="injected executor exhaustion"):
+        _ = GuardDaemonServer(
+            GuardStore(tmp_path / "guard-home"),
+            host="127.0.0.1",
+            port=port,
+            idle_timeout_seconds=0,
+        )
+
+    assert not any(
+        thread.ident not in executor_threads_before and thread.name.startswith("guard-http-") and thread.is_alive()
+        for thread in threading.enumerate()
+    )
+    replacement = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        replacement.bind(("127.0.0.1", port))
+    finally:
+        replacement.close()
+
+
+def test_executor_worker_start_failure_rolls_back_started_threads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executor_threads_before = {
+        thread.ident for thread in threading.enumerate() if thread.name.startswith("guard-http-")
+    }
+    real_start = threading.Thread.start
+    guard_http_start_count = 0
+
+    def fail_third_guard_http_start(thread: threading.Thread) -> None:
+        nonlocal guard_http_start_count
+        if thread.name.startswith("guard-http-"):
+            guard_http_start_count += 1
+            if guard_http_start_count == 3:
+                raise RuntimeError("injected HTTP worker exhaustion")
+        real_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", fail_third_guard_http_start)
+
+    with pytest.raises(RuntimeError, match="injected HTTP worker exhaustion"):
+        _ = GuardDaemonServer(
+            GuardStore(tmp_path / "guard-home"),
+            host="127.0.0.1",
+            port=0,
+            idle_timeout_seconds=0,
+        )
+
+    assert not any(
+        thread.ident not in executor_threads_before and thread.name.startswith("guard-http-") and thread.is_alive()
+        for thread in threading.enumerate()
+    )
 
 
 def test_serve_thread_start_failure_rolls_back_initialized_service(
