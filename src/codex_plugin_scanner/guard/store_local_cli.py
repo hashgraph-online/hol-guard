@@ -331,9 +331,7 @@ def _load_commands_by_cli(connection: sqlite3.Connection) -> dict[str, list[dict
         order by cli_id asc, sort_index asc, command_id asc
         """
     ).fetchall()
-    state_rows = connection.execute(
-        "select cli_id, command_id, state from local_cli_command_grant"
-    ).fetchall()
+    state_rows = connection.execute("select cli_id, command_id, state from local_cli_command_grant").fetchall()
     states: dict[tuple[str, str], str] = {}
     for row in state_rows:
         cli_id, command_id, state = _row_values(row, 3)

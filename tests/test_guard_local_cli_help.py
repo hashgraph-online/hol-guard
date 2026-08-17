@@ -8,8 +8,10 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     merge_discovered_commands,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_help import (
+    _HELP_OUTPUT_LIMIT,
     discover_local_cli_commands,
     parse_cli_help_text,
+    run_cli_help,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import identify_unlisted_cli
 
@@ -113,3 +115,11 @@ def test_discover_uses_help_runner(tmp_path: Path) -> None:
     ids = [command.command_id for command in commands]
     assert "deploy" in ids
     assert "pages.deploy" in ids
+
+
+def test_run_cli_help_stops_after_output_limit(tmp_path: Path) -> None:
+    tool = tmp_path / "flood"
+    tool.write_text("#!/bin/sh\npython3 -c 'print(\"a\" * 20000)'\n", encoding="utf-8")
+    tool.chmod(0o755)
+    output = run_cli_help((str(tool), "--help"))
+    assert len(output) <= _HELP_OUTPUT_LIMIT

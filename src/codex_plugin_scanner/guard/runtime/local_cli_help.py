@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
@@ -146,20 +147,46 @@ def run_cli_help(argv: Sequence[str]) -> str:
         return ""
     try:
         with tempfile.TemporaryDirectory(prefix="hol-guard-cli-help-") as tmp:
-            completed = subprocess.run(
-                list(argv),
-                cwd=tmp,
-                env=_help_env(tmp),
-                capture_output=True,
-                text=True,
-                timeout=_HELP_TIMEOUT_SECONDS,
-                check=False,
-                stdin=subprocess.DEVNULL,
-            )
+            return _read_help_output(list(argv), tmp)
     except (OSError, subprocess.TimeoutExpired):
         return ""
-    combined = f"{completed.stdout or ''}\n{completed.stderr or ''}"
-    return combined[:_HELP_OUTPUT_LIMIT]
+
+
+def _read_help_output(argv: list[str], tmp: str) -> str:
+    process = subprocess.Popen(
+        argv,
+        cwd=tmp,
+        env=_help_env(tmp),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        text=True,
+    )
+    chunks: list[str] = []
+    captured = 0
+
+    def _drain() -> None:
+        nonlocal captured
+        stdout = process.stdout
+        if stdout is None:
+            return
+        while captured < _HELP_OUTPUT_LIMIT:
+            piece = stdout.read(min(4096, _HELP_OUTPUT_LIMIT - captured))
+            if piece == "":
+                return
+            chunks.append(piece)
+            captured += len(piece)
+        process.kill()
+
+    reader = threading.Thread(target=_drain, daemon=True)
+    reader.start()
+    reader.join(_HELP_TIMEOUT_SECONDS)
+    if reader.is_alive() or process.poll() is None:
+        process.kill()
+        reader.join(1)
+        if process.poll() is None:
+            process.wait(timeout=1)
+    return "".join(chunks)[:_HELP_OUTPUT_LIMIT]
 
 
 def _with_nested_commands(

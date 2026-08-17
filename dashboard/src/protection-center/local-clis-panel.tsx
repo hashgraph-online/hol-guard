@@ -40,6 +40,9 @@ export function customExtensionStateLabel(item: LocalCliItem): string {
   if (item.stale) return "This file changed. Review the extension again.";
   if (item.state === "blocked") return "Every command from this file is blocked.";
   if (item.state === "allowed") {
+    if (item.commands.length === 0) {
+      return "Matching commands from this file are allowed.";
+    }
     const allowed = item.commands.filter((command) => command.state === "allow").length;
     if (allowed > 0) return `${allowed} command${allowed === 1 ? "" : "s"} allowed. The rest follow Recommended.`;
     return "Commands follow Recommended until you allow or block them.";

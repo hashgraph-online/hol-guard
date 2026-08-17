@@ -46,12 +46,7 @@ def test_v1_schema_migrates_to_command_tables(tmp_path: Path) -> None:
         "select version, checksum from local_cli_schema_migration where singleton = 1"
     ).fetchone()
     assert version == LOCAL_CLI_SCHEMA_VERSION
-    tables = {
-        row[0]
-        for row in connection.execute(
-            "select name from sqlite_master where type = 'table'"
-        ).fetchall()
-    }
+    tables = {row[0] for row in connection.execute("select name from sqlite_master where type = 'table'").fetchall()}
     assert "local_cli_command" in tables
     assert "local_cli_command_grant" in tables
     connection.close()
