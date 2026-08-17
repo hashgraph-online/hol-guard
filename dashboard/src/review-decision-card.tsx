@@ -41,7 +41,7 @@ import {
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 
-const commonScopeValues = new Set<DecisionScope>(["artifact"]);
+const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
 function resolvedActionCopy(
   item: GuardApprovalRequest | null,

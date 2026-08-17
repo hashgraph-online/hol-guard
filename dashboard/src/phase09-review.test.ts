@@ -202,18 +202,18 @@ assert(
 );
 
 const allowLabel = (scope: string): string => {
-  if (scope === "artifact") return "Approve once";
-  if (scope === "workspace") return "Remember for project";
+  if (scope === "artifact") return "Allow just this once";
+  if (scope === "workspace") return "Allow and remember for this project";
   return "Approve and remember";
 };
 
 assert(
-  allowLabel("artifact") === "Approve once",
-  "GR202-01: approve button label is 'Approve once' for artifact scope - primary CTA above fold"
+  allowLabel("artifact") === "Allow just this once",
+  "GR202-01: approve button label is 'Allow just this once' for artifact scope"
 );
 assert(
-  allowLabel("workspace") === "Remember for project",
-  "GR202-02: approve button label is 'Remember for project' for workspace scope"
+  allowLabel("workspace") === "Allow and remember for this project",
+  "GR202-02: approve button label is 'Allow and remember for this project' for workspace scope"
 );
 assert(
   allowLabel("harness") === "Approve and remember",

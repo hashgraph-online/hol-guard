@@ -13,15 +13,15 @@ export type ApprovalScopeChoice = {
 export const DEFAULT_SCOPE_CHOICES: ApprovalScopeChoice[] = [
   {
     value: "artifact",
-    label: "Approve once",
+    label: "Allow just this once",
     description:
       "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved.",
   },
   {
     value: "workspace",
-    label: "Remember for project",
+    label: "Allow and remember for this project",
     description:
-      "Save this decision for the current project. Future matching actions skip review here without asking again.",
+      "Save this exact action for the current project. Matching actions skip review here until the action changes.",
   },
   {
     value: "publisher",

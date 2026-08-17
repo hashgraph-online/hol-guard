@@ -2157,17 +2157,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
             inventory_items = store.list_inventory()
             installed_harnesses = {str(item.get("harness", "")) for item in inventory_items}
-            contracts_index = {
-                c.harness: {
-                    "install_aliases": list(c.install_aliases),
-                    "event_surfaces": list(c.event_surfaces),
-                    "native_approval": c.native_approval,
-                    "browser_fallback": c.browser_fallback,
-                    "resume_support": c.resume_support,
-                    "known_blind_spots": c.known_blind_spots,
+            from ..protection_capabilities import capability_for
+
+            contracts_index: dict[str, dict[str, object]] = {}
+            for contract in HARNESS_CONTRACTS:
+                payload: dict[str, object] = {
+                    "install_aliases": list(contract.install_aliases),
+                    "event_surfaces": list(contract.event_surfaces),
+                    "native_approval": contract.native_approval,
+                    "browser_fallback": contract.browser_fallback,
+                    "resume_support": contract.resume_support,
+                    "known_blind_spots": contract.known_blind_spots,
                 }
-                for c in HARNESS_CONTRACTS
-            }
+                capability = capability_for(contract.harness)
+                if capability is not None:
+                    payload.update(capability.to_dict())
+                contracts_index[contract.harness] = payload
             enriched: list[dict[str, object]] = []
             for item in inventory_items:
                 harness_name = str(item.get("harness", ""))
@@ -8772,10 +8777,13 @@ def _build_resolution_copy(action: str, harness: str) -> dict[str, str]:
 
 
 def _settings_response_payload(guard_home: Path, settings: dict[str, object]) -> dict[str, object]:
+    from ..protection_capabilities import protection_capability_payloads
+
     return {
         "guard_home": str(guard_home),
         "config_path": str(guard_home / "config.toml"),
         "settings": settings,
+        "protection_capabilities": protection_capability_payloads(),
     }
 
 

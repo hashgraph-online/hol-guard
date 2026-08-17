@@ -48,10 +48,10 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
       {props.broaderScopeOptions.length > 0 && (
         <details className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3">
           <summary className="cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue">
-            Save for project or app
+            Save for this app
           </summary>
           <p className="mt-2 text-xs text-brand-dark/70">
-            These options save a decision that skips review for matching actions going forward. Choose the narrowest scope that fits what you meant to allow.
+            These options save the same action for this app. They do not grant unrelated actions.
           </p>
           <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
             {props.broaderScopeOptions.map((choice) => (
@@ -185,10 +185,10 @@ function ScopeChoiceButton(props: {
 
 export function allowButtonLabel(scope: DecisionScope): string {
   if (scope === "artifact") {
-    return "Approve once";
+    return "Allow just this once";
   }
   if (scope === "workspace") {
-    return "Remember for project";
+    return "Allow and remember for this project";
   }
   return "Approve and remember";
 }

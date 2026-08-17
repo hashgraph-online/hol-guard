@@ -176,19 +176,22 @@ assert(
   "L114: Pending item policy_action is preserved — approve button reflects correct state"
 );
 
-const allowLabel = (scope: string): string =>
-  scope === "artifact" ? "Approve once" : scope === "workspace" ? "Remember for project" : "Approve and remember";
+const allowLabel = (scope: string): string => {
+  if (scope === "artifact") return "Allow just this once";
+  if (scope === "workspace") return "Allow and remember for this project";
+  return "Approve and remember";
+};
 const blockLabel = (isBlocked: boolean): string =>
   isBlocked ? "Keep blocked" : "Block this action";
 
 assert(
-  allowLabel("artifact") === "Approve once",
-  "L114: Approve button label is 'Approve once' for artifact scope — visible above fold on mobile"
+  allowLabel("artifact") === "Allow just this once",
+  "L114: Approve button label is 'Allow just this once' for artifact scope — visible above fold on mobile"
 );
 
 assert(
-  allowLabel("workspace") === "Remember for project",
-  "L114: Approve button label is 'Remember for project' for workspace scope (GR125)"
+  allowLabel("workspace") === "Allow and remember for this project",
+  "L114: Approve button label is 'Allow and remember for this project' for workspace scope"
 );
 
 assert(

@@ -47,6 +47,7 @@ from .local_dashboard_session import build_local_dashboard_session_token
 from .local_supply_chain import build_local_supply_chain_posture
 from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
+from .protection_capabilities import protection_capability_payloads
 from .models import (
     DECISION_SCOPE_VALUES,
     DecisionScope,
@@ -1571,6 +1572,7 @@ def build_runtime_snapshot(
         **cloud_context,
         "trust_status": trust_status,
         "protection_health": protection_health,
+        "protection_capabilities": protection_capability_payloads(),
     }
 
 

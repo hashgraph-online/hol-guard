@@ -160,7 +160,7 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
     return ApprovalScopeContract(
         allow_scopes=allow_scopes,
         block_scopes=block_scope_tuple,
-        recommended_allow_scope="artifact" if "artifact" in allow_scopes else None,
+        recommended_allow_scope=_recommended_allow_scope(allow_scopes),
         recommended_block_scope="artifact" if "artifact" in block_scopes else None,
         restrictions=restrictions_tuple,
         digest=digest,
@@ -168,6 +168,14 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
         task_capability_reason_codes=task_capability_reason_codes,
         exact_action_persistence_eligible=exact_action_persistence_eligible,
     )
+
+
+def _recommended_allow_scope(allow_scopes: tuple[DecisionScope, ...]) -> DecisionScope | None:
+    if "workspace" in allow_scopes:
+        return "workspace"
+    if "artifact" in allow_scopes:
+        return "artifact"
+    return None
 
 
 def _reusable_allow_scopes(

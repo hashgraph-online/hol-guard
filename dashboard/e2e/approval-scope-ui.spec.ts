@@ -112,9 +112,9 @@ test("approval review renders action-eligible scopes and binds the selected cont
   await page.goto(`/requests/scope-e2e?${DAEMON}`);
 
   await expect(page.getByRole("heading", { name: "Run workspace command" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /Approve once/ })).toBeVisible();
-  await page.getByText("Save for project or app", { exact: true }).click();
-  await expect(page.getByRole("radio", { name: /Remember for project/ })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /Allow just this once/ })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /Allow and remember for this project/ })).toBeVisible();
+  await page.getByText("Save for this app", { exact: true }).click();
   await expect(page.getByRole("radio", { name: /This app/ })).toBeVisible();
   await page.getByText("Advanced: save everywhere on this machine", { exact: true }).click();
   await expect(page.getByRole("radio", { name: /Everywhere/ })).toBeVisible();
@@ -151,7 +151,7 @@ test("non-overridable actions disable approval while preserving eligible block s
 
   await expect(page.getByText("This decision cannot be overridden")).toBeVisible();
   await expect(page.getByText(/Policy terminally blocked this action/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Approve once" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Allow just this once" })).toHaveCount(0);
   await expect(page.getByText("Block matching actions", { exact: true })).toHaveCount(0);
   expect(resolutionBodies).toHaveLength(0);
 });

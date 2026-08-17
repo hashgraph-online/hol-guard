@@ -437,6 +437,12 @@ def contract_for(harness: str) -> HarnessProtectionContract | None:
     return _CONTRACT_BY_ALIAS.get(harness)
 
 
+def display_name_for(harness: str) -> str:
+    contract = contract_for(harness)
+    key = contract.harness if contract is not None else harness
+    return _DISPLAY_NAMES.get(key, key)
+
+
 def setup_contract_for(harness: str) -> HarnessSetupContract | None:
     """Return guided setup metadata for a harness name or install alias."""
 
