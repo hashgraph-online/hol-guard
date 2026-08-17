@@ -1917,9 +1917,7 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> None:
     evaluation = evaluate_command(_PROTECTION_REPAIR_PROBE_COMMAND)
     occurred_at = datetime.now(timezone.utc)
     activity_id = f"activity:protection-repair-probe:{uuid.uuid4().hex}"
-    decision_reason = (
-        ActivityDecisionReason.EXTENSION_MATCH if evaluation.matches else ActivityDecisionReason.NO_MATCH
-    )
+    decision_reason = ActivityDecisionReason.EXTENSION_MATCH if evaluation.matches else ActivityDecisionReason.NO_MATCH
     evidence = build_pre_hook_evidence(
         evaluation,
         CommandActivityDecisionFacts(
