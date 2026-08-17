@@ -53,8 +53,12 @@ def is_local_cli_command_state(value: object) -> bool:
 
 
 def local_cli_command_state(value: object) -> LocalCliCommandState | None:
-    if value == "inherit" or value == "allow" or value == "block":
-        return value
+    if value == "inherit":
+        return "inherit"
+    if value == "allow":
+        return "allow"
+    if value == "block":
+        return "block"
     return None
 
 
