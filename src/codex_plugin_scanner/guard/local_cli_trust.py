@@ -73,6 +73,31 @@ def matching_local_cli_grant(
     return None
 
 
+def apply_local_mcp_extension_decision(
+    store: object,
+    artifact: GuardArtifact,
+    current_action: GuardAction,
+) -> tuple[GuardAction, str, str] | None:
+    matched = matching_local_mcp_grant(
+        store=store,
+        artifact=artifact,
+        current_action=current_action,
+    )
+    if matched == "blocked":
+        return (
+            "block",
+            "local-mcp-extension",
+            "This MCP tool is blocked by a custom extension on this device.",
+        )
+    if matched == "allowed":
+        return (
+            "allow",
+            "local-mcp-extension",
+            "This MCP tool is allowed by a custom extension on this device.",
+        )
+    return None
+
+
 def matching_local_mcp_grant(
     *,
     store: object,
