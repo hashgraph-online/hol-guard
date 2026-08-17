@@ -812,7 +812,7 @@ def _apply_explicit_posture_action(
 
     resolved = coerce_guard_action(action) or "require-reapproval"
     confidence = _artifact_risk_confidence(artifact)
-    return apply_posture_confidence(
+    next_action = apply_posture_confidence(
         posture=config.protection_posture,
         explicit=config.protection_posture_explicit,
         risk_class=risk_class,
@@ -822,6 +822,15 @@ def _apply_explicit_posture_action(
         injection_disables_guard=_prompt_requires_hard_block(artifact),
         skill_is_known_bad=_artifact_skill_is_known_bad(artifact),
     )
+    if next_action == "block" and resolved != "block":
+        from ..protection_events import record_protection_event
+
+        record_protection_event(
+            config.guard_home,
+            "guard.protection.auto_stop",
+            {"risk_class": risk_class, "confidence": str(confidence or "")},
+        )
+    return next_action
 
 
 def _artifact_risk_confidence(artifact: GuardArtifact) -> object:
