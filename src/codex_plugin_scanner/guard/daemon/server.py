@@ -13,7 +13,6 @@ import math
 import mimetypes
 import os
 import platform
-import queue
 import secrets
 import socket
 import sqlite3
@@ -22,7 +21,7 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
@@ -258,6 +257,7 @@ from .manager import (
     repair_approval_center_locator,
     write_guard_daemon_state,
 )
+from .request_executor import BoundedRequestExecutor as _BoundedRequestExecutor
 from .runtime_heartbeat import RuntimeHeartbeatWriter
 from .runtime_hook_deadline import RuntimeHookDeadline
 from .runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
@@ -402,80 +402,6 @@ def _runtime_hook_remaining_hint(payload: dict[str, object]) -> float:
 _PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 
 
-_TransportWorkItem: TypeAlias = tuple[socket.socket, tuple[str, int]]
-
-
-class _BoundedRequestExecutor:
-    def __init__(
-        self,
-        *,
-        name: str,
-        workers: int,
-        queue_limit: int,
-        run: Callable[[socket.socket, tuple[str, int]], None],
-        discard: Callable[[socket.socket], None],
-    ) -> None:
-        self._queue: queue.Queue[_TransportWorkItem | None] = queue.Queue(maxsize=queue_limit)
-        self._run = run
-        self._discard = discard
-        self._stopped = threading.Event()
-        self._lifecycle_lock = threading.Lock()
-        self._threads = [
-            threading.Thread(
-                target=self._worker,
-                daemon=True,
-                name=f"guard-http-{name}-{index + 1}",
-            )
-            for index in range(workers)
-        ]
-        for thread in self._threads:
-            thread.start()
-
-    @property
-    def threads(self) -> tuple[threading.Thread, ...]:
-        return tuple(self._threads)
-
-    def submit(self, request: socket.socket, client_address: tuple[str, int]) -> bool:
-        with self._lifecycle_lock:
-            if self._stopped.is_set():
-                return False
-            try:
-                self._queue.put_nowait((request, client_address))
-            except queue.Full:
-                return False
-        return True
-
-    def shutdown(self, *, timeout_seconds: float) -> bool:
-        with self._lifecycle_lock:
-            if not self._stopped.is_set():
-                self._stopped.set()
-                while True:
-                    try:
-                        item = self._queue.get_nowait()
-                    except queue.Empty:
-                        break
-                    if item is not None:
-                        self._discard(item[0])
-                    self._queue.task_done()
-                for _ in self._threads:
-                    self._queue.put_nowait(None)
-        deadline = time.monotonic() + timeout_seconds
-        for thread in self._threads:
-            if thread is not threading.current_thread():
-                thread.join(timeout=max(0.0, deadline - time.monotonic()))
-        return all(not thread.is_alive() for thread in self._threads)
-
-    def _worker(self) -> None:
-        while True:
-            item = self._queue.get()
-            try:
-                if item is None:
-                    return
-                self._run(*item)
-            finally:
-                self._queue.task_done()
-
-
 class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     request_queue_size = _MAX_CONCURRENT_DAEMON_CONNECTIONS
 
@@ -577,7 +503,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         shutdown_started: threading.Event,
         diagnostics: DaemonDiagnostics,
     ) -> None:
-        super().__init__(server_address, handler_class)
+        # TCPServer calls server_close() when bind/activation fails. Treat the
+        # request executors as already stopped until their construction finishes.
+        self.request_executors_stopped = True
         self.store = store
         self.runtime = GuardSurfaceRuntime(store)
         self.auth_token = auth_token
@@ -650,39 +578,52 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             retry_interval_seconds=0.05,
         )
         self.store.set_policy_integrity_state_listener(self.publish_trust_state)
+        self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
+        self._initialize_request_services()
+        self.request_executors_stopped = False
+        super().__init__(server_address, handler_class)
+
+    def _initialize_request_services(self) -> None:
         from .hook_worker import HookWorker
 
-        self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
-        self.hook_worker = HookWorker(store=store, activity_writer=self.runtime_hook_evidence_writer)
-        self.extension_control_runtime = ExtensionControlRuntime(
-            store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-        )
-        self.extension_control_api = ExtensionControlApiService(
-            store=store,
-            registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            runtime=self.extension_control_runtime,
-        )
-        self.local_cli_api = LocalCliApiService(store=store)
-        self.approval_attention = ApprovalAttentionCoordinator(
-            store=store,
-            runtime=self.runtime,
-            opener=open_browser_url,
-        )
-        self.request_executors_stopped = False
-        self.general_request_executor = _BoundedRequestExecutor(
-            name="general",
-            workers=_MAX_CONCURRENT_DAEMON_REQUESTS,
-            queue_limit=_MAX_CONCURRENT_DAEMON_CONNECTIONS,
-            run=self._process_request_worker,
-            discard=self._discard_request,
-        )
-        self.control_request_executor = _BoundedRequestExecutor(
-            name="control",
-            workers=_MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS,
-            queue_limit=_MAX_CONCURRENT_DAEMON_CONNECTIONS,
-            run=self._process_request_worker,
-            discard=self._discard_request,
-        )
+        try:
+            self.hook_worker = HookWorker(store=self.store, activity_writer=self.runtime_hook_evidence_writer)
+            self.extension_control_runtime = ExtensionControlRuntime(
+                self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+            )
+            self.extension_control_api = ExtensionControlApiService(
+                store=self.store,
+                registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+                runtime=self.extension_control_runtime,
+            )
+            self.local_cli_api = LocalCliApiService(store=self.store)
+            self.approval_attention = ApprovalAttentionCoordinator(
+                store=self.store,
+                runtime=self.runtime,
+                opener=open_browser_url,
+            )
+            self.general_request_executor = _BoundedRequestExecutor(
+                name="general",
+                workers=_MAX_CONCURRENT_DAEMON_REQUESTS,
+                queue_limit=_MAX_CONCURRENT_DAEMON_CONNECTIONS,
+                run=self._process_request_worker,
+                discard=self._discard_request,
+            )
+            self.control_request_executor = _BoundedRequestExecutor(
+                name="control",
+                workers=_MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS,
+                queue_limit=_MAX_CONCURRENT_DAEMON_CONNECTIONS,
+                run=self._process_request_worker,
+                discard=self._discard_request,
+            )
+        except BaseException:
+            for executor_name in ("control_request_executor", "general_request_executor"):
+                executor = getattr(self, executor_name, None)
+                if executor is not None:
+                    _ = executor.shutdown(timeout_seconds=1.0)
+            _ = self.runtime_hook_evidence_writer.stop(timeout_seconds=1.0)
+            _ = self.hook_process_runner.close_contained()
+            raise
 
     def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
         view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
@@ -8097,21 +8038,26 @@ class GuardDaemonServer:
         self._shutdown_started = threading.Event()
         self._finish_service_lock = threading.Lock()
         self._owner_lock: BinaryIO | None = None
-        self._server = _GuardDaemonHttpServer(
-            (host, port),
-            _GuardDaemonHandler,
-            store=store,
-            auth_token=load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex,
-            runtime_host=host,
-            runtime_session_id=uuid.uuid4().hex,
-            runtime_started_at=_now(),
-            idle_timeout_seconds=_guard_daemon_idle_timeout_seconds(
-                store.guard_home,
-                idle_timeout_seconds=idle_timeout_seconds,
-            ),
-            shutdown_started=self._shutdown_started,
-            diagnostics=self._diagnostics,
-        )
+        try:
+            self._server = _GuardDaemonHttpServer(
+                (host, port),
+                _GuardDaemonHandler,
+                store=store,
+                auth_token=load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex,
+                runtime_host=host,
+                runtime_session_id=uuid.uuid4().hex,
+                runtime_started_at=_now(),
+                idle_timeout_seconds=_guard_daemon_idle_timeout_seconds(
+                    store.guard_home,
+                    idle_timeout_seconds=idle_timeout_seconds,
+                ),
+                shutdown_started=self._shutdown_started,
+                diagnostics=self._diagnostics,
+            )
+        except BaseException:
+            self._diagnostics.record_exception("daemon_initialization_failed")
+            self._diagnostics.close(timeout_seconds=0.5)
+            raise
         self.port = self._server.daemon_port()
         self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
         self._bundle_refresh_interval_seconds = bundle_refresh_interval_seconds
