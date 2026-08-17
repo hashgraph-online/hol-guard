@@ -408,11 +408,13 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
                     not is_safe_relative_path(package.root_path, arg, require_prefix=True, require_exists=True)
                     or arg_target.is_symlink()
                 ):
+                    detail = f'MCP server "{name}" local argument "{arg}" must exist inside the plugin '
+                    detail += "and not be a symlink."
                     findings.append(
                         _finding(
                             "KIMI_MCP_ARG_PATH_INVALID",
                             "Kimi MCP argument path is unsafe",
-                            f'MCP server "{name}" local argument "{arg}" must exist inside the plugin and not be a symlink.',
+                            detail,
                             "Use a regular in-plugin path for local MCP arguments.",
                             package,
                         )
