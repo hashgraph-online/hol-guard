@@ -1,4 +1,4 @@
-name: Prototype PR 2464 native Windows process inventory
+name: Repair PR 2464 native Windows process inventory
 
 on:
   push:
@@ -9,203 +9,660 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: prototype-pr-2464-windows-inventory
+  group: repair-pr-2464-windows-inventory
   cancel-in-progress: false
 
 jobs:
-  prototype:
+  repair:
     runs-on: windows-2025
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: fix/rust-daemon-edge-workflow-validation
-          fetch-depth: 1
-          persist-credentials: false
+          fetch-depth: 2
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - name: Prove bounded native process command-line discovery
-        shell: python
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Implement bounded native Windows process discovery
+        shell: bash
         run: |
+          set -euo pipefail
+          branch='fix/rust-daemon-edge-workflow-validation'
+          remote_sha=$(git ls-remote --exit-code origin "refs/heads/${branch}" | awk '{print $1}')
+          test "$remote_sha" = "$GITHUB_SHA"
+
+          python - <<'PY'
           from __future__ import annotations
 
-          import ctypes
-          import json
-          import ntpath
-          import os
-          import sys
-          from contextlib import suppress
-          from ctypes import wintypes
+          import re
+          from pathlib import Path
 
-          PROCESS_QUERY_LIMITED_INFORMATION = 0x00001000
-          PROCESS_COMMAND_LINE_INFORMATION = 60
-          MAX_PROCESS_COUNT = 65_536
-          MAX_PATH_CHARS = 32_768
-          MAX_COMMAND_LINE_BYTES = 1024 * 1024
-          MAX_QUERY_BUFFER_BYTES = 128 * 1024
+          windows_paths = Path("src/codex_plugin_scanner/guard/windows_paths.py")
+          text = windows_paths.read_text(encoding="utf-8")
 
-          class UnicodeString(ctypes.Structure):
+          import_anchor = "from pathlib import Path\n"
+          if "from typing import Any\n" not in text:
+              if text.count(import_anchor) != 1:
+                  raise RuntimeError("unexpected windows_paths import anchor")
+              text = text.replace(import_anchor, import_anchor + "from typing import Any\n", 1)
+
+          constant_anchor = "_WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x00001000\n"
+          constant_block = """_WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x00001000
+          _WINDOWS_PROCESS_COMMAND_LINE_INFORMATION = 60
+          _WINDOWS_PROCESS_ENUMERATION_LIMIT = 65_536
+          _WINDOWS_PROCESS_IMAGE_PATH_CHARS = 32_768
+          _WINDOWS_PROCESS_COMMAND_LINE_BUFFER_LIMIT_BYTES = 128 * 1024
+          _WINDOWS_PROCESS_COMMAND_LINE_TOTAL_LIMIT_BYTES = 1024 * 1024
+          """
+          if "_WINDOWS_PROCESS_COMMAND_LINE_INFORMATION = 60" not in text:
+              if text.count(constant_anchor) != 1:
+                  raise RuntimeError("unexpected Windows process constant anchor")
+              text = text.replace(constant_anchor, constant_block, 1)
+
+          structure_anchor = "\n\ndef open_windows_locked_regular_descriptor(path: Path | str) -> int:\n"
+          structure_block = """
+
+          class _WindowsUnicodeString(ctypes.Structure):
               _fields_ = [
-                  ("Length", wintypes.USHORT),
-                  ("MaximumLength", wintypes.USHORT),
-                  ("Buffer", ctypes.c_void_p),
+                  ("length", wintypes.USHORT),
+                  ("maximum_length", wintypes.USHORT),
+                  ("buffer", ctypes.c_void_p),
               ]
 
-          kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-          psapi = ctypes.WinDLL("psapi", use_last_error=True)
-          ntdll = ctypes.WinDLL("ntdll", use_last_error=True)
 
-          enum_processes = psapi.EnumProcesses
-          enum_processes.argtypes = [
-              ctypes.POINTER(wintypes.DWORD),
-              wintypes.DWORD,
-              ctypes.POINTER(wintypes.DWORD),
-          ]
-          enum_processes.restype = wintypes.BOOL
+          def open_windows_locked_regular_descriptor(path: Path | str) -> int:
+          """
+          if "class _WindowsUnicodeString" not in text:
+              if text.count(structure_anchor) != 1:
+                  raise RuntimeError("unexpected Windows structure insertion anchor")
+              text = text.replace(structure_anchor, structure_block, 1)
 
-          open_process = kernel32.OpenProcess
-          open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-          open_process.restype = wintypes.HANDLE
+          function_anchor = "\n\ndef windows_process_liveness(pid: int) -> bool | None:\n"
+          function_block = r'''
 
-          query_image = kernel32.QueryFullProcessImageNameW
-          query_image.argtypes = [
-              wintypes.HANDLE,
-              wintypes.DWORD,
-              wintypes.LPWSTR,
-              ctypes.POINTER(wintypes.DWORD),
-          ]
-          query_image.restype = wintypes.BOOL
-
-          close_handle = kernel32.CloseHandle
-          close_handle.argtypes = [wintypes.HANDLE]
-          close_handle.restype = wintypes.BOOL
-
-          query_process = ntdll.NtQueryInformationProcess
-          query_process.argtypes = [
-              wintypes.HANDLE,
-              wintypes.ULONG,
-              ctypes.c_void_p,
-              wintypes.ULONG,
-              ctypes.POINTER(wintypes.ULONG),
-          ]
-          query_process.restype = wintypes.LONG
-
-          process_ids = (wintypes.DWORD * MAX_PROCESS_COUNT)()
-          bytes_returned = wintypes.DWORD()
-          assert enum_processes(
-              process_ids,
-              ctypes.sizeof(process_ids),
-              ctypes.byref(bytes_returned),
-          )
-          assert bytes_returned.value % ctypes.sizeof(wintypes.DWORD) == 0
-          process_count = bytes_returned.value // ctypes.sizeof(wintypes.DWORD)
-          assert 0 < process_count < MAX_PROCESS_COUNT
-
-          current_pid = os.getpid()
-          current_name = ntpath.basename(sys.executable).lower()
-          found_current = False
-          candidate_count = 0
-          command_line_bytes = 0
-          failures: list[dict[str, object]] = []
-
-          for raw_pid in process_ids[:process_count]:
-              pid = int(raw_pid)
-              if pid <= 0:
-                  continue
-              handle = open_process(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-              if not handle:
-                  continue
+          def _windows_process_command_line_from_handle(
+              process_handle: object,
+              query_information_process: Any,
+              *,
+              max_command_line_bytes: int,
+          ) -> str | None:
+              if not 0 < max_command_line_bytes <= _WINDOWS_PROCESS_COMMAND_LINE_TOTAL_LIMIT_BYTES:
+                  return None
+              structure_size = ctypes.sizeof(_WindowsUnicodeString)
+              query_limit = min(
+                  _WINDOWS_PROCESS_COMMAND_LINE_BUFFER_LIMIT_BYTES,
+                  max(structure_size, (max_command_line_bytes * 2) + structure_size + 2),
+              )
               try:
-                  image_buffer = ctypes.create_unicode_buffer(MAX_PATH_CHARS)
-                  image_size = wintypes.DWORD(MAX_PATH_CHARS)
-                  if not query_image(handle, 0, image_buffer, ctypes.byref(image_size)):
-                      continue
-                  image_name = ntpath.basename(image_buffer.value).lower()
-                  if image_name != current_name:
-                      continue
-                  candidate_count += 1
-
                   required = wintypes.ULONG()
-                  _ = query_process(
-                      handle,
-                      PROCESS_COMMAND_LINE_INFORMATION,
+                  _ = query_information_process(
+                      process_handle,
+                      _WINDOWS_PROCESS_COMMAND_LINE_INFORMATION,
                       None,
                       0,
                       ctypes.byref(required),
                   )
-                  if required.value < ctypes.sizeof(UnicodeString) or required.value > MAX_QUERY_BUFFER_BYTES:
-                      failures.append({"pid": pid, "stage": "size", "required": required.value})
-                      continue
+                  if not structure_size <= required.value <= query_limit:
+                      return None
                   raw_buffer = ctypes.create_string_buffer(required.value)
                   status = int(
-                      query_process(
-                          handle,
-                          PROCESS_COMMAND_LINE_INFORMATION,
+                      query_information_process(
+                          process_handle,
+                          _WINDOWS_PROCESS_COMMAND_LINE_INFORMATION,
                           raw_buffer,
                           required.value,
                           ctypes.byref(required),
                       )
                   )
                   if status != 0:
-                      failures.append({"pid": pid, "stage": "query", "status": status})
-                      continue
-                  value = ctypes.cast(raw_buffer, ctypes.POINTER(UnicodeString)).contents
+                      return None
+                  value = ctypes.cast(
+                      raw_buffer,
+                      ctypes.POINTER(_WindowsUnicodeString),
+                  ).contents
                   raw_start = ctypes.addressof(raw_buffer)
                   raw_end = raw_start + ctypes.sizeof(raw_buffer)
-                  buffer_start = int(value.Buffer or 0)
+                  buffer_start = int(value.buffer or 0)
                   if (
-                      value.Length <= 0
-                      or value.Length % 2 != 0
-                      or value.Length > value.MaximumLength
+                      value.length <= 0
+                      or value.length % 2 != 0
+                      or value.length > value.maximum_length
                       or buffer_start < raw_start
-                      or buffer_start + value.Length > raw_end
+                      or buffer_start + value.length > raw_end
                   ):
-                      failures.append(
-                          {
-                              "pid": pid,
-                              "stage": "unicode",
-                              "length": int(value.Length),
-                              "maximum": int(value.MaximumLength),
-                              "buffer_in_range": raw_start <= buffer_start < raw_end,
-                          }
-                      )
-                      continue
-                  command_line = ctypes.wstring_at(buffer_start, value.Length // 2).strip()
-                  encoded_size = len(command_line.encode("utf-8", errors="strict"))
-                  command_line_bytes += encoded_size
-                  assert command_line_bytes <= MAX_COMMAND_LINE_BYTES
-                  if pid == current_pid:
-                      found_current = bool(command_line)
-                      print(
-                          json.dumps(
-                              {
-                                  "current_pid": pid,
-                                  "image_name": image_name,
-                                  "command_line_bytes": encoded_size,
-                                  "command_prefix": command_line[:500],
-                              },
-                              sort_keys=True,
-                          )
-                      )
-              finally:
-                  with suppress(OSError, TypeError, ValueError):
-                      close_handle(handle)
+                      return None
+                  command_line = ctypes.wstring_at(buffer_start, value.length // 2).strip()
+                  if not command_line:
+                      return None
+                  if len(command_line.encode("utf-8", errors="strict")) > max_command_line_bytes:
+                      return None
+                  return command_line
+              except (OSError, OverflowError, TypeError, UnicodeError, ValueError):
+                  return None
 
-          print(
-              json.dumps(
-                  {
-                      "process_count": process_count,
-                      "candidate_count": candidate_count,
-                      "command_line_bytes": command_line_bytes,
-                      "failure_count": len(failures),
-                      "failures": failures[:20],
-                      "found_current": found_current,
-                  },
-                  sort_keys=True,
+
+          def windows_process_command_line(
+              pid: int,
+              *,
+              max_command_line_bytes: int = _WINDOWS_PROCESS_COMMAND_LINE_TOTAL_LIMIT_BYTES,
+          ) -> str | None:
+              """Read one Windows process command line through bounded native APIs."""
+
+              if (
+                  os.name != "nt"
+                  or pid <= 0
+                  or not 0 < max_command_line_bytes <= _WINDOWS_PROCESS_COMMAND_LINE_TOTAL_LIMIT_BYTES
+              ):
+                  return None
+              win_dll = getattr(ctypes, "WinDLL", None)
+              if win_dll is None:
+                  return None
+              process_handle: object | None = None
+              close_handle: Any | None = None
+              try:
+                  kernel32 = win_dll("kernel32", use_last_error=True)
+                  ntdll = win_dll("ntdll", use_last_error=True)
+                  open_process = kernel32.OpenProcess
+                  open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+                  open_process.restype = wintypes.HANDLE
+                  close_handle = kernel32.CloseHandle
+                  close_handle.argtypes = [wintypes.HANDLE]
+                  close_handle.restype = wintypes.BOOL
+                  query_information_process = ntdll.NtQueryInformationProcess
+                  query_information_process.argtypes = [
+                      wintypes.HANDLE,
+                      wintypes.ULONG,
+                      ctypes.c_void_p,
+                      wintypes.ULONG,
+                      ctypes.POINTER(wintypes.ULONG),
+                  ]
+                  query_information_process.restype = wintypes.LONG
+                  process_handle = open_process(
+                      _WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION,
+                      False,
+                      pid,
+                  )
+                  if not process_handle:
+                      return None
+                  return _windows_process_command_line_from_handle(
+                      process_handle,
+                      query_information_process,
+                      max_command_line_bytes=max_command_line_bytes,
+                  )
+              except (AttributeError, OSError, TypeError, ValueError):
+                  return None
+              finally:
+                  if process_handle and close_handle is not None:
+                      with suppress(OSError, TypeError, ValueError):
+                          _ = close_handle(process_handle)
+
+
+          def windows_process_command_line_inventory(
+              *,
+              candidate_executable_names: frozenset[str],
+              max_processes: int = _WINDOWS_PROCESS_ENUMERATION_LIMIT,
+              max_command_line_bytes: int = _WINDOWS_PROCESS_COMMAND_LINE_TOTAL_LIMIT_BYTES,
+          ) -> list[tuple[int, str]] | None:
+              """Return bounded command lines for candidate Windows process images."""
+
+              if (
+                  os.name != "nt"
+                  or not 0 < max_processes <= _WINDOWS_PROCESS_ENUMERATION_LIMIT
+                  or not 0 < max_command_line_bytes <= _WINDOWS_PROCESS_COMMAND_LINE_TOTAL_LIMIT_BYTES
+              ):
+                  return None
+              candidates = frozenset(
+                  ntpath.basename(value.strip()).lower()
+                  for value in candidate_executable_names
+                  if isinstance(value, str) and value.strip()
               )
+              if not candidates:
+                  return []
+              win_dll = getattr(ctypes, "WinDLL", None)
+              if win_dll is None:
+                  return None
+              try:
+                  kernel32 = win_dll("kernel32", use_last_error=True)
+                  psapi = win_dll("psapi", use_last_error=True)
+                  ntdll = win_dll("ntdll", use_last_error=True)
+                  enum_processes = psapi.EnumProcesses
+                  enum_processes.argtypes = [
+                      ctypes.POINTER(wintypes.DWORD),
+                      wintypes.DWORD,
+                      ctypes.POINTER(wintypes.DWORD),
+                  ]
+                  enum_processes.restype = wintypes.BOOL
+                  open_process = kernel32.OpenProcess
+                  open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+                  open_process.restype = wintypes.HANDLE
+                  query_image = kernel32.QueryFullProcessImageNameW
+                  query_image.argtypes = [
+                      wintypes.HANDLE,
+                      wintypes.DWORD,
+                      wintypes.LPWSTR,
+                      ctypes.POINTER(wintypes.DWORD),
+                  ]
+                  query_image.restype = wintypes.BOOL
+                  close_handle = kernel32.CloseHandle
+                  close_handle.argtypes = [wintypes.HANDLE]
+                  close_handle.restype = wintypes.BOOL
+                  query_information_process = ntdll.NtQueryInformationProcess
+                  query_information_process.argtypes = [
+                      wintypes.HANDLE,
+                      wintypes.ULONG,
+                      ctypes.c_void_p,
+                      wintypes.ULONG,
+                      ctypes.POINTER(wintypes.ULONG),
+                  ]
+                  query_information_process.restype = wintypes.LONG
+
+                  process_ids = (wintypes.DWORD * max_processes)()
+                  bytes_returned = wintypes.DWORD()
+                  if not enum_processes(
+                      process_ids,
+                      ctypes.sizeof(process_ids),
+                      ctypes.byref(bytes_returned),
+                  ):
+                      return None
+                  process_id_size = ctypes.sizeof(wintypes.DWORD)
+                  if (
+                      bytes_returned.value == 0
+                      or bytes_returned.value % process_id_size != 0
+                      or bytes_returned.value >= ctypes.sizeof(process_ids)
+                  ):
+                      return None
+                  process_count = bytes_returned.value // process_id_size
+                  entries: list[tuple[int, str]] = []
+                  consumed_command_line_bytes = 0
+                  for raw_pid in process_ids[:process_count]:
+                      pid = int(raw_pid)
+                      if pid <= 0:
+                          continue
+                      process_handle = open_process(
+                          _WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION,
+                          False,
+                          pid,
+                      )
+                      if not process_handle:
+                          continue
+                      try:
+                          image_buffer = ctypes.create_unicode_buffer(
+                              _WINDOWS_PROCESS_IMAGE_PATH_CHARS
+                          )
+                          image_size = wintypes.DWORD(_WINDOWS_PROCESS_IMAGE_PATH_CHARS)
+                          if not query_image(
+                              process_handle,
+                              0,
+                              image_buffer,
+                              ctypes.byref(image_size),
+                          ):
+                              continue
+                          image_name = ntpath.basename(image_buffer.value).lower()
+                          if image_name not in candidates:
+                              continue
+                          remaining_bytes = max_command_line_bytes - consumed_command_line_bytes
+                          if remaining_bytes <= 0:
+                              return None
+                          command_line = _windows_process_command_line_from_handle(
+                              process_handle,
+                              query_information_process,
+                              max_command_line_bytes=remaining_bytes,
+                          )
+                          if command_line is None:
+                              if windows_process_liveness(pid) is False:
+                                  continue
+                              return None
+                          if windows_process_liveness(pid) is False:
+                              continue
+                          command_line_size = len(
+                              command_line.encode("utf-8", errors="strict")
+                          )
+                          if command_line_size > remaining_bytes:
+                              return None
+                          consumed_command_line_bytes += command_line_size
+                          entries.append((pid, command_line))
+                      finally:
+                          with suppress(OSError, TypeError, ValueError):
+                              _ = close_handle(process_handle)
+                  return sorted(entries, key=lambda item: item[0])
+              except (AttributeError, OSError, OverflowError, TypeError, UnicodeError, ValueError):
+                  return None
+
+
+          def windows_process_liveness(pid: int) -> bool | None:
+          '''
+          if "def windows_process_command_line_inventory(" not in text:
+              if text.count(function_anchor) != 1:
+                  raise RuntimeError("unexpected Windows process helper insertion anchor")
+              text = text.replace(function_anchor, function_block, 1)
+          windows_paths.write_text(text, encoding="utf-8")
+
+          manager = Path("src/codex_plugin_scanner/guard/daemon/manager.py")
+          text = manager.read_text(encoding="utf-8")
+          text = text.replace("    trusted_windows_system_executable,\n", "")
+          import_anchor = "    windows_command_line_to_argv,\n"
+          import_replacement = """    windows_command_line_to_argv,
+              windows_process_command_line,
+              windows_process_command_line_inventory,
+          """
+          if "    windows_process_command_line_inventory,\n" not in text:
+              if text.count(import_anchor) != 1:
+                  raise RuntimeError("unexpected daemon manager Windows import anchor")
+              text = text.replace(import_anchor, import_replacement, 1)
+
+          powershell_pattern = re.compile(
+              r"\n\ndef _trusted_windows_powershell_path\(\) -> str \| None:\n.*?"
+              r"(?=\n\ndef _terminate_bounded_process_query)",
+              re.DOTALL,
           )
-          assert found_current
+          text, removed = powershell_pattern.subn("", text, count=1)
+          if removed != 1 and "def _trusted_windows_powershell_path" in text:
+              raise RuntimeError("could not remove retired PowerShell resolver")
+
+          inventory_pattern = re.compile(
+              r"def _guard_daemon_process_inventory_for_guard_home\(guard_home: Path\) "
+              r"-> list\[tuple\[int, int\]\] \| None:\n.*?"
+              r"(?=\n\ndef _malformed_command_may_launch_guard)",
+              re.DOTALL,
+          )
+          inventory_replacement = '''def _guard_daemon_process_inventory_for_guard_home(
+              guard_home: Path,
+          ) -> list[tuple[int, int]] | None:
+              """Return a proven process inventory, or ``None`` when enumeration is unknown."""
+
+              if os.name == "nt":
+                  candidate_names = {
+                      "hol-guard.exe",
+                      "plugin-guard.exe",
+                      "py.exe",
+                      "python.exe",
+                      "python3.exe",
+                      "pythonw.exe",
+                  }
+                  current_executable_name = ntpath.basename(sys.executable).strip().lower()
+                  if current_executable_name:
+                      candidate_names.add(current_executable_name)
+                  entries = windows_process_command_line_inventory(
+                      candidate_executable_names=frozenset(candidate_names),
+                      max_command_line_bytes=_GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES,
+                  )
+                  if entries is None:
+                      return None
+              else:
+                  ps_path = _trusted_posix_ps_path()
+                  if ps_path is None:
+                      if not sys.platform.startswith("linux"):
+                          return None
+                      proc_entries = _linux_proc_process_entries()
+                      if proc_entries is None:
+                          return None
+                      entries = proc_entries
+                  else:
+                      output = _bounded_process_query_stdout([ps_path, "-axo", "pid=,command="])
+                      if output is None:
+                          return None
+                      entries = []
+                      for line in output.splitlines():
+                          match = re.match(r"^\\s*(\\d+)\\s+(.*)$", line)
+                          if match is None:
+                              continue
+                          entries.append((int(match.group(1)), match.group(2).strip()))
+
+              processes: list[tuple[int, int]] = []
+              for pid, command_line in entries:
+                  parts = _split_process_command(command_line)
+                  if parts is None:
+                      lowered = command_line.lower()
+                      if (
+                          "codex_plugin_scanner" in lowered or "guard" in lowered
+                      ) and _malformed_command_may_launch_guard(command_line):
+                          return None
+                      continue
+                  if not _guard_daemon_command_parts_match(parts):
+                      continue
+                  command_guard_home = _guard_home_from_command_parts(parts)
+                  port = _guard_daemon_port_from_command(command_line)
+                  if command_guard_home is None or port is None:
+                      return None
+                  try:
+                      matches_home = command_guard_home.resolve() == guard_home.resolve()
+                  except OSError:
+                      matches_home = command_guard_home == guard_home
+                  if matches_home:
+                      processes.append((pid, port))
+              return sorted(processes, key=lambda item: item[1])
+          '''
+          text, replaced = inventory_pattern.subn(inventory_replacement, text, count=1)
+          if replaced != 1:
+              raise RuntimeError("could not replace Windows daemon inventory")
+
+          pid_pattern = re.compile(
+              r"def _guard_daemon_command_for_pid\(pid: int\) -> str \| None:\n.*?"
+              r"(?=\n\ndef _retire_guard_daemon_process)",
+              re.DOTALL,
+          )
+          pid_replacement = '''def _guard_daemon_command_for_pid(pid: int) -> str | None:
+              if os.name == "nt":
+                  return windows_process_command_line(
+                      pid,
+                      max_command_line_bytes=_GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES,
+                  )
+              ps_path = _trusted_posix_ps_path()
+              if ps_path is None:
+                  return None
+              output = _bounded_process_query_stdout(
+                  [ps_path, "-p", str(pid), "-o", "command="],
+              )
+              if output is None:
+                  return None
+              stdout = output.strip()
+              return stdout or None
+          '''
+          text, replaced = pid_pattern.subn(pid_replacement, text, count=1)
+          if replaced != 1:
+              raise RuntimeError("could not replace Windows PID command lookup")
+          manager.write_text(text, encoding="utf-8")
+
+          tests = Path("tests/test_guard_daemon_manager.py")
+          text = tests.read_text(encoding="utf-8")
+
+          pid_test_pattern = re.compile(
+              r"def test_guard_daemon_pid_matches_command_validates_guard_home_on_windows"
+              r"\(tmp_path, monkeypatch\):\n.*?"
+              r"(?=\n\ndef test_guard_daemon_pid_matches_command_accepts_console_script_launch)",
+              re.DOTALL,
+          )
+          pid_test_replacement = '''def test_guard_daemon_pid_matches_command_validates_guard_home_on_windows(
+              tmp_path,
+              monkeypatch,
+          ):
+              expected_guard_home = tmp_path / "guard home"
+              parsed_command = [
+                  "python",
+                  "-m",
+                  "codex_plugin_scanner.cli",
+                  "guard",
+                  "daemon",
+                  "--serve",
+                  "--guard-home",
+                  str(expected_guard_home),
+                  "--port",
+                  "4781",
+              ]
+              command = subprocess.list2cmdline(parsed_command)
+              captured_pids: list[tuple[int, int]] = []
+              monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
+              monkeypatch.setattr(
+                  daemon_manager_module,
+                  "windows_command_line_to_argv",
+                  lambda raw_command: parsed_command if raw_command == command else None,
+              )
+
+              def native_command_line(pid: int, *, max_command_line_bytes: int) -> str:
+                  captured_pids.append((pid, max_command_line_bytes))
+                  return command
+
+              monkeypatch.setattr(
+                  daemon_manager_module,
+                  "windows_process_command_line",
+                  native_command_line,
+              )
+
+              assert daemon_manager_module._guard_daemon_pid_matches_command(
+                  12345,
+                  expected_guard_home=expected_guard_home,
+              )
+              assert not daemon_manager_module._guard_daemon_pid_matches_command(
+                  12345,
+                  expected_guard_home=tmp_path / "other-home",
+              )
+              assert captured_pids == [
+                  (12345, daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES),
+                  (12345, daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES),
+              ]
+          '''
+          text, replaced = pid_test_pattern.subn(pid_test_replacement, text, count=1)
+          if replaced != 1:
+              raise RuntimeError("could not update Windows PID identity test")
+
+          inventory_test_pattern = re.compile(
+              r"def test_windows_daemon_inventory_is_bounded_strict_and_guard_home_scoped"
+              r"\(tmp_path, monkeypatch\) -> None:\n.*?"
+              r"(?=\n\n@pytest\.mark\.skipif\(os\.name == \"nt\", reason=\"POSIX process-list coverage\"\))",
+              re.DOTALL,
+          )
+          inventory_test_replacement = '''def test_windows_daemon_inventory_is_bounded_strict_and_guard_home_scoped(
+              tmp_path,
+              monkeypatch,
+          ) -> None:
+              guard_home = tmp_path / "guard home"
+              captured: dict[str, object] = {}
+              daemon_parts = [
+                  "python.exe",
+                  "-m",
+                  "codex_plugin_scanner.cli",
+                  "guard",
+                  "daemon",
+                  "--serve",
+                  "--guard-home",
+                  str(guard_home),
+                  "--port",
+                  "5410",
+              ]
+
+              monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
+              monkeypatch.setattr(
+                  daemon_manager_module,
+                  "_split_process_command",
+                  lambda _command: daemon_parts,
+              )
+
+              def native_inventory(**kwargs: object) -> list[tuple[int, str]]:
+                  captured.update(kwargs)
+                  return [(63_333, "native command line")]
+
+              monkeypatch.setattr(
+                  daemon_manager_module,
+                  "windows_process_command_line_inventory",
+                  native_inventory,
+              )
+
+              assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(
+                  guard_home
+              ) == [(63_333, 5410)]
+              candidates = captured["candidate_executable_names"]
+              assert isinstance(candidates, frozenset)
+              assert {"hol-guard.exe", "plugin-guard.exe", "python.exe"}.issubset(candidates)
+              assert captured["max_command_line_bytes"] == (
+                  daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES
+              )
+          '''
+          text, replaced = inventory_test_pattern.subn(inventory_test_replacement, text, count=1)
+          if replaced != 1:
+              raise RuntimeError("could not update Windows inventory test")
+
+          integration_anchor = '''@pytest.mark.parametrize("argument_count", [0, -1])
+          def test_windows_command_line_to_argv_frees_non_null_allocation_for_invalid_count(
+          '''
+          integration_tests = '''def test_windows_native_process_inventory_rejects_invalid_limits(monkeypatch) -> None:
+              monkeypatch.setattr(windows_paths_module, "os", _WindowsOSProxy())
+              assert windows_paths_module.windows_process_command_line(0) is None
+              assert (
+                  windows_paths_module.windows_process_command_line_inventory(
+                      candidate_executable_names=frozenset({"python.exe"}),
+                      max_processes=0,
+                  )
+                  is None
+              )
+              assert (
+                  windows_paths_module.windows_process_command_line_inventory(
+                      candidate_executable_names=frozenset({"python.exe"}),
+                      max_command_line_bytes=0,
+                  )
+                  is None
+              )
+
+
+          @pytest.mark.skipif(os.name != "nt", reason="requires native Windows process APIs")
+          def test_windows_native_process_command_line_inventory_finds_current_python() -> None:
+              command_line = windows_paths_module.windows_process_command_line(os.getpid())
+              assert command_line
+              executable_name = Path(sys.executable).name.lower()
+              inventory = windows_paths_module.windows_process_command_line_inventory(
+                  candidate_executable_names=frozenset({executable_name}),
+              )
+              assert inventory is not None
+              assert any(pid == os.getpid() and command == command_line for pid, command in inventory)
+
+
+          @pytest.mark.parametrize("argument_count", [0, -1])
+          def test_windows_command_line_to_argv_frees_non_null_allocation_for_invalid_count(
+          '''
+          if "test_windows_native_process_command_line_inventory_finds_current_python" not in text:
+              if text.count(integration_anchor) != 1:
+                  raise RuntimeError("unexpected Windows native integration-test anchor")
+              text = text.replace(integration_anchor, integration_tests, 1)
+          tests.write_text(text, encoding="utf-8")
+          PY
+
+          uv sync --frozen --extra dev --python 3.12
+          uv run --no-sync ruff format \
+            src/codex_plugin_scanner/guard/windows_paths.py \
+            src/codex_plugin_scanner/guard/daemon/manager.py \
+            tests/test_guard_daemon_manager.py
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/windows_paths.py \
+            src/codex_plugin_scanner/guard/daemon/manager.py \
+            tests/test_guard_daemon_manager.py
+          uv run --no-sync ruff format --check \
+            src/codex_plugin_scanner/guard/windows_paths.py \
+            src/codex_plugin_scanner/guard/daemon/manager.py \
+            tests/test_guard_daemon_manager.py
+          uv run --no-sync basedpyright --level error \
+            src/codex_plugin_scanner/guard/windows_paths.py \
+            src/codex_plugin_scanner/guard/daemon/manager.py
+          uv run --no-sync pytest -q \
+            tests/test_guard_daemon_manager.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py \
+            --tb=short
+          git diff --check
+          ! git grep -n '_trusted_windows_powershell_path' -- \
+            src/codex_plugin_scanner/guard/daemon/manager.py \
+            tests/test_guard_daemon_manager.py
+
+          rm .github/workflows/tmp-fix-pr2464-windows-inventory.yml
+          git add -A
+          git diff --cached --check
+          git config user.name 'Michael Kantor'
+          git config user.email '6068672+kantorcodes@users.noreply.github.com'
+          git commit --signoff -m 'fix(daemon): use native Windows process inventory'
+          git push origin "HEAD:refs/heads/${branch}"
