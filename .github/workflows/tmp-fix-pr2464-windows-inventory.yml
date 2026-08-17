@@ -67,15 +67,20 @@ jobs:
               raise RuntimeError("unexpected Windows process-query environment implementation")
           text = text.replace(environment_anchor, environment_replacement, 1)
 
-          old_query = "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine"
-          new_query = (
-              r"CimCmdlets\Get-CimInstance -ClassName Win32_Process "
-              r"-Property ProcessId,CommandLine | "
-              r"Microsoft.PowerShell.Utility\Select-Object ProcessId,CommandLine"
+          query_anchor = (
+              '                "$items = @(Get-CimInstance Win32_Process | '
+              'Select-Object ProcessId,CommandLine); "'
           )
-          if text.count(old_query) != 1:
+          query_replacement = "\n".join(
+              (
+                  r'                r"$items = @(CimCmdlets\Get-CimInstance -ClassName Win32_Process "',
+                  r'                r"-Property ProcessId,CommandLine | "',
+                  r'                r"Microsoft.PowerShell.Utility\Select-Object ProcessId,CommandLine); "',
+              )
+          )
+          if text.count(query_anchor) != 1:
               raise RuntimeError("unexpected Windows process inventory query implementation")
-          text = text.replace(old_query, new_query, 1)
+          text = text.replace(query_anchor, query_replacement, 1)
           manager.write_text(text, encoding="utf-8")
 
           tests = Path("tests/test_guard_daemon_manager.py")
