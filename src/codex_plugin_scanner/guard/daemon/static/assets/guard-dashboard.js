@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/harness-setup-target.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/extensions-workspace.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/watch-protection-banner.js","assets/chunks/harness-setup-target.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/extensions-workspace.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -28924,8 +28924,14 @@ function ReviewDecisionCard(props) {
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
   const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
-  if (persistExactAllow) {
-    resolvedAllowButtonLabel = watchOnlyObservation ? "Allow next time" : "Approve and remember";
+  if (watchOnlyObservation) {
+    resolvedAllowButtonLabel = "Keep allowing";
+  } else if (persistExactAllow) {
+    resolvedAllowButtonLabel = "Approve and remember";
+  }
+  let resolvedBlockButtonLabel = blockButtonLabel(blockScope);
+  if (watchOnlyObservation || persistExactBlock) {
+    resolvedBlockButtonLabel = "Stop this next time";
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -28956,7 +28962,7 @@ function ReviewDecisionCard(props) {
             harnessName
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: watchOnlyObservation ? "info" : actionPresentation.tone, children: watchOnlyObservation ? "Ran in Watch only" : actionPresentation.label })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: watchOnlyObservation ? "info" : actionPresentation.tone, children: watchOnlyObservation ? "Would have stopped" : actionPresentation.label })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -29051,7 +29057,7 @@ function ReviewDecisionCard(props) {
               "Blocking..."
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
-              persistExactBlock ? "Block next time" : blockButtonLabel(blockScope)
+              resolvedBlockButtonLabel
             ] })
           }
         )
@@ -29103,7 +29109,7 @@ function ReviewDecisionCard(props) {
         onUseCooldownChange: handleUseCooldownChange,
         onSubmit: handleModalSubmit,
         onCancel: handleModalCancel,
-        submitLabel: pendingAction === "allow" ? resolvedAllowButtonLabel : blockButtonLabel(blockScope)
+        submitLabel: pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel
       }
     )
   ] });
@@ -29219,7 +29225,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   harnessDisplayName(item.harness),
                   " · ",
                   formatQueueRequestDate(item),
-                  watchOnlyObservation ? " · Watch only" : ""
+                  watchOnlyObservation ? " · Would have stopped" : ""
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -29330,7 +29336,7 @@ function ReviewHeader({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold tracking-[-0.02em] text-brand-dark sm:text-2xl", children: "Review" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground", children: "Review actions Guard paused and findings recorded while Watch only was active." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground", children: "Review paused actions and Watch findings Guard recorded as would have stopped." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
       progress,
@@ -30217,16 +30223,16 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([4,5,3]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([6,5,2]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([6,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([7,8]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([9,3]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([10,8]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
@@ -31020,42 +31026,42 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniAdjustmentsHorizontal as $,
+  HiMiniBellAlert as $,
   ActionButton as A,
-  HiMiniCloud as B,
-  HiMiniQuestionMarkCircle as C,
+  resolveCloudIntelCopy as B,
+  HiMiniCloud as C,
   DeviceProofCard as D,
   EvidenceInsightsShareButton as E,
-  useFocusTrap as F,
+  HiMiniQuestionMarkCircle as F,
   GuardStatMetric as G,
   HomeInsightsMetrics as H,
-  approvalProofRequiresPassword as I,
-  HiMiniExclamationTriangle as J,
-  HiMiniBolt as K,
-  Badge as L,
-  HiMiniMinusCircle as M,
-  HiMiniWrenchScrewdriver as N,
+  useFocusTrap as I,
+  approvalProofRequiresPassword as J,
+  HiMiniExclamationTriangle as K,
+  HiMiniBolt as L,
+  Badge as M,
+  HiMiniMinusCircle as N,
   OperatorHealthCard as O,
-  HiMiniExclamationCircle as P,
-  ProofStrip as Q,
-  HiMiniEye as R,
+  HiMiniWrenchScrewdriver as P,
+  HiMiniExclamationCircle as Q,
+  ProofStrip as R,
   SectionLabel as S,
-  HiMiniXCircle as T,
-  HiMiniClipboardDocumentCheck as U,
-  HiMiniClipboard as V,
-  getDefaultExportFromCjs as W,
-  React as X,
-  HiMiniKey as Y,
-  HiMiniLockClosed as Z,
-  HiMiniBellAlert as _,
+  HiMiniEye as T,
+  HiMiniXCircle as U,
+  HiMiniClipboardDocumentCheck as V,
+  HiMiniClipboard as W,
+  getDefaultExportFromCjs as X,
+  React as Y,
+  HiMiniKey as Z,
+  HiMiniLockClosed as _,
   EvidenceActivityHeatmapMini as a,
-  readString$1 as a$,
-  HiMiniCircleStack as a0,
-  TabBar as a1,
-  resolveProtectionLevelCopy as a2,
-  fetchSettings as a3,
-  fetchRuntimeSnapshot as a4,
-  updateSettings as a5,
+  isRecord$2 as a$,
+  HiMiniAdjustmentsHorizontal as a0,
+  HiMiniCircleStack as a1,
+  TabBar as a2,
+  resolveProtectionLevelCopy as a3,
+  fetchSettings as a4,
+  fetchRuntimeSnapshot as a5,
   clearPolicy as a6,
   clearReviewQueue as a7,
   revokeApprovalGateCooldown as a8,
@@ -31063,30 +31069,30 @@ export {
   fetchExtensionControlApi as aA,
   HiMiniArrowPath as aB,
   HiMiniInformationCircle as aC,
-  WorkspacePageHeader as aD,
-  fetchApprovalPage as aE,
-  fetchPolicy as aF,
-  HiMiniHome as aG,
-  guardActionPresentation as aH,
-  DEFAULT_FILTER_STATE as aI,
-  filterEvidence as aJ,
-  sortEvidence as aK,
-  computeMetrics as aL,
-  CommandActivityWorkspace as aM,
-  EvidenceFilterBar as aN,
-  EvidenceInsightStrip as aO,
-  EvidenceActionList as aP,
-  EvidenceActionDetail as aQ,
-  policyIdentityKey as aR,
-  HiMiniChartBar as aS,
-  runHarnessAction as aT,
-  GuardHarnessActionError as aU,
-  HiMiniRocketLaunch as aV,
-  HiMiniTrash as aW,
-  clearLabelForScope as aX,
-  formatHarnessCommand as aY,
-  isSupplyChainAuditIncomplete as aZ,
-  isSupplyChainAuditEvidence as a_,
+  fetchApprovalPage as aD,
+  fetchPolicy as aE,
+  HiMiniHome as aF,
+  guardActionPresentation as aG,
+  DEFAULT_FILTER_STATE as aH,
+  filterEvidence as aI,
+  sortEvidence as aJ,
+  computeMetrics as aK,
+  CommandActivityWorkspace as aL,
+  EvidenceFilterBar as aM,
+  EvidenceInsightStrip as aN,
+  EvidenceActionList as aO,
+  EvidenceActionDetail as aP,
+  policyIdentityKey as aQ,
+  HiMiniChartBar as aR,
+  runHarnessAction as aS,
+  GuardHarnessActionError as aT,
+  HiMiniRocketLaunch as aU,
+  HiMiniTrash as aV,
+  clearLabelForScope as aW,
+  formatHarnessCommand as aX,
+  isSupplyChainAuditIncomplete as aY,
+  isSupplyChainAuditEvidence as aZ,
+  readString$1 as a_,
   importSettings as aa,
   resetSettings as ab,
   enrollApprovalGateTotp as ac,
@@ -31096,9 +31102,9 @@ export {
   repairApprovalCenter as ag,
   exportSettings as ah,
   setupDesktopNotifications as ai,
-  Tag as aj,
+  WorkspacePageHeader as aj,
   HiMiniMagnifyingGlass as ak,
-  HiMiniCog6Tooth as al,
+  Tag as al,
   approvalGateCooldownLabel as am,
   fetchLocalCliApi as an,
   GenIcon as ao,
@@ -31114,92 +31120,91 @@ export {
   HiMiniArrowLeft as ay,
   HiMiniPlus as az,
   HiMiniCommandLine as b,
-  HiMiniSignal as b$,
-  isRecord$2 as b0,
-  HiMiniClock as b1,
-  IconActionButton as b2,
-  HiMiniBeaker as b3,
-  ActivationSummary as b4,
-  ActionResultPanel as b5,
-  HiMiniBugAnt as b6,
-  GuardModalLayer as b7,
-  ConnectFlowCard as b8,
-  ApprovalProofInline as b9,
-  createCloudExceptionRequest as bA,
-  HiMiniArrowRight as bB,
-  HiMiniPuzzlePiece as bC,
-  fetchCloudExceptions as bD,
-  fetchCloudExceptionRequests as bE,
-  downloadBlob as bF,
-  PolicyStatField as bG,
-  PaginationControls as bH,
-  HiMiniNoSymbol as bI,
-  HiMiniArrowDownTray as bJ,
-  HiMiniQueueList as bK,
-  fetchMcpPolicyRequest as bL,
-  resolveMcpPolicyRequest as bM,
-  HiMiniDocumentPlus as bN,
-  HiMiniDocumentMagnifyingGlass as bO,
-  Surface as bP,
-  HiMiniCheckBadge as bQ,
-  fetchSupplyChainBundle as bR,
-  isSupplyChainScannerEvidence as bS,
-  isBlockedGuardAction as bT,
-  HiMiniShieldExclamation as bU,
-  HiMiniComputerDesktop as bV,
-  HiMiniChevronLeft as bW,
-  HiMiniFunnel as bX,
-  HiMiniArrowDown as bY,
-  HiMiniArrowUp as bZ,
-  runAuditRemediation as b_,
-  HiMiniArrowTopRightOnSquare as ba,
-  HiMiniCloudArrowDown as bb,
-  fetchPackageFirewallStatus as bc,
-  runPackageAudit as bd,
-  resolveSupplyChainAuditFailure as be,
-  runPackageSync as bf,
-  startPackageFirewallConnect as bg,
-  openPackageFirewallAuthorizeFallback as bh,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bi,
-  repairSupplyChainProtection as bj,
-  runPackageFirewallAction as bk,
-  parseInterceptProofSnapshot as bl,
-  activatePackageFirewallRuntime as bm,
-  EntitlementNotice as bn,
-  fetchReceipts as bo,
-  __vitePreload as bp,
-  scopeLabel as bq,
-  guardAwareHref as br,
-  HiMiniDocumentText as bs,
-  HiMiniCloudArrowUp as bt,
-  HiMiniCheck as bu,
-  HiMiniCodeBracket as bv,
-  HiMiniClipboardDocument as bw,
-  HiMiniUsers as bx,
-  HiMiniIdentification as by,
-  policyActionLabel as bz,
+  HiMiniClock as b0,
+  IconActionButton as b1,
+  HiMiniBeaker as b2,
+  ActivationSummary as b3,
+  ActionResultPanel as b4,
+  HiMiniBugAnt as b5,
+  GuardModalLayer as b6,
+  ConnectFlowCard as b7,
+  ApprovalProofInline as b8,
+  HiMiniArrowTopRightOnSquare as b9,
+  HiMiniArrowRight as bA,
+  HiMiniPuzzlePiece as bB,
+  fetchCloudExceptions as bC,
+  fetchCloudExceptionRequests as bD,
+  downloadBlob as bE,
+  PolicyStatField as bF,
+  PaginationControls as bG,
+  HiMiniNoSymbol as bH,
+  HiMiniArrowDownTray as bI,
+  HiMiniQueueList as bJ,
+  fetchMcpPolicyRequest as bK,
+  resolveMcpPolicyRequest as bL,
+  HiMiniDocumentPlus as bM,
+  HiMiniDocumentMagnifyingGlass as bN,
+  Surface as bO,
+  HiMiniCheckBadge as bP,
+  fetchSupplyChainBundle as bQ,
+  isSupplyChainScannerEvidence as bR,
+  isBlockedGuardAction as bS,
+  HiMiniShieldExclamation as bT,
+  HiMiniComputerDesktop as bU,
+  HiMiniChevronLeft as bV,
+  HiMiniFunnel as bW,
+  HiMiniArrowDown as bX,
+  HiMiniArrowUp as bY,
+  runAuditRemediation as bZ,
+  HiMiniSignal as b_,
+  HiMiniCloudArrowDown as ba,
+  fetchPackageFirewallStatus as bb,
+  runPackageAudit as bc,
+  resolveSupplyChainAuditFailure as bd,
+  runPackageSync as be,
+  startPackageFirewallConnect as bf,
+  openPackageFirewallAuthorizeFallback as bg,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bh,
+  repairSupplyChainProtection as bi,
+  runPackageFirewallAction as bj,
+  parseInterceptProofSnapshot as bk,
+  activatePackageFirewallRuntime as bl,
+  EntitlementNotice as bm,
+  fetchReceipts as bn,
+  __vitePreload as bo,
+  scopeLabel as bp,
+  guardAwareHref as bq,
+  HiMiniDocumentText as br,
+  HiMiniCloudArrowUp as bs,
+  HiMiniCheck as bt,
+  HiMiniCodeBracket as bu,
+  HiMiniClipboardDocument as bv,
+  HiMiniUsers as bw,
+  HiMiniIdentification as bx,
+  policyActionLabel as by,
+  createCloudExceptionRequest as bz,
   HiMiniChevronRight as c,
   createCommandActivityClient as d,
-  harnessDisplayName as e,
+  updateSettings as e,
   fetchCommandActivityApi as f,
   getHeatmapLevel as g,
   homeCommandActivityModel as h,
-  EmptyState as i,
+  harnessDisplayName as i,
   jsxRuntimeExports as j,
-  EvidenceInsightsShareModal as k,
-  HiMiniCheckCircle as l,
-  GuardHero as m,
-  formatNumber as n,
-  HiMiniShieldCheck as o,
+  EmptyState as k,
+  EvidenceInsightsShareModal as l,
+  HiMiniCheckCircle as m,
+  GuardHero as n,
+  formatNumber as o,
   protectionHealthFor as p,
-  guardActionDisposition as q,
+  HiMiniShieldCheck as q,
   reactExports as r,
-  formatRelativeTime as s,
-  guardActionActivityCopy as t,
+  guardActionDisposition as s,
+  formatRelativeTime as t,
   useReceiptAnalytics as u,
-  HiMiniSparkles as v,
-  HiMiniXMark as w,
-  HiMiniChevronUp as x,
-  HiMiniChevronDown as y,
-  resolveCloudIntelCopy as z
+  guardActionActivityCopy as v,
+  HiMiniSparkles as w,
+  HiMiniXMark as x,
+  HiMiniChevronUp as y,
+  HiMiniChevronDown as z
 };

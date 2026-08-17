@@ -12,6 +12,7 @@ type ProtectionPosturePanelProps = {
   posture: ProtectionPosture;
   customRules: boolean;
   capabilities: GuardProtectionCapability[];
+  disabledPostures?: ProtectionPosture[];
   onPostureChange: (posture: ProtectionPosture) => void;
 };
 
@@ -29,6 +30,7 @@ export function ProtectionPosturePanel(props: ProtectionPosturePanelProps) {
               key={value}
               value={value}
               selected={props.posture === value}
+              disabled={props.disabledPostures?.includes(value) === true}
               onSelect={props.onPostureChange}
             />
           ))}
@@ -67,23 +69,31 @@ export function ProtectionPosturePanel(props: ProtectionPosturePanelProps) {
 function PostureChoice(props: {
   value: ProtectionPosture;
   selected: boolean;
+  disabled?: boolean;
   onSelect: (posture: ProtectionPosture) => void;
 }) {
   const handleChange = useCallback(() => {
+    if (props.disabled) return;
     props.onSelect(props.value);
-  }, [props.onSelect, props.value]);
+  }, [props.disabled, props.onSelect, props.value]);
+
+  let choiceClass = "cursor-pointer text-slate-600 hover:text-brand-dark";
+  if (props.disabled) {
+    choiceClass = "cursor-not-allowed text-slate-400";
+  } else if (props.selected) {
+    choiceClass = "cursor-pointer bg-white text-brand-dark shadow-sm";
+  }
 
   return (
     <label
-      className={`flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-        props.selected ? "bg-white text-brand-dark shadow-sm" : "text-slate-600 hover:text-brand-dark"
-      }`}
+      className={`flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${choiceClass}`}
     >
       <input
         type="radio"
         name="protection-posture"
         value={props.value}
         checked={props.selected}
+        disabled={props.disabled}
         onChange={handleChange}
         className="sr-only"
       />

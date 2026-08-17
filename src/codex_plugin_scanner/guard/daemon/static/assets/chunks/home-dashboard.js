@@ -1,5 +1,6 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as harnessDisplayName, p as protectionHealthFor, i as EmptyState, A as ActionButton, k as EvidenceInsightsShareModal, l as HiMiniCheckCircle, m as GuardHero, O as OperatorHealthCard, n as formatNumber, o as HiMiniShieldCheck, D as DeviceProofCard, q as guardActionDisposition, s as formatRelativeTime, t as guardActionActivityCopy, v as HiMiniSparkles, w as HiMiniXMark, x as HiMiniChevronUp, y as HiMiniChevronDown, z as resolveCloudIntelCopy, B as HiMiniCloud, C as HiMiniQuestionMarkCircle, F as useFocusTrap, I as approvalProofRequiresPassword, J as HiMiniExclamationTriangle, K as HiMiniBolt, L as Badge, M as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, u as useReceiptAnalytics, e as updateSettings, i as harnessDisplayName, p as protectionHealthFor, k as EmptyState, A as ActionButton, l as EvidenceInsightsShareModal, m as HiMiniCheckCircle, n as GuardHero, O as OperatorHealthCard, o as formatNumber, q as HiMiniShieldCheck, D as DeviceProofCard, s as guardActionDisposition, t as formatRelativeTime, v as guardActionActivityCopy, w as HiMiniSparkles, x as HiMiniXMark, y as HiMiniChevronUp, z as HiMiniChevronDown, B as resolveCloudIntelCopy, C as HiMiniCloud, F as HiMiniQuestionMarkCircle, I as useFocusTrap, J as approvalProofRequiresPassword, K as HiMiniExclamationTriangle, L as HiMiniBolt, M as Badge, N as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
+import { W as WatchProtectionBanner } from "./watch-protection-banner.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -197,6 +198,11 @@ function HomeWorkspace(props) {
   const handleClearPolicies = reactExports.useCallback((scope) => {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
+  const handleTurnProtectionOn = reactExports.useCallback(() => {
+    void updateSettings({ protection_posture: "protected" }).then(() => {
+      props.onOpenSettings();
+    });
+  }, [props.onOpenSettings]);
   const handleClearPasswordChange = reactExports.useCallback((event) => {
     setClearPassword(event.target.value);
     setClearError(null);
@@ -290,6 +296,7 @@ function HomeWorkspace(props) {
   }
   if (!snapshot) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    snapshot.protection_posture === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { onTurnProtectionOn: handleTurnProtectionOn }) : null,
     shareOpen && analyticsState.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceInsightsShareModal,
       {

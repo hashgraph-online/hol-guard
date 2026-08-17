@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, aE as fetchApprovalPage, aF as fetchPolicy, q as guardActionDisposition, p as protectionHealthFor, ay as HiMiniArrowLeft, c as HiMiniChevronRight, e as harnessDisplayName, m as GuardHero, Q as ProofStrip, aG as HiMiniHome, K as HiMiniBolt, $ as HiMiniAdjustmentsHorizontal, S as SectionLabel, A as ActionButton, o as HiMiniShieldCheck, s as formatRelativeTime, J as HiMiniExclamationTriangle, aH as guardActionPresentation, L as Badge, aI as DEFAULT_FILTER_STATE, aJ as filterEvidence, aK as sortEvidence, aL as computeMetrics, aM as CommandActivityWorkspace, i as EmptyState, aN as EvidenceFilterBar, aO as EvidenceInsightStrip, aP as EvidenceActionList, aQ as EvidenceActionDetail, F as useFocusTrap, aR as policyIdentityKey, B as HiMiniCloud, aS as HiMiniChartBar, aj as Tag, l as HiMiniCheckCircle, T as HiMiniXCircle, aT as runHarnessAction, aU as GuardHarnessActionError, aV as HiMiniRocketLaunch, aB as HiMiniArrowPath, aW as HiMiniTrash, aX as clearLabelForScope, aY as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, aD as fetchApprovalPage, aE as fetchPolicy, s as guardActionDisposition, p as protectionHealthFor, ay as HiMiniArrowLeft, c as HiMiniChevronRight, i as harnessDisplayName, n as GuardHero, R as ProofStrip, aF as HiMiniHome, L as HiMiniBolt, a0 as HiMiniAdjustmentsHorizontal, S as SectionLabel, A as ActionButton, q as HiMiniShieldCheck, t as formatRelativeTime, K as HiMiniExclamationTriangle, aG as guardActionPresentation, M as Badge, aH as DEFAULT_FILTER_STATE, aI as filterEvidence, aJ as sortEvidence, aK as computeMetrics, aL as CommandActivityWorkspace, k as EmptyState, aM as EvidenceFilterBar, aN as EvidenceInsightStrip, aO as EvidenceActionList, aP as EvidenceActionDetail, I as useFocusTrap, aQ as policyIdentityKey, C as HiMiniCloud, aR as HiMiniChartBar, al as Tag, m as HiMiniCheckCircle, U as HiMiniXCircle, aS as runHarnessAction, aT as GuardHarnessActionError, aU as HiMiniRocketLaunch, aB as HiMiniArrowPath, aV as HiMiniTrash, aW as clearLabelForScope, aX as formatHarnessCommand } from "../guard-dashboard.js";
 import { a as appSetupTarget } from "./harness-setup-target.js";
 function ActivityModeButton(props) {
   const active = props.mode === props.value;
@@ -78,7 +78,10 @@ function resolveHeroStatus(status, protectionState) {
   if (status === "needs_setup") return "setup_gap";
   return "needs_review";
 }
-function resolveHeroHeadline(status, harness, isObserved, protectionState) {
+function resolveHeroHeadline(status, harness, isObserved, protectionState, limited) {
+  if (status === "active" && protectionState === "protected" && limited) {
+    return `${harnessDisplayName(harness)} is limited`;
+  }
   if (status === "active" && protectionState === "protected") return `${harnessDisplayName(harness)} is protected`;
   if (status === "active" && protectionState === "partial") return `${harnessDisplayName(harness)} is partially protected`;
   if (status === "active") return `${harnessDisplayName(harness)} protection is degraded`;
@@ -86,7 +89,8 @@ function resolveHeroHeadline(status, harness, isObserved, protectionState) {
   if (isObserved) return `${harnessDisplayName(harness)} is observed`;
   return harnessDisplayName(harness);
 }
-function resolveHeroSubheadline(status, isObserved, protectionState) {
+function resolveHeroSubheadline(status, isObserved, protectionState, honestySentence) {
+  if (status === "active" && honestySentence) return honestySentence;
   if (status === "active" && protectionState === "protected") return "All required protection checks have current proof.";
   if (status === "active" && protectionState === "partial") return "Core protection passes, but decision-stream evidence is incomplete.";
   if (status === "active") return "One or more required protection checks failed or remain unproven.";
@@ -211,9 +215,11 @@ function AppDetailWorkspace(props) {
   const status = isActive ? "active" : install !== void 0 ? "needs_setup" : isObserved ? "observed" : "unknown";
   const appProtection = protectionHealthFor(runtime, harness);
   const protectionState = appProtection.state;
+  const capability = runtime.protection_capabilities?.find((item) => item.harness === harness);
+  const limited = capability?.limited === true;
   const heroStatus = resolveHeroStatus(status, protectionState);
-  const heroHeadline = resolveHeroHeadline(status, harness, isObserved, protectionState);
-  const heroSub = resolveHeroSubheadline(status, isObserved, protectionState);
+  const heroHeadline = resolveHeroHeadline(status, harness, isObserved, protectionState, limited);
+  const heroSub = resolveHeroSubheadline(status, isObserved, protectionState, capability?.honesty_sentence);
   const handleTabChange = reactExports.useCallback((next) => {
     const currentIndex = tabOrder.indexOf(activeTab);
     const nextIndex = tabOrder.indexOf(next);

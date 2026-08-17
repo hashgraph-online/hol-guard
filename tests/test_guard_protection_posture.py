@@ -331,3 +331,32 @@ def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path:
     )
     action = _apply_explicit_posture_action(config, artifact, "credential_exfiltration", "require-reapproval")
     assert action == "block"
+
+
+def test_managed_mode_lock_overrides_watch_payload() -> None:
+    from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, ManagedPolicy
+    from codex_plugin_scanner.guard.mdm.policy import apply_managed_policy
+
+    policy = ManagedPolicy(
+        schema_version=MDM_POLICY_SCHEMA_VERSION,
+        settings={"mode": "enforce"},
+        locked_settings=frozenset({"mode"}),
+    )
+    composed = apply_managed_policy(
+        {"mode": "observe", "protection_posture": "watch", "security_level": "balanced"},
+        policy,
+    )
+    assert composed["mode"] == "enforce"
+
+
+def test_managed_watch_auto_revert_lock_keeps_hours() -> None:
+    from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, ManagedPolicy
+    from codex_plugin_scanner.guard.mdm.policy import apply_managed_policy
+
+    policy = ManagedPolicy(
+        schema_version=MDM_POLICY_SCHEMA_VERSION,
+        settings={"watch_auto_revert_hours": 24},
+        locked_settings=frozenset({"watch_auto_revert_hours"}),
+    )
+    composed = apply_managed_policy({"watch_auto_revert_hours": 0}, policy)
+    assert composed["watch_auto_revert_hours"] == 24

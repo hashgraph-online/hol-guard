@@ -594,6 +594,7 @@ export type GuardRuntimeSnapshot = {
   operator_health?: GuardOperatorHealth;
   security_level?: "balanced" | "strict" | "custom";
   protection_posture?: "protected" | "extra_careful" | "watch";
+  protection_capabilities?: GuardProtectionCapability[];
   supply_chain?: SupplyChainSnapshot;
 };
 
@@ -908,6 +909,7 @@ export type GuardSettings = {
   billing: boolean;
   update_channel?: "stable" | "alpha";
   approval_gate?: GuardApprovalGatePublicConfig;
+  managed_locked_settings?: string[];
 };
 
 export type GuardProtectionCapability = {

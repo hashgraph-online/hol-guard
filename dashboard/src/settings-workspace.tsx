@@ -412,6 +412,22 @@ function currentProtectionPosture(settings: GuardSettings): ProtectionPosture {
   return deriveProtectionPosture(settings.mode, settings.security_level);
 }
 
+function lockedSetting(settings: GuardSettings, key: string): boolean {
+  return settings.managed_locked_settings?.includes(key) === true;
+}
+
+function lockedProtectionPostures(settings: GuardSettings): ProtectionPosture[] {
+  const allPostures: ProtectionPosture[] = ["protected", "extra_careful", "watch"];
+  if (lockedSetting(settings, "protection_posture")) {
+    const current = currentProtectionPosture(settings);
+    return allPostures.filter((posture) => posture !== current);
+  }
+  if (lockedSetting(settings, "mode") && settings.mode !== "observe") {
+    return ["watch"];
+  }
+  return [];
+}
+
 function buildConsequenceSummary(settings: GuardSettings): string {
   const posture = currentProtectionPosture(settings);
   if (posture === "watch") {
@@ -1489,6 +1505,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 posture={selectedPosture}
                 customRules={draft.security_level === "custom"}
                 capabilities={protectionCapabilities}
+                disabledPostures={lockedProtectionPostures(draft)}
                 onPostureChange={handleProtectionPostureChange}
               />
             </SettingsFormSection>
@@ -1699,6 +1716,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                     label="Auto-revert Watch"
                     description="Turn protection back on after 24 hours unless you disable this."
                     checked={(draft.watch_auto_revert_hours ?? 24) > 0}
+                    disabled={lockedSetting(draft, "watch_auto_revert_hours")}
                     onChange={handleWatchAutoRevertToggle}
                   />
                 </div>

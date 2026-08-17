@@ -349,7 +349,10 @@ const watchOnlyDecisionMarkup = renderToStaticMarkup(
   }),
 );
 assert(
-  watchOnlyDecisionMarkup.includes("Watch-only finding") && watchOnlyDecisionMarkup.includes("Would have stopped"),
+  watchOnlyDecisionMarkup.includes("Watch-only finding")
+    && watchOnlyDecisionMarkup.includes("Would have stopped")
+    && watchOnlyDecisionMarkup.includes("Keep allowing")
+    && watchOnlyDecisionMarkup.includes("Stop this next time"),
   "Watch-only decision card renders its observation state without crashing",
 );
 

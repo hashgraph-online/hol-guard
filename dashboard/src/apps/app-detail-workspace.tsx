@@ -128,7 +128,11 @@ function resolveHeroHeadline(
   harness: string,
   isObserved: boolean,
   protectionState: GuardProtectionState,
+  limited: boolean,
 ): string {
+  if (status === "active" && protectionState === "protected" && limited) {
+    return `${harnessDisplayName(harness)} is limited`;
+  }
   if (status === "active" && protectionState === "protected") return `${harnessDisplayName(harness)} is protected`;
   if (status === "active" && protectionState === "partial") return `${harnessDisplayName(harness)} is partially protected`;
   if (status === "active") return `${harnessDisplayName(harness)} protection is degraded`;
@@ -141,7 +145,9 @@ function resolveHeroSubheadline(
   status: "active" | "needs_setup" | "observed" | "unknown",
   isObserved: boolean,
   protectionState: GuardProtectionState,
+  honestySentence: string | undefined,
 ): string {
+  if (status === "active" && honestySentence) return honestySentence;
   if (status === "active" && protectionState === "protected") return "All required protection checks have current proof.";
   if (status === "active" && protectionState === "partial") return "Core protection passes, but decision-stream evidence is incomplete.";
   if (status === "active") return "One or more required protection checks failed or remain unproven.";
@@ -320,9 +326,11 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
 
   const appProtection = protectionHealthFor(runtime, harness);
   const protectionState = appProtection.state;
+  const capability = runtime.protection_capabilities?.find((item) => item.harness === harness);
+  const limited = capability?.limited === true;
   const heroStatus = resolveHeroStatus(status, protectionState);
-  const heroHeadline = resolveHeroHeadline(status, harness, isObserved, protectionState);
-  const heroSub = resolveHeroSubheadline(status, isObserved, protectionState);
+  const heroHeadline = resolveHeroHeadline(status, harness, isObserved, protectionState, limited);
+  const heroSub = resolveHeroSubheadline(status, isObserved, protectionState, capability?.honesty_sentence);
 
   const handleTabChange = useCallback((next: TabKey) => {
     const currentIndex = tabOrder.indexOf(activeTab);
