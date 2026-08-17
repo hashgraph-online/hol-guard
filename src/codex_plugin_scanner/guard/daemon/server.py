@@ -2389,10 +2389,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             format_q = query.get("format", ["json"])[-1]
             with store._connect() as conn:
                 if format_q == "json":
-                    payload = export_evidence_json(conn, limit=10_000)
+                    export_body = export_evidence_json(conn, limit=10_000)
                     content_type = "application/json"
                 elif format_q == "csv":
-                    payload = export_evidence_csv(conn, limit=10_000)
+                    export_body = export_evidence_csv(conn, limit=10_000)
                     content_type = "text/csv; charset=utf-8"
                 else:
                     self._write_json({"error": "invalid_export_format"}, status=400)
@@ -2400,7 +2400,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.end_headers()
-            self.wfile.write(payload.encode("utf-8"))
+            self.wfile.write(export_body.encode("utf-8"))
             return
         if len(path_parts) == 4 and path_parts[:3] == ["v1", "artifacts", path_parts[2]] and path_parts[3] == "diff":
             query = parse_qs(parsed.query)
