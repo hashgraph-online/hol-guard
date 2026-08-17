@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import cast
 
 from ..command_model import CanonicalCommand
-from ..compound_git_inspection import is_low_risk_git_inspection_segment, is_low_risk_standalone_git_routine
+from ..compound_git_inspection import (
+    canonical_home_git_c_path,
+    is_low_risk_git_inspection_segment,
+    is_low_risk_standalone_git_routine,
+)
 from ..git_execution_safety import git_status_args_are_read_only, git_status_has_execution_free_config
 from ..kubernetes_commands import kubernetes_secret_read_source
 from ..shell_command_wrappers import normalize_transparent_shell_command
@@ -275,12 +279,14 @@ def _unverified_git_fetch_request(
         workspace_root=parsing_cwd,
         home_dir=home_dir,
     )
+    trusted_home = home_dir if canonical_home_git_c_path(command_text) is not None else None
     if not any(_segment_invokes_git_fetch(segment.tokens) for segment in context.segments):
         return None
-    if cwd is not None and is_low_risk_standalone_git_routine(context):
+    if cwd is not None and is_low_risk_standalone_git_routine(context, home_dir=trusted_home):
         return None
     if context.complete and all(
-        not _segment_invokes_git_fetch(segment.tokens) or is_low_risk_git_inspection_segment(segment)
+        not _segment_invokes_git_fetch(segment.tokens)
+        or is_low_risk_git_inspection_segment(segment, home_dir=trusted_home)
         for segment in context.segments
     ):
         return None
