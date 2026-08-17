@@ -1,4 +1,4 @@
-name: Diagnose PR 2464 Windows process inventory
+name: Prototype PR 2464 native Windows process inventory
 
 on:
   push:
@@ -12,11 +12,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: diagnose-pr-2464-windows-inventory
+  group: prototype-pr-2464-windows-inventory
   cancel-in-progress: false
 
 jobs:
-  diagnose:
+  prototype:
     runs-on: windows-2025
     timeout-minutes: 10
     steps:
@@ -28,116 +28,178 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - name: Measure trusted Windows process queries
+      - name: Prove bounded native process command-line discovery
         shell: python
         run: |
+          from __future__ import annotations
+
+          import ctypes
           import json
+          import ntpath
           import os
-          import subprocess
-          import time
-          from pathlib import Path
+          import sys
+          from contextlib import suppress
+          from ctypes import wintypes
 
-          windows = Path(os.environ["WINDIR"])
-          system32 = windows / "System32"
-          powershell = system32 / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-          modules = system32 / "WindowsPowerShell" / "v1.0" / "Modules"
-          print(json.dumps({
-              "powershell": str(powershell),
-              "powershell_exists": powershell.is_file(),
-              "modules": str(modules),
-              "modules_exists": modules.is_dir(),
-          }, sort_keys=True))
+          PROCESS_QUERY_LIMITED_INFORMATION = 0x00001000
+          PROCESS_COMMAND_LINE_INFORMATION = 60
+          MAX_PROCESS_COUNT = 65_536
+          MAX_PATH_CHARS = 32_768
+          MAX_COMMAND_LINE_BYTES = 1024 * 1024
 
-          original_env = {
-              "ComSpec": str(system32 / "cmd.exe"),
-              "PATH": str(system32),
-              "SystemRoot": str(windows),
-              "WINDIR": str(windows),
-          }
-          module_env = dict(original_env)
-          module_env["PSModulePath"] = str(modules)
+          class UnicodeString(ctypes.Structure):
+              _fields_ = [
+                  ("Length", wintypes.USHORT),
+                  ("MaximumLength", wintypes.USHORT),
+                  ("Buffer", wintypes.LPWSTR),
+              ]
 
-          prelude = (
-              "$ErrorActionPreference = 'Stop'; "
-              "$utf8 = New-Object System.Text.UTF8Encoding($false); "
-              "[Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
+          kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+          psapi = ctypes.WinDLL("psapi", use_last_error=True)
+          ntdll = ctypes.WinDLL("ntdll", use_last_error=True)
+
+          enum_processes = psapi.EnumProcesses
+          enum_processes.argtypes = [
+              ctypes.POINTER(wintypes.DWORD),
+              wintypes.DWORD,
+              ctypes.POINTER(wintypes.DWORD),
+          ]
+          enum_processes.restype = wintypes.BOOL
+
+          open_process = kernel32.OpenProcess
+          open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+          open_process.restype = wintypes.HANDLE
+
+          query_image = kernel32.QueryFullProcessImageNameW
+          query_image.argtypes = [
+              wintypes.HANDLE,
+              wintypes.DWORD,
+              wintypes.LPWSTR,
+              ctypes.POINTER(wintypes.DWORD),
+          ]
+          query_image.restype = wintypes.BOOL
+
+          close_handle = kernel32.CloseHandle
+          close_handle.argtypes = [wintypes.HANDLE]
+          close_handle.restype = wintypes.BOOL
+
+          query_process = ntdll.NtQueryInformationProcess
+          query_process.argtypes = [
+              wintypes.HANDLE,
+              wintypes.ULONG,
+              ctypes.c_void_p,
+              wintypes.ULONG,
+              ctypes.POINTER(wintypes.ULONG),
+          ]
+          query_process.restype = wintypes.LONG
+
+          process_ids = (wintypes.DWORD * MAX_PROCESS_COUNT)()
+          bytes_returned = wintypes.DWORD()
+          assert enum_processes(
+              process_ids,
+              ctypes.sizeof(process_ids),
+              ctypes.byref(bytes_returned),
           )
-          commands = {
-              "original": (
-                  original_env,
-                  prelude
-                  + "$items = @(Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine); "
-                  + "ConvertTo-Json -Compress -InputObject $items",
-              ),
-              "qualified": (
-                  module_env,
-                  prelude
-                  + r"$items = @(CimCmdlets\Get-CimInstance -ClassName Win32_Process "
-                  + r"-Property ProcessId,CommandLine | "
-                  + r"Microsoft.PowerShell.Utility\Select-Object ProcessId,CommandLine); "
-                  + "ConvertTo-Json -Compress -InputObject $items",
-              ),
-              "filtered": (
-                  module_env,
-                  prelude
-                  + r'''$query = "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name='python.exe' OR Name='pythonw.exe' OR Name='python3.exe' OR Name='py.exe' OR Name='hol-guard.exe' OR Name='plugin-guard.exe'"; '''
-                  + r"$items = @(CimCmdlets\Get-CimInstance -Query $query | "
-                  + r"Microsoft.PowerShell.Utility\Select-Object ProcessId,CommandLine); "
-                  + "ConvertTo-Json -Compress -InputObject $items",
-              ),
-              "module_probe": (
-                  module_env,
-                  prelude
-                  + r"$items = @(Microsoft.PowerShell.Core\Get-Module -ListAvailable CimCmdlets | "
-                  + r"Microsoft.PowerShell.Utility\Select-Object Name,Version,Path); "
-                  + "ConvertTo-Json -Compress -InputObject $items",
-              ),
-          }
+          assert bytes_returned.value % ctypes.sizeof(wintypes.DWORD) == 0
+          process_count = bytes_returned.value // ctypes.sizeof(wintypes.DWORD)
+          assert 0 < process_count < MAX_PROCESS_COUNT
 
-          failed = False
-          for name, (environment, script) in commands.items():
-              started = time.monotonic()
-              try:
-                  completed = subprocess.run(
-                      [
-                          str(powershell),
-                          "-NoProfile",
-                          "-NonInteractive",
-                          "-Command",
-                          script,
-                      ],
-                      stdin=subprocess.DEVNULL,
-                      stdout=subprocess.PIPE,
-                      stderr=subprocess.PIPE,
-                      env=environment,
-                      timeout=30,
-                      check=False,
-                  )
-              except subprocess.TimeoutExpired as error:
-                  print(json.dumps({
-                      "name": name,
-                      "timeout": True,
-                      "elapsed_seconds": round(time.monotonic() - started, 3),
-                      "stdout_bytes": len(error.stdout or b""),
-                      "stderr_bytes": len(error.stderr or b""),
-                  }, sort_keys=True))
-                  failed = True
+          current_pid = os.getpid()
+          current_name = ntpath.basename(sys.executable).lower()
+          found_current = False
+          candidate_count = 0
+          command_line_bytes = 0
+          failures: list[dict[str, object]] = []
+
+          for raw_pid in process_ids[:process_count]:
+              pid = int(raw_pid)
+              if pid <= 0:
                   continue
-              elapsed = time.monotonic() - started
-              stdout = completed.stdout.decode("utf-8", errors="replace")
-              stderr = completed.stderr.decode("utf-8", errors="replace")
-              payload = {
-                  "name": name,
-                  "returncode": completed.returncode,
-                  "elapsed_seconds": round(elapsed, 3),
-                  "stdout_bytes": len(completed.stdout),
-                  "stderr_bytes": len(completed.stderr),
-                  "stdout_prefix": stdout[:1000],
-                  "stderr_prefix": stderr[:1000],
-              }
-              print(json.dumps(payload, sort_keys=True))
-              if completed.returncode != 0:
-                  failed = True
+              handle = open_process(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+              if not handle:
+                  continue
+              try:
+                  image_buffer = ctypes.create_unicode_buffer(MAX_PATH_CHARS)
+                  image_size = wintypes.DWORD(MAX_PATH_CHARS)
+                  if not query_image(handle, 0, image_buffer, ctypes.byref(image_size)):
+                      continue
+                  image_name = ntpath.basename(image_buffer.value).lower()
+                  if image_name != current_name:
+                      continue
+                  candidate_count += 1
 
-          if failed:
-              raise SystemExit(1)
+                  required = wintypes.ULONG()
+                  _ = query_process(
+                      handle,
+                      PROCESS_COMMAND_LINE_INFORMATION,
+                      None,
+                      0,
+                      ctypes.byref(required),
+                  )
+                  if required.value < ctypes.sizeof(UnicodeString) or required.value > MAX_COMMAND_LINE_BYTES:
+                      failures.append({"pid": pid, "stage": "size", "required": required.value})
+                      continue
+                  raw_buffer = ctypes.create_string_buffer(required.value)
+                  status = int(
+                      query_process(
+                          handle,
+                          PROCESS_COMMAND_LINE_INFORMATION,
+                          raw_buffer,
+                          required.value,
+                          ctypes.byref(required),
+                      )
+                  )
+                  if status != 0:
+                      failures.append({"pid": pid, "stage": "query", "status": status})
+                      continue
+                  value = ctypes.cast(raw_buffer, ctypes.POINTER(UnicodeString)).contents
+                  if (
+                      value.Length <= 0
+                      or value.Length % 2 != 0
+                      or value.Length > value.MaximumLength
+                      or value.Buffer is None
+                  ):
+                      failures.append(
+                          {
+                              "pid": pid,
+                              "stage": "unicode",
+                              "length": int(value.Length),
+                              "maximum": int(value.MaximumLength),
+                          }
+                      )
+                      continue
+                  command_line = ctypes.wstring_at(value.Buffer, value.Length // 2).strip()
+                  encoded_size = len(command_line.encode("utf-8", errors="strict"))
+                  command_line_bytes += encoded_size
+                  assert command_line_bytes <= MAX_COMMAND_LINE_BYTES
+                  if pid == current_pid:
+                      found_current = bool(command_line)
+                      print(
+                          json.dumps(
+                              {
+                                  "current_pid": pid,
+                                  "image_name": image_name,
+                                  "command_line_bytes": encoded_size,
+                                  "command_prefix": command_line[:500],
+                              },
+                              sort_keys=True,
+                          )
+                      )
+              finally:
+                  with suppress(OSError, TypeError, ValueError):
+                      close_handle(handle)
+
+          print(
+              json.dumps(
+                  {
+                      "process_count": process_count,
+                      "candidate_count": candidate_count,
+                      "command_line_bytes": command_line_bytes,
+                      "failure_count": len(failures),
+                      "failures": failures[:20],
+                      "found_current": found_current,
+                  },
+                  sort_keys=True,
+              )
+          )
+          assert found_current
