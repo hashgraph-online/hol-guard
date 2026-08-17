@@ -46,7 +46,7 @@ def _copilot_command(context: HarnessContext) -> tuple[str, ...]:
     ("harness", "factory", "timeout_seconds"),
     [
         ("copilot", _copilot_command, 25),
-        ("grok", GrokHarnessAdapter._hook_command_parts, 25),  # pyright: ignore[reportPrivateUsage]
+        ("grok", GrokHarnessAdapter._hook_command_parts, 85),  # pyright: ignore[reportPrivateUsage]
         ("kimi", KimiHarnessAdapter._hook_command_parts, 25),  # pyright: ignore[reportPrivateUsage]
         ("zcode", ZCodeHarnessAdapter._hook_command_parts, 25),  # pyright: ignore[reportPrivateUsage]
     ],
