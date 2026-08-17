@@ -37,10 +37,8 @@ def honesty_sentence(capability: HarnessProtectionCapability, display_name: str)
     if capability.can_ask_inline:
         return f"{display_name} asks in chat, then remembers."
     if capability.fail_open_on_hook_failure:
-        return (
-            f"Limited in {display_name}. This app cannot ask in chat. "
-            f"If Guard is down, this app continues."
-        )
+        limited = f"Limited in {display_name}. This app cannot ask in chat."
+        return f"{limited} If Guard is down, this app continues."
     if capability.can_pre_block_limited:
         return f"Limited in {display_name}. Guard stops what it can see and opens Guard for the rest."
     return f"{display_name} stops the action and opens Guard. This app cannot ask in chat."

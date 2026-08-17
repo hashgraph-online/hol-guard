@@ -15,7 +15,7 @@ def test_every_supported_harness_has_a_protection_capability() -> None:
 
 
 def test_fail_open_harnesses_are_marked_limited() -> None:
-    for harness in ("grok", "kimi", "zcode", "pi"):
+    for harness in ("grok", "kimi", "zcode", "pi", "omp"):
         capability = capability_for(harness)
         assert capability is not None
         payload = capability.to_dict()
