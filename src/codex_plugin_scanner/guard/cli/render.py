@@ -698,18 +698,19 @@ def _protection_display_name(payload: dict[str, object], fallback: str) -> str:
     return fallback
 
 
-def _protection_status_line(payload: dict[str, object], fallback: str) -> tuple[str, bool]:
-    protection = str(payload.get("protection") or payload.get("protection_posture") or fallback)
+def _protection_status_copy(payload: dict[str, object], fallback: str) -> tuple[str, bool]:
+    raw = payload.get("protection") or payload.get("protection_posture") or fallback
+    protection = str(raw)
     protection_off = bool(payload.get("protection_off")) or protection == "watch"
-    name = _protection_display_name(payload, protection)
-    if protection_off:
-        return f"[bold red]protection: {name} (off)[/bold red]", True
-    return f"protection: {name}", False
+    return _protection_display_name(payload, protection), protection_off
 
 
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
-    protection_line, protection_off = _protection_status_line(payload, "protected")
+    name, protection_off = _protection_status_copy(payload, "protected")
+    protection_line = (
+        f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+    )
     console.print(
         Panel.fit(
             f"[bold]HOL Guard status[/bold]\n"
@@ -792,7 +793,10 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         console.print(Panel(summary, title="Guard notification setup", border_style="cyan"))
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
-        protection_line, protection_off = _protection_status_line(payload, "protected")
+        name, protection_off = _protection_status_copy(payload, "protected")
+        protection_line = (
+            f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+        )
         console.print(
             Panel.fit(
                 f"[bold]HOL Guard doctor[/bold]\n{protection_line}\n{len(tables)} local tables checked",
@@ -848,14 +852,10 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             if isinstance(recovery_command, str) and recovery_command.strip():
                 summary.add_row("Recovery", recovery_command)
         summary.add_row("Warnings", str(len(warnings)))
-        protection = str(payload.get("protection") or payload.get("protection_posture") or "")
-        if protection:
-            protection_off = bool(payload.get("protection_off")) or protection == "watch"
-            protection_name = _protection_display_name(payload, protection)
-            protection_value = (
-                f"[bold red]{protection_name} (off)[/bold red]" if protection_off else protection_name
-            )
-            summary.add_row("Protection", protection_value)
+        name, protection_off = _protection_status_copy(payload, "")
+        if name:
+            value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
+            summary.add_row("Protection", value)
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:
             warning_text = "\n".join(
