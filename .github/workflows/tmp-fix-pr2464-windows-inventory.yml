@@ -45,35 +45,33 @@ jobs:
           manager = Path("src/codex_plugin_scanner/guard/daemon/manager.py")
           text = manager.read_text(encoding="utf-8")
 
-          old_environment = '''    return {
-              "ComSpec": ntpath.join(system_directory, "cmd.exe"),
-              "PATH": system_directory,
-              "SystemRoot": windows_directory,
-              "WINDIR": windows_directory,
-          }
-          '''
-          new_environment = '''    return {
-              "ComSpec": ntpath.join(system_directory, "cmd.exe"),
-              "PATH": system_directory,
-              "PSModulePath": ntpath.join(
-                  system_directory,
-                  "WindowsPowerShell",
-                  "v1.0",
-                  "Modules",
-              ),
-              "SystemRoot": windows_directory,
-              "WINDIR": windows_directory,
-          }
-          '''
-          if text.count(old_environment) != 1:
+          environment_anchor = "\n".join(
+              (
+                  '        "PATH": system_directory,',
+                  '        "SystemRoot": windows_directory,',
+              )
+          )
+          environment_replacement = "\n".join(
+              (
+                  '        "PATH": system_directory,',
+                  '        "PSModulePath": ntpath.join(',
+                  '            system_directory,',
+                  '            "WindowsPowerShell",',
+                  '            "v1.0",',
+                  '            "Modules",',
+                  '        ),',
+                  '        "SystemRoot": windows_directory,',
+              )
+          )
+          if text.count(environment_anchor) != 1:
               raise RuntimeError("unexpected Windows process-query environment implementation")
-          text = text.replace(old_environment, new_environment, 1)
+          text = text.replace(environment_anchor, environment_replacement, 1)
 
           old_query = "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine"
           new_query = (
-              "CimCmdlets\\Get-CimInstance -ClassName Win32_Process "
-              "-Property ProcessId,CommandLine | "
-              "Microsoft.PowerShell.Utility\\Select-Object ProcessId,CommandLine"
+              r"CimCmdlets\Get-CimInstance -ClassName Win32_Process "
+              r"-Property ProcessId,CommandLine | "
+              r"Microsoft.PowerShell.Utility\Select-Object ProcessId,CommandLine"
           )
           if text.count(old_query) != 1:
               raise RuntimeError("unexpected Windows process inventory query implementation")
@@ -82,41 +80,45 @@ jobs:
 
           tests = Path("tests/test_guard_daemon_manager.py")
           text = tests.read_text(encoding="utf-8")
-          old_assertions = '''    assert "$ErrorActionPreference = 'Stop'" in query_commands[0][-1]
-              assert "ConvertTo-Json" in query_commands[0][-1]
-          '''
-          new_assertions = '''    assert "$ErrorActionPreference = 'Stop'" in query_commands[0][-1]
-              assert "CimCmdlets\\\\Get-CimInstance" in query_commands[0][-1]
-              assert "-Property ProcessId,CommandLine" in query_commands[0][-1]
-              assert "Microsoft.PowerShell.Utility\\\\Select-Object" in query_commands[0][-1]
-              assert "ConvertTo-Json" in query_commands[0][-1]
-          '''
-          if text.count(old_assertions) != 1:
+          assertion_anchor = '    assert "ConvertTo-Json" in query_commands[0][-1]'
+          assertion_replacement = "\n".join(
+              (
+                  r'    assert "CimCmdlets\\Get-CimInstance" in query_commands[0][-1]',
+                  '    assert "-Property ProcessId,CommandLine" in query_commands[0][-1]',
+                  r'    assert "Microsoft.PowerShell.Utility\\Select-Object" in query_commands[0][-1]',
+                  assertion_anchor,
+              )
+          )
+          if text.count(assertion_anchor) != 1:
               raise RuntimeError("unexpected Windows inventory test assertions")
-          text = text.replace(old_assertions, new_assertions, 1)
+          text = text.replace(assertion_anchor, assertion_replacement, 1)
 
-          insertion_anchor = '''@pytest.mark.skipif(os.name == "nt", reason="POSIX process-query regression")
-          def test_guard_daemon_process_query_ignores_hostile_path_and_loader_environment(tmp_path, monkeypatch):
-          '''
-          new_test = r'''def test_windows_process_query_environment_uses_only_trusted_system_locations(monkeypatch) -> None:
-              trusted_powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-              monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
-
-              assert daemon_manager_module._process_query_environment([trusted_powershell]) == {
-                  "ComSpec": r"C:\Windows\System32\cmd.exe",
-                  "PATH": r"C:\Windows\System32",
-                  "PSModulePath": r"C:\Windows\System32\WindowsPowerShell\v1.0\Modules",
-                  "SystemRoot": r"C:\Windows",
-                  "WINDIR": r"C:\Windows",
-              }
-
-
-          @pytest.mark.skipif(os.name == "nt", reason="POSIX process-query regression")
-          def test_guard_daemon_process_query_ignores_hostile_path_and_loader_environment(tmp_path, monkeypatch):
-          '''
+          insertion_anchor = "\n".join(
+              (
+                  '@pytest.mark.skipif(os.name == "nt", reason="POSIX process-query regression")',
+                  "def test_guard_daemon_process_query_ignores_hostile_path_and_loader_environment(tmp_path, monkeypatch):",
+              )
+          )
+          new_test = "\n".join(
+              (
+                  "def test_windows_process_query_environment_uses_only_trusted_system_locations(monkeypatch) -> None:",
+                  r'    trusted_powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"',
+                  '    monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())',
+                  "",
+                  "    assert daemon_manager_module._process_query_environment([trusted_powershell]) == {",
+                  r'        "ComSpec": r"C:\Windows\System32\cmd.exe",',
+                  r'        "PATH": r"C:\Windows\System32",',
+                  r'        "PSModulePath": r"C:\Windows\System32\WindowsPowerShell\v1.0\Modules",',
+                  r'        "SystemRoot": r"C:\Windows",',
+                  r'        "WINDIR": r"C:\Windows",',
+                  "    }",
+                  "",
+                  "",
+              )
+          )
           if text.count(insertion_anchor) != 1:
               raise RuntimeError("unexpected process-query test insertion anchor")
-          text = text.replace(insertion_anchor, new_test, 1)
+          text = text.replace(insertion_anchor, new_test + insertion_anchor, 1)
           tests.write_text(text, encoding="utf-8")
           PY
 
