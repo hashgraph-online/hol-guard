@@ -693,14 +693,21 @@ def _init_notification_summary(payload: dict[str, object]) -> str:
 
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
+    protection = str(payload.get("protection") or "protected")
+    protection_line = (
+        "[bold red]protection: watch (off)[/bold red]"
+        if payload.get("protection_off") or protection == "watch"
+        else f"protection: {protection}"
+    )
     console.print(
         Panel.fit(
             f"[bold]HOL Guard status[/bold]\n"
+            f"{protection_line}\n"
             f"{payload.get('managed_harnesses', 0)} managed harnesses • "
             f"{payload.get('receipt_count', 0)} receipts • "
             f"{payload.get('pending_approvals', 0)} approvals • "
             f"sync {'connected' if payload.get('sync_configured') else 'local only'}",
-            border_style="cyan",
+            border_style="red" if protection == "watch" else "cyan",
         )
     )
     console.print(_build_cloud_summary_panel(payload))

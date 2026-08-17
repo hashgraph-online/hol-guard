@@ -1077,23 +1077,25 @@ _PRESET_DESCRIPTIONS: dict[str, str] = {
 }
 
 def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
-    preset = config.security_level
-    description = _PRESET_DESCRIPTIONS.get(preset, f"Unknown preset '{preset}'.")
+    from ..protection_posture import posture_help, posture_label
+
     effective = editable_guard_settings(config).get("risk_actions") or {}
     return {
         "generated_at": _now(),
-        "preset": preset,
-        "description": description,
+        "protection_posture": config.protection_posture,
+        "label": posture_label(config.protection_posture),
+        "description": posture_help(config.protection_posture),
+        "preset": config.security_level,
         "effective_risk_actions": effective,
     }
 
 def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
     issues: list[dict[str, str]] = []
-    if config.mode == "observe":
+    if config.protection_posture == "watch" or config.mode == "observe":
         issues.append(
             {
                 "severity": "warning",
-                "message": "Guard is in observe mode. No actions will be blocked or reviewed.",
+                "message": "Protection is off. Guard is only recording.",
             }
         )
     if config.security_level not in VALID_SECURITY_LEVELS:
