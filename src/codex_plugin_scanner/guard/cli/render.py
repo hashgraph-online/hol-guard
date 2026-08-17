@@ -696,9 +696,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     protection = str(payload.get("protection") or "protected")
     protection_off = bool(payload.get("protection_off")) or protection == "watch"
     protection_line = (
-        f"[bold red]protection: {protection} (off)[/bold red]"
-        if protection_off
-        else f"protection: {protection}"
+        f"[bold red]protection: {protection} (off)[/bold red]" if protection_off else f"protection: {protection}"
     )
     console.print(
         Panel.fit(
@@ -785,9 +783,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         protection = str(payload.get("protection") or payload.get("protection_posture") or "protected")
         protection_off = bool(payload.get("protection_off")) or protection == "watch"
         protection_line = (
-            f"[bold red]protection: {protection} (off)[/bold red]"
-            if protection_off
-            else f"protection: {protection}"
+            f"[bold red]protection: {protection} (off)[/bold red]" if protection_off else f"protection: {protection}"
         )
         console.print(
             Panel.fit(
@@ -847,10 +843,8 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         protection = str(payload.get("protection") or payload.get("protection_posture") or "")
         if protection:
             protection_off = bool(payload.get("protection_off")) or protection == "watch"
-            summary.add_row(
-                "Protection",
-                f"[bold red]{protection} (off)[/bold red]" if protection_off else protection,
-            )
+            protection_value = f"[bold red]{protection} (off)[/bold red]" if protection_off else protection
+            summary.add_row("Protection", protection_value)
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:
             warning_text = "\n".join(
