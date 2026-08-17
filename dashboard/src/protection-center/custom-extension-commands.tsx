@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import type { LocalCliCommand, LocalCliCommandState } from "../local-cli-api";
+import type { LocalCliCommand, LocalCliCommandState, LocalCliSurface } from "../local-cli-api";
 import {
   extensionPolicyRadioTabStop,
   nextExtensionPolicyRadioIndex,
@@ -23,12 +23,15 @@ export function withCommandState(
 export function CustomExtensionCommandList(props: {
   commands: readonly LocalCliCommand[];
   disabled: boolean;
+  surface?: LocalCliSurface;
   onChange: (commandId: string, state: LocalCliCommandState) => void;
 }) {
   if (props.commands.length === 0) {
     return (
       <p className="text-sm leading-6 text-brand-dark/75">
-        Guard has not loaded commands for this tool yet. Find the tool again to read its --help output.
+        {props.surface === "mcp"
+          ? "Guard has not loaded tools for this MCP server yet. Find the server again to list its tools."
+          : "Guard has not loaded commands for this tool yet. Find the tool again to read its --help output."}
       </p>
     );
   }

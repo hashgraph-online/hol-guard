@@ -68,11 +68,7 @@ export function AddCustomExtensionDialog(props: {
     setCommand(item.example_label);
     setRecognized(item);
     setCommands(item.commands);
-    setSummary(
-      item.commands.length > 0
-        ? `Guard loaded ${item.commands.length} commands. Recommended keeps the usual review. Allow or block each one.`
-        : `Find this tool to read ${item.name} --help and load its commands.`,
-    );
+    setSummary(suggestionSummary(item));
     setPending(null);
     setError(null);
   }, []);
@@ -142,7 +138,11 @@ export function AddCustomExtensionDialog(props: {
       { approvalPassword: password, approvalTotpCode: totp },
       busy,
     );
-  const submitLabel = recognized === null ? (busy ? "Looking…" : "Find this tool") : busy ? "Saving…" : pending === "blocked" ? "Block this tool" : "Allow this tool";
+  const submitLabel = addDialogSubmitLabel({
+    recognized,
+    busy,
+    pending,
+  });
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm">
@@ -157,7 +157,7 @@ export function AddCustomExtensionDialog(props: {
       >
         <h2 id="add-custom-extension-title" className="text-xl font-semibold text-brand-dark">Add a custom extension</h2>
         <p className="mt-2 text-sm leading-6 text-brand-dark/80">
-          Paste the command for your tool. Guard reads --help, then you can set Recommended, Allow, or Block on each command.
+          Paste a local command or an MCP server launch command. Guard lists commands from --help, or tools from a stdio MCP server, then you set Recommended, Allow, or Block.
         </p>
         <label htmlFor="custom-extension-command" className="mt-5 block text-sm font-semibold text-brand-dark">Command</label>
         <input
@@ -166,15 +166,22 @@ export function AddCustomExtensionDialog(props: {
           onChange={handleCommand}
           spellCheck={false}
           autoComplete="off"
-          placeholder="python3 scripts/cwv.py --by url"
+          placeholder="npx -y @modelcontextprotocol/server-github"
           className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
         />
         <p className="mt-2 text-sm leading-6 text-brand-dark/70">
-          One command. Include the script or binary. Not <span className="font-medium">ls</span>, <span className="font-medium">grep</span>, or a pipeline.
+          One command. A script, a binary, or an MCP launch such as <span className="font-medium">npx</span> or <span className="font-medium">uvx</span>. Not <span className="font-medium">ls</span>, <span className="font-medium">grep</span>, or a pipeline.
         </p>
         {recognized ? (
           <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-sm font-semibold text-brand-dark">{recognized.name}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-brand-dark">{recognized.name}</p>
+              {recognized.surface === "mcp" ? (
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold tracking-wide text-brand-dark/70 ring-1 ring-slate-200">
+                  MCP server
+                </span>
+              ) : null}
+            </div>
             <p className="mt-1 font-mono text-xs text-brand-dark/70">{recognized.example_label}</p>
             {summary ? <p className="mt-2 text-sm leading-6 text-brand-dark/80">{summary}</p> : null}
             {commands.length > 0 ? (
@@ -182,16 +189,17 @@ export function AddCustomExtensionDialog(props: {
                 <CustomExtensionCommandList
                   commands={commands}
                   disabled={busy}
+                  surface={recognized.surface}
                   onChange={handleCommandState}
                 />
               </div>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={requestAllow} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "allowed" ? "bg-brand-blue text-white" : "border border-slate-300 text-brand-dark"}`}>
-                Allow this tool
+                {recognized.surface === "mcp" ? "Allow this server" : "Allow this tool"}
               </button>
               <button type="button" onClick={requestBlock} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "blocked" ? "bg-brand-dark text-white" : "border border-slate-300 text-brand-dark"}`}>
-                Block this tool
+                {recognized.surface === "mcp" ? "Block this server" : "Block this tool"}
               </button>
             </div>
           </div>
@@ -229,6 +237,37 @@ export function AddCustomExtensionDialog(props: {
       </form>
     </div>
   );
+}
+
+function addDialogSubmitLabel(input: {
+  recognized: LocalCliItem | null;
+  busy: boolean;
+  pending: LocalCliState | null;
+}): string {
+  if (input.recognized === null) {
+    return input.busy ? "Looking…" : "Find this tool";
+  }
+  if (input.busy) {
+    return "Saving…";
+  }
+  const mcp = input.recognized.surface === "mcp";
+  if (input.pending === "blocked") {
+    return mcp ? "Block this server" : "Block this tool";
+  }
+  return mcp ? "Allow this server" : "Allow this tool";
+}
+
+function suggestionSummary(item: LocalCliItem): string {
+  if (item.surface === "mcp" && item.commands.length > 0) {
+    return `Guard listed ${item.commands.length} tools from this MCP server. Recommended keeps the usual review. Allow or block each one.`;
+  }
+  if (item.surface === "mcp") {
+    return `Find this tool to list MCP tools from ${item.name}.`;
+  }
+  if (item.commands.length > 0) {
+    return `Guard loaded ${item.commands.length} commands. Recommended keeps the usual review. Allow or block each one.`;
+  }
+  return `Find this tool to read ${item.name} --help and load its commands.`;
 }
 
 function SuggestionButton(props: { item: LocalCliItem; onSelect: (item: LocalCliItem) => void }) {

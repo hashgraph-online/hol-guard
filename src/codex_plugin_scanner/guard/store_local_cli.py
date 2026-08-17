@@ -30,9 +30,12 @@ class StoreLocalCliMixin:
         seen_at: str,
         source_path: str | None = None,
         help_status: str | None = None,
+        surface: str = "cli",
+        server_identity_hash: str | None = None,
     ) -> None:
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
+        surface_value = surface if surface in {"cli", "mcp"} else "cli"
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
             current = connection.execute(
@@ -44,8 +47,9 @@ class StoreLocalCliMixin:
                     """
                     insert into local_cli_observation (
                         cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                        observed_count, last_seen_at, source_path, help_status
-                    ) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                        observed_count, last_seen_at, source_path, help_status, surface,
+                        server_identity_hash
+                    ) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
                     """,
                     (
                         identity.cli_id,
@@ -57,6 +61,8 @@ class StoreLocalCliMixin:
                         seen_at,
                         source_path,
                         help_status,
+                        surface_value,
+                        server_identity_hash,
                     ),
                 )
                 return
@@ -66,7 +72,9 @@ class StoreLocalCliMixin:
                 set identity_hash = ?, kind = ?, name = ?, interpreter_name = ?,
                     example_label = ?, observed_count = observed_count + 1, last_seen_at = ?,
                     source_path = coalesce(?, source_path),
-                    help_status = coalesce(?, help_status)
+                    help_status = coalesce(?, help_status),
+                    surface = ?,
+                    server_identity_hash = coalesce(?, server_identity_hash)
                 where cli_id = ?
                 """,
                 (
@@ -78,6 +86,8 @@ class StoreLocalCliMixin:
                     seen_at,
                     source_path,
                     help_status,
+                    surface_value,
+                    server_identity_hash,
                     identity.cli_id,
                 ),
             )
@@ -88,7 +98,8 @@ class StoreLocalCliMixin:
             observation_rows = connection.execute(
                 """
                 select cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                       observed_count, last_seen_at, source_path, help_status
+                       observed_count, last_seen_at, source_path, help_status, surface,
+                       server_identity_hash
                 from local_cli_observation
                 order by last_seen_at desc, cli_id asc
                 """
@@ -123,6 +134,8 @@ class StoreLocalCliMixin:
                         "last_seen_at": None,
                         "source_path": None,
                         "help_status": None,
+                        "surface": "cli",
+                        "server_identity_hash": None,
                         "state": grant["state"],
                         "stale": False,
                         "grant_revision": grant["revision"],
@@ -134,6 +147,42 @@ class StoreLocalCliMixin:
             item["authority_revision"] = authority_revision
             item["commands"] = command_map.get(str(item["cli_id"]), [])
         return items
+
+    def read_local_mcp_grant(self, server_identity_hash: str) -> dict[str, object] | None:
+        if not isinstance(server_identity_hash, str) or len(server_identity_hash) != 64:
+            return None
+        if any(character not in "0123456789abcdef" for character in server_identity_hash):
+            return None
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            observation = connection.execute(
+                """
+                select cli_id, identity_hash
+                from local_cli_observation
+                where surface = 'mcp'
+                  and (server_identity_hash = ? or identity_hash = ?)
+                order by last_seen_at desc, cli_id asc
+                limit 1
+                """,
+                (server_identity_hash, server_identity_hash),
+            ).fetchone()
+            if observation is None:
+                return None
+            cli_id, identity_hash = _row_values(observation, 2)
+            if not isinstance(cli_id, str) or not isinstance(identity_hash, str):
+                return None
+            grant_row = connection.execute(
+                "select cli_id, identity_hash, state, revision, updated_at from local_cli_grant where cli_id = ?",
+                (cli_id,),
+            ).fetchone()
+        if grant_row is None:
+            return None
+        grant = _grant_from_row(grant_row)
+        if grant["identity_hash"] != identity_hash:
+            return None
+        grant["commands"] = self.read_local_cli_command_catalog(cli_id)
+        grant["command_states"] = self.read_local_cli_command_states(cli_id)
+        return grant
 
     def read_local_cli_grant(self, cli_id: str) -> dict[str, object] | None:
         if not is_local_cli_id(cli_id):
@@ -372,7 +421,8 @@ def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
 
 
 def _observation_from_row(row: object) -> dict[str, object]:
-    values = _row_values(row, 10)
+    values = _row_values(row, 12)
+    surface = values[10] if values[10] in {"cli", "mcp"} else "cli"
     return {
         "cli_id": values[0],
         "identity_hash": values[1],
@@ -384,6 +434,8 @@ def _observation_from_row(row: object) -> dict[str, object]:
         "last_seen_at": values[7],
         "source_path": values[8],
         "help_status": values[9],
+        "surface": surface,
+        "server_identity_hash": values[11],
     }
 
 

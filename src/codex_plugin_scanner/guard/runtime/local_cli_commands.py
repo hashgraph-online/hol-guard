@@ -16,7 +16,8 @@ LocalCliCommandState = Literal["inherit", "allow", "block"]
 ROOT_COMMAND_ID = "root"
 OTHER_COMMAND_ID = "other"
 _COMMAND_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,40}$")
-_MAX_COMMANDS = 40
+MAX_LOCAL_CLI_COMMANDS = 80
+_MAX_COMMANDS = MAX_LOCAL_CLI_COMMANDS
 _MAX_DEPTH = 4
 
 
@@ -46,6 +47,17 @@ def is_local_cli_command_id(value: str) -> bool:
         return True
     parts = value.split(".")
     return 1 <= len(parts) <= _MAX_DEPTH and all(_COMMAND_NAME.fullmatch(part) for part in parts)
+
+
+def slug_local_cli_command_id(name: str) -> str:
+    """Turn an MCP tool name or CLI token into a catalog command id."""
+
+    compact = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
+    compact = "-".join(part for part in compact.split("-") if part)
+    if not compact:
+        return OTHER_COMMAND_ID
+    slug = compact[:40]
+    return slug if is_local_cli_command_id(slug) else OTHER_COMMAND_ID
 
 
 def is_local_cli_command_state(value: object) -> bool:

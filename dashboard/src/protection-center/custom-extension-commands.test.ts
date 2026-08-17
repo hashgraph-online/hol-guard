@@ -42,6 +42,8 @@ const legacyAllowed: LocalCliItem = {
   last_seen_at: null,
   source_path: null,
   help_status: null,
+  surface: "cli",
+  server_identity_hash: null,
   state: "allowed",
   stale: false,
   grant_revision: 1,
@@ -56,6 +58,14 @@ assert.match(
     commands: [{ ...commands[0]!, state: "inherit" }],
   }),
   /Recommended/,
+);
+assert.equal(
+  customExtensionStateLabel({
+    ...legacyAllowed,
+    surface: "mcp",
+    state: "blocked",
+  }),
+  "Every tool from this server is blocked.",
 );
 
 console.log("custom-extension-commands.test.ts: all assertions passed");

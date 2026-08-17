@@ -15,6 +15,7 @@ from .action_lattice import most_restrictive_guard_action, normalize_guard_actio
 from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
+from .local_cli_trust import matching_local_mcp_grant
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
 from .runtime.approval_context import (
@@ -466,6 +467,11 @@ def evaluate_tool_call(
         arguments=arguments,
         current=current,
     )
+    current = _apply_local_mcp_extension_grant(
+        store=store,
+        artifact=artifact,
+        current=current,
+    )
     runtime_exact_match_context = _browser_runtime_exact_match_context(artifact, arguments)
     policy_lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
         artifact.harness,
@@ -589,6 +595,34 @@ def _apply_temporary_mcp_grant(
                 source="temporary-mcp-grant",
                 summary="A time-bounded approval covers this routine MCP capability.",
             )
+    return current
+
+
+def _apply_local_mcp_extension_grant(
+    *,
+    store: GuardStore,
+    artifact: GuardArtifact,
+    current: ToolCallDecision,
+) -> ToolCallDecision:
+    matched = matching_local_mcp_grant(
+        store=store,
+        artifact=artifact,
+        current_action=current.action,
+    )
+    if matched == "blocked":
+        return replace(
+            current,
+            action="block",
+            source="local-mcp-extension",
+            summary="This MCP tool is blocked by a custom extension on this device.",
+        )
+    if matched == "allowed":
+        return replace(
+            current,
+            action="allow",
+            source="local-mcp-extension",
+            summary="This MCP tool is allowed by a custom extension on this device.",
+        )
     return current
 
 
