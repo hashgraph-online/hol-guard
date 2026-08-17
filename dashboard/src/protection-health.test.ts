@@ -6,6 +6,7 @@ import {
   PROTECTION_CHECK_IDS,
   protectionHeadlineFor,
   protectionHealthFor,
+  remainingProtectionRepairParts,
 } from "./protection-health";
 import type { GuardProtectionCheck, GuardRuntimeSnapshot } from "./guard-types";
 
@@ -118,6 +119,57 @@ const fleetSource = readFileSync(new URL("./fleet-workspace.tsx", import.meta.ur
 const reviewStatesSource = readFileSync(new URL("./review-states.tsx", import.meta.url), "utf8");
 assert.match(appSource, /const handleRepairProtection = useCallback/);
 assert.match(appSource, /onRepairProtection=\{handleRepairProtection\}/);
+assert.match(appSource, /remainingProtectionRepairParts\(remainingHealth\)/);
+assert.match(appSource, /Command evidence still needs repair/);
+assert.doesNotMatch(appSource, /app\.checks\.some\(\(check\) => check\.status === "fail"\)/);
+
+const evidenceOnlyHealth = normalizeProtectionHealth({
+  ...payload(decisionFailure),
+  apps: [
+    {
+      harness: "grok",
+      state: "degraded",
+      label: "Degraded",
+      detail: "Shared evidence failed.",
+      evidence_gap: false,
+      reason_codes: ["hooks_verified"],
+      checks: checks().map((check) => (
+        check.check_id === "decision_stream"
+          ? { check_id: "decision_stream", status: "fail", reason_code: "decision_stream_failed" }
+          : check
+      )),
+    },
+  ],
+});
+assert.deepEqual(remainingProtectionRepairParts(evidenceOnlyHealth), {
+  failedHookHarnesses: [],
+  evidenceFailed: true,
+});
+
+const hookFailureChecks = checks();
+hookFailureChecks[PROTECTION_CHECK_IDS.indexOf("harness_hooks")] = {
+  check_id: "harness_hooks",
+  status: "fail",
+  reason_code: "hook_verification_failed",
+};
+const hookFailureHealth = normalizeProtectionHealth({
+  ...payload(hookFailureChecks),
+  apps: [
+    {
+      harness: "grok",
+      state: "degraded",
+      label: "Degraded",
+      detail: "Hooks failed.",
+      evidence_gap: false,
+      reason_codes: ["hook_verification_failed"],
+      checks: hookFailureChecks,
+    },
+  ],
+});
+assert.deepEqual(remainingProtectionRepairParts(hookFailureHealth), {
+  failedHookHarnesses: ["grok"],
+  evidenceFailed: false,
+});
 assert.match(appDetailSource, /Install state" value=\{active \? "Installed"/);
 assert.match(appDetailSource, /protectionHealthFor\(runtime, harness\)/);
 assert.match(fleetSource, /resolveAppStatus\(install, appProtection,/);

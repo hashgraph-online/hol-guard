@@ -172,3 +172,15 @@ export function protectionHealthFor(
   const fallback = healthFromChecks(fallbackChecks());
   return { harness: STABLE_ID.test(harness) && harness.length <= 64 ? harness : "unknown", ...fallback };
 }
+
+export function remainingProtectionRepairParts(health: GuardProtectionHealth): {
+  failedHookHarnesses: string[];
+  evidenceFailed: boolean;
+} {
+  return {
+    failedHookHarnesses: health.apps
+      .filter((app) => app.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail"))
+      .map((app) => app.harness),
+    evidenceFailed: health.checks.some((check) => check.check_id === "decision_stream" && check.status === "fail"),
+  };
+}

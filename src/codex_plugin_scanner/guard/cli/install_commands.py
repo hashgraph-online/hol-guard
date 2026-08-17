@@ -396,6 +396,23 @@ def _grok_pretool_is_catchall(pretool_hook: Path) -> bool:
     return nested[0].get("type") == "command" and isinstance(command, str) and bool(command.strip())
 
 
+def grok_hooks_protection_ready(context: HarnessContext) -> bool:
+    """Return whether live Grok hook files and managed permission rules are active."""
+
+    checks = _grok_protection_checks(context)
+    hook_warnings = [
+        warning
+        for warning in checks.get("warnings", [])
+        if isinstance(warning, str) and "shim" not in warning.lower() and "launcher" not in warning.lower()
+    ]
+    return (
+        checks.get("pretool_catchall_installed") is True
+        and checks.get("prompt_hook_installed") is True
+        and checks.get("managed_config_installed") is True
+        and not hook_warnings
+    )
+
+
 def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
     from ..adapters.grok import GrokHarnessAdapter
 

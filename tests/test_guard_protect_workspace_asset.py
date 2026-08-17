@@ -17,11 +17,22 @@ def _authoritative_source() -> str:
     return "\n".join(path.read_text(encoding="utf-8") for path in (_AUTHORITATIVE_SOURCE, _RECOVERY_SOURCE))
 
 
+def test_repair_message_does_not_blame_apps_for_shared_evidence_failure() -> None:
+    app_source = Path(__file__).parents[1].joinpath("dashboard/src/app.tsx").read_text(encoding="utf-8")
+    health_source = Path(__file__).parents[1].joinpath("dashboard/src/protection-health.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "remainingProtectionRepairParts" in health_source
+    assert "remainingProtectionRepairParts(remainingHealth)" in app_source
+    assert "Command evidence still needs repair." in app_source
+    assert 'app.checks.some((check) => check.status === "fail")' not in app_source
+
+
 def test_degraded_protection_exposes_recovery_actions() -> None:
     source = _source()
     authoritative_source = _authoritative_source()
 
-    assert "Restore full protection" in source
+    assert "Restore local protection" in source
     assert "protection-recovery" in source
     assert "View repair details" in source
     assert "Needs repair" in source
@@ -31,7 +42,7 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
     assert "Guard could not confirm integrity protection yet." not in source
     assert 'hookCheck?.status === "fail"' in source
     assert 'check.check_id === "harness_hooks" && check.status === "fail"' in source
-    assert "Restore full protection" in authoritative_source
+    assert "Restore local protection" in authoritative_source
 
 
 def test_protection_repair_requires_local_auth_token() -> None:

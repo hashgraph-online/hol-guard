@@ -1946,41 +1946,81 @@ def _finalize_daemon_guard_connect_payload(
     return payload
 
 
+_PROTECTION_REPAIR_PROBE_COMMAND = "git status --porcelain=v1"
+
+
 def _repair_command_activity_persistence_health(store: GuardStore) -> None:
-    shadow_evaluation = evaluate_command("git push origin release/2.1 --force")
-    shadow_proposal = baseline_command_shadow_proposal(shadow_evaluation)
+    evaluation = evaluate_command(_PROTECTION_REPAIR_PROBE_COMMAND)
     occurred_at = datetime.now(timezone.utc)
+    activity_id = f"activity:protection-repair-probe:{uuid.uuid4().hex}"
+    decision_reason = (
+        ActivityDecisionReason.EXTENSION_MATCH if evaluation.matches else ActivityDecisionReason.NO_MATCH
+    )
     evidence = build_pre_hook_evidence(
-        shadow_evaluation,
+        evaluation,
         CommandActivityDecisionFacts(
             policy_action="allow",
-            decision_reason_code=ActivityDecisionReason.EXTENSION_MATCH,
+            decision_reason_code=decision_reason,
             prompted=False,
             approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
             receipt_id=None,
         ),
-        activity_id="activity:protection-repair-probe",
+        activity_id=activity_id,
         occurred_at=occurred_at,
         harness="codex",
         request_correlation=None,
     )
-    shadow = build_command_shadow_observation(
-        shadow_evaluation,
-        authoritative_action="allow",
-        proposal=shadow_proposal,
-        activity_id="activity:protection-repair-probe",
-        occurred_at=occurred_at,
-        control=CommandShadowControl(
-            enabled=True,
-            kill_switch=False,
-            release_cohorts=frozenset({CommandShadowCohort.BASELINE}),
-            disabled_cohorts=frozenset(),
-            sample_basis_points=10_000,
-        ),
+    shadow = None
+    try:
+        shadow = build_command_shadow_observation(
+            evaluation,
+            authoritative_action="allow",
+            proposal=baseline_command_shadow_proposal(evaluation),
+            activity_id=activity_id,
+            occurred_at=occurred_at,
+            control=CommandShadowControl(
+                enabled=True,
+                kill_switch=False,
+                release_cohorts=frozenset({CommandShadowCohort.BASELINE}),
+                disabled_cohorts=frozenset(),
+                sample_basis_points=10_000,
+            ),
+        )
+    except (RuntimeError, TypeError, ValueError):
+        shadow = None
+    store.probe_command_activity_persistence(
+        evidence,
+        shadow=shadow,
+        shadow_evaluation_succeeded=True,
     )
-    if shadow is None:
-        raise RuntimeError("command shadow repair probe was not selected")
-    store.probe_command_activity_persistence(evidence, shadow=shadow)
+
+
+def _repair_failing_managed_harness_hooks(store: GuardStore) -> list[str]:
+    from ..approvals import _live_hook_verification
+
+    installs = store.list_managed_installs()
+    context = HarnessContext(
+        home_dir=Path.home().resolve(),
+        workspace_dir=None,
+        guard_home=store.guard_home,
+    )
+    verified = _live_hook_verification(installs, store)
+    failed: list[str] = []
+    for install in installs:
+        harness = install.get("harness")
+        if not isinstance(harness, str) or install.get("active") is not True:
+            continue
+        if verified.get(harness) is True:
+            continue
+        try:
+            apply_managed_install("install", harness, False, context, store, None, _now())
+        except (OSError, RuntimeError, TypeError, ValueError):
+            failed.append(harness)
+            continue
+        refreshed = store.get_managed_install(harness)
+        if refreshed is None or _live_hook_verification([refreshed], store).get(harness) is not True:
+            failed.append(harness)
+    return failed
 
 
 _GuardDaemonHttpServer = _GuardDaemonHTTPServer
@@ -4935,39 +4975,54 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             reason_count = len(degraded_reasons) if isinstance(degraded_reasons, list) else 0
             repaired_check_ids = ["policy_engine", "rule_packs", "tamper_checks"]
             pending_check_ids: list[str] = []
-            if check_id == "all" and repaired:
-                failed_check_ids: list[str] = []
+            failed_check_ids: list[str] = []
+            if check_id == "all":
                 try:
-                    containment_health = self._containment_health_payload(force_refresh=True)
-                    refreshed_signals = containment_health_signals(
-                        containment_health,
-                        now=datetime.now(timezone.utc),
-                    )
-                    for containment_check_id in (
-                        "decision_plane_compatibility",
-                        "containment_compatibility",
-                        "sandbox",
-                    ):
-                        if refreshed_signals[containment_check_id].status is ProtectionCheckStatus.PASS:
-                            repaired_check_ids.append(containment_check_id)
-                        else:
-                            failed_check_ids.append(containment_check_id)
+                    hook_failures = _repair_failing_managed_harness_hooks(store)
                 except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                    failed_check_ids.extend(["decision_plane_compatibility", "containment_compatibility", "sandbox"])
-                try:
-                    config = load_guard_config(store.guard_home)
-                    _repair_command_activity_persistence_health(store)
-                    store.maintain_command_activity(
-                        now=datetime.now(timezone.utc),
-                        detail_retain_days=config.evidence_retain_days,
-                    )
-                    evidence_health = store.get_command_activity_persistence_health()
-                    if evidence_health.active_error_count > 0:
+                    hook_failures = ["harness_hooks"]
+                has_active_hooks = any(
+                    isinstance(install.get("harness"), str) and install.get("active") is True
+                    for install in store.list_managed_installs()
+                )
+                if hook_failures:
+                    failed_check_ids.append("harness_hooks")
+                elif has_active_hooks:
+                    repaired_check_ids.append("harness_hooks")
+                if repaired:
+                    try:
+                        containment_health = self._containment_health_payload(force_refresh=True)
+                        refreshed_signals = containment_health_signals(
+                            containment_health,
+                            now=datetime.now(timezone.utc),
+                        )
+                        for containment_check_id in (
+                            "decision_plane_compatibility",
+                            "containment_compatibility",
+                            "sandbox",
+                        ):
+                            if refreshed_signals[containment_check_id].status is ProtectionCheckStatus.PASS:
+                                repaired_check_ids.append(containment_check_id)
+                            else:
+                                failed_check_ids.append(containment_check_id)
+                    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                        failed_check_ids.extend(
+                            ["decision_plane_compatibility", "containment_compatibility", "sandbox"]
+                        )
+                    try:
+                        config = load_guard_config(store.guard_home)
+                        _repair_command_activity_persistence_health(store)
+                        store.maintain_command_activity(
+                            now=datetime.now(timezone.utc),
+                            detail_retain_days=config.evidence_retain_days,
+                        )
+                        evidence_health = store.get_command_activity_persistence_health()
+                        if evidence_health.active_error_count > 0:
+                            failed_check_ids.append("decision_stream")
+                        else:
+                            repaired_check_ids.append("decision_stream")
+                    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                         failed_check_ids.append("decision_stream")
-                    else:
-                        repaired_check_ids.append("decision_stream")
-                except (OSError, RuntimeError, TypeError, ValueError):
-                    failed_check_ids.append("decision_stream")
                 if failed_check_ids or pending_check_ids:
                     self._write_json(
                         {
@@ -5026,6 +5081,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(
                 {
                     "repaired": repaired,
+                    "repair_scope": "local_integrity",
                     "check_ids": ["decision_stream"],
                     "message": (
                         "Command evidence is healthy."

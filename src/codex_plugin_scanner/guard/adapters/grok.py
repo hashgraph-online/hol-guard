@@ -384,7 +384,7 @@ class GrokHarnessAdapter(HarnessAdapter):
         grok_root = self._grok_root(context)
         managed_config_path = self._managed_config_path(context)
         hooks_dir = self._hooks_dir(context)
-        _ensure_path_within_root(context.home_dir, managed_config_path, label="Grok")
+        _ensure_path_within_root(self._grok_home_dir(context), managed_config_path, label="Grok")
         grok_root.mkdir(parents=True, exist_ok=True)
         hooks_dir.mkdir(parents=True, exist_ok=True)
         state_dir = self._managed_state_dir(context)
@@ -429,8 +429,12 @@ class GrokHarnessAdapter(HarnessAdapter):
         return {
             "harness": self.harness,
             "active": True,
-            "config_path": str(managed_config_path),
             **shim_manifest,
+            "config_path": str(managed_config_path),
+            "managed_config_path": str(managed_config_path),
+            "managed_hooks_path": str(pretool_path),
+            "pretool_hook_path": str(pretool_path),
+            "prompt_hook_path": str(prompt_path),
             "notes": [
                 "Guard catch-all PreToolUse hook installed in .grok/hooks/hol-guard-pretooluse.json",
                 "Guard observe hooks installed for prompts, session start, and subagent start",
@@ -449,7 +453,7 @@ class GrokHarnessAdapter(HarnessAdapter):
         managed_config_path = self._managed_config_path(context)
         hooks_dir = self._hooks_dir(context)
         if managed_config_path.is_file():
-            _ensure_path_within_root(context.home_dir, managed_config_path, label="Grok")
+            _ensure_path_within_root(self._grok_home_dir(context), managed_config_path, label="Grok")
             existing_text = managed_config_path.read_text(encoding="utf-8")
             managed_config_path.write_text(remove_managed_block(existing_text).rstrip() + "\n", encoding="utf-8")
 
