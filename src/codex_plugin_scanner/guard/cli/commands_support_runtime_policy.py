@@ -806,7 +806,7 @@ def _apply_explicit_posture_action(
     config: GuardConfig,
     artifact: GuardArtifact,
     risk_class: str,
-    action: GuardAction | None,
+    action: str | None,
 ) -> GuardAction:
     from ..protection_posture import apply_posture_confidence
 
