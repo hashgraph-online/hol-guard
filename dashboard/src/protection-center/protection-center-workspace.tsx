@@ -290,6 +290,11 @@ export function ProtectionCenterWorkspace() {
   }, []);
   const openAddCustom = useCallback(() => setAddingCustom(true), []);
   const closeAddCustom = useCallback(() => setAddingCustom(false), []);
+  const handleCustomExtensionAdded = useCallback((cliId: string) => {
+    void localClis.load();
+    closeAddCustom();
+    openLocalCliDetail(cliId);
+  }, [closeAddCustom, localClis.load, openLocalCliDetail]);
   const retryLocalClis = useCallback(() => {
     void localClis.load();
   }, [localClis.load]);
@@ -494,8 +499,9 @@ export function ProtectionCenterWorkspace() {
     {addingCustom ? (
       <AddCustomExtensionDialog
         items={localClis.data?.items ?? []}
+        revision={localClis.data?.revision ?? 0}
         onClose={closeAddCustom}
-        onOpen={openLocalCliDetail}
+        onAdded={handleCustomExtensionAdded}
       />
     ) : null}
     {pending ? <ReviewModal change={pending} busy={busy} error={mutationError} approvalGate={resolvedApprovalGate} onCancel={() => { if (!busy) setPending(null); }} onConfirm={confirm} /> : null}

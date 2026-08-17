@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..approval_gate import (
@@ -11,7 +12,12 @@ from ..approval_gate import (
     require_local_cli_trust,
 )
 from ..local_cli_trust import utc_now
-from ..runtime.local_cli_identity import LocalCliKind, UnlistedCliIdentity, is_local_cli_id
+from ..runtime.local_cli_identity import (
+    LocalCliKind,
+    UnlistedCliIdentity,
+    is_local_cli_id,
+    recognize_operator_cli,
+)
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -48,6 +54,27 @@ class LocalCliApiService:
                     "Guard Cloud can keep the same extension on your other machines."
                 ),
             },
+        }
+
+    def recognize(self, payload: dict[str, object]) -> dict[str, object]:
+        command = self._required_string(payload, "command")
+        home_dir = Path.home()
+        identity, code, message = recognize_operator_cli(command, cwd=home_dir, home_dir=home_dir)
+        if identity is None:
+            raise LocalCliApiError(400, code, message)
+        self._store.record_local_cli_observation(identity, seen_at=utc_now())
+        listed = next(
+            (item for item in self._store.list_local_cli_items() if item.get("cli_id") == identity.cli_id),
+            None,
+        )
+        return {
+            "schema_version": _LOCAL_CLI_API_SCHEMA,
+            "revision": self._store.read_local_cli_revision(),
+            "item": listed or identity.to_dict(),
+            "summary": (
+                f"Later commands from this same {identity.name} file are covered. "
+                "Different flags are fine. Pipes and wrappers are not."
+            ),
         }
 
     def preview(self, payload: dict[str, object]) -> dict[str, object]:

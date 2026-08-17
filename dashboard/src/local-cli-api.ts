@@ -16,6 +16,7 @@ export type LocalCliItem = {
   stale: boolean;
   grant_revision: number | null;
   authority_revision: number;
+  suggestable: boolean;
 };
 
 export type LocalCliListResponse = {
@@ -82,7 +83,7 @@ export function addedCustomExtensions(items: readonly LocalCliItem[]): LocalCliI
 }
 
 export function suggestedCustomExtensions(items: readonly LocalCliItem[]): LocalCliItem[] {
-  return items.filter((item) => item.state === "unset");
+  return items.filter((item) => item.state === "unset" && item.suggestable);
 }
 
 export function normalizeLocalCliItem(value: unknown): LocalCliItem {
@@ -110,6 +111,7 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
       ? null
       : requiredInt(value.grant_revision, "grant revision"),
     authority_revision: requiredInt(value.authority_revision, "revision"),
+    suggestable: value.suggestable === true,
   };
 }
 
@@ -158,6 +160,20 @@ export async function previewLocalCliMutation(payload: LocalCliMutationPayload):
   }));
   if (!isRecord(body)) throw new Error("Invalid local CLI preview");
   return { summary: requiredString(body.summary, "summary") };
+}
+
+export async function recognizeLocalCli(command: string): Promise<{ item: LocalCliItem; summary: string; revision: number }> {
+  const body = await readJson(await fetchLocalCliApi("/v1/local-clis/recognize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command }),
+  }));
+  if (!isRecord(body)) throw new Error("Invalid local CLI recognition");
+  return {
+    item: normalizeLocalCliItem(body.item),
+    summary: requiredString(body.summary, "summary"),
+    revision: requiredInt(body.revision, "revision"),
+  };
 }
 
 export async function applyLocalCliMutation(payload: LocalCliMutationPayload): Promise<void> {

@@ -25,6 +25,7 @@ const item = normalizeLocalCliItem({
   stale: false,
   grant_revision: 1,
   authority_revision: 1,
+  suggestable: true,
 });
 assert.equal(item.name, "cwv.py");
 assert.equal(item.state, "allowed");
@@ -59,10 +60,21 @@ const unsetItem = normalizeLocalCliItem({
   name: "unset-tool",
   state: "unset",
   grant_revision: null,
+  suggestable: true,
 });
-const mixed = [item, blockedItem, unsetItem];
+const grepItem = normalizeLocalCliItem({
+  ...item,
+  cli_id: "local-cli.grep-abcdef12",
+  name: "grep",
+  kind: "executable",
+  example_label: "grep",
+  state: "unset",
+  grant_revision: null,
+  suggestable: false,
+});
+const mixed = [item, blockedItem, unsetItem, grepItem];
 assert.deepEqual(addedCustomExtensions(mixed).map((entry) => entry.state), ["allowed", "blocked"]);
-assert.deepEqual(suggestedCustomExtensions(mixed).map((entry) => entry.state), ["unset"]);
+assert.deepEqual(suggestedCustomExtensions(mixed).map((entry) => entry.name), ["unset-tool"]);
 
 const fallbackCloud = normalizeLocalCliList({
   schema_version: "guard.daemon.local-clis.v1",

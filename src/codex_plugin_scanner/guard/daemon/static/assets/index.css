@@ -1112,10 +1112,6 @@
     max-height: calc(var(--spacing) * 40);
   }
 
-  .max-h-80 {
-    max-height: calc(var(--spacing) * 80);
-  }
-
   .max-h-96 {
     max-height: calc(var(--spacing) * 96);
   }
@@ -1842,6 +1838,10 @@
 
   :where(.divide-slate-100 > :not(:last-child)) {
     border-color: var(--color-slate-100);
+  }
+
+  :where(.divide-slate-200 > :not(:last-child)) {
+    border-color: var(--color-slate-200);
   }
 
   .self-center {
@@ -5216,6 +5216,16 @@
 
   .placeholder\:font-sans::placeholder {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  }
+
+  .placeholder\:text-brand-dark\/40::placeholder {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .placeholder\:text-brand-dark\/40::placeholder {
+      color: color-mix(in oklab, var(--brand-dark) 40%, transparent);
+    }
   }
 
   .placeholder\:text-slate-400::placeholder {

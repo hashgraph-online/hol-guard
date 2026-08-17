@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -50,6 +51,76 @@ _INTERPRETER_NAMES = frozenset(
 )
 _PACKAGE_SCRIPT_KINDS = frozenset({"bun-package-script"})
 _INLINE_KINDS = frozenset({"python-c", "python-m", "node-eval", "inline-script"})
+_COMMON_SHELL_UTILITIES = frozenset(
+    {
+        "[",
+        "alias",
+        "awk",
+        "basename",
+        "cat",
+        "cd",
+        "chmod",
+        "chown",
+        "clear",
+        "cp",
+        "cut",
+        "date",
+        "df",
+        "dirname",
+        "du",
+        "echo",
+        "env",
+        "false",
+        "file",
+        "find",
+        "grep",
+        "head",
+        "history",
+        "kill",
+        "less",
+        "ln",
+        "ls",
+        "mkdir",
+        "more",
+        "mv",
+        "open",
+        "pbcopy",
+        "pbpaste",
+        "printf",
+        "ps",
+        "pwd",
+        "readlink",
+        "realpath",
+        "rm",
+        "rmdir",
+        "sed",
+        "sleep",
+        "sort",
+        "stat",
+        "tail",
+        "tee",
+        "test",
+        "touch",
+        "tr",
+        "true",
+        "type",
+        "uname",
+        "uniq",
+        "unalias",
+        "wc",
+        "which",
+        "xargs",
+    }
+)
+_RESERVED_TOOL_NAMES = frozenset({"hol-guard", "hol_guard", "guard"})
+_SCRIPT_LAUNCHERS = {
+    ".py": "python3",
+    ".js": "node",
+    ".mjs": "node",
+    ".cjs": "node",
+    ".ts": "tsx",
+    ".rb": "ruby",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +218,8 @@ def identify_unlisted_cli_from_command(
         return None
     if _is_interpreter_name(exe_name):
         return None
+    if is_common_shell_utility(exe_name) or is_reserved_tool_name(exe_name):
+        return None
     if exe_name in owned and not _looks_like_script_kind(entrypoint_kind, entrypoint_status):
         return None
     return _executable_identity(executable, exe_name)
@@ -169,6 +242,59 @@ def unlisted_cli_invocation_is_safe(command: CanonicalCommand) -> bool:
 
 def is_local_cli_id(value: str) -> bool:
     return _CLI_ID_PATTERN.fullmatch(value) is not None
+
+
+def is_common_shell_utility(name: str) -> bool:
+    return _normalize_tool_name(name) in _COMMON_SHELL_UTILITIES
+
+
+def is_reserved_tool_name(name: str) -> bool:
+    return _normalize_tool_name(name) in _RESERVED_TOOL_NAMES
+
+
+def is_suggestable_custom_tool(*, name: str, kind: LocalCliKind) -> bool:
+    """Return whether an observed CLI is worth offering as a custom extension."""
+
+    normalized = _normalize_tool_name(name)
+    if is_common_shell_utility(normalized) or is_reserved_tool_name(normalized):
+        return False
+    return not (kind == "script" and normalized.startswith("test_") and normalized.endswith(".py"))
+
+
+def recognize_operator_cli(
+    command_text: str,
+    *,
+    cwd: Path,
+    home_dir: Path,
+    registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+) -> tuple[UnlistedCliIdentity | None, str, str]:
+    """Identify a pasted command or file path. Returns (identity, error_code, message)."""
+
+    stripped = command_text.strip()
+    if not stripped:
+        return None, "missing_command", "Paste a command or a path to the tool."
+    candidates = _recognition_candidates(stripped, cwd=cwd, home_dir=home_dir)
+    last_code = "unrecognized_command"
+    last_message = (
+        "Guard could not turn that into one tool. Paste a single command, "
+        "not a pipeline, and include the script or binary path."
+    )
+    owned = catalog_owned_executables(registry)
+    for candidate in candidates:
+        identity = identify_unlisted_cli(candidate, cwd=cwd, home_dir=home_dir, registry=registry)
+        if identity is not None:
+            return identity, "", ""
+        exe = _first_executable_name(candidate, cwd=cwd, home_dir=home_dir)
+        if exe is not None and is_common_shell_utility(exe):
+            return None, "common_shell_utility", f"{exe} is a built-in shell command, not a custom extension."
+        if exe is not None and is_reserved_tool_name(exe):
+            return None, "reserved_tool", "Guard itself is not added as a custom extension."
+        if exe is not None and exe in owned:
+            return None, "already_built_in", f"{exe} is already a built-in Guard extension."
+        if "&&" in candidate or "||" in candidate or "|" in candidate:
+            last_code = "compound_command"
+            last_message = "Paste only the tool itself. Wrappers, pipes, and chained commands are not covered."
+    return None, last_code, last_message
 
 
 def _safe_primary_segment(segment: CommandSegment) -> bool:
@@ -288,3 +414,40 @@ def _sha256_hex(value: object) -> str | None:
 
 def _nonempty_string(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _normalize_tool_name(name: str) -> str:
+    base = name.strip().lower()
+    if base.endswith(".exe") or base.endswith(".cmd"):
+        return base.rsplit(".", 1)[0]
+    return base
+
+
+def _recognition_candidates(command_text: str, *, cwd: Path, home_dir: Path) -> tuple[str, ...]:
+    expanded = command_text.replace("~/", f"{home_dir}/")
+    candidates = [expanded]
+    path = Path(expanded).expanduser()
+    if not path.is_absolute():
+        path = cwd / path
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return tuple(candidates)
+    if resolved.is_file():
+        quoted = shlex.quote(str(resolved))
+        launcher = _SCRIPT_LAUNCHERS.get(resolved.suffix.lower())
+        if launcher is not None:
+            candidates.append(f"{launcher} {quoted}")
+        else:
+            candidates.append(quoted)
+    return tuple(dict.fromkeys(candidates))
+
+
+def _first_executable_name(command_text: str, *, cwd: Path, home_dir: Path) -> str | None:
+    try:
+        model = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
+    except ValueError:
+        return None
+    if not model.segments:
+        return None
+    return executable_name(model.segments[0].executable)

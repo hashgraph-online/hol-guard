@@ -16276,7 +16276,7 @@ async function fetchExtensionControlApi(input, init) {
   return fetchWithGuardAuth(input, init);
 }
 async function fetchLocalCliApi(input, init) {
-  const approvedPath = typeof input === "string" && /^\/v1\/local-clis(?:\/(?:preview|apply))?$/.test(input);
+  const approvedPath = typeof input === "string" && /^\/v1\/local-clis(?:\/(?:preview|apply|recognize))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
   }
@@ -31108,11 +31108,11 @@ export {
   HiMiniFolder as as,
   FaWindows as at,
   FaAws as au,
-  HiMiniArrowLeft as av,
-  HiMiniPlus as aw,
-  buildApprovalProofCredentials as ax,
-  isApprovalProofSubmitDisabled as ay,
-  ApprovalProofFieldInputs as az,
+  buildApprovalProofCredentials as av,
+  isApprovalProofSubmitDisabled as aw,
+  ApprovalProofFieldInputs as ax,
+  HiMiniArrowLeft as ay,
+  HiMiniPlus as az,
   HiMiniCommandLine as b,
   HiMiniSignal as b$,
   isRecord$2 as b0,

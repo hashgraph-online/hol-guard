@@ -6,6 +6,8 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     catalog_owned_executables,
     identify_unlisted_cli,
     is_local_cli_id,
+    is_suggestable_custom_tool,
+    recognize_operator_cli,
 )
 
 
@@ -62,6 +64,53 @@ def test_compound_command_is_not_unlisted(tmp_path: Path) -> None:
     script = tmp_path / "cwv.py"
     script.write_text("print('ok')\n", encoding="utf-8")
     assert identify_unlisted_cli(f"python3 {script} && echo done", cwd=tmp_path, home_dir=tmp_path) is None
+
+
+def test_common_shell_utilities_are_not_unlisted(tmp_path: Path) -> None:
+    for command in ("ls -la", "grep foo", "echo hi"):
+        assert identify_unlisted_cli(command, cwd=tmp_path, home_dir=tmp_path) is None
+
+
+def test_recognize_script_path_and_reject_grep(tmp_path: Path) -> None:
+    script = tmp_path / "cwv.py"
+    script.write_text("print('ok')\n", encoding="utf-8")
+    identity, code, message = recognize_operator_cli(str(script), cwd=tmp_path, home_dir=tmp_path)
+    assert identity is not None
+    assert identity.name == "cwv.py"
+    assert code == ""
+    rejected, reject_code, reject_message = recognize_operator_cli("grep foo", cwd=tmp_path, home_dir=tmp_path)
+    assert rejected is None
+    assert reject_code == "common_shell_utility"
+    assert "grep" in reject_message
+    assert is_suggestable_custom_tool(name="cwv.py", kind="script")
+    assert not is_suggestable_custom_tool(name="ls", kind="executable")
+
+
+def test_recognize_script_path_with_spaces(tmp_path: Path) -> None:
+    tools_dir = tmp_path / "my tools"
+    tools_dir.mkdir()
+    script = tools_dir / "cwv.py"
+    script.write_text("print('ok')\n", encoding="utf-8")
+    identity, code, message = recognize_operator_cli(str(script), cwd=tmp_path, home_dir=tmp_path)
+    assert identity is not None
+    assert identity.name == "cwv.py"
+    assert identity.kind == "script"
+    assert code == ""
+    assert message == ""
+
+
+def test_recognize_binary_path_with_spaces(tmp_path: Path) -> None:
+    tools_dir = tmp_path / "my tools"
+    tools_dir.mkdir()
+    tool = tools_dir / "internal-deploy"
+    tool.write_text("#!/bin/sh\necho deploy\n", encoding="utf-8")
+    tool.chmod(0o755)
+    identity, code, message = recognize_operator_cli(str(tool), cwd=tmp_path, home_dir=tmp_path)
+    assert identity is not None
+    assert identity.name == "internal-deploy"
+    assert identity.kind == "executable"
+    assert code == ""
+    assert message == ""
 
 
 def test_standalone_binary_is_unlisted(tmp_path: Path) -> None:

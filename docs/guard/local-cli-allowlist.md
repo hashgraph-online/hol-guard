@@ -2,7 +2,9 @@
 
 Extensions already cover built-in tools such as Git, npm, and cloud CLIs. Agents also run tools that are not in that catalog: a local binary, or an interpreter launching a specific script.
 
-On the Extensions page, choose **Add custom extension**. Guard lists CLIs it has already seen on this device. Adding one turns that exact tool into a custom extension so you can allow or block its matching commands.
+On the Extensions page, choose **Add custom extension** and paste the command for your tool, for example `python3 <skill-root>/scripts/cwv.py --by url`. Guard binds to that exact file. You can then allow or block later commands from it.
+
+Shell utilities such as `ls` and `grep` are not custom extensions. Built-in catalog tools such as Git stay in All tools.
 
 ## Local boundary
 

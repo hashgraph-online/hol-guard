@@ -14,7 +14,6 @@ import {
   fetchLocalCliList,
   LocalCliApiError,
   previewLocalCliMutation,
-  suggestedCustomExtensions,
   type LocalCliItem,
   type LocalCliListResponse,
   type LocalCliState,
@@ -22,6 +21,8 @@ import {
 import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError, ProtectionModuleRow } from "./components/protection-primitives";
+
+export { AddCustomExtensionDialog } from "./add-custom-extension-dialog";
 
 function randomToken(): string {
   return crypto.randomUUID().replaceAll("-", "");
@@ -34,10 +35,10 @@ function reviewTitle(name: string, state: LocalCliState): string {
 }
 
 export function customExtensionStateLabel(item: LocalCliItem): string {
-  if (item.stale) return "This extension's files changed. Review it again.";
-  if (item.state === "allowed") return "Custom extension. Matching commands are allowed on this device.";
-  if (item.state === "blocked") return "Custom extension. Matching commands are blocked on this device.";
-  return "Seen on this device. Add it as a custom extension to allow its commands.";
+  if (item.stale) return "This file changed. Review the extension again.";
+  if (item.state === "allowed") return "Matching commands from this file are allowed.";
+  if (item.state === "blocked") return "Matching commands from this file are blocked.";
+  return item.example_label;
 }
 
 export function CustomExtensionsSection(props: {
@@ -46,24 +47,27 @@ export function CustomExtensionsSection(props: {
   onAdd: () => void;
 }) {
   const added = addedCustomExtensions(props.items);
-  if (added.length === 0) return null;
   return (
     <section className="mt-10" aria-labelledby="custom-extensions-heading">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 id="custom-extensions-heading" className="text-xl font-semibold tracking-tight text-brand-dark">Custom extensions</h2>
-          <p className="mt-1 text-sm text-slate-500">CLIs you added that are not in Guard's built-in catalog.</p>
+          <p className="mt-1 text-sm text-slate-500">Your own scripts and binaries, not Guard's built-in catalog.</p>
         </div>
         <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-blue">
           <HiMiniPlus className="size-4" aria-hidden="true" />
           Add custom extension
         </button>
       </div>
-      <div className="mt-4">
-        {added.map((item) => (
-          <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
-        ))}
-      </div>
+      {added.length === 0 ? (
+        <p className="mt-4 text-sm leading-6 text-brand-dark/75">None yet. Add one by pasting the command you want Guard to watch.</p>
+      ) : (
+        <div className="mt-4">
+          {added.map((item) => (
+            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -91,39 +95,6 @@ function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string)
       executables={[props.item.name]}
       onOpen={handleOpen}
     />
-  );
-}
-
-export function AddCustomExtensionDialog(props: {
-  items: LocalCliItem[];
-  onClose: () => void;
-  onOpen: (cliId: string) => void;
-}) {
-  const suggestions = suggestedCustomExtensions(props.items);
-  const dialogRef = useModalDialog<HTMLDivElement>(props.onClose);
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="add-custom-extension-title" className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none">
-        <h2 id="add-custom-extension-title" className="text-xl font-semibold text-brand-dark">Add a custom extension</h2>
-        <p className="mt-2 text-sm leading-6 text-brand-dark/80">
-          Guard can turn a CLI it has already seen on this device into an extension. After you add it, you can allow every matching command from that tool.
-        </p>
-        {suggestions.length === 0 ? (
-          <p className="mt-4 text-sm leading-6 text-brand-dark/75">
-            No unused CLIs yet. Run the tool once in a protected app, then come back here to add it.
-          </p>
-        ) : (
-          <div className="mt-4 max-h-80 overflow-auto">
-            {suggestions.map((item) => (
-              <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
-            ))}
-          </div>
-        )}
-        <div className="mt-6 flex justify-end">
-          <button type="button" onClick={props.onClose} className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark">Close</button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -190,7 +161,7 @@ export function LocalCliDetail(props: {
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.item.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
-          Adding this custom extension lets Guard treat this exact CLI like the built-in tools. You can allow every matching command on this device. Guard still blocks wrapped or destructive commands that are not just this tool.
+          Allow covers later commands from this same file, including different flags. Pipes, wrappers, and destructive commands stay under Guard's usual rules.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           {added ? (

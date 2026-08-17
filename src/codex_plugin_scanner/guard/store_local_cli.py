@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, cast
 
-from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
+from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id, is_suggestable_custom_tool
 from .store_local_cli_schema import ensure_local_cli_schema
 
 
@@ -85,24 +85,26 @@ class StoreLocalCliMixin:
             cli_id = str(item["cli_id"])
             seen.add(cli_id)
             grant = grants.get(cli_id)
-            items.append(_merge_item(item, grant))
+            items.append(_with_suggestable(_merge_item(item, grant)))
         for cli_id, grant in sorted(grants.items()):
             if cli_id in seen:
                 continue
             items.append(
-                {
-                    "cli_id": cli_id,
-                    "name": cli_id.removeprefix("local-cli."),
-                    "kind": "executable",
-                    "identity_hash": grant["identity_hash"],
-                    "example_label": cli_id.removeprefix("local-cli."),
-                    "interpreter_name": None,
-                    "observed_count": 0,
-                    "last_seen_at": None,
-                    "state": grant["state"],
-                    "stale": False,
-                    "grant_revision": grant["revision"],
-                }
+                _with_suggestable(
+                    {
+                        "cli_id": cli_id,
+                        "name": cli_id.removeprefix("local-cli."),
+                        "kind": "executable",
+                        "identity_hash": grant["identity_hash"],
+                        "example_label": cli_id.removeprefix("local-cli."),
+                        "interpreter_name": None,
+                        "observed_count": 0,
+                        "last_seen_at": None,
+                        "state": grant["state"],
+                        "stale": False,
+                        "grant_revision": grant["revision"],
+                    }
+                )
             )
         authority_revision = 0 if revision_row is None else _row_int(revision_row[0])
         for item in items:
@@ -165,6 +167,20 @@ class StoreLocalCliMixin:
                 (next_revision,),
             )
         return next_revision
+
+
+def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
+    kind = item.get("kind")
+    name = item.get("name")
+    item["suggestable"] = (
+        isinstance(kind, str)
+        and isinstance(name, str)
+        and is_suggestable_custom_tool(
+            name=name,
+            kind="script" if kind == "script" else "executable",
+        )
+    )
+    return item
 
 
 def _observation_from_row(row: object) -> dict[str, object]:

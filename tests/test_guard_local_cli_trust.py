@@ -115,3 +115,4 @@ def test_list_merges_observation_and_grant(tmp_path: Path) -> None:
     assert items[0]["state"] == "allowed"
     assert items[0]["stale"] is False
     assert items[0]["observed_count"] == 1
+    assert items[0]["suggestable"] is True
