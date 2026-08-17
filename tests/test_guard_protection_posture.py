@@ -135,6 +135,41 @@ def test_settings_echo_does_not_persist_derived_posture(tmp_path: Path) -> None:
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "warn"
 
 
+def test_settings_save_blob_with_explicit_watch_stamps_entered_at(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    loaded = update_guard_settings(
+        guard_home,
+        {
+            "mode": "observe",
+            "security_level": "balanced",
+            "risk_actions": {},
+            "protection_posture": "watch",
+            "protection_posture_explicit": True,
+        },
+    )
+    assert loaded.protection_posture == "watch"
+    assert loaded.protection_posture_explicit is True
+    assert loaded.mode == "observe"
+    assert loaded.watch_entered_at is not None
+
+
+def test_settings_save_blob_with_explicit_protected_uses_posture_maps(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    loaded = update_guard_settings(
+        guard_home,
+        {
+            "mode": "enforce",
+            "security_level": "balanced",
+            "risk_actions": {},
+            "protection_posture": "protected",
+            "protection_posture_explicit": True,
+        },
+    )
+    assert loaded.protection_posture_explicit is True
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "allow"
+    assert resolve_risk_action(loaded, "package_script", harness="codex") == "require-reapproval"
+
+
 def test_mode_prompt_does_not_clear_explicit_protected(tmp_path: Path) -> None:
     guard_home = tmp_path / ".hol-guard"
     update_guard_settings(guard_home, {"protection_posture": "protected"})

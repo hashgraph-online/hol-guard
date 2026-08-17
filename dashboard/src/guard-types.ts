@@ -924,18 +924,6 @@ export type GuardProtectionCapability = {
   limited: boolean;
 };
 
-export type GuardProtectionCapability = {
-  harness: string;
-  display_name: string;
-  can_pre_block: boolean;
-  can_ask_inline: boolean;
-  has_native_remember: boolean;
-  fail_open_on_hook_failure: boolean;
-  can_pre_block_limited: boolean;
-  honesty_sentence: string;
-  limited: boolean;
-};
-
 export type GuardSettingsPayload = {
   guard_home: string;
   config_path: string;

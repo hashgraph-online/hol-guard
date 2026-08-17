@@ -392,12 +392,18 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
 
 function applyProtectionPosture(settings: GuardSettings, posture: ProtectionPosture): GuardSettings {
   if (posture === "watch") {
-    return { ...settings, protection_posture: "watch", mode: "observe" };
+    return {
+      ...settings,
+      protection_posture: "watch",
+      protection_posture_explicit: true,
+      mode: "observe",
+    };
   }
   const securityLevel = posture === "extra_careful" ? "strict" : "balanced";
   return {
     ...settings,
     protection_posture: posture,
+    protection_posture_explicit: true,
     mode: "enforce",
     security_level: securityLevel,
     risk_actions: riskProfileActions[securityLevel],
