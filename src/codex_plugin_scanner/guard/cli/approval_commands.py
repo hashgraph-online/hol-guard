@@ -35,6 +35,7 @@ _HARNESS_RETRY_COPY: dict[str, str] = {
     "copilot": "Return to Copilot and retry",
     "pi": "Return to Pi and retry",
     "omp": "Return to Oh My Pi and retry",
+    "grok": "Grok is resuming this action",
 }
 _DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
 

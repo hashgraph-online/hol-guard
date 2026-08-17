@@ -7,6 +7,8 @@ import sys
 from collections.abc import Mapping
 from typing import TextIO
 
+from .grok_approval_resume import grok_resume_metadata_from_guard_payload
+
 _GROK_TOOL_ALIASES: dict[str, str] = {
     "run_terminal_command": "Bash",
     "read_file": "Read",
@@ -188,6 +190,7 @@ def grok_hook_response_from_guard(
     policy_action: str,
     reason: str,
     event_name: str | None = None,
+    approval_payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Translate Guard policy action into Grok hook stdout JSON."""
 
@@ -195,10 +198,12 @@ def grok_hook_response_from_guard(
         return {"decision": "allow"}
     if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
         cleaned_reason = _dedupe_grok_block_reason(reason.strip() if isinstance(reason, str) else "")
-        return {
+        response: dict[str, object] = {
             "decision": "deny",
             "reason": cleaned_reason or "Blocked by HOL Guard.",
         }
+        response.update(grok_resume_metadata_from_guard_payload(approval_payload))
+        return response
     return {"decision": "allow"}
 
 
@@ -220,12 +225,14 @@ def emit_grok_hook_response(
     policy_action: str,
     reason: str,
     event_name: str | None = None,
+    approval_payload: Mapping[str, object] | None = None,
     output_stream: TextIO | None = None,
 ) -> None:
     payload = grok_hook_response_from_guard(
         policy_action=policy_action,
         reason=reason,
         event_name=event_name,
+        approval_payload=approval_payload,
     )
     stream = output_stream if output_stream is not None else sys.stdout
     stream.write(json.dumps(payload, separators=(",", ":")) + "\n")

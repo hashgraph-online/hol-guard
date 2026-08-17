@@ -103,6 +103,7 @@ Current Guard support in this repo:
   - installs observe-only `UserPromptSubmit`, `SubagentStart`, and `SessionStart` hooks for inventory; Grok ignores deny on those events
   - installs Guard-managed deny rules and backup hooks in `~/.grok/managed_config.toml` without touching user `~/.grok/config.toml` or `~/.grok/auth`
   - blocks by returning exit code `2` and Grok-native stdout JSON `{"decision":"deny","reason":"..."}` with approval-center copy in stderr
+  - waits on the original PreToolUse hook after queuing an approval, then returns allow so Grok resumes the same tool call
   - surfaces `--always-approve`, `bypassPermissions`, and sandbox `off` as degraded protection states when detected in Grok config
   - fails open if a hook crashes or times out, so Grok keeps working when Guard is unreachable
 - `pi`
@@ -184,7 +185,7 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `openclaw` | `openclaw` | ❌ | ✅ | ❌ | mcp_tool |
 | `antigravity` | `antigravity` | ❌ | ✅ | ❌ | mcp_tool, prompt |
 | `kimi` | `kimi`, `kimi-code`, `kimi-cli` | ❌ | ✅ | ❌ | shell, prompt |
-| `grok` | `grok`, `grok-build`, `grok-build-cli`, `xai-grok` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, file_write |
+| `grok` | `grok`, `grok-build`, `grok-build-cli`, `xai-grok` | ❌ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, file_write |
 | `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |

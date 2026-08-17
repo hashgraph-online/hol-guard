@@ -9,6 +9,7 @@ from pathlib import Path
 from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact
 from .base import _json_payload
+from .grok_approval_resume import GROK_PRETOOL_HOOK_TIMEOUT_SECONDS
 
 GROK_DIR = ".grok"
 GROK_CONFIG_FILE = "config.toml"
@@ -93,7 +94,7 @@ def build_pretool_hook_json(hook_command: str) -> dict[str, object]:
     ``spawn_subagent``, ``list_dir``, and ``server__tool`` MCP names.
     """
 
-    return {"hooks": {"PreToolUse": [_command_hook_entry(hook_command, timeout=30)]}}
+    return {"hooks": {"PreToolUse": [_command_hook_entry(hook_command, timeout=GROK_PRETOOL_HOOK_TIMEOUT_SECONDS)]}}
 
 
 def build_observe_hook_json(hook_command: str) -> dict[str, object]:
@@ -123,7 +124,7 @@ def build_managed_config_block(hook_command: str = "") -> str:
         "]",
     ]
     if hook_command.strip():
-        command_hook = _toml_inline_command_hook(hook_command, timeout=30)
+        command_hook = _toml_inline_command_hook(hook_command, timeout=GROK_PRETOOL_HOOK_TIMEOUT_SECONDS)
         observe_hook = _toml_inline_command_hook(hook_command, timeout=15)
         lines.extend(
             [

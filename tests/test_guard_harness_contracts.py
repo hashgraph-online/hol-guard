@@ -117,6 +117,12 @@ class TestContractFor:
         assert c.harness == "omp"
         assert c.resume_support is True
 
+    def test_grok_is_resume_capable_contract(self) -> None:
+        c = contract_for("grok")
+        assert c is not None
+        assert c.harness == "grok"
+        assert c.resume_support is True
+
 
 class TestInstallAliases:
     def test_install_codex(self) -> None:

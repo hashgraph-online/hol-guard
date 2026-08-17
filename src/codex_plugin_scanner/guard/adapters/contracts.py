@@ -358,7 +358,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "file_write"),
         native_approval=False,
         browser_fallback=True,
-        resume_support=False,
+        resume_support=True,
         known_blind_spots=(
             "Grok UserPromptSubmit hooks are observe-only, so prompt screening cannot block the model from "
             "seeing a prompt. Enforcement is the catch-all PreToolUse hook, including subagent and MCP tools. "

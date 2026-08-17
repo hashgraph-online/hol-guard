@@ -1252,6 +1252,31 @@ def _run_hook_generic_payload(
         payload_map["approval_requests"] = queued
         payload_map["approval_center_url"] = approval_center_url
     _localize_pending_approval_copy(payload_map, harness=args.harness)
+    if _canonical_harness_name(args.harness) == "grok":
+        from ..adapters.grok_approval_resume import wait_for_grok_live_approval
+
+        grok_live_decision = wait_for_grok_live_approval(
+            event_name=hook_event_name,
+            policy_action=policy_action,
+            response_payload=payload_map,
+            store=store,
+            timeout_seconds=config.approval_wait_timeout_seconds,
+            json_mode=bool(getattr(args, "json", False)),
+            payload=payload_map,
+        )
+        if grok_live_decision == "allow":
+            from ..adapters.grok_hooks import emit_grok_hook_response
+
+            emit_grok_hook_response(
+                policy_action="allow",
+                reason="",
+                event_name=hook_event_name,
+                approval_payload=payload_map,
+                output_stream=output_stream,
+            )
+            return 0
+        if grok_live_decision == "block":
+            policy_action = "block"
     incoming_reason = (
         daemon_failure_reason
         or _decision_v2_harness_message(payload_map)
@@ -1280,6 +1305,7 @@ def _run_hook_generic_payload(
                 policy_action=policy_action,
                 reason=block_reason,
                 event_name=hook_event_name,
+                approval_payload=payload_map,
                 output_stream=output_stream,
             )
             if not grok_hook_should_block(policy_action=policy_action, event_name=hook_event_name):
@@ -1341,6 +1367,7 @@ def _run_hook_generic_payload(
                 policy_action=policy_action,
                 reason=reason,
                 event_name=hook_event_name,
+                approval_payload=payload_map,
                 output_stream=output_stream,
             )
             return 0 if not grok_hook_should_block(policy_action=policy_action, event_name=hook_event_name) else 2

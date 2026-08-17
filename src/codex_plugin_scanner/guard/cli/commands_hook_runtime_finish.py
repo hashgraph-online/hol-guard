@@ -125,6 +125,54 @@ def _finalize_runtime_artifact_hook(
             "authoritative_action": fresh_state.policy_action,
         }
 
+    grok_live_decision = None
+    if _canonical_harness_name(args.harness) == "grok":
+        from ..adapters.grok_approval_resume import wait_for_grok_live_approval
+
+        grok_live_decision = wait_for_grok_live_approval(
+            event_name=event_name,
+            policy_action=policy_action,
+            response_payload=response_payload,
+            store=store,
+            timeout_seconds=config.approval_wait_timeout_seconds,
+            json_mode=bool(getattr(args, "json", False)),
+            payload=payload,
+        )
+        if grok_live_decision == "allow":
+            approval_request_id = response_payload.get("browser_resolution_request_id")
+            set_runtime_artifact_hook_final_action(
+                state,
+                "allow",
+                approval_request_id=approval_request_id if isinstance(approval_request_id, str) else None,
+                approval_source="browser",
+            )
+            from ..adapters.grok_hooks import emit_grok_hook_response
+
+            emit_grok_hook_response(
+                policy_action="allow",
+                reason="",
+                event_name=event_name,
+                approval_payload=response_payload,
+                output_stream=output_stream,
+            )
+            record_runtime_artifact_hook_receipt(state, store)
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action="allow",
+            )
+            return 0
+        if grok_live_decision == "block":
+            policy_action = "block"
+            approval_request_id = response_payload.get("browser_resolution_request_id")
+            set_runtime_artifact_hook_final_action(
+                state,
+                "block",
+                approval_request_id=approval_request_id if isinstance(approval_request_id, str) else None,
+                approval_source="browser",
+            )
+
     codex_browser_decision = _codex_browser_approval_decision(
         args=args,
         event_name=event_name,
@@ -252,6 +300,8 @@ def _finalize_runtime_artifact_hook(
             emit_grok_hook_response(
                 policy_action=policy_action,
                 reason=native_block_reason,
+                event_name=event_name,
+                approval_payload=response_payload,
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) in {"pi", "omp"}:
@@ -332,6 +382,8 @@ def _finalize_runtime_artifact_hook(
             emit_grok_hook_response(
                 policy_action=policy_action,
                 reason=runtime_reason,
+                event_name=event_name,
+                approval_payload=response_payload,
                 output_stream=output_stream,
             )
             _record_harness_usage_for_hook(

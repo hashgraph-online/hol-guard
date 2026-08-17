@@ -573,7 +573,7 @@ def _resume_after_remote_approval(
     now: str,
 ) -> dict[str, object]:
     harness = _optional_string(request_row.get("harness"))
-    if harness not in {"codex", "pi", "omp"}:
+    if harness not in {"codex", "pi", "omp", "grok"}:
         return {
             "resumeStatus": "not_applicable",
             "harnessResume": {

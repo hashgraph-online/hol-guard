@@ -111,6 +111,7 @@ class TestGrokInstallUninstall:
         pretool_entries = pretool_payload["hooks"]["PreToolUse"]
         assert len(pretool_entries) == 1
         assert "matcher" not in pretool_entries[0]
+        assert pretool_entries[0]["hooks"][0]["timeout"] == 90
         assert set(prompt_payload["hooks"]) == {"UserPromptSubmit", "SubagentStart", "SessionStart"}
         managed_text = managed_config.read_text(encoding="utf-8")
         assert "Read(**/.grok/auth/**)" in managed_text
@@ -187,6 +188,25 @@ class TestGrokHookResponses:
     def test_unsatisfied_review_response_is_denied(self) -> None:
         payload = grok_hook_response_from_guard(policy_action="review", reason="Review in HOL Guard.")
         assert payload == {"decision": "deny", "reason": "Review in HOL Guard."}
+
+    def test_review_response_includes_resume_poll_metadata(self) -> None:
+        payload = grok_hook_response_from_guard(
+            policy_action="require-reapproval",
+            reason="Open HOL Guard to approve this request.",
+            approval_payload={
+                "primary_approval_request_id": "req-grok",
+                "primary_approval_url": "http://127.0.0.1:5474/requests/req-grok",
+                "approval_center_url": "http://127.0.0.1:5474",
+            },
+        )
+        assert payload == {
+            "decision": "deny",
+            "reason": "Open HOL Guard to approve this request.",
+            "approval_request_id": "req-grok",
+            "resume_poll_path": "/v1/requests/req-grok",
+            "approval_url": "http://127.0.0.1:5474/requests/req-grok",
+            "approval_center_url": "http://127.0.0.1:5474",
+        }
 
     def test_emit_grok_hook_response_writes_json_line(self) -> None:
         stream = io.StringIO()
@@ -670,7 +690,7 @@ class TestGrokInventoryAndResponses:
         grok_root = ctx.home_dir / ".grok"
         (grok_root / "workflows").mkdir(parents=True)
         (grok_root / "agents").mkdir(parents=True)
-        (grok_root / "sandbox.toml").write_text("[profiles.project]\nextends = \"workspace\"\n", encoding="utf-8")
+        (grok_root / "sandbox.toml").write_text('[profiles.project]\nextends = "workspace"\n', encoding="utf-8")
         result = GrokHarnessAdapter().detect(ctx)
         assert any(path.endswith(".grok/workflows") for path in result.config_paths)
         assert any(path.endswith(".grok/agents") for path in result.config_paths)
