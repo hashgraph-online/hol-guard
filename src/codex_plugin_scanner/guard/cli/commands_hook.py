@@ -259,9 +259,7 @@ def _run_guard_hook_command(
         return result
     data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
     extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        store.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        )
+        store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
     with use_extension_control_snapshot(extension_control_snapshot):
         runtime_artifact = _hook_runtime_artifact(
@@ -332,9 +330,7 @@ def _run_guard_hook_command(
                 workspace=runtime_workspace,
             )
             fresh_extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-                store.read_extension_control_authority(
-                    catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-                )
+                store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
             )
             with use_extension_control_snapshot(fresh_extension_control_snapshot):
                 fresh_runtime_artifact = _hook_runtime_artifact(

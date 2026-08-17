@@ -43,6 +43,8 @@ from .extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     current_extension_control_snapshot,
 )
+from .github_capability_contract import github_capability_contract
+from .github_command_capabilities import classify_github_cli
 from .github_workflow_authorization import (
     GitHubWorkflowAuthorization,
     github_workflow_authorization_evidence,
@@ -180,6 +182,7 @@ def evaluate_command(
                 for owned in owned_matches
                 if (permission := registry.permission_for_rule_id(owned.match.rule.rule_id)) is not None
             }
+            | _direct_github_permission_ids(command)
         )
     )
     control_resolution = resolve_extension_controls(
@@ -424,6 +427,21 @@ def _explicit_permission_allow_factors(
             )
         )
     return tuple(factors)
+
+
+def _direct_github_permission_ids(command: CanonicalCommand) -> set[str]:
+    """Resolve catalog permissions for exact GitHub capabilities without matcher rules."""
+
+    permission_ids: set[str] = set()
+    for segment in command.segments:
+        executable = (segment.executable or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+        if executable.removesuffix(".exe") != "gh":
+            continue
+        assessment = classify_github_cli(segment.arguments)
+        permission_ids.update(
+            github_capability_contract(capability).permission_id for capability in assessment.capabilities
+        )
+    return permission_ids
 
 
 def _rule_floor(owned: OwnedCommandRuleMatch) -> CommandDecisionFloor:

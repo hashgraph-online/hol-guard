@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_open_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
@@ -72,12 +73,10 @@ def test_extension_control_authority_blocks_only_downgrades_after_enrollment(
     tmp_path: Path,
 ) -> None:
     class FakeStore:
-        def read_extension_control_authority(
-            self,
-            *,
-            catalog_digest: str,
+        def read_extension_control_authority_for_registry(
+            self, registry: CommandSafetyExtensionRegistry
         ) -> ExtensionControlAuthorityView:
-            return ExtensionControlAuthorityView(health, 0, catalog_digest, ())
+            return ExtensionControlAuthorityView(health, 0, registry.catalog_digest, ())
 
     store = cast(GuardStore, FakeStore())
 
@@ -110,12 +109,10 @@ def test_update_blocks_protected_authority_downgrade_before_installer_execution(
     )
 
     class ProtectedAuthorityStore:
-        def read_extension_control_authority(
-            self,
-            *,
-            catalog_digest: str,
+        def read_extension_control_authority_for_registry(
+            self, registry: CommandSafetyExtensionRegistry
         ) -> ExtensionControlAuthorityView:
-            return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, catalog_digest, ())
+            return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ())
 
     payload, exit_code = update_commands.run_guard_update(
         dry_run=False,

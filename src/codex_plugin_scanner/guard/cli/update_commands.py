@@ -340,9 +340,7 @@ def _authority_blocks_downgrade(
     except InvalidVersion:
         return False
     authority_store = store or GuardStore(guard_home)
-    authority = authority_store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
+    authority = authority_store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     return authority.health is not AuthorityHealth.UNENROLLED
 
 

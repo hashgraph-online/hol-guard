@@ -131,7 +131,7 @@ def _recover_authority(
 ) -> int:
     store = GuardStore(guard_home)
     catalog_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    current = store.read_extension_control_authority(catalog_digest=catalog_digest)
+    current = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     session_nonce = secrets.token_hex(32)
     subject = f"{command}:{current.health.value}:{current.revision}:{catalog_digest}"
     gate_input = prompt_for_approval_gate(
@@ -154,7 +154,10 @@ def _recover_authority(
             subject=subject,
             session_nonce=session_nonce,
         )
-        view = store.recover_extension_control_authority(catalog_digest=catalog_digest)
+        view = store.recover_extension_control_authority(
+            catalog_digest=catalog_digest,
+            migration_registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        )
         with contextlib.suppress(GuardDaemonRequestError):
             _ = _client(guard_home).refresh_extension_controls()
         response: dict[str, object] = {

@@ -655,9 +655,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
         self.hook_worker = HookWorker(store=store, activity_writer=self.runtime_hook_evidence_writer)
         self.extension_control_runtime = ExtensionControlRuntime(
-            store.read_extension_control_authority(
-                catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            )
+            store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
         )
         self.extension_control_api = ExtensionControlApiService(
             store=store,
@@ -687,9 +685,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         )
 
     def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
-        view = self.store.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        )
+        view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
         return self.extension_control_runtime.refresh(view)
 
     def process_request(self, request: Any, client_address: Any) -> None:

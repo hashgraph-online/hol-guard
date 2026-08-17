@@ -125,12 +125,18 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
         def __init__(self, guard_home: Path) -> None:
             assert guard_home == tmp_path
 
-        def read_extension_control_authority(self, *, catalog_digest: str) -> object:
-            assert catalog_digest
+        def read_extension_control_authority_for_registry(self, registry: object) -> object:
+            assert registry
             return view
 
-        def recover_extension_control_authority(self, *, catalog_digest: str) -> object:
+        def recover_extension_control_authority(
+            self,
+            *,
+            catalog_digest: str,
+            migration_registry: object,
+        ) -> object:
             assert catalog_digest
+            assert migration_registry
             calls.append("recover")
             return view
 

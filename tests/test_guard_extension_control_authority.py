@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -12,7 +15,10 @@ from codex_plugin_scanner.guard import store_extension_control_authority_schema 
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
 from codex_plugin_scanner.guard.config import load_guard_config, update_guard_settings
 from codex_plugin_scanner.guard.extension_control_events import extension_control_change_payload
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.command_extensions import (
+    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    CommandSafetyExtensionRegistry,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     AuthorityPhase,
@@ -143,6 +149,61 @@ def test_authenticated_recovery_rebuilds_snapshot_with_invalid_mac(tmp_path: Pat
     assert repaired.health is AuthorityHealth.PROTECTED
     assert repaired.revision == 0
     assert repaired.layers == ()
+    with store._connect() as connection:
+        event = connection.execute(
+            "select payload_json from guard_events where event_name = ? order by event_id desc limit 1",
+            ("extension_control_authority_reset",),
+        ).fetchone()
+    assert event is not None
+    payload = json.loads(event["payload_json"])
+    assert payload["reason"] == "authenticated-recovery-unverifiable"
+    assert payload["previous_revision"] == 0
+    assert payload["previous_catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    assert payload["previous_layers_bytes"] > 0
+    with store._connect() as connection:
+        archive = connection.execute(
+            "select archive_id, snapshot_row_json from extension_control_authority_recovery_archive "
+            "where archive_id = ?",
+            (payload["archive_id"],),
+        ).fetchone()
+    assert archive is not None
+    assert json.loads(archive["snapshot_row_json"])["catalog_digest"] == payload["previous_catalog_digest"]
+
+
+def test_recovery_archives_authority_before_bootstrap_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=original_digest)
+    _commit(store)
+    with store._connect() as connection:
+        connection.execute(
+            "update extension_control_authority_snapshot set snapshot_mac = ? where singleton = 1",
+            ("invalid",),
+        )
+    monkeypatch.setattr(
+        store,
+        "_bootstrap_extension_control_authority",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("injected bootstrap failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="injected bootstrap failure"):
+        store.recover_extension_control_authority(catalog_digest=original_digest)
+
+    with store._connect() as connection:
+        archive = connection.execute(
+            "select snapshot_row_json, transition_rows_json from extension_control_authority_recovery_archive"
+        ).fetchone()
+        event = connection.execute(
+            "select payload_json from guard_events where event_name = 'extension_control_authority_reset'"
+        ).fetchone()
+    assert archive is not None
+    assert json.loads(archive["snapshot_row_json"])["revision"] == 1
+    assert len(json.loads(archive["transition_rows_json"])) == 1
+    assert event is not None
 
 
 @pytest.mark.parametrize("missing_part", ("snapshot", "anchor", "key"))
@@ -215,6 +276,41 @@ def _disabled_layer() -> ExtensionControlLayer:
     )
 
 
+def _upgraded_registry(*, remove_first_extension: bool = False) -> CommandSafetyExtensionRegistry:
+    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    if remove_first_extension:
+        return CommandSafetyExtensionRegistry(extensions[1:])
+    return CommandSafetyExtensionRegistry(
+        (replace(extensions[0], description=f"{extensions[0].description} Updated."), *extensions[1:])
+    )
+
+
+def _expanded_permission_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
+    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    extension = extensions[0]
+    permission = extension.permissions[0]
+    expanded_permission = replace(
+        permission,
+        typed_capabilities=(*permission.typed_capabilities, "test.expanded-capability"),
+    )
+    expanded_extension = replace(
+        extension,
+        permissions=(expanded_permission, *extension.permissions[1:]),
+    )
+    return CommandSafetyExtensionRegistry((expanded_extension, *extensions[1:])), permission.permission_id
+
+
+def _rule_version_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
+    extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+    extension = extensions[0]
+    rule = extension.rules[0]
+    versioned_rule = replace(rule, rule_version="99.0.0")
+    versioned_extension = replace(extension, rules=(versioned_rule, *extension.rules[1:]))
+    return CommandSafetyExtensionRegistry((versioned_extension, *extensions[1:])), extension.permissions[
+        0
+    ].permission_id
+
+
 def _proof(
     store: GuardStore,
     layers: tuple[ExtensionControlLayer, ...],
@@ -260,6 +356,38 @@ def _commit(
             key=key,
             actor_id=actor_id,
             nonce=f"nonce-{key}",
+        ),
+    )
+
+
+def _commit_enabled_permission(store: GuardStore, permission_id: str, *, key: str) -> None:
+    layer = ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        global_lockdown=False,
+        controls=(
+            ExtensionControl(
+                ControlTarget(ControlTargetKind.PERMISSION, permission_id),
+                ControlState.ENABLED,
+            ),
+        ),
+    )
+    nonce = f"nonce-{key}"
+    store.commit_extension_control_layers(
+        (layer,),
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        actor_id="local-admin",
+        expected_revision=0,
+        idempotency_key=key,
+        nonce=nonce,
+        proof=_proof(
+            store,
+            (layer,),
+            revision=0,
+            key=key,
+            actor_id="local-admin",
+            nonce=nonce,
         ),
     )
 
@@ -316,6 +444,212 @@ def test_authenticated_snapshot_transition_and_anchor_detect_sqlite_tamper(tmp_p
     view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert view.health is AuthorityHealth.TAMPERED
     assert view.layers == ()
+
+
+def test_authenticated_catalog_upgrade_preserves_controls_and_records_provenance(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=original_digest)
+    _commit(store)
+    upgraded_registry = _upgraded_registry()
+    upgraded_digest = upgraded_registry.catalog_digest
+
+    upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    assert upgraded.revision == 2
+    assert len(upgraded.layers) == 1
+    assert upgraded.layers[0].catalog_digest == upgraded_digest
+    assert upgraded.layers[0].controls == _disabled_layer().controls
+    with store._connect() as connection:
+        event = connection.execute(
+            "select payload_json from guard_events where event_name = ? order by event_id desc limit 1",
+            ("extension_control_authority_catalog_migrated",),
+        ).fetchone()
+        transition = connection.execute(
+            "select previous_revision, catalog_digest, phase from extension_control_authority_transition "
+            "where revision = 2"
+        ).fetchone()
+    assert event is not None
+    assert json.loads(event["payload_json"]) == {
+        "previous_revision": 1,
+        "revision": 2,
+        "previous_catalog_digest": original_digest,
+        "catalog_digest": upgraded_digest,
+        "layer_count": 1,
+        "control_count": 1,
+        "retired_target_count": 0,
+        "retired_target_ids": [],
+    }
+    assert dict(transition) == {
+        "previous_revision": 1,
+        "catalog_digest": upgraded_digest,
+        "phase": AuthorityPhase.COMMITTED.value,
+    }
+
+
+def test_catalog_digest_change_requires_trusted_migration_boundary(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=original_digest)
+    _commit(store)
+
+    rejected = store.read_extension_control_authority(catalog_digest="c" * 64)
+
+    assert rejected.health is AuthorityHealth.TAMPERED
+    with store._connect() as connection:
+        snapshot = connection.execute(
+            "select revision, catalog_digest from extension_control_authority_snapshot where singleton = 1"
+        ).fetchone()
+        migration_events = connection.execute(
+            "select count(*) from guard_events where event_name = ?",
+            ("extension_control_authority_catalog_migrated",),
+        ).fetchone()[0]
+    assert dict(snapshot) == {"revision": 1, "catalog_digest": original_digest}
+    assert migration_events == 0
+
+
+def test_catalog_upgrade_retires_removed_targets_with_provenance(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    removed_target = _disabled_layer().controls[0].target.target_id
+    store.read_extension_control_authority(catalog_digest=original_digest)
+    _commit(store)
+    upgraded_registry = _upgraded_registry(remove_first_extension=True)
+
+    upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    assert upgraded.revision == 2
+    assert upgraded.layers[0].controls == ()
+    with store._connect() as connection:
+        event = connection.execute(
+            "select payload_json from guard_events where event_name = ? order by event_id desc limit 1",
+            ("extension_control_authority_catalog_migrated",),
+        ).fetchone()
+    assert event is not None
+    payload = json.loads(event["payload_json"])
+    assert payload["retired_target_count"] == 1
+    assert payload["retired_target_ids"] == [removed_target]
+
+
+def test_catalog_upgrade_retires_enabled_target_when_contract_expands(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    upgraded_registry, permission_id = _expanded_permission_registry()
+    _commit_enabled_permission(store, permission_id, key="enable-before-expansion")
+
+    upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    assert upgraded.layers[0].controls == ()
+    with store._connect() as connection:
+        event = connection.execute(
+            "select payload_json from guard_events where event_name = ? order by event_id desc limit 1",
+            ("extension_control_authority_catalog_migrated",),
+        ).fetchone()
+    assert event is not None
+    payload = json.loads(event["payload_json"])
+    assert payload["retired_target_ids"] == [permission_id]
+
+
+def test_catalog_upgrade_preserves_enabled_target_for_description_only_change(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    permission_id = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0].permissions[0].permission_id
+    _commit_enabled_permission(store, permission_id, key="enable-before-copy-change")
+
+    upgraded = store.read_extension_control_authority_for_registry(_upgraded_registry())
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    assert upgraded.layers[0].controls[0].target.target_id == permission_id
+    assert upgraded.layers[0].controls[0].state is ControlState.ENABLED
+
+
+def test_catalog_upgrade_retires_enabled_target_when_rule_version_changes(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    upgraded_registry, permission_id = _rule_version_registry()
+    _commit_enabled_permission(store, permission_id, key="enable-before-rule-version-change")
+
+    upgraded = store.read_extension_control_authority_for_registry(upgraded_registry)
+
+    assert upgraded.health is AuthorityHealth.PROTECTED
+    assert upgraded.layers[0].controls == ()
+
+
+def test_catalog_manifest_tamper_is_detected_immediately(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    protected = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    assert protected.health is AuthorityHealth.PROTECTED
+    with store._connect() as connection:
+        connection.execute(
+            "update extension_control_catalog_manifest set record_mac = ? where catalog_digest = ?",
+            ("0" * 64, BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest),
+        )
+
+    tampered = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+
+    assert tampered.health is AuthorityHealth.TAMPERED
+
+
+def test_catalog_manifest_is_stable_across_python_hash_seeds() -> None:
+    script = """
+import hashlib
+import json
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.store import GuardStore
+manifest = GuardStore._catalog_target_manifest(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+payload = json.dumps(manifest, sort_keys=True, separators=(\",\", \":\"))
+print(hashlib.sha256(payload.encode()).hexdigest())
+"""
+    digests = set()
+    for seed in ("1", "2", "3", "4"):
+        environment = dict(os.environ)
+        environment["PYTHONHASHSEED"] = seed
+        environment["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        digests.add(completed.stdout.strip())
+    assert len(digests) == 1
+
+
+def test_catalog_upgrade_provenance_survives_final_anchor_failure(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    store.read_extension_control_authority(catalog_digest=original_digest)
+    _commit(store)
+    upgraded_registry = _upgraded_registry()
+    upgraded_digest = upgraded_registry.catalog_digest
+    secrets.fail_anchor_set_number = secrets.anchor_set_count + 2
+
+    interrupted = store.read_extension_control_authority_for_registry(upgraded_registry)
+
+    assert interrupted.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
+    with store._connect() as connection:
+        event = connection.execute(
+            "select payload_json from guard_events where event_name = ? order by event_id desc limit 1",
+            ("extension_control_authority_catalog_migrated",),
+        ).fetchone()
+    assert event is not None
+    assert json.loads(event["payload_json"])["catalog_digest"] == upgraded_digest
+    secrets.fail_anchor_set_number = None
+    recovered = store.recover_extension_control_authority(catalog_digest=upgraded_digest)
+    assert recovered.health is AuthorityHealth.PROTECTED
+    assert recovered.layers[0].controls == _disabled_layer().controls
 
 
 def test_authenticated_historical_transition_fields_detect_tamper(tmp_path: Path) -> None:
@@ -995,6 +1329,7 @@ def test_control_change_payload_counts_extension_and_permission_blocks() -> None
     assert payload["disabledExtensionCount"] == 1
     assert payload["disabledPermissionCount"] == 1
 
+
 def test_authenticated_history_returns_only_verified_prior_device_layers(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
@@ -1027,7 +1362,14 @@ def test_authenticated_history_returns_only_verified_prior_device_layers(tmp_pat
     assert [item["revision"] for item in history] == [1]
     assert history[0]["layers"][0]["kind"] == "local-admin"
     encoded = json.dumps(history, sort_keys=True)
-    for private_name in ("actor_id_hash", "idempotency_key_hash", "nonce_hash", "snapshot_mac", "transition_mac", "proof"):
+    for private_name in (
+        "actor_id_hash",
+        "idempotency_key_hash",
+        "nonce_hash",
+        "snapshot_mac",
+        "transition_mac",
+        "proof",
+    ):
         assert private_name not in encoded
 
 
@@ -1042,7 +1384,9 @@ def test_authenticated_history_fails_closed_on_tampered_transition(tmp_path: Pat
         expected_revision=0,
         idempotency_key="history-tamper-1",
         nonce="history-tamper-nonce-1",
-        proof=_proof(store, first, revision=0, key="history-tamper-1", actor_id="history-test", nonce="history-tamper-nonce-1"),
+        proof=_proof(
+            store, first, revision=0, key="history-tamper-1", actor_id="history-test", nonce="history-tamper-nonce-1"
+        ),
     )
     second: tuple[ExtensionControlLayer, ...] = ()
     _ = store.commit_extension_control_layers(
@@ -1052,10 +1396,14 @@ def test_authenticated_history_fails_closed_on_tampered_transition(tmp_path: Pat
         expected_revision=1,
         idempotency_key="history-tamper-2",
         nonce="history-tamper-nonce-2",
-        proof=_proof(store, second, revision=1, key="history-tamper-2", actor_id="history-test", nonce="history-tamper-nonce-2"),
+        proof=_proof(
+            store, second, revision=1, key="history-tamper-2", actor_id="history-test", nonce="history-tamper-nonce-2"
+        ),
     )
     with store._connect() as connection:
-        connection.execute("update extension_control_authority_transition set transition_mac = ? where revision = 1", ("invalid",))
+        connection.execute(
+            "update extension_control_authority_transition set transition_mac = ? where revision = 1", ("invalid",)
+        )
     with pytest.raises(ExtensionControlAuthorityError):
         store.list_extension_control_authority_history(
             catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,

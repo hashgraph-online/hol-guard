@@ -129,9 +129,7 @@ class ExtensionControlApiService:
         }
 
     def refresh(self) -> dict[str, object]:
-        view = self._store.read_extension_control_authority(
-            catalog_digest=self._registry.catalog_digest,
-        )
+        view = self._store.read_extension_control_authority_for_registry(self._registry)
         _ = self._runtime.refresh(view)
         return self.effective()
 
@@ -161,7 +159,7 @@ class ExtensionControlApiService:
         }
 
     def recover_authority(self, payload: dict[str, object]) -> dict[str, object]:
-        current = self._store.read_extension_control_authority(catalog_digest=self._registry.catalog_digest)
+        current = self._store.read_extension_control_authority_for_registry(self._registry)
         if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
             raise ExtensionControlApiError(409, "authority_not_recoverable")
         session_nonce = self._required_string(payload, "session_nonce")
@@ -185,7 +183,10 @@ class ExtensionControlApiService:
         except ApprovalGateError as exc:
             raise ExtensionControlApiError(exc.status, exc.code) from exc
         try:
-            view = self._store.recover_extension_control_authority(catalog_digest=self._registry.catalog_digest)
+            view = self._store.recover_extension_control_authority(
+                catalog_digest=self._registry.catalog_digest,
+                migration_registry=self._registry,
+            )
         except ExtensionControlAuthorityError as exc:
             raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
         if view.health is not AuthorityHealth.PROTECTED:
@@ -197,7 +198,7 @@ class ExtensionControlApiService:
         if self._runtime.current().health is not AuthorityHealth.DEGRADED_UNACKNOWLEDGED:
             raise ExtensionControlApiError(409, "authority_not_degraded")
         session_nonce = self._required_string(payload, "session_nonce")
-        current = self._store.read_extension_control_authority(catalog_digest=self._registry.catalog_digest)
+        current = self._store.read_extension_control_authority_for_registry(self._registry)
         action = "acknowledge-degraded"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
         try:

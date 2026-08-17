@@ -642,6 +642,37 @@ def test_explicit_github_merge_permission_allows_exact_merge_through_runtime_art
     ]
 
 
+@pytest.mark.parametrize("executable", ("gh", "gh.exe"))
+def test_explicit_github_content_permission_applies_without_matcher_owned_rule(tmp_path: Path, executable: str) -> None:
+    command = f'{executable} pr edit 123 --repo example/project --title "fix: corrected title"'
+    request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
+    layer = _github_permission_layer("command.github.permission.content-remote", ControlState.ENABLED)
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(
+            health=AuthorityHealth.PROTECTED,
+            revision=8,
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            layers=(layer,),
+        )
+    )
+
+    assert request is not None
+    with use_extension_control_snapshot(snapshot):
+        artifact = build_tool_action_request_artifact(
+            "codex",
+            request,
+            config_path="config.toml",
+            source_scope="project",
+        )
+
+    assert artifact.metadata["command_action_floor"] == "allow"
+    assert artifact.metadata["extension_control_resolution"] == {
+        "blocked": False,
+        "failures": [],
+        "explicitly_enabled_permission_ids": ["command.github.permission.content-remote"],
+    }
+
+
 def test_explicit_git_force_push_permission_allows_matcher_owned_rule(tmp_path: Path) -> None:
     command = "git push --force origin feature"
     request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)

@@ -41,6 +41,11 @@ from codex_plugin_scanner.guard.store import GuardStore
             "command.github.permission.routine-merge-remote",
             False,
         ),
+        (
+            'gh pr edit 5134 --repo example/project --title "fix: corrected title"',
+            "command.github.permission.content-remote",
+            True,
+        ),
         ("git push --force origin feature", "command.git.permission.force-push", True),
     ),
 )
@@ -74,7 +79,7 @@ def test_guard_hook_honors_explicit_extension_permission(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         layers=(layer,),
     )
-    monkeypatch.setattr(store, "read_extension_control_authority", lambda **_kwargs: authority)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: authority)
     output = io.StringIO()
     result = commands_hook._run_guard_hook_command(
         argparse.Namespace(

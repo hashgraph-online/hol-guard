@@ -192,8 +192,8 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
         )
         monkeypatch.setattr(
             store,
-            "read_extension_control_authority",
-            lambda *, catalog_digest: updated,
+            "read_extension_control_authority_for_registry",
+            lambda registry: updated,
         )
         deadline = time.monotonic() + 1
         while daemon._server.extension_control_runtime.current().revision != 7:
