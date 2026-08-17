@@ -6,6 +6,11 @@ on:
       - fix/rust-daemon-edge-workflow-validation
     paths:
       - .github/workflows/tmp-fix-pr2464-windows-inventory.yml
+  pull_request:
+    branches:
+      - release/3.0
+    paths:
+      - .github/workflows/tmp-fix-pr2464-windows-inventory.yml
   workflow_dispatch:
 
 permissions:
@@ -13,7 +18,7 @@ permissions:
 
 concurrency:
   group: finalize-pr-2464-native-windows-process-inventory
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   finalize:
@@ -38,11 +43,13 @@ jobs:
           rustup default 1.88.0
       - name: Apply, validate, and commit the final repair
         shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           branch='fix/rust-daemon-edge-workflow-validation'
           remote_sha=$(git ls-remote --exit-code origin "refs/heads/${branch}" | awk '{print $1}')
-          test "$remote_sha" = "$GITHUB_SHA"
+          test "$remote_sha" = "$EXPECTED_HEAD_SHA"
 
           python - <<'PY'
           from __future__ import annotations
