@@ -151,6 +151,7 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
             "guard-managed config write",
             "sensitive local file write",
             "GitHub PR body shell substitution",
+            "process environment secret read",
         ),
         risk_classes=("destructive_shell", "local_secret_read", "execution"),
         safer_alternatives=(

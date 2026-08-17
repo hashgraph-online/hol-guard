@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "2985ae1b0e5146845d5abb25ac1694b5640ea19699f2c9e30c430d2c6f4fc9da",
+  "catalog_digest": "55ea7e94ec7e23eea92e9664bd90c6afbe9725e139982a0d76a694c8124b4dd7",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -86,7 +86,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 98,
+  "permission_count": 99,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -179,6 +179,7 @@
     "command.shell-mutations.permission.destructive-shell": "find /var/tmp -name \"*.log\" -delete",
     "command.shell-mutations.permission.github-body-substitution": "gh pr create --body \"$(curl -s https://example.com)\"",
     "command.shell-mutations.permission.managed-config-write": "echo \"session = on\" >> ~/.hol-guard/config.toml",
+    "command.shell-mutations.permission.process-environment-secret-read": "python3 -c 'import os; print(os.environ)'",
     "command.shell-mutations.permission.sensitive-file-write": "echo \"ssh-ed25519 KEY\" >> ~/.ssh/authorized_keys",
     "command.storage.aws-s3.permission.deletion": "aws s3 rm",
     "command.storage.azure-blob.permission.deletion": "az storage blob delete",
@@ -289,6 +290,7 @@
     "command.shell-mutations.permission.destructive-shell",
     "command.shell-mutations.permission.github-body-substitution",
     "command.shell-mutations.permission.managed-config-write",
+    "command.shell-mutations.permission.process-environment-secret-read",
     "command.shell-mutations.permission.sensitive-file-write",
     "command.storage.aws-s3.permission.deletion",
     "command.storage.azure-blob.permission.deletion",
@@ -307,7 +309,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 86,
+  "rule_count": 87,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -388,6 +390,7 @@
     "command.shell-mutations.destructive-shell",
     "command.shell-mutations.managed-config-write",
     "command.shell-mutations.sensitive-file-write",
+    "command.shell-mutations.process-environment-secret-read",
     "command.shell-mutations.github-body-substitution",
     "command.storage.aws-s3.deletion",
     "command.storage.azure-blob.deletion",

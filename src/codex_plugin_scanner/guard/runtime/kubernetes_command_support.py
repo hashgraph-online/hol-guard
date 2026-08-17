@@ -34,6 +34,12 @@ _INTERPRETER_ENV_LOOKUP_PATTERNS = (
         re.IGNORECASE,
     ),
 )
+_ENV_DUMP_PATTERNS = (
+    re.compile(r"\bos\.environ\b(?!\s*(?:\[|\.get\b|\.setdefault\b))"),
+    re.compile(r"\bos\.environ\s*\.\s*(?:items|keys|values|copy|update)\s*\("),
+    re.compile(r"\bprocess\.env\b(?!\s*[.\[])"),
+    re.compile(r"\bprocess\.env\s*\[\s*(?!['\"])"),
+)
 _OUTPUT_REDIRECT_TOKENS = frozenset({">", "1>", "2>", ">>", "1>>", "2>>"})
 _SERVICE_ACCOUNT_PATH_MARKERS = (
     "/var/run/secrets/kubernetes.io/serviceaccount",
@@ -202,7 +208,13 @@ def resource_token_includes_secret(token: str) -> bool:
     return False
 
 
+def script_dumps_process_environment(script: str) -> bool:
+    return any(pattern.search(script) for pattern in _ENV_DUMP_PATTERNS)
+
+
 def script_reads_sensitive_env(script: str) -> bool:
+    if script_dumps_process_environment(script):
+        return True
     if any(
         is_sensitive_env_name(match.group("braced") or match.group("plain") or "")
         for match in _ENV_EXPANSION_PATTERN.finditer(script)
@@ -304,6 +316,7 @@ __all__ = [
     "raw_secret_api_path",
     "remote_cp_path",
     "resource_token_includes_secret",
+    "script_dumps_process_environment",
     "script_reads_sensitive_env",
     "secret_volume_argument_value",
     "shell_command_script",

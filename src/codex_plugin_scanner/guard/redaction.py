@@ -58,6 +58,11 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
         "AKIA****************",
     ),
     (
+        "aws-secret-access-key",
+        re.compile(r"(?i)(['\"]?)(aws[_-]?secret[_-]?access[_-]?key)\1\s*[:=]\s*(['\"]?)([A-Za-z0-9/+=]{40})\3"),
+        r"\1\2\1=\3*****\3",
+    ),
+    (
         "npm-token",
         re.compile(r"(?im)\b(_authToken|npm[_ -]?token)\s*[:=]\s*([^\s\"',}]+)"),
         r"\1=*****",

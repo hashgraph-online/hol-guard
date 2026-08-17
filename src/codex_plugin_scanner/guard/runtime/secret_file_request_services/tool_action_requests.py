@@ -23,6 +23,7 @@ from .docker_requests import (
     _docker_sensitive_tool_action_request,
     _shell_execution_context_validation_reason,
 )
+from .environment_secret_dump import environment_secret_dump_request
 from .pytest_config_safety import _shell_args_without_trailing_redirections
 from .request_artifacts import _candidate_command_texts, _shell_normalized_tool_name
 from .request_models import ToolActionRequestMatch, _normalize_tool_name
@@ -163,30 +164,17 @@ def extract_sensitive_tool_action_request(
                     wrapper_chain=wrapper_chain,
                 )
             return docker_config_request
-        kubernetes_secret_source = kubernetes_secret_read_source(command_text)
-        if kubernetes_secret_source is not None:
-            kubernetes_secret_request = ToolActionRequestMatch(
-                tool_name=requested_tool_name,
-                normalized_tool_name=effective_tool_name,
-                command_text=command_text,
-                action_class="Kubernetes secret read command",
-                reason=(
-                    f"Guard treats {kubernetes_secret_source} reads through Kubernetes CLIs as sensitive because "
-                    "they can expose cluster credentials or application secrets before the user confirms the action."
-                ),
-            )
-            kubernetes_secret_request = _request_with_shell_execution_context(
-                kubernetes_secret_request,
-                command_text=command_text,
-                cwd=cwd,
-            )
-            if wrapper_chain:
-                kubernetes_secret_request = _request_with_wrapper_context(
-                    kubernetes_secret_request,
-                    raw_command_text=raw_command_text,
-                    wrapper_chain=wrapper_chain,
-                )
-            return kubernetes_secret_request
+        secret_request = _kubernetes_or_environment_secret_request(
+            tool_name=requested_tool_name,
+            normalized_tool_name=effective_tool_name,
+            command_text=command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+            raw_command_text=raw_command_text,
+            wrapper_chain=wrapper_chain,
+        )
+        if secret_request is not None:
+            return secret_request
         destructive_execution_context = model_shell_execution_context(
             command_text,
             cwd=cwd,
@@ -260,6 +248,71 @@ def extract_sensitive_tool_action_request(
                 )
                 return destructive_shell_request
     return None
+
+
+def _kubernetes_or_environment_secret_request(
+    *,
+    tool_name: str,
+    normalized_tool_name: str,
+    command_text: str,
+    cwd: Path | None,
+    home_dir: Path | None,
+    raw_command_text: str,
+    wrapper_chain: tuple[str, ...],
+) -> ToolActionRequestMatch | None:
+    kubernetes_secret_source = kubernetes_secret_read_source(command_text)
+    if kubernetes_secret_source is not None:
+        request = ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="Kubernetes secret read command",
+            reason=(
+                f"Guard treats {kubernetes_secret_source} reads through Kubernetes CLIs as sensitive because "
+                "they can expose cluster credentials or application secrets before the user confirms the action."
+            ),
+        )
+        return _finalize_shell_match(
+            request,
+            command_text=command_text,
+            cwd=cwd,
+            raw_command_text=raw_command_text,
+            wrapper_chain=wrapper_chain,
+        )
+    env_dump_request = environment_secret_dump_request(
+        tool_name=tool_name,
+        normalized_tool_name=normalized_tool_name,
+        command_text=command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+    )
+    if env_dump_request is None:
+        return None
+    return _finalize_shell_match(
+        env_dump_request,
+        command_text=command_text,
+        cwd=cwd,
+        raw_command_text=raw_command_text,
+        wrapper_chain=wrapper_chain,
+    )
+
+
+def _finalize_shell_match(
+    request: ToolActionRequestMatch,
+    *,
+    command_text: str,
+    cwd: Path | None,
+    raw_command_text: str,
+    wrapper_chain: tuple[str, ...],
+) -> ToolActionRequestMatch:
+    request = _request_with_shell_execution_context(request, command_text=command_text, cwd=cwd)
+    if wrapper_chain:
+        request = _request_with_wrapper_context(
+            request,
+            raw_command_text=raw_command_text,
+            wrapper_chain=wrapper_chain,
+        )
+    return request
 
 
 def _unverified_git_fetch_request(

@@ -33,6 +33,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "docker client config access": ("local_secret_read",),
     "encoded or encrypted shell command": ("encoded_execution",),
     "kubernetes secret read command": ("local_secret_read",),
+    "process environment secret read": ("local_secret_read",),
     "shell file upload command": ("credential_exfiltration", "network_egress"),
     "sensitive local file write": ("destructive_shell", "local_secret_read"),
     "destructive shell command": ("destructive_shell",),
@@ -249,6 +250,14 @@ BUILT_IN_COMMAND_RULES = (
         description="Identifies writes that can replace or expose sensitive local state.",
         action_class="sensitive local file write",
         safer_alternative="Write to a scoped temporary path and review the final destination.",
+    ),
+    _compatibility_rule(
+        rule_id="command.shell-mutations.process-environment-secret-read",
+        example_command="python3 -c 'import os; print(os.environ)'",
+        title="Process environment secret read",
+        description="Identifies commands that print process environment secrets to the agent.",
+        action_class="process environment secret read",
+        safer_alternative="Inspect only a named non-secret variable, or confirm the exact secret read in Guard.",
     ),
     *GITHUB_COMMAND_RULES,
     _compatibility_rule(
