@@ -12,9 +12,11 @@ import {
   previewLocalCliMutation,
   recognizeLocalCli,
   suggestedCustomExtensions,
+  type LocalCliCommandState,
   type LocalCliItem,
   type LocalCliState,
 } from "../local-cli-api";
+import { CustomExtensionCommandList, commandStatesPayload, withCommandState } from "./custom-extension-commands";
 import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
@@ -32,6 +34,7 @@ export function AddCustomExtensionDialog(props: {
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const [command, setCommand] = useState("");
   const [recognized, setRecognized] = useState<LocalCliItem | null>(null);
+  const [commands, setCommands] = useState<LocalCliItem["commands"]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
   const [password, setPassword] = useState("");
@@ -50,6 +53,7 @@ export function AddCustomExtensionDialog(props: {
   const handleCommand = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setCommand(event.target.value);
     setRecognized(null);
+    setCommands([]);
     setSummary(null);
     setPending(null);
     setError(null);
@@ -63,7 +67,12 @@ export function AddCustomExtensionDialog(props: {
   const selectSuggestion = useCallback((item: LocalCliItem) => {
     setCommand(item.example_label);
     setRecognized(item);
-    setSummary(`Later commands from this same ${item.name} file are covered. Different flags are fine.`);
+    setCommands(item.commands);
+    setSummary(
+      item.commands.length > 0
+        ? `Guard loaded ${item.commands.length} commands. Recommended keeps the usual review. Allow or block each one.`
+        : `Find this tool to read ${item.name} --help and load its commands.`,
+    );
     setPending(null);
     setError(null);
   }, []);
@@ -73,6 +82,7 @@ export function AddCustomExtensionDialog(props: {
     try {
       const result = await recognizeLocalCli(command);
       setRecognized(result.item);
+      setCommands(result.item.commands);
       setSummary(result.summary);
       setPending(null);
     } catch (caught) {
@@ -105,6 +115,7 @@ export function AddCustomExtensionDialog(props: {
         state: pending,
         previous_revision: props.revision,
         session_nonce: randomToken(),
+        commands: commandStatesPayload(commands),
         ...buildApprovalProofCredentials(resolvedApprovalGate, {
           approvalPassword: password,
           approvalTotpCode: totp,
@@ -118,7 +129,10 @@ export function AddCustomExtensionDialog(props: {
     } finally {
       setBusy(false);
     }
-  }, [findTool, password, pending, props, recognized, resolvedApprovalGate, totp]);
+  }, [commands, findTool, password, pending, props, recognized, resolvedApprovalGate, totp]);
+  const handleCommandState = useCallback((commandId: string, state: LocalCliCommandState) => {
+    setCommands((current) => withCommandState(current, commandId, state));
+  }, []);
 
   const proofReady = pending !== null && recognized !== null;
   const submitDisabled = recognized === null
@@ -143,7 +157,7 @@ export function AddCustomExtensionDialog(props: {
       >
         <h2 id="add-custom-extension-title" className="text-xl font-semibold text-brand-dark">Add a custom extension</h2>
         <p className="mt-2 text-sm leading-6 text-brand-dark/80">
-          Paste the command for your tool. Guard binds to that file, then you can allow or block later commands from it.
+          Paste the command for your tool. Guard reads --help, then you can set Recommended, Allow, or Block on each command.
         </p>
         <label htmlFor="custom-extension-command" className="mt-5 block text-sm font-semibold text-brand-dark">Command</label>
         <input
@@ -163,6 +177,15 @@ export function AddCustomExtensionDialog(props: {
             <p className="text-sm font-semibold text-brand-dark">{recognized.name}</p>
             <p className="mt-1 font-mono text-xs text-brand-dark/70">{recognized.example_label}</p>
             {summary ? <p className="mt-2 text-sm leading-6 text-brand-dark/80">{summary}</p> : null}
+            {commands.length > 0 ? (
+              <div className="mt-4 max-h-72 overflow-auto rounded-2xl bg-white">
+                <CustomExtensionCommandList
+                  commands={commands}
+                  disabled={busy}
+                  onChange={handleCommandState}
+                />
+              </div>
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={requestAllow} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "allowed" ? "bg-brand-blue text-white" : "border border-slate-300 text-brand-dark"}`}>
                 Allow this tool

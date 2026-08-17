@@ -423,6 +423,12 @@ def _normalize_tool_name(name: str) -> str:
     return base
 
 
+def local_cli_recognition_candidates(command_text: str, *, cwd: Path, home_dir: Path) -> tuple[str, ...]:
+    """Return pasted-command variants Guard can bind to a single file."""
+
+    return _recognition_candidates(command_text, cwd=cwd, home_dir=home_dir)
+
+
 def _recognition_candidates(command_text: str, *, cwd: Path, home_dir: Path) -> tuple[str, ...]:
     expanded = command_text.replace("~/", f"{home_dir}/")
     candidates = [expanded]

@@ -2,6 +2,16 @@ import { fetchLocalCliApi } from "./guard-api";
 
 export type LocalCliKind = "executable" | "script";
 export type LocalCliState = "unset" | "allowed" | "blocked";
+export type LocalCliCommandState = "inherit" | "allow" | "block";
+
+export type LocalCliCommand = {
+  command_id: string;
+  name: string;
+  usage: string;
+  description: string;
+  parent_id: string | null;
+  state: LocalCliCommandState;
+};
 
 export type LocalCliItem = {
   cli_id: string;
@@ -12,11 +22,14 @@ export type LocalCliItem = {
   interpreter_name: string | null;
   observed_count: number;
   last_seen_at: string | null;
+  source_path: string | null;
+  help_status: "ok" | "empty" | "failed" | null;
   state: LocalCliState;
   stale: boolean;
   grant_revision: number | null;
   authority_revision: number;
   suggestable: boolean;
+  commands: LocalCliCommand[];
 };
 
 export type LocalCliListResponse = {
@@ -39,6 +52,7 @@ export type LocalCliMutationPayload = {
   state: LocalCliState;
   previous_revision: number;
   session_nonce: string;
+  commands?: Array<{ command_id: string; state: LocalCliCommandState }>;
   approval_password?: string;
   approval_totp_code?: string;
 };
@@ -105,6 +119,8 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
     interpreter_name: optionalString(value.interpreter_name),
     observed_count: requiredInt(value.observed_count, "count"),
     last_seen_at: optionalString(value.last_seen_at),
+    source_path: optionalString(value.source_path),
+    help_status: normalizeHelpStatus(value.help_status),
     state,
     stale: value.stale === true,
     grant_revision: value.grant_revision === null || value.grant_revision === undefined
@@ -112,6 +128,32 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
       : requiredInt(value.grant_revision, "grant revision"),
     authority_revision: requiredInt(value.authority_revision, "revision"),
     suggestable: value.suggestable === true,
+    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
+  };
+}
+
+function normalizeHelpStatus(value: unknown): LocalCliItem["help_status"] {
+  if (value === "ok" || value === "empty" || value === "failed") return value;
+  return null;
+}
+
+export function normalizeLocalCliCommand(value: unknown): LocalCliCommand {
+  if (!isRecord(value)) throw new Error("Invalid local CLI command");
+  const state = value.state;
+  if (state !== "inherit" && state !== "allow" && state !== "block") {
+    throw new Error("Invalid local CLI command state");
+  }
+  const parent = value.parent_id;
+  if (parent !== null && parent !== undefined && typeof parent !== "string") {
+    throw new Error("Invalid local CLI command parent");
+  }
+  return {
+    command_id: requiredString(value.command_id, "command").slice(0, 80),
+    name: requiredString(value.name, "command name").slice(0, 120),
+    usage: requiredString(value.usage, "command usage").slice(0, 160),
+    description: typeof value.description === "string" ? value.description.slice(0, 240) : "",
+    parent_id: typeof parent === "string" && parent.trim() ? parent : null,
+    state,
   };
 }
 
@@ -162,17 +204,24 @@ export async function previewLocalCliMutation(payload: LocalCliMutationPayload):
   return { summary: requiredString(body.summary, "summary") };
 }
 
-export async function recognizeLocalCli(command: string): Promise<{ item: LocalCliItem; summary: string; revision: number }> {
+export async function recognizeLocalCli(command: string): Promise<{
+  item: LocalCliItem;
+  summary: string;
+  revision: number;
+  help_status: LocalCliItem["help_status"];
+}> {
   const body = await readJson(await fetchLocalCliApi("/v1/local-clis/recognize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ command }),
   }));
   if (!isRecord(body)) throw new Error("Invalid local CLI recognition");
+  const item = normalizeLocalCliItem(body.item);
   return {
-    item: normalizeLocalCliItem(body.item),
+    item,
     summary: requiredString(body.summary, "summary"),
     revision: requiredInt(body.revision, "revision"),
+    help_status: normalizeHelpStatus(body.help_status) ?? item.help_status,
   };
 }
 

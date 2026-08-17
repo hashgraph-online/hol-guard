@@ -26,9 +26,20 @@ const item = normalizeLocalCliItem({
   grant_revision: 1,
   authority_revision: 1,
   suggestable: true,
+  commands: [
+    {
+      command_id: "root",
+      name: "cwv.py",
+      usage: "cwv.py",
+      description: "Run cwv.py without a subcommand.",
+      parent_id: null,
+      state: "inherit",
+    },
+  ],
 });
 assert.equal(item.name, "cwv.py");
 assert.equal(item.state, "allowed");
+assert.equal(item.commands[0]?.command_id, "root");
 
 const list = normalizeLocalCliList({
   schema_version: "guard.daemon.local-clis.v1",

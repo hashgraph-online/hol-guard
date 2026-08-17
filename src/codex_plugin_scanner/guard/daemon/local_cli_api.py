@@ -12,10 +12,22 @@ from ..approval_gate import (
     require_local_cli_trust,
 )
 from ..local_cli_trust import utc_now
+from ..runtime.local_cli_commands import (
+    LocalCliCommand,
+    LocalCliCommandState,
+    default_local_cli_commands,
+    is_local_cli_command_id,
+    is_local_cli_command_state,
+)
+from ..runtime.local_cli_help import (
+    discover_local_cli_commands,
+    help_invocation_for_command,
+)
 from ..runtime.local_cli_identity import (
     LocalCliKind,
     UnlistedCliIdentity,
     is_local_cli_id,
+    local_cli_recognition_candidates,
     recognize_operator_cli,
 )
 
@@ -62,7 +74,14 @@ class LocalCliApiService:
         identity, code, message = recognize_operator_cli(command, cwd=home_dir, home_dir=home_dir)
         if identity is None:
             raise LocalCliApiError(400, code, message)
-        self._store.record_local_cli_observation(identity, seen_at=utc_now())
+        commands, help_status, source_path = _discover_from_command(command, identity, home_dir)
+        self._store.record_local_cli_observation(
+            identity,
+            seen_at=utc_now(),
+            source_path=source_path,
+            help_status=help_status,
+        )
+        self._store.replace_local_cli_commands(identity.cli_id, commands)
         listed = next(
             (item for item in self._store.list_local_cli_items() if item.get("cli_id") == identity.cli_id),
             None,
@@ -71,10 +90,8 @@ class LocalCliApiService:
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "revision": self._store.read_local_cli_revision(),
             "item": listed or identity.to_dict(),
-            "summary": (
-                f"Later commands from this same {identity.name} file are covered. "
-                "Different flags are fine. Pipes and wrappers are not."
-            ),
+            "help_status": help_status,
+            "summary": _recognize_summary(identity.name, help_status, len(commands)),
         }
 
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
@@ -117,12 +134,14 @@ class LocalCliApiService:
             )
         except ApprovalGateError as exc:
             raise LocalCliApiError(exc.status, exc.code, str(exc)) from exc
+        command_states = self._command_states_from_payload(payload)
         try:
             revision = self._store.upsert_local_cli_grant(
                 identity=identity,
                 state=state,
                 expected_revision=expected,
                 updated_at=utc_now(),
+                command_states=command_states,
             )
         except ValueError as exc:
             if str(exc) == "local_cli_revision_conflict":
@@ -167,6 +186,25 @@ class LocalCliApiService:
         )
         return identity, state
 
+    def _command_states_from_payload(self, payload: dict[str, object]) -> dict[str, LocalCliCommandState]:
+        raw = payload.get("commands")
+        if raw is None:
+            return {}
+        if not isinstance(raw, list) or len(raw) > 40:
+            raise LocalCliApiError(400, "invalid_commands")
+        states: dict[str, LocalCliCommandState] = {}
+        for entry in raw:
+            if not isinstance(entry, dict):
+                raise LocalCliApiError(400, "invalid_commands")
+            command_id = entry.get("command_id")
+            state = entry.get("state")
+            if not isinstance(command_id, str) or not is_local_cli_command_id(command_id):
+                raise LocalCliApiError(400, "invalid_command_id")
+            if not is_local_cli_command_state(state):
+                raise LocalCliApiError(400, "invalid_command_state")
+            states[command_id] = state
+        return states
+
     def _required_string(self, payload: dict[str, object], key: str) -> str:
         value = payload.get(key)
         if not isinstance(value, str) or not value.strip():
@@ -182,10 +220,49 @@ class LocalCliApiService:
 
 def _preview_summary(name: str, state: str) -> str:
     if state == "allowed":
-        return f"Add {name} as a custom extension and allow its matching commands on this device."
+        return (
+            f"Add {name} as a custom extension. Recommended commands stay on Guard's usual review. "
+            "Allow or block applies only to the commands you set."
+        )
     if state == "blocked":
-        return f"Keep {name} as a custom extension and block its matching commands on this device."
+        return f"Keep {name} as a custom extension and block every command from this file."
     return f"Remove the {name} custom extension from this device."
+
+
+def _recognize_summary(name: str, help_status: str, command_count: int) -> str:
+    if help_status == "ok":
+        return (
+            f"Guard read {command_count} commands from {name} --help. "
+            "Recommended keeps the usual review. Allow or block each command like a built-in tool."
+        )
+    if help_status == "empty":
+        return (
+            f"{name} did not list subcommands. You can still allow or block this file, "
+            "or set Recommended for other commands."
+        )
+    return (
+        f"Guard could not read {name} --help. You can still add the tool. "
+        "Commands stay on Recommended until --help works."
+    )
+
+
+def _discover_from_command(
+    command: str,
+    identity: UnlistedCliIdentity,
+    home_dir: Path,
+) -> tuple[tuple[LocalCliCommand, ...], str, str | None]:
+    source_path: str | None = None
+    for candidate in local_cli_recognition_candidates(command, cwd=home_dir, home_dir=home_dir):
+        invocation = help_invocation_for_command(candidate, cwd=home_dir, home_dir=home_dir)
+        if invocation is None:
+            continue
+        matched, argv = invocation
+        if matched.cli_id != identity.cli_id:
+            continue
+        source_path = argv[1] if matched.kind == "script" and len(argv) >= 2 else argv[0]
+        commands, help_status = discover_local_cli_commands(matched, argv)
+        return commands, help_status, source_path
+    return default_local_cli_commands(identity.name), "failed", source_path
 
 
 def _cli_kind(value: str) -> LocalCliKind | None:

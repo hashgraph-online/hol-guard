@@ -14,10 +14,12 @@ import {
   fetchLocalCliList,
   LocalCliApiError,
   previewLocalCliMutation,
+  type LocalCliCommandState,
   type LocalCliItem,
   type LocalCliListResponse,
   type LocalCliState,
 } from "../local-cli-api";
+import { CustomExtensionCommandList, commandStatesPayload, withCommandState } from "./custom-extension-commands";
 import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError, ProtectionModuleRow } from "./components/protection-primitives";
@@ -29,15 +31,19 @@ function randomToken(): string {
 }
 
 function reviewTitle(name: string, state: LocalCliState): string {
-  if (state === "allowed") return `Add ${name} as a custom extension`;
+  if (state === "allowed") return `Save ${name} command settings`;
   if (state === "blocked") return `Block ${name}`;
   return `Remove ${name}`;
 }
 
 export function customExtensionStateLabel(item: LocalCliItem): string {
   if (item.stale) return "This file changed. Review the extension again.";
-  if (item.state === "allowed") return "Matching commands from this file are allowed.";
-  if (item.state === "blocked") return "Matching commands from this file are blocked.";
+  if (item.state === "blocked") return "Every command from this file is blocked.";
+  if (item.state === "allowed") {
+    const allowed = item.commands.filter((command) => command.state === "allow").length;
+    if (allowed > 0) return `${allowed} command${allowed === 1 ? "" : "s"} allowed. The rest follow Recommended.`;
+    return "Commands follow Recommended until you allow or block them.";
+  }
   return item.example_label;
 }
 
@@ -106,13 +112,22 @@ export function LocalCliDetail(props: {
 }) {
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
+  const [commands, setCommands] = useState(props.item.commands);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const added = props.item.state !== "unset";
+  const commandsDirty = commands.some((command, index) => command.state !== props.item.commands[index]?.state);
+  useEffect(() => {
+    setCommands(props.item.commands);
+  }, [props.item.cli_id, props.item.grant_revision]);
   const requestAdd = useCallback(() => setPending("allowed"), []);
   const requestAllow = useCallback(() => setPending("allowed"), []);
   const requestBlock = useCallback(() => setPending("blocked"), []);
   const requestRemove = useCallback(() => setPending("unset"), []);
+  const requestSaveCommands = useCallback(() => setPending(props.item.state === "blocked" ? "blocked" : "allowed"), [props.item.state]);
+  const handleCommandState = useCallback((commandId: string, state: LocalCliCommandState) => {
+    setCommands((current) => withCommandState(current, commandId, state));
+  }, []);
   const clearPending = useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -131,6 +146,7 @@ export function LocalCliDetail(props: {
         state: pending,
         previous_revision: props.revision,
         session_nonce: randomToken(),
+        commands: commandStatesPayload(commands),
         ...credentials,
       };
       await previewLocalCliMutation(payload);
@@ -142,7 +158,7 @@ export function LocalCliDetail(props: {
     } finally {
       setBusy(false);
     }
-  }, [pending, props]);
+  }, [commands, pending, props]);
 
   useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
@@ -161,7 +177,7 @@ export function LocalCliDetail(props: {
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.item.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
-          Allow covers later commands from this same file, including different flags. Pipes, wrappers, and destructive commands stay under Guard's usual rules.
+          Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           {added ? (
@@ -183,6 +199,26 @@ export function LocalCliDetail(props: {
           )}
         </div>
       </header>
+      {added ? (
+        <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
+          <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">Command patterns</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+            Same settings as built-in tools. Recommended is the safe default.
+          </p>
+          <div className="mt-4">
+            <CustomExtensionCommandList
+              commands={commands}
+              disabled={busy}
+              onChange={handleCommandState}
+            />
+          </div>
+          {commandsDirty ? (
+            <button type="button" className="mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestSaveCommands}>
+              Review command changes
+            </button>
+          ) : null}
+        </section>
+      ) : null}
       {error && !pending ? <div className="mt-4"><InlineError message={error} /></div> : null}
       {pending ? (
         <CustomExtensionReviewModal
