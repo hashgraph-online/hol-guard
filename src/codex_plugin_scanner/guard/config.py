@@ -72,7 +72,11 @@ def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) ->
     config = load_guard_config(guard_home)
     if not watch_should_auto_revert(config, now=now):
         return config
-    return update_guard_settings(guard_home, {"protection_posture": "protected"})
+    return update_guard_settings(
+        guard_home,
+        {"protection_posture": "protected"},
+        event_source="auto-revert",
+    )
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
 NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
     {
@@ -621,6 +625,7 @@ def update_guard_settings(
     *,
     approval_gate_grant: ApprovalGateGrant | None = None,
     cloud_sync_entitled: bool = False,
+    event_source: str = "settings",
 ) -> GuardConfig:
     """Persist safe local Guard settings to config.toml and return the updated config."""
 
@@ -654,7 +659,18 @@ def update_guard_settings(
     if next_payload.get("sync") is True and not cloud_sync_entitled:
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
-    return load_guard_config(guard_home)
+    updated = load_guard_config(guard_home)
+    if current_config.protection_posture != updated.protection_posture:
+        from .protection_events import record_posture_change
+
+        record_posture_change(
+            guard_home,
+            previous=current_config.protection_posture,
+            next_posture=updated.protection_posture,
+            source=event_source,
+            auto=event_source == "auto-revert",
+        )
+    return updated
 
 
 def update_guard_update_channel(

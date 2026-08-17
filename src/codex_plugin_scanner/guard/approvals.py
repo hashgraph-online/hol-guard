@@ -1210,6 +1210,16 @@ def _record_resolution_event(
         },
         resolved_at,
     )
+    if action == "allow":
+        store.add_event(
+            "guard.protection.ask_once_remembered" if persisted_rule else "guard.protection.ask_once_shown",
+            {
+                "request_id": request_id,
+                "scope": scope,
+                "local_once_fallback": local_once_fallback,
+            },
+            resolved_at,
+        )
     _enqueue_memory_decision_for_resolution(
         store,
         request_id=request_id,
