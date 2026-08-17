@@ -46,12 +46,13 @@ jobs:
           MAX_PROCESS_COUNT = 65_536
           MAX_PATH_CHARS = 32_768
           MAX_COMMAND_LINE_BYTES = 1024 * 1024
+          MAX_QUERY_BUFFER_BYTES = 128 * 1024
 
           class UnicodeString(ctypes.Structure):
               _fields_ = [
                   ("Length", wintypes.USHORT),
                   ("MaximumLength", wintypes.USHORT),
-                  ("Buffer", wintypes.LPWSTR),
+                  ("Buffer", ctypes.c_void_p),
               ]
 
           kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -136,7 +137,7 @@ jobs:
                       0,
                       ctypes.byref(required),
                   )
-                  if required.value < ctypes.sizeof(UnicodeString) or required.value > MAX_COMMAND_LINE_BYTES:
+                  if required.value < ctypes.sizeof(UnicodeString) or required.value > MAX_QUERY_BUFFER_BYTES:
                       failures.append({"pid": pid, "stage": "size", "required": required.value})
                       continue
                   raw_buffer = ctypes.create_string_buffer(required.value)
@@ -153,11 +154,15 @@ jobs:
                       failures.append({"pid": pid, "stage": "query", "status": status})
                       continue
                   value = ctypes.cast(raw_buffer, ctypes.POINTER(UnicodeString)).contents
+                  raw_start = ctypes.addressof(raw_buffer)
+                  raw_end = raw_start + ctypes.sizeof(raw_buffer)
+                  buffer_start = int(value.Buffer or 0)
                   if (
                       value.Length <= 0
                       or value.Length % 2 != 0
                       or value.Length > value.MaximumLength
-                      or value.Buffer is None
+                      or buffer_start < raw_start
+                      or buffer_start + value.Length > raw_end
                   ):
                       failures.append(
                           {
@@ -165,10 +170,11 @@ jobs:
                               "stage": "unicode",
                               "length": int(value.Length),
                               "maximum": int(value.MaximumLength),
+                              "buffer_in_range": raw_start <= buffer_start < raw_end,
                           }
                       )
                       continue
-                  command_line = ctypes.wstring_at(value.Buffer, value.Length // 2).strip()
+                  command_line = ctypes.wstring_at(buffer_start, value.Length // 2).strip()
                   encoded_size = len(command_line.encode("utf-8", errors="strict"))
                   command_line_bytes += encoded_size
                   assert command_line_bytes <= MAX_COMMAND_LINE_BYTES
