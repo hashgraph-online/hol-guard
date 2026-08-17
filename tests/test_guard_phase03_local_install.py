@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.cli import update_artifact as update_artifact_mo
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_open_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
+from codex_plugin_scanner.guard.daemon import update_refresh_program
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -133,7 +134,7 @@ def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monk
     (context.guard_home / "daemon-state.json").write_text("{}", encoding="utf-8")
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        assert command[-2:] == ["-c", update_commands._DAEMON_REFRESH_SCRIPT]
+        assert command[-2:] == ["-c", update_commands._DAEMON_REFRESH_BOOTSTRAP_SCRIPT]
         assert json.loads(str(kwargs["input"])) == {
             "guard_home": str(context.guard_home),
             "home_dir": str(context.home_dir),
@@ -151,6 +152,17 @@ def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monk
 
     assert payload == {"status": "restarted", "retired": [123], "runtime_verified": True}
     assert note == "Restarted the Guard daemon to load the updated package."
+
+
+def test_daemon_refresh_bootstrap_loads_script_from_installed_module(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(update_refresh_program, "DAEMON_REFRESH_SCRIPT", "print('new-runtime-refresh')")
+
+    exec(update_commands._DAEMON_REFRESH_BOOTSTRAP_SCRIPT, {})
+
+    assert capsys.readouterr().out == "new-runtime-refresh\n"
 
 
 def test_daemon_refresh_after_update_skips_when_daemon_is_not_running(tmp_path: Path) -> None:
@@ -189,7 +201,7 @@ def test_daemon_refresh_authorizes_breakaway_only_for_restart_child(tmp_path: Pa
     assert note == "Restarted the Guard daemon to load the updated package."
     assert calls == [
         (
-            update_commands._DAEMON_REFRESH_SCRIPT,
+            update_commands._DAEMON_REFRESH_BOOTSTRAP_SCRIPT,
             {
                 "input_text": json.dumps(
                     {
@@ -214,7 +226,7 @@ def test_daemon_refresh_rejects_unverified_runtime_handoff(tmp_path: Path) -> No
             return ["/trusted/python", script]
 
         def run(self, command: list[str], **_kwargs: object) -> SimpleNamespace:
-            if command[-1] == update_commands._DAEMON_REFRESH_SCRIPT:
+            if command[-1] == update_commands._DAEMON_REFRESH_BOOTSTRAP_SCRIPT:
                 return SimpleNamespace(
                     returncode=0,
                     stdout='{"status":"restarted"}',
@@ -314,7 +326,7 @@ def test_daemon_refresh_failure_runs_contained_cleanup_without_breakaway(tmp_pat
         def run(self, command: list[str], **kwargs: object) -> SimpleNamespace:
             script = command[-1]
             calls.append((script, dict(kwargs)))
-            if script == update_commands._DAEMON_REFRESH_SCRIPT:
+            if script == update_commands._DAEMON_REFRESH_BOOTSTRAP_SCRIPT:
                 return SimpleNamespace(returncode=1, stdout="", stderr="failed", output_limited=False)
             return SimpleNamespace(
                 returncode=0,
@@ -330,7 +342,7 @@ def test_daemon_refresh_failure_runs_contained_cleanup_without_breakaway(tmp_pat
 
     assert payload is None
     assert note == "Could not restart the Guard daemon after update: failed"
-    assert calls[0][0] == update_commands._DAEMON_REFRESH_SCRIPT
+    assert calls[0][0] == update_commands._DAEMON_REFRESH_BOOTSTRAP_SCRIPT
     assert calls[0][1]["allow_windows_job_breakaway"] is True
     assert calls[1][0] == update_commands._DAEMON_REFRESH_CLEANUP_SCRIPT
     assert "allow_windows_job_breakaway" not in calls[1][1]
