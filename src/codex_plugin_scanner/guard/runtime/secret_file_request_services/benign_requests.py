@@ -169,7 +169,7 @@ def is_explicitly_benign_tool_action_request(
         if _looks_like_safe_git_status_command(stripped_command, parts, cwd=cwd):
             found_benign_candidate = True
             continue
-        if _looks_like_safe_standalone_git_routine(stripped_command, cwd=cwd):
+        if _looks_like_safe_standalone_git_routine(stripped_command, cwd=cwd, home_dir=home_dir):
             found_benign_candidate = True
             continue
         if home_dir is not None and is_safe_git_worktree_add(
