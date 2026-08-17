@@ -440,7 +440,7 @@ jobs:
                       processes.append((pid, port))
               return sorted(processes, key=lambda item: item[1])
           '''
-          text, replaced = inventory_pattern.subn(inventory_replacement, text, count=1)
+          text, replaced = inventory_pattern.subn(lambda _match: inventory_replacement, text, count=1)
           if replaced != 1:
               raise RuntimeError("could not replace Windows daemon inventory")
 
@@ -466,7 +466,7 @@ jobs:
               stdout = output.strip()
               return stdout or None
           '''
-          text, replaced = pid_pattern.subn(pid_replacement, text, count=1)
+          text, replaced = pid_pattern.subn(lambda _match: pid_replacement, text, count=1)
           if replaced != 1:
               raise RuntimeError("could not replace Windows PID command lookup")
           manager.write_text(text, encoding="utf-8")
@@ -529,7 +529,7 @@ jobs:
                   (12345, daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES),
               ]
           '''
-          text, replaced = pid_test_pattern.subn(pid_test_replacement, text, count=1)
+          text, replaced = pid_test_pattern.subn(lambda _match: pid_test_replacement, text, count=1)
           if replaced != 1:
               raise RuntimeError("could not update Windows PID identity test")
 
@@ -585,7 +585,7 @@ jobs:
                   daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES
               )
           '''
-          text, replaced = inventory_test_pattern.subn(inventory_test_replacement, text, count=1)
+          text, replaced = inventory_test_pattern.subn(lambda _match: inventory_test_replacement, text, count=1)
           if replaced != 1:
               raise RuntimeError("could not update Windows inventory test")
 
