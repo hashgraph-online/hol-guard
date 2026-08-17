@@ -864,7 +864,12 @@ def _sync_protection_posture_payload(
     synced = dict(next_payload)
     synced.pop("protection_posture_explicit", None)
     next_level = synced.get("security_level", current_config.security_level)
-    if _incoming_selects_protection_posture(incoming, current_config, synced.get("mode", current_config.mode), next_level):
+    if _incoming_selects_protection_posture(
+        incoming,
+        current_config,
+        synced.get("mode", current_config.mode),
+        next_level,
+    ):
         posture = coerce_protection_posture(incoming.get("protection_posture"))
         synced["protection_posture"] = posture
         dual_mode, dual_level = dual_write_from_posture(
