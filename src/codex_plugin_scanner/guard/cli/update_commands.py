@@ -56,6 +56,7 @@ from .update_artifact import (
     recover_local_wheel_original,
     stage_trusted_wheel,
 )
+from .update_grok_repair import append_grok_repair
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
@@ -2430,6 +2431,7 @@ def _repair_supported_harnesses_in_process(
         repaired_installs.append(repaired_cursor)
     if cursor_warning is not None:
         repair_notes.append(cursor_warning)
+    append_grok_repair(repaired_installs, repair_notes, context=context, store=store, workspace=workspace, now=now)
     legacy_omp_migration, legacy_omp_warning = _migrate_legacy_omp_install(
         context=context,
         store=store,
@@ -2507,13 +2509,7 @@ def _repair_pi_family_install(
     workspace: str | None,
     now: str,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Rewrite one managed Pi-family extension after package updates.
-
-    The extension embeds timeout and daemon-compat constants. Refreshing it after
-    update keeps the fast daemon path available and avoids cold CLI timeouts.
-    When the on-disk extension and settings already match the current package,
-    skip the rewrite so already-current updates stay silent.
-    """
+    """Rewrite one managed Pi-family extension after package updates."""
 
     try:
         managed_install = store.get_managed_install(harness)
