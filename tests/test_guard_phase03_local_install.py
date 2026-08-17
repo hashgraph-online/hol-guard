@@ -272,6 +272,7 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", lambda _home: next(retirement_checks))
     monkeypatch.setattr(manager, "clear_guard_daemon_state", lambda _home: None)
     monkeypatch.setattr(manager, "repair_approval_center_locator", lambda _home: None)
+    monkeypatch.setattr(manager, "publish_approval_center_locator", lambda _home, _url: None)
     monkeypatch.setattr(manager, "ensure_guard_daemon_after_update", fake_ensure)
     monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5474")
     monkeypatch.setattr(update_commands.time, "monotonic", lambda: next(monotonic_values))

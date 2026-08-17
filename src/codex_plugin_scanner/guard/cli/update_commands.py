@@ -167,6 +167,7 @@ from codex_plugin_scanner.guard.daemon.manager import (
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
     load_guard_daemon_url,
+    publish_approval_center_locator,
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
 )
@@ -225,16 +226,22 @@ for attempt in range(1, 4):
         if verified_url is None:
             break
     if verified_url is not None:
+        locator_published = True
+        try:
+            publish_approval_center_locator(guard_home, verified_url)
+        except (OSError, RuntimeError):
+            locator_published = False
+        result = {
+            "status": "restarted",
+            "retired": retired,
+            "daemon_url": verified_url,
+            "attempts": attempt,
+            "runtime_verified": True,
+        }
+        if not locator_published:
+            result["locator_published"] = False
         print(
-            json.dumps(
-                {
-                    "status": "restarted",
-                    "retired": retired,
-                    "daemon_url": verified_url,
-                    "attempts": attempt,
-                    "runtime_verified": True,
-                }
-            )
+            json.dumps(result)
         )
         raise SystemExit(0)
     last_failure_status = "runtime_replaced"

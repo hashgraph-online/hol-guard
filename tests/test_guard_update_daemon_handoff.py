@@ -14,6 +14,11 @@ from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.daemon import manager
 
 
+@pytest.fixture(autouse=True)
+def _stub_locator_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(manager, "publish_approval_center_locator", lambda _home, _url: None)
+
+
 def test_refresh_script_adapts_to_new_manager_signature(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -24,6 +29,7 @@ def test_refresh_script_adapts_to_new_manager_signature(
     _ = guard_home.mkdir(parents=True)
     _ = (guard_home / "daemon-state.json").write_text('{"port":8123}', encoding="utf-8")
     observed: dict[str, object] = {}
+    call_order: list[str] = []
 
     def retire(_guard_home: Path) -> list[int]:
         return [17]
@@ -38,6 +44,11 @@ def test_refresh_script_adapts_to_new_manager_signature(
     monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", retirement_complete)
     monkeypatch.setattr(manager, "clear_guard_daemon_state", no_op)
     monkeypatch.setattr(manager, "repair_approval_center_locator", no_op)
+    monkeypatch.setattr(
+        manager,
+        "publish_approval_center_locator",
+        lambda received_home, daemon_url: call_order.append("locator"),
+    )
 
     def require_new_parameters(
         received_guard_home: Path,
@@ -46,6 +57,7 @@ def test_refresh_script_adapts_to_new_manager_signature(
         preferred_port: int | None = None,
         allow_windows_job_breakaway: bool = False,
     ) -> str:
+        call_order.append("daemon")
         observed.update(
             guard_home=received_guard_home,
             home_dir=home_dir,
@@ -78,12 +90,59 @@ def test_refresh_script_adapts_to_new_manager_signature(
         "preferred_port": 8123,
         "allow_windows_job_breakaway": True,
     }
+    assert call_order == ["daemon", "locator"]
     assert json.loads(capsys.readouterr().out) == {
         "status": "restarted",
         "retired": [17],
         "daemon_url": "http://127.0.0.1:8123",
         "runtime_verified": True,
         "attempts": 1,
+    }
+
+
+def test_refresh_script_keeps_verified_daemon_when_locator_publish_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    guard_home = home_dir / ".hol-guard"
+    _ = guard_home.mkdir(parents=True)
+    _ = (guard_home / "daemon-state.json").write_text('{"port":8126}', encoding="utf-8")
+
+    monkeypatch.setattr(manager, "retire_all_guard_daemons_for_home", lambda _home: [19])
+    monkeypatch.setattr(manager, "guard_daemon_retirement_is_complete", lambda _home: True)
+    monkeypatch.setattr(manager, "clear_guard_daemon_state", lambda _home: None)
+    monkeypatch.setattr(manager, "repair_approval_center_locator", lambda _home: None)
+    monkeypatch.setattr(
+        manager,
+        "ensure_guard_daemon_after_update",
+        lambda _home, **_kwargs: "http://127.0.0.1:8126",
+    )
+    monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:8126")
+
+    def fail_locator_publish(_home: Path, _daemon_url: str) -> None:
+        raise OSError("locator unavailable")
+
+    monkeypatch.setattr(manager, "publish_approval_center_locator", fail_locator_publish)
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps({"guard_home": str(guard_home), "home_dir": str(home_dir)})),
+    )
+
+    refresh_script = cast(str, update_commands.__dict__["_DAEMON_REFRESH_SCRIPT"])
+    with pytest.raises(SystemExit) as exit_info:
+        exec(refresh_script, {})
+
+    assert exit_info.value.code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "restarted",
+        "retired": [19],
+        "daemon_url": "http://127.0.0.1:8126",
+        "attempts": 1,
+        "runtime_verified": True,
+        "locator_published": False,
     }
 
 

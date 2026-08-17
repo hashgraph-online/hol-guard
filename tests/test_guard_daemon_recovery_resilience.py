@@ -18,6 +18,15 @@ from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events
 
 
+@pytest.fixture(autouse=True)
+def _stub_locator_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "publish_approval_center_locator",
+        lambda _home, _url: None,
+    )
+
+
 def _old_generation() -> dict[str, object]:
     return {"started_at": (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()}
 
@@ -84,6 +93,63 @@ def test_recovery_starts_when_overloaded_state_has_no_live_generation(
 
     assert recovered == "http://127.0.0.1:4782"
     assert retired == []
+
+
+def test_recovery_republishes_approval_center_after_starting_new_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    published: list[tuple[Path, str]] = []
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: None)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: None)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "ensure_guard_daemon",
+        lambda _home, *, home_dir=None: "http://127.0.0.1:4782",
+    )
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "publish_approval_center_locator",
+        lambda received_home, daemon_url: published.append((received_home, daemon_url)),
+    )
+
+    recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(
+        guard_home,
+        home_dir=home_dir,
+        failure_kind="transport-failure",
+    )
+
+    assert recovered == "http://127.0.0.1:4782"
+    assert published == [(guard_home, "http://127.0.0.1:4782")]
+
+
+def test_recovery_keeps_live_daemon_when_locator_publication_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: None)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: None)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "ensure_guard_daemon",
+        lambda _home, *, home_dir=None: "http://127.0.0.1:4782",
+    )
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "publish_approval_center_locator",
+        lambda _home, _url: (_ for _ in ()).throw(OSError("write interrupted")),
+    )
+
+    recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(
+        guard_home,
+        failure_kind="transport-failure",
+    )
+
+    assert recovered == "http://127.0.0.1:4782"
+    assert any(event["event"] == "locator_publish_failed" for event in load_daemon_lifecycle_events(guard_home))
 
 
 def test_recovery_records_trigger_and_missing_authenticated_process(
