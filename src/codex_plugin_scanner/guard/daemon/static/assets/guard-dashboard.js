@@ -13125,13 +13125,13 @@ function groupByCategory(receipts) {
 const DEFAULT_SCOPE_CHOICES = [
   {
     value: "artifact",
-    label: "Approve once",
+    label: "Allow just this once",
     description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved."
   },
   {
     value: "workspace",
-    label: "Remember for project",
-    description: "Save this decision for the current project. Future matching actions skip review here without asking again."
+    label: "Allow and remember for this project",
+    description: "Save this exact action for the current project. Matching actions skip review here until the action changes."
   },
   {
     value: "publisher",
@@ -28387,8 +28387,8 @@ function ReviewScopeControls(props) {
       }
     ),
     props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Save for project or app" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These options save a decision that skips review for matching actions going forward. Choose the narrowest scope that fits what you meant to allow." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Save for this app" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These options save the same action for this app. They do not grant unrelated actions." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", children: props.broaderScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         ScopeChoiceButton,
         {
@@ -28496,10 +28496,10 @@ function ScopeChoiceButton(props) {
 }
 function allowButtonLabel(scope) {
   if (scope === "artifact") {
-    return "Approve once";
+    return "Allow just this once";
   }
   if (scope === "workspace") {
-    return "Remember for project";
+    return "Allow and remember for this project";
   }
   return "Approve and remember";
 }
@@ -28670,7 +28670,7 @@ function pastDecisionVerb(decision) {
       return "blocked";
   }
 }
-const commonScopeValues = /* @__PURE__ */ new Set(["artifact"]);
+const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
 function resolvedActionCopy(item, action, persistedExactAction) {
   if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
   if (action === "allow") return "Approved: action can proceed";
