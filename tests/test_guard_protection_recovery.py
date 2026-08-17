@@ -13,6 +13,8 @@ from codex_plugin_scanner.guard.approvals import _live_hook_verification
 from codex_plugin_scanner.guard.cli.install_commands import (
     apply_managed_install,
     grok_hooks_protection_ready,
+    _grok_hook_command_is_guard,
+    _grok_managed_config_is_active,
 )
 from codex_plugin_scanner.guard.daemon.server import (
     _PROTECTION_REPAIR_PROBE_COMMAND,
@@ -309,3 +311,24 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
     assert store.get_command_activity_persistence_health().active_error_count == 0
     assert (ctx.home_dir / ".grok" / "managed_config.toml").is_file()
     assert "matcher" not in json.loads(pretool.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]
+
+
+def test_grok_hook_command_rejects_placeholder_invocations() -> None:
+    assert _grok_hook_command_is_guard("hol-guard hook grok") is True
+    assert _grok_hook_command_is_guard("echo hol-guard hook") is False
+    assert _grok_hook_command_is_guard("true") is False
+
+
+def test_grok_managed_config_rejects_inline_commented_rule() -> None:
+    assert (
+        _grok_managed_config_is_active(
+            '# BEGIN HOL GUARD MANAGED GROK\ndeny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n'
+        )
+        is True
+    )
+    assert (
+        _grok_managed_config_is_active(
+            "# BEGIN HOL GUARD MANAGED GROK\ndeny = [] # Read(**/.grok/auth/**)\n# END HOL GUARD MANAGED GROK\n"
+        )
+        is False
+    )

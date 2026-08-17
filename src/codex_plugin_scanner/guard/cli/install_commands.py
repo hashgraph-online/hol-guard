@@ -351,8 +351,15 @@ def _grok_pretool_is_catchall(pretool_hook: Path) -> bool:
 
 def _grok_hook_command_is_guard(command: str) -> bool:
     lowered = command.lower()
+    tokens = lowered.replace("=", " ").replace(",", " ").split()
+    if not tokens:
+        return False
+    first = tokens[0].rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if first in {"echo", "true", "false", "printf", ":"}:
+        return False
     return "hook" in lowered and (
-        "hol-guard" in lowered
+        "hol-guard" in tokens
+        or any(token.endswith("/hol-guard") or token.endswith("\\hol-guard") for token in tokens)
         or "__guard-bounded-hook" in lowered
         or "bounded_cli_hook_bridge" in lowered
         or "codex_plugin_scanner.guard" in lowered
@@ -391,7 +398,7 @@ def _grok_event_has_command_hook(entries: object) -> bool:
             if not isinstance(hook_entry, dict) or hook_entry.get("type") != "command":
                 continue
             command = hook_entry.get("command")
-            if isinstance(command, str) and command.strip():
+            if isinstance(command, str) and _grok_hook_command_is_guard(command):
                 return True
     return False
 
@@ -404,10 +411,8 @@ def _grok_managed_config_is_active(managed_text: str) -> bool:
     if start < 0 or stop <= start:
         return False
     for line in managed_text[start:stop].splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            continue
-        if "Read(**/.grok/auth/**)" in stripped:
+        active = line.split("#", 1)[0].strip()
+        if "Read(**/.grok/auth/**)" in active:
             return True
     return False
 
