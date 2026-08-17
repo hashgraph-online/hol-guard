@@ -1,4 +1,4 @@
-import { an as fetchLocalCliApi, r as reactExports, ao as GenIcon, j as jsxRuntimeExports, L as HiMiniBolt, ap as HiMiniGlobeAlt, aq as HiMiniCube, _ as HiMiniLockClosed, C as HiMiniCloud, ar as HiMiniServerStack, b as HiMiniCommandLine, as as HiMiniFolder, q as HiMiniShieldCheck, at as FaWindows, au as FaAws, K as HiMiniExclamationTriangle, m as HiMiniCheckCircle, c as HiMiniChevronRight, z as HiMiniChevronDown, av as buildApprovalProofCredentials, aw as isApprovalProofSubmitDisabled, ax as ApprovalProofFieldInputs, ay as HiMiniArrowLeft, az as HiMiniPlus, aA as fetchExtensionControlApi, aB as HiMiniArrowPath, aC as HiMiniInformationCircle, x as HiMiniXMark, ak as HiMiniMagnifyingGlass, V as HiMiniClipboardDocumentCheck, W as HiMiniClipboard, aj as WorkspacePageHeader } from "../guard-dashboard.js";
+import { as as fetchLocalCliApi, r as reactExports, at as GenIcon, j as jsxRuntimeExports, L as HiMiniBolt, au as HiMiniGlobeAlt, av as HiMiniCube, a1 as HiMiniLockClosed, C as HiMiniCloud, aw as HiMiniServerStack, b as HiMiniCommandLine, ax as HiMiniFolder, q as HiMiniShieldCheck, ay as FaWindows, az as FaAws, K as HiMiniExclamationTriangle, m as HiMiniCheckCircle, c as HiMiniChevronRight, z as HiMiniChevronDown, aA as buildApprovalProofCredentials, aB as isApprovalProofSubmitDisabled, aC as ApprovalProofFieldInputs, aD as HiMiniArrowLeft, aE as HiMiniPlus, aF as fetchExtensionControlApi, aG as HiMiniArrowPath, aH as HiMiniInformationCircle, x as HiMiniXMark, an as HiMiniMagnifyingGlass, V as HiMiniClipboardDocumentCheck, X as HiMiniClipboard, am as WorkspacePageHeader } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -871,7 +871,7 @@ function ProtectionStatusHero(props) {
   ] });
 }
 function ProtectionDecisionBadge({ result }) {
-  const label = result === "allowed" ? "Allowed" : result === "ask-first" ? "Ask first" : "Blocked";
+  const label = result === "allowed" ? "Allowed" : result === "ask-first" ? "Ask once" : "Blocked";
   const classes = result === "allowed" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : result === "ask-first" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-800";
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${classes}`, children: label });
 }

@@ -691,12 +691,20 @@ def _init_notification_summary(payload: dict[str, object]) -> str:
     return ", ".join(states) if states else "ready"
 
 
+def _protection_display_name(payload: dict[str, object], fallback: str) -> str:
+    label = payload.get("protection_label")
+    if isinstance(label, str) and label.strip():
+        return label.strip()
+    return fallback
+
+
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     protection = str(payload.get("protection") or "protected")
     protection_off = bool(payload.get("protection_off")) or protection == "watch"
+    protection_name = _protection_display_name(payload, protection)
     protection_line = (
-        f"[bold red]protection: {protection} (off)[/bold red]" if protection_off else f"protection: {protection}"
+        f"[bold red]protection: {protection_name} (off)[/bold red]" if protection_off else f"protection: {protection_name}"
     )
     console.print(
         Panel.fit(
@@ -782,8 +790,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         tables = _coerce_string_list(payload.get("tables"))
         protection = str(payload.get("protection") or payload.get("protection_posture") or "protected")
         protection_off = bool(payload.get("protection_off")) or protection == "watch"
+        protection_name = _protection_display_name(payload, protection)
         protection_line = (
-            f"[bold red]protection: {protection} (off)[/bold red]" if protection_off else f"protection: {protection}"
+            f"[bold red]protection: {protection_name} (off)[/bold red]" if protection_off else f"protection: {protection_name}"
         )
         console.print(
             Panel.fit(
@@ -843,7 +852,10 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         protection = str(payload.get("protection") or payload.get("protection_posture") or "")
         if protection:
             protection_off = bool(payload.get("protection_off")) or protection == "watch"
-            protection_value = f"[bold red]{protection} (off)[/bold red]" if protection_off else protection
+            protection_name = _protection_display_name(payload, protection)
+            protection_value = (
+                f"[bold red]{protection_name} (off)[/bold red]" if protection_off else protection_name
+            )
             summary.add_row("Protection", protection_value)
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:

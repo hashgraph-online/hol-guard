@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/watch-protection-banner.js","assets/chunks/harness-setup-target.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/extensions-workspace.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/harness-setup-target.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/extensions-workspace.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -29925,9 +29925,86 @@ function QueueConnectionError(props) {
     ] })
   ] }) });
 }
+const PROTECTION_POSTURE_COPY = {
+  protected: {
+    label: "Protected",
+    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
+  },
+  extra_careful: {
+    label: "Extra careful",
+    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
+  },
+  watch: {
+    label: "Watch",
+    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
+  }
+};
+const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
+const POSTURE_OUTCOME_COLUMNS = {
+  protected: {
+    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
+    asks: "First secret read, new destructive command, first package script, new MCP or skill",
+    runs: "Remembered actions, routine browsing, verified-benign work"
+  },
+  extra_careful: {
+    stops: "The same automatic stops as Protected",
+    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
+    runs: "Remembered actions and verified-benign work"
+  },
+  watch: {
+    stops: "Nothing. Guard only records.",
+    asks: "Nothing. Inbox shows what would have stopped.",
+    runs: "Every action, including known-bad work"
+  }
+};
+function isProtectionPosture(value) {
+  return value === "protected" || value === "extra_careful" || value === "watch";
+}
+function deriveProtectionPosture(mode, securityLevel) {
+  if (mode === "observe") return "watch";
+  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
+  return "protected";
+}
+function WatchProtectionBanner(props) {
+  const handleTurnOn = reactExports.useCallback(() => {
+    props.onTurnProtectionOn?.();
+  }, [props.onTurnProtectionOn]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "flex flex-col gap-3 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+      role: "status",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: WATCH_BANNER_COPY })
+        ] }),
+        props.onTurnProtectionOn ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleTurnOn,
+            className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+            children: "Turn protection on"
+          }
+        ) : null
+      ]
+    }
+  );
+}
 const McpPolicyRequestPanel = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
+function InboxWatchBanner(props) {
+  const handleTurnOn = reactExports.useCallback(() => {
+    void updateSettings({ protection_posture: "protected" }).then(() => {
+      props.onRestored?.();
+    }).catch(() => {
+      props.onOpenSettings();
+    });
+  }, [props.onOpenSettings, props.onRestored]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { onTurnProtectionOn: handleTurnOn });
+}
 function renderInboxContent(props) {
   if (props.requests.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
@@ -30048,6 +30125,9 @@ function ApprovalCenterLayout(props) {
   } else {
     queuedCount = queuedItems.length;
   }
+  const handleOpenSettings = reactExports.useCallback(() => {
+    props.onNavigate("/settings");
+  }, [props.onNavigate]);
   const handleToggleSidebar = reactExports.useCallback(() => {
     setSidebarCollapsed((previous) => {
       const next = !previous;
@@ -30091,7 +30171,16 @@ function ApprovalCenterLayout(props) {
         className: "guard-shell-content flex flex-col",
         "data-sidebar-collapsed": sidebarCollapsed ? "true" : "false",
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "guard-shell-main flex-1", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-shell-workspace", "data-view": props.view, children: renderViewContent(props) }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "guard-shell-main flex-1", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-shell-workspace", "data-view": props.view, children: [
+            props.view === "inbox" && props.runtime.kind === "ready" && props.runtime.snapshot.protection_posture === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              InboxWatchBanner,
+              {
+                onRestored: props.onGuardReconnected,
+                onOpenSettings: handleOpenSettings
+              }
+            ) }) : null,
+            renderViewContent(props)
+          ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ShellFooter, {})
         ]
       }
@@ -30223,16 +30312,16 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([4,5,3]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([6,5,2]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([7,8]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([6,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([9,3]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([10,8]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
@@ -31027,7 +31116,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniBellAlert as $,
+  React as $,
   ActionButton as A,
   resolveCloudIntelCopy as B,
   HiMiniCloud as C,
@@ -31050,141 +31139,146 @@ export {
   HiMiniEye as T,
   HiMiniXCircle as U,
   HiMiniClipboardDocumentCheck as V,
-  HiMiniClipboard as W,
-  getDefaultExportFromCjs as X,
-  React as Y,
-  HiMiniKey as Z,
-  HiMiniLockClosed as _,
+  WatchProtectionBanner as W,
+  HiMiniClipboard as X,
+  PROTECTION_POSTURE_COPY as Y,
+  POSTURE_OUTCOME_COLUMNS as Z,
+  getDefaultExportFromCjs as _,
   EvidenceActivityHeatmapMini as a,
-  isRecord$2 as a$,
-  HiMiniAdjustmentsHorizontal as a0,
-  HiMiniCircleStack as a1,
-  TabBar as a2,
-  resolveProtectionLevelCopy as a3,
-  fetchSettings as a4,
-  fetchRuntimeSnapshot as a5,
-  clearPolicy as a6,
-  clearReviewQueue as a7,
-  revokeApprovalGateCooldown as a8,
-  disableApprovalGateTotp as a9,
-  fetchExtensionControlApi as aA,
-  HiMiniArrowPath as aB,
-  HiMiniInformationCircle as aC,
-  fetchApprovalPage as aD,
-  fetchPolicy as aE,
-  HiMiniHome as aF,
-  guardActionPresentation as aG,
-  DEFAULT_FILTER_STATE as aH,
-  filterEvidence as aI,
-  sortEvidence as aJ,
-  computeMetrics as aK,
-  CommandActivityWorkspace as aL,
-  EvidenceFilterBar as aM,
-  EvidenceInsightStrip as aN,
-  EvidenceActionList as aO,
-  EvidenceActionDetail as aP,
-  policyIdentityKey as aQ,
-  HiMiniChartBar as aR,
-  runHarnessAction as aS,
-  GuardHarnessActionError as aT,
-  HiMiniRocketLaunch as aU,
-  HiMiniTrash as aV,
-  clearLabelForScope as aW,
-  formatHarnessCommand as aX,
-  isSupplyChainAuditIncomplete as aY,
-  isSupplyChainAuditEvidence as aZ,
-  readString$1 as a_,
-  importSettings as aa,
-  resetSettings as ab,
-  enrollApprovalGateTotp as ac,
-  verifyApprovalGateTotp as ad,
-  clearEvidence as ae,
-  exportDiagnostics as af,
-  repairApprovalCenter as ag,
-  exportSettings as ah,
-  setupDesktopNotifications as ai,
-  WorkspacePageHeader as aj,
-  HiMiniMagnifyingGlass as ak,
-  Tag as al,
-  approvalGateCooldownLabel as am,
-  fetchLocalCliApi as an,
-  GenIcon as ao,
-  HiMiniGlobeAlt as ap,
-  HiMiniCube as aq,
-  HiMiniServerStack as ar,
-  HiMiniFolder as as,
-  FaWindows as at,
-  FaAws as au,
-  buildApprovalProofCredentials as av,
-  isApprovalProofSubmitDisabled as aw,
-  ApprovalProofFieldInputs as ax,
-  HiMiniArrowLeft as ay,
-  HiMiniPlus as az,
+  clearLabelForScope as a$,
+  HiMiniKey as a0,
+  HiMiniLockClosed as a1,
+  HiMiniBellAlert as a2,
+  HiMiniAdjustmentsHorizontal as a3,
+  HiMiniCircleStack as a4,
+  TabBar as a5,
+  resolveProtectionLevelCopy as a6,
+  fetchSettings as a7,
+  fetchRuntimeSnapshot as a8,
+  clearPolicy as a9,
+  buildApprovalProofCredentials as aA,
+  isApprovalProofSubmitDisabled as aB,
+  ApprovalProofFieldInputs as aC,
+  HiMiniArrowLeft as aD,
+  HiMiniPlus as aE,
+  fetchExtensionControlApi as aF,
+  HiMiniArrowPath as aG,
+  HiMiniInformationCircle as aH,
+  fetchApprovalPage as aI,
+  fetchPolicy as aJ,
+  HiMiniHome as aK,
+  guardActionPresentation as aL,
+  DEFAULT_FILTER_STATE as aM,
+  filterEvidence as aN,
+  sortEvidence as aO,
+  computeMetrics as aP,
+  CommandActivityWorkspace as aQ,
+  EvidenceFilterBar as aR,
+  EvidenceInsightStrip as aS,
+  EvidenceActionList as aT,
+  EvidenceActionDetail as aU,
+  policyIdentityKey as aV,
+  HiMiniChartBar as aW,
+  runHarnessAction as aX,
+  GuardHarnessActionError as aY,
+  HiMiniRocketLaunch as aZ,
+  HiMiniTrash as a_,
+  clearReviewQueue as aa,
+  revokeApprovalGateCooldown as ab,
+  disableApprovalGateTotp as ac,
+  importSettings as ad,
+  resetSettings as ae,
+  enrollApprovalGateTotp as af,
+  verifyApprovalGateTotp as ag,
+  clearEvidence as ah,
+  exportDiagnostics as ai,
+  repairApprovalCenter as aj,
+  exportSettings as ak,
+  setupDesktopNotifications as al,
+  WorkspacePageHeader as am,
+  HiMiniMagnifyingGlass as an,
+  isProtectionPosture as ao,
+  deriveProtectionPosture as ap,
+  Tag as aq,
+  approvalGateCooldownLabel as ar,
+  fetchLocalCliApi as as,
+  GenIcon as at,
+  HiMiniGlobeAlt as au,
+  HiMiniCube as av,
+  HiMiniServerStack as aw,
+  HiMiniFolder as ax,
+  FaWindows as ay,
+  FaAws as az,
   HiMiniCommandLine as b,
-  HiMiniClock as b0,
-  IconActionButton as b1,
-  HiMiniBeaker as b2,
-  ActivationSummary as b3,
-  ActionResultPanel as b4,
-  HiMiniBugAnt as b5,
-  GuardModalLayer as b6,
-  ConnectFlowCard as b7,
-  ApprovalProofInline as b8,
-  HiMiniArrowTopRightOnSquare as b9,
-  HiMiniArrowRight as bA,
-  HiMiniPuzzlePiece as bB,
-  fetchCloudExceptions as bC,
-  fetchCloudExceptionRequests as bD,
-  downloadBlob as bE,
-  PolicyStatField as bF,
-  PaginationControls as bG,
-  HiMiniNoSymbol as bH,
-  HiMiniArrowDownTray as bI,
-  HiMiniQueueList as bJ,
-  fetchMcpPolicyRequest as bK,
-  resolveMcpPolicyRequest as bL,
-  HiMiniDocumentPlus as bM,
-  HiMiniDocumentMagnifyingGlass as bN,
-  Surface as bO,
-  HiMiniCheckBadge as bP,
-  fetchSupplyChainBundle as bQ,
-  isSupplyChainScannerEvidence as bR,
-  isBlockedGuardAction as bS,
-  HiMiniShieldExclamation as bT,
-  HiMiniComputerDesktop as bU,
-  HiMiniChevronLeft as bV,
-  HiMiniFunnel as bW,
-  HiMiniArrowDown as bX,
-  HiMiniArrowUp as bY,
-  runAuditRemediation as bZ,
-  HiMiniSignal as b_,
-  HiMiniCloudArrowDown as ba,
-  fetchPackageFirewallStatus as bb,
-  runPackageAudit as bc,
-  resolveSupplyChainAuditFailure as bd,
-  runPackageSync as be,
-  startPackageFirewallConnect as bf,
-  openPackageFirewallAuthorizeFallback as bg,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bh,
-  repairSupplyChainProtection as bi,
-  runPackageFirewallAction as bj,
-  parseInterceptProofSnapshot as bk,
-  activatePackageFirewallRuntime as bl,
-  EntitlementNotice as bm,
-  fetchReceipts as bn,
-  __vitePreload as bo,
-  scopeLabel as bp,
-  guardAwareHref as bq,
-  HiMiniDocumentText as br,
-  HiMiniCloudArrowUp as bs,
-  HiMiniCheck as bt,
-  HiMiniCodeBracket as bu,
-  HiMiniClipboardDocument as bv,
-  HiMiniUsers as bw,
-  HiMiniIdentification as bx,
-  policyActionLabel as by,
-  createCloudExceptionRequest as bz,
+  HiMiniFunnel as b$,
+  formatHarnessCommand as b0,
+  isSupplyChainAuditIncomplete as b1,
+  isSupplyChainAuditEvidence as b2,
+  readString$1 as b3,
+  isRecord$2 as b4,
+  HiMiniClock as b5,
+  IconActionButton as b6,
+  HiMiniBeaker as b7,
+  ActivationSummary as b8,
+  ActionResultPanel as b9,
+  HiMiniClipboardDocument as bA,
+  HiMiniUsers as bB,
+  HiMiniIdentification as bC,
+  policyActionLabel as bD,
+  createCloudExceptionRequest as bE,
+  HiMiniArrowRight as bF,
+  HiMiniPuzzlePiece as bG,
+  fetchCloudExceptions as bH,
+  fetchCloudExceptionRequests as bI,
+  downloadBlob as bJ,
+  PolicyStatField as bK,
+  PaginationControls as bL,
+  HiMiniNoSymbol as bM,
+  HiMiniArrowDownTray as bN,
+  HiMiniQueueList as bO,
+  fetchMcpPolicyRequest as bP,
+  resolveMcpPolicyRequest as bQ,
+  HiMiniDocumentPlus as bR,
+  HiMiniDocumentMagnifyingGlass as bS,
+  Surface as bT,
+  HiMiniCheckBadge as bU,
+  fetchSupplyChainBundle as bV,
+  isSupplyChainScannerEvidence as bW,
+  isBlockedGuardAction as bX,
+  HiMiniShieldExclamation as bY,
+  HiMiniComputerDesktop as bZ,
+  HiMiniChevronLeft as b_,
+  HiMiniBugAnt as ba,
+  GuardModalLayer as bb,
+  ConnectFlowCard as bc,
+  ApprovalProofInline as bd,
+  HiMiniArrowTopRightOnSquare as be,
+  HiMiniCloudArrowDown as bf,
+  fetchPackageFirewallStatus as bg,
+  runPackageAudit as bh,
+  resolveSupplyChainAuditFailure as bi,
+  runPackageSync as bj,
+  startPackageFirewallConnect as bk,
+  openPackageFirewallAuthorizeFallback as bl,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bm,
+  repairSupplyChainProtection as bn,
+  runPackageFirewallAction as bo,
+  parseInterceptProofSnapshot as bp,
+  activatePackageFirewallRuntime as bq,
+  EntitlementNotice as br,
+  fetchReceipts as bs,
+  __vitePreload as bt,
+  scopeLabel as bu,
+  guardAwareHref as bv,
+  HiMiniDocumentText as bw,
+  HiMiniCloudArrowUp as bx,
+  HiMiniCheck as by,
+  HiMiniCodeBracket as bz,
   HiMiniChevronRight as c,
+  HiMiniArrowDown as c0,
+  HiMiniArrowUp as c1,
+  runAuditRemediation as c2,
+  HiMiniSignal as c3,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,

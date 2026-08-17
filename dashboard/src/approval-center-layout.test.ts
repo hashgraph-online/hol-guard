@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import {
   resolveEnvelopeDisplayText,
@@ -470,5 +472,9 @@ assert(
   }) === "http://127.0.0.1:4781/requests/cursor-share-req",
   "T498: resolveApprovalShareUrl prefers request_id and canonical /requests/ route"
 );
+
+const layoutSource = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, ".tsx"), "utf8");
+assert(layoutSource.includes("WatchProtectionBanner"), "inbox shows the Watch protection-off banner");
+assert(layoutSource.includes('view === "inbox"'), "Watch banner is scoped to the approval inbox");
 
 console.log("approval-center-layout.test.ts: all tests passed");

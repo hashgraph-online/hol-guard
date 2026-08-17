@@ -28,7 +28,7 @@ export type ProtectionBehavior = "allowed" | "ask-first" | "blocked" | "required
 export function protectionBehaviorLabel(behavior: ProtectionBehavior): string {
   switch (behavior) {
     case "allowed": return "Allowed";
-    case "ask-first": return "Ask first";
+    case "ask-first": return "Ask once";
     case "blocked": return "Blocked";
     case "required": return "Required";
     case "managed": return "Managed by your organization";

@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, P as HiMiniWrenchScrewdriver, A as ActionButton, m as HiMiniCheckCircle, z as HiMiniChevronDown, Q as HiMiniExclamationCircle, i as harnessDisplayName, p as protectionHealthFor, n as GuardHero, R as ProofStrip, S as SectionLabel, k as EmptyState, c as HiMiniChevronRight, T as HiMiniEye, U as HiMiniXCircle, V as HiMiniClipboardDocumentCheck, W as HiMiniClipboard } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, P as HiMiniWrenchScrewdriver, A as ActionButton, m as HiMiniCheckCircle, z as HiMiniChevronDown, Q as HiMiniExclamationCircle, i as harnessDisplayName, p as protectionHealthFor, n as GuardHero, R as ProofStrip, S as SectionLabel, k as EmptyState, c as HiMiniChevronRight, T as HiMiniEye, U as HiMiniXCircle, V as HiMiniClipboardDocumentCheck, X as HiMiniClipboard } from "../guard-dashboard.js";
 import { S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 const PROTECTION_CHECK_ACTIONS = {

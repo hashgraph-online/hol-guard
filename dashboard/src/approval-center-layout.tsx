@@ -24,6 +24,8 @@ import type {
   DecisionScope,
 } from "./guard-types";
 import { useGuardUpdate } from "./guard-update-panel";
+import { updateSettings } from "./guard-api";
+import { WatchProtectionBanner } from "./watch-protection-banner";
 
 type RequestState =
   | { kind: "loading" }
@@ -98,6 +100,19 @@ type LayoutProps = {
   onGuardReconnected?: () => void;
   enableUpdateStatus?: boolean;
 };
+
+function InboxWatchBanner(props: { onRestored?: () => void; onOpenSettings: () => void }) {
+  const handleTurnOn = useCallback(() => {
+    void updateSettings({ protection_posture: "protected" })
+      .then(() => {
+        props.onRestored?.();
+      })
+      .catch(() => {
+        props.onOpenSettings();
+      });
+  }, [props.onOpenSettings, props.onRestored]);
+  return <WatchProtectionBanner onTurnProtectionOn={handleTurnOn} />;
+}
 
 function renderInboxContent(props: LayoutProps): ReactNode {
   if (props.requests.kind === "loading") {
@@ -228,6 +243,10 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     queuedCount = queuedItems.length;
   }
 
+  const handleOpenSettings = useCallback(() => {
+    props.onNavigate("/settings");
+  }, [props.onNavigate]);
+
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed((previous) => {
       const next = !previous;
@@ -284,6 +303,16 @@ export function ApprovalCenterLayout(props: LayoutProps) {
       >
         <main id="main-content" className="guard-shell-main flex-1" tabIndex={-1}>
           <div className="guard-shell-workspace" data-view={props.view}>
+            {props.view === "inbox"
+              && props.runtime.kind === "ready"
+              && props.runtime.snapshot.protection_posture === "watch" ? (
+              <div className="mb-4">
+                <InboxWatchBanner
+                  onRestored={props.onGuardReconnected}
+                  onOpenSettings={handleOpenSettings}
+                />
+              </div>
+            ) : null}
             {renderViewContent(props)}
           </div>
         </main>

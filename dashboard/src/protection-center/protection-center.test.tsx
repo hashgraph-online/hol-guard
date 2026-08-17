@@ -105,13 +105,13 @@ const moduleRow = renderToStaticMarkup(createElement(ProtectionModuleRow, {
   extensionId: "command.git",
   name: "Git",
   description: "Protects source-control history.",
-  behavior: "Ask first",
+  behavior: "Ask once",
   executables: ["git"],
   ecosystemIds: ["git"],
   onOpen: () => undefined,
 }));
 assert.match(moduleRow, /Git/);
-assert.match(moduleRow, /Ask first/);
+assert.match(moduleRow, /Ask once/);
 assert.match(moduleRow, /guard-extensions-row/);
 assert.match(moduleRow, /data-extension-brand="git"/);
 assert.match(moduleRow, /guard-extension-mark/);
@@ -121,7 +121,7 @@ const awsRow = renderToStaticMarkup(createElement(ProtectionModuleRow, {
   extensionId: "command.cloud.aws",
   name: "AWS command protection",
   description: "Reviews AWS CLI deletions.",
-  behavior: "Ask first",
+  behavior: "Ask once",
   onOpen: () => undefined,
 }));
 assert.match(awsRow, /data-extension-brand="aws"/);
@@ -130,7 +130,7 @@ const cloudCluster = renderToStaticMarkup(createElement(ProtectionModuleRow, {
   extensionId: "command.dns",
   name: "DNS command protection",
   description: "Reviews hosted-zone deletion.",
-  behavior: "Ask first",
+  behavior: "Ask once",
   onOpen: () => undefined,
 }));
 assert.match(cloudCluster, /data-extension-brand="aws gcp azure"/);

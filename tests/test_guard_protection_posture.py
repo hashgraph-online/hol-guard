@@ -430,6 +430,14 @@ def test_status_marks_legacy_observe_as_protection_off(
     assert rc == 0
     assert payload["protection"] == "protected"
     assert payload["protection_off"] is True
+    assert payload["protection_label"] == "Protected"
+
+
+def test_status_human_copy_uses_protection_label() -> None:
+    from codex_plugin_scanner.guard.cli.render import _protection_display_name
+
+    assert _protection_display_name({"protection_label": "Extra careful"}, "extra_careful") == "Extra careful"
+    assert _protection_display_name({}, "protected") == "protected"
 
 
 def test_settings_doctor_prints_protection_posture(tmp_path: Path, capsys: object) -> None:

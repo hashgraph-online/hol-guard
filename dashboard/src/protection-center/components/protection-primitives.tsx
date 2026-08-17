@@ -44,7 +44,7 @@ export function ProtectionStatusHero(props: {
 }
 
 export function ProtectionDecisionBadge({ result }: { result: "allowed" | "ask-first" | "blocked" }) {
-  const label = result === "allowed" ? "Allowed" : result === "ask-first" ? "Ask first" : "Blocked";
+  const label = result === "allowed" ? "Allowed" : result === "ask-first" ? "Ask once" : "Blocked";
   const classes = result === "allowed" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : result === "ask-first" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-800";
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${classes}`}>{label}</span>;
 }
