@@ -848,9 +848,7 @@ def _artifact_skill_is_known_bad(artifact: GuardArtifact) -> bool:
     if artifact.metadata.get("skill_is_known_bad") is True:
         return True
     intel = artifact.metadata.get("threat_intel")
-    if isinstance(intel, Mapping) and intel.get("known_bad") is True:
-        return True
-    return False
+    return isinstance(intel, Mapping) and intel.get("known_bad") is True
 
 
 def _artifact_writes_launch_agent(artifact: GuardArtifact) -> bool:
