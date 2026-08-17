@@ -708,9 +708,7 @@ def _protection_status_copy(payload: dict[str, object], fallback: str) -> tuple[
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
-    protection_line = (
-        f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
-    )
+    protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
     console.print(
         Panel.fit(
             f"[bold]HOL Guard status[/bold]\n"
@@ -794,9 +792,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
         name, protection_off = _protection_status_copy(payload, "protected")
-        protection_line = (
-            f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
-        )
+        protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
         console.print(
             Panel.fit(
                 f"[bold]HOL Guard doctor[/bold]\n{protection_line}\n{len(tables)} local tables checked",
