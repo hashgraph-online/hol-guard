@@ -293,3 +293,26 @@ def test_watch_forces_observe_even_when_mode_is_in_payload(tmp_path: Path) -> No
     )
     assert loaded.mode == "observe"
     assert loaded.protection_posture == "watch"
+
+
+def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
+        _apply_explicit_posture_action,
+    )
+    from codex_plugin_scanner.guard.models import GuardArtifact
+
+    guard_home = tmp_path / ".hol-guard"
+    config = update_guard_settings(guard_home, {"protection_posture": "protected"})
+    artifact = GuardArtifact(
+        artifact_id="codex:project:tool-action:exfil",
+        name="exfil",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/workspace/repo/.guard/config.toml",
+        metadata={
+            "risk_signals": [{"confidence": "strong", "category": "secret"}],
+        },
+    )
+    action = _apply_explicit_posture_action(config, artifact, "credential_exfiltration", "require-reapproval")
+    assert action == "block"

@@ -10,9 +10,7 @@ DEFAULT_WATCH_AUTO_REVERT_HOURS = 24
 MAX_WATCH_AUTO_REVERT_HOURS = 168
 HIGH_CONFIDENCE_LABELS = frozenset({"strong"})
 ALWAYS_STOP_RISK_CLASSES = frozenset({"guard_bypass", "encoded_exfiltration"})
-HIGH_CONFIDENCE_STOP_RISK_CLASSES = frozenset(
-    {"credential_exfiltration", "data_flow_exfiltration"}
-)
+HIGH_CONFIDENCE_STOP_RISK_CLASSES = frozenset({"credential_exfiltration", "data_flow_exfiltration"})
 
 POSTURE_COPY: dict[str, dict[str, str]] = {
     "protected": {
@@ -25,16 +23,12 @@ POSTURE_COPY: dict[str, dict[str, str]] = {
     "extra_careful": {
         "label": "Extra careful",
         "help": (
-            "Same as Protected, and also asks the first time this project talks "
-            "to a new site or installs a new tool."
+            "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
         ),
     },
     "watch": {
         "label": "Watch",
-        "help": (
-            "Records what Guard would have stopped, but does not stop anything. "
-            "Use only while debugging."
-        ),
+        "help": ("Records what Guard would have stopped, but does not stop anything. Use only while debugging."),
     },
 }
 

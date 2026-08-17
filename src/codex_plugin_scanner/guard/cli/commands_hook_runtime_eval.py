@@ -201,6 +201,27 @@ def _runtime_external_archive_has_digest_binding_sink(
     return resolved_executable == shim_path
 
 
+def _stamp_runtime_posture_metadata(artifact: object, signals: object) -> None:
+    metadata = getattr(artifact, "metadata", None)
+    if not isinstance(metadata, dict):
+        return
+    if isinstance(signals, tuple) and signals:
+        metadata["risk_signals"] = [
+            {
+                "confidence": getattr(signal, "confidence", None),
+                "category": getattr(signal, "category", None),
+            }
+            for signal in signals
+        ]
+        if any(getattr(signal, "confidence", None) == "strong" for signal in signals):
+            metadata["risk_confidence"] = "strong"
+    action_class = metadata.get("action_class")
+    if isinstance(action_class, str):
+        lowered = action_class.lower()
+        if any(token in lowered for token in ("launch agent", "login item", "launchctl", "cron", "systemd", "launchd")):
+            metadata["persistence_writes_launch_agent"] = True
+
+
 def _embedded_script_evidence(command_text: str) -> list[dict[str, object]]:
     """Hash-addressed audit entries for heredoc script bodies (lazy import)."""
 
@@ -414,6 +435,8 @@ def _evaluate_runtime_artifact_hook(
     requested_policy_action = (
         requested_action_normalization.original_action if requested_action_normalization is not None else None
     )
+    _stamp_runtime_posture_metadata(runtime_artifact, data_flow_signals)
+    _stamp_runtime_posture_metadata(approval_context_artifact, data_flow_signals)
     current_config_action = _resolved_guard_action(
         _runtime_artifact_policy_action(config, runtime_artifact, args.harness),
         "warn",

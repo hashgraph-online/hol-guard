@@ -455,14 +455,24 @@ def load_guard_config(
     loaded_mode = _coerce_loaded_guard_mode(merged.get("mode"), "prompt")
     loaded_security_level = _coerce_loaded_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL))
     explicit_posture = coerce_loaded_protection_posture(merged.get("protection_posture"))
+    managed_locks_level = (
+        effective_managed_policy is not None and "security_level" in effective_managed_policy.locked_settings
+    )
+    if managed_locks_level:
+        loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
+        posture_explicit = False
+    elif explicit_posture is not None:
+        loaded_posture = explicit_posture
+        posture_explicit = True
+    else:
+        loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
+        posture_explicit = False
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
         mode=loaded_mode,
-        protection_posture=explicit_posture
-        if explicit_posture is not None
-        else derive_protection_posture(loaded_mode, loaded_security_level),
-        protection_posture_explicit=explicit_posture is not None,
+        protection_posture=loaded_posture,
+        protection_posture_explicit=posture_explicit,
         watch_auto_revert_hours=coerce_watch_auto_revert_hours(merged.get("watch_auto_revert_hours")),
         default_action=_coerce_loaded_guard_action_or_default(merged.get("default_action"), "warn"),
         unknown_publisher_action=_coerce_loaded_guard_action_or_default(
@@ -833,9 +843,7 @@ def _posture_or_level_defaults(config: GuardConfig) -> dict[str, GuardAction]:
         posture_defaults = resolve_posture_defaults(config.protection_posture)
         if posture_defaults is not None:
             return posture_defaults
-    return SECURITY_LEVEL_RISK_ACTIONS.get(
-        config.security_level, SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL]
-    )
+    return SECURITY_LEVEL_RISK_ACTIONS.get(config.security_level, SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL])
 
 
 def _effective_risk_actions(config: GuardConfig) -> dict[str, GuardAction]:
