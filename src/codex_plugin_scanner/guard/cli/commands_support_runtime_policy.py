@@ -1065,40 +1065,24 @@ def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
         "settings": editable_guard_settings(config),
     }
 
-_PRESET_DESCRIPTIONS: dict[str, str] = {
-    "gentle": (
-        "Warn-only mode. All risky actions surface as warnings so you stay informed "
-        "without blocking any agent workflows."
-    ),
-    "balanced": (
-        "Default preset. High-severity actions (secret reads, exfiltration) require "
-        "re-approval; network egress is warned."
-    ),
-    "strict": (
-        "Elevated protection. Data-flow exfiltration is blocked; all other high-risk "
-        "actions require explicit re-approval."
-    ),
-    "paranoid": (
-        "Maximum protection. Every risk class is blocked outright. "
-        "Recommended for high-security or air-gapped environments."
-    ),
-    "custom": "Fully custom action map. Each risk class uses the action you configured explicitly.",
-}
-
 def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
-    from ..protection_posture import posture_help, posture_label
+    from ..protection_posture import posture_help, posture_label, protection_status_fields
 
     effective = editable_guard_settings(config).get("risk_actions") or {}
+    status = protection_status_fields(posture=config.protection_posture, mode=config.mode)
     return {
         "generated_at": _now(),
         "protection_posture": config.protection_posture,
         "label": posture_label(config.protection_posture),
         "description": posture_help(config.protection_posture),
-        "preset": config.security_level,
+        "security_level": config.security_level,
+        "protection_off": status["protection_off"],
         "effective_risk_actions": effective,
     }
 
 def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
+    from ..protection_posture import protection_status_fields
+
     issues: list[dict[str, str]] = []
     if config.protection_posture == "watch" or config.mode == "observe":
         issues.append(
@@ -1129,6 +1113,7 @@ def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
         "generated_at": _now(),
         "issues": issues,
         "healthy": len(issues) == 0,
+        **protection_status_fields(posture=config.protection_posture, mode=config.mode),
     }
 
 def _guard_cli_settings_payload(config: GuardConfig) -> dict[str, object]:
@@ -1202,7 +1187,7 @@ def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object
     ]
 
 __all__ = [
-    "_PRESET_DESCRIPTIONS", "_approval_center_routed_message", "_approval_delivery_payload",
+    "_approval_center_routed_message", "_approval_delivery_payload",
     "_claude_notification_tool_display_name", "_claude_notification_tool_name", "_ensure_terminal_punctuation",
     "_guard_cli_settings_payload", "_guard_settings_doctor_payload", "_guard_settings_explain_payload",
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",

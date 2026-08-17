@@ -93,7 +93,7 @@ export function buildRetryAfterApprovalCopy(
       return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
     }
     if (persistedExactAction) return "Saved. Guard will stop this exact action next time.";
-    return "Reviewed. Watch only already allowed this action to run; no future rule was saved.";
+    return "Reviewed. Watch already allowed this action to run; no future rule was saved.";
   }
   if (action === "allow") {
     if (persistedExactAction) {

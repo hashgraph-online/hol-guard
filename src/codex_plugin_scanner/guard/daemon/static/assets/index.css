@@ -5298,11 +5298,6 @@
   }
 
   @media (hover: hover) {
-    .hover\:-translate-y-0\.5:hover {
-      --tw-translate-y: calc(var(--spacing) * -.5);
-      translate: var(--tw-translate-x) var(--tw-translate-y);
-    }
-
     .hover\:border-amber-300:hover {
       border-color: var(--color-amber-300);
     }

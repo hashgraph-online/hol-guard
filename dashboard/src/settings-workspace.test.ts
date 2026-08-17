@@ -84,12 +84,12 @@ assert(
 
 const strictFineTuningDescription = resolveFineTuningSectionDescription("strict");
 assert(
-  strictFineTuningDescription.includes("Strict"),
-  "fine-tuning: strict description should name the preset"
+  strictFineTuningDescription.includes("Extra careful"),
+  "fine-tuning: strict maps to Extra careful copy"
 );
 assert(
-  !strictFineTuningDescription.includes("Protection"),
-  "fine-tuning: strict description should not send users to another tab"
+  !strictFineTuningDescription.includes("Strict"),
+  "fine-tuning: strict description should not use the legacy level name"
 );
 assert(
   strictFineTuningDescription.includes("Custom"),
@@ -107,6 +107,9 @@ assert(resolveInitialSettingsTab("?section=defaults") === "protection", "setting
 assert(resolveInitialSettingsTab("?section=unknown") === "protection", "settings routing: unknown sections fall back safely");
 
 const settingsWorkspaceSource = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, ".tsx"), "utf8");
+assert(!settingsWorkspaceSource.includes("Ask first"), "settings: Ask first is not a first-class label");
+assert(!settingsWorkspaceSource.includes("Block until approved"), "settings: Block until approved is not a first-class label");
+assert(!settingsWorkspaceSource.includes("Watch only"), "settings: Watch only is not a first-class label");
 assert(settingsWorkspaceSource.includes('window.addEventListener("popstate", handlePopState)'), "settings routing: browser history resyncs the visible section");
 assert(settingsWorkspaceSource.includes('window.removeEventListener("popstate", handlePopState)'), "settings routing: history listener is cleaned up");
 assert(settingsWorkspaceSource.includes('label="Cloud receipt privacy"'), "receipt privacy: redaction control is visible in settings");

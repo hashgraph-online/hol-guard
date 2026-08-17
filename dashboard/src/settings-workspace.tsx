@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   HiMiniShieldCheck,
-  HiMiniLockClosed,
-  HiMiniCog6Tooth,
   HiMiniCheckCircle,
   HiMiniExclamationTriangle,
   HiMiniBellAlert,
@@ -17,7 +15,6 @@ import {
   EmptyState,
   SectionLabel,
   Tag,
-  GuardHero,
 } from "./approval-center-primitives";
 import {
   clearEvidence,
@@ -41,13 +38,14 @@ import {
 } from "./guard-api";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
-import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch, securityLevelLabel } from "./apps/app-catalog";
+import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch } from "./apps/app-catalog";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { ProtectionPosturePanel } from "./protection-posture-panel";
 import { WatchProtectionBanner } from "./watch-protection-banner";
 import {
   deriveProtectionPosture,
   isProtectionPosture,
+  PROTECTION_POSTURE_COPY,
   type ProtectionPosture,
 } from "./protection-posture-copy";
 import { useFocusTrap } from "./use-focus-trap";
@@ -97,9 +95,10 @@ export function resolveFineTuningSectionDescription(
   securityLevel: GuardSettings["security_level"],
 ): string {
   if (securityLevel === "custom") {
-    return "You are overriding the preset for this machine.";
+    return "Using custom rules on top of this machine's protection posture.";
   }
-  return `These rules follow the ${securityLevelLabel(securityLevel)} preset. Use Custom fine-tuning to edit each action type here.`;
+  const postureLabel = securityLevel === "strict" ? "Extra careful" : "Protected";
+  return `These rules follow ${postureLabel}. Switch to Custom to change how Guard handles each action type.`;
 }
 
 export function isFineTuningEditable(securityLevel: GuardSettings["security_level"]): boolean {
@@ -208,47 +207,6 @@ const attentionSeverityOptions = [
   { value: "low", label: "Any identified risk" },
 ];
 
-const protectionModeChoices = [
-  { value: "prompt" as const, label: "Ask first" },
-  { value: "enforce" as const, label: "Block until approved" },
-  { value: "observe" as const, label: "Watch only" },
-];
-
-const securityLevels = [
-  {
-    value: "relaxed" as const,
-    label: "Relaxed",
-    description: "Warn on dangerous actions. Most safe actions run without a prompt.",
-    icon: HiMiniShieldCheck,
-    protects: ["Destructive commands", "Credential sharing"],
-    tone: "green" as const,
-  },
-  {
-    value: "balanced" as const,
-    label: "Balanced",
-    description: "Ask before secret access, hidden execution, exfiltration, and destructive actions.",
-    icon: HiMiniShieldCheck,
-    protects: ["Secret file access", "Credential sharing", "Destructive shell commands", "Hidden scripts"],
-    tone: "blue" as const,
-  },
-  {
-    value: "strict" as const,
-    label: "Strict",
-    description: "Ask more often, including new network destinations.",
-    icon: HiMiniLockClosed,
-    protects: ["Everything in Balanced", "New network destinations"],
-    tone: "purple" as const,
-  },
-  {
-    value: "custom" as const,
-    label: "Custom",
-    description: "Use the exact choices below for this machine and connected apps.",
-    icon: HiMiniCog6Tooth,
-    protects: [],
-    tone: "slate" as const,
-  }
-];
-
 const riskControls = [
   { key: "local_secret_read", label: "Local secrets", description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials.", consequence: RISK_CONTROL_CONSEQUENCES["local_secret_read"] },
   { key: "credential_exfiltration", label: "Credential sharing", description: "Commands or scripts that appear to send keys, tokens, or credentials away.", consequence: RISK_CONTROL_CONSEQUENCES["credential_exfiltration"] },
@@ -335,35 +293,6 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
   }
 };
 
-const securityToneClasses = {
-  green: {
-    icon: "text-emerald-600",
-    iconBg: "bg-emerald-50",
-    selected: "border-emerald-300 bg-emerald-50"
-  },
-  blue: {
-    icon: "text-brand-blue",
-    iconBg: "bg-brand-blue/10",
-    selected: "border-brand-blue/30 bg-brand-blue/[0.05]"
-  },
-  purple: {
-    icon: "text-brand-purple",
-    iconBg: "bg-brand-purple/10",
-    selected: "border-brand-purple/30 bg-brand-purple/[0.04]"
-  },
-  slate: {
-    icon: "text-slate-500",
-    iconBg: "bg-slate-100",
-    selected: "border-slate-300 bg-slate-50"
-  }
-} as const;
-
-type SecurityTone = keyof typeof securityToneClasses;
-
-function getSecurityToneClasses(tone: SecurityTone) {
-  return securityToneClasses[tone] ?? securityToneClasses.slate;
-}
-
 function normalizeSettingsPayload(payload: GuardSettingsPayload): GuardSettingsPayload {
   return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
@@ -443,7 +372,8 @@ function buildConsequenceSummary(settings: GuardSettings): string {
     return "Guard will also ask the first time this project talks to a new site or installs a new tool.";
   }
   if (settings.security_level === "custom") {
-    return "Using custom rules on top of Protected.";
+    const postureLabel = PROTECTION_POSTURE_COPY[posture].label;
+    return `Using custom rules on top of ${postureLabel}.`;
   }
   return "Guard stops dangerous actions automatically and asks once about new or unknown work.";
 }
@@ -477,21 +407,6 @@ export function applyApprovalGateDraft(
       totp_pending: gate?.totp_pending ?? false,
     },
   };
-}
-
-function protectionModeHelp(mode: GuardSettings["mode"]): string {
-  if (mode === "enforce") {
-    return "Guard keeps risky actions stopped until you allow them.";
-  }
-  if (mode === "observe") {
-    return "Guard logs what it sees without pausing anything.";
-  }
-  return "Guard pauses risky actions and asks what to do.";
-}
-
-function protectionModeLabel(mode: GuardSettings["mode"]): string {
-  const match = protectionModeChoices.find((choice) => choice.value === mode);
-  return match?.label ?? mode;
 }
 
 function saveStatusText(saveSuccess: boolean, saveError: string | null): string {
@@ -1464,6 +1379,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
             <div className="mt-3">
               <FineTuningPresetBanner
                 securityLevel={draft.security_level}
+                posture={selectedPosture}
                 onSwitchToCustom={handleSwitchToCustomFineTuning}
               />
             </div>
@@ -1659,6 +1575,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
             {!isFineTuningEditable(draft.security_level) ? (
               <FineTuningPresetBanner
                 securityLevel={draft.security_level}
+                posture={selectedPosture}
                 onSwitchToCustom={handleSwitchToCustomFineTuning}
               />
             ) : null}
@@ -2074,74 +1991,30 @@ function SettingToggle(props: {
 
 function FineTuningPresetBanner(props: {
   securityLevel: GuardSettings["security_level"];
+  posture: ProtectionPosture;
   onSwitchToCustom: () => void;
 }) {
   if (isFineTuningEditable(props.securityLevel)) return null;
+  const postureLabel = PROTECTION_POSTURE_COPY[props.posture].label;
 
   return (
     <div
       className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-4 sm:flex sm:items-center sm:justify-between sm:gap-4"
       role="region"
-      aria-label="Fine-tuning preset controls"
+      aria-label="Advanced rules"
     >
       <div className="min-w-0">
         <p className="text-sm font-medium text-brand-dark">
-          Using the {securityLevelLabel(props.securityLevel)} preset
+          These rules follow {postureLabel}
         </p>
         <p className="mt-1 text-sm text-slate-500">
-          Individual rules match this preset. Switch to Custom to change how Guard handles each risky action type on this machine.
+          Switch to Custom to change how Guard handles each action type on this machine.
         </p>
       </div>
       <div className="mt-3 w-full shrink-0 sm:mt-0 sm:w-auto">
         <ActionButton onClick={props.onSwitchToCustom}>Use Custom fine-tuning</ActionButton>
       </div>
     </div>
-  );
-}
-
-type SecurityLevelCardProps = {
-  level: (typeof securityLevels)[number];
-  isSelected: boolean;
-  onSelect: (value: "relaxed" | "balanced" | "strict" | "custom") => void;
-};
-
-function SecurityLevelCard({ level, isSelected, onSelect }: SecurityLevelCardProps) {
-  const LevelIcon = level.icon;
-  const toneClasses = getSecurityToneClasses(level.tone);
-  const iconColorClass = toneClasses.icon;
-  const iconBgClass = toneClasses.iconBg;
-  const selectedBorderClass = toneClasses.selected;
-
-  const handleClick = useCallback(() => onSelect(level.value), [onSelect, level.value]);
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      aria-pressed={isSelected}
-      className={`relative rounded-xl border p-4 text-left transition-all duration-150 hover:-translate-y-0.5 ${isSelected ? selectedBorderClass : "border-transparent bg-slate-50/80 hover:bg-white"}`}
-    >
-      {isSelected && (
-        <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600">
-          <HiMiniCheckCircle className="h-3.5 w-3.5 text-white" aria-hidden="true" />
-        </span>
-      )}
-      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`}>
-        <LevelIcon className={`h-4 w-4 ${iconColorClass}`} aria-hidden="true" />
-      </span>
-      <span className="mt-2 block text-sm font-semibold text-brand-dark">{level.label}</span>
-      <span className="mt-1 block text-xs leading-relaxed text-slate-500">{level.description}</span>
-      {level.protects.length > 0 && (
-        <ul className="mt-2 space-y-0.5">
-          {level.protects.map((item) => (
-            <li key={item} className="flex items-center gap-1.5 text-[11px] text-slate-500">
-              <span className={`h-1 w-1 shrink-0 rounded-full ${iconColorClass}`} />
-              {item}
-            </li>
-          ))}
-        </ul>
-      )}
-    </button>
   );
 }
 

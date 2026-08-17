@@ -162,3 +162,17 @@ def posture_label(posture: str) -> str:
 def posture_help(posture: str) -> str:
     copy = POSTURE_COPY.get(posture)
     return copy["help"] if copy is not None else ""
+
+
+def protection_is_off(*, posture: str, mode: str) -> bool:
+    return posture == "watch" or mode == "observe"
+
+
+def protection_status_fields(*, posture: str, mode: str) -> dict[str, object]:
+    off = protection_is_off(posture=posture, mode=mode)
+    return {
+        "protection": posture,
+        "protection_label": posture_label(posture),
+        "protection_help": posture_help(posture),
+        "protection_off": off,
+    }

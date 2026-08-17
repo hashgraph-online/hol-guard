@@ -1,5 +1,5 @@
 import { j as jsxRuntimeExports, r as reactExports, X as getDefaultExportFromCjs, Y as React, I as useFocusTrap, Z as HiMiniKey, S as SectionLabel, A as ActionButton, q as HiMiniShieldCheck, _ as HiMiniLockClosed, $ as HiMiniBellAlert, a0 as HiMiniAdjustmentsHorizontal, a1 as HiMiniCircleStack, a2 as TabBar, c as HiMiniChevronRight, a3 as resolveProtectionLevelCopy, a4 as fetchSettings, a5 as fetchRuntimeSnapshot, e as updateSettings, a6 as clearPolicy, a7 as clearReviewQueue, a8 as revokeApprovalGateCooldown, a9 as disableApprovalGateTotp, aa as importSettings, ab as resetSettings, ac as enrollApprovalGateTotp, ad as verifyApprovalGateTotp, ae as clearEvidence, af as exportDiagnostics, ag as repairApprovalCenter, ah as exportSettings, ai as setupDesktopNotifications, k as EmptyState, aj as WorkspacePageHeader, ak as HiMiniMagnifyingGlass, z as HiMiniChevronDown, m as HiMiniCheckCircle, K as HiMiniExclamationTriangle, al as Tag, am as approvalGateCooldownLabel, x as HiMiniXMark } from "../guard-dashboard.js";
-import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
+import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
 import { P as PROTECTION_POSTURE_COPY, a as POSTURE_OUTCOME_COLUMNS, W as WatchProtectionBanner, i as isProtectionPosture, d as deriveProtectionPosture } from "./watch-protection-banner.js";
 const POSTURE_ORDER = ["protected", "extra_careful", "watch"];
 function ProtectionPosturePanel(props) {
@@ -2489,9 +2489,10 @@ function resolveSecurityLevelCardDescription(level) {
 }
 function resolveFineTuningSectionDescription(securityLevel) {
   if (securityLevel === "custom") {
-    return "You are overriding the preset for this machine.";
+    return "Using custom rules on top of this machine's protection posture.";
   }
-  return `These rules follow the ${securityLevelLabel(securityLevel)} preset. Use Custom fine-tuning to edit each action type here.`;
+  const postureLabel = securityLevel === "strict" ? "Extra careful" : "Protected";
+  return `These rules follow ${postureLabel}. Switch to Custom to change how Guard handles each action type.`;
 }
 function isFineTuningEditable(securityLevel) {
   return securityLevel === "custom";
@@ -2707,7 +2708,8 @@ function buildConsequenceSummary(settings) {
     return "Guard will also ask the first time this project talks to a new site or installs a new tool.";
   }
   if (settings.security_level === "custom") {
-    return "Using custom rules on top of Protected.";
+    const postureLabel = PROTECTION_POSTURE_COPY[posture].label;
+    return `Using custom rules on top of ${postureLabel}.`;
   }
   return "Guard stops dangerous actions automatically and asks once about new or unknown work.";
 }
@@ -3599,6 +3601,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         FineTuningPresetBanner,
         {
           securityLevel: draft.security_level,
+          posture: selectedPosture,
           onSwitchToCustom: handleSwitchToCustomFineTuning
         }
       ) }) : null,
@@ -3789,6 +3792,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
               FineTuningPresetBanner,
               {
                 securityLevel: draft.security_level,
+                posture: selectedPosture,
                 onSwitchToCustom: handleSwitchToCustomFineTuning
               }
             ) : null,
@@ -4073,20 +4077,20 @@ function SettingToggle(props) {
 }
 function FineTuningPresetBanner(props) {
   if (isFineTuningEditable(props.securityLevel)) return null;
+  const postureLabel = PROTECTION_POSTURE_COPY[props.posture].label;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
       className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-4 sm:flex sm:items-center sm:justify-between sm:gap-4",
       role: "region",
-      "aria-label": "Fine-tuning preset controls",
+      "aria-label": "Advanced rules",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
-            "Using the ",
-            securityLevelLabel(props.securityLevel),
-            " preset"
+            "These rules follow ",
+            postureLabel
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Individual rules match this preset. Switch to Custom to change how Guard handles each risky action type on this machine." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Switch to Custom to change how Guard handles each action type on this machine." })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 w-full shrink-0 sm:mt-0 sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onSwitchToCustom, children: "Use Custom fine-tuning" }) })
       ]

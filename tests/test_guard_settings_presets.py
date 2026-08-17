@@ -219,20 +219,36 @@ class TestCustomModeActivation:
 
 
 class TestSettingsExplainCommand:
-    """L287 — settings explain returns preset description and current level."""
+    """settings explain returns protection posture copy, not a legacy preset essay."""
 
-    @pytest.mark.parametrize("preset", ["gentle", "balanced", "strict", "paranoid"])
+    @pytest.mark.parametrize(
+        ("level", "expected_posture"),
+        [
+            ("gentle", "protected"),
+            ("balanced", "protected"),
+            ("strict", "extra_careful"),
+            ("paranoid", "extra_careful"),
+        ],
+    )
     def test_settings_explain_json_fields(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], preset: str
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        level: str,
+        expected_posture: str,
     ) -> None:
         home_dir = tmp_path / "home"
-        _write_text(home_dir / "config.toml", f'security_level = "{preset}"\n')
+        _write_text(home_dir / "config.toml", f'security_level = "{level}"\n')
         rc = main(["guard", "settings", "explain", "--home", str(home_dir), "--json"])
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
-        assert payload["preset"] == preset
+        assert payload["protection_posture"] == expected_posture
+        assert payload["security_level"] == level
+        assert "preset" not in payload
         assert isinstance(payload["description"], str)
         assert len(payload["description"]) > 0
+        assert "paranoid" not in payload["description"].lower()
+        assert "re-approval" not in payload["description"]
 
 
 class TestConfigMigration:

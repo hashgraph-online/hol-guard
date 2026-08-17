@@ -353,6 +353,9 @@ def _run_guard_doctor_command(
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+    from ..protection_posture import protection_status_fields
+
+    payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 

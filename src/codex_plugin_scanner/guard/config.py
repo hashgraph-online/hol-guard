@@ -651,6 +651,12 @@ def update_guard_settings(
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue
         next_payload[key] = _coerce_editable_setting(key, value)
+    incoming_selected_posture = _incoming_selects_protection_posture(
+        payload,
+        current_config,
+        next_payload.get("mode", current_config.mode),
+        next_payload.get("security_level", current_config.security_level),
+    )
     next_payload = _sync_protection_posture_payload(next_payload, current_config, payload)
     if current_config.managed_policy is not None:
         composed = apply_managed_policy(next_payload, current_config.managed_policy)
@@ -667,7 +673,10 @@ def update_guard_settings(
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)
-    if current_config.protection_posture != updated.protection_posture:
+    explicit_choice = incoming_selected_posture and updated.protection_posture_explicit
+    if current_config.protection_posture != updated.protection_posture or (
+        explicit_choice and not current_config.protection_posture_explicit
+    ):
         from .protection_events import record_posture_change
 
         record_posture_change(

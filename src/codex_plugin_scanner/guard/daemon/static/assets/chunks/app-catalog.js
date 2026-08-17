@@ -98,8 +98,9 @@ const SETTINGS_SEARCH_INDEX = [
   { key: "new_network_domain_action", label: "New website or host", description: "What Guard does when an app contacts a host it has not seen before.", section: "defaults" },
   { key: "subprocess_action", label: "Nested commands", description: "What Guard does when a command starts another command.", section: "defaults" },
   { key: "approval_surface_policy", label: "Where to ask", description: "Where Guard shows approval prompts.", section: "defaults" },
-  { key: "security_level", label: "Security level", description: "Overall protection preset: Relaxed, Balanced, Strict, or Custom.", section: "protection" },
-  { key: "mode", label: "Protection mode", description: "Prompt, Enforce, or Observe. Controls whether Guard pauses actions.", section: "protection" },
+  { key: "protection_posture", label: "Protection", description: "Protected, Extra careful, or Watch.", section: "protection" },
+  { key: "security_level", label: "Advanced rules", description: "Custom per-risk rules on top of the selected protection posture.", section: "protection" },
+  { key: "mode", label: "Legacy protection mode", description: "Compatibility alias for observe, prompt, and enforce.", section: "protection" },
   { key: "approval_wait_timeout", label: "Approval wait timeout", description: "How long Guard waits for you to respond before resuming.", section: "protection" },
   { key: "telemetry", label: "Telemetry", description: "Send anonymized usage data to improve Guard.", section: "protection" },
   { key: "sync", label: "Cloud sync", description: "Sync decisions and rules with Guard Cloud.", section: "protection" },
@@ -117,24 +118,9 @@ function filterSettingsBySearch(query) {
     (item) => item.label.toLowerCase().includes(q) || item.description.toLowerCase().includes(q) || item.key.toLowerCase().includes(q)
   );
 }
-function securityLevelLabel(level) {
-  switch (level) {
-    case "relaxed":
-      return "Relaxed";
-    case "gentle":
-      return "Relaxed";
-    case "balanced":
-      return "Balanced";
-    case "strict":
-      return "Strict";
-    case "custom":
-      return "Custom";
-  }
-}
 export {
   APP_STATUS_LABELS as A,
   RISK_CONTROL_CONSEQUENCES as R,
   SUPPORTED_APPS_BRIEF as S,
-  filterSettingsBySearch as f,
-  securityLevelLabel as s
+  filterSettingsBySearch as f
 };

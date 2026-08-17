@@ -399,6 +399,85 @@ def test_managed_mode_lock_overrides_watch_payload() -> None:
     assert composed["mode"] == "enforce"
 
 
+def test_status_marks_legacy_observe_as_protection_off(
+    tmp_path: Path, capsys: object
+) -> None:
+    import json
+
+    from codex_plugin_scanner.cli import main
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+    home_dir.mkdir()
+    workspace_dir.mkdir()
+    update_guard_settings(guard_home, {"protection_posture": "protected"})
+    update_guard_settings(guard_home, {"mode": "observe"})
+    rc = main(
+        [
+            "guard",
+            "status",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["protection"] == "protected"
+    assert payload["protection_off"] is True
+
+
+def test_settings_doctor_prints_protection_posture(tmp_path: Path, capsys: object) -> None:
+    import json
+
+    from codex_plugin_scanner.cli import main
+
+    guard_home = tmp_path / "guard-home"
+    update_guard_settings(guard_home, {"protection_posture": "watch"})
+    rc = main(["guard", "settings", "doctor", "--home", str(guard_home), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["protection"] == "watch"
+    assert payload["protection_off"] is True
+    assert payload["healthy"] is False
+
+
+def test_guard_doctor_includes_protection_posture(tmp_path: Path, capsys: object) -> None:
+    import json
+
+    from codex_plugin_scanner.cli import main
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+    home_dir.mkdir()
+    workspace_dir.mkdir()
+    update_guard_settings(guard_home, {"protection_posture": "extra_careful"})
+    rc = main(
+        [
+            "guard",
+            "doctor",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["protection"] == "extra_careful"
+    assert payload["protection_off"] is False
+    assert payload["protection_label"] == "Extra careful"
+
+
 def test_managed_watch_auto_revert_lock_keeps_hours() -> None:
     from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, ManagedPolicy
     from codex_plugin_scanner.guard.mdm.policy import apply_managed_policy

@@ -1210,9 +1210,9 @@ def _record_resolution_event(
         },
         resolved_at,
     )
-    if action == "allow":
+    if action == "allow" and persisted_rule:
         store.add_event(
-            "guard.protection.ask_once_remembered" if persisted_rule else "guard.protection.ask_once_shown",
+            "guard.protection.ask_once_remembered",
             {
                 "request_id": request_id,
                 "scope": scope,
@@ -1274,6 +1274,17 @@ def _record_created_event(store: GuardStore, request: GuardApprovalRequest, crea
         },
         created_at,
     )
+    if request.policy_action in {"review", "require-reapproval"}:
+        store.add_event(
+            "guard.protection.ask_once_shown",
+            {
+                "request_id": request.request_id,
+                "harness": request.harness,
+                "artifact_id": request.artifact_id,
+                "policy_action": request.policy_action,
+            },
+            created_at,
+        )
 
 
 def _refresh_queue_result(
