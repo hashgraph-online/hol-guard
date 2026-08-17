@@ -401,12 +401,14 @@ def static_markdown_pr_body_file_operand(args: Sequence[str]) -> str | None:
     if len(body_files) != 1:
         return None
     body_file = body_files[0]
-    shell_expansion_markers = ("$", "`", "*", "?", "[", "]", "{", "}", "(", ")", "<", ">", "^", "#", "~")
+    shell_expansion_markers = ("$", "`", "*", "?", "[", "]", "{", "}", "(", ")", "<", ">", "^", "#")
     if (
         not body_file
         or body_file == "-"
         or body_file.startswith("=")
+        or body_file.startswith("~//")
         or any(marker in body_file for marker in shell_expansion_markers)
+        or ("~" in body_file and not body_file.startswith("~/"))
     ):
         return None
     if not body_file.lower().endswith((".md", ".markdown")):

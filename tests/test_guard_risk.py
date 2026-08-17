@@ -1378,6 +1378,62 @@ def test_tool_action_request_classifier_allows_canonical_pr_body_file_with_stand
     assert request is None
 
 
+def test_tool_action_request_classifier_allows_named_pr_body_from_user_project_worktree(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "CascadeProjects" / "hashgraph-online"
+    body_directory = home_dir / "CascadeProjects" / "hol-guard-protection-posture"
+    workspace.mkdir(parents=True)
+    body_directory.mkdir()
+    body_file = body_directory / "PR_BODY_PROTECTION.md"
+    body_file.write_text("## Summary\n- Add the protection posture.\n", encoding="utf-8")
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --repo hashgraph-online/hol-guard --base release/3.0 "
+                "--head feat/protection-posture "
+                "--title 'feat(guard): add protection_posture with dual-write to mode and level' "
+                "--body-file ~/CascadeProjects/hol-guard-protection-posture/PR_BODY_PROTECTION.md"
+            )
+        },
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert request is None
+
+
+@pytest.mark.parametrize(
+    "body_operand",
+    (
+        "'~/CascadeProjects/proposal-worktree/PR_BODY_PROTECTION.md'",
+        r"\~/CascadeProjects/proposal-worktree/PR_BODY_PROTECTION.md",
+        "~//CascadeProjects/proposal-worktree/PR_BODY_PROTECTION.md",
+    ),
+)
+def test_tool_action_request_classifier_reviews_ambiguous_tilde_pr_body(
+    tmp_path: Path,
+    body_operand: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "CascadeProjects" / "active-project"
+    body_directory = home_dir / "CascadeProjects" / "proposal-worktree"
+    workspace.mkdir(parents=True)
+    body_directory.mkdir()
+    body_file = body_directory / "PR_BODY_PROTECTION.md"
+    body_file.write_text("## Summary\n- Safe text.\n", encoding="utf-8")
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": f"gh pr create --title 'Static title' --body-file {body_operand}"},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub content mutation command"
+
+
 @pytest.mark.parametrize(
     "body_file",
     ("-", "/tmp/guard-pr-body.txt", "'~/focused-pr-body.md'", "~otheruser/focused-pr-body.md"),

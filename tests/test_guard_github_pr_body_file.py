@@ -22,7 +22,10 @@ def test_github_pr_body_file_accepts_bounded_owner_controlled_markdown(tmp_path:
     )
 
 
-@pytest.mark.parametrize("name", ("pr-body.md", "pr-body.markdown", "PR-BODY.MD"))
+@pytest.mark.parametrize(
+    "name",
+    ("pr-body.md", "pr-body.markdown", "PR-BODY.MD", "PR_BODY.md", "PR_BODY_PROTECTION.md"),
+)
 def test_github_pr_body_file_accepts_canonical_markdown_name(tmp_path: Path, name: str) -> None:
     body_file = tmp_path / name
     _ = body_file.write_text("## Summary\n- Focused change.\n", encoding="utf-8")
@@ -31,6 +34,22 @@ def test_github_pr_body_file_accepts_canonical_markdown_name(tmp_path: Path, nam
         str(body_file),
         cwd=tmp_path,
         home_dir=tmp_path.parent,
+    )
+
+
+def test_github_pr_body_file_accepts_named_body_in_user_cascade_projects(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "CascadeProjects" / "active-project"
+    body_directory = home_dir / "CascadeProjects" / "proposal-worktree"
+    workspace.mkdir(parents=True)
+    body_directory.mkdir()
+    body_file = body_directory / "PR_BODY_PROTECTION.md"
+    _ = body_file.write_text("## Summary\n- Focused change.\n", encoding="utf-8")
+
+    assert github_pr_body_file_is_safe(
+        "~/CascadeProjects/proposal-worktree/PR_BODY_PROTECTION.md",
+        cwd=workspace,
+        home_dir=home_dir,
     )
 
 
@@ -58,6 +77,17 @@ def test_github_pr_body_file_rejects_sensitive_path(tmp_path: Path) -> None:
 
 def test_github_pr_body_file_rejects_arbitrary_markdown_name(tmp_path: Path) -> None:
     body_file = tmp_path / "internal-notes.md"
+    _ = body_file.write_text("Private planning notes.\n", encoding="utf-8")
+
+    assert not github_pr_body_file_is_safe(
+        str(body_file),
+        cwd=tmp_path,
+        home_dir=tmp_path.parent,
+    )
+
+
+def test_github_pr_body_file_rejects_pr_body_marker_only_as_suffix(tmp_path: Path) -> None:
+    body_file = tmp_path / "internal_notes_pr_body.md"
     _ = body_file.write_text("Private planning notes.\n", encoding="utf-8")
 
     assert not github_pr_body_file_is_safe(

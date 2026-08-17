@@ -147,13 +147,14 @@ def _resolve_operand(operand: str, *, cwd: Path, home_dir: Path) -> Path | None:
 def _authored_location_root(candidate: Path, *, cwd: Path, home_dir: Path) -> Path | None:
     # A separate process running as this user already has the same GitHub CLI
     # authority. This boundary prevents accidental agent publication of files
-    # outside the active workspace and current-user temporary locations.
+    # outside the active workspace, project worktrees, and current-user temporary locations.
     roots = sorted(
         {
             cwd.resolve(),
             Path(tempfile.gettempdir()).resolve(),
             Path("/tmp").resolve(),
             Path("/var/tmp").resolve(),
+            *filter(None, (_cascade_projects_authored_root(candidate, home_dir=home_dir),)),
             *filter(None, (_omp_session_authored_root(candidate, home_dir=home_dir),)),
         },
         key=lambda path: len(path.parts),
@@ -163,6 +164,11 @@ def _authored_location_root(candidate: Path, *, cwd: Path, home_dir: Path) -> Pa
         (root for root in roots if candidate == root or candidate.is_relative_to(root)),
         None,
     )
+
+
+def _cascade_projects_authored_root(candidate: Path, *, home_dir: Path) -> Path | None:
+    projects_root = (home_dir / "CascadeProjects").resolve()
+    return projects_root if candidate.is_relative_to(projects_root) else None
 
 
 def _omp_session_authored_root(candidate: Path, *, home_dir: Path) -> Path | None:
@@ -236,4 +242,7 @@ def _path_looks_sensitive(candidate: Path) -> bool:
 
 def _is_pr_body_markdown_name(name: str) -> bool:
     normalized = name.casefold()
-    return normalized in {"pr-body.md", "pr-body.markdown"} or normalized.endswith(("-pr-body.md", "-pr-body.markdown"))
+    stem, suffix = normalized.rsplit(".", 1) if "." in normalized else (normalized, "")
+    if suffix not in {"md", "markdown"}:
+        return False
+    return stem == "pr-body" or stem.endswith("-pr-body") or stem == "pr_body" or stem.startswith("pr_body_")
