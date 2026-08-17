@@ -52,6 +52,12 @@ def is_local_cli_command_state(value: object) -> bool:
     return value in {"inherit", "allow", "block"}
 
 
+def local_cli_command_state(value: object) -> LocalCliCommandState | None:
+    if value == "inherit" or value == "allow" or value == "block":
+        return value
+    return None
+
+
 def default_local_cli_commands(tool_name: str) -> tuple[LocalCliCommand, ...]:
     label = tool_name.strip() or "tool"
     return (

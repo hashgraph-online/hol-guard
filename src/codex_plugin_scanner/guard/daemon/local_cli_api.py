@@ -256,9 +256,12 @@ def _discover_from_command(
         if invocation is None:
             continue
         matched, argv = invocation
-        if matched.cli_id != identity.cli_id or not argv:
+        if matched.cli_id != identity.cli_id:
             continue
-        source_path = argv[1] if matched.kind == "script" and len(argv) >= 2 else argv[0]
+        tool_path = next(iter(argv), None)
+        if tool_path is None:
+            continue
+        source_path = argv[1] if matched.kind == "script" and len(argv) >= 2 else tool_path
         commands, help_status = discover_local_cli_commands(matched, argv)
         return commands, help_status, source_path
     return default_local_cli_commands(identity.name), "failed", source_path

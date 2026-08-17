@@ -12,6 +12,7 @@ from .runtime.local_cli_commands import (
     LocalCliCommandState,
     is_local_cli_command_id,
     is_local_cli_command_state,
+    local_cli_command_state,
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id, is_suggestable_custom_tool
 from .store_local_cli_schema import ensure_local_cli_schema
@@ -290,9 +291,10 @@ class StoreLocalCliMixin:
             ).fetchall()
         states: dict[str, LocalCliCommandState] = {}
         for row in rows:
-            command_id, state = _row_values(row, 2)
-            if isinstance(command_id, str) and (state == "inherit" or state == "allow" or state == "block"):
-                states[command_id] = state
+            command_id, raw_state = _row_values(row, 2)
+            parsed_state = local_cli_command_state(raw_state)
+            if isinstance(command_id, str) and parsed_state is not None:
+                states[command_id] = parsed_state
         return states
 
 
