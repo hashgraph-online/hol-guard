@@ -1065,8 +1065,13 @@ def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
         "settings": editable_guard_settings(config),
     }
 
+
 def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
-    from ..protection_posture import posture_help, posture_label, protection_status_fields
+    from ..protection_posture import (
+        posture_help,
+        posture_label,
+        protection_status_fields,
+    )
 
     effective = editable_guard_settings(config).get("risk_actions") or {}
     status = protection_status_fields(posture=config.protection_posture, mode=config.mode)
@@ -1079,6 +1084,7 @@ def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
         "protection_off": status["protection_off"],
         "effective_risk_actions": effective,
     }
+
 
 def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
     from ..protection_posture import protection_status_fields
@@ -1115,6 +1121,7 @@ def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
         "healthy": len(issues) == 0,
         **protection_status_fields(posture=config.protection_posture, mode=config.mode),
     }
+
 
 def _guard_cli_settings_payload(config: GuardConfig) -> dict[str, object]:
     payload = _guard_settings_payload(config)
