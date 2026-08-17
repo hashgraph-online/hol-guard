@@ -1,0 +1,148 @@
+name: Fix PR 2464 Windows process inventory
+
+on:
+  push:
+    branches:
+      - fix/rust-daemon-edge-workflow-validation
+    paths:
+      - .github/workflows/tmp-fix-pr2464-windows-inventory.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-pr-2464-windows-inventory
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/rust-daemon-edge-workflow-validation
+          fetch-depth: 2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Patch and validate Windows process inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='fix/rust-daemon-edge-workflow-validation'
+          remote_sha=$(git ls-remote --exit-code origin "refs/heads/${branch}" | awk '{print $1}')
+          test "$remote_sha" = "$GITHUB_SHA"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          manager = Path("src/codex_plugin_scanner/guard/daemon/manager.py")
+          text = manager.read_text(encoding="utf-8")
+
+          old_environment = '''    return {
+              "ComSpec": ntpath.join(system_directory, "cmd.exe"),
+              "PATH": system_directory,
+              "SystemRoot": windows_directory,
+              "WINDIR": windows_directory,
+          }
+          '''
+          new_environment = '''    return {
+              "ComSpec": ntpath.join(system_directory, "cmd.exe"),
+              "PATH": system_directory,
+              "PSModulePath": ntpath.join(
+                  system_directory,
+                  "WindowsPowerShell",
+                  "v1.0",
+                  "Modules",
+              ),
+              "SystemRoot": windows_directory,
+              "WINDIR": windows_directory,
+          }
+          '''
+          if text.count(old_environment) != 1:
+              raise RuntimeError("unexpected Windows process-query environment implementation")
+          text = text.replace(old_environment, new_environment, 1)
+
+          old_query = "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine"
+          new_query = (
+              "CimCmdlets\\Get-CimInstance -ClassName Win32_Process "
+              "-Property ProcessId,CommandLine | "
+              "Microsoft.PowerShell.Utility\\Select-Object ProcessId,CommandLine"
+          )
+          if text.count(old_query) != 1:
+              raise RuntimeError("unexpected Windows process inventory query implementation")
+          text = text.replace(old_query, new_query, 1)
+          manager.write_text(text, encoding="utf-8")
+
+          tests = Path("tests/test_guard_daemon_manager.py")
+          text = tests.read_text(encoding="utf-8")
+          old_assertions = '''    assert "$ErrorActionPreference = 'Stop'" in query_commands[0][-1]
+              assert "ConvertTo-Json" in query_commands[0][-1]
+          '''
+          new_assertions = '''    assert "$ErrorActionPreference = 'Stop'" in query_commands[0][-1]
+              assert "CimCmdlets\\\\Get-CimInstance" in query_commands[0][-1]
+              assert "-Property ProcessId,CommandLine" in query_commands[0][-1]
+              assert "Microsoft.PowerShell.Utility\\\\Select-Object" in query_commands[0][-1]
+              assert "ConvertTo-Json" in query_commands[0][-1]
+          '''
+          if text.count(old_assertions) != 1:
+              raise RuntimeError("unexpected Windows inventory test assertions")
+          text = text.replace(old_assertions, new_assertions, 1)
+
+          insertion_anchor = '''@pytest.mark.skipif(os.name == "nt", reason="POSIX process-query regression")
+          def test_guard_daemon_process_query_ignores_hostile_path_and_loader_environment(tmp_path, monkeypatch):
+          '''
+          new_test = r'''def test_windows_process_query_environment_uses_only_trusted_system_locations(monkeypatch) -> None:
+              trusted_powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+              monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
+
+              assert daemon_manager_module._process_query_environment([trusted_powershell]) == {
+                  "ComSpec": r"C:\Windows\System32\cmd.exe",
+                  "PATH": r"C:\Windows\System32",
+                  "PSModulePath": r"C:\Windows\System32\WindowsPowerShell\v1.0\Modules",
+                  "SystemRoot": r"C:\Windows",
+                  "WINDIR": r"C:\Windows",
+              }
+
+
+          @pytest.mark.skipif(os.name == "nt", reason="POSIX process-query regression")
+          def test_guard_daemon_process_query_ignores_hostile_path_and_loader_environment(tmp_path, monkeypatch):
+          '''
+          if text.count(insertion_anchor) != 1:
+              raise RuntimeError("unexpected process-query test insertion anchor")
+          text = text.replace(insertion_anchor, new_test, 1)
+          tests.write_text(text, encoding="utf-8")
+          PY
+
+          uv sync --frozen --extra dev --python 3.12
+          uv run --no-sync ruff format \
+            src/codex_plugin_scanner/guard/daemon/manager.py \
+            tests/test_guard_daemon_manager.py
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/daemon/manager.py \
+            tests/test_guard_daemon_manager.py
+          uv run --no-sync ruff format --check \
+            src/codex_plugin_scanner/guard/daemon/manager.py \
+            tests/test_guard_daemon_manager.py
+          uv run --no-sync basedpyright --level error \
+            src/codex_plugin_scanner/guard/daemon/manager.py
+          uv run --no-sync pytest -q \
+            tests/test_guard_daemon_manager.py \
+            tests/test_daemon_bounded_http.py \
+            tests/test_rust_daemon_edge_hardening_contracts.py \
+            --tb=short
+          git diff --check
+
+          rm .github/workflows/tmp-fix-pr2464-windows-inventory.yml
+          git add -A
+          git diff --cached --check
+          git config user.name 'Michael Kantor'
+          git config user.email '6068672+kantorcodes@users.noreply.github.com'
+          git commit --signoff -m 'fix(daemon): load trusted Windows CIM modules'
+          git push origin "HEAD:refs/heads/${branch}"
