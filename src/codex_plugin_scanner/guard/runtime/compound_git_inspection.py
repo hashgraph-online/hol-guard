@@ -27,6 +27,25 @@ _REPOSITORY_PATH_COMPONENT: Final = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,12
 _BOUND: Final = 1000
 
 
+def canonical_home_git_c_path(command_text: str) -> str | None:
+    """Return an unquoted canonical current-user Git ``-C`` operand."""
+
+    match = re.match(r"\Agit[ \t]+-C[ \t]+(?P<path>~/[A-Za-z0-9_.\-/]+)(?=[ \t]+)", command_text)
+    if match is None:
+        return None
+    path = match.group("path")
+    tail = path[2:]
+    return (
+        path
+        if tail
+        and all(
+            component not in {"", ".", ".."} and _REPOSITORY_PATH_COMPONENT.fullmatch(component) is not None
+            for component in tail.split("/")
+        )
+        else None
+    )
+
+
 def is_low_risk_compound_git_inspection(context: ShellExecutionContext) -> bool:
     """Recognize a deterministic leading-cd Git routine."""
 
@@ -65,7 +84,11 @@ def _leading_literal_cd(segment: ShellExecutionSegment) -> bool:
     )
 
 
-def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
+def is_low_risk_git_inspection_segment(
+    segment: ShellExecutionSegment,
+    *,
+    home_dir: Path | None = None,
+) -> bool:
     """Recognize one bounded Git refresh or inspection segment."""
 
     tokens = _without_stderr_merge(segment.tokens)
@@ -74,11 +97,15 @@ def is_low_risk_git_inspection_segment(segment: ShellExecutionSegment) -> bool:
     operation_index = 1
     repository_path: str | None = None
     if tokens[1] == "-C":
-        if len(tokens) < 4 or not _safe_git_c_repository_path(tokens[2]):
+        if len(tokens) < 4 or not _safe_git_c_repository_path(tokens[2], home_dir=home_dir):
             return False
         repository_path = tokens[2]
         operation_index = 3
-    invocation_cwds = _git_invocation_cwds(segment, repository_path=repository_path)
+    invocation_cwds = _git_invocation_cwds(
+        segment,
+        repository_path=repository_path,
+        home_dir=home_dir,
+    )
     if invocation_cwds is None:
         return False
     execution_cwd, repository_cwd = invocation_cwds
@@ -175,7 +202,11 @@ def is_low_risk_git_push_segment(segment: ShellExecutionSegment) -> bool:
     )
 
 
-def is_low_risk_standalone_git_routine(context: ShellExecutionContext) -> bool:
+def is_low_risk_standalone_git_routine(
+    context: ShellExecutionContext,
+    *,
+    home_dir: Path | None = None,
+) -> bool:
     """Recognize one bounded Git read or configured-origin ref refresh."""
 
     if not context.complete or len(context.segments) != 1:
@@ -185,7 +216,7 @@ def is_low_risk_standalone_git_routine(context: ShellExecutionContext) -> bool:
         segment.tokens[:1] == ("git",)
         and not segment.control_before
         and not segment.control_after
-        and is_low_risk_git_inspection_segment(segment)
+        and is_low_risk_git_inspection_segment(segment, home_dir=home_dir)
     )
 
 
@@ -290,9 +321,20 @@ def _safe_repository_path(value: str) -> bool:
     )
 
 
-def _safe_git_c_repository_path(value: str) -> bool:
+def _safe_git_c_repository_path(value: str, *, home_dir: Path | None = None) -> bool:
     if _safe_repository_path(value):
         return True
+    if value.startswith("~/"):
+        tail = value[2:]
+        return bool(
+            home_dir is not None
+            and tail
+            and not tail.startswith(("/", "\\"))
+            and all(
+                component not in {"", ".", ".."} and _REPOSITORY_PATH_COMPONENT.fullmatch(component) is not None
+                for component in tail.split("/")
+            )
+        )
     if not value or len(value) > 512 or not Path(value).is_absolute() or _dynamic(value):
         return False
     return all(
@@ -381,6 +423,7 @@ def _git_invocation_cwds(
     segment: ShellExecutionSegment,
     *,
     repository_path: str | None,
+    home_dir: Path | None = None,
 ) -> tuple[Path, Path] | None:
     if segment.effective_cwd is None:
         return None
@@ -389,16 +432,22 @@ def _git_invocation_cwds(
         if repository_path is None:
             repository_cwd = execution_cwd
         else:
-            requested_repository = Path(repository_path)
+            if repository_path.startswith("~/"):
+                if home_dir is None:
+                    return None
+                requested_repository = home_dir.resolve() / repository_path[2:]
+            else:
+                requested_repository = Path(repository_path)
             candidate = (
                 requested_repository if requested_repository.is_absolute() else execution_cwd / requested_repository
             )
             repository_cwd = candidate.resolve()
+        allowed_roots = (execution_cwd,) if home_dir is None else (execution_cwd, home_dir.resolve())
     except (OSError, RuntimeError):
         return None
     return (
         (execution_cwd, repository_cwd)
-        if repository_cwd.is_dir() and repository_cwd.is_relative_to(execution_cwd)
+        if repository_cwd.is_dir() and any(repository_cwd.is_relative_to(root) for root in allowed_roots)
         else None
     )
 
@@ -502,6 +551,7 @@ def _dynamic(value: str) -> bool:
 
 
 __all__ = (
+    "canonical_home_git_c_path",
     "is_low_risk_compound_git_inspection",
     "is_low_risk_git_inspection_segment",
     "is_low_risk_git_push_segment",
