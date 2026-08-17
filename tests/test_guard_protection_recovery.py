@@ -60,6 +60,116 @@ def test_protection_repair_probe_avoids_force_push() -> None:
     assert "git status --porcelain=v1" in _PROTECTION_REPAIR_PROBE_COMMAND
 
 
+def test_live_grok_hooks_reject_empty_observe_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    hooks_dir = ctx.home_dir / ".grok" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "hol-guard-pretooluse.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "hol-guard hook grok",
+                                    "timeout": 30,
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (hooks_dir / "hol-guard-prompt.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "UserPromptSubmit": [],
+                    "SubagentStart": [],
+                    "SessionStart": [],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (ctx.home_dir / ".grok" / "managed_config.toml").write_text(
+        '# BEGIN HOL GUARD MANAGED GROK\ndeny = ["Read(**/.grok/auth/**)"]\n# END HOL GUARD MANAGED GROK\n',
+        encoding="utf-8",
+    )
+    store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
+    store.set_managed_install("grok", True, None, {"harness": "grok", "active": True}, "2026-08-17T12:00:00+00:00")
+    assert grok_hooks_protection_ready(ctx) is False
+
+
+def test_live_grok_hooks_reject_managed_rule_outside_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    hooks_dir = ctx.home_dir / ".grok" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    command_hook = {
+        "hooks": [
+            {
+                "type": "command",
+                "command": "hol-guard hook grok",
+                "timeout": 15,
+            }
+        ]
+    }
+    (hooks_dir / "hol-guard-pretooluse.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "hol-guard hook grok",
+                                    "timeout": 30,
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (hooks_dir / "hol-guard-prompt.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "UserPromptSubmit": [command_hook],
+                    "SubagentStart": [command_hook],
+                    "SessionStart": [command_hook],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (ctx.home_dir / ".grok" / "managed_config.toml").write_text(
+        'deny = ["Read(**/.grok/auth/**)"]\n'
+        "# BEGIN HOL GUARD MANAGED GROK\n"
+        "# Read(**/.grok/auth/**)\n"
+        "# END HOL GUARD MANAGED GROK\n",
+        encoding="utf-8",
+    )
+    store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
+    store.set_managed_install("grok", True, None, {"harness": "grok", "active": True}, "2026-08-17T12:00:00+00:00")
+    assert grok_hooks_protection_ready(ctx) is False
+
+
 def test_live_grok_hooks_fail_when_managed_config_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
