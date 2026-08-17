@@ -1278,7 +1278,7 @@ def _run_hook_generic_payload(
 
             emit_grok_hook_response(
                 policy_action=policy_action,
-                reason=block_reason, approval_payload=payload_map,
+                reason=block_reason,
                 event_name=hook_event_name,
                 output_stream=output_stream,
             )
@@ -1339,7 +1339,7 @@ def _run_hook_generic_payload(
 
             emit_grok_hook_response(
                 policy_action=policy_action,
-                reason=reason, approval_payload=payload_map,
+                reason=reason,
                 event_name=hook_event_name,
                 output_stream=output_stream,
             )

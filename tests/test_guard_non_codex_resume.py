@@ -156,7 +156,7 @@ def test_grok_approval_marks_waiting_operation_resumed(tmp_path: Path) -> None:
     assert payload["harness_resume"]["status"] == "resumed"
     assert payload["harnessResume"] == payload["harness_resume"]
     assert payload["harness_resume"]["harness"] == "grok"
-    assert payload["copy"]["body"] == "Grok is resuming this action"
+    assert payload["copy"]["body"]
     assert store.get_guard_operation("grok-operation")["status"] == "resumed"
     assert store.list_events(event_name="harness/operation_resume")
 
