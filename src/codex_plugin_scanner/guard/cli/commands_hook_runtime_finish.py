@@ -248,12 +248,12 @@ def _finalize_runtime_artifact_hook(
             )
         elif _canonical_harness_name(args.harness) == "grok":
             from ..adapters.grok_hooks import emit_grok_hook_response, grok_hook_process_exit
-
             emit_grok_hook_response(
                 policy_action=policy_action, event_name=event_name,
                 reason=native_block_reason, approval_payload=response_payload,
                 output_stream=output_stream,
             )
+            return grok_hook_process_exit(policy_action)
         elif _canonical_harness_name(args.harness) in {"pi", "omp"}:
             from ..adapters.pi_hooks import emit_pi_hook_response
 
@@ -281,7 +281,7 @@ def _finalize_runtime_artifact_hook(
             payload=payload,
             policy_action=policy_action,
         )
-        from ..adapters.grok_hooks import grok_hook_process_exit as _grok_exit; return _grok_exit(policy_action) if _canonical_harness_name(args.harness) == "grok" else 2
+        return 2
     if _canonical_harness_name(args.harness) == "codex" and (
         event_name == "UserPromptSubmit"
         or approval_context is not None
