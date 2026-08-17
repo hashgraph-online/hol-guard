@@ -1,0 +1,53 @@
+name: Patch PR 2464 repair workflow v2
+
+on:
+  push:
+    branches:
+      - fix/rust-daemon-edge-workflow-validation
+    paths:
+      - .github/workflows/tmp-patch-pr2464-repair-v2.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-pr-2464-repair-v2
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/rust-daemon-edge-workflow-validation
+          fetch-depth: 2
+      - name: Fix optional ctypes function typing
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='fix/rust-daemon-edge-workflow-validation'
+          remote_sha=$(git ls-remote --exit-code origin "refs/heads/${branch}" | awk '{print $1}')
+          test "$remote_sha" = "$GITHUB_SHA"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/tmp-fix-pr2464-windows-inventory.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '              close_handle: Any | None = None'
+          new = '              close_handle: Any = None'
+          if text.count(old) != 1:
+              raise RuntimeError('unexpected close_handle typing anchor count')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+          rm .github/workflows/tmp-patch-pr2464-repair-v2.yml
+          git diff --check
+          git add -A
+          git diff --cached --check
+          git config user.name 'Michael Kantor'
+          git config user.email '6068672+kantorcodes@users.noreply.github.com'
+          git commit --signoff -m 'ci: fix PR 2464 native handle typing'
+          git push origin "HEAD:refs/heads/${branch}"
