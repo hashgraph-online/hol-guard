@@ -281,7 +281,7 @@ def _finalize_runtime_artifact_hook(
             payload=payload,
             policy_action=policy_action,
         )
-        return grok_hook_process_exit(policy_action) if _canonical_harness_name(args.harness) == "grok" else 2
+        from ..adapters.grok_hooks import grok_hook_process_exit as _grok_exit; return _grok_exit(policy_action) if _canonical_harness_name(args.harness) == "grok" else 2
     if _canonical_harness_name(args.harness) == "codex" and (
         event_name == "UserPromptSubmit"
         or approval_context is not None

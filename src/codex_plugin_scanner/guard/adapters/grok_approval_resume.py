@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import Protocol
 
 from ..approvals import wait_for_approval_requests
+from ..store import GuardStore
 from .grok_config import (
     GROK_APPROVAL_WAIT_MAX_SECONDS,
     GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
@@ -14,24 +14,6 @@ from .grok_config import (
 )
 
 _GROK_WAITABLE_ACTIONS = frozenset({"review", "require-reapproval"})
-
-
-class _GrokResumeStore(Protocol):
-    def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object] | None: ...
-
-    def upsert_guard_operation(
-        self,
-        *,
-        operation_id: str,
-        session_id: str,
-        harness: str,
-        operation_type: str,
-        status: str,
-        approval_request_ids: list[str],
-        resume_token: str | None,
-        metadata: dict[str, object],
-        now: str,
-    ) -> dict[str, object]: ...
 
 
 def grok_resume_metadata_from_guard_payload(approval_payload: Mapping[str, object] | None) -> dict[str, object]:
@@ -65,7 +47,7 @@ def wait_for_grok_live_approval(
     event_name: str,
     policy_action: str,
     response_payload: dict[str, object],
-    store: _GrokResumeStore,
+    store: GuardStore,
     timeout_seconds: int,
     json_mode: bool,
     payload: Mapping[str, object] | None = None,
@@ -92,7 +74,7 @@ def wait_for_grok_live_approval(
         now=now,
     )
     wait_result = wait_for_approval_requests(
-        store=store,  # type: ignore[arg-type]
+        store=store,
         request_ids=request_ids,
         timeout_seconds=wait_timeout_seconds,
     )
@@ -113,7 +95,7 @@ def wait_for_grok_live_approval(
 
 
 def _mark_grok_operations_waiting(
-    store: _GrokResumeStore,
+    store: GuardStore,
     *,
     request_ids: list[str],
     payload: Mapping[str, object],
@@ -123,7 +105,7 @@ def _mark_grok_operations_waiting(
     started_at = datetime.now(timezone.utc)
     deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
     session_id = _optional_string(payload.get("session_id")) or _optional_string(payload.get("sessionId"))
-    wait_metadata = {
+    wait_metadata: dict[str, object] = {
         "grok_hook_waits_for_approval": True,
         "grok_approval_wait_started_at": started_at.isoformat(),
         "grok_approval_wait_deadline_at": deadline_at.isoformat(),

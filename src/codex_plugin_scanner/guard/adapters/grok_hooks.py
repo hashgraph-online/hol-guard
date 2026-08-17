@@ -221,7 +221,7 @@ def _dedupe_grok_block_reason(reason: str) -> str:
     return reason[:second].rstrip()
 
 
-_LAST_GROK_POLICY_ACTION = ""
+_last_grok_policy_action = ""
 
 
 def emit_grok_hook_response(
@@ -232,7 +232,7 @@ def emit_grok_hook_response(
     approval_payload: Mapping[str, object] | None = None,
     output_stream: TextIO | None = None,
 ) -> None:
-    global _LAST_GROK_POLICY_ACTION
+    global _last_grok_policy_action
     live_action, live_reason, live_payload = _apply_live_approval_wait(
         policy_action=policy_action,
         reason=reason,
@@ -245,14 +245,14 @@ def emit_grok_hook_response(
         event_name=event_name,
         approval_payload=live_payload,
     )
-    _LAST_GROK_POLICY_ACTION = "allow" if payload.get("decision") == "allow" else live_action
+    _last_grok_policy_action = "allow" if payload.get("decision") == "allow" else live_action
     stream = output_stream if output_stream is not None else sys.stdout
     stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
     stream.flush()
 
 
 def grok_hook_process_exit(policy_action: str) -> int:
-    if _LAST_GROK_POLICY_ACTION == "allow":
+    if _last_grok_policy_action == "allow":
         return 0
     return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
 
