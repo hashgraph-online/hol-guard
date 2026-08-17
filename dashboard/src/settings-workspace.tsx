@@ -42,6 +42,14 @@ import {
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch, securityLevelLabel } from "./apps/app-catalog";
+import { WorkspacePageHeader } from "./workspace-page-header";
+import { ProtectionPosturePanel } from "./protection-posture-panel";
+import { WatchProtectionBanner } from "./watch-protection-banner";
+import {
+  deriveProtectionPosture,
+  isProtectionPosture,
+  type ProtectionPosture,
+} from "./protection-posture-copy";
 import { useFocusTrap } from "./use-focus-trap";
 export {
   buildTotpQrImageOptions,
@@ -62,6 +70,7 @@ import type {
   GuardApprovalGatePublicConfig,
   GuardNotificationSetupResult,
   GuardRuntimeSnapshot,
+  GuardProtectionCapability,
   GuardSettings,
   GuardSettingsExport,
   GuardSettingsPayload,
@@ -178,18 +187,18 @@ type SettingsState =
   | { kind: "ready"; payload: GuardSettingsPayload };
 
 const actionOptions = [
-  { value: "allow", label: "Allow without asking" },
-  { value: "warn", label: "Warn only" },
-  { value: "review", label: "Ask me first" },
-  { value: "require-reapproval", label: "Ask every time" },
+  { value: "allow", label: "Allow" },
+  { value: "warn", label: "Allow" },
+  { value: "review", label: "Ask once" },
+  { value: "require-reapproval", label: "Ask once" },
   { value: "sandbox-required", label: "Run in sandbox" },
-  { value: "block", label: "Block" },
+  { value: "block", label: "Stop" },
 ];
 
 const surfacePolicyOptions = [
-  { value: "attention-aware", label: "Smart (recommended)" },
-  { value: "approval-center", label: "Open prompts immediately" },
-  { value: "native-only", label: "Never open the browser" },
+  { value: "attention-aware", label: "In the app when possible" },
+  { value: "approval-center", label: "Always in Guard" },
+  { value: "native-only", label: "Never open a browser" },
 ];
 
 const attentionSeverityOptions = [
@@ -367,8 +376,13 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
     actions[risk.key] = settings.risk_actions?.[risk.key] ?? explicitOverrides[risk.key] ?? defaults[risk.key];
     return actions;
   }, {} as Record<RiskKey, string>);
+  const posture = isProtectionPosture(settings.protection_posture)
+    ? settings.protection_posture
+    : deriveProtectionPosture(settings.mode, securityLevel);
   return {
     ...settings,
+    protection_posture: posture,
+    watch_auto_revert_hours: settings.watch_auto_revert_hours ?? 24,
     security_level: securityLevel,
     risk_actions: effectiveRiskActions,
     risk_action_overrides: explicitOverrides,
@@ -376,15 +390,40 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
   };
 }
 
+function applyProtectionPosture(settings: GuardSettings, posture: ProtectionPosture): GuardSettings {
+  if (posture === "watch") {
+    return { ...settings, protection_posture: "watch", mode: "observe" };
+  }
+  const securityLevel = posture === "extra_careful" ? "strict" : "balanced";
+  return {
+    ...settings,
+    protection_posture: posture,
+    mode: "enforce",
+    security_level: securityLevel,
+    risk_actions: riskProfileActions[securityLevel],
+    risk_action_overrides: {},
+  };
+}
+
+function currentProtectionPosture(settings: GuardSettings): ProtectionPosture {
+  if (isProtectionPosture(settings.protection_posture)) {
+    return settings.protection_posture;
+  }
+  return deriveProtectionPosture(settings.mode, settings.security_level);
+}
+
 function buildConsequenceSummary(settings: GuardSettings): string {
-  const level = settings.security_level;
-  const mode = settings.mode;
-  if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
-  if (level === "relaxed") return "Guard will warn about destructive commands and credential sharing but will not pause for approval. Most safe actions run automatically. Good for trusted environments.";
-  if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
-  if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
-  if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
-  return "";
+  const posture = currentProtectionPosture(settings);
+  if (posture === "watch") {
+    return "Protection is off. Guard is only recording.";
+  }
+  if (posture === "extra_careful") {
+    return "Guard will also ask the first time this project talks to a new site or installs a new tool.";
+  }
+  if (settings.security_level === "custom") {
+    return "Using custom rules on top of Protected.";
+  }
+  return "Guard stops dangerous actions automatically and asks once about new or unknown work.";
 }
 
 export function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
@@ -461,6 +500,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [actionMessageKind, setActionMessageKind] = useState<"success" | "error">("success");
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
+  const [pendingPosture, setPendingPosture] = useState<ProtectionPosture | null>(null);
   const [activeTab, setActiveTab] = useState<LocalSettingsTabKey>(() => resolveInitialSettingsTab(window.location.search));
   const [searchQuery, setSearchQuery] = useState("");
   const [importingSettings, setImportingSettings] = useState(false);
@@ -641,14 +681,45 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setSaveError(null);
   }, []);
 
+  const applyDraftPosture = useCallback((posture: ProtectionPosture) => {
+    setDraft((value) => value === null ? value : applyProtectionPosture(value, posture));
+    setSaveError(null);
+  }, []);
+
+  const handleProtectionPostureChange = useCallback((posture: ProtectionPosture) => {
+    if (posture === "watch") {
+      setPendingPosture(posture);
+      return;
+    }
+    applyDraftPosture(posture);
+  }, [applyDraftPosture]);
+
+  const handleTurnProtectionOn = useCallback(() => {
+    applyDraftPosture("protected");
+  }, [applyDraftPosture]);
+
+  const handleWatchAutoRevertToggle = useCallback((checked: boolean) => {
+    setDraft((value) => value === null ? value : { ...value, watch_auto_revert_hours: checked ? 24 : 0 });
+    setSaveError(null);
+  }, []);
+
   const confirmModeChange = useCallback(() => {
+    if (pendingPosture === "watch") {
+      applyDraftPosture("watch");
+      setPendingPosture(null);
+      setPendingMode(null);
+      return;
+    }
     if (pendingMode === null) return;
     setDraft((value) => value === null ? value : { ...value, mode: pendingMode });
     setPendingMode(null);
     setSaveError(null);
-  }, [pendingMode]);
+  }, [applyDraftPosture, pendingMode, pendingPosture]);
 
-  const cancelModeChange = useCallback(() => { setPendingMode(null); }, []);
+  const cancelModeChange = useCallback(() => {
+    setPendingMode(null);
+    setPendingPosture(null);
+  }, []);
 
   const handleBooleanChange = useCallback(
     (key: keyof GuardSettings) => (event: ChangeEvent<HTMLInputElement>) => {
@@ -1323,8 +1394,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     return <EmptyState title="Settings are unavailable" body={state.kind === "error" ? state.message : "Guard did not return editable settings."} tone="teach" />;
   }
 
-  const modeHelp = protectionModeHelp(draft.mode);
   const consequenceSummary = buildConsequenceSummary(draft);
+  const selectedPosture = currentProtectionPosture(draft);
+  const protectionCapabilities: GuardProtectionCapability[] = state.kind === "ready"
+    ? (state.payload.protection_capabilities ?? [])
+    : [];
   const searchMatches = filterSettingsBySearch(searchQuery);
   const hasSearch = searchQuery.trim().length > 0;
   const riskSearchMatches = searchMatches.filter((m) => m.section === "risk");
@@ -1334,12 +1408,14 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
   return (
     <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-6">
-      <GuardHero
-        status="neutral"
-        headline="Set how hard Guard should push back"
-        subheadline="Pick a security level, then fine-tune individual rules whenever you need more control."
-        cta={<Tag tone="blue">{protectionModeLabel(draft.mode)}</Tag>}
+      <WorkspacePageHeader
+        eyebrow="This machine"
+        title="Protection"
+        description="Guard stops dangerous actions automatically and asks once about new or unknown work."
       />
+      {selectedPosture === "watch" ? (
+        <WatchProtectionBanner onTurnProtectionOn={handleTurnProtectionOn} />
+      ) : null}
 
       <div className="relative">
         <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
@@ -1406,50 +1482,15 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         {activeTab === "protection" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-6">
             <SettingsFormSection
-              title="Protection level"
-              description={`${securityLevelLabel(draft.security_level)} · ${protectionModeLabel(draft.mode)}`}
+              title="Protection"
+              description={consequenceSummary}
             >
-              <fieldset className="space-y-6 border-0 p-0">
-                <legend className="sr-only">Security level</legend>
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                  {securityLevels.map((level) => (
-                    <SecurityLevelCard
-                      key={level.value}
-                      level={level}
-                      isSelected={draft.security_level === level.value}
-                      onSelect={handleSecurityLevelChange}
-                    />
-                  ))}
-                </div>
-              </fieldset>
-            </SettingsFormSection>
-
-            <SettingsFormSection title="Protection mode" description={modeHelp}>
-              <fieldset className="border-0 p-0">
-                <legend className="sr-only">Protection mode</legend>
-                <div className="grid gap-2 py-3 sm:grid-cols-3">
-                  {protectionModeChoices.map((modeChoice) => (
-                    <label
-                      key={modeChoice.value}
-                      className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 py-2 transition-colors ${
-                        draft.mode === modeChoice.value
-                          ? "border-brand-blue/25 bg-brand-blue/[0.04]"
-                          : "border-transparent bg-slate-50/80 hover:bg-white"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="mode"
-                        value={modeChoice.value}
-                        checked={draft.mode === modeChoice.value}
-                        onChange={handleModeChange}
-                        className="sr-only"
-                      />
-                      <span className="text-sm font-semibold text-brand-dark">{modeChoice.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              <ProtectionPosturePanel
+                posture={selectedPosture}
+                customRules={draft.security_level === "custom"}
+                capabilities={protectionCapabilities}
+                onPostureChange={handleProtectionPostureChange}
+              />
             </SettingsFormSection>
 
             <SettingsFormSection title="Timing and features">
@@ -1519,6 +1560,35 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 </p>
               </div>
             ) : null}
+            <SettingsFormSection
+              title="Where Guard asks"
+              description="This only chooses the surface for Ask once. It does not change what Guard stops."
+            >
+              <div className="space-y-4 py-3">
+                <SettingsSelectRow
+                  label="Ask surface"
+                  description="In the app when possible, always in Guard, or never open a browser."
+                  value={draft.approval_surface_policy}
+                  onChange={handleStringChange("approval_surface_policy")}
+                  options={surfacePolicyOptions}
+                />
+                {draft.approval_surface_policy === "attention-aware" ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-medium text-brand-dark">Browser delay (seconds)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={120}
+                        value={draft.approval_browser_delay_seconds}
+                        onChange={handleNumberChange("approval_browser_delay_seconds")}
+                        className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            </SettingsFormSection>
             <ApprovalGateCard
               enabled={approvalGateEnabled}
               gateConfig={draft.approval_gate ?? null}
@@ -1623,29 +1693,15 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                   <SettingSelect label="Changed command" value={draft.changed_hash_action} options={actionOptions} onChange={handleStringChange("changed_hash_action")} />
                   <SettingSelect label="New website or host" value={draft.new_network_domain_action} options={actionOptions} onChange={handleStringChange("new_network_domain_action")} />
                   <SettingSelect label="Nested commands" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
-                  <SettingSelect label="Where to ask" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
                 </div>
-                {draft.approval_surface_policy === "attention-aware" ? (
-                  <div className="grid gap-3 border-t border-slate-100 py-4 sm:grid-cols-2">
-                    <SettingNumber
-                      label="Browser delay"
-                      value={draft.approval_browser_delay_seconds}
-                      min={0}
-                      max={300}
-                      suffix="seconds"
-                      onChange={handleNumberChange("approval_browser_delay_seconds")}
-                    />
-                    <SettingSelect
-                      label="Open immediately for"
-                      value={draft.approval_browser_immediate_severity}
-                      options={attentionSeverityOptions}
-                      onChange={handleStringChange("approval_browser_immediate_severity")}
-                    />
-                    <p className="text-xs leading-5 text-slate-500 sm:col-span-2">
-                      Guard cancels the browser prompt when your AI app continues with a different action. Desktop and in-app notices still appear immediately.
-                    </p>
-                  </div>
-                ) : null}
+                <div className="border-t border-slate-100 py-4">
+                  <SettingsToggleRow
+                    label="Auto-revert Watch"
+                    description="Turn protection back on after 24 hours unless you disable this."
+                    checked={(draft.watch_auto_revert_hours ?? 24) > 0}
+                    onChange={handleWatchAutoRevertToggle}
+                  />
+                </div>
               </div>
             </details>
           </div>
@@ -1810,7 +1866,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         />
       ) : null}
 
-      {pendingMode === "observe" && (
+      {(pendingMode === "observe" || pendingPosture === "watch") && (
         <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-brand-attention/15 bg-white p-6 shadow-xl">
             <div className="flex items-start gap-3">
@@ -1818,13 +1874,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 <HiMiniExclamationTriangle className="h-5 w-5 text-brand-attention" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-base font-semibold text-brand-dark">Switch to Watch only?</h3>
-                <p className="mt-2 text-sm text-slate-500">In Watch only mode, Guard records what your AI apps do but does not pause anything. Use this only when debugging or in a fully trusted environment.</p>
+                <h3 className="text-base font-semibold text-brand-dark">Switch to Watch?</h3>
+                <p className="mt-2 text-sm text-slate-500">Protection is off. Guard is only recording. Use this only while debugging.</p>
               </div>
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
-              <button onClick={confirmModeChange} className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90">Switch to Watch only</button>
-              <button onClick={cancelModeChange} className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50">Keep current mode</button>
+              <button onClick={confirmModeChange} className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90">Switch to Watch</button>
+              <button onClick={cancelModeChange} className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50">Keep protection on</button>
             </div>
           </div>
         </div>

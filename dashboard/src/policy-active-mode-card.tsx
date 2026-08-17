@@ -9,11 +9,13 @@ type PolicyActiveModeCardProps = {
 };
 
 export function PolicyActiveModeCard({ snapshot }: PolicyActiveModeCardProps) {
-  const modeCopy = resolveSecurityModeCopy(snapshot.security_level);
+  const modeCopy = resolveSecurityModeCopy(
+    snapshot.protection_posture ?? snapshot.security_level,
+  );
 
   return (
     <div className={`${POLICY_SUMMARY_CARD_CLASS} self-start p-4`}>
-      <SectionLabel>Active mode</SectionLabel>
+      <SectionLabel>Protection</SectionLabel>
       <div className="mt-2 flex items-start gap-2.5">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
           <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true" />

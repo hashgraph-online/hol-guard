@@ -46,7 +46,7 @@ assert(tabSource.includes("PolicyRememberedLocalRules"), "tab mounts local rules
 assert(tabSource.includes("PolicyRememberedCloudRules"), "tab mounts cloud rules section");
 assert(tabSource.includes("PolicyRememberedRulesRightRail"), "tab mounts right rail helper");
 
-assert(railSource.includes("Active mode"), "right rail shows active mode card");
+assert(railSource.includes("Protection"), "right rail shows protection card");
 assert(railSource.includes("Approvals are still fast"), "right rail explains fast approvals");
 assert(railSource.includes("Once"), "scope ladder includes Once");
 assert(railSource.includes("Team policy"), "scope ladder includes Team policy");

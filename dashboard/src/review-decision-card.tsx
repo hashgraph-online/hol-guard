@@ -362,7 +362,7 @@ export function ReviewDecisionCard(props: {
             </p>
           </div>
           <Badge tone={watchOnlyObservation ? "info" : actionPresentation.tone}>
-            {watchOnlyObservation ? "Ran in Watch only" : actionPresentation.label}
+            {watchOnlyObservation ? "Would have stopped" : actionPresentation.label}
           </Badge>
         </div>
 

@@ -593,6 +593,7 @@ export type GuardRuntimeSnapshot = {
   cloud_command_capability?: GuardCloudCommandCapability;
   operator_health?: GuardOperatorHealth;
   security_level?: "balanced" | "strict" | "custom";
+  protection_posture?: "protected" | "extra_careful" | "watch";
   supply_chain?: SupplyChainSnapshot;
 };
 
@@ -885,6 +886,9 @@ export type GuardApprovalGatePublicConfig = {
 
 export type GuardSettings = {
   mode: "observe" | "prompt" | "enforce";
+  protection_posture?: "protected" | "extra_careful" | "watch";
+  protection_posture_explicit?: boolean;
+  watch_auto_revert_hours?: number;
   security_level: "relaxed" | "gentle" | "balanced" | "strict" | "custom";
   default_action: string;
   unknown_publisher_action: string;

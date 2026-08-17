@@ -245,6 +245,21 @@ def test_watch_auto_revert_hours_round_trip(tmp_path: Path) -> None:
     assert loaded.watch_auto_revert_hours == 48
 
 
+def test_watch_auto_reverts_after_entered_timestamp(tmp_path: Path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from codex_plugin_scanner.guard.config import maybe_auto_revert_watch
+
+    guard_home = tmp_path / ".hol-guard"
+    loaded = update_guard_settings(guard_home, {"protection_posture": "watch", "watch_auto_revert_hours": 24})
+    assert loaded.protection_posture == "watch"
+    assert loaded.watch_entered_at is not None
+    later = datetime.now(timezone.utc) + timedelta(hours=25)
+    reverted = maybe_auto_revert_watch(guard_home, now=later)
+    assert reverted.protection_posture == "protected"
+    assert reverted.mode == "enforce"
+
+
 def test_explicit_protected_survives_mode_lock_overlay(tmp_path: Path) -> None:
     from types import SimpleNamespace
 

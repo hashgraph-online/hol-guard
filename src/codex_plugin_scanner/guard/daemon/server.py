@@ -2194,7 +2194,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(_settings_export_payload(config))
             return
         if parsed.path == "/v1/settings":
-            config = load_guard_config(store.guard_home)
+            from ..config import maybe_auto_revert_watch
+
+            config = maybe_auto_revert_watch(store.guard_home)
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
         if parsed.path == "/v1/update/status":

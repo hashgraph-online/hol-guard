@@ -151,7 +151,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
             </p>
             <p className="truncate text-[11px] text-muted-foreground">
               {harnessDisplayName(item.harness)} · {formatQueueRequestDate(item)}
-              {watchOnlyObservation ? " · Watch only" : ""}
+              {watchOnlyObservation ? " · Would have stopped" : ""}
             </p>
           </div>
           <span

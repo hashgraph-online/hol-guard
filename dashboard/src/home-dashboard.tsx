@@ -30,6 +30,8 @@ import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-m
 import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import { HomeCommandActivityCard } from "./command-activity/command-activity-home-card";
 import { protectionHealthFor } from "./protection-health";
+import { WatchProtectionBanner } from "./watch-protection-banner";
+import { updateSettings } from "./guard-api";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import type {
@@ -183,6 +185,12 @@ export function HomeWorkspace(props: {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
 
+  const handleTurnProtectionOn = useCallback(() => {
+    void updateSettings({ protection_posture: "protected" }).then(() => {
+      props.onOpenSettings();
+    });
+  }, [props.onOpenSettings]);
+
   const handleClearPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setClearPassword(event.target.value);
     setClearError(null);
@@ -298,6 +306,9 @@ export function HomeWorkspace(props: {
 
   return (
     <div className="space-y-6">
+      {snapshot.protection_posture === "watch" ? (
+        <WatchProtectionBanner onTurnProtectionOn={handleTurnProtectionOn} />
+      ) : null}
       {shareOpen && analyticsState.kind === "ready" ? (
         <EvidenceInsightsShareModal
           analytics={analyticsState.data}

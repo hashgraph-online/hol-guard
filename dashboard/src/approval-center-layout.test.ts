@@ -321,7 +321,7 @@ const watchOnlyRequest: GuardApprovalRequest = {
 };
 assert(isWatchOnlyObservation(watchOnlyRequest), "Watch-only findings are identified from trusted queue evidence");
 assert(
-  buildPauseLine(watchOnlyRequest).startsWith("Watch only let this action run."),
+  buildPauseLine(watchOnlyRequest).startsWith("Would have stopped."),
   "Watch-only findings never claim the action was paused",
 );
 assert(
@@ -349,7 +349,7 @@ const watchOnlyDecisionMarkup = renderToStaticMarkup(
   }),
 );
 assert(
-  watchOnlyDecisionMarkup.includes("Watch-only finding") && watchOnlyDecisionMarkup.includes("Ran in Watch only"),
+  watchOnlyDecisionMarkup.includes("Watch-only finding") && watchOnlyDecisionMarkup.includes("Would have stopped"),
   "Watch-only decision card renders its observation state without crashing",
 );
 

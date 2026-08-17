@@ -12,6 +12,7 @@ import tempfile
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,40 @@ from .protection_posture import (
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 VALID_UPDATE_CHANNELS = frozenset({"stable", "alpha"})
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _coerce_watch_entered_at(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return value.strip()
+
+
+def watch_should_auto_revert(config: GuardConfig, *, now: datetime | None = None) -> bool:
+    if config.protection_posture != "watch" or config.watch_auto_revert_hours <= 0:
+        return False
+    if config.watch_entered_at is None:
+        return False
+    try:
+        entered = datetime.fromisoformat(config.watch_entered_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    current = now or datetime.now(timezone.utc)
+    return current - entered >= timedelta(hours=config.watch_auto_revert_hours)
+
+
+def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) -> GuardConfig:
+    config = load_guard_config(guard_home)
+    if not watch_should_auto_revert(config, now=now):
+        return config
+    return update_guard_settings(guard_home, {"protection_posture": "protected"})
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
 NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
     {
@@ -323,6 +358,7 @@ class GuardConfig:
     protection_posture: str = DEFAULT_PROTECTION_POSTURE
     protection_posture_explicit: bool = False
     watch_auto_revert_hours: int = DEFAULT_WATCH_AUTO_REVERT_HOURS
+    watch_entered_at: str | None = None
     security_level: str = DEFAULT_SECURITY_LEVEL
     default_action: GuardAction = "warn"
     unknown_publisher_action: GuardAction = "review"
@@ -474,6 +510,7 @@ def load_guard_config(
         protection_posture=loaded_posture,
         protection_posture_explicit=posture_explicit,
         watch_auto_revert_hours=coerce_watch_auto_revert_hours(merged.get("watch_auto_revert_hours")),
+        watch_entered_at=_coerce_watch_entered_at(merged.get("watch_entered_at")),
         default_action=_coerce_loaded_guard_action_or_default(merged.get("default_action"), "warn"),
         unknown_publisher_action=_coerce_loaded_guard_action_or_default(
             merged.get("unknown_publisher_action"),
@@ -886,8 +923,12 @@ def _sync_protection_posture_payload(
         )
         if posture == "watch":
             synced["mode"] = "observe"
-        elif "mode" not in incoming:
-            synced["mode"] = dual_mode
+            if current_config.protection_posture != "watch" or not current_config.watch_entered_at:
+                synced["watch_entered_at"] = _utc_now_iso()
+        else:
+            synced.pop("watch_entered_at", None)
+            if "mode" not in incoming:
+                synced["mode"] = dual_mode
         if "security_level" not in incoming and dual_level is not None:
             synced["security_level"] = dual_level
         return synced

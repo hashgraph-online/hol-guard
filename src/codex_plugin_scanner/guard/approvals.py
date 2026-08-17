@@ -35,7 +35,7 @@ from .cli.connect_flow import (
     resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
-from .config import load_guard_config
+from .config import load_guard_config, maybe_auto_revert_watch
 from .daemon.manager import load_guard_daemon_auth_token
 from .decision_boundaries import canonical_approval_surfaces
 from .desktop_notifications import (
@@ -1514,7 +1514,7 @@ def build_runtime_snapshot(
     next_request_id = active_request_id if active_is_pending else first_request_id
     latest_receipts = store.list_receipts(limit=receipt_limit) if receipt_limit > 0 else []
     snapshot_now = now or _now()
-    config = load_guard_config(store.guard_home)
+    config = maybe_auto_revert_watch(store.guard_home)
     latest_connect_state = _build_latest_connect_state(store, snapshot_now)
     oauth_storage_health = store.get_oauth_local_credential_health()
     cloud_context = _build_runtime_cloud_context(
@@ -1573,6 +1573,7 @@ def build_runtime_snapshot(
         "trust_status": trust_status,
         "protection_health": protection_health,
         "protection_capabilities": protection_capability_payloads(),
+        "protection_posture": config.protection_posture,
     }
 
 

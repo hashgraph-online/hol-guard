@@ -216,7 +216,7 @@ export function buildPauseLine(item: GuardApprovalRequest): string {
     return resolutionBlockReason;
   }
   if (isWatchOnlyObservation(item)) {
-    return "Watch only let this action run. Guard recorded it because the current policy would have paused it in an enforcing mode.";
+    return "Would have stopped. Guard recorded this because Protected would have blocked it.";
   }
   if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
     return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;
