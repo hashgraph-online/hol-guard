@@ -199,10 +199,15 @@ function HomeWorkspace(props) {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
   const handleTurnProtectionOn = reactExports.useCallback(() => {
-    void updateSettings({ protection_posture: "protected" }).then(() => {
+    void updateSettings({ protection_posture: "protected" }).then(async () => {
+      await props.onRefreshRuntime?.();
+      props.onOpenSettings();
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : "Unable to turn protection on.";
+      showToast(message);
       props.onOpenSettings();
     });
-  }, [props.onOpenSettings]);
+  }, [props.onOpenSettings, props.onRefreshRuntime, showToast]);
   const handleClearPasswordChange = reactExports.useCallback((event) => {
     setClearPassword(event.target.value);
     setClearError(null);

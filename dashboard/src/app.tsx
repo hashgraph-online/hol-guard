@@ -926,6 +926,7 @@ export function App() {
             onOpenInsights={handleOpenInsights}
             onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
+            onRefreshRuntime={refreshStateAfterAction}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}
