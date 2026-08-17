@@ -14,6 +14,8 @@ from .types import Ecosystem, NormalizedPackage, PackageCandidate
 def _load_manifest(path: Path) -> tuple[dict[str, object], bool, str | None]:
     try:
         payload = cast(object, json.loads(path.read_text(encoding="utf-8")))
+    except UnicodeDecodeError:
+        return {}, True, "invalid-encoding"
     except FileNotFoundError:
         return {}, True, "file-not-found"
     except PermissionError:

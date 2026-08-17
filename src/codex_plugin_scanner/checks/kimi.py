@@ -11,6 +11,7 @@ from ..ecosystems.types import NormalizedPackage
 from ..models import CheckResult, Finding, Severity
 from ..path_support import is_safe_relative_path
 from .code_quality import check_no_eval, check_no_shell_injection
+from .kimi_support import looks_like_path, manifest_label, object_sequence
 from .security import (
     DANGEROUS_MCP_PATTERNS,
     check_license,
@@ -34,10 +35,6 @@ KIMI_MANIFEST_PATHS = ("skills", "agents", "commands")
 UNSUPPORTED_RUNTIME_FIELDS = ("tools", "apps", "inject", "configFile")
 
 
-def _manifest_label(package: NormalizedPackage) -> str:
-    return package.manifest_path.name if package.manifest_path else "kimi.plugin.json"
-
-
 def _finding(
     rule_id: str,
     title: str,
@@ -53,7 +50,7 @@ def _finding(
         title=title,
         description=description,
         remediation=remediation,
-        file_path=_manifest_label(package),
+        file_path=manifest_label(package),
     )
 
 
@@ -74,12 +71,6 @@ def _string_mapping(value: object) -> dict[str, object] | None:
     if not all(isinstance(key, str) for key in mapping):
         return None
     return {cast(str, key): item for key, item in mapping.items()}
-
-
-def _object_sequence(value: object) -> list[object] | None:
-    if not isinstance(value, list):
-        return None
-    return cast(list[object], value)
 
 
 def check_kimi_manifest(package: NormalizedPackage) -> CheckResult:
@@ -173,13 +164,13 @@ def check_kimi_declared_paths(package: NormalizedPackage) -> CheckResult:
                     )
                 )
                 continue
-            if field == "commands" and target.is_file() and target.suffix.lower() != ".md":
+            if field in {"agents", "commands"} and target.is_file() and target.suffix.lower() != ".md":
                 findings.append(
                     _finding(
-                        "KIMI_COMMAND_PATH_INVALID",
-                        "Kimi command file is not Markdown",
-                        f'Command path "{value_path}" must be a directory or .md file.',
-                        "Point commands to a directory or Markdown file.",
+                        "KIMI_MARKDOWN_PATH_INVALID",
+                        f"Kimi {field} file is not Markdown",
+                        f'{field} path "{value_path}" must be a directory or .md file.',
+                        f"Point {field} to a directory or Markdown file.",
                         package,
                         Severity.LOW,
                     )
@@ -320,7 +311,7 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
             )
             continue
         if isinstance(command, str):
-            raw_args = _object_sequence(server.get("args")) or []
+            raw_args = object_sequence(server.get("args")) or []
             joined = " ".join([command, *[item for item in raw_args if isinstance(item, str)]])
             command_name = Path(command).name.lower()
             launches_shell_code = command_name in SHELL_INTERPRETERS and any(
@@ -337,7 +328,18 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
                         Severity.HIGH,
                     )
                 )
-            if command.startswith("./") and not is_safe_relative_path(
+            command_is_path = looks_like_path(command)
+            if command_is_path and not command.startswith("./"):
+                findings.append(
+                    _finding(
+                        "KIMI_MCP_COMMAND_PATH_INVALID",
+                        "Kimi MCP command path is invalid",
+                        f'MCP server "{name}" path-like command must use an in-plugin ./ path.',
+                        "Use a bare executable name or existing in-plugin executable path.",
+                        package,
+                    )
+                )
+            elif command.startswith("./") and not is_safe_relative_path(
                 package.root_path, command, require_prefix=True, require_exists=True
             ):
                 findings.append(
@@ -349,16 +351,6 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
                         package,
                     )
                 )
-            elif command.startswith("./") and not (package.root_path / command).is_file():
-                findings.append(
-                    _finding(
-                        "KIMI_MCP_COMMAND_NOT_FILE",
-                        "Kimi MCP command is not a file",
-                        f'MCP server "{name}" command must reference an executable file.',
-                        "Point command to an in-plugin executable file.",
-                        package,
-                    )
-                )
             elif command.startswith("./") and (package.root_path / command).is_symlink():
                 findings.append(
                     _finding(
@@ -366,6 +358,16 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
                         "Kimi MCP command path is a symlink",
                         f'MCP server "{name}" command must not be a symlink.',
                         "Use a regular in-plugin executable file.",
+                        package,
+                    )
+                )
+            elif command.startswith("./") and not (package.root_path / command).is_file():
+                findings.append(
+                    _finding(
+                        "KIMI_MCP_COMMAND_NOT_FILE",
+                        "Kimi MCP command is not a file",
+                        f'MCP server "{name}" command must reference an executable file.',
+                        "Point command to an in-plugin executable file.",
                         package,
                     )
                 )
@@ -388,7 +390,7 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
                 )
         args = server.get("args")
         env = server.get("env")
-        args_sequence = _object_sequence(args)
+        args_sequence = object_sequence(args)
         if args is not None and (args_sequence is None or not all(isinstance(item, str) for item in args_sequence)):
             findings.append(
                 _finding(
@@ -401,7 +403,18 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
             )
         if args_sequence is not None:
             for arg in args_sequence:
-                if not isinstance(arg, str) or not arg.startswith("./"):
+                if not isinstance(arg, str) or not looks_like_path(arg):
+                    continue
+                if not arg.startswith("./"):
+                    findings.append(
+                        _finding(
+                            "KIMI_MCP_ARG_PATH_INVALID",
+                            "Kimi MCP argument path is unsafe",
+                            f'MCP server "{name}" path-like argument "{arg}" must use an in-plugin ./ path.',
+                            "Use an existing regular in-plugin path for local MCP arguments.",
+                            package,
+                        )
+                    )
                     continue
                 arg_target = package.root_path / arg
                 if (
@@ -437,7 +450,9 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
         cwd_is_safe = isinstance(cwd, str) and is_safe_relative_path(
             package.root_path, cwd, require_prefix=True, require_exists=True
         )
-        if cwd is not None and (cwd_target is None or not cwd_is_safe or cwd_target.is_symlink()):
+        if cwd is not None and (
+            cwd_target is None or not cwd_is_safe or cwd_target.is_symlink() or not cwd_target.is_dir()
+        ):
             findings.append(
                 _finding(
                     "KIMI_MCP_CWD_INVALID",

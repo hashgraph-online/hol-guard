@@ -156,6 +156,18 @@ def test_kimi_alternate_manifest_is_scanned_when_root_manifest_is_absent(tmp_pat
     assert all(finding.rule_id != "KIMI_VERSION_INVALID" for finding in result.findings)
 
 
+def test_kimi_invalid_utf8_manifest_reports_parse_finding(tmp_path: Path) -> None:
+    (tmp_path / "kimi.plugin.json").write_bytes(b'\xff\xfe{"name":"plugin"}')
+
+    result = scan_plugin(
+        tmp_path,
+        ScanOptions(ecosystem="kimi", cisco_skill_scan="off", cisco_mcp_scan="off"),
+    )
+
+    finding = next(finding for finding in result.findings if finding.rule_id == "KIMI_MANIFEST_INVALID")
+    assert "invalid-encoding" in finding.description
+
+
 def test_kimi_declared_path_escape_is_rejected(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside-kimi-skill"
     outside.mkdir(exist_ok=True)
@@ -191,6 +203,21 @@ def test_kimi_declared_symlink_path_is_rejected(tmp_path: Path) -> None:
     assert any(finding.rule_id == "KIMI_PATH_SYMLINK_UNSUPPORTED" for finding in result.findings)
 
 
+def test_kimi_explicit_agent_file_must_be_markdown(tmp_path: Path) -> None:
+    (tmp_path / "agent.py").write_text("print('not an agent')", encoding="utf-8")
+    (tmp_path / "kimi.plugin.json").write_text(
+        json.dumps({"name": "invalid-agent-plugin", "agents": "./agent.py"}),
+        encoding="utf-8",
+    )
+
+    result = scan_plugin(
+        tmp_path,
+        ScanOptions(ecosystem="kimi", cisco_skill_scan="off", cisco_mcp_scan="off"),
+    )
+
+    assert any(finding.rule_id == "KIMI_MARKDOWN_PATH_INVALID" for finding in result.findings)
+
+
 def test_kimi_dangerous_mcp_command_is_high_severity(tmp_path: Path) -> None:
     (tmp_path / "kimi.plugin.json").write_text(
         json.dumps(
@@ -209,6 +236,62 @@ def test_kimi_dangerous_mcp_command_is_high_severity(tmp_path: Path) -> None:
 
     finding = next(finding for finding in result.findings if finding.rule_id == "KIMI_MCP_COMMAND_DANGEROUS")
     assert finding.severity.value == "high"
+
+
+def test_kimi_local_mcp_command_symlink_is_rejected(tmp_path: Path) -> None:
+    target = tmp_path / "server-target.js"
+    target.write_text("export {};", encoding="utf-8")
+    _symlink_or_skip(tmp_path / "server.js", target)
+    (tmp_path / "kimi.plugin.json").write_text(
+        json.dumps({"name": "symlink-plugin", "mcpServers": {"local": {"command": "./server.js"}}}),
+        encoding="utf-8",
+    )
+
+    result = scan_plugin(
+        tmp_path,
+        ScanOptions(ecosystem="kimi", cisco_skill_scan="off", cisco_mcp_scan="off"),
+    )
+
+    assert any(finding.rule_id == "KIMI_MCP_COMMAND_SYMLINK_UNSUPPORTED" for finding in result.findings)
+
+
+@pytest.mark.parametrize("path_value", ["../outside.js", "/outside.js", "C:outside.js"])
+@pytest.mark.parametrize("field", ["command", "args"])
+def test_kimi_external_mcp_command_or_arg_path_is_rejected(tmp_path: Path, field: str, path_value: str) -> None:
+    server: dict[str, object] = {"command": "node"}
+    server[field] = [path_value] if field == "args" else path_value
+    (tmp_path / "kimi.plugin.json").write_text(
+        json.dumps({"name": "external-path-plugin", "mcpServers": {"local": server}}),
+        encoding="utf-8",
+    )
+
+    result = scan_plugin(
+        tmp_path,
+        ScanOptions(ecosystem="kimi", cisco_skill_scan="off", cisco_mcp_scan="off"),
+    )
+
+    expected = "KIMI_MCP_ARG_PATH_INVALID" if field == "args" else "KIMI_MCP_COMMAND_PATH_INVALID"
+    assert any(finding.rule_id == expected for finding in result.findings)
+
+
+def test_kimi_mcp_cwd_must_be_directory(tmp_path: Path) -> None:
+    (tmp_path / "cwd.txt").write_text("not a directory", encoding="utf-8")
+    (tmp_path / "kimi.plugin.json").write_text(
+        json.dumps(
+            {
+                "name": "invalid-cwd-plugin",
+                "mcpServers": {"local": {"command": "node", "cwd": "./cwd.txt"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = scan_plugin(
+        tmp_path,
+        ScanOptions(ecosystem="kimi", cisco_skill_scan="off", cisco_mcp_scan="off"),
+    )
+
+    assert any(finding.rule_id == "KIMI_MCP_CWD_INVALID" for finding in result.findings)
 
 
 @pytest.mark.parametrize(
