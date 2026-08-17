@@ -1969,6 +1969,7 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> None:
         request_correlation=None,
     )
     shadow = None
+    shadow_evaluation_succeeded = True
     try:
         shadow = build_command_shadow_observation(
             evaluation,
@@ -1986,10 +1987,11 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> None:
         )
     except (RuntimeError, TypeError, ValueError):
         shadow = None
+        shadow_evaluation_succeeded = False
     store.probe_command_activity_persistence(
         evidence,
         shadow=shadow,
-        shadow_evaluation_succeeded=True,
+        shadow_evaluation_succeeded=shadow_evaluation_succeeded,
     )
 
 

@@ -404,6 +404,7 @@ def _grok_hook_command_is_guard(command: str) -> bool:
     lowered = command.lower()
     return "hook" in lowered and (
         "hol-guard" in lowered
+        or "__guard-bounded-hook" in lowered
         or "bounded_cli_hook_bridge" in lowered
         or "codex_plugin_scanner.guard" in lowered
     )
