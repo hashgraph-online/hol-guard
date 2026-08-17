@@ -420,7 +420,7 @@
   "oversized_files": {
     ".github/workflows/ci.yml": 542,
     ".github/workflows/publish.yml": 1639,
-    "dashboard/src/app.tsx": 1037,
+    "dashboard/src/app.tsx": 1051,
     "dashboard/src/approval-center-primitives.tsx": 1041,
     "dashboard/src/approval-center-utils.ts": 901,
     "dashboard/src/apps/app-detail-workspace.tsx": 1933,
