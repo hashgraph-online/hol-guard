@@ -615,7 +615,12 @@ mod tests {
     use std::io::Write;
 
     fn fixture_root(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("guard-secure-fs-{name}-{}", std::process::id()))
+        #[cfg(unix)]
+        let temporary_root =
+            fs::canonicalize(std::env::temp_dir()).unwrap_or_else(|_| std::env::temp_dir());
+        #[cfg(not(unix))]
+        let temporary_root = std::env::temp_dir();
+        temporary_root.join(format!("guard-secure-fs-{name}-{}", std::process::id()))
     }
 
     #[test]

@@ -32,7 +32,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rust-daemon-edge-${{ github.event.pull_request.number || github.ref }}-${{ matrix.os || 'plan' }}
+  group: rust-daemon-edge-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -91,7 +91,6 @@ jobs:
         run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
 
   low-descriptor:
-    if: runner.os == 'Linux'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

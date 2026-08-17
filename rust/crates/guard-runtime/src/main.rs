@@ -18,6 +18,7 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+#[cfg(unix)]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
@@ -54,6 +55,7 @@ const MAX_JSON_COLLECTION_ITEMS: usize = 4_096;
 const MAX_JSON_STRING_BYTES: usize = 1024 * 1024;
 const SERVER_PROOF_LABEL: &[u8] = b"hol-guard-resident-server-v1\0";
 const CLIENT_PROOF_LABEL: &[u8] = b"hol-guard-resident-client-v1\0";
+#[cfg(unix)]
 const PARENT_LIVENESS_FD_ENV: &str = "HOL_GUARD_PARENT_LIVENESS_FD";
 
 #[derive(Debug, Deserialize)]
