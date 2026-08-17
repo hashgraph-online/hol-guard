@@ -15194,6 +15194,8 @@ def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_
             "approvals",
             "approve",
             str(approval_request["request_id"]),
+            "--scope",
+            "artifact",
             "--home",
             str(home_dir),
             "--workspace",
@@ -15245,7 +15247,7 @@ def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_
     assert first_output["policy_action"] == "require-reapproval"
     assert first_output["artifact_type"] == "file_read_request"
     assert "sensitive local file" in first_output["risk_summary"].lower()
-    assert approval_request["recommended_scope"] == "artifact"
+    assert approval_request["recommended_scope"] == "workspace"
     assert approval_request["artifact_hash"].startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
     assert approval_request["artifact_hash"] == first_receipt["artifact_hash"]
     assert approval_rc == 0
