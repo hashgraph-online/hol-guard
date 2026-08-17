@@ -15481,7 +15481,7 @@ function protectionHealthFor(snapshot, harness = null) {
 function remainingProtectionRepairParts(health) {
   return {
     failedHookHarnesses: health.apps.filter((app) => app.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail")).map((app) => app.harness),
-    evidenceFailed: health.checks.some((check) => check.check_id === "decision_stream" && check.status === "fail")
+    evidenceFailed: health.checks.some((check) => check.check_id === "decision_stream" && check.status !== "pass")
   };
 }
 const now = "2026-04-11T12:00:00Z";

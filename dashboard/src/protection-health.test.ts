@@ -146,6 +146,17 @@ assert.deepEqual(remainingProtectionRepairParts(evidenceOnlyHealth), {
   evidenceFailed: true,
 });
 
+const evidenceUnknown = checks();
+evidenceUnknown[PROTECTION_CHECK_IDS.indexOf("decision_stream")] = {
+  check_id: "decision_stream",
+  status: "unknown",
+  reason_code: "decision_stream_gap",
+};
+assert.equal(
+  remainingProtectionRepairParts(normalizeProtectionHealth(payload(evidenceUnknown))).evidenceFailed,
+  true,
+);
+
 const hookFailureChecks = checks();
 hookFailureChecks[PROTECTION_CHECK_IDS.indexOf("harness_hooks")] = {
   check_id: "harness_hooks",

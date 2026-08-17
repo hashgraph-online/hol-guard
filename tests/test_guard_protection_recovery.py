@@ -56,10 +56,7 @@ def _stale_pretool_payload() -> dict[str, object]:
 
 
 def test_protection_repair_probe_avoids_force_push() -> None:
-    source = Path(__file__).parents[1].joinpath(
-        "src/codex_plugin_scanner/guard/daemon/server.py"
-    ).read_text(encoding="utf-8")
-    assert "git push origin release/2.1 --force" not in source
+    assert "git push" not in _PROTECTION_REPAIR_PROBE_COMMAND
     assert "git status --porcelain=v1" in _PROTECTION_REPAIR_PROBE_COMMAND
 
 
@@ -77,6 +74,33 @@ def test_live_grok_hooks_fail_when_managed_config_is_missing(
     )
     (hooks_dir / "hol-guard-prompt.json").write_text(
         json.dumps({"hooks": {"UserPromptSubmit": []}}),
+        encoding="utf-8",
+    )
+    store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
+    store.set_managed_install("grok", True, None, {"harness": "grok", "active": True}, "2026-08-17T12:00:00+00:00")
+
+    assert grok_hooks_protection_ready(ctx) is False
+    assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": False}
+
+
+def test_live_grok_hooks_reject_placeholder_command_and_marker_only_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    hooks_dir = ctx.home_dir / ".grok" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "hol-guard-pretooluse.json").write_text(
+        json.dumps({"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "true"}]}]}}),
+        encoding="utf-8",
+    )
+    (hooks_dir / "hol-guard-prompt.json").write_text(
+        json.dumps({"hooks": {"UserPromptSubmit": []}}),
+        encoding="utf-8",
+    )
+    (ctx.home_dir / ".grok" / "managed_config.toml").write_text(
+        "# BEGIN HOL GUARD MANAGED GROK\n# END HOL GUARD MANAGED GROK\n",
         encoding="utf-8",
     )
     store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
