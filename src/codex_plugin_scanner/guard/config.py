@@ -64,6 +64,8 @@ def watch_should_auto_revert(config: GuardConfig, *, now: datetime | None = None
         entered = datetime.fromisoformat(config.watch_entered_at.replace("Z", "+00:00"))
     except ValueError:
         return False
+    if entered.tzinfo is None:
+        entered = entered.replace(tzinfo=timezone.utc)
     current = now or datetime.now(timezone.utc)
     return current - entered >= timedelta(hours=config.watch_auto_revert_hours)
 
@@ -72,7 +74,13 @@ def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) ->
     config = load_guard_config(guard_home)
     if not watch_should_auto_revert(config, now=now):
         return config
-    return update_guard_settings(guard_home, {"protection_posture": "protected"})
+    return update_guard_settings(
+        guard_home,
+        {"protection_posture": "protected"},
+        skip_approval_gate=True,
+    )
+
+
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
 NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
     {
@@ -621,10 +629,12 @@ def update_guard_settings(
     *,
     approval_gate_grant: ApprovalGateGrant | None = None,
     cloud_sync_entitled: bool = False,
+    skip_approval_gate: bool = False,
 ) -> GuardConfig:
     """Persist safe local Guard settings to config.toml and return the updated config."""
 
-    require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
+    if not skip_approval_gate:
+        require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     current = _read_toml(guard_home / "config.toml")
     current_config = load_guard_config(guard_home)
     next_payload = dict(current)

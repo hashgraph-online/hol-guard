@@ -2543,9 +2543,9 @@ function resolveTotpSetupModalDescription(isConfirmStep) {
 }
 const actionOptions = [
   { value: "allow", label: "Allow" },
-  { value: "warn", label: "Allow" },
+  { value: "warn", label: "Allow and record" },
   { value: "review", label: "Ask once" },
-  { value: "require-reapproval", label: "Ask once" },
+  { value: "require-reapproval", label: "Ask every time" },
   { value: "sandbox-required", label: "Run in sandbox" },
   { value: "block", label: "Stop" }
 ];

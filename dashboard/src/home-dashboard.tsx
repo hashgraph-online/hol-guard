@@ -144,6 +144,7 @@ export function HomeWorkspace(props: {
   onOpenInsights?: () => void;
   onOpenCommands: () => void;
   onOpenSettings: () => void;
+  onRefreshRuntime?: () => Promise<void> | void;
   onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
   onOpenAppDetail: (harness: string) => void;
@@ -186,10 +187,17 @@ export function HomeWorkspace(props: {
   }, [props.onClearPolicies]);
 
   const handleTurnProtectionOn = useCallback(() => {
-    void updateSettings({ protection_posture: "protected" }).then(() => {
-      props.onOpenSettings();
-    });
-  }, [props.onOpenSettings]);
+    void updateSettings({ protection_posture: "protected" })
+      .then(async () => {
+        await props.onRefreshRuntime?.();
+        props.onOpenSettings();
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Unable to turn protection on.";
+        showToast(message);
+        props.onOpenSettings();
+      });
+  }, [props.onOpenSettings, props.onRefreshRuntime, showToast]);
 
   const handleClearPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setClearPassword(event.target.value);

@@ -2147,7 +2147,7 @@ function resolveSecurityModeCopy(level) {
   }
   return {
     label: "Protected",
-    description: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers.",
+    description: "Stops theft, wipes, and attempts to disable Guard. Asks once about new tools or first-time secret access, then remembers.",
     tone: "green"
   };
 }
