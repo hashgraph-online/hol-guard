@@ -10,6 +10,7 @@ from .checks.best_practices import run_best_practice_checks
 from .checks.claude import run_claude_checks
 from .checks.code_quality import run_code_quality_checks
 from .checks.gemini import run_gemini_checks
+from .checks.kimi import run_kimi_checks
 from .checks.manifest import run_manifest_checks
 from .checks.marketplace import run_marketplace_checks
 from .checks.mcp_security import resolve_mcp_security_context, run_mcp_security_checks
@@ -543,6 +544,17 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
                     CategoryResult(name=f"{prefix}Code Quality", checks=quality_checks),
                 )
             )
+            processed_packages.append(package)
+            continue
+
+        if package.ecosystem == Ecosystem.KIMI:
+            kimi_checks = _maybe_rebase_checks(
+                run_kimi_checks(package),
+                package_root,
+                scan_root_resolved,
+                needs_rebase,
+            )
+            categories.append(CategoryResult(name=f"{prefix}Kimi Plugin", checks=kimi_checks))
             processed_packages.append(package)
 
     findings = tuple(finding for category in categories for check in category.checks for finding in check.findings)

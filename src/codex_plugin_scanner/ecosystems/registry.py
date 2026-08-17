@@ -6,6 +6,7 @@ from .base import EcosystemAdapter
 from .claude import ClaudeAdapter
 from .codex import CodexAdapter
 from .gemini import GeminiAdapter
+from .kimi import KimiAdapter
 from .opencode import OpenCodeAdapter
 from .types import Ecosystem
 
@@ -17,6 +18,7 @@ def get_default_adapters() -> tuple[EcosystemAdapter, ...]:
         CodexAdapter(),
         ClaudeAdapter(),
         GeminiAdapter(),
+        KimiAdapter(),
         OpenCodeAdapter(),
     )
 
