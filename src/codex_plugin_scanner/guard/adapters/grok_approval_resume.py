@@ -7,11 +7,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 from ..approvals import wait_for_approval_requests
+from .grok_config import (
+    GROK_APPROVAL_WAIT_MAX_SECONDS,
+    GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
+    GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
+)
 
-GROK_PRETOOL_HOOK_TIMEOUT_SECONDS = 90
-GROK_HOOK_INTERNAL_TIMEOUT_SECONDS = 85
-GROK_APPROVAL_WAIT_MAX_SECONDS = 80
-_GROK_LIVE_WAIT_EVENTS = frozenset({"PreToolUse"})
 _GROK_WAITABLE_ACTIONS = frozenset({"review", "require-reapproval"})
 
 
@@ -71,7 +72,8 @@ def wait_for_grok_live_approval(
 ) -> str | None:
     """Wait for the queued Grok approval and return allow, block, or None."""
 
-    if json_mode or event_name not in _GROK_LIVE_WAIT_EVENTS:
+    canonical_event = event_name.replace("_", "").replace("-", "").lower()
+    if json_mode or canonical_event != "pretooluse":
         return None
     if policy_action not in _GROK_WAITABLE_ACTIONS:
         return None

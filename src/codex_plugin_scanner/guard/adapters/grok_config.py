@@ -9,7 +9,10 @@ from pathlib import Path
 from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact
 from .base import _json_payload
-from .grok_approval_resume import GROK_PRETOOL_HOOK_TIMEOUT_SECONDS
+
+GROK_PRETOOL_HOOK_TIMEOUT_SECONDS = 90
+GROK_HOOK_INTERNAL_TIMEOUT_SECONDS = 85
+GROK_APPROVAL_WAIT_MAX_SECONDS = 80
 
 GROK_DIR = ".grok"
 GROK_CONFIG_FILE = "config.toml"

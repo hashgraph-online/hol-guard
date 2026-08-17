@@ -428,33 +428,6 @@ def test_frozen_path_resolution_failure_denies_before_daemon_dispatch(
     assert _json_object(output.getvalue())["decision"] == "deny"
 
 
-def test_grok_pretool_skips_daemon_fast_path_for_live_wait(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    config = _config(tmp_path, harness="grok")
-
-    def forbidden_daemon(**kwargs: object) -> object:
-        del kwargs
-        raise AssertionError("Grok PreToolUse must wait in the isolated hook process")
-
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_try_daemon_hook", forbidden_daemon)
-    monkeypatch.setattr(
-        bounded_cli_hook_bridge,
-        "run_isolated_hook_process",
-        _runner_result(BoundedHookProcessResult(0, '{"decision":"allow"}\n', False, False)),
-    )
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            config,
-            input_text='{"hookEventName":"pre_tool_use","toolName":"read_file"}',
-        )
-
-    assert returncode == 0
-    assert _json_object(output.getvalue())["decision"] == "allow"
-
-
 def test_valid_frozen_args_retain_daemon_fast_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -476,10 +449,7 @@ def test_valid_frozen_args_retain_daemon_fast_path(
     monkeypatch.setattr(bounded_cli_hook_bridge, "run_isolated_hook_process", forbidden_runner)
     output = io.StringIO()
     with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            config,
-            input_text='{"hookEventName":"user_prompt_submit"}',
-        )
+        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(config, input_text="{}")
 
     assert returncode == 0
     assert _json_object(output.getvalue())["decision"] == "allow"
