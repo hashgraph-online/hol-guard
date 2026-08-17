@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -52,12 +53,15 @@ def is_local_cli_command_id(value: str) -> bool:
 def slug_local_cli_command_id(name: str) -> str:
     """Turn an MCP tool name or CLI token into a catalog command id."""
 
-    compact = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
+    stripped = name.strip()
+    if stripped not in {ROOT_COMMAND_ID, OTHER_COMMAND_ID} and is_local_cli_command_id(stripped):
+        return stripped
+    compact = "".join(ch.lower() if ch.isalnum() else "-" for ch in stripped).strip("-")
     compact = "-".join(part for part in compact.split("-") if part)
-    if not compact:
-        return OTHER_COMMAND_ID
-    slug = compact[:40]
-    return slug if is_local_cli_command_id(slug) else OTHER_COMMAND_ID
+    digest = hashlib.sha256(stripped.encode("utf-8")).hexdigest()[:8]
+    base = (compact or "tool")[:31]
+    candidate = f"{base}-{digest}"
+    return candidate if is_local_cli_command_id(candidate) else OTHER_COMMAND_ID
 
 
 def is_local_cli_command_state(value: object) -> bool:

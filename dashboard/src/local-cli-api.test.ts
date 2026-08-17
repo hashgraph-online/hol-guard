@@ -66,6 +66,10 @@ const mcpItem = normalizeLocalCliItem({
 assert.equal(mcpItem.surface, "mcp");
 assert.equal(mcpItem.server_identity_hash, "b".repeat(64));
 assert.equal(isLocalCliId(mcpItem.cli_id), true);
+assert.equal(
+  normalizeLocalCliItem({ ...mcpItem, server_identity_hash: "not-a-hash" }).server_identity_hash,
+  null,
+);
 
 const list = normalizeLocalCliList({
   schema_version: "guard.daemon.local-clis.v1",

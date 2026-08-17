@@ -144,9 +144,7 @@ function normalizeHelpStatus(value: unknown): LocalCliItem["help_status"] {
 
 function normalizeIdentityHash(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
-  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) {
-    throw new Error("Invalid local CLI server identity");
-  }
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
   return value;
 }
 

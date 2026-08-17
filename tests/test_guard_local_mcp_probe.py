@@ -5,6 +5,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard.runtime.local_cli_commands import OTHER_COMMAND_ID, slug_local_cli_command_id
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import (
     is_package_mcp_launcher,
+    is_strict_package_mcp_launcher,
     looks_like_mcp_launch,
     mcp_launch_tokens,
     probe_stdio_mcp_server,
@@ -15,6 +16,8 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 def test_package_launcher_detection() -> None:
     assert is_package_mcp_launcher(("npx", "-y", "@modelcontextprotocol/server-github"))
     assert is_package_mcp_launcher(("uvx", "mcp-server-git"))
+    assert is_strict_package_mcp_launcher(("npx", "-y", "@modelcontextprotocol/server-github"))
+    assert not is_strict_package_mcp_launcher(("pnpm", "dlx", "my-custom-cli"))
     assert not is_package_mcp_launcher(("npx",))
     assert not is_package_mcp_launcher(("npx", "--yes"))
     assert not is_package_mcp_launcher(("git", "status"))
@@ -23,8 +26,15 @@ def test_package_launcher_detection() -> None:
 def test_looks_like_mcp_launch_for_named_servers(tmp_path: Path) -> None:
     tokens = mcp_launch_tokens("./github-mcp", cwd=tmp_path, home_dir=tmp_path)
     assert tokens == ("./github-mcp",)
-    assert looks_like_mcp_launch(tokens)
-    assert looks_like_mcp_launch(("npx", "-y", "@modelcontextprotocol/server-github"))
+    assert looks_like_mcp_launch(
+        tokens, command_text="./github-mcp", cwd=tmp_path, home_dir=tmp_path
+    ) is False
+    assert looks_like_mcp_launch(
+        ("npx", "-y", "@modelcontextprotocol/server-github"),
+        command_text="npx -y @modelcontextprotocol/server-github",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
 
 
 def test_probe_identity_matches_runtime_builder(tmp_path: Path) -> None:
@@ -47,6 +57,8 @@ def test_probe_identity_matches_runtime_builder(tmp_path: Path) -> None:
     assert probed.status == "ok"
     ids = [tool.command_id for tool in probed.tools]
     assert slug_local_cli_command_id("read_file") in ids
+    assert slug_local_cli_command_id("read.file") != slug_local_cli_command_id("read-file")
+    assert slug_local_cli_command_id("READ_FILE") != slug_local_cli_command_id("read_file")
     assert OTHER_COMMAND_ID in ids
 
 

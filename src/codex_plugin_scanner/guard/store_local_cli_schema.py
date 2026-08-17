@@ -54,7 +54,9 @@ def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
             source_path text,
             help_status text,
             surface text not null default 'cli' check (surface in ('cli', 'mcp')),
-            server_identity_hash text
+            server_identity_hash text,
+            server_command text,
+            server_args_hash text
         )
         """
     )
@@ -100,6 +102,10 @@ def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
         _ = connection.execute("alter table local_cli_observation add column surface text not null default 'cli'")
     if "server_identity_hash" not in columns:
         _ = connection.execute("alter table local_cli_observation add column server_identity_hash text")
+    if "server_command" not in columns:
+        _ = connection.execute("alter table local_cli_observation add column server_command text")
+    if "server_args_hash" not in columns:
+        _ = connection.execute("alter table local_cli_observation add column server_args_hash text")
     _ = connection.execute(
         "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
         (LOCAL_CLI_SCHEMA_VERSION, _SCHEMA_CHECKSUM),

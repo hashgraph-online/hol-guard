@@ -261,9 +261,7 @@ function normalizeHelpStatus(value) {
 }
 function normalizeIdentityHash(value) {
   if (value === null || value === void 0 || value === "") return null;
-  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) {
-    throw new Error("Invalid local CLI server identity");
-  }
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
   return value;
 }
 function normalizeLocalCliCommand(value) {

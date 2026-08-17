@@ -31,7 +31,7 @@ from ..runtime.local_cli_identity import (
     recognize_operator_cli,
 )
 from ..runtime.local_mcp_probe import (
-    is_package_mcp_launcher,
+    is_strict_package_mcp_launcher,
     looks_like_mcp_launch,
     mcp_launch_tokens,
     probe_stdio_mcp_server,
@@ -101,11 +101,13 @@ class LocalCliApiService:
 
     def _recognize_mcp(self, command: str, home_dir: Path) -> dict[str, object] | None:
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
-        if tokens is None or not looks_like_mcp_launch(tokens):
+        if tokens is None or not looks_like_mcp_launch(
+            tokens, command_text=command, cwd=home_dir, home_dir=home_dir
+        ):
             return None
         probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir)
         if probed is None:
-            if is_package_mcp_launcher(tokens):
+            if is_strict_package_mcp_launcher(tokens):
                 launcher = Path(tokens[0]).name
                 raise LocalCliApiError(
                     400,
@@ -123,6 +125,8 @@ class LocalCliApiService:
             help_status=probed.status,
             surface="mcp",
             server_identity_hash=probed.server_identity.identity_hash,
+            server_command=probed.server_identity.command,
+            server_args_hash=probed.server_identity.args_hash,
         )
         self._store.replace_local_cli_commands(probed.identity.cli_id, probed.tools)
         return self._recognize_payload(

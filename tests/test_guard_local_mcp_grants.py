@@ -60,13 +60,15 @@ def _enroll(store: GuardStore, identity, *, states: dict[str, str], grant_state:
         seen_at=utc_now(),
         surface="mcp",
         server_identity_hash=identity.identity_hash,
+        server_command=identity.command,
+        server_args_hash=identity.args_hash,
         help_status="ok",
     )
     store.replace_local_cli_commands(
         cli_identity.cli_id,
         (
-            LocalCliCommand("read-file", "read_file", "read_file", "Read a file"),
-            LocalCliCommand("write-file", "write_file", "write_file", "Write a file"),
+            LocalCliCommand("read_file", "read_file", "read_file", "Read a file"),
+            LocalCliCommand("write_file", "write_file", "write_file", "Write a file"),
             LocalCliCommand("other", "Other tools", "server …", "other"),
         ),
     )
@@ -82,7 +84,7 @@ def _enroll(store: GuardStore, identity, *, states: dict[str, str], grant_state:
 def test_allowed_tool_overrides_review(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"read-file": "allow", "write-file": "inherit"})
+    _enroll(store, identity, states={"read_file": "allow", "write_file": "inherit"})
     artifact = _artifact(identity, "read_file")
     arguments = {"path": "notes.txt"}
     decision = evaluate_tool_call(
@@ -100,7 +102,7 @@ def test_allowed_tool_overrides_review(tmp_path: Path) -> None:
 def test_recommended_tool_stays_on_review(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"read-file": "allow", "write-file": "inherit"})
+    _enroll(store, identity, states={"read_file": "allow", "write_file": "inherit"})
     artifact = _artifact(identity, "write_file")
     arguments = {"path": "notes.txt", "contents": "hi"}
     decision = evaluate_tool_call(
@@ -118,7 +120,7 @@ def test_recommended_tool_stays_on_review(tmp_path: Path) -> None:
 def test_blocked_tool_overrides_review(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"write-file": "block"})
+    _enroll(store, identity, states={"write_file": "block"})
     artifact = _artifact(identity, "write_file")
     arguments = {"path": "notes.txt", "contents": "hi"}
     decision = evaluate_tool_call(
@@ -136,7 +138,7 @@ def test_blocked_tool_overrides_review(tmp_path: Path) -> None:
 def test_blocked_server_blocks_every_tool(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"read-file": "allow"}, grant_state="blocked")
+    _enroll(store, identity, states={"read_file": "allow"}, grant_state="blocked")
     artifact = _artifact(identity, "read_file")
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == "blocked"
     arguments = {"path": "notes.txt"}
@@ -155,9 +157,26 @@ def test_blocked_server_blocks_every_tool(tmp_path: Path) -> None:
 def test_allow_does_not_override_block(tmp_path: Path) -> None:
     identity = _identity()
     store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"read-file": "allow"})
+    _enroll(store, identity, states={"read_file": "allow"})
     artifact = _artifact(identity, "read_file")
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="block") is None
+
+
+def test_env_drift_still_matches_command_and_args(tmp_path: Path) -> None:
+    identity = _identity()
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(store, identity, states={"read_file": "allow"})
+    runtime = build_mcp_server_identity(
+        config_path="",
+        command="npx",
+        args=("-y", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={"GITHUB_TOKEN": "secret"},
+        env_keys=("GITHUB_TOKEN",),
+    )
+    assert runtime.identity_hash != identity.identity_hash
+    artifact = _artifact(runtime, "read_file")
+    assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") == "allowed"
 
 
 def test_identity_mismatch_does_not_apply(tmp_path: Path) -> None:
@@ -169,7 +188,7 @@ def test_identity_mismatch_does_not_apply(tmp_path: Path) -> None:
         transport="stdio",
     )
     store = GuardStore(tmp_path / "guard-home")
-    _enroll(store, identity, states={"read-file": "allow"})
+    _enroll(store, identity, states={"read_file": "allow"})
     artifact = _artifact(other, "read_file")
     assert matching_local_mcp_grant(store=store, artifact=artifact, current_action="review") is None
 
@@ -185,7 +204,7 @@ def test_recognize_mcp_package_persists_tools(tmp_path: Path, monkeypatch) -> No
     )
     identity = _identity()
 
-    def _probe(command: str, *, cwd, home_dir, runner=None):
+    def _probe(command: str, **_kwargs):
         return McpProbeResult(
             identity=UnlistedCliIdentity(
                 cli_id=f"local-cli.mcp-{identity.identity_hash[:8]}",
@@ -196,7 +215,7 @@ def test_recognize_mcp_package_persists_tools(tmp_path: Path, monkeypatch) -> No
             ),
             server_identity=identity,
             tools=(
-                LocalCliCommand("read-file", "read_file", "read_file", "Read a file"),
+                LocalCliCommand("read_file", "read_file", "read_file", "Read a file"),
                 LocalCliCommand("other", "Other tools", "server …", "other"),
             ),
             status="ok",
@@ -214,7 +233,7 @@ def test_recognize_mcp_package_persists_tools(tmp_path: Path, monkeypatch) -> No
     assert item["surface"] == "mcp"
     assert item["server_identity_hash"] == identity.identity_hash
     ids = [entry["command_id"] for entry in item["commands"]]
-    assert "read-file" in ids
+    assert "read_file" in ids
     assert "other" in ids
     assert "MCP server" in str(result["summary"]) or "tools" in str(result["summary"]).lower()
 
