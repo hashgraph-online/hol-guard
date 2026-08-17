@@ -379,10 +379,7 @@ def _grok_prompt_hook_is_observe(prompt_hook: Path) -> bool:
     if not isinstance(hooks, dict):
         return False
     required = ("UserPromptSubmit", "SubagentStart", "SessionStart")
-    for event_name in required:
-        if not _grok_event_has_command_hook(hooks.get(event_name)):
-            return False
-    return True
+    return all(_grok_event_has_command_hook(hooks.get(event_name)) for event_name in required)
 
 
 def _grok_event_has_command_hook(entries: object) -> bool:
