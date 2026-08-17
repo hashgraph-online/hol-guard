@@ -291,7 +291,7 @@ class StoreLocalCliMixin:
         states: dict[str, LocalCliCommandState] = {}
         for row in rows:
             command_id, state = _row_values(row, 2)
-            if isinstance(command_id, str) and is_local_cli_command_state(state):
+            if isinstance(command_id, str) and (state == "inherit" or state == "allow" or state == "block"):
                 states[command_id] = state
         return states
 

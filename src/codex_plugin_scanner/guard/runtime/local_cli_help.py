@@ -7,7 +7,7 @@ import re
 import subprocess
 import tempfile
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -111,11 +111,11 @@ def discover_local_cli_commands(
     identity: UnlistedCliIdentity,
     argv: Sequence[str],
     *,
-    runner: object | None = None,
+    runner: Callable[[Sequence[str]], str] | None = None,
 ) -> tuple[tuple[LocalCliCommand, ...], HelpStatus]:
     """Run --help and merge discovered commands onto the default catalog."""
 
-    probe = runner if callable(runner) else run_cli_help
+    probe: Callable[[Sequence[str]], str] = runner if runner is not None else run_cli_help
     output = str(probe(tuple(argv)))
     discovered = parse_cli_help_text(output)
     if output.strip() == "":
@@ -192,7 +192,7 @@ def _read_help_output(argv: list[str], tmp: str) -> str:
 def _with_nested_commands(
     argv: Sequence[str],
     discovered: Sequence[LocalCliCommand],
-    probe: object,
+    probe: Callable[[Sequence[str]], str],
 ) -> tuple[LocalCliCommand, ...]:
     nested: list[LocalCliCommand] = list(discovered)
     seen = {command.command_id for command in nested}
@@ -200,7 +200,7 @@ def _with_nested_commands(
     for command in discovered:
         if command.parent_id is not None:
             continue
-        child_output = str(probe((*prefix, command.name, "--help")))
+        child_output = probe((*prefix, command.name, "--help"))
         for child in parse_cli_help_text(child_output):
             child_id = f"{command.command_id}.{child.command_id}"
             if child_id in seen or not _COMMAND_NAME.fullmatch(child.command_id):

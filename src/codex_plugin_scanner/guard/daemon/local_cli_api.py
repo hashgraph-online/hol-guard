@@ -17,7 +17,6 @@ from ..runtime.local_cli_commands import (
     LocalCliCommandState,
     default_local_cli_commands,
     is_local_cli_command_id,
-    is_local_cli_command_state,
 )
 from ..runtime.local_cli_help import (
     discover_local_cli_commands,
@@ -200,7 +199,7 @@ class LocalCliApiService:
             state = entry.get("state")
             if not isinstance(command_id, str) or not is_local_cli_command_id(command_id):
                 raise LocalCliApiError(400, "invalid_command_id")
-            if not is_local_cli_command_state(state):
+            if state != "inherit" and state != "allow" and state != "block":
                 raise LocalCliApiError(400, "invalid_command_state")
             states[command_id] = state
         return states
@@ -257,7 +256,7 @@ def _discover_from_command(
         if invocation is None:
             continue
         matched, argv = invocation
-        if matched.cli_id != identity.cli_id:
+        if matched.cli_id != identity.cli_id or not argv:
             continue
         source_path = argv[1] if matched.kind == "script" and len(argv) >= 2 else argv[0]
         commands, help_status = discover_local_cli_commands(matched, argv)
