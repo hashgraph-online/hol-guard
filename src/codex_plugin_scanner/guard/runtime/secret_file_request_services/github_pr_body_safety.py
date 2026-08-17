@@ -38,6 +38,12 @@ def _gh_pr_create_uses_safe_static_body_file(
     if args_start_index is None:
         return False
     operand = static_markdown_pr_body_file_operand(tuple(token.plain for token in segment[args_start_index:]))
+    if (
+        operand is not None
+        and operand.startswith("~/")
+        and not any(token.plain == operand and token.raw.startswith("~/") for token in segment[args_start_index:])
+    ):
+        return False
     return operand is not None and github_pr_body_file_is_safe(
         operand,
         cwd=cwd,

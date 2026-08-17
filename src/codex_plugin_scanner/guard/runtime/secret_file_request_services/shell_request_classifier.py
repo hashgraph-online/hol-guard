@@ -9,6 +9,8 @@ from ..command_extension_interaction import classify_command_extension_interacti
 from ..command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..command_model import CanonicalCommand, parse_shell_command
 from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
+from ..extension_control_contract import ControlSurface
+from ..extension_control_resolver import resolve_extension_controls
 from ..extension_control_runtime import current_extension_control_snapshot
 from ..github_capability_contract import github_capability_contract
 from ..github_capability_interaction import github_capability_action_class, github_capability_requires_confirmation
@@ -385,7 +387,7 @@ def _destructive_shell_tool_action_request(
             pytest_config_reason_codes=pytest_config_assessment.reason_codes,
             interpreter_executable_identities=interpreter_executable_identities,
         )
-    if _gh_pr_create_uses_safe_static_body_file(
+    safe_pr_create_body_file = _gh_pr_create_uses_safe_static_body_file(
         detection_command_text,
         cwd=cwd,
         home_dir=home_dir,
@@ -397,7 +399,30 @@ def _destructive_shell_tool_action_request(
             cwd=cwd,
             home_dir=home_dir,
         )
-    ):
+    )
+    if safe_pr_create_body_file:
+        snapshot = current_extension_control_snapshot()
+        proposal_permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_typed_capability("propose_remote")
+        if snapshot is not None and proposal_permission is not None:
+            proposal_contract = github_capability_contract("propose_remote")
+            control_resolution = resolve_extension_controls(
+                snapshot.layers,
+                BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+                extension_ids=(proposal_permission.extension_id,),
+                permission_ids=(proposal_permission.permission_id,),
+                surface=ControlSurface.COMMAND_EVALUATION,
+                authority_failure=snapshot.authority_failure,
+            )
+            if control_resolution.blocked:
+                return ToolActionRequestMatch(
+                    tool_name=tool_name,
+                    normalized_tool_name=normalized_tool_name,
+                    command_text=command_text,
+                    action_class=proposal_contract.action_class or "GitHub pull-request proposal command",
+                    reason="Guard extension controls block this GitHub capability.",
+                    canonical_command=canonical_command,
+                    interpreter_executable_identities=interpreter_executable_identities,
+                )
         return None
     if _gh_pr_edit_uses_safe_static_body_file(
         detection_command_text,

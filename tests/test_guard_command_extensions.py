@@ -673,6 +673,57 @@ def test_explicit_github_content_permission_applies_without_matcher_owned_rule(t
     }
 
 
+@pytest.mark.parametrize(
+    ("health", "state", "expected_action_class"),
+    (
+        (AuthorityHealth.PROTECTED, ControlState.ENABLED, None),
+        (AuthorityHealth.PROTECTED, ControlState.DISABLED, "GitHub pull-request proposal command"),
+        (AuthorityHealth.TAMPERED, ControlState.ENABLED, "GitHub pull-request proposal command"),
+    ),
+)
+def test_github_pr_create_body_file_honors_proposal_permission_toggle(
+    tmp_path: Path,
+    health: AuthorityHealth,
+    state: ControlState,
+    expected_action_class: str | None,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "CascadeProjects" / "hashgraph-online"
+    body_directory = home_dir / "CascadeProjects" / "hol-guard-protection-posture"
+    workspace.mkdir(parents=True)
+    body_directory.mkdir()
+    body_file = body_directory / "PR_BODY_PROTECTION.md"
+    body_file.write_text("## Summary\n- Add the protection posture.\n", encoding="utf-8")
+    command = (
+        "gh pr create --repo hashgraph-online/hol-guard --base release/3.0 "
+        "--head feat/protection-posture "
+        "--title 'feat(guard): add protection_posture with dual-write to mode and level' "
+        "--body-file ~/CascadeProjects/hol-guard-protection-posture/PR_BODY_PROTECTION.md"
+    )
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(
+            health=health,
+            revision=9,
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            layers=(_github_permission_layer("command.github.permission.propose-remote", state),),
+        )
+    )
+
+    with use_extension_control_snapshot(snapshot):
+        request = extract_sensitive_tool_action_request(
+            "Shell",
+            {"command": command},
+            cwd=workspace,
+            home_dir=home_dir,
+        )
+
+    if expected_action_class is None:
+        assert request is None
+    else:
+        assert request is not None
+        assert request.action_class == expected_action_class
+
+
 def test_explicit_git_force_push_permission_allows_matcher_owned_rule(tmp_path: Path) -> None:
     command = "git push --force origin feature"
     request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
