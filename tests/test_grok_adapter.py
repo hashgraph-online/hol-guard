@@ -97,6 +97,10 @@ class TestGrokInstallUninstall:
         pretool_hook = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
         prompt_hook = ctx.home_dir / ".grok" / "hooks" / "hol-guard-prompt.json"
         assert manifest["active"] is True
+        assert manifest["config_path"] == str(managed_config)
+        assert manifest["managed_config_path"] == str(managed_config)
+        assert manifest["pretool_hook_path"] == str(pretool_hook)
+        assert manifest["prompt_hook_path"] == str(prompt_hook)
         assert managed_config.is_file()
         assert "BEGIN HOL GUARD MANAGED GROK" in managed_config.read_text(encoding="utf-8")
         assert pretool_hook.is_file()

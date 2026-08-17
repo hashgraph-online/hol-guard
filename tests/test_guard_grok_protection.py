@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_protection_checks,
     build_harness_setup_plan,
     build_harness_verification,
+    grok_hooks_protection_ready,
     uninstall_confirmation_token,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -66,6 +67,7 @@ def test_grok_protection_checks_ready_after_install(tmp_path: Path, monkeypatch)
     assert checks["pretool_catchall_installed"] is True
     assert checks["managed_config_installed"] is True
     assert checks["ready"] is True
+    assert grok_hooks_protection_ready(ctx) is True
 
 
 def test_build_harness_verification_includes_grok_checks(tmp_path: Path, monkeypatch) -> None:

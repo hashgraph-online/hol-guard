@@ -28,7 +28,7 @@ import type { AppView } from "./approval-center-primitives";
 import { buildClearPayload } from "./clear-policy-payload";
 import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
-import { protectionHealthFor } from "./protection-health";
+import { protectionHealthFor, remainingProtectionRepairParts } from "./protection-health";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
 
@@ -793,11 +793,19 @@ export function App() {
     }
     const remainingHealth = protectionHealthFor(refreshedSnapshot);
     if (remainingHealth.state !== "protected") {
-      const failedApps = remainingHealth.apps
-        .filter((app) => app.checks.some((check) => check.status === "fail"))
-        .map((app) => harnessDisplayName(app.harness));
-      const remaining = failedApps.length > 0
-        ? `${failedApps.join(", ")} still ${failedApps.length === 1 ? "needs" : "need"} repair.`
+      const remainingParts = remainingProtectionRepairParts(remainingHealth);
+      const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
+      const remainingMessages: string[] = [];
+      if (failedHookApps.length > 0) {
+        remainingMessages.push(
+          `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`,
+        );
+      }
+      if (remainingParts.evidenceFailed) {
+        remainingMessages.push("Command evidence still needs repair.");
+      }
+      const remaining = remainingMessages.length > 0
+        ? remainingMessages.join(" ")
         : "A local protection check still needs attention.";
       throw new Error(`${remaining} Open the repair details below for the exact check.`);
     }

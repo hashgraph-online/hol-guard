@@ -124,6 +124,23 @@ def test_successful_disabled_shadow_evaluation_recovers_shadow_health(tmp_path: 
     assert _health(store)["status"] == "healthy"
 
 
+def test_repair_probe_without_shadow_observation_recovers_command_and_shadow(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
+    store.record_command_activity_persistence_failure(error_code="shadow_evaluation_failed", occurred_at=_NOW)
+    activity_evidence, _shadow = _shadow_evidence("activity:repair-probe-command-only")
+
+    store.probe_command_activity_persistence(
+        activity_evidence,
+        shadow=None,
+        shadow_evaluation_succeeded=True,
+    )
+
+    recovered = _health(store)
+    assert recovered["status"] == "healthy"
+    assert recovered["dropped_events"] == recovered["persistence_errors"] == 2
+
+
 def test_repair_probe_recovers_active_store_errors_without_resetting_history(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)

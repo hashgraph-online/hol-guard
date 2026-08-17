@@ -82,7 +82,8 @@ class StoreCommandActivityMixin:
         self: _ConnectionOwner,
         evidence: CommandActivityEvidence,
         *,
-        shadow: CommandShadowObservation,
+        shadow: CommandShadowObservation | None = None,
+        shadow_evaluation_succeeded: bool = True,
     ) -> None:
         """Exercise and roll back the real command and shadow write path."""
 
@@ -95,7 +96,7 @@ class StoreCommandActivityMixin:
                     connection,
                     evidence,
                     shadow=shadow,
-                    shadow_evaluation_succeeded=True,
+                    shadow_evaluation_succeeded=shadow_evaluation_succeeded,
                 )
             except BaseException:
                 connection.execute("rollback to command_activity_repair_probe")
@@ -107,10 +108,11 @@ class StoreCommandActivityMixin:
                 connection,
                 error_domain=COMMAND_PERSISTENCE_ERROR_DOMAIN,
             )
-            recover_command_activity_persistence(
-                connection,
-                error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
-            )
+            if shadow is not None or shadow_evaluation_succeeded:
+                recover_command_activity_persistence(
+                    connection,
+                    error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
+                )
 
     def count_command_activities(self: _ConnectionOwner) -> int:
         with self._connect() as connection:

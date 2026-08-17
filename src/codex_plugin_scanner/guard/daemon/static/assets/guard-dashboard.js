@@ -15446,6 +15446,12 @@ function protectionHealthFor(snapshot, harness = null) {
   const fallback = healthFromChecks(fallbackChecks());
   return { harness: STABLE_ID$1.test(harness) && harness.length <= 64 ? harness : "unknown", ...fallback };
 }
+function remainingProtectionRepairParts(health) {
+  return {
+    failedHookHarnesses: health.apps.filter((app) => app.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail")).map((app) => app.harness),
+    evidenceFailed: health.checks.some((check) => check.check_id === "decision_stream" && check.status === "fail")
+  };
+}
 const TARGETS$1 = /* @__PURE__ */ new Set(["exact", "category", "server"]);
 const DURATIONS$1 = /* @__PURE__ */ new Set(["once", "15m", "1h", "5h"]);
 const ROUTINE_BROWSER_OPERATIONS = /* @__PURE__ */ new Set([
@@ -31082,8 +31088,18 @@ function App() {
     }
     const remainingHealth = protectionHealthFor(refreshedSnapshot);
     if (remainingHealth.state !== "protected") {
-      const failedApps = remainingHealth.apps.filter((app) => app.checks.some((check) => check.status === "fail")).map((app) => harnessDisplayName(app.harness));
-      const remaining = failedApps.length > 0 ? `${failedApps.join(", ")} still ${failedApps.length === 1 ? "needs" : "need"} repair.` : "A local protection check still needs attention.";
+      const remainingParts = remainingProtectionRepairParts(remainingHealth);
+      const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
+      const remainingMessages = [];
+      if (failedHookApps.length > 0) {
+        remainingMessages.push(
+          `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`
+        );
+      }
+      if (remainingParts.evidenceFailed) {
+        remainingMessages.push("Command evidence still needs repair.");
+      }
+      const remaining = remainingMessages.length > 0 ? remainingMessages.join(" ") : "A local protection check still needs attention.";
       throw new Error(`${remaining} Open the repair details below for the exact check.`);
     }
     return "Automatic repairs completed. Guard rechecked every protection layer below.";

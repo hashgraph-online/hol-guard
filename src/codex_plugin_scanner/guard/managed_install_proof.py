@@ -16,6 +16,8 @@ _MANAGED_PATH_KEYS = (
     "managed_config_path",
     "managed_hooks_path",
     "plugin_path",
+    "pretool_hook_path",
+    "prompt_hook_path",
     "shim_path",
 )
 _MANAGED_PATH_LIST_KEYS = ("shim_paths",)
