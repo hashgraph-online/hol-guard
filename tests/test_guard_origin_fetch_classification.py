@@ -92,19 +92,18 @@ def test_repo_bound_origin_fetch_variants_are_benign(tmp_path: Path, command: st
         "ssh://git@github.com/example/project.git",
     ),
 )
-def test_repo_bound_github_ssh_origin_fetch_is_benign(tmp_path: Path, origin: str) -> None:
+def test_repo_bound_github_ssh_origin_fetch_stays_owned(tmp_path: Path, origin: str) -> None:
     home, repository = _repository(tmp_path, origin=origin)
 
-    assert _is_benign("git fetch origin", home=home, repository=repository)
-    assert (
-        extract_sensitive_tool_action_request(
-            "Bash",
-            {"command": "git fetch origin --quiet"},
-            cwd=repository,
-            home_dir=home,
-        )
-        is None
+    assert not _is_benign("git fetch origin", home=home, repository=repository)
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "git fetch origin --quiet"},
+        cwd=repository,
+        home_dir=home,
     )
+    assert request is not None
+    assert request.action_class == "git origin refresh"
 
 
 def test_github_ssh_origin_fetch_rejects_configured_ssh_command(tmp_path: Path) -> None:
@@ -138,6 +137,23 @@ def test_unverified_fetch_is_owned_by_git_extension(tmp_path: Path) -> None:
     git = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.git")
     assert git is not None
     assert any(permission.permission_id == "command.git.permission.unverified-fetch" for permission in git.permissions)
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git -c core.sshCommand=payload fetch origin",
+        "git --config-env credential.helper=HELPER fetch origin",
+        "git --exec-path=/tmp fetch origin",
+    ),
+)
+def test_execution_config_fetch_stays_unowned(tmp_path: Path, command: str) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] == "unverified Git remote refresh"
+    assert payload["controlling_rule_id"] is None
+    assert payload["extensions"] == []
 
 
 def test_url_remote_fetch_stays_unowned(tmp_path: Path) -> None:
