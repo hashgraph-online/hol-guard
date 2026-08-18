@@ -52,7 +52,6 @@ _GIT_LOCAL_CHECKOUT_EXECUTION_ENV = frozenset(
     }
 )
 _SAFE_GITHUB_REPOSITORY_PATH = re.compile(r"/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?")
-_SAFE_GITHUB_SCP_REMOTE = re.compile(r"^git@github\.com:([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?$")
 _SAFE_GIT_HELPER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 _GIT_PROBE_TIMEOUT_SECONDS = 1.0
 _READ_ONLY_GIT_STATUS_FLAGS = frozenset(
@@ -310,7 +309,7 @@ def git_fetch_origin_has_execution_free_config(
         if parsed_config is None or _git_fetch_config_routes_execution(parsed_config):
             return False
         urls = parsed_config.get("remote.origin.url", ())
-        if not urls or not all(_safe_github_remote_url(value) for value in urls):
+        if not urls or not all(_safe_github_https_remote_url(value) for value in urls):
             return False
         git_exec_path = subprocess.run(
             [str(resolved_git), "--exec-path"],
@@ -779,36 +778,6 @@ def _safe_github_https_remote_url(value: str) -> bool:
         and all(part not in {"", ".", ".."} for part in path_parts[1:])
         and _SAFE_GITHUB_REPOSITORY_PATH.fullmatch(parsed.path)
     )
-
-
-def _safe_github_ssh_remote_url(value: str) -> bool:
-    if any(character in value for character in ("\0", "\r", "\n", " ")):
-        return False
-    if _SAFE_GITHUB_SCP_REMOTE.fullmatch(value) is not None:
-        return True
-    try:
-        parsed = urlsplit(value)
-        port = parsed.port
-    except ValueError:
-        return False
-    path_parts = parsed.path.removesuffix(".git").split("/")
-    return bool(
-        parsed.scheme.casefold() == "ssh"
-        and parsed.username == "git"
-        and parsed.password is None
-        and parsed.hostname is not None
-        and parsed.hostname.casefold() == "github.com"
-        and port in {None, 22}
-        and not parsed.query
-        and not parsed.fragment
-        and len(path_parts) == 3
-        and all(part not in {"", ".", ".."} for part in path_parts[1:])
-        and _SAFE_GITHUB_REPOSITORY_PATH.fullmatch(parsed.path)
-    )
-
-
-def _safe_github_remote_url(value: str) -> bool:
-    return _safe_github_https_remote_url(value) or _safe_github_ssh_remote_url(value)
 
 
 def _safe_origin_fetch_refspec(value: str) -> bool:
