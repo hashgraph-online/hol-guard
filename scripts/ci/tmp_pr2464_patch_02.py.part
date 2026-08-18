@@ -1,0 +1,203 @@
+        parts = _split_process_command(command_line)
+        if parts is None:
+            lowered = command_line.lower()
+            if (
+                "codex_plugin_scanner" in lowered or "guard" in lowered
+            ) and _malformed_command_may_launch_guard(command_line):
+                return None
+            continue
+        if not _guard_daemon_command_parts_match(parts):
+            continue
+        command_guard_home = _guard_home_from_command_parts(parts)
+        port = _guard_daemon_port_from_command(command_line)
+        if command_guard_home is None or port is None:
+            return None
+        try:
+            matches_home = command_guard_home.resolve() == guard_home.resolve()
+        except OSError:
+            matches_home = command_guard_home == guard_home
+        if matches_home:
+            processes.append((pid, port))
+    return sorted(processes, key=lambda item: item[1])
+'''
+
+PID_REPLACEMENT = '''def _guard_daemon_command_for_pid(pid: int) -> str | None:
+    if os.name == "nt":
+        return windows_processes.windows_process_command_line(
+            pid,
+            max_command_line_bytes=_GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES,
+        )
+    ps_path = _trusted_posix_ps_path()
+    if ps_path is None:
+        return None
+    output = _bounded_process_query_stdout(
+        [ps_path, "-p", str(pid), "-o", "command="],
+    )
+    if output is None:
+        return None
+    stdout = output.strip()
+    return stdout or None
+'''
+
+PID_TEST_REPLACEMENT = '''def test_windows_guard_daemon_pid_matches_command(tmp_path, monkeypatch):
+    expected_guard_home = tmp_path / "guard home"
+    parsed_command = [
+        "python",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "daemon",
+        "--serve",
+        "--guard-home",
+        str(expected_guard_home),
+        "--port",
+        "4781",
+    ]
+    command = subprocess.list2cmdline(parsed_command)
+    captured_pids: list[tuple[int, int]] = []
+    monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "windows_command_line_to_argv",
+        lambda raw_command: parsed_command if raw_command == command else None,
+    )
+
+    def native_command_line(pid: int, *, max_command_line_bytes: int) -> str:
+        captured_pids.append((pid, max_command_line_bytes))
+        return command
+
+    monkeypatch.setattr(
+        daemon_manager_module.windows_processes,
+        "windows_process_command_line",
+        native_command_line,
+    )
+
+    assert daemon_manager_module._guard_daemon_pid_matches_command(
+        12345,
+        expected_guard_home=expected_guard_home,
+    )
+    assert not daemon_manager_module._guard_daemon_pid_matches_command(
+        12345,
+        expected_guard_home=tmp_path / "other-home",
+    )
+    assert captured_pids == [
+        (12345, daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES),
+        (12345, daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES),
+    ]
+'''
+
+INVENTORY_TEST_REPLACEMENT = '''def test_windows_daemon_inventory_uses_native_api(tmp_path, monkeypatch) -> None:
+    guard_home = tmp_path / "guard home"
+    captured: dict[str, object] = {}
+    daemon_parts = [
+        "python.exe",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "daemon",
+        "--serve",
+        "--guard-home",
+        str(guard_home),
+        "--port",
+        "5410",
+    ]
+
+    monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_split_process_command",
+        lambda _command: daemon_parts,
+    )
+
+    def native_inventory(**kwargs: object) -> list[tuple[int, str]]:
+        captured.update(kwargs)
+        return [(63_333, "native command line")]
+
+    monkeypatch.setattr(
+        daemon_manager_module.windows_processes,
+        "windows_process_command_line_inventory",
+        native_inventory,
+    )
+
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(
+        guard_home
+    ) == [(63_333, 5410)]
+    candidates = captured["candidate_executable_names"]
+    assert isinstance(candidates, frozenset)
+    assert {"hol-guard.exe", "plugin-guard.exe", "python.exe"}.issubset(candidates)
+    assert captured["max_command_line_bytes"] == (
+        daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES
+    )
+'''
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{label}: expected one anchor, found {count}")
+    return text.replace(old, new, 1)
+
+
+module_path = Path("src/codex_plugin_scanner/guard/windows_processes.py")
+if module_path.exists():
+    raise RuntimeError("native Windows process module unexpectedly already exists")
+module_path.write_text(MODULE_CONTENT, encoding="utf-8")
+
+manager_path = Path("src/codex_plugin_scanner/guard/daemon/manager.py")
+text = manager_path.read_text(encoding="utf-8")
+old_import = (
+    "from ..windows_paths import (\n"
+    "    trusted_windows_system_executable,\n"
+    "    windows_command_line_to_argv,\n"
+    "    windows_process_creation_time,\n"
+    "    windows_process_is_running,\n"
+    "    windows_process_liveness,\n"
+    "    windows_terminate_process_if_creation_time,\n"
+    ")\n"
+)
+new_import = (
+    "from .. import windows_processes\n"
+    "from ..windows_paths import (\n"
+    "    windows_command_line_to_argv,\n"
+    "    windows_process_creation_time,\n"
+    "    windows_process_is_running,\n"
+    "    windows_process_liveness,\n"
+    "    windows_terminate_process_if_creation_time,\n"
+    ")\n"
+)
+text = replace_once(text, old_import, new_import, "daemon Windows imports")
+
+powershell_pattern = re.compile(
+    r"\n\ndef _trusted_windows_powershell_path\(\) -> str \| None:\n.*?"
+    r"(?=\n\ndef _terminate_bounded_process_query)",
+    re.DOTALL,
+)
+text, removed = powershell_pattern.subn("", text, count=1)
+if removed != 1:
+    raise RuntimeError("could not remove retired PowerShell resolver")
+
+inventory_pattern = re.compile(
+    r"def _guard_daemon_process_inventory_for_guard_home\(guard_home: Path\) "
+    r"-> list\[tuple\[int, int\]\] \| None:\n.*?"
+    r"(?=\n\ndef _malformed_command_may_launch_guard)",
+    re.DOTALL,
+)
+text, replaced = inventory_pattern.subn(
+    lambda _match: INVENTORY_REPLACEMENT,
+    text,
+    count=1,
+)
+if replaced != 1:
+    raise RuntimeError("could not replace Windows daemon inventory")
+
+pid_pattern = re.compile(
+    r"def _guard_daemon_command_for_pid\(pid: int\) -> str \| None:\n.*?"
+    r"(?=\n\ndef _retire_guard_daemon_process)",
+    re.DOTALL,
+)
+text, replaced = pid_pattern.subn(lambda _match: PID_REPLACEMENT, text, count=1)
+if replaced != 1:
+    raise RuntimeError("could not replace Windows PID command lookup")
+manager_path.write_text(text, encoding="utf-8")
+
+tests_path = Path("tests/test_guard_daemon_manager.py")
