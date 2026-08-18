@@ -1418,7 +1418,11 @@ def _build_package_protect_authority(
         guard_home=store.guard_home,
         launch_cwd=launch_cwd,
     )
-    intent = _package_intent_parser_module().parse_package_intent(shlex.join(command), workspace=launch_cwd)
+    intent = _package_intent_parser_module().parse_package_intent(
+        shlex.join(command),
+        workspace=launch_cwd,
+        environment=launch_environment,
+    )
     if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
