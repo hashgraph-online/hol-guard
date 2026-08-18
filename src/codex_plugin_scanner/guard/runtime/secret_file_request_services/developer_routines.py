@@ -75,9 +75,8 @@ def _looks_like_safe_compound_developer_inspection(
     """Auto-relax only a command with a complete bounded-observer effect graph."""
 
     graph = _compound_developer_effect_graph(command_text, cwd=cwd, home_dir=home_dir)
-    index_ok = is_low_risk_git_index_inspection(command_text, cwd=cwd, home_dir=home_dir)
-    if graph is None or not graph.context.complete or index_ok:
-        return index_ok
+    if graph is None or not graph.context.complete:
+        return is_low_risk_git_index_inspection(command_text, cwd=cwd, home_dir=home_dir)
     silently_verified_effects = {
         DeveloperShellEffect.DIRECTORY,
         DeveloperShellEffect.LOCAL_READ,
@@ -153,7 +152,7 @@ def _git_segment_is_silently_verified(
         return "|" not in (*segment.control_before, *segment.control_after) and is_low_risk_git_inspection_segment(
             segment
         )
-    if operation in {"blame", "branch", "show", "worktree"}:
+    if operation in {"blame", "branch", "diff", "show", "worktree"}:
         return is_low_risk_git_inspection_segment(segment)
     return operation in {"ls-files", "rev-parse"}
 

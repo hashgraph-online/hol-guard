@@ -158,7 +158,7 @@ def is_low_risk_git_inspection_segment(
     if operation == "rev-parse":
         return _safe_rev_parse_args(args)
     if operation == "diff":
-        return _safe_diff_args(args)
+        return _safe_diff_args(args) and _git_show_has_execution_free_config(segment, repository_path=repository_path)
     if operation == "ls-files":
         return _safe_ls_files_args(args)
     if operation == "show":
