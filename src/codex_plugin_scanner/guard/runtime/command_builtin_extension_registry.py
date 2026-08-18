@@ -56,14 +56,15 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
         name="Git protection",
         description=(
             "Reviews local and remote Git operations that can discard work, replace history, "
-            "or refresh a remote Guard cannot verify."
+            "refresh a remote Guard cannot verify, or read a staged index Guard cannot bound."
         ),
-        action_classes=("git destructive command", "git origin refresh"),
-        risk_classes=("destructive_shell", "network_egress"),
+        action_classes=("git destructive command", "git origin refresh", "git index inspection"),
+        risk_classes=("destructive_shell", "network_egress", "local_secret_read"),
         safer_alternatives=(
             "Preview affected files and refs before destructive repository operations.",
             "Create a temporary branch or stash before discarding local work.",
             "Run fetch from the repository with a named origin instead of a URL remote.",
+            "Inspect the staged index with git diff --cached --check or lockfile excludes.",
         ),
         reference_urls=(),
         required=True,

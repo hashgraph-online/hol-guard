@@ -16,6 +16,7 @@ from ..false_positive_rules import (
     fd_search_targets,
     split_fd_args_and_exec,
 )
+from ..git_index_inspection import is_low_risk_git_index_inspection
 from ..github_capability_interaction import github_capability_requires_confirmation
 from ..shell_command_wrappers import is_trusted_absolute_command_path
 from ..shell_execution_context import ShellExecutionContext, model_shell_execution_context
@@ -140,6 +141,8 @@ def _compound_developer_effect_graph(
     starts_with_literal_cd = shell_execution_context_starts_with_literal_cd(context)
     if not starts_with_literal_cd and cwd is None:
         return None
+    if is_low_risk_git_index_inspection(command_text, cwd=cwd or context.workspace_root, home_dir=home_dir):
+        return _known_context_effect_graph(context, DeveloperShellEffect.LOCAL_READ)
     if not context.complete:
         return None
     if is_low_risk_compound_git_inspection(context):

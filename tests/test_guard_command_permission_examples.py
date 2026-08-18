@@ -57,6 +57,7 @@ def test_explicit_rule_examples_override_matcher_derivation() -> None:
     permissions = {permission.permission_id: permission for permission in _all_permissions()}
     assert permissions["command.git.permission.local-branch-delete"].example_command == "git branch -D stale-feature"
     assert permissions["command.git.permission.unverified-fetch"].example_command == "git fetch origin"
+    assert permissions["command.git.permission.index-inspection"].example_command == "git diff --cached --output=patch"
 
 
 def test_git_destructive_family_groups_exactly_the_five_git_rules() -> None:

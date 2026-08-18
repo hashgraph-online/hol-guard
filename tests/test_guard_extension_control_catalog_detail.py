@@ -164,6 +164,7 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
         "command.git.permission.force-clean",
         "command.git.permission.force-push",
         "command.git.permission.hard-reset",
+        "command.git.permission.index-inspection",
         "command.git.permission.local-branch-delete",
         "command.git.permission.remote-branch-delete",
         "command.git.permission.unverified-fetch",

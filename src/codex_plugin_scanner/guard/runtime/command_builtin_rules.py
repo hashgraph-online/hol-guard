@@ -44,6 +44,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "filesystem destructive command": ("destructive_shell",),
     "git destructive command": ("destructive_shell",),
     "git origin refresh": ("network_egress",),
+    "git index inspection": ("local_secret_read",),
     "system destructive command": ("destructive_shell",),
     "windows destructive command": ("destructive_shell",),
     "kubernetes destructive command": ("destructive_shell", "network_egress"),
@@ -303,6 +304,15 @@ BUILT_IN_COMMAND_RULES = (
         description="Identifies named-origin Git fetch operations that Guard cannot verify as safe.",
         action_class="git origin refresh",
         safer_alternative="Run fetch from the repository with a named origin, optional quiet flags, and named refs.",
+    ),
+    _compatibility_rule(
+        rule_id="command.git.index-inspection",
+        family="git-index",
+        example_command="git diff --cached --output=patch",
+        title="Git index inspection",
+        description="Identifies staged-index Git reads that Guard cannot verify as a bounded inspection.",
+        action_class="git index inspection",
+        safer_alternative="Run git diff --cached --check, or exclude lockfiles and scan the staged patch on stdin.",
     ),
     _structured_rule(
         rule_id="command.git.hard-reset",

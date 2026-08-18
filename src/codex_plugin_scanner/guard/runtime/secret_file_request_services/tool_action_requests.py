@@ -13,6 +13,7 @@ from ..compound_git_inspection import (
     is_low_risk_standalone_git_routine,
 )
 from ..git_execution_safety import git_status_args_are_read_only, git_status_has_execution_free_config
+from ..git_index_inspection import owned_git_index_inspection_action_class
 from ..git_origin_refresh import command_is_origin_shaped_git_fetch
 from ..kubernetes_commands import kubernetes_secret_read_source
 from ..shell_command_wrappers import normalize_transparent_shell_command
@@ -104,6 +105,23 @@ def extract_sensitive_tool_action_request(
         )
         if git_fetch_request is not None:
             return git_fetch_request
+        index_action_class = owned_git_index_inspection_action_class(
+            command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+        if index_action_class is not None:
+            return ToolActionRequestMatch(
+                tool_name=requested_tool_name,
+                normalized_tool_name=effective_tool_name,
+                command_text=command_text,
+                action_class=index_action_class,
+                reason=(
+                    "Git cached diff needs a repository-bound index inspection Guard can verify. "
+                    "Use git diff --cached with check/stat flags or lockfile excludes, "
+                    "or confirm the exact index read in Guard."
+                ),
+            )
         docker_sensitive_request = _docker_sensitive_tool_action_request(
             tool_name=requested_tool_name,
             normalized_tool_name=effective_tool_name,

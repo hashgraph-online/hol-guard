@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "191ed88959909b2ae5d299d6b52cc4fcd33b04a6a0f49200cb79e7fec0542e95",
+  "catalog_digest": "afca8822aa5640d6ffaaf78a89e9ef98df6e615e1bf4ef1e8ccaf94ddc6b13fc",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -86,7 +86,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 100,
+  "permission_count": 101,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -123,6 +123,7 @@
     "command.git.permission.force-clean": "git clean -f",
     "command.git.permission.force-push": "git push --force",
     "command.git.permission.hard-reset": "git reset --hard",
+    "command.git.permission.index-inspection": "git diff --cached --output=patch",
     "command.git.permission.local-branch-delete": "git branch -D stale-feature",
     "command.git.permission.remote-branch-delete": "git push --delete",
     "command.git.permission.unverified-fetch": "git fetch origin",
@@ -193,6 +194,7 @@
     "command.git.permission.force-clean": "git-destructive",
     "command.git.permission.force-push": "git-destructive",
     "command.git.permission.hard-reset": "git-destructive",
+    "command.git.permission.index-inspection": "git-index",
     "command.git.permission.local-branch-delete": "git-destructive",
     "command.git.permission.remote-branch-delete": "git-destructive",
     "command.git.permission.unverified-fetch": "git-remote",
@@ -236,6 +238,7 @@
     "command.git.permission.force-clean",
     "command.git.permission.force-push",
     "command.git.permission.hard-reset",
+    "command.git.permission.index-inspection",
     "command.git.permission.local-branch-delete",
     "command.git.permission.remote-branch-delete",
     "command.git.permission.unverified-fetch",
@@ -312,7 +315,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 88,
+  "rule_count": 89,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -347,6 +350,7 @@
     "command.filesystem.recursive-delete",
     "command.filesystem.recursive-permission-change",
     "command.git.unverified-fetch",
+    "command.git.index-inspection",
     "command.git.hard-reset",
     "command.git.force-clean",
     "command.git.force-push",
