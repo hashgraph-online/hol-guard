@@ -2686,7 +2686,9 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             trusted_failure_reason = error.reason_code
             blocked_reason = "The trusted update environment could not be verified."
 
-    current_version = installed_distribution.version if installed_distribution is not None else "unknown"
+    # Verification failures block updates, but they must not erase display
+    # metadata for the package that is already running.
+    current_version = installed_distribution.version if installed_distribution is not None else _current_version()
     direct_url = installed_distribution.direct_url if installed_distribution is not None else None
     local_source_install = _local_source_install_payload(direct_url)
     local_archive_install = _recover_local_archive_install(
@@ -2706,7 +2708,7 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
         else {
             "source": source_kind,
             "status": "managed" if installer == "desktop" else "unavailable",
-            "current_version": current_version if installer == "desktop" else None,
+            "current_version": current_version if current_version != "unknown" else None,
             "latest_version": None,
             "update_available": None,
         }

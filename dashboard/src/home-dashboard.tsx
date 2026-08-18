@@ -386,6 +386,9 @@ export function HomeWorkspace(props: {
                   ))}
                 </div>
               )}
+              <ActionButton className="mt-4" variant="secondary" onClick={props.onOpenEvidence}>
+                Review today&apos;s activity
+              </ActionButton>
             </CollapsibleCard>
           )}
         </section>

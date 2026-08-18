@@ -3037,6 +3037,7 @@ export async function resolveRequestWithQueueResult(input: GuardApprovalResoluti
       ...(input.scope_contract_digest !== undefined
         ? { scope_contract_digest: input.scope_contract_digest }
         : {}),
+      ...(input.persist_policy !== undefined ? { persist_policy: input.persist_policy } : {}),
       ...(input.mcp_grant_target !== undefined ? { mcp_grant_target: input.mcp_grant_target } : {}),
       ...(input.mcp_grant_duration !== undefined ? { mcp_grant_duration: input.mcp_grant_duration } : {}),
       ...(input.local_tool_grant_target !== undefined
