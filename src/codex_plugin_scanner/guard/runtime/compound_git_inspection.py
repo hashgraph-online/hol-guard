@@ -362,8 +362,7 @@ def _safe_diff_args(args: tuple[str, ...]) -> bool:
         return False
     if "--" not in args:
         return all(
-            arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "--staged", "HEAD"}
-            or _safe_ref(arg)
+            arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "HEAD"} or _safe_ref(arg)
             for arg in args
         )
     separator = args.index("--")
@@ -372,8 +371,7 @@ def _safe_diff_args(args: tuple[str, ...]) -> bool:
     return (
         bool(paths)
         and all(
-            arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "--staged", "HEAD"}
-            or _safe_ref(arg)
+            arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "HEAD"} or _safe_ref(arg)
             for arg in revisions
         )
         and all(_safe_repository_path(path) for path in paths)
