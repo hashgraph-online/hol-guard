@@ -374,6 +374,16 @@ def test_status_uses_trusted_distribution_record_not_parent_metadata(
 def test_status_keeps_running_version_when_trusted_environment_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        update_commands,
+        "build_guard_install_surface_payload",
+        lambda: {"installer": "pipx", "binary_diagnostics": {}},
+    )
+    monkeypatch.setattr(
+        update_commands,
+        "load_managed_policy",
+        lambda: ManagedPolicyState(status="absent", source="test", policy=None),
+    )
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.109")
     monkeypatch.setattr(
         update_commands,
