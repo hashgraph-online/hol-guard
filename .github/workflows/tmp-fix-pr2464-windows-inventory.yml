@@ -45,7 +45,6 @@ jobs:
         shell: bash
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PATCH_SHA256: 7b893f5445992d83fbdf6c075bc54506ac40666e3d3045c93d7837d1a9379aa7
         run: |
           set -euo pipefail
           branch='fix/rust-daemon-edge-workflow-validation'
@@ -53,76 +52,13 @@ jobs:
           remote_sha=$(git ls-remote --exit-code origin "refs/heads/${branch}" | awk '{print $1}')
           test "$remote_sha" = "$EXPECTED_HEAD_SHA"
 
-          patch_b64="$RUNNER_TEMP/pr2464-patch.py.gz.b64"
+          test "$(git hash-object scripts/ci/tmp_pr2464_patch_00.py.part)" = 13c781ea0d1bb773d99a97045ab22b4f1dc3b422
+          test "$(git hash-object scripts/ci/tmp_pr2464_patch_01.py.part)" = daa166f464087730fb279c734e45de9dedf29d2b
+          test "$(git hash-object scripts/ci/tmp_pr2464_patch_02.py.part)" = 4f465e6337b463899acc6e21b9702b5ae04c8109
+          test "$(git hash-object scripts/ci/tmp_pr2464_patch_03.py.part)" = 10ad13e956a3ec18adab46611a614df5ebf95088
           patch_file="$RUNNER_TEMP/pr2464-patch.py"
-          cat > "$patch_b64" <<'PATCH_B64'
-          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
-          PATCH_B64
-          tr -d '\r\n' < "$patch_b64" | base64 --decode | gzip --decompress > "$patch_file"
-          echo "$PATCH_SHA256  $patch_file" | sha256sum --check --strict
+          cat scripts/ci/tmp_pr2464_patch_*.py.part > "$patch_file"
+          python -m py_compile "$patch_file"
           python "$patch_file"
 
           uv sync --frozen --extra dev --python 3.12
@@ -162,10 +98,14 @@ jobs:
           cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
           cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
 
-          temporary_workflow=.github/workflows/tmp-fix-pr2464-windows-inventory.yml
-          temporary_copy="$RUNNER_TEMP/tmp-fix-pr2464-windows-inventory.yml"
-          cp "$temporary_workflow" "$temporary_copy"
-          rm -f "$temporary_workflow"
+          temp_sources="$RUNNER_TEMP/pr2464-temp-sources"
+          mkdir -p "$temp_sources"
+          cp .github/workflows/tmp-fix-pr2464-windows-inventory.yml "$temp_sources/workflow.yml"
+          for part in scripts/ci/tmp_pr2464_patch_*.py.part; do
+            cp "$part" "$temp_sources/$(basename "$part")"
+          done
+          rm -f .github/workflows/tmp-fix-pr2464-windows-inventory.yml
+          rm -f scripts/ci/tmp_pr2464_patch_*.py.part
           uv run --no-sync python scripts/ci/code_quality_audit.py \
             --root . \
             --baseline ci/code-quality-baseline.json \
@@ -175,7 +115,10 @@ jobs:
             --baseline ci/test-suite-ratchet-baseline.json \
             --inventory test-inventory.json
           uv run --no-sync python scripts/ci/rust_migration_tree_hygiene.py
-          mv "$temporary_copy" "$temporary_workflow"
+          mv "$temp_sources/workflow.yml" .github/workflows/tmp-fix-pr2464-windows-inventory.yml
+          for part in "$temp_sources"/tmp_pr2464_patch_*.py.part; do
+            mv "$part" scripts/ci/"$(basename "$part")"
+          done
           rm -f code-quality-audit.json test-inventory.json
 
           git diff --check
@@ -189,6 +132,10 @@ jobs:
             rust/crates/guard-secure-fs/src/lib.rs
           git diff --cached --check
           git diff --exit-code -- .github/workflows
+          git diff --exit-code -- scripts/ci/tmp_pr2464_patch_00.py.part
+          git diff --exit-code -- scripts/ci/tmp_pr2464_patch_01.py.part
+          git diff --exit-code -- scripts/ci/tmp_pr2464_patch_02.py.part
+          git diff --exit-code -- scripts/ci/tmp_pr2464_patch_03.py.part
           git status --short
           git config user.name 'Michael Kantor'
           git config user.email '6068672+kantorcodes@users.noreply.github.com'
