@@ -42,6 +42,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "github pr body shell substitution": ("execution",),
     "filesystem destructive command": ("destructive_shell",),
     "git destructive command": ("destructive_shell",),
+    "git origin refresh": ("network_egress",),
     "git index inspection": ("local_secret_read",),
     "system destructive command": ("destructive_shell",),
     "windows destructive command": ("destructive_shell",),
@@ -272,6 +273,13 @@ BUILT_IN_COMMAND_RULES = (
         ),
         action_class="filesystem destructive command",
         safer_alternative="Preview affected paths and apply the change to the narrowest directory possible.",
+    ),
+    _compatibility_rule(
+        rule_id="command.git.unverified-fetch",
+        title="Git origin refresh",
+        description="Identifies named-origin Git fetch operations that Guard cannot verify as safe.",
+        action_class="git origin refresh",
+        safer_alternative="Run fetch from the repository with a named origin, optional quiet flags, and named refs.",
     ),
     _structured_rule(
         rule_id="command.git.hard-reset",
