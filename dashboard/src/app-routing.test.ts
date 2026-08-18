@@ -1,4 +1,4 @@
-import { parseAppDetail, PROTECT_ROUTE, resolveView, shouldFetchArtifactDiff, viewTitle } from "./app";
+import { parseAppDetail, PROTECT_ROUTE, resolveView, shouldFetchArtifactDiff, TODAY_EVIDENCE_ROUTE, viewTitle } from "./app";
 import { harnessDisplayName, isDisplayableHarness, normalizeHarnessFilter, normalizeHarnessSlug } from "./approval-center-utils";
 import { appSetupTarget, isConnectableAppHarness } from "./apps/harness-setup-target";
 
@@ -23,6 +23,7 @@ assert(resolveView("/apps/*") === "fleet", "wildcard app route falls back to fle
 assert(resolveView("/apps/%2A") === "fleet", "encoded wildcard app route falls back to fleet");
 assert(resolveView(PROTECT_ROUTE) === "fleet", "/protect resolves to protect workspace view");
 assert(resolveView("/about") === "about", "/about resolves to about view");
+assert(TODAY_EVIDENCE_ROUTE === "/evidence?time=today", "daily activity opens Evidence filtered to today");
 assert(viewTitle("about") === "About", "about view title is About");
 assert(!shouldFetchArtifactDiff("package_request"), "package approvals do not request unsupported artifact diffs");
 assert(shouldFetchArtifactDiff("mcp_server"), "configuration approvals continue to request artifact diffs");

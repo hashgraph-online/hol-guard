@@ -132,6 +132,7 @@ function parseRequestId(pathname: string): string | null {
 }
 
 export const PROTECT_ROUTE = "/protect";
+export const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 
 export function viewTitle(view: AppView): string {
   if (view === "home") return "Home";
@@ -508,6 +509,7 @@ export function App() {
   const handleOpenInbox = useCallback(() => navigate("/inbox"), []);
   const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
+  const handleOpenTodayEvidence = useCallback(() => navigate(TODAY_EVIDENCE_ROUTE), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback((pathname = "/settings") => navigate(pathname), []);
@@ -902,6 +904,7 @@ export function App() {
             onOpenInbox={handleOpenInbox}
             onOpenFleet={handleOpenFleet}
             onOpenEvidence={handleOpenEvidence}
+            onOpenTodayEvidence={handleOpenTodayEvidence}
             onOpenInsights={handleOpenInsights}
             onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
