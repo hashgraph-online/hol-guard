@@ -23,6 +23,8 @@ _DEFAULT_SOCKET_TIMEOUT_SECONDS = 5.0
 _MAX_ACTIVE_REQUESTS = 256
 _MAX_LISTEN_BACKLOG = 512
 _MAX_SOCKET_TIMEOUT_SECONDS = 30.0
+_OVERLOAD_REQUEST_DRAIN_LIMIT_BYTES = 16 * 1024
+_OVERLOAD_REQUEST_DRAIN_TIMEOUT_SECONDS = 0.05
 
 
 def _bounded_int(name: str, default: int, maximum: int) -> int:
@@ -153,6 +155,26 @@ def _overload_response() -> bytes:
     )
 
 
+def _drain_overload_request(request: socket.socket) -> None:
+    # Drain only a bounded request header so Windows can deliver the 503 before close.
+
+    request.settimeout(_OVERLOAD_REQUEST_DRAIN_TIMEOUT_SECONDS)
+    remaining = _OVERLOAD_REQUEST_DRAIN_LIMIT_BYTES
+    trailing = b""
+    while remaining > 0:
+        try:
+            chunk = request.recv(min(4096, remaining))
+        except OSError:
+            return
+        if not chunk:
+            return
+        remaining -= len(chunk)
+        combined = trailing + chunk
+        if b"\r\n\r\n" in combined or b"\n\n" in combined:
+            return
+        trailing = combined[-3:]
+
+
 class BoundedThreadingHTTPServer(ThreadingHTTPServer):
     """Loopback-only HTTP server with bounded active request threads."""
 
@@ -236,9 +258,10 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
     def _reject_overload(self, request: socket.socket) -> None:
         try:
+            _drain_overload_request(request)
             request.settimeout(0.25)
             request.sendall(_overload_response())
-        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+        except OSError:
             _METRICS.abort()
 
 

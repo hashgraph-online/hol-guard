@@ -2066,7 +2066,7 @@ def test_ephemeral_guard_daemon_state_paths_only_scan_pytest_roots_and_honor_lim
     assert ignored_state not in results
 
 
-def test_guard_daemon_pid_matches_command_validates_guard_home_on_windows(tmp_path, monkeypatch):
+def test_windows_guard_daemon_pid_matches_command(tmp_path, monkeypatch):
     expected_guard_home = tmp_path / "guard home"
     parsed_command = [
         "python",
@@ -2081,29 +2081,22 @@ def test_guard_daemon_pid_matches_command_validates_guard_home_on_windows(tmp_pa
         "4781",
     ]
     command = subprocess.list2cmdline(parsed_command)
-
-    trusted_powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    captured_commands: list[list[str]] = []
+    captured_pids: list[tuple[int, int]] = []
     monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
     monkeypatch.setattr(
         daemon_manager_module,
         "windows_command_line_to_argv",
         lambda raw_command: parsed_command if raw_command == command else None,
     )
+
+    def native_command_line(pid: int, *, max_command_line_bytes: int) -> str:
+        captured_pids.append((pid, max_command_line_bytes))
+        return command
+
     monkeypatch.setattr(
-        daemon_manager_module,
-        "_trusted_windows_powershell_path",
-        lambda: trusted_powershell,
-    )
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_bounded_process_query_stdout",
-        lambda invoked, **_kwargs: captured_commands.append(invoked) or command,
-    )
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_guard_home_from_command",
-        lambda _command: expected_guard_home,
+        daemon_manager_module.windows_processes,
+        "windows_process_command_line",
+        native_command_line,
     )
 
     assert daemon_manager_module._guard_daemon_pid_matches_command(
@@ -2114,9 +2107,10 @@ def test_guard_daemon_pid_matches_command_validates_guard_home_on_windows(tmp_pa
         12345,
         expected_guard_home=tmp_path / "other-home",
     )
-    assert captured_commands
-    assert all(invoked[0] == trusted_powershell for invoked in captured_commands)
-    assert all("-NoProfile" in invoked and "-NonInteractive" in invoked for invoked in captured_commands)
+    assert captured_pids == [
+        (12345, daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES),
+        (12345, daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES),
+    ]
 
 
 def test_guard_daemon_pid_matches_command_accepts_console_script_launch(tmp_path, monkeypatch):
@@ -2784,9 +2778,9 @@ def test_malformed_windows_lifecycle_records_remain_when_inventory_is_unknown(tm
     assert not (guard_home / "daemon-state.invalid.json").exists()
 
 
-def test_windows_daemon_inventory_is_bounded_strict_and_guard_home_scoped(tmp_path, monkeypatch) -> None:
+def test_windows_daemon_inventory_uses_native_api(tmp_path, monkeypatch) -> None:
     guard_home = tmp_path / "guard home"
-    query_commands: list[list[str]] = []
+    captured: dict[str, object] = {}
     daemon_parts = [
         "python.exe",
         "-m",
@@ -2801,23 +2795,27 @@ def test_windows_daemon_inventory_is_bounded_strict_and_guard_home_scoped(tmp_pa
     ]
 
     monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
-    monkeypatch.setattr(daemon_manager_module, "_trusted_windows_powershell_path", lambda: "powershell.exe")
-    monkeypatch.setattr(daemon_manager_module, "_split_process_command", lambda _command: daemon_parts)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_split_process_command",
+        lambda _command: daemon_parts,
+    )
 
-    def bounded(command):
-        query_commands.append(command)
-        return json.dumps(
-            [
-                {"ProcessId": 0, "CommandLine": None},
-                {"ProcessId": 63_333, "CommandLine": "native command line"},
-            ]
-        )
+    def native_inventory(**kwargs: object) -> list[tuple[int, str]]:
+        captured.update(kwargs)
+        return [(63_333, "native command line")]
 
-    monkeypatch.setattr(daemon_manager_module, "_bounded_process_query_stdout", bounded)
+    monkeypatch.setattr(
+        daemon_manager_module.windows_processes,
+        "windows_process_command_line_inventory",
+        native_inventory,
+    )
 
     assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(guard_home) == [(63_333, 5410)]
-    assert "$ErrorActionPreference = 'Stop'" in query_commands[0][-1]
-    assert "ConvertTo-Json" in query_commands[0][-1]
+    candidates = captured["candidate_executable_names"]
+    assert isinstance(candidates, frozenset)
+    assert {"hol-guard.exe", "plugin-guard.exe", "python.exe"}.issubset(candidates)
+    assert captured["max_command_line_bytes"] == (daemon_manager_module._GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX process-list coverage")

@@ -27,10 +27,10 @@ from pathlib import Path
 from typing import BinaryIO, Literal, TypedDict
 
 from ...version import __version__
+from .. import windows_processes
 from ..mdm.file_lock import release_file_lock
 from ..private_file_io import private_regular_file_is_valid, read_private_regular_text
 from ..windows_paths import (
-    trusted_windows_system_executable,
     windows_command_line_to_argv,
     windows_process_creation_time,
     windows_process_is_running,
@@ -2085,22 +2085,6 @@ def _linux_proc_process_entries(proc_root: Path = Path("/proc")) -> list[tuple[i
     return entries
 
 
-def _trusted_windows_powershell_path() -> str | None:
-    """Resolve Windows PowerShell from the kernel-reported system directory."""
-
-    if os.name != "nt":
-        return None
-    try:
-        powershell = trusted_windows_system_executable(
-            "WindowsPowerShell",
-            "v1.0",
-            "powershell.exe",
-        )
-    except (OSError, RuntimeError, ValueError):
-        return None
-    return str(powershell)
-
-
 def _terminate_bounded_process_query(process: subprocess.Popen[bytes]) -> None:
     if os.name == "nt":
         with suppress(OSError):
@@ -2350,47 +2334,29 @@ def _guard_daemon_command_parts_match(parts: list[str]) -> bool:
     return False
 
 
-def _guard_daemon_process_inventory_for_guard_home(guard_home: Path) -> list[tuple[int, int]] | None:
+def _guard_daemon_process_inventory_for_guard_home(
+    guard_home: Path,
+) -> list[tuple[int, int]] | None:
     """Return a proven process inventory, or ``None`` when enumeration is unknown."""
 
     if os.name == "nt":
-        powershell_path = _trusted_windows_powershell_path()
-        if powershell_path is None:
+        candidate_names = {
+            "hol-guard.exe",
+            "plugin-guard.exe",
+            "py.exe",
+            "python.exe",
+            "python3.exe",
+            "pythonw.exe",
+        }
+        executable_name = ntpath.basename(sys.executable).strip().lower()
+        if executable_name:
+            candidate_names.add(executable_name)
+        entries = windows_processes.windows_process_command_line_inventory(
+            candidate_executable_names=frozenset(candidate_names),
+            max_command_line_bytes=_GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES,
+        )
+        if entries is None:
             return None
-        command = [
-            powershell_path,
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            (
-                "$ErrorActionPreference = 'Stop'; "
-                "$utf8 = New-Object System.Text.UTF8Encoding($false); "
-                "[Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
-                "$items = @(Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine); "
-                "ConvertTo-Json -Compress -InputObject $items"
-            ),
-        ]
-        output = _bounded_process_query_stdout(command)
-        if output is None:
-            return None
-        try:
-            raw_entries: object = json.loads(output)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(raw_entries, list):
-            return None
-        entries: list[tuple[int, str]] = []
-        for entry in raw_entries:
-            if not isinstance(entry, dict):
-                return None
-            pid = entry.get("ProcessId")
-            command_line = entry.get("CommandLine")
-            if type(pid) is not int or pid < 0 or (command_line is not None and not isinstance(command_line, str)):
-                return None
-            if pid == 0:
-                continue
-            if isinstance(command_line, str) and command_line.strip():
-                entries.append((pid, command_line.strip()))
     else:
         ps_path = _trusted_posix_ps_path()
         if ps_path is None:
@@ -2572,26 +2538,16 @@ def _guard_daemon_pid_command_identity(
 
 def _guard_daemon_command_for_pid(pid: int) -> str | None:
     if os.name == "nt":
-        powershell_path = _trusted_windows_powershell_path()
-        if powershell_path is None:
-            return None
-        command = [
-            powershell_path,
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            (
-                "$utf8 = New-Object System.Text.UTF8Encoding($false); "
-                "[Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
-                f'(Get-CimInstance Win32_Process -Filter "ProcessId = {pid}").CommandLine'
-            ),
-        ]
-    else:
-        ps_path = _trusted_posix_ps_path()
-        if ps_path is None:
-            return None
-        command = [ps_path, "-p", str(pid), "-o", "command="]
-    output = _bounded_process_query_stdout(command)
+        return windows_processes.windows_process_command_line(
+            pid,
+            max_command_line_bytes=_GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES,
+        )
+    ps_path = _trusted_posix_ps_path()
+    if ps_path is None:
+        return None
+    output = _bounded_process_query_stdout(
+        [ps_path, "-p", str(pid), "-o", "command="],
+    )
     if output is None:
         return None
     stdout = output.strip()

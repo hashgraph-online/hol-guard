@@ -18,8 +18,6 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::panic::{catch_unwind, AssertUnwindSafe};
-#[cfg(unix)]
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -588,8 +586,8 @@ fn admit_connection(
 }
 
 #[cfg(unix)]
-fn resident_parent_liveness() -> Result<Arc<AtomicBool>, String> {
-    let alive = Arc::new(AtomicBool::new(true));
+fn resident_parent_liveness() -> Result<Arc<std::sync::atomic::AtomicBool>, String> {
+    let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
     let Ok(raw_descriptor) = env::var(PARENT_LIVENESS_FD_ENV) else {
         return Ok(alive);
     };
@@ -605,7 +603,7 @@ fn resident_parent_liveness() -> Result<Arc<AtomicBool>, String> {
     thread::spawn(move || {
         let mut byte = [0u8; 1];
         let _ = pipe.read(&mut byte);
-        watcher_state.store(false, Ordering::Release);
+        watcher_state.store(false, std::sync::atomic::Ordering::Release);
     });
     Ok(alive)
 }
@@ -650,7 +648,7 @@ fn serve(socket_path: &str) -> Result<(), String> {
     let sender = start_resident_workers(token);
     let parent_alive = resident_parent_liveness()?;
     let mut consecutive_accept_failures = 0;
-    while parent_alive.load(Ordering::Acquire) {
+    while parent_alive.load(std::sync::atomic::Ordering::Acquire) {
         match listener.accept() {
             Ok((stream, _address)) => {
                 consecutive_accept_failures = 0;

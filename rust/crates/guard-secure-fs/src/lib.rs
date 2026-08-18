@@ -304,31 +304,27 @@ fn sensitive_external_filename(path: &Path) -> bool {
 }
 
 fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
-    if parts
+    parts
         .iter()
         .any(|part| SOURCE_INSPECTION_PARTS.contains(&part.as_str()))
-    {
-        return true;
-    }
-    if path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .is_some_and(|name| {
-            let lowered = name.to_ascii_lowercase();
-            BENIGN_SOURCE_DOTFILES.contains(&lowered.as_str())
-        })
-    {
-        return true;
-    }
-    path.extension()
-        .and_then(|value| value.to_str())
-        .map(str::to_ascii_lowercase)
-        .is_some_and(|suffix| SOURCE_EXTENSIONS.contains(&suffix.as_str()))
+        || path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|name| {
+                let lowered = name.to_ascii_lowercase();
+                BENIGN_SOURCE_DOTFILES.contains(&lowered.as_str())
+            })
+        || path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(str::to_ascii_lowercase)
+            .is_some_and(|suffix| SOURCE_EXTENSIONS.contains(&suffix.as_str()))
 }
 
 fn canonical_dir(path: &Path) -> Option<PathBuf> {
-    let canonical = fs::canonicalize(path).ok()?;
-    canonical.is_dir().then_some(canonical)
+    fs::canonicalize(path)
+        .ok()
+        .and_then(|canonical| canonical.is_dir().then_some(canonical))
 }
 
 fn immediate_sibling_git_checkout(path: &Path, workspace: &Path) -> bool {
@@ -350,13 +346,9 @@ fn immediate_sibling_git_checkout(path: &Path, workspace: &Path) -> bool {
     if checkout == workspace {
         return false;
     }
-    let marker = checkout.join(".git");
-    match fs::symlink_metadata(&marker) {
-        Ok(metadata) => {
-            !metadata.file_type().is_symlink() && (metadata.is_file() || metadata.is_dir())
-        }
-        Err(_) => false,
-    }
+    fs::symlink_metadata(checkout.join(".git")).is_ok_and(|metadata| {
+        !metadata.file_type().is_symlink() && (metadata.is_file() || metadata.is_dir())
+    })
 }
 
 fn known_skill_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
