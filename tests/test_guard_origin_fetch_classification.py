@@ -107,6 +107,24 @@ def test_repo_bound_github_ssh_origin_fetch_is_benign(tmp_path: Path, origin: st
     )
 
 
+def test_github_ssh_origin_fetch_rejects_configured_ssh_command(tmp_path: Path) -> None:
+    home, repository = _repository(tmp_path, origin="git@github.com:example/project.git")
+    _ = subprocess.run(
+        ["git", "-C", str(repository), "config", "core.sshCommand", "payload"],
+        check=True,
+    )
+
+    assert not _is_benign("git fetch origin", home=home, repository=repository)
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "git fetch origin"},
+        cwd=repository,
+        home_dir=home,
+    )
+    assert request is not None
+    assert request.action_class == "unverified Git remote refresh"
+
+
 def test_unverified_fetch_is_owned_by_git_extension(tmp_path: Path) -> None:
     payload = inspect_command("git fetch origin", cwd=tmp_path, home_dir=tmp_path)
 

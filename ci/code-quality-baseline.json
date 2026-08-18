@@ -552,7 +552,7 @@
     "src/codex_plugin_scanner/guard/runtime/detectors.py": 882,
     "src/codex_plugin_scanner/guard/runtime/direct_vitest.py": 617,
     "src/codex_plugin_scanner/guard/runtime/false_positive_rules.py": 738,
-    "src/codex_plugin_scanner/guard/runtime/git_execution_safety.py": 864,
+    "src/codex_plugin_scanner/guard/runtime/git_execution_safety.py": 866,
     "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py": 647,
     "src/codex_plugin_scanner/guard/runtime/kubernetes_commands.py": 607,
     "src/codex_plugin_scanner/guard/runtime/linux_artifact_lifecycle.py": 678,
