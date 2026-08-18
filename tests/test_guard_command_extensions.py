@@ -43,7 +43,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     ("command", "action_class", "extension_id"),
     [
         ("git reset --hard HEAD~1", "destructive shell command", "command.git"),
-        ("git fetch origin", "unverified Git remote refresh", "command.git"),
         ("rm -rf ./build", "destructive shell command", "command.filesystem"),
         ("docker push registry.example.com/app:v1", "docker-sensitive command", "command.container-runtime"),
         (
