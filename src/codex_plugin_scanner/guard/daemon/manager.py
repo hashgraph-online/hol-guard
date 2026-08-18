@@ -2676,8 +2676,10 @@ def _retire_guard_daemon_pid(
         return windows_terminate_process_if_creation_time(pid, observed_creation_time)
     try:
         os.kill(pid, signal.SIGTERM)
-    except OSError:
+    except ProcessLookupError:
         return True
+    except OSError:
+        return _guard_daemon_pid_is_proven_dead(pid)
     if _wait_for_guard_daemon_pid_death(pid):
         return True
     sigkill = getattr(signal, "SIGKILL", None)
@@ -2685,8 +2687,10 @@ def _retire_guard_daemon_pid(
         return False
     try:
         os.kill(pid, sigkill)
-    except OSError:
+    except ProcessLookupError:
         return True
+    except OSError:
+        return _guard_daemon_pid_is_proven_dead(pid)
     return _wait_for_guard_daemon_pid_death(pid)
 
 
