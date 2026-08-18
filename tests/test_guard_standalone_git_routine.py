@@ -152,7 +152,7 @@ def test_git_fetch_without_repository_bound_cwd_is_sensitive(tmp_path: Path, com
     )
 
     assert request is not None
-    assert request.action_class == "unverified Git remote refresh"
+    assert request.action_class == "git origin refresh"
 
 
 def test_git_fetch_without_any_cwd_is_sensitive(tmp_path: Path) -> None:
@@ -164,7 +164,7 @@ def test_git_fetch_without_any_cwd_is_sensitive(tmp_path: Path) -> None:
     )
 
     assert request is not None
-    assert request.action_class == "unverified Git remote refresh"
+    assert request.action_class == "git origin refresh"
 
 
 def test_standalone_verified_origin_reads_are_explicitly_benign(tmp_path: Path) -> None:
