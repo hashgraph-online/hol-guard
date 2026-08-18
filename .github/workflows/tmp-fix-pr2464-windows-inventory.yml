@@ -65,15 +65,19 @@ jobs:
 
           path = Path("rust/crates/guard-secure-fs/src/lib.rs")
           text = path.read_text(encoding="utf-8")
-          old = '''    if parts
-                  .windows(2)
-                  .any(|window| window == [".aws", "credentials"])
-              {
+          old = '''fn resolved_path_eq(left: &Path, right: &Path) -> bool {
+              if paths_case_equivalent(left, right) {
+                  return true;
+              }
+              macos_private_alias_eq(left, right)
+          }
           '''
-          new = '''    if parts.windows(2).any(|window| window == [".aws", "credentials"]) {
+          new = '''fn resolved_path_eq(left: &Path, right: &Path) -> bool {
+              paths_case_equivalent(left, right) || macos_private_alias_eq(left, right)
+          }
           '''
           if text.count(old) != 1:
-              raise SystemExit(f"expected one AWS credentials branch, found {text.count(old)}")
+              raise SystemExit(f"expected one resolved_path_eq helper, found {text.count(old)}")
           path.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
 
