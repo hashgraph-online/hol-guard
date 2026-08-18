@@ -6,6 +6,7 @@ import sqlite3
 from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING
 
+from .runtime.local_cli_commands import LocalCliCommand, LocalCliCommandState
 from .store_local_cli import _grant_from_row, _row_values
 from .store_local_cli_schema import ensure_local_cli_schema
 
@@ -15,9 +16,9 @@ class StoreLocalMcpMixin:
 
         def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
-        def read_local_cli_command_catalog(self, cli_id: str) -> list[object]: ...
+        def read_local_cli_command_catalog(self, cli_id: str) -> list[LocalCliCommand]: ...
 
-        def read_local_cli_command_states(self, cli_id: str) -> dict[str, object]: ...
+        def read_local_cli_command_states(self, cli_id: str) -> dict[str, LocalCliCommandState]: ...
 
     def read_local_mcp_grant(
         self,
