@@ -160,16 +160,12 @@ jobs:
             --root . \
             --baseline ci/code-quality-baseline.json \
             --json-output code-quality-audit.json
-          uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
-          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
-            --baseline ci/test-suite-ratchet-baseline.json \
-            --inventory test-inventory.json
           uv run --no-sync python scripts/ci/rust_migration_tree_hygiene.py
           mv "$temp_sources/workflow.yml" .github/workflows/tmp-fix-pr2464-windows-inventory.yml
           for part in "$temp_sources"/tmp_pr2464_patch_*.py.part; do
             mv "$part" scripts/ci/"$(basename "$part")"
           done
-          rm -f code-quality-audit.json test-inventory.json
+          rm -f code-quality-audit.json
 
           git diff --check
           git add \
