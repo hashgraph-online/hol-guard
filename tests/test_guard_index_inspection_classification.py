@@ -207,6 +207,24 @@ def test_unproven_cached_diff_variants_are_owned(tmp_path: Path, command: str) -
     assert request.action_class == "git index inspection"
 
 
+@pytest.mark.parametrize("command", ("git diff -- --cached", "git diff -- --staged"))
+def test_pathspec_index_flag_names_are_not_owned(tmp_path: Path, command: str) -> None:
+    home, repository = _repository(tmp_path)
+    payload = inspect_command(command, cwd=repository, home_dir=home)
+
+    assert payload["status"] == "no_match"
+    assert payload["classification"]["action_class"] is None
+    assert (
+        extract_sensitive_tool_action_request(
+            "Bash",
+            {"command": command},
+            cwd=repository,
+            home_dir=home,
+        )
+        is None
+    )
+
+
 def test_ripgrep_config_path_is_owned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home, repository = _repository(tmp_path)
     monkeypatch.setenv("RIPGREP_CONFIG_PATH", "other-config")

@@ -129,7 +129,8 @@ def cached_diff_kind(tokens: tuple[str, ...]) -> _CACHED_DIFF_KIND | None:
         if token != "diff":
             return None
         operands = args[index + 1 :]
-        if not _INDEX_DIFF_FLAGS.intersection(operands):
+        options = operands[: operands.index("--")] if "--" in operands else operands
+        if not _INDEX_DIFF_FLAGS.intersection(options):
             return None
         return "routed" if routed else "owned"
     return None
@@ -295,12 +296,16 @@ def _safe_exclude_pathspec(value: str) -> bool:
 
 
 def _cached_diff_operands_are_safe(args: tuple[str, ...]) -> bool:
-    if not _INDEX_DIFF_FLAGS.intersection(args) or len(args) > 20:
+    if len(args) > 20:
         return False
     if "--" not in args:
-        return all(arg in _SAFE_CACHED_DIFF_FLAGS or arg == "--cached" for arg in args)
+        return bool(_INDEX_DIFF_FLAGS.intersection(args)) and all(
+            arg in _SAFE_CACHED_DIFF_FLAGS or arg == "--cached" for arg in args
+        )
     separator = args.index("--")
     revisions = args[:separator]
+    if not _INDEX_DIFF_FLAGS.intersection(revisions):
+        return False
     paths = args[separator + 1 :]
     if not paths or len(paths) > 16:
         return False
