@@ -139,6 +139,23 @@ def test_unverified_fetch_is_owned_by_git_extension(tmp_path: Path) -> None:
     assert any(permission.permission_id == "command.git.permission.unverified-fetch" for permission in git.permissions)
 
 
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git -c core.sshCommand=payload fetch origin",
+        "git --config-env credential.helper=HELPER fetch origin",
+        "git --exec-path=/tmp fetch origin",
+    ),
+)
+def test_execution_config_fetch_stays_unowned(tmp_path: Path, command: str) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] == "unverified Git remote refresh"
+    assert payload["controlling_rule_id"] is None
+    assert payload["extensions"] == []
+
+
 def test_url_remote_fetch_stays_unowned(tmp_path: Path) -> None:
     payload = inspect_command("git fetch https://example.invalid/project.git", cwd=tmp_path, home_dir=tmp_path)
 
