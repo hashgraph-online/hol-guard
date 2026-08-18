@@ -272,10 +272,24 @@ def _safe_bounded_log_args(args: tuple[str, ...]) -> bool:
     return len(refs) <= 1 and all(_safe_ref(ref) for ref in refs)
 
 
+_SAFE_FETCH_FLAGS: Final = frozenset({"-q", "--quiet", "--no-tags"})
+
+
 def _safe_fetch_args(args: tuple[str, ...]) -> bool:
-    if args in {("origin",), ("origin", "--quiet"), ("--quiet", "origin")}:
-        return True
-    return len(args) == 2 and args[0] == "origin" and _safe_ref(args[1])
+    if not args or len(args) > 16:
+        return False
+    remote: str | None = None
+    refs: list[str] = []
+    for arg in args:
+        if arg in _SAFE_FETCH_FLAGS:
+            continue
+        if arg.startswith("-") or (remote is None and arg != "origin"):
+            return False
+        if remote is None:
+            remote = arg
+            continue
+        refs.append(arg)
+    return remote == "origin" and len(refs) <= 12 and all(_safe_ref(ref) for ref in refs)
 
 
 def _safe_ls_remote_args(args: tuple[str, ...]) -> bool:

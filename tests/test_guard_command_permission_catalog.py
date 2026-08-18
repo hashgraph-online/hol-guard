@@ -145,11 +145,17 @@ def test_shared_action_classes_keep_unique_rule_permissions() -> None:
         "command.git.permission.hard-reset",
         "command.git.permission.local-branch-delete",
         "command.git.permission.remote-branch-delete",
+        "command.git.permission.unverified-fetch",
     }
     assert all(permission.configurable for permission in git.permissions)
-    assert all(permission.action_classes == ("git destructive command",) for permission in git.permissions)
-    first = min(git.permissions, key=lambda permission: permission.permission_id)
+    fetch_id = "command.git.permission.unverified-fetch"
+    destructive = [permission for permission in git.permissions if permission.permission_id != fetch_id]
+    fetch = next(permission for permission in git.permissions if permission.permission_id == fetch_id)
+    assert all(permission.action_classes == ("git destructive command",) for permission in destructive)
+    assert fetch.action_classes == ("unverified Git remote refresh",)
+    first = min(destructive, key=lambda permission: permission.permission_id)
     assert registry.permission_for_action_class("git destructive command") is first
+    assert registry.permission_for_action_class("unverified Git remote refresh") is fetch
     for permission in git.permissions:
         assert registry.permission_for_rule_id(permission.rule_ids[0]) is permission
 
@@ -164,7 +170,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "55ea7e94ec7e23eea92e9664bd90c6afbe9725e139982a0d76a694c8124b4dd7"
+    assert registry.catalog_digest == "879df885900f701b1e269403e05b1d74a1e9db9e8a2e00463a2bfa5c5982823d"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )

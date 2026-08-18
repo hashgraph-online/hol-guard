@@ -54,12 +54,16 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
     CommandExtensionSpec(
         extension_id="command.git",
         name="Git protection",
-        description="Reviews local and remote Git operations that can discard work or replace history.",
-        action_classes=("git destructive command",),
-        risk_classes=("destructive_shell",),
+        description=(
+            "Reviews local and remote Git operations that can discard work, replace history, "
+            "or refresh a remote Guard cannot verify."
+        ),
+        action_classes=("git destructive command", "unverified Git remote refresh"),
+        risk_classes=("destructive_shell", "network_egress"),
         safer_alternatives=(
             "Preview affected files and refs before destructive repository operations.",
             "Create a temporary branch or stash before discarding local work.",
+            "Run fetch from the repository with a named origin instead of a URL remote.",
         ),
         reference_urls=(),
         required=True,

@@ -43,6 +43,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "github pr body shell substitution": ("execution",),
     "filesystem destructive command": ("destructive_shell",),
     "git destructive command": ("destructive_shell",),
+    "unverified git remote refresh": ("network_egress",),
     "system destructive command": ("destructive_shell",),
     "windows destructive command": ("destructive_shell",),
     "kubernetes destructive command": ("destructive_shell", "network_egress"),
@@ -117,6 +118,7 @@ def _compatibility_rule(
     safer_alternative: str,
     matcher: CommandMatcher | None = None,
     example_command: str | None = None,
+    family: str | None = None,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -129,6 +131,7 @@ def _compatibility_rule(
         matcher=matcher,
         compatibility_fallback=True,
         example_command=example_command,
+        family=family,
     )
 
 
@@ -291,6 +294,15 @@ BUILT_IN_COMMAND_RULES = (
         ),
         action_class="filesystem destructive command",
         safer_alternative="Preview affected paths and apply the change to the narrowest directory possible.",
+    ),
+    _compatibility_rule(
+        rule_id="command.git.unverified-fetch",
+        family="git-remote",
+        example_command="git fetch origin",
+        title="Git remote refresh",
+        description="Identifies Git fetch operations that Guard cannot verify as a repository-bound origin refresh.",
+        action_class="unverified Git remote refresh",
+        safer_alternative="Run fetch from the repository with a named origin, optional quiet flags, and named refs.",
     ),
     _structured_rule(
         rule_id="command.git.hard-reset",

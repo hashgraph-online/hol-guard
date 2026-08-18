@@ -43,6 +43,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     ("command", "action_class", "extension_id"),
     [
         ("git reset --hard HEAD~1", "destructive shell command", "command.git"),
+        ("git fetch origin", "unverified Git remote refresh", "command.git"),
         ("rm -rf ./build", "destructive shell command", "command.filesystem"),
         ("docker push registry.example.com/app:v1", "docker-sensitive command", "command.container-runtime"),
         (
@@ -118,7 +119,7 @@ def test_command_extension_registry_is_deterministic_and_complete() -> None:
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("destructive shell command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("GitHub merge command") is not None
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("GitHub merge command") is not None
-    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 87
+    assert sum(extension["rule_count"] for extension in payload["extensions"]) == 88
 
 
 @pytest.mark.parametrize(

@@ -166,6 +166,7 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
         "command.git.permission.hard-reset",
         "command.git.permission.local-branch-delete",
         "command.git.permission.remote-branch-delete",
+        "command.git.permission.unverified-fetch",
     }
     assert all(permission["configurable"] is True for permission in git["permissions"])
     assert all(len(permission["rule_ids"]) == 1 for permission in git["permissions"])
