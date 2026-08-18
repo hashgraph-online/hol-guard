@@ -42,6 +42,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "github pr body shell substitution": ("execution",),
     "filesystem destructive command": ("destructive_shell",),
     "git destructive command": ("destructive_shell",),
+    "git index inspection": ("local_secret_read",),
     "system destructive command": ("destructive_shell",),
     "windows destructive command": ("destructive_shell",),
     "kubernetes destructive command": ("destructive_shell", "network_egress"),
@@ -242,6 +243,13 @@ BUILT_IN_COMMAND_RULES = (
         description="Identifies shell substitution used to construct a remote request body.",
         action_class="GitHub PR body shell substitution",
         safer_alternative="Use a literal body file whose contents can be reviewed before submission.",
+    ),
+    _compatibility_rule(
+        rule_id="command.git.index-inspection",
+        title="Git index inspection",
+        description="Identifies staged-index Git reads that Guard cannot verify as a bounded inspection.",
+        action_class="git index inspection",
+        safer_alternative="Run git diff --cached --check, or exclude lockfiles and scan the staged patch on stdin.",
     ),
     _structured_rule(
         rule_id="command.filesystem.recursive-delete",

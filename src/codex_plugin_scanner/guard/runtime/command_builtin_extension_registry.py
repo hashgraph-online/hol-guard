@@ -53,12 +53,16 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
     CommandExtensionSpec(
         extension_id="command.git",
         name="Git protection",
-        description="Reviews local and remote Git operations that can discard work or replace history.",
-        action_classes=("git destructive command",),
-        risk_classes=("destructive_shell",),
+        description=(
+            "Reviews local and remote Git operations that can discard work, replace history, "
+            "or read a staged index Guard cannot bound."
+        ),
+        action_classes=("git destructive command", "git index inspection"),
+        risk_classes=("destructive_shell", "local_secret_read"),
         safer_alternatives=(
             "Preview affected files and refs before destructive repository operations.",
             "Create a temporary branch or stash before discarding local work.",
+            "Inspect the staged index with git diff --cached --check or lockfile excludes.",
         ),
         reference_urls=(),
         required=True,

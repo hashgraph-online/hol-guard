@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..compound_git_inspection import is_low_risk_git_inspection_segment
 from ..git_execution_safety import trusted_git_binary_for_cwd
+from ..git_index_inspection import is_low_risk_git_index_inspection
 from ..kubernetes_commands import kubernetes_read_only_inventory_args
 from ..shell_command_wrappers import is_trusted_absolute_command_path
 from ..shell_execution_context import ShellExecutionContext, ShellExecutionSegment, model_shell_execution_context
@@ -75,7 +76,7 @@ def _looks_like_safe_compound_developer_inspection(
 
     graph = _compound_developer_effect_graph(command_text, cwd=cwd, home_dir=home_dir)
     if graph is None or not graph.context.complete:
-        return False
+        return is_low_risk_git_index_inspection(command_text, cwd=cwd, home_dir=home_dir)
     silently_verified_effects = {
         DeveloperShellEffect.DIRECTORY,
         DeveloperShellEffect.LOCAL_READ,
@@ -151,7 +152,7 @@ def _git_segment_is_silently_verified(
         return "|" not in (*segment.control_before, *segment.control_after) and is_low_risk_git_inspection_segment(
             segment
         )
-    if operation in {"blame", "branch", "show", "worktree"}:
+    if operation in {"blame", "branch", "diff", "show", "worktree"}:
         return is_low_risk_git_inspection_segment(segment)
     return operation in {"ls-files", "rev-parse"}
 

@@ -7,6 +7,7 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
+from ..git_index_inspection import index_inspection_execution_context
 from ..shell_execution_context import ShellExecutionContext, model_shell_execution_context
 from .developer_inspection import (
     _low_risk_compound_developer_execution_context,
@@ -37,11 +38,15 @@ def low_risk_compound_developer_execution_context(
         )
         return replace(recovered, command_text=command_text) if recovered is not None else None
 
-    return _low_risk_compound_developer_execution_context(
-        command_text,
-        cwd=cwd,
-        home_dir=home_dir,
-    ) or _bounded_verified_source_edit_execution_context(command_text, home_dir=home_dir)
+    return (
+        _low_risk_compound_developer_execution_context(
+            command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+        or index_inspection_execution_context(command_text, cwd=cwd, home_dir=home_dir)
+        or _bounded_verified_source_edit_execution_context(command_text, home_dir=home_dir)
+    )
 
 
 def _bounded_verified_source_edit_execution_context(

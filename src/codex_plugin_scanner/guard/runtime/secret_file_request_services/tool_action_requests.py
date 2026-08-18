@@ -10,6 +10,7 @@ from typing import cast
 from ..command_model import CanonicalCommand
 from ..compound_git_inspection import is_low_risk_git_inspection_segment, is_low_risk_standalone_git_routine
 from ..git_execution_safety import git_status_args_are_read_only, git_status_has_execution_free_config
+from ..git_index_inspection import owned_git_index_inspection_action_class
 from ..kubernetes_commands import kubernetes_secret_read_source
 from ..shell_command_wrappers import normalize_transparent_shell_command
 from ..shell_execution_context import ShellExecutionContext, model_shell_execution_context
@@ -266,8 +267,27 @@ def _unverified_git_fetch_request(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> ToolActionRequestMatch | None:
-    if "git" not in command_text or "fetch" not in command_text:
+    if "git" not in command_text:
         return None
+    if "fetch" not in command_text:
+        action_class = owned_git_index_inspection_action_class(
+            command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+        if action_class is None:
+            return None
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=action_class,
+            reason=(
+                "Git cached diff needs a repository-bound index inspection Guard can verify. "
+                "Use git diff --cached with check/stat flags or lockfile excludes, "
+                "or confirm the exact index read in Guard."
+            ),
+        )
     parsing_cwd = cwd or home_dir or Path.cwd()
     context = model_shell_execution_context(
         command_text,
