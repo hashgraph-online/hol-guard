@@ -101,9 +101,7 @@ class LocalCliApiService:
 
     def _recognize_mcp(self, command: str, home_dir: Path) -> dict[str, object] | None:
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
-        if tokens is None or not looks_like_mcp_launch(
-            tokens, command_text=command, cwd=home_dir, home_dir=home_dir
-        ):
+        if tokens is None or not looks_like_mcp_launch(tokens, command_text=command, cwd=home_dir, home_dir=home_dir):
             return None
         probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir)
         if probed is None:

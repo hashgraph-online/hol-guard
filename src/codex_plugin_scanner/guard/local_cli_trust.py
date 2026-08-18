@@ -165,9 +165,10 @@ def _mcp_server_identity_hash(artifact: GuardArtifact) -> str | None:
     value = identity.get("identity_hash")
     if not isinstance(value, str) or len(value) != 64:
         return None
-    if any(character not in "0123456789abcdef" for character in value):
+    lowered = value.lower()
+    if any(character not in "0123456789abcdef" for character in lowered):
         return None
-    return value
+    return lowered
 
 
 def _mcp_tool_name(artifact: GuardArtifact) -> str:

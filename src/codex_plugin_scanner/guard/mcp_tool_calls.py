@@ -53,10 +53,7 @@ _MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v3"  # bump 
 _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "review": ("runtime_tool_call_review_required", "runtime tool call awaiting review"),
     "require-reapproval": ("runtime_tool_call_reapproval_required", "runtime tool call awaiting fresh approval"),
-    "sandbox-required": (
-        "runtime_tool_call_sandbox_required",
-        "runtime tool call requires an enforceable sandbox",
-    ),
+    "sandbox-required": ("runtime_tool_call_sandbox_required", "runtime tool call requires an enforceable sandbox"),
     "block": ("runtime_tool_call_blocked", "runtime tool call blocked"),
 }
 
@@ -564,7 +561,8 @@ def _apply_temporary_mcp_grant(
     arguments: object,
     current: ToolCallDecision,
 ) -> ToolCallDecision:
-    if current.action == "review":
+    original_action = current.action
+    if original_action == "review":
         selectors = runtime_grant_selectors(
             normalize_browser_mcp_intent(artifact, arguments),
             current.risk_categories,
@@ -586,8 +584,10 @@ def _apply_temporary_mcp_grant(
                     summary="A time-bounded approval covers this routine MCP capability.",
                 )
                 break
-    granted = apply_local_mcp_extension_decision(store, artifact, current.action)
-    return current if granted is None else replace(current, action=granted[0], source=granted[1], summary=granted[2])
+    granted = apply_local_mcp_extension_decision(store, artifact, original_action)
+    if granted is not None and (granted[0] == "block" or current.action != "allow"):
+        return replace(current, action=granted[0], source=granted[1], summary=granted[2])
+    return current
 
 
 def _revalidate_claimed_tool_call_approval(
