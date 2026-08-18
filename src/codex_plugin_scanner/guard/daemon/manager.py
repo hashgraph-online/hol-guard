@@ -2577,6 +2577,15 @@ def _guard_daemon_pid_is_proven_dead(pid: int) -> bool:
     return not _guard_daemon_pid_is_running(pid)
 
 
+def _wait_for_guard_daemon_pid_death(pid: int, *, timeout: float = 1.0) -> bool:
+    deadline = time.monotonic() + max(0.0, timeout)
+    while time.monotonic() < deadline:
+        if _guard_daemon_pid_is_proven_dead(pid):
+            return True
+        time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
+    return _guard_daemon_pid_is_proven_dead(pid)
+
+
 def _guard_daemon_pid_matches_command(pid: int, expected_guard_home: Path | None = None) -> bool:
     return _guard_daemon_pid_command_identity(pid, expected_guard_home=expected_guard_home) is True
 
@@ -2699,21 +2708,22 @@ def _retire_guard_daemon_pid(
         return windows_terminate_process_if_creation_time(pid, observed_creation_time)
     try:
         os.kill(pid, signal.SIGTERM)
-    except OSError:
+    except ProcessLookupError:
         return True
-    deadline = time.monotonic() + 1.0
-    while time.monotonic() < deadline:
-        if not _guard_daemon_pid_is_running(pid):
-            return True
-        time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
+    except OSError:
+        return _guard_daemon_pid_is_proven_dead(pid)
+    if _wait_for_guard_daemon_pid_death(pid):
+        return True
     sigkill = getattr(signal, "SIGKILL", None)
     if sigkill is None:
         return False
     try:
         os.kill(pid, sigkill)
-    except OSError:
+    except ProcessLookupError:
         return True
-    return not _guard_daemon_pid_is_running(pid)
+    except OSError:
+        return _guard_daemon_pid_is_proven_dead(pid)
+    return _wait_for_guard_daemon_pid_death(pid)
 
 
 def _wait_for_guard_daemon_url(
