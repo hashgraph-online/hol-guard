@@ -118,6 +118,29 @@ def test_execution_config_cached_diff_stays_unowned(tmp_path: Path) -> None:
     assert payload["extensions"] == []
 
 
+def test_echo_redirection_is_not_benign(tmp_path: Path) -> None:
+    home, repository = _repository(tmp_path)
+    command = "git diff --cached --check; echo data > output"
+
+    assert not _is_benign(command, home=home, repository=repository)
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=repository,
+        home_dir=home,
+    )
+    assert request is not None
+    assert request.action_class == "git index inspection"
+
+
+def test_attached_config_override_stays_unowned(tmp_path: Path) -> None:
+    payload = inspect_command("git -cdiff.external=payload diff --cached", cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "no_match"
+    assert payload["classification"]["action_class"] is None
+    assert payload["extensions"] == []
+
+
 def test_verified_cached_check_stays_unmatched_in_inspection(tmp_path: Path) -> None:
     home, repository = _repository(tmp_path)
     payload = inspect_command("git diff --cached --check", cwd=repository, home_dir=home)

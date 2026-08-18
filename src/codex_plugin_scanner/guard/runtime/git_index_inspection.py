@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 from .compound_git_inspection import (
+    _git_show_has_execution_free_config,
     _safe_repository_path,
     is_low_risk_git_inspection_segment,
     is_low_risk_standalone_git_routine,
@@ -98,6 +99,15 @@ def cached_diff_kind(tokens: tuple[str, ...]) -> _CACHED_DIFF_KIND | None:
         if token in _GIT_GLOBAL_FLAG_OPTIONS:
             index += 1
             continue
+        if token == "-c" or (token.startswith("-c") and not token.startswith("-C")):
+            routed = True
+            if token == "-c":
+                if index + 1 >= len(args):
+                    return None
+                index += 2
+                continue
+            index += 1
+            continue
         if option_name in _GIT_GLOBAL_VALUE_OPTIONS:
             if option_name in _EXECUTION_ROUTING_OPTIONS:
                 routed = True
@@ -172,6 +182,15 @@ def index_inspection_execution_context(
     return context
 
 
+def _segment_has_mutating_redirection(tokens: tuple[str, ...]) -> bool:
+    for token in tokens:
+        if token in {">", ">>", ">|", "1>", "1>>", "1>|"}:
+            return True
+        if ">" in token and not token.startswith("--"):
+            return True
+    return False
+
+
 def _flow_controls(controls: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(control for control in controls if control != "\n")
 
@@ -196,6 +215,8 @@ def _context_is_low_risk_git_index_inspection(
         if not tokens:
             previous_was_cached_diff = False
             continue
+        if _segment_has_mutating_redirection(segment.tokens):
+            return False
         command_name, command_index = _shell_segment_primary_command(list(tokens))
         if command_name is None or command_index is None:
             return False
@@ -306,7 +327,11 @@ def _git_cached_diff_segment_is_safe(
     if operands is None or not _cached_diff_operands_are_safe(operands):
         return False
     synthetic = replace(segment, tokens=_proof_cached_diff_tokens(tokens))
-    return is_low_risk_git_inspection_segment(synthetic, home_dir=home_dir)
+    repository_path = tokens[2] if tokens[:2] == ("git", "-C") and len(tokens) > 2 else None
+    return is_low_risk_git_inspection_segment(
+        synthetic,
+        home_dir=home_dir,
+    ) and _git_show_has_execution_free_config(synthetic, repository_path=repository_path)
 
 
 def git_diff_operands(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
