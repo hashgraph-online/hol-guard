@@ -30,9 +30,14 @@ class StoreLocalCliMixin:
         seen_at: str,
         source_path: str | None = None,
         help_status: str | None = None,
+        surface: str = "cli",
+        server_identity_hash: str | None = None,
+        server_command: str | None = None,
+        server_args_hash: str | None = None,
     ) -> None:
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
+        surface_value = surface if surface in {"cli", "mcp"} else "cli"
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
             current = connection.execute(
@@ -44,8 +49,9 @@ class StoreLocalCliMixin:
                     """
                     insert into local_cli_observation (
                         cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                        observed_count, last_seen_at, source_path, help_status
-                    ) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                        observed_count, last_seen_at, source_path, help_status, surface,
+                        server_identity_hash, server_command, server_args_hash
+                    ) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         identity.cli_id,
@@ -57,6 +63,10 @@ class StoreLocalCliMixin:
                         seen_at,
                         source_path,
                         help_status,
+                        surface_value,
+                        server_identity_hash,
+                        server_command,
+                        server_args_hash,
                     ),
                 )
                 return
@@ -66,7 +76,11 @@ class StoreLocalCliMixin:
                 set identity_hash = ?, kind = ?, name = ?, interpreter_name = ?,
                     example_label = ?, observed_count = observed_count + 1, last_seen_at = ?,
                     source_path = coalesce(?, source_path),
-                    help_status = coalesce(?, help_status)
+                    help_status = coalesce(?, help_status),
+                    surface = ?,
+                    server_identity_hash = coalesce(?, server_identity_hash),
+                    server_command = coalesce(?, server_command),
+                    server_args_hash = coalesce(?, server_args_hash)
                 where cli_id = ?
                 """,
                 (
@@ -78,6 +92,10 @@ class StoreLocalCliMixin:
                     seen_at,
                     source_path,
                     help_status,
+                    surface_value,
+                    server_identity_hash,
+                    server_command,
+                    server_args_hash,
                     identity.cli_id,
                 ),
             )
@@ -88,7 +106,8 @@ class StoreLocalCliMixin:
             observation_rows = connection.execute(
                 """
                 select cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                       observed_count, last_seen_at, source_path, help_status
+                       observed_count, last_seen_at, source_path, help_status, surface,
+                       server_identity_hash
                 from local_cli_observation
                 order by last_seen_at desc, cli_id asc
                 """
@@ -123,6 +142,8 @@ class StoreLocalCliMixin:
                         "last_seen_at": None,
                         "source_path": None,
                         "help_status": None,
+                        "surface": "cli",
+                        "server_identity_hash": None,
                         "state": grant["state"],
                         "stale": False,
                         "grant_revision": grant["revision"],
@@ -372,7 +393,8 @@ def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
 
 
 def _observation_from_row(row: object) -> dict[str, object]:
-    values = _row_values(row, 10)
+    values = _row_values(row, 12)
+    surface = values[10] if values[10] in {"cli", "mcp"} else "cli"
     return {
         "cli_id": values[0],
         "identity_hash": values[1],
@@ -384,6 +406,8 @@ def _observation_from_row(row: object) -> dict[str, object]:
         "last_seen_at": values[7],
         "source_path": values[8],
         "help_status": values[9],
+        "surface": surface,
+        "server_identity_hash": values[11],
     }
 
 

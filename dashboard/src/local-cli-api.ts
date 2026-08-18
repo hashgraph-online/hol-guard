@@ -3,6 +3,7 @@ import { fetchLocalCliApi } from "./guard-api";
 export type LocalCliKind = "executable" | "script";
 export type LocalCliState = "unset" | "allowed" | "blocked";
 export type LocalCliCommandState = "inherit" | "allow" | "block";
+export type LocalCliSurface = "cli" | "mcp";
 
 export type LocalCliCommand = {
   command_id: string;
@@ -24,6 +25,8 @@ export type LocalCliItem = {
   last_seen_at: string | null;
   source_path: string | null;
   help_status: "ok" | "empty" | "failed" | null;
+  surface: LocalCliSurface;
+  server_identity_hash: string | null;
   state: LocalCliState;
   stale: boolean;
   grant_revision: number | null;
@@ -121,6 +124,8 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
     last_seen_at: optionalString(value.last_seen_at),
     source_path: optionalString(value.source_path),
     help_status: normalizeHelpStatus(value.help_status),
+    surface: value.surface === "mcp" ? "mcp" : "cli",
+    server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
     state,
     stale: value.stale === true,
     grant_revision: value.grant_revision === null || value.grant_revision === undefined
@@ -135,6 +140,12 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
 function normalizeHelpStatus(value: unknown): LocalCliItem["help_status"] {
   if (value === "ok" || value === "empty" || value === "failed") return value;
   return null;
+}
+
+function normalizeIdentityHash(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
+  return value;
 }
 
 export function normalizeLocalCliCommand(value: unknown): LocalCliCommand {

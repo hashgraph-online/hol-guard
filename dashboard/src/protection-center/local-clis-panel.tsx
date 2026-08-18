@@ -37,15 +37,18 @@ function reviewTitle(name: string, state: LocalCliState): string {
 }
 
 export function customExtensionStateLabel(item: LocalCliItem): string {
+  const unit = item.surface === "mcp" ? "tool" : "command";
+  const units = item.surface === "mcp" ? "tools" : "commands";
+  const source = item.surface === "mcp" ? "this server" : "this file";
   if (item.stale) return "This file changed. Review the extension again.";
-  if (item.state === "blocked") return "Every command from this file is blocked.";
+  if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
   if (item.state === "allowed") {
     if (item.commands.length === 0) {
-      return "Matching commands from this file are allowed.";
+      return `Matching ${units} from ${source} are allowed.`;
     }
     const allowed = item.commands.filter((command) => command.state === "allow").length;
-    if (allowed > 0) return `${allowed} command${allowed === 1 ? "" : "s"} allowed. The rest follow Recommended.`;
-    return "Commands follow Recommended until you allow or block them.";
+    if (allowed > 0) return `${allowed} ${allowed === 1 ? unit : units} allowed. The rest follow Recommended.`;
+    return `${units.charAt(0).toUpperCase()}${units.slice(1)} follow Recommended until you allow or block them.`;
   }
   return item.example_label;
 }
@@ -61,7 +64,7 @@ export function CustomExtensionsSection(props: {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 id="custom-extensions-heading" className="text-xl font-semibold tracking-tight text-brand-dark">Custom extensions</h2>
-          <p className="mt-1 text-sm text-slate-500">Your own scripts and binaries, not Guard's built-in catalog.</p>
+          <p className="mt-1 text-sm text-slate-500">Your own scripts, binaries, and MCP servers, not Guard's built-in catalog.</p>
         </div>
         <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-blue">
           <HiMiniPlus className="size-4" aria-hidden="true" />
@@ -180,7 +183,9 @@ export function LocalCliDetail(props: {
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.item.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
-          Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules.
+          {props.item.surface === "mcp"
+            ? "Recommended keeps Guard's usual review. Allow or block applies to that tool from this MCP server. Destructive tools stay under Guard's usual rules."
+            : "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules."}
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           {added ? (
@@ -204,14 +209,19 @@ export function LocalCliDetail(props: {
       </header>
       {added ? (
         <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
-          <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">Command patterns</h2>
+          <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">
+            {props.item.surface === "mcp" ? "MCP tools" : "Command patterns"}
+          </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-            Same settings as built-in tools. Recommended is the safe default.
+            {props.item.surface === "mcp"
+              ? "Same settings as built-in tools. Recommended is the safe default for each MCP tool."
+              : "Same settings as built-in tools. Recommended is the safe default."}
           </p>
           <div className="mt-4">
             <CustomExtensionCommandList
               commands={commands}
               disabled={busy}
+              surface={props.item.surface}
               onChange={handleCommandState}
             />
           </div>

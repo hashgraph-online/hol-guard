@@ -9,7 +9,6 @@ from typing import cast
 
 from ..command_model import CanonicalCommand
 from ..compound_git_inspection import (
-    canonical_home_git_c_path,
     is_low_risk_git_inspection_segment,
     is_low_risk_standalone_git_routine,
 )
@@ -332,14 +331,13 @@ def _unverified_git_fetch_request(
         workspace_root=parsing_cwd,
         home_dir=home_dir,
     )
-    trusted_home = home_dir if canonical_home_git_c_path(command_text) is not None else None
     if not any(_segment_invokes_git_fetch(segment.tokens) for segment in context.segments):
         return None
-    if cwd is not None and is_low_risk_standalone_git_routine(context, home_dir=trusted_home):
+    # Home lets git -C target a repo under that home from a sibling workspace.
+    if cwd is not None and is_low_risk_standalone_git_routine(context, home_dir=home_dir):
         return None
     if context.complete and all(
-        not _segment_invokes_git_fetch(segment.tokens)
-        or is_low_risk_git_inspection_segment(segment, home_dir=trusted_home)
+        not _segment_invokes_git_fetch(segment.tokens) or is_low_risk_git_inspection_segment(segment, home_dir=home_dir)
         for segment in context.segments
     ):
         return None
@@ -348,7 +346,11 @@ def _unverified_git_fetch_request(
         normalized_tool_name=normalized_tool_name,
         command_text=command_text,
         action_class="unverified Git remote refresh",
-        reason="Git fetch requires repository-bound remote and execution-configuration verification.",
+        reason=(
+            "Git fetch needs a repository-bound origin Guard can verify. "
+            "Run it from that repository, or use git -C with a path under your "
+            "home directory, a named origin, and no force/prune/URL remotes."
+        ),
     )
 
 

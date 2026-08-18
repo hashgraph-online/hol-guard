@@ -15,6 +15,7 @@ from .action_lattice import most_restrictive_guard_action, normalize_guard_actio
 from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
+from .local_cli_trust import apply_local_mcp_extension_decision
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
 from .runtime.approval_context import (
@@ -47,19 +48,12 @@ from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall,
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
-# Bump when MCP risk classification or action-composition semantics change.
-_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v3"
+_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION = "mcp-tool-call-evaluation-v3"  # bump with risk/action semantics
 
 _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "review": ("runtime_tool_call_review_required", "runtime tool call awaiting review"),
-    "require-reapproval": (
-        "runtime_tool_call_reapproval_required",
-        "runtime tool call awaiting fresh approval",
-    ),
-    "sandbox-required": (
-        "runtime_tool_call_sandbox_required",
-        "runtime tool call requires an enforceable sandbox",
-    ),
+    "require-reapproval": ("runtime_tool_call_reapproval_required", "runtime tool call awaiting fresh approval"),
+    "sandbox-required": ("runtime_tool_call_sandbox_required", "runtime tool call requires an enforceable sandbox"),
     "block": ("runtime_tool_call_blocked", "runtime tool call blocked"),
 }
 
@@ -567,28 +561,32 @@ def _apply_temporary_mcp_grant(
     arguments: object,
     current: ToolCallDecision,
 ) -> ToolCallDecision:
-    if current.action != "review":
-        return current
-    selectors = runtime_grant_selectors(
-        normalize_browser_mcp_intent(artifact, arguments),
-        current.risk_categories,
-        artifact_id=artifact.artifact_id,
-        artifact_hash=artifact_hash,
-    )
-    for selector in selectors:
-        lookup = store.resolve_policy_decision_lookup(
-            artifact.harness,
-            selector,
-            consume_one_shot=False,
+    original_action = current.action
+    if original_action == "review":
+        selectors = runtime_grant_selectors(
+            normalize_browser_mcp_intent(artifact, arguments),
+            current.risk_categories,
+            artifact_id=artifact.artifact_id,
+            artifact_hash=artifact_hash,
         )
-        decision = lookup["decision"]
-        if decision is not None and decision.get("action") == "allow" and decision.get("source") == "approval-gate":
-            return replace(
-                current,
-                action="allow",
-                source="temporary-mcp-grant",
-                summary="A time-bounded approval covers this routine MCP capability.",
+        for selector in selectors:
+            lookup = store.resolve_policy_decision_lookup(
+                artifact.harness,
+                selector,
+                consume_one_shot=False,
             )
+            decision = lookup["decision"]
+            if decision is not None and decision.get("action") == "allow" and decision.get("source") == "approval-gate":
+                current = replace(
+                    current,
+                    action="allow",
+                    source="temporary-mcp-grant",
+                    summary="A time-bounded approval covers this routine MCP capability.",
+                )
+                break
+    granted = apply_local_mcp_extension_decision(store, artifact, original_action)
+    if granted is not None and (granted[0] == "block" or current.action != "allow"):
+        return replace(current, action=granted[0], source=granted[1], summary=granted[2])
     return current
 
 

@@ -39,7 +39,37 @@ const item = normalizeLocalCliItem({
 });
 assert.equal(item.name, "cwv.py");
 assert.equal(item.state, "allowed");
+assert.equal(item.surface, "cli");
+assert.equal(item.server_identity_hash, null);
 assert.equal(item.commands[0]?.command_id, "root");
+
+const mcpItem = normalizeLocalCliItem({
+  ...item,
+  cli_id: "local-cli.mcp-abcdef12",
+  name: "@modelcontextprotocol/server-github",
+  kind: "executable",
+  example_label: "npx -y @modelcontextprotocol/server-github",
+  interpreter_name: null,
+  surface: "mcp",
+  server_identity_hash: "b".repeat(64),
+  commands: [
+    {
+      command_id: "read-file",
+      name: "read_file",
+      usage: "read_file",
+      description: "Read a file",
+      parent_id: null,
+      state: "allow",
+    },
+  ],
+});
+assert.equal(mcpItem.surface, "mcp");
+assert.equal(mcpItem.server_identity_hash, "b".repeat(64));
+assert.equal(isLocalCliId(mcpItem.cli_id), true);
+assert.equal(
+  normalizeLocalCliItem({ ...mcpItem, server_identity_hash: "not-a-hash" }).server_identity_hash,
+  null,
+);
 
 const list = normalizeLocalCliList({
   schema_version: "guard.daemon.local-clis.v1",

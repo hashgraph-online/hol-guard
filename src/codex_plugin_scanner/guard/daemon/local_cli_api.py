@@ -13,6 +13,7 @@ from ..approval_gate import (
 )
 from ..local_cli_trust import utc_now
 from ..runtime.local_cli_commands import (
+    MAX_LOCAL_CLI_COMMANDS,
     LocalCliCommand,
     LocalCliCommandState,
     default_local_cli_commands,
@@ -28,6 +29,12 @@ from ..runtime.local_cli_identity import (
     is_local_cli_id,
     local_cli_recognition_candidates,
     recognize_operator_cli,
+)
+from ..runtime.local_mcp_probe import (
+    is_strict_package_mcp_launcher,
+    looks_like_mcp_launch,
+    mcp_launch_tokens,
+    probe_stdio_mcp_server,
 )
 
 if TYPE_CHECKING:
@@ -70,6 +77,9 @@ class LocalCliApiService:
     def recognize(self, payload: dict[str, object]) -> dict[str, object]:
         command = self._required_string(payload, "command")
         home_dir = Path.home()
+        mcp_item = self._recognize_mcp(command, home_dir)
+        if mcp_item is not None:
+            return mcp_item
         identity, code, message = recognize_operator_cli(command, cwd=home_dir, home_dir=home_dir)
         if identity is None:
             raise LocalCliApiError(400, code, message)
@@ -79,18 +89,68 @@ class LocalCliApiService:
             seen_at=utc_now(),
             source_path=source_path,
             help_status=help_status,
+            surface="cli",
         )
         self._store.replace_local_cli_commands(identity.cli_id, commands)
+        return self._recognize_payload(
+            identity.cli_id,
+            identity.to_dict(),
+            help_status,
+            _recognize_summary(identity.name, help_status, len(commands)),
+        )
+
+    def _recognize_mcp(self, command: str, home_dir: Path) -> dict[str, object] | None:
+        tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
+        if tokens is None or not looks_like_mcp_launch(tokens, command_text=command, cwd=home_dir, home_dir=home_dir):
+            return None
+        probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir)
+        if probed is None:
+            if is_strict_package_mcp_launcher(tokens):
+                launcher = Path(tokens[0]).name
+                raise LocalCliApiError(
+                    400,
+                    "already_built_in",
+                    (
+                        f"{launcher} is already a built-in Guard extension. "
+                        "Guard could not list MCP tools from that command."
+                    ),
+                )
+            return None
+        self._store.record_local_cli_observation(
+            probed.identity,
+            seen_at=utc_now(),
+            source_path=None,
+            help_status=probed.status,
+            surface="mcp",
+            server_identity_hash=probed.server_identity.identity_hash,
+            server_command=probed.server_identity.command,
+            server_args_hash=probed.server_identity.args_hash,
+        )
+        self._store.replace_local_cli_commands(probed.identity.cli_id, probed.tools)
+        return self._recognize_payload(
+            probed.identity.cli_id,
+            probed.identity.to_dict(),
+            probed.status,
+            _recognize_mcp_summary(probed.identity.name, probed.status, len(probed.tools)),
+        )
+
+    def _recognize_payload(
+        self,
+        cli_id: str,
+        fallback: dict[str, object],
+        help_status: str,
+        summary: str,
+    ) -> dict[str, object]:
         listed = next(
-            (item for item in self._store.list_local_cli_items() if item.get("cli_id") == identity.cli_id),
+            (item for item in self._store.list_local_cli_items() if item.get("cli_id") == cli_id),
             None,
         )
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "revision": self._store.read_local_cli_revision(),
-            "item": listed or identity.to_dict(),
+            "item": listed or fallback,
             "help_status": help_status,
-            "summary": _recognize_summary(identity.name, help_status, len(commands)),
+            "summary": summary,
         }
 
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
@@ -189,7 +249,7 @@ class LocalCliApiService:
         raw = payload.get("commands")
         if raw is None:
             return {}
-        if not isinstance(raw, list) or len(raw) > 40:
+        if not isinstance(raw, list) or len(raw) > MAX_LOCAL_CLI_COMMANDS:
             raise LocalCliApiError(400, "invalid_commands")
         states: dict[str, LocalCliCommandState] = {}
         for entry in raw:
@@ -226,6 +286,22 @@ def _preview_summary(name: str, state: str) -> str:
     if state == "blocked":
         return f"Keep {name} as a custom extension and block every command from this file."
     return f"Remove the {name} custom extension from this device."
+
+
+def _recognize_mcp_summary(name: str, help_status: str, tool_count: int) -> str:
+    if help_status == "ok":
+        return (
+            f"Guard listed {tool_count} tools from this MCP server. "
+            "Recommended keeps the usual review. Allow or block each tool like a built-in."
+        )
+    if help_status == "empty":
+        return (
+            f"{name} did not list tools. You can still allow or block this server, or set Recommended for other tools."
+        )
+    return (
+        f"Guard could not list tools from {name}. You can still add the server. "
+        "Tools stay on Recommended until listing works."
+    )
 
 
 def _recognize_summary(name: str, help_status: str, command_count: int) -> str:

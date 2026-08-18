@@ -535,12 +535,23 @@ def recover_guard_daemon_after_hook_failure(
             if live_process_url is not None:
                 return live_process_url
         if os.name == "nt":
-            return ensure_guard_daemon(
+            recovered_url = ensure_guard_daemon(
                 guard_home,
                 home_dir=home_dir,
                 allow_windows_job_breakaway=True,
             )
-        return ensure_guard_daemon(guard_home, home_dir=home_dir)
+        else:
+            recovered_url = ensure_guard_daemon(guard_home, home_dir=home_dir)
+        try:
+            _ = publish_approval_center_locator(guard_home, recovered_url)
+        except (OSError, RuntimeError):
+            with suppress(Exception):
+                record_daemon_lifecycle_event(
+                    guard_home,
+                    event="locator_publish_failed",
+                    reason="recovery",
+                )
+        return recovered_url
 
 
 def schedule_guard_daemon_recovery(
@@ -1358,8 +1369,6 @@ def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | No
         return None
     if not _guard_daemon_pid_is_running(pid):
         return None
-    if not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
-        return None
     daemon_url = payload.get("daemon_url")
     approval_url_base = payload.get("approval_url_base")
     started_at = payload.get("started_at")
@@ -1375,6 +1384,12 @@ def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | No
         return None
     if not isinstance(guard_home_str, str):
         return None
+    if not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
+        state = load_authenticated_daemon_state(guard_home)
+        state_pid = state.get("pid") if isinstance(state, dict) else None
+        state_port = state.get("port") if isinstance(state, dict) else None
+        if state_pid != pid or not isinstance(state_port, int) or daemon_url != f"http://127.0.0.1:{state_port}":
+            return None
     return ApprovalCenterLocator(
         guard_home=Path(guard_home_str),
         daemon_url=daemon_url,
@@ -1401,6 +1416,62 @@ def _daemon_state_pid_matches_locator(guard_home: Path, locator_pid: int) -> boo
         return False
     state_pid = state.get("pid")
     return isinstance(state_pid, int) and state_pid == locator_pid
+
+
+def _daemon_identity_matches_locator(
+    guard_home: Path,
+    *,
+    pid: int,
+    daemon_url: str,
+) -> bool:
+    if not _guard_daemon_pid_is_running(pid):
+        return False
+    if _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
+        return True
+    auth_token = load_guard_daemon_auth_token(guard_home)
+    if auth_token is None:
+        return False
+    details = _daemon_healthz_details_payload(daemon_url, auth_token)
+    return bool(
+        isinstance(details, dict)
+        and details.get("pid") == pid
+        and _healthz_payload_matches_guard_home(json.dumps(details), guard_home)
+        and _daemon_healthz_details_match_current_runtime(details)
+    )
+
+
+def publish_approval_center_locator(
+    guard_home: Path,
+    daemon_url: str,
+) -> ApprovalCenterLocator:
+    """Publish browser discovery for an already authenticated live daemon."""
+
+    state = load_authenticated_daemon_state(guard_home)
+    if not isinstance(state, dict):
+        raise RuntimeError("Guard daemon identity is unavailable.")
+    pid = state.get("pid")
+    port = state.get("port")
+    if (
+        not isinstance(pid, int)
+        or pid <= 0
+        or not isinstance(port, int)
+        or daemon_url != f"http://127.0.0.1:{port}"
+        or not _daemon_identity_matches_locator(guard_home, pid=pid, daemon_url=daemon_url)
+    ):
+        raise RuntimeError("Guard daemon identity does not match the active local service.")
+    started_at = state.get("started_at")
+    if not isinstance(started_at, str) or not started_at:
+        started_at = datetime.now(tz=timezone.utc).isoformat()
+    locator = ApprovalCenterLocator(
+        guard_home=guard_home,
+        daemon_url=daemon_url,
+        approval_url_base=daemon_url,
+        pid=pid,
+        started_at=started_at,
+        state_path=_state_path(guard_home),
+    )
+    write_approval_center_locator(guard_home, locator)
+    return locator
 
 
 def ensure_approval_center(guard_home: Path) -> ApprovalCenterLocator:

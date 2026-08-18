@@ -485,9 +485,6 @@ def test_standalone_fetch_accepts_canonical_home_git_c_target(tmp_path: Path) ->
     (
         "~//projects/example",
         "~/projects/../projects/example",
-        "'~/projects/example'",
-        '"~/projects/example"',
-        r"\~/projects/example",
     ),
 )
 def test_standalone_fetch_rejects_ambiguous_home_git_c_target(

@@ -245,6 +245,8 @@ function normalizeLocalCliItem(value) {
     last_seen_at: optionalString$1(value.last_seen_at),
     source_path: optionalString$1(value.source_path),
     help_status: normalizeHelpStatus(value.help_status),
+    surface: value.surface === "mcp" ? "mcp" : "cli",
+    server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
     state,
     stale: value.stale === true,
     grant_revision: value.grant_revision === null || value.grant_revision === void 0 ? null : requiredInt(value.grant_revision, "grant revision"),
@@ -256,6 +258,11 @@ function normalizeLocalCliItem(value) {
 function normalizeHelpStatus(value) {
   if (value === "ok" || value === "empty" || value === "failed") return value;
   return null;
+}
+function normalizeIdentityHash(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
+  return value;
 }
 function normalizeLocalCliCommand(value) {
   if (!isRecord(value)) throw new Error("Invalid local CLI command");
@@ -1932,7 +1939,7 @@ function withCommandState(commands, commandId, state) {
 }
 function CustomExtensionCommandList(props) {
   if (props.commands.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Guard has not loaded commands for this tool yet. Find the tool again to read its --help output." });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: props.surface === "mcp" ? "Guard has not loaded tools for this MCP server yet. Find the server again to list its tools." : "Guard has not loaded commands for this tool yet. Find the tool again to read its --help output." });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-200", children: props.commands.map((command) => /* @__PURE__ */ jsxRuntimeExports.jsx(
     CustomExtensionCommandRow,
@@ -2600,9 +2607,7 @@ function AddCustomExtensionDialog(props) {
     setCommand(item.example_label);
     setRecognized(item);
     setCommands(item.commands);
-    setSummary(
-      item.commands.length > 0 ? `Guard loaded ${item.commands.length} commands. Recommended keeps the usual review. Allow or block each one.` : `Find this tool to read ${item.name} --help and load its commands.`
-    );
+    setSummary(suggestionSummary(item));
     setPending(null);
     setError(null);
   }, []);
@@ -2669,7 +2674,11 @@ function AddCustomExtensionDialog(props) {
     { approvalPassword: password, approvalTotpCode: totp },
     busy
   );
-  const submitLabel = recognized === null ? busy ? "Looking…" : "Find this tool" : busy ? "Saving…" : pending === "blocked" ? "Block this tool" : "Allow this tool";
+  const submitLabel = addDialogSubmitLabel({
+    recognized,
+    busy,
+    pending
+  });
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "form",
     {
@@ -2682,7 +2691,7 @@ function AddCustomExtensionDialog(props) {
       className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "add-custom-extension-title", className: "text-xl font-semibold text-brand-dark", children: "Add a custom extension" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: "Paste the command for your tool. Guard reads --help, then you can set Recommended, Allow, or Block on each command." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: "Paste a local command or an MCP server launch command. Guard lists commands from --help, or tools from a stdio MCP server, then you set Recommended, Allow, or Block." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-5 block text-sm font-semibold text-brand-dark", children: "Command" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
@@ -2692,19 +2701,26 @@ function AddCustomExtensionDialog(props) {
             onChange: handleCommand,
             spellCheck: false,
             autoComplete: "off",
-            placeholder: "python3 scripts/cwv.py --by url",
+            placeholder: "npx -y @modelcontextprotocol/server-github",
             className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm leading-6 text-brand-dark/70", children: [
-          "One command. Include the script or binary. Not ",
+          "One command. A script, a binary, or an MCP launch such as ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "npx" }),
+          " or ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "uvx" }),
+          ". Not ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "ls" }),
           ", ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "grep" }),
           ", or a pipeline."
         ] }),
         recognized ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: recognized.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: recognized.name }),
+            recognized.surface === "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold tracking-wide text-brand-dark/70 ring-1 ring-slate-200", children: "MCP server" }) : null
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-xs text-brand-dark/70", children: recognized.example_label }),
           summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: summary }) : null,
           commands.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 max-h-72 overflow-auto rounded-2xl bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2712,12 +2728,13 @@ function AddCustomExtensionDialog(props) {
             {
               commands,
               disabled: busy,
+              surface: recognized.surface,
               onChange: handleCommandState
             }
           ) }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestAllow, className: `min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "allowed" ? "bg-brand-blue text-white" : "border border-slate-300 text-brand-dark"}`, children: "Allow this tool" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestBlock, className: `min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "blocked" ? "bg-brand-dark text-white" : "border border-slate-300 text-brand-dark"}`, children: "Block this tool" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestAllow, className: `min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "allowed" ? "bg-brand-blue text-white" : "border border-slate-300 text-brand-dark"}`, children: recognized.surface === "mcp" ? "Allow this server" : "Allow this tool" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestBlock, className: `min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "blocked" ? "bg-brand-dark text-white" : "border border-slate-300 text-brand-dark"}`, children: recognized.surface === "mcp" ? "Block this server" : "Block this tool" })
           ] })
         ] }) : null,
         proofReady ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2743,6 +2760,31 @@ function AddCustomExtensionDialog(props) {
     }
   ) });
 }
+function addDialogSubmitLabel(input) {
+  if (input.recognized === null) {
+    return input.busy ? "Looking…" : "Find this tool";
+  }
+  if (input.busy) {
+    return "Saving…";
+  }
+  const mcp = input.recognized.surface === "mcp";
+  if (input.pending === "blocked") {
+    return mcp ? "Block this server" : "Block this tool";
+  }
+  return mcp ? "Allow this server" : "Allow this tool";
+}
+function suggestionSummary(item) {
+  if (item.surface === "mcp" && item.commands.length > 0) {
+    return `Guard listed ${item.commands.length} tools from this MCP server. Recommended keeps the usual review. Allow or block each one.`;
+  }
+  if (item.surface === "mcp") {
+    return `Find this tool to list MCP tools from ${item.name}.`;
+  }
+  if (item.commands.length > 0) {
+    return `Guard loaded ${item.commands.length} commands. Recommended keeps the usual review. Allow or block each one.`;
+  }
+  return `Find this tool to read ${item.name} --help and load its commands.`;
+}
 function SuggestionButton(props) {
   const handleSelect = reactExports.useCallback(() => {
     props.onSelect(props.item);
@@ -2761,15 +2803,18 @@ function reviewTitle(name, state) {
   return `Remove ${name}`;
 }
 function customExtensionStateLabel(item) {
+  const unit = item.surface === "mcp" ? "tool" : "command";
+  const units = item.surface === "mcp" ? "tools" : "commands";
+  const source = item.surface === "mcp" ? "this server" : "this file";
   if (item.stale) return "This file changed. Review the extension again.";
-  if (item.state === "blocked") return "Every command from this file is blocked.";
+  if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
   if (item.state === "allowed") {
     if (item.commands.length === 0) {
-      return "Matching commands from this file are allowed.";
+      return `Matching ${units} from ${source} are allowed.`;
     }
     const allowed = item.commands.filter((command) => command.state === "allow").length;
-    if (allowed > 0) return `${allowed} command${allowed === 1 ? "" : "s"} allowed. The rest follow Recommended.`;
-    return "Commands follow Recommended until you allow or block them.";
+    if (allowed > 0) return `${allowed} ${allowed === 1 ? unit : units} allowed. The rest follow Recommended.`;
+    return `${units.charAt(0).toUpperCase()}${units.slice(1)} follow Recommended until you allow or block them.`;
   }
   return item.example_label;
 }
@@ -2779,7 +2824,7 @@ function CustomExtensionsSection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extensions-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Custom extensions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Your own scripts and binaries, not Guard's built-in catalog." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Your own scripts, binaries, and MCP servers, not Guard's built-in catalog." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-blue", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
@@ -2876,7 +2921,7 @@ function LocalCliDetail(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.item.example_label }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: props.item.name }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: customExtensionStateLabel(props.item) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75", children: "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75", children: props.item.surface === "mcp" ? "Recommended keeps Guard's usual review. Allow or block applies to that tool from this MCP server. Destructive tools stay under Guard's usual rules." : "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-3", children: added ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: "Allow this extension's commands" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", onClick: requestBlock, children: "Block this extension" }),
@@ -2884,13 +2929,14 @@ function LocalCliDetail(props) {
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAdd, children: "Add custom extension" }) })
     ] }),
     added ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8", "aria-labelledby": "custom-extension-commands-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-commands-heading", className: "text-lg font-semibold text-brand-dark", children: "Command patterns" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-6 text-slate-500", children: "Same settings as built-in tools. Recommended is the safe default." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-commands-heading", className: "text-lg font-semibold text-brand-dark", children: props.item.surface === "mcp" ? "MCP tools" : "Command patterns" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-6 text-slate-500", children: props.item.surface === "mcp" ? "Same settings as built-in tools. Recommended is the safe default for each MCP tool." : "Same settings as built-in tools. Recommended is the safe default." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         CustomExtensionCommandList,
         {
           commands,
           disabled: busy,
+          surface: props.item.surface,
           onChange: handleCommandState
         }
       ) }),
