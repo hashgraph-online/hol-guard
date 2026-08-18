@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from pathlib import Path
 from typing import Final, Literal
@@ -20,23 +21,22 @@ _ALLOWED_CONTROLS: Final = frozenset({"&&", "||", "|", ";", "\n"})
 _RG_BOOLEAN_FLAGS: Final = frozenset({"--ignore-case", "--line-number", "--no-config", "-i", "-in", "-n", "-ni"})
 _GIT_GLOBAL_FLAG_OPTIONS: Final = frozenset(
     {
-        "--bare",
         "--literal-pathspecs",
         "--no-advice",
         "--no-lazy-fetch",
         "--no-optional-locks",
         "--no-pager",
         "--no-replace-objects",
-        "--paginate",
-        "-P",
-        "-p",
     }
 )
 _GIT_GLOBAL_VALUE_OPTIONS: Final = frozenset(
     {"--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree", "-C", "-c"}
 )
 _EXECUTION_ROUTING_OPTIONS: Final = frozenset({"-c", "--config-env", "--exec-path"})
-_REPOSITORY_SELECTOR_OPTIONS: Final = frozenset({"--git-dir", "--namespace", "--super-prefix", "--work-tree"})
+_REPOSITORY_SELECTOR_OPTIONS: Final = frozenset(
+    {"--bare", "--git-dir", "--namespace", "--paginate", "--super-prefix", "--work-tree", "-P", "-p"}
+)
+_INDEX_DIFF_FLAGS: Final = frozenset({"--cached", "--staged"})
 _CACHED_DIFF_KIND = Literal["owned", "routed"]
 _MAX_SEGMENTS: Final = 32
 
@@ -61,15 +61,19 @@ def _static_echo_arg_is_safe(arg: str) -> bool:
 def _index_scan_rg_args_are_safe(args: tuple[str, ...]) -> bool:
     """Accept stdin-only ripgrep with one inline pattern after a cached diff."""
 
+    if os.environ.get("RIPGREP_CONFIG_PATH") and "--no-config" not in args:
+        return False
     saw_pattern = False
     for arg in args:
+        if arg.startswith("RIPGREP_CONFIG_PATH="):
+            return False
         if arg in _RG_BOOLEAN_FLAGS:
             continue
         if not arg or arg.startswith("-"):
             return False
         if saw_pattern:
             return False
-        if any(marker in arg for marker in ("$(", "`", "<(", ">(", "\x00")):
+        if "$" in arg or any(marker in arg for marker in ("$(", "`", "<(", ">(", "\x00")):
             return False
         saw_pattern = True
     return saw_pattern
@@ -125,7 +129,7 @@ def cached_diff_kind(tokens: tuple[str, ...]) -> _CACHED_DIFF_KIND | None:
         if token != "diff":
             return None
         operands = args[index + 1 :]
-        if "--cached" not in operands:
+        if not _INDEX_DIFF_FLAGS.intersection(operands):
             return None
         return "routed" if routed else "owned"
     return None
@@ -237,6 +241,8 @@ def _context_is_low_risk_git_index_inspection(
         if command_name == "rg":
             if _flow_controls(segment.control_before) != ("|",) or not previous_was_cached_diff:
                 return False
+            if any(token.startswith("RIPGREP_CONFIG_PATH=") for token in segment.tokens) and "--no-config" not in args:
+                return False
             if not _index_scan_rg_args_are_safe(args):
                 return False
             previous_was_cached_diff = False
@@ -253,7 +259,9 @@ def owned_git_index_inspection_action_class(
 ) -> str | None:
     """Return the Git-protection action class for an unproven cached diff."""
 
-    if "git" not in command_text or "diff" not in command_text or "--cached" not in command_text:
+    if "git" not in command_text or "diff" not in command_text:
+        return None
+    if "--cached" not in command_text and "--staged" not in command_text:
         return None
     parsing_cwd = cwd or home_dir or Path.cwd()
     context = model_shell_execution_context(
@@ -274,7 +282,9 @@ def owned_git_index_inspection_action_class(
     return "git index inspection"
 
 
-_SAFE_CACHED_DIFF_FLAGS: Final = frozenset({"--cached", "--check", "--stat", "--name-only", "--name-status", "HEAD"})
+_SAFE_CACHED_DIFF_FLAGS: Final = frozenset(
+    {"--cached", "--check", "--name-only", "--name-status", "--staged", "--stat", "HEAD"}
+)
 
 
 def _safe_exclude_pathspec(value: str) -> bool:
@@ -287,7 +297,7 @@ def _safe_exclude_pathspec(value: str) -> bool:
 
 
 def _cached_diff_operands_are_safe(args: tuple[str, ...]) -> bool:
-    if "--cached" not in args or len(args) > 20:
+    if not _INDEX_DIFF_FLAGS.intersection(args) or len(args) > 20:
         return False
     if "--" not in args:
         return all(arg in _SAFE_CACHED_DIFF_FLAGS or arg == "--cached" for arg in args)
