@@ -39,6 +39,12 @@ def _is_scanner_program(program_name: str) -> bool:
     return normalized_name in {"plugin-scanner", "plugin-ecosystem-scanner"}
 
 
+def _resolve_hol_guard_help_alias(program_name: str, argv: list[str]) -> list[str]:
+    if not _is_hol_guard_program(program_name) or argv[:1] != ["help"]:
+        return argv
+    return [*argv[1:], "--help"]
+
+
 def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentParser:
     if program_mode in {"guard", "hol-guard"}:
         parser = FriendlyArgumentParser(
@@ -288,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
+    requested_argv = _resolve_hol_guard_help_alias(program_name, requested_argv)
     if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "secrets":
         from .guard.secrets.cli import main as secrets_main
 
@@ -300,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         program_mode = "scanner"
     else:
         program_mode = "combined"
-    if program_mode in {"guard", "hol-guard"} and requested_argv[:1] == ["help"]:
+    if program_mode == "guard" and requested_argv[:1] == ["help"]:
         requested_argv = [*requested_argv[1:], "--help"]
     parser = _build_parser(program_name, program_mode=program_mode)
     resolved_argv = _resolve_legacy_args(
