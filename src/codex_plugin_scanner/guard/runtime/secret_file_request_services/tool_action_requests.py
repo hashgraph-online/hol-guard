@@ -269,7 +269,14 @@ def _unverified_git_fetch_request(
 ) -> ToolActionRequestMatch | None:
     if "git" not in command_text:
         return None
-    if "fetch" not in command_text:
+    parsing_cwd = cwd or home_dir or Path.cwd()
+    context = model_shell_execution_context(
+        command_text,
+        cwd=parsing_cwd,
+        workspace_root=parsing_cwd,
+        home_dir=home_dir,
+    )
+    if not any(_segment_invokes_git_fetch(segment.tokens) for segment in context.segments):
         action_class = owned_git_index_inspection_action_class(
             command_text,
             cwd=cwd,
@@ -288,15 +295,6 @@ def _unverified_git_fetch_request(
                 "or confirm the exact index read in Guard."
             ),
         )
-    parsing_cwd = cwd or home_dir or Path.cwd()
-    context = model_shell_execution_context(
-        command_text,
-        cwd=parsing_cwd,
-        workspace_root=parsing_cwd,
-        home_dir=home_dir,
-    )
-    if not any(_segment_invokes_git_fetch(segment.tokens) for segment in context.segments):
-        return None
     if cwd is not None and is_low_risk_standalone_git_routine(context):
         return None
     if context.complete and all(
