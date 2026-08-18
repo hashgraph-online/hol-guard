@@ -908,6 +908,27 @@ class TestGuardCli:
         assert "usage: hol-guard" in output
         assert "Run `hol-guard --help`" not in output
 
+    def test_hol_guard_help_alias_shows_root_help(self, monkeypatch, capsys) -> None:
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["help"])
+
+        assert exc_info.value.code == 0
+        output = capsys.readouterr().out
+        assert "usage: hol-guard" in output
+        assert "dashboard" in output
+
+    def test_hol_guard_help_alias_shows_command_help(self, monkeypatch, capsys) -> None:
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["help", "dashboard"])
+
+        assert exc_info.value.code == 0
+        output = capsys.readouterr().out
+        assert "usage: hol-guard dashboard" in output
+
     def test_hol_guard_routes_flat_commands_without_nested_guard_alias(self, monkeypatch, capsys) -> None:
         called: dict[str, object] = {}
 

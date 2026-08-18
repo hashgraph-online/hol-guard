@@ -300,7 +300,7 @@ def _resolve_legacy_args(
 
 
 def main(argv: list[str] | None = None) -> int:
-    effective_argv = argv or sys.argv[1:]
+    effective_argv = sys.argv[1:] if argv is None else argv
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
         from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
 
@@ -314,6 +314,8 @@ def main(argv: list[str] | None = None) -> int:
         program_mode = "scanner"
     else:
         program_mode = "combined"
+    if program_mode in {"guard", "hol-guard"} and effective_argv[:1] == ["help"]:
+        effective_argv = [*effective_argv[1:], "--help"]
     parser = _build_parser(program_name, program_mode=program_mode)
     resolved_argv = _resolve_legacy_args(
         effective_argv,
