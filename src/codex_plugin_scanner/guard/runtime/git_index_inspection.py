@@ -17,9 +17,7 @@ from .shell_execution_context import ShellExecutionContext, ShellExecutionSegmen
 
 _CONTROL_PREFIXES: Final = frozenset({"!", "elif", "else", "fi", "if", "then"})
 _ALLOWED_CONTROLS: Final = frozenset({"&&", "||", "|", ";", "\n"})
-_RG_BOOLEAN_FLAGS: Final = frozenset(
-    {"--ignore-case", "--line-number", "--no-config", "-i", "-in", "-n", "-ni"}
-)
+_RG_BOOLEAN_FLAGS: Final = frozenset({"--ignore-case", "--line-number", "--no-config", "-i", "-in", "-n", "-ni"})
 _GIT_GLOBAL_FLAG_OPTIONS: Final = frozenset(
     {
         "--bare",
@@ -275,9 +273,7 @@ def owned_git_index_inspection_action_class(
     return "git index inspection"
 
 
-_SAFE_CACHED_DIFF_FLAGS: Final = frozenset(
-    {"--cached", "--check", "--stat", "--name-only", "--name-status", "HEAD"}
-)
+_SAFE_CACHED_DIFF_FLAGS: Final = frozenset({"--cached", "--check", "--stat", "--name-only", "--name-status", "HEAD"})
 
 
 def _safe_exclude_pathspec(value: str) -> bool:
