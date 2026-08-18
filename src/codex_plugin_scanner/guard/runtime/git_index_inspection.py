@@ -259,9 +259,7 @@ def owned_git_index_inspection_action_class(
 ) -> str | None:
     """Return the Git-protection action class for an unproven cached diff."""
 
-    if "git" not in command_text or "diff" not in command_text:
-        return None
-    if "--cached" not in command_text and "--staged" not in command_text:
+    if "git" not in command_text or "diff" not in command_text or "--cached" not in command_text:
         return None
     parsing_cwd = cwd or home_dir or Path.cwd()
     context = model_shell_execution_context(
