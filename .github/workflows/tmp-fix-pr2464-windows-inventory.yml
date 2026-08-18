@@ -45,7 +45,7 @@ jobs:
         shell: bash
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PATCH_SHA256: ca54dbe8dff5cbd55bed571ccd6810658f92a856e24789b0946350358b491bc5
+          PATCH_SHA256: 1cc671dc200ce34d8b8cc79c9ea413002fb8c16e30e5ab84aa88a34f14dd4ab0
         run: |
           set -euo pipefail
           branch='fix/rust-daemon-edge-workflow-validation'
@@ -105,26 +105,26 @@ jobs:
           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
-          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
-          8D4lAgU3pAeQ0Ye5vf8FSfKEXEVoAAA=
+          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
+          3qdEoOCG9AAy+jC3979PLQYhRWgAAA==
           PATCH_B64
           tr -d '\r\n' < "$patch_b64" | base64 --decode | gzip --decompress > "$patch_file"
           echo "$PATCH_SHA256  $patch_file" | sha256sum --check --strict
