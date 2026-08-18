@@ -6,7 +6,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Final, Literal
 
-from .compound_git_inspection import is_low_risk_git_inspection_segment, is_low_risk_standalone_git_routine
+from .compound_git_inspection import (
+    _safe_repository_path,
+    is_low_risk_git_inspection_segment,
+    is_low_risk_standalone_git_routine,
+)
 from .secret_file_request_services.shell_tokenization import _shell_segment_primary_command
 from .shell_execution_context import ShellExecutionContext, ShellExecutionSegment, model_shell_execution_context
 
@@ -140,19 +144,32 @@ def is_low_risk_git_index_inspection(
 ) -> bool:
     """Recognize a repo-bound staged-index inspection, including if/then scans."""
 
+    return index_inspection_execution_context(command_text, cwd=cwd, home_dir=home_dir) is not None
+
+
+def index_inspection_execution_context(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None = None,
+) -> ShellExecutionContext | None:
+    """Return the modeled context when a staged-index scan is repo-bound."""
+
     if cwd is None:
-        return False
+        return None
     try:
         execution_cwd = cwd.resolve()
     except (OSError, RuntimeError):
-        return False
+        return None
     context = model_shell_execution_context(
         command_text,
         cwd=execution_cwd,
         workspace_root=execution_cwd,
         home_dir=home_dir,
     )
-    return _context_is_low_risk_git_index_inspection(context, home_dir=home_dir)
+    if not _context_is_low_risk_git_index_inspection(context, home_dir=home_dir):
+        return None
+    return context
 
 
 def _flow_controls(controls: tuple[str, ...]) -> tuple[str, ...]:
@@ -237,6 +254,46 @@ def owned_git_index_inspection_action_class(
     return "git index inspection"
 
 
+_SAFE_CACHED_DIFF_FLAGS: Final = frozenset(
+    {"--cached", "--check", "--stat", "--name-only", "--name-status", "HEAD"}
+)
+
+
+def _safe_exclude_pathspec(value: str) -> bool:
+    if not value.startswith((":!", ":^")):
+        return False
+    remainder = value[2:]
+    if not remainder or remainder.startswith((":", "/", "~")):
+        return False
+    return _safe_repository_path(remainder)
+
+
+def _cached_diff_operands_are_safe(args: tuple[str, ...]) -> bool:
+    if "--cached" not in args or len(args) > 20:
+        return False
+    if "--" not in args:
+        return all(arg in _SAFE_CACHED_DIFF_FLAGS or arg == "--cached" for arg in args)
+    separator = args.index("--")
+    revisions = args[:separator]
+    paths = args[separator + 1 :]
+    if not paths or len(paths) > 16:
+        return False
+    if any(arg not in _SAFE_CACHED_DIFF_FLAGS for arg in revisions):
+        return False
+    return all(_safe_repository_path(path) or _safe_exclude_pathspec(path) for path in paths)
+
+
+def _proof_cached_diff_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    command_name, command_index = _shell_segment_primary_command(list(tokens))
+    if command_name != "git" or command_index is None:
+        return ("git", "diff", "--cached", "--check")
+    prefix = tokens[: command_index + 1]
+    args = tokens[command_index + 1 :]
+    if args[:1] == ("-C",) and len(args) >= 2:
+        return (*prefix, "-C", args[1], "diff", "--cached", "--check")
+    return (*prefix, "diff", "--cached", "--check")
+
+
 def _git_cached_diff_segment_is_safe(
     segment: ShellExecutionSegment,
     tokens: tuple[str, ...],
@@ -245,5 +302,38 @@ def _git_cached_diff_segment_is_safe(
 ) -> bool:
     if not _tokens_are_cached_diff(tokens):
         return False
-    synthetic = replace(segment, tokens=tokens)
+    operands = git_diff_operands(tokens)
+    if operands is None or not _cached_diff_operands_are_safe(operands):
+        return False
+    synthetic = replace(segment, tokens=_proof_cached_diff_tokens(tokens))
     return is_low_risk_git_inspection_segment(synthetic, home_dir=home_dir)
+
+
+def git_diff_operands(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
+    kind = cached_diff_kind(tokens)
+    if kind != "owned":
+        return None
+    stripped = executable_tokens(tokens)
+    if not stripped:
+        return None
+    command_name, command_index = _shell_segment_primary_command(list(stripped))
+    if command_name != "git" or command_index is None:
+        return None
+    args = stripped[command_index + 1 :]
+    index = 0
+    while index < len(args):
+        token = args[index]
+        option_name = token.partition("=")[0]
+        if token in _GIT_GLOBAL_FLAG_OPTIONS:
+            index += 1
+            continue
+        if option_name in _GIT_GLOBAL_VALUE_OPTIONS:
+            index += 1 if "=" in token else 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        if token != "diff":
+            return None
+        return args[index + 1 :]
+    return None

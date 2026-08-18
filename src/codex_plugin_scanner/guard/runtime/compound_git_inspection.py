@@ -370,22 +370,12 @@ def _safe_diff_args(args: tuple[str, ...]) -> bool:
     paths = args[separator + 1 :]
     return (
         bool(paths)
-        and len(paths) <= 16
         and all(
             arg in {"--check", "--stat", "--name-only", "--name-status", "--cached", "HEAD"} or _safe_ref(arg)
             for arg in revisions
         )
-        and all(_safe_diff_pathspec(path) for path in paths)
+        and all(_safe_repository_path(path) for path in paths)
     )
-
-
-def _safe_diff_pathspec(value: str) -> bool:
-    if _safe_repository_path(value):
-        return True
-    if not value.startswith((":!", ":^")):
-        return False
-    remainder = value[2:]
-    return bool(remainder) and not remainder.startswith((":", "/", "~")) and _safe_repository_path(remainder)
 
 
 def _safe_show_args(args: tuple[str, ...]) -> bool:

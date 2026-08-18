@@ -105,23 +105,6 @@ def extract_sensitive_tool_action_request(
         )
         if git_fetch_request is not None:
             return git_fetch_request
-        index_action_class = owned_git_index_inspection_action_class(
-            command_text,
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-        if index_action_class is not None:
-            return ToolActionRequestMatch(
-                tool_name=requested_tool_name,
-                normalized_tool_name=effective_tool_name,
-                command_text=command_text,
-                action_class=index_action_class,
-                reason=(
-                    "Git cached diff needs a repository-bound index inspection Guard can verify. "
-                    "Use git diff --cached with check/stat flags or lockfile excludes, "
-                    "or confirm the exact index read in Guard."
-                ),
-            )
         docker_sensitive_request = _docker_sensitive_tool_action_request(
             tool_name=requested_tool_name,
             normalized_tool_name=effective_tool_name,
@@ -341,8 +324,27 @@ def _unverified_git_fetch_request(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> ToolActionRequestMatch | None:
-    if "git" not in command_text or "fetch" not in command_text:
+    if "git" not in command_text:
         return None
+    if "fetch" not in command_text:
+        action_class = owned_git_index_inspection_action_class(
+            command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+        if action_class is None:
+            return None
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class=action_class,
+            reason=(
+                "Git cached diff needs a repository-bound index inspection Guard can verify. "
+                "Use git diff --cached with check/stat flags or lockfile excludes, "
+                "or confirm the exact index read in Guard."
+            ),
+        )
     parsing_cwd = cwd or home_dir or Path.cwd()
     context = model_shell_execution_context(
         command_text,
