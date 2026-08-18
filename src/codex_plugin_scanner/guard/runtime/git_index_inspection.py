@@ -36,6 +36,7 @@ _GIT_GLOBAL_VALUE_OPTIONS: Final = frozenset(
     {"--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree", "-C", "-c"}
 )
 _EXECUTION_ROUTING_OPTIONS: Final = frozenset({"-c", "--config-env", "--exec-path"})
+_REPOSITORY_SELECTOR_OPTIONS: Final = frozenset({"--git-dir", "--namespace", "--super-prefix", "--work-tree"})
 _CACHED_DIFF_KIND = Literal["owned", "routed"]
 _MAX_SEGMENTS: Final = 32
 
@@ -311,13 +312,48 @@ def _proof_cached_diff_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
     return (*prefix, "diff", "--cached", "--check")
 
 
+def _args_have_repository_selector(args: tuple[str, ...]) -> bool:
+    index = 0
+    while index < len(args):
+        token = args[index]
+        option_name = token.partition("=")[0]
+        if token == "-C" or token.startswith("-C") or option_name in _REPOSITORY_SELECTOR_OPTIONS:
+            return True
+        if token in _GIT_GLOBAL_FLAG_OPTIONS:
+            index += 1
+            continue
+        if option_name in _GIT_GLOBAL_VALUE_OPTIONS:
+            index += 1 if "=" in token else 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        return False
+    return False
+
+
+def _has_unproven_repository_selector(tokens: tuple[str, ...]) -> bool:
+    stripped = executable_tokens(tokens)
+    if not stripped:
+        return True
+    command_name, command_index = _shell_segment_primary_command(list(stripped))
+    if command_name != "git" or command_index is None:
+        return True
+    args = stripped[command_index + 1 :]
+    if args[:1] == ("-C",):
+        if len(args) < 2 or not args[1] or args[1].startswith("-"):
+            return True
+        return _args_have_repository_selector(args[2:])
+    return _args_have_repository_selector(args)
+
+
 def _git_cached_diff_segment_is_safe(
     segment: ShellExecutionSegment,
     tokens: tuple[str, ...],
     *,
     home_dir: Path | None,
 ) -> bool:
-    if not _tokens_are_cached_diff(tokens):
+    if not _tokens_are_cached_diff(tokens) or _has_unproven_repository_selector(tokens):
         return False
     operands = git_diff_operands(tokens)
     if operands is None or not _cached_diff_operands_are_safe(operands):

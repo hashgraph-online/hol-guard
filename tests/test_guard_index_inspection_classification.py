@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
@@ -148,3 +149,27 @@ def test_verified_cached_check_stays_unmatched_in_inspection(tmp_path: Path) -> 
     assert payload["classification"]["explicitly_benign"] is True
     assert payload["status"] == "no_match"
     assert payload["extensions"] == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git --git-dir=other-repo diff --cached --check",
+        "git --work-tree=other-repo diff --cached --check",
+        "git -Cother-repo diff --cached --check",
+        "git --no-pager -C other-repo diff --cached --check",
+        "git diff --cached --output=fetch.patch",
+    ),
+)
+def test_unproven_cached_diff_variants_are_owned(tmp_path: Path, command: str) -> None:
+    home, repository = _repository(tmp_path)
+
+    assert not _is_benign(command, home=home, repository=repository)
+    request = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": command},
+        cwd=repository,
+        home_dir=home,
+    )
+    assert request is not None
+    assert request.action_class == "git index inspection"
