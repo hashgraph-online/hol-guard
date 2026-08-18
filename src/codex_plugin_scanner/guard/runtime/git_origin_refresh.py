@@ -23,9 +23,8 @@ _GIT_GLOBAL_FLAG_OPTIONS: Final = frozenset(
         "-p",
     }
 )
-_GIT_GLOBAL_VALUE_OPTIONS: Final = frozenset(
-    {"--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree", "-C", "-c"}
-)
+_GIT_GLOBAL_VALUE_OPTIONS: Final = frozenset({"-C", "--git-dir", "--namespace", "--super-prefix", "--work-tree"})
+_GIT_EXECUTION_VALUE_OPTIONS: Final = frozenset({"-c", "--config-env", "--exec-path"})
 
 
 def origin_shaped_git_fetch_args(args: tuple[str, ...]) -> bool:
@@ -63,6 +62,8 @@ def git_fetch_operands(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
         if token in _GIT_GLOBAL_FLAG_OPTIONS:
             index += 1
             continue
+        if option_name in _GIT_EXECUTION_VALUE_OPTIONS:
+            return None
         if option_name in _GIT_GLOBAL_VALUE_OPTIONS:
             if "=" in token:
                 if not token.partition("=")[2]:
