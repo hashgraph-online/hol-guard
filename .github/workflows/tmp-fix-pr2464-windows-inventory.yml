@@ -137,7 +137,7 @@ jobs:
             src/codex_plugin_scanner/guard/daemon/bounded_http.py \
             tests/test_windows_processes.py \
             tests/test_guard_daemon_manager.py
-          uv run --no-sync ruff check \
+          uv run --no-sync ruff check --fix \
             src/codex_plugin_scanner/guard/windows_processes.py \
             src/codex_plugin_scanner/guard/daemon/manager.py \
             src/codex_plugin_scanner/guard/daemon/bounded_http.py \
