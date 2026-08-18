@@ -60,6 +60,22 @@ jobs:
           cat scripts/ci/tmp_pr2464_patch_*.py.part > "$patch_file"
           python -m py_compile "$patch_file"
           python "$patch_file"
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("rust/crates/guard-secure-fs/src/lib.rs")
+          text = path.read_text(encoding="utf-8")
+          old = '''    if parts
+                  .windows(2)
+                  .any(|window| window == [".aws", "credentials"])
+              {
+          '''
+          new = '''    if parts.windows(2).any(|window| window == [".aws", "credentials"]) {
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one AWS credentials branch, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
 
           uv sync --frozen --extra dev --python 3.12
           uv run --no-sync ruff format \
