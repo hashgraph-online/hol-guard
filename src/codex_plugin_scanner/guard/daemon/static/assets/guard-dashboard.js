@@ -15345,6 +15345,33 @@ function normalizeOperatorHealth(raw) {
     workers_configured: nonNegativeNumber(raw["workers_configured"])
   };
 }
+function canonicalizeGuardDaemonOrigin(rawUrl) {
+  try {
+    const rawOrigin = rawUrl.trim();
+    const url = new URL(rawOrigin);
+    if (url.protocol !== "http:" || !["127.0.0.1", "[::1]"].includes(url.hostname)) {
+      return null;
+    }
+    if (url.username || url.password || url.pathname && url.pathname !== "/" || url.search || url.hash || !url.port) {
+      return null;
+    }
+    const port = Number(url.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      return null;
+    }
+    const canonicalHost = url.hostname === "[::1]" ? "[::1]" : "127.0.0.1";
+    const canonical = `http://${canonicalHost}:${port}`;
+    return url.origin === canonical && (rawOrigin === canonical || rawOrigin === `${canonical}/`) ? canonical : null;
+  } catch {
+    return null;
+  }
+}
+function standardGuardDaemonOrigin(rawUrl, firstPort, portCount) {
+  const origin = canonicalizeGuardDaemonOrigin(rawUrl);
+  if (!origin) return null;
+  const port = Number(new URL(origin).port);
+  return port >= firstPort && port < firstPort + portCount ? origin : null;
+}
 const PROTECTION_CHECK_IDS = [
   "harness_hooks",
   "daemon",
@@ -16192,8 +16219,6 @@ async function reconnectGuardDaemonAfterUpdate(options) {
   return null;
 }
 function readGuardDaemonOrigin() {
-  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
-  const storedDaemonOrigin = storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
   if (rawDaemonUrl) {
     const daemonOrigin = localGuardDaemonOrigin(rawDaemonUrl);
@@ -16204,28 +16229,18 @@ function readGuardDaemonOrigin() {
       return daemonOrigin;
     }
   }
-  return storedDaemonOrigin;
-}
-function canonicalizeGuardDaemonOrigin(rawUrl) {
-  try {
-    const rawOrigin = rawUrl.trim();
-    const url = new URL(rawOrigin);
-    if (url.protocol !== "http:" || !["127.0.0.1", "[::1]"].includes(url.hostname)) {
-      return null;
-    }
-    if (url.username || url.password || url.pathname && url.pathname !== "/" || url.search || url.hash || !url.port) {
-      return null;
-    }
-    const port = Number(url.port);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      return null;
-    }
-    const canonicalHost = url.hostname === "[::1]" ? "[::1]" : "127.0.0.1";
-    const canonical = `http://${canonicalHost}:${port}`;
-    return url.origin === canonical && (rawOrigin === canonical || rawOrigin === `${canonical}/`) ? canonical : null;
-  } catch {
-    return null;
+  const pageOrigin = standardGuardDaemonOrigin(
+    window.location.origin,
+    DEFAULT_GUARD_DAEMON_PORT,
+    GUARD_DAEMON_PORT_RANGE
+  );
+  if (pageOrigin) {
+    saveGuardStorage(GUARD_DAEMON_PARAM, pageOrigin);
+    return pageOrigin;
   }
+  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
+  const storedDaemonOrigin = storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
+  return storedDaemonOrigin;
 }
 function localGuardDaemonOrigin(rawUrl) {
   return canonicalizeGuardDaemonOrigin(rawUrl);
