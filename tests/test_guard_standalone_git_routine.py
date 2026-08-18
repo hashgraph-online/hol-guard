@@ -152,7 +152,7 @@ def test_git_fetch_without_repository_bound_cwd_is_sensitive(tmp_path: Path, com
     )
 
     assert request is not None
-    assert request.action_class == "unverified Git remote refresh"
+    assert request.action_class == "git origin refresh"
 
 
 def test_git_fetch_without_any_cwd_is_sensitive(tmp_path: Path) -> None:
@@ -164,7 +164,7 @@ def test_git_fetch_without_any_cwd_is_sensitive(tmp_path: Path) -> None:
     )
 
     assert request is not None
-    assert request.action_class == "unverified Git remote refresh"
+    assert request.action_class == "git origin refresh"
 
 
 def test_standalone_verified_origin_reads_are_explicitly_benign(tmp_path: Path) -> None:
@@ -504,7 +504,7 @@ def test_standalone_fetch_rejects_ambiguous_home_git_c_target(
         home_dir=home,
     )
     assert request is not None
-    assert request.action_class == "unverified Git remote refresh"
+    assert request.action_class == "git origin refresh"
 
 
 def test_standalone_fetch_rejects_absolute_git_c_target_outside_execution_root(tmp_path: Path) -> None:

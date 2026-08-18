@@ -58,7 +58,7 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
             "Reviews local and remote Git operations that can discard work, replace history, "
             "or refresh a remote Guard cannot verify."
         ),
-        action_classes=("git destructive command", "unverified Git remote refresh"),
+        action_classes=("git destructive command", "git origin refresh"),
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternatives=(
             "Preview affected files and refs before destructive repository operations.",

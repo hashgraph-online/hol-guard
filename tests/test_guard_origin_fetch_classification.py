@@ -122,22 +122,31 @@ def test_github_ssh_origin_fetch_rejects_configured_ssh_command(tmp_path: Path) 
         home_dir=home,
     )
     assert request is not None
-    assert request.action_class == "unverified Git remote refresh"
+    assert request.action_class == "git origin refresh"
 
 
 def test_unverified_fetch_is_owned_by_git_extension(tmp_path: Path) -> None:
     payload = inspect_command("git fetch origin", cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "unverified Git remote refresh"
+    assert payload["classification"]["action_class"] == "git origin refresh"
     assert payload["controlling_rule_id"] == "command.git.unverified-fetch"
     assert payload["extensions"][0]["extension_id"] == "command.git"
     assert payload["rules"][0]["rule_id"] == "command.git.unverified-fetch"
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("unverified Git remote refresh") is not None
-    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("unverified Git remote refresh") is not None
+    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.for_action_class("git origin refresh") is not None
+    assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.rule_for_action_class("git origin refresh") is not None
     git = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.git")
     assert git is not None
     assert any(permission.permission_id == "command.git.permission.unverified-fetch" for permission in git.permissions)
+
+
+def test_url_remote_fetch_stays_unowned(tmp_path: Path) -> None:
+    payload = inspect_command("git fetch https://example.invalid/project.git", cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] == "unverified Git remote refresh"
+    assert payload["controlling_rule_id"] is None
+    assert payload["extensions"] == []
 
 
 def test_verified_origin_fetch_stays_unmatched_in_inspection(tmp_path: Path) -> None:
