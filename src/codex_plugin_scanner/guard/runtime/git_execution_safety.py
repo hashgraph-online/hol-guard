@@ -623,6 +623,8 @@ def _git_fetch_config_routes_execution(config: dict[str, tuple[str, ...]]) -> bo
         return True
     if any(value.strip() for value in config.get("core.askpass", ())):
         return True
+    if any(value.strip() for value in config.get("core.sshcommand", ())):
+        return True
     for key, values in config.items():
         if not (key.startswith("url.") and key.endswith(".insteadof")):
             continue
