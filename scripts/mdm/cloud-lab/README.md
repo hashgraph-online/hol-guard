@@ -1,6 +1,6 @@
 # HOL Guard multi-device MDM Cloud integration lab
 
-This directory contains the provider-neutral integration lab for HOL Guard 3.0 MDM control. It runs a stateful Cloud service, a deterministic fault proxy, three independently keyed HOL Guard device runtimes, and a fleet orchestrator over real HTTP.
+This directory contains the provider-neutral integration lab for HOL Guard 3.0 MDM control. It runs a persistent reference Cloud service, a deterministic fault proxy, four independently keyed HOL Guard device runtimes across two workspaces, and a fleet orchestrator over real HTTP.
 
 ## Run
 
@@ -10,55 +10,55 @@ From the repository root:
 python scripts/mdm/run-cloud-integration-lab.py
 ```
 
-Dry-run the exact Compose commands:
+The runner builds the current worktree, starts the control plane and devices, executes the initial security matrix, restarts Cloud and every device, executes persistence checks, validates the report, writes a SHA-256 checksum, captures bounded logs, and tears down the entire Compose project.
+
+Useful modes:
 
 ```bash
 python scripts/mdm/run-cloud-integration-lab.py --dry-run
-```
-
-Keep the project after a failure for inspection:
-
-```bash
 python scripts/mdm/run-cloud-integration-lab.py --keep
-```
-
-Write the canonical report to a chosen path:
-
-```bash
 python scripts/mdm/run-cloud-integration-lab.py \
   --artifacts artifacts/mdm-cloud-lab
 ```
 
-The runner creates a unique Compose project, builds from the current worktree, waits on service healthchecks, runs the one-shot orchestrator, validates the report, and removes containers, networks, and volumes unless `--keep` is supplied.
-
 ## Services
 
-- `cloud`: signed desired state, enrollment, assignments, acknowledgements, health, remediation, audit, and SQLite durability.
-- `fault-proxy`: partitions, delays, forced status, drops, corruption, truncation, stale replay, and ETag removal.
-- `device-a`, `device-b`, `device-c`: separate device keys, generations, policy files, checkpoints, outboxes, and fault controls.
-- `orchestrator`: baseline, canary, skipped revision, rollback, crash, replay, partition, corruption, clock, cloning, remediation, and privacy assertions.
+- `volume-init`: grants the fixed unprivileged lab identity access only to named state and evidence volumes.
+- `cloud`: signed desired state, one-time enrollment, assignments, historical acknowledgements, health, remediation, audit, and SQLite durability.
+- `proxy`: partitions, throttling, forced status responses, request drops, lost success responses, corruption, truncation, malformed JSON, stale replay, and ETag removal.
+- `device-a`, `device-b`, `device-c`: independent machines in the alpha workspace.
+- `device-d`: an independent machine in a second workspace for tenant isolation.
+- `orchestrator`: enrollment, baseline, canary, skipped revisions, rollback, crash recovery, replay, partition, corruption, idempotency, fixed remediation, evidence verification, restart, and privacy assertions.
+
+All runtime services use UID and GID `10001`, read-only root filesystems, dropped capabilities, no-new-privileges, internal-only networking, bounded memory and CPU, and separate persistent volumes. The project exposes no host ports and does not mount the Docker socket.
 
 ## Fast tests without Docker
 
 ```bash
-PYTHONPATH=src pytest -q \
+PYTHONPATH=src:scripts/mdm/cloud-lab pytest -q \
   tests/test_guard_mdm_cloud_control.py \
+  tests/test_guard_mdm_cloud_hardening.py \
   tests/test_guard_mdm_cloud_schemas.py \
   tests/test_guard_mdm_cloud_lab_integration.py \
   tests/test_guard_mdm_cloud_lab_registration.py
 ```
 
-The integration test starts real HTTP servers and the real SQLite store in one Python process. It exercises the same orchestrator and production managed-policy parser, but it does not prove container isolation.
+The real-HTTP test starts the same Cloud, proxy, and four device implementations in one Python process. It stops and recreates all servers against the same state directories before the restart phase. The Docker gate additionally proves container isolation, named-volume permissions, unprivileged execution, and evidence export.
 
-## Add a regression
+## Security invariants
 
-1. Add the smallest deterministic fault needed to `fault_proxy.py` or `device_runtime.py`.
-2. Add a named orchestrator assertion with bounded evidence.
-3. Add a focused unit test for the security rule.
-4. Update the report schema only when the external report contract changes.
-5. Update the PRD/TODO only when scope or certification boundaries change.
-6. Preserve the native-certification `not-evaluated` statement.
+- Enrollment is one-time and bound to workspace, device, installation generation, and a unique P-256 key.
+- Every runtime request binds method, path, body digest, timestamp, device identity, and a persistent monotonic sequence.
+- Desired state is RSA-PSS signed and binds identity, revision, policy hash, predecessor hash, validity, and rollback metadata.
+- A newer revision is visible even when its policy bytes match an earlier revision.
+- Devices retain the last known good policy whenever Cloud, transport, signature, JSON, ETag, or policy validation fails.
+- Historical acknowledgements remain valid after a newer assignment is published.
+- Outboxes remove an item only after delivery or a proven exact duplicate. Ambiguous `409`, `429`, `503`, and lost-response outcomes remain retryable.
+- Remediation is limited to a fixed typed action set. Arbitrary commands, scripts, shells, URLs, credentials, and open parameter bags are rejected.
+- Local execution success remains `awaiting_evidence` until a later healthy report proves recovery.
+- Audit details are redacted and linked by a tamper-evident hash chain.
+- Workspace-scoped state cannot reveal or control another tenant.
 
-## Security boundary
+## Certification boundary
 
-The reference Cloud is test infrastructure, not a production Cloud replacement. The lab proves provider-neutral policy and evidence behavior. It does not certify native Apple or Windows management transports, OS key stores, package signing, or commercial MDM behavior.
+The lab proves the HOL Guard-owned provider-neutral control and evidence path. It does not certify Apple APNs, Automated Device Enrollment, supervision, notarization, Windows OMA-DM/CSP, SYSTEM execution, Authenticode, WDAC, or any commercial provider. Those gates remain explicitly `not-evaluated` until executed on the actual platform or provider.

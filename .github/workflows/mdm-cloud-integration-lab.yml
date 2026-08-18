@@ -10,6 +10,7 @@ on:
       - "docs/guard/mdm-cloud-integration-lab-*.md"
       - "docs/guard/schemas/mdm-cloud-*.json"
       - ".github/workflows/mdm-cloud-integration-lab.yml"
+      - "ci/test-suite-ratchet-baseline.json"
   push:
     branches: [release/3.0]
     paths:
@@ -19,6 +20,7 @@ on:
       - "docs/guard/mdm-cloud-integration-lab-*.md"
       - "docs/guard/schemas/mdm-cloud-*.json"
       - ".github/workflows/mdm-cloud-integration-lab.yml"
+      - "ci/test-suite-ratchet-baseline.json"
   workflow_dispatch:
 
 permissions:
@@ -30,8 +32,8 @@ concurrency:
 
 jobs:
   integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     env:
       HOL_MDM_LAB_PROJECT: mdm-cloud-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -63,31 +65,73 @@ jobs:
             uv.lock
           save-cache: false
       - run: uv sync --frozen --extra dev --python 3.12
-      - name: Run focused contract and real-HTTP tests
+      - name: Generate an ephemeral MDM lab admin token
+        shell: bash
+        run: |
+          token="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          echo "::add-mask::$token"
+          echo "HOL_MDM_LAB_ADMIN_TOKEN=$token" >> "$GITHUB_ENV"
+      - name: Run focused contracts, persistence, and real-HTTP restart tests
         run: |
           uv run --no-sync pytest -q \
             tests/test_guard_mdm_cloud_control.py \
+            tests/test_guard_mdm_cloud_hardening.py \
             tests/test_guard_mdm_cloud_schemas.py \
             tests/test_guard_mdm_cloud_lab_registration.py \
             tests/test_guard_mdm_cloud_lab_integration.py
-      - name: Run standalone multi-device Docker lab
+      - name: Lint and format MDM Cloud hardening surfaces
+        run: |
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/mdm/cloud_control.py \
+            scripts/mdm/cloud-lab \
+            scripts/mdm/run-cloud-integration-lab.py \
+            tests/test_guard_mdm_cloud_control.py \
+            tests/test_guard_mdm_cloud_hardening.py \
+            tests/test_guard_mdm_cloud_lab_registration.py \
+            tests/test_guard_mdm_cloud_lab_integration.py
+          uv run --no-sync ruff format --check \
+            src/codex_plugin_scanner/guard/mdm/cloud_control.py \
+            scripts/mdm/cloud-lab \
+            scripts/mdm/run-cloud-integration-lab.py \
+            tests/test_guard_mdm_cloud_control.py \
+            tests/test_guard_mdm_cloud_hardening.py \
+            tests/test_guard_mdm_cloud_lab_registration.py \
+            tests/test_guard_mdm_cloud_lab_integration.py
+      - name: Validate Compose model
+        run: |
+          docker compose \
+            --project-name "$HOL_MDM_LAB_PROJECT" \
+            --file scripts/mdm/cloud-lab/docker-compose.yml \
+            config --quiet
+      - name: Run standalone multi-device Docker lab with process restart
         run: |
           mkdir -p artifacts/mdm-cloud-lab
           uv run --no-sync python scripts/mdm/run-cloud-integration-lab.py \
             --project "$HOL_MDM_LAB_PROJECT" \
             --artifacts artifacts/mdm-cloud-lab
-      - name: Validate bounded report
+      - name: Validate report checksum and native boundary
         run: |
           uv run --no-sync python - <<'PY'
+          import hashlib
           import json
           from pathlib import Path
-          report = json.loads(Path('artifacts/mdm-cloud-lab/mdm-cloud-integration-report.json').read_text())
+          report_path = Path('artifacts/mdm-cloud-lab/mdm-cloud-integration-report.json')
+          checksum_path = Path('artifacts/mdm-cloud-lab/mdm-cloud-integration-report.json.sha256')
+          report = json.loads(report_path.read_text())
+          expected = checksum_path.read_text().split()[0]
+          assert hashlib.sha256(report_path.read_bytes()).hexdigest() == expected
           assert report['schemaVersion'] == 'hol-guard-mdm-cloud-integration-lab.v1'
           assert report['healthy'] is True
-          assert report['stepCount'] >= 25
+          assert report['stepCount'] >= 50
           assert report['nativeCertification']['outcome'] == 'not-evaluated'
           assert all(step['passed'] is True for step in report['steps'])
           PY
+      - name: Trivy scan MDM lab image and configuration
+        run: |
+          docker run --rm -v "$PWD:/workdir" \
+            aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c \
+            fs --scanners misconfig,secret --severity HIGH,CRITICAL \
+            --exit-code 1 --quiet /workdir/scripts/mdm/cloud-lab
       - name: Collect bounded Compose logs on failure
         if: failure()
         run: |
@@ -95,15 +139,15 @@ jobs:
           docker compose \
             --project-name "$HOL_MDM_LAB_PROJECT" \
             --file scripts/mdm/cloud-lab/docker-compose.yml \
-            logs --no-color --tail 400 > artifacts/mdm-cloud-lab/compose.log 2>&1 || true
+            logs --no-color --tail 1000 > artifacts/mdm-cloud-lab/workflow-compose.log 2>&1 || true
       - name: Upload MDM Cloud lab evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: mdm-cloud-integration-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/mdm-cloud-lab
-          if-no-files-found: warn
-          retention-days: 14
+          if-no-files-found: error
+          retention-days: 30
       - name: Tear down lab
         if: always()
         run: |
