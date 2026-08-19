@@ -1105,18 +1105,54 @@ jobs:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
+          set -euo pipefail
           tag="alpha/v${VERSION}"
-          remote_json=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" || true)
-          remote_tag_sha=$(printf '%s' "$remote_json" | jq -r '.object.sha // empty')
+          set +e
+          ref_json=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" 2>ref.err)
+          ref_code=$?
+          set -e
+          if [[ "$ref_code" -ne 0 ]]; then
+            if grep -q 'Not Found' ref.err; then
+              echo "No reservation tag to release"
+              exit 0
+            fi
+            cat ref.err >&2
+            exit "$ref_code"
+          fi
+          remote_tag_sha=$(printf '%s' "$ref_json" | jq -r '.object.sha // empty')
           if [[ -z "$remote_tag_sha" ]]; then
-            echo "No reservation tag to release"
-            exit 0
+            echo "Reservation lookup returned no object sha" >&2
+            exit 1
           fi
           if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
             echo "Reservation tag no longer points at this source"
             exit 0
           fi
+          set +e
+          curl -fsS "https://pypi.org/pypi/hol-guard/${VERSION}/json" >/dev/null
+          pypi_code=$?
+          set -e
+          if [[ "$pypi_code" -eq 0 ]]; then
+            echo "PyPI already has ${VERSION}; keeping reservation"
+            exit 0
+          fi
+          if [[ "$pypi_code" -ne 22 ]]; then
+            echo "Could not inspect PyPI for ${VERSION}" >&2
+            exit "$pypi_code"
+          fi
           gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}"
+          set +e
+          gh api --method GET "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" 2>deleted.err
+          deleted_code=$?
+          set -e
+          if [[ "$deleted_code" -eq 0 ]]; then
+            echo "Reservation tag still exists after delete" >&2
+            exit 1
+          fi
+          if ! grep -q 'Not Found' deleted.err; then
+            cat deleted.err >&2
+            exit "$deleted_code"
+          fi
 
   publish-main-testpypi:
     name: Verify main artifact on TestPyPI
