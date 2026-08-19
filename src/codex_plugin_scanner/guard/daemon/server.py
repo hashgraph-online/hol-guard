@@ -3843,7 +3843,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return managers, None
 
     def _supply_chain_entitlement(self) -> dict[str, object]:
-        return resolve_package_firewall_entitlement_with_refresh(self.server.store)  # type: ignore[attr-defined]
+        server = self.server  # type: ignore[attr-defined]
+        with server.guard_cloud_browser_session_lock:
+            cloud_connect = _copy_guard_cloud_connect_state(server)
+            package_connect = _copy_package_firewall_connect_state(server)
+            if _guard_cloud_connect_state_is_in_flight(cloud_connect) or _guard_cloud_connect_state_is_in_flight(
+                package_connect
+            ):
+                return resolve_package_firewall_entitlement(server.store)
+            return resolve_package_firewall_entitlement_with_refresh(server.store)
 
     def _handle_get_supply_chain_bundle(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
