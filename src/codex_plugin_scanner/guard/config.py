@@ -576,7 +576,8 @@ def update_guard_settings(
         if weakened:
             raise ValueError(f"Managed policy locks prevent weakening: {', '.join(sorted(weakened))}")
     preserving_sync_while_switching_to_watch_only = (
-        current_config.sync is True
+        current.get("sync") is True
+        and current_config.sync is True
         and next_payload.get("sync") is True
         and current.get("mode") != "observe"
         and current_config.mode != "observe"

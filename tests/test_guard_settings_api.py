@@ -359,6 +359,37 @@ def test_managed_mode_floor_cannot_fake_watch_only_transition(tmp_path: Path, mo
     assert payload["message"] == "Cloud sync requires a paid team plan."
 
 
+def test_managed_sync_cannot_be_persisted_by_watch_only_transition(tmp_path: Path, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+    (guard_home / "config.toml").write_text('mode = "prompt"\n', encoding="utf-8")
+    managed_state = ManagedPolicyState(
+        status="active",
+        source="fixture",
+        policy=ManagedPolicy(
+            schema_version="guard-managed-policy.v1",
+            settings={"sync": True},
+            locked_settings=frozenset(),
+        ),
+    )
+    monkeypatch.setattr(config_module, "load_managed_policy", lambda: managed_state)
+    _store, daemon = _with_daemon(guard_home)
+    try:
+        status, payload = _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"mode": "observe", "sync": True}},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["message"] == "Cloud sync requires a paid team plan."
+    assert "sync = true" not in (guard_home / "config.toml").read_text(encoding="utf-8")
+
+
 def test_risk_settings_drive_runtime_policy_resolution(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     update_guard_settings(
