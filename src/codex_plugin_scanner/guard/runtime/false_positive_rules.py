@@ -75,6 +75,10 @@ KNOWN_SKILL_DOC_ROOT_SUFFIXES = (
     ".agents/skills",
     ".claude/skills",
 )
+KNOWN_AGENT_DOC_SUFFIXES = (
+    ".codex/docs/harness-engineering.md",
+    ".codex/docs/token-discipline.md",
+)
 FD_OPTION_VALUE_FLAGS = frozenset(
     {
         "-d",
@@ -150,6 +154,15 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
         if (normalized == root or normalized.startswith(f"{root}/")) and not _path_has_symlink_component(
             normalized,
             root=root,
+        ):
+            return True
+    for suffix in KNOWN_AGENT_DOC_SUFFIXES:
+        expected = f"{home}/{suffix}"
+        root = expected.rsplit("/", maxsplit=1)[0]
+        if (
+            normalized == expected
+            and not os.path.islink(root)
+            and not _path_has_symlink_component(normalized, root=root)
         ):
             return True
     return False

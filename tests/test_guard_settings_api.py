@@ -306,6 +306,27 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
     assert expired_payload["message"] == "Cloud sync requires a paid team plan."
 
 
+def test_existing_cloud_sync_does_not_block_switching_to_watch_only(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+    (guard_home / "config.toml").write_text('sync = true\nmode = "prompt"\n', encoding="utf-8")
+    _store, daemon = _with_daemon(guard_home)
+    try:
+        status, payload = _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"mode": "observe", "sync": True}},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["settings"]["mode"] == "observe"
+    assert payload["settings"]["sync"] is True
+
+
 def test_risk_settings_drive_runtime_policy_resolution(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     update_guard_settings(

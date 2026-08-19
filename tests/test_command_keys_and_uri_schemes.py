@@ -200,6 +200,43 @@ def test_common_readers_are_read_only_source_inspection(tmp_path):
         )
 
 
+def test_bounded_agent_guidance_reads_are_read_only_source_inspection(tmp_path):
+    docs = tmp_path / ".codex" / "docs"
+    docs.mkdir(parents=True)
+    (docs / "harness-engineering.md").write_text("# Harness engineering\n", encoding="utf-8")
+    (docs / "token-discipline.md").write_text("# Token discipline\n", encoding="utf-8")
+    command = (
+        "sed -n '1,220p' ~/.codex/docs/harness-engineering.md && sed -n '1,180p' ~/.codex/docs/token-discipline.md"
+    )
+
+    assert _codex_command_is_read_only_source_inspection(command, cwd=tmp_path, home_dir=tmp_path)
+
+
+def test_agent_guidance_read_rejects_non_markdown_and_symlink_escape(tmp_path):
+    docs = tmp_path / ".codex" / "docs"
+    docs.mkdir(parents=True)
+    (docs / "credentials.json").write_text("{}\n", encoding="utf-8")
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    (docs / "linked.md").symlink_to(outside)
+
+    assert not _codex_command_is_read_only_source_inspection(
+        "sed -n '1,20p' ~/.codex/docs/credentials.json",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert not _codex_command_is_read_only_source_inspection(
+        "sed -n '1,20p' ~/.codex/docs/linked.md",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert not _codex_command_is_read_only_source_inspection(
+        "sed -n '1,20p' ~/.codex/docs/other.md",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+
 def test_semicolon_chain_requires_every_segment_to_be_read_only(tmp_path):
     source_file = tmp_path / "src" / "example.ts"
     source_file.parent.mkdir(parents=True)
