@@ -22,7 +22,7 @@ def observe_unlisted_cli(
     recorder = getattr(store, "record_local_cli_observation", None)
     if not callable(recorder):
         return
-    recorder(identity, seen_at=utc_now())
+    recorder(identity, seen_at=utc_now(), source_path=identity.source_path)
 
 
 def apply_local_cli_grant(

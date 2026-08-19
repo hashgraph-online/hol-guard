@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 
 import {
   addedCustomExtensions,
+  filterExtensionSuggestions,
   isLocalCliId,
   normalizeLocalCliItem,
   normalizeLocalCliList,
+  seenSuggestionMeta,
   suggestedCustomExtensions,
   suggestedHarnessExtensions,
   suggestedSeenExtensions,
@@ -132,6 +134,49 @@ const harnessUnset = normalizeLocalCliItem({
 });
 assert.deepEqual(suggestedHarnessExtensions([unsetItem, harnessUnset]).map((entry) => entry.name), ["github"]);
 assert.deepEqual(suggestedSeenExtensions([unsetItem, harnessUnset]).map((entry) => entry.name), ["unset-tool"]);
+
+const recentJunk = normalizeLocalCliItem({
+  ...unsetItem,
+  cli_id: "local-cli.rg-abcdef12",
+  name: "rg",
+  kind: "executable",
+  example_label: "rg",
+  observed_count: 9,
+  last_seen_at: "2026-08-18T12:00:00Z",
+  suggestable: false,
+});
+const frequentTool = normalizeLocalCliItem({
+  ...unsetItem,
+  cli_id: "local-cli.cwv-py-bbbbbb12",
+  name: "cwv.py",
+  example_label: "python3 cwv.py",
+  observed_count: 4,
+  last_seen_at: "2026-08-18T11:00:00Z",
+  suggestable: true,
+});
+const rareTool = normalizeLocalCliItem({
+  ...unsetItem,
+  cli_id: "local-cli.ship-it-cccccccc",
+  name: "ship-it",
+  example_label: "ship-it",
+  observed_count: 1,
+  last_seen_at: "2026-08-18T12:30:00Z",
+  suggestable: true,
+});
+assert.deepEqual(
+  suggestedSeenExtensions([recentJunk, rareTool, frequentTool, harnessUnset]).map((entry) => entry.name),
+  ["cwv.py", "ship-it"],
+);
+assert.deepEqual(
+  filterExtensionSuggestions(suggestedSeenExtensions([frequentTool, rareTool]), "cwv").map((entry) => entry.name),
+  ["cwv.py"],
+);
+assert.deepEqual(
+  filterExtensionSuggestions([recentJunk], "rg").map((entry) => entry.name),
+  ["rg"],
+);
+assert.equal(seenSuggestionMeta(frequentTool), "Seen 4 times");
+assert.equal(seenSuggestionMeta(rareTool), "Seen once");
 
 const fallbackCloud = normalizeLocalCliList({
   schema_version: "guard.daemon.local-clis.v1",

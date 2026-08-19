@@ -109,7 +109,41 @@ export function suggestedHarnessExtensions(items: readonly LocalCliItem[]): Loca
 }
 
 export function suggestedSeenExtensions(items: readonly LocalCliItem[]): LocalCliItem[] {
-  return suggestedCustomExtensions(items).filter((item) => item.source_label === null);
+  return suggestedCustomExtensions(items)
+    .filter((item) => item.source_label === null)
+    .slice()
+    .sort(compareSeenSuggestions);
+}
+
+export function filterExtensionSuggestions(
+  items: readonly LocalCliItem[],
+  query: string,
+): LocalCliItem[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [...items];
+  return items.filter((item) => suggestionMatchesQuery(item, needle));
+}
+
+export function seenSuggestionMeta(item: LocalCliItem): string {
+  if (item.observed_count <= 0) {
+    return item.kind === "script" ? "Script" : "Tool";
+  }
+  if (item.observed_count === 1) return "Seen once";
+  return `Seen ${item.observed_count} times`;
+}
+
+function compareSeenSuggestions(left: LocalCliItem, right: LocalCliItem): number {
+  if (right.observed_count !== left.observed_count) {
+    return right.observed_count - left.observed_count;
+  }
+  const recency = (right.last_seen_at ?? "").localeCompare(left.last_seen_at ?? "");
+  if (recency !== 0) return recency;
+  return left.name.localeCompare(right.name);
+}
+
+function suggestionMatchesQuery(item: LocalCliItem, needle: string): boolean {
+  const haystacks = [item.name, item.example_label, item.source_label ?? ""];
+  return haystacks.some((value) => value.toLowerCase().includes(needle));
 }
 
 export function normalizeLocalCliItem(value: unknown): LocalCliItem {

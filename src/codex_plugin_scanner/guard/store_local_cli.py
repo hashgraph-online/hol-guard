@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, cast
 
+from .runtime.custom_extension_suggestion import is_suggestable_custom_tool
 from .runtime.local_cli_commands import (
     LocalCliCommand,
     LocalCliCommandState,
@@ -14,7 +15,7 @@ from .runtime.local_cli_commands import (
     is_local_cli_command_state,
     local_cli_command_state,
 )
-from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id, is_suggestable_custom_tool
+from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .store_local_cli_schema import ensure_local_cli_schema
 
 
@@ -381,12 +382,20 @@ def _load_commands_by_cli(connection: sqlite3.Connection) -> dict[str, list[dict
 def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
     kind = item.get("kind")
     name = item.get("name")
+    source_path = item.get("source_path")
+    observed_count = item.get("observed_count")
+    help_status = item.get("help_status")
+    surface = item.get("surface")
     item["suggestable"] = (
         isinstance(kind, str)
         and isinstance(name, str)
         and is_suggestable_custom_tool(
             name=name,
             kind="script" if kind == "script" else "executable",
+            source_path=source_path if isinstance(source_path, str) else None,
+            observed_count=observed_count if isinstance(observed_count, int) else 0,
+            help_status=help_status if isinstance(help_status, str) else None,
+            surface=surface if isinstance(surface, str) else "cli",
         )
     )
     return item

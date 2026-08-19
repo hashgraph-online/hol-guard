@@ -18,6 +18,7 @@ from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafe
 from .command_model import CanonicalCommand, CommandSegment, parse_shell_command
 from .command_rules import matcher_index_hints
 from .command_tokens import executable_name
+from .custom_extension_suggestion import common_utility_reject_message, is_common_shell_utility
 
 LocalCliKind = Literal["executable", "script"]
 
@@ -51,67 +52,6 @@ _INTERPRETER_NAMES = frozenset(
 )
 _PACKAGE_SCRIPT_KINDS = frozenset({"bun-package-script"})
 _INLINE_KINDS = frozenset({"python-c", "python-m", "node-eval", "inline-script"})
-_COMMON_SHELL_UTILITIES = frozenset(
-    {
-        "[",
-        "alias",
-        "awk",
-        "basename",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "clear",
-        "cp",
-        "cut",
-        "date",
-        "df",
-        "dirname",
-        "du",
-        "echo",
-        "env",
-        "false",
-        "file",
-        "find",
-        "grep",
-        "head",
-        "history",
-        "kill",
-        "less",
-        "ln",
-        "ls",
-        "mkdir",
-        "more",
-        "mv",
-        "open",
-        "pbcopy",
-        "pbpaste",
-        "printf",
-        "ps",
-        "pwd",
-        "readlink",
-        "realpath",
-        "rm",
-        "rmdir",
-        "sed",
-        "sleep",
-        "sort",
-        "stat",
-        "tail",
-        "tee",
-        "test",
-        "touch",
-        "tr",
-        "true",
-        "type",
-        "uname",
-        "uniq",
-        "unalias",
-        "wc",
-        "which",
-        "xargs",
-    }
-)
 _RESERVED_TOOL_NAMES = frozenset({"hol-guard", "hol_guard", "guard"})
 _SCRIPT_LAUNCHERS = {
     ".py": "python3",
@@ -125,7 +65,7 @@ _SCRIPT_LAUNCHERS = {
 
 @dataclass(frozen=True, slots=True)
 class UnlistedCliIdentity:
-    """Stable, path-redacted identity for one unlisted CLI."""
+    """Stable identity for one unlisted CLI. Public payloads stay path-redacted."""
 
     cli_id: str
     name: str
@@ -133,6 +73,7 @@ class UnlistedCliIdentity:
     identity_hash: str
     example_label: str
     interpreter_name: str | None = None
+    source_path: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -244,21 +185,8 @@ def is_local_cli_id(value: str) -> bool:
     return _CLI_ID_PATTERN.fullmatch(value) is not None
 
 
-def is_common_shell_utility(name: str) -> bool:
-    return _normalize_tool_name(name) in _COMMON_SHELL_UTILITIES
-
-
 def is_reserved_tool_name(name: str) -> bool:
     return _normalize_tool_name(name) in _RESERVED_TOOL_NAMES
-
-
-def is_suggestable_custom_tool(*, name: str, kind: LocalCliKind) -> bool:
-    """Return whether an observed CLI is worth offering as a custom extension."""
-
-    normalized = _normalize_tool_name(name)
-    if is_common_shell_utility(normalized) or is_reserved_tool_name(normalized):
-        return False
-    return not (kind == "script" and normalized.startswith("test_") and normalized.endswith(".py"))
 
 
 def recognize_operator_cli(
@@ -286,7 +214,7 @@ def recognize_operator_cli(
             return identity, "", ""
         exe = _first_executable_name(candidate, cwd=cwd, home_dir=home_dir)
         if exe is not None and is_common_shell_utility(exe):
-            return None, "common_shell_utility", f"{exe} is a built-in shell command, not a custom extension."
+            return None, "common_shell_utility", common_utility_reject_message(exe)
         if exe is not None and is_reserved_tool_name(exe):
             return None, "reserved_tool", "Guard itself is not added as a custom extension."
         if exe is not None and exe in owned:
@@ -335,6 +263,7 @@ def _script_identity(entrypoint: dict[str, object], *, interpreter_name: str | N
         identity_hash=identity_hash,
         example_label=_example_label(interpreter_name, name),
         interpreter_name=interpreter_name,
+        source_path=path,
     )
 
 
@@ -361,6 +290,7 @@ def _executable_identity(executable: dict[str, object], exe_name: str) -> Unlist
         identity_hash=identity_hash,
         example_label=exe_name,
         interpreter_name=None,
+        source_path=path,
     )
 
 

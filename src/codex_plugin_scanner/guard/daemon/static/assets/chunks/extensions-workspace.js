@@ -228,7 +228,31 @@ function suggestedHarnessExtensions(items) {
   return suggestedCustomExtensions(items).filter((item) => item.source_label !== null);
 }
 function suggestedSeenExtensions(items) {
-  return suggestedCustomExtensions(items).filter((item) => item.source_label === null);
+  return suggestedCustomExtensions(items).filter((item) => item.source_label === null).slice().sort(compareSeenSuggestions);
+}
+function filterExtensionSuggestions(items, query) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [...items];
+  return items.filter((item) => suggestionMatchesQuery(item, needle));
+}
+function seenSuggestionMeta(item) {
+  if (item.observed_count <= 0) {
+    return item.kind === "script" ? "Script" : "Tool";
+  }
+  if (item.observed_count === 1) return "Seen once";
+  return `Seen ${item.observed_count} times`;
+}
+function compareSeenSuggestions(left, right) {
+  if (right.observed_count !== left.observed_count) {
+    return right.observed_count - left.observed_count;
+  }
+  const recency = (right.last_seen_at ?? "").localeCompare(left.last_seen_at ?? "");
+  if (recency !== 0) return recency;
+  return left.name.localeCompare(right.name);
+}
+function suggestionMatchesQuery(item, needle) {
+  const haystacks = [item.name, item.example_label, item.source_label ?? ""];
+  return haystacks.some((value) => value.toLowerCase().includes(needle));
 }
 function normalizeLocalCliItem(value) {
   if (!isRecord(value)) throw new Error("Invalid local CLI item");
@@ -2599,8 +2623,15 @@ function AddCustomExtensionDialog(props) {
   const [error, setError] = reactExports.useState(null);
   const dialogRef = useModalDialog(props.onClose, !busy);
   const recognizeGeneration = reactExports.useRef(0);
-  const harnessSuggestions = suggestedHarnessExtensions(props.items).slice(0, 8);
-  const seenSuggestions = suggestedSeenExtensions(props.items).slice(0, 4);
+  const harnessSuggestions = filterExtensionSuggestions(
+    suggestedHarnessExtensions(props.items),
+    command
+  ).slice(0, 8);
+  const seenSuggestions = filterExtensionSuggestions(
+    suggestedSeenExtensions(props.items),
+    command
+  ).slice(0, 6);
+  const hasSuggestions = harnessSuggestions.length > 0 || seenSuggestions.length > 0;
   reactExports.useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
       setError("Guard could not load local approval settings yet.");
@@ -2723,7 +2754,7 @@ function AddCustomExtensionDialog(props) {
       className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "add-custom-extension-title", className: "text-xl font-semibold text-brand-dark", children: "Add a custom extension" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: "Paste a local command or an MCP server launch command, or pick a server Guard found in your apps. Guard lists commands from --help, or tools from a stdio MCP server, then you set Recommended, Allow, or Block." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: "Paste a script, binary, or MCP launch command, or pick something Guard already found. Everyday commands such as rg, grep, and whoami are not custom extensions." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-5 block text-sm font-semibold text-brand-dark", children: "Command" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
@@ -2742,11 +2773,7 @@ function AddCustomExtensionDialog(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "npx" }),
           " or ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "uvx" }),
-          ". Not ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "ls" }),
-          ", ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "grep" }),
-          ", or a pipeline."
+          ". Not a pipeline."
         ] }),
         recognized ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
@@ -2779,10 +2806,16 @@ function AddCustomExtensionDialog(props) {
             onApprovalTotpCodeChange: handleTotp
           }
         ) }) : null,
-        recognized === null ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SuggestionGroup, { heading: "From your apps", items: harnessSuggestions, onSelect: selectSuggestion }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SuggestionGroup, { heading: "Seen on this device", items: seenSuggestions, onSelect: selectSuggestion })
-        ] }) : null,
+        recognized === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SuggestionPanel,
+          {
+            query: command,
+            hasSuggestions,
+            harnessSuggestions,
+            seenSuggestions,
+            onSelect: selectSuggestion
+          }
+        ) : null,
         error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: error }) }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: busy, onClick: props.onClose, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: "Cancel" }),
@@ -2805,6 +2838,12 @@ function addDialogSubmitLabel(input) {
   }
   return mcp ? "Allow this server" : "Allow this tool";
 }
+function suggestionEmptyCopy(query) {
+  if (query.trim() !== "") {
+    return "No matching tools. Everyday commands such as rg, whoami, and script stay hidden.";
+  }
+  return "No extra tools yet. Paste a command above. Guard hides everyday shell, search, and test-runner commands.";
+}
 function suggestionSummary(item) {
   if (item.surface === "mcp" && item.commands.length > 0) {
     return `Guard listed ${item.commands.length} tools from this MCP server. Recommended keeps the usual review. Allow or block each one.`;
@@ -2817,10 +2856,36 @@ function suggestionSummary(item) {
   }
   return `Find this tool to read ${item.name} --help and load its commands.`;
 }
+function SuggestionPanel(props) {
+  if (!props.hasSuggestions) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/70", children: suggestionEmptyCopy(props.query) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SuggestionGroup,
+      {
+        heading: "From your apps",
+        helper: "MCP servers already configured in apps on this device.",
+        items: props.harnessSuggestions,
+        onSelect: props.onSelect
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SuggestionGroup,
+      {
+        heading: "Seen on this device",
+        helper: "Your own tools that agents have run. Common commands stay hidden.",
+        items: props.seenSuggestions,
+        onSelect: props.onSelect
+      }
+    )
+  ] });
+}
 function SuggestionGroup(props) {
   if (props.items.length === 0) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.heading }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/60", children: props.helper }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 divide-y divide-slate-200", children: props.items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(SuggestionButton, { item, onSelect: props.onSelect }) }, item.cli_id)) })
   ] });
 }
@@ -2831,7 +2896,7 @@ function SuggestionButton(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: handleSelect, className: "flex min-h-11 w-full items-baseline justify-between gap-3 py-2 text-left", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-sm font-semibold text-brand-dark", children: props.item.name }),
-      props.item.source_label ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-xs text-brand-dark/60", children: props.item.source_label }) : null
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-xs text-brand-dark/60", children: props.item.source_label ?? seenSuggestionMeta(props.item) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate font-mono text-xs text-brand-dark/60", children: props.item.example_label })
   ] });

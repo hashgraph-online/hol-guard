@@ -8,9 +8,11 @@ import {
 } from "../approval-proof-inline";
 import {
   applyLocalCliMutation,
+  filterExtensionSuggestions,
   LocalCliApiError,
   previewLocalCliMutation,
   recognizeLocalCli,
+  seenSuggestionMeta,
   suggestedHarnessExtensions,
   suggestedSeenExtensions,
   type LocalCliCommandState,
@@ -44,8 +46,15 @@ export function AddCustomExtensionDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useModalDialog<HTMLFormElement>(props.onClose, !busy);
   const recognizeGeneration = useRef(0);
-  const harnessSuggestions = suggestedHarnessExtensions(props.items).slice(0, 8);
-  const seenSuggestions = suggestedSeenExtensions(props.items).slice(0, 4);
+  const harnessSuggestions = filterExtensionSuggestions(
+    suggestedHarnessExtensions(props.items),
+    command,
+  ).slice(0, 8);
+  const seenSuggestions = filterExtensionSuggestions(
+    suggestedSeenExtensions(props.items),
+    command,
+  ).slice(0, 6);
+  const hasSuggestions = harnessSuggestions.length > 0 || seenSuggestions.length > 0;
 
   useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
@@ -175,7 +184,7 @@ export function AddCustomExtensionDialog(props: {
       >
         <h2 id="add-custom-extension-title" className="text-xl font-semibold text-brand-dark">Add a custom extension</h2>
         <p className="mt-2 text-sm leading-6 text-brand-dark/80">
-          Paste a local command or an MCP server launch command, or pick a server Guard found in your apps. Guard lists commands from --help, or tools from a stdio MCP server, then you set Recommended, Allow, or Block.
+          Paste a script, binary, or MCP launch command, or pick something Guard already found. Everyday commands such as rg, grep, and whoami are not custom extensions.
         </p>
         <label htmlFor="custom-extension-command" className="mt-5 block text-sm font-semibold text-brand-dark">Command</label>
         <input
@@ -188,7 +197,7 @@ export function AddCustomExtensionDialog(props: {
           className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
         />
         <p className="mt-2 text-sm leading-6 text-brand-dark/70">
-          One command. A script, a binary, or an MCP launch such as <span className="font-medium">npx</span> or <span className="font-medium">uvx</span>. Not <span className="font-medium">ls</span>, <span className="font-medium">grep</span>, or a pipeline.
+          One command. A script, a binary, or an MCP launch such as <span className="font-medium">npx</span> or <span className="font-medium">uvx</span>. Not a pipeline.
         </p>
         {recognized ? (
           <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -234,10 +243,13 @@ export function AddCustomExtensionDialog(props: {
           </div>
         ) : null}
         {recognized === null ? (
-          <>
-            <SuggestionGroup heading="From your apps" items={harnessSuggestions} onSelect={selectSuggestion} />
-            <SuggestionGroup heading="Seen on this device" items={seenSuggestions} onSelect={selectSuggestion} />
-          </>
+          <SuggestionPanel
+            query={command}
+            hasSuggestions={hasSuggestions}
+            harnessSuggestions={harnessSuggestions}
+            seenSuggestions={seenSuggestions}
+            onSelect={selectSuggestion}
+          />
         ) : null}
         {error ? <div className="mt-4"><InlineError message={error} /></div> : null}
         <div className="mt-6 flex justify-end gap-3">
@@ -269,6 +281,13 @@ function addDialogSubmitLabel(input: {
   return mcp ? "Allow this server" : "Allow this tool";
 }
 
+function suggestionEmptyCopy(query: string): string {
+  if (query.trim() !== "") {
+    return "No matching tools. Everyday commands such as rg, whoami, and script stay hidden.";
+  }
+  return "No extra tools yet. Paste a command above. Guard hides everyday shell, search, and test-runner commands.";
+}
+
 function suggestionSummary(item: LocalCliItem): string {
   if (item.surface === "mcp" && item.commands.length > 0) {
     return `Guard listed ${item.commands.length} tools from this MCP server. Recommended keeps the usual review. Allow or block each one.`;
@@ -282,8 +301,41 @@ function suggestionSummary(item: LocalCliItem): string {
   return `Find this tool to read ${item.name} --help and load its commands.`;
 }
 
+function SuggestionPanel(props: {
+  query: string;
+  hasSuggestions: boolean;
+  harnessSuggestions: LocalCliItem[];
+  seenSuggestions: LocalCliItem[];
+  onSelect: (item: LocalCliItem) => void;
+}) {
+  if (!props.hasSuggestions) {
+    return (
+      <p className="mt-5 text-sm leading-6 text-brand-dark/70">
+        {suggestionEmptyCopy(props.query)}
+      </p>
+    );
+  }
+  return (
+    <>
+      <SuggestionGroup
+        heading="From your apps"
+        helper="MCP servers already configured in apps on this device."
+        items={props.harnessSuggestions}
+        onSelect={props.onSelect}
+      />
+      <SuggestionGroup
+        heading="Seen on this device"
+        helper="Your own tools that agents have run. Common commands stay hidden."
+        items={props.seenSuggestions}
+        onSelect={props.onSelect}
+      />
+    </>
+  );
+}
+
 function SuggestionGroup(props: {
   heading: string;
+  helper: string;
   items: LocalCliItem[];
   onSelect: (item: LocalCliItem) => void;
 }) {
@@ -291,6 +343,7 @@ function SuggestionGroup(props: {
   return (
     <div className="mt-5">
       <p className="text-sm font-semibold text-brand-dark">{props.heading}</p>
+      <p className="mt-1 text-xs leading-5 text-brand-dark/60">{props.helper}</p>
       <ul className="mt-2 divide-y divide-slate-200">
         {props.items.map((item) => (
           <li key={item.cli_id}>
@@ -310,9 +363,9 @@ function SuggestionButton(props: { item: LocalCliItem; onSelect: (item: LocalCli
     <button type="button" onClick={handleSelect} className="flex min-h-11 w-full items-baseline justify-between gap-3 py-2 text-left">
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-brand-dark">{props.item.name}</span>
-        {props.item.source_label ? (
-          <span className="block truncate text-xs text-brand-dark/60">{props.item.source_label}</span>
-        ) : null}
+        <span className="block truncate text-xs text-brand-dark/60">
+          {props.item.source_label ?? seenSuggestionMeta(props.item)}
+        </span>
       </span>
       <span className="truncate font-mono text-xs text-brand-dark/60">{props.item.example_label}</span>
     </button>

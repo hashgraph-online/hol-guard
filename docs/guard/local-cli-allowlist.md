@@ -6,7 +6,9 @@ On the Extensions page, choose **Add custom extension** and paste the command fo
 
 For an MCP server, paste the same stdio launch command the harness uses, for example `npx -y @modelcontextprotocol/server-github` or `uvx mcp-server-git`. Guard also lists stdio MCP servers already configured in your apps under **From your apps**. Choosing one starts that command as a stdio MCP client, lists the tools, then stops the process. You then set **Recommended**, **Allow**, or **Block** on each command or tool, the same way built-in tools work. Guard does not allow tools or start servers until you choose one.
 
-Shell utilities such as `ls` and `grep` are not custom extensions. Built-in catalog tools such as Git stay in All tools.
+Shell utilities such as `ls` and `grep` are not custom extensions. Everyday search, identity, and terminal-recorder commands such as `rg`, `whoami`, and `script` are not custom extensions either. Test runners such as `vitest` are not suggested. Built-in catalog tools such as Git stay in All tools.
+
+**From your apps** lists stdio MCP servers Guard found in harness configs. **Seen on this device** lists your own scripts and binaries that agents have actually run. Guard ranks those by how much they look like a product tool, not by whichever command ran last.
 
 ## Local boundary
 
