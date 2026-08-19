@@ -7711,10 +7711,7 @@ class GuardDaemonServer:
             self._thread = threading.Thread(target=self._serve_forever, daemon=True)
             self._thread.start()
             serve_thread_started = True
-            self._server.hook_process_runner.enable_full_capacity(
-                delay_seconds=0,
-                active_deferral_seconds=0,
-            )
+            self._server.hook_process_runner.enable_full_capacity()
         except BaseException as error:
             self._diagnostics.record_exception("daemon_start_thread_failed")
             serve_thread_contained = True
@@ -7737,10 +7734,7 @@ class GuardDaemonServer:
 
     def serve(self) -> None:
         self._begin_service()
-        self._server.hook_process_runner.enable_full_capacity(
-            delay_seconds=0,
-            active_deferral_seconds=0,
-        )
+        self._server.hook_process_runner.enable_full_capacity()
         self._serve_forever()
 
     def stop(self) -> None:

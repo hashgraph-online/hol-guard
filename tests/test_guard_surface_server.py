@@ -26,7 +26,6 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import hook_process_runner as hook_process_runner_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
@@ -990,8 +989,6 @@ class TestGuardSurfaceServer:
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
-        # This test owns response-shape coverage; latency budgets have dedicated tests.
-        monkeypatch.setattr(hook_process_runner_module, "initial_hook_worker_target", lambda: 2)
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 8.0)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()

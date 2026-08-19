@@ -18,6 +18,28 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def test_daemon_start_preserves_deferred_hook_worker_backfill(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
+    runner = daemon._server.hook_process_runner
+    enable_full_capacity = runner.enable_full_capacity
+    calls: list[dict[str, float]] = []
+
+    def recording_enable_full_capacity(**kwargs: float) -> None:
+        calls.append(kwargs)
+        enable_full_capacity(**kwargs)
+
+    monkeypatch.setattr(runner, "enable_full_capacity", recording_enable_full_capacity)
+    try:
+        daemon.start()
+        assert calls == [{}]
+    finally:
+        daemon.stop()
+
+
 def test_occupied_port_preserves_bind_error_during_partial_server_cleanup(tmp_path: Path) -> None:
     diagnostics_threads_before = {
         thread.ident
