@@ -35,7 +35,7 @@ if TYPE_CHECKING:
         _managed_install_for,
         _resolve_copilot_workspace_root,
     )
-    from .commands_support_workspace import _workspace_from_cursor_project_dir
+    from .commands_support_workspace import _workspace_from_cursor_project_dir, _workspace_from_hook_payload
 
 
 from ._commands_shared import *
@@ -103,7 +103,7 @@ def _run_guard_hook_command(
         payload = _normalize_hook_payload(prepare_zcode_hook_payload(payload), harness=args.harness)
     managed_install = _managed_install_for(store, args.harness)
     workspace_was_explicit = workspace is not None
-    runtime_workspace = workspace
+    runtime_workspace = workspace or _workspace_from_hook_payload(payload)
     if runtime_workspace is None and args.harness == "copilot":
         with suppress(OSError):
             current_workspace = Path.cwd().resolve()

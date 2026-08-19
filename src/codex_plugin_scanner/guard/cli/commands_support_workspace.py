@@ -353,6 +353,17 @@ def _normalize_explicit_workspace_path(value: str | None) -> Path | None:
     except OSError:
         return path
 
+
+def _workspace_from_hook_payload(payload: object) -> Path | None:
+    if not isinstance(payload, dict):
+        return None
+    for key in ("workspace_root", "workspaceRoot", "cwd"):
+        value = payload.get(key)
+        resolved = _normalize_explicit_workspace_path(value if isinstance(value, str) else None)
+        if resolved is not None:
+            return resolved
+    return None
+
 _INSTALL_WORKSPACE_COMMANDS = frozenset({"install", "uninstall"})
 
 _PROJECT_ROOT_MARKERS = (
