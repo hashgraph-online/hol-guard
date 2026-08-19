@@ -22,7 +22,9 @@ def test_unpublished_alpha_reservation_is_released_when_publish_fails() -> None:
     assert "needs.publish-alpha-pypi.result != 'success'" in job["if"]
     assert "git/ref/tags/${tag}" in cleanup_run
     assert "git/refs/tags/${tag}" in cleanup_run
-    assert "pypi.org/pypi/hol-guard/${VERSION}/json" in cleanup_run
+    assert "pypi.org/pypi/${project}/${VERSION}/json" in cleanup_run
+    assert "hol-guard plugin-scanner" in cleanup_run
+    assert "%{http_code}" in cleanup_run
     assert "Not Found" in cleanup_run
 
 
