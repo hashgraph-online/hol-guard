@@ -8,6 +8,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action, update_guard_settings
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
@@ -285,6 +287,13 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
             "resolve_package_firewall_entitlement",
             lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
         )
+        _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"sync": False}},
+        )
         expired_status, expired_payload = _json_request(
             daemon.port,
             daemon._server.auth_token,
@@ -304,6 +313,91 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
     assert allowed_payload["settings"]["sync"] is True
     assert expired_status == 400
     assert expired_payload["message"] == "Cloud sync requires a paid team plan."
+
+
+def test_existing_cloud_sync_does_not_block_protection_posture_change(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    update_guard_settings(
+        guard_home,
+        {"sync": True, "protection_posture": "watch"},
+        cloud_sync_entitled=True,
+    )
+    updated = update_guard_settings(
+        guard_home,
+        {"protection_posture": "protected"},
+        cloud_sync_entitled=False,
+    )
+
+    assert updated.protection_posture == "protected"
+    assert updated.sync is True
+
+
+def test_watch_to_protected_api_ignores_existing_sync_without_entitlement(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    update_guard_settings(
+        guard_home,
+        {"sync": True, "protection_posture": "watch"},
+        cloud_sync_entitled=True,
+    )
+    _store, daemon = _with_daemon(guard_home)
+    monkeypatch.setattr(
+        daemon_server_module,
+        "resolve_package_firewall_entitlement",
+        lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
+    )
+    try:
+        status, payload = _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"protection_posture": "protected"}},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["settings"]["protection_posture"] == "protected"
+    assert payload["settings"]["sync"] is True
+
+
+def test_managed_policy_sync_does_not_persist_local_sync_without_entitlement(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from codex_plugin_scanner.guard import config as config_module
+    from codex_plugin_scanner.guard.mdm.contracts import (
+        MDM_POLICY_SCHEMA_VERSION,
+        ManagedPolicy,
+        ManagedPolicyState,
+        ManagedUpdatePolicy,
+    )
+
+    guard_home = tmp_path / "guard-home"
+    policy = ManagedPolicy(
+        schema_version=MDM_POLICY_SCHEMA_VERSION,
+        settings={"sync": True},
+        locked_settings=frozenset(),
+        update=ManagedUpdatePolicy(owner="mdm", allow_downgrade=False),
+        content_hash="managed-sync",
+    )
+    monkeypatch.setattr(
+        config_module,
+        "load_managed_policy",
+        lambda: ManagedPolicyState(status="active", source="test", policy=policy),
+    )
+    with pytest.raises(ValueError, match="Cloud sync requires a paid team plan"):
+        update_guard_settings(
+            guard_home,
+            {"sync": True},
+            cloud_sync_entitled=False,
+        )
+    config_path = guard_home / "config.toml"
+    persisted = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    assert "sync = true" not in persisted.lower()
 
 
 def test_risk_settings_drive_runtime_policy_resolution(tmp_path: Path) -> None:
