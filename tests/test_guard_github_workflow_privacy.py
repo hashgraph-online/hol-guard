@@ -251,6 +251,9 @@ def test_full_launch_environment_drift_changes_binding(
         f"command {Path(sys.executable).resolve()} issue lock 17 --repo {_REPOSITORY}",
         f"{Path(sys.executable).resolve()} issue lock 17 --repo {_REPOSITORY} &",
     ),
+    # Stable ids keep the pytest node ids free of the interpreter's absolute
+    # path, which differs between the shard-planning and test-running CI jobs.
+    ids=("bare-gh", "dot-slash-gh", "relative-bin-gh", "command-interpreter", "interpreter-background"),
 )
 def test_noncanonical_launch_forms_are_ineligible(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
