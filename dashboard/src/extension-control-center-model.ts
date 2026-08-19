@@ -171,6 +171,23 @@ export function permissionEffectiveState(
     (permission.default_enabled ? "enabled" : "disabled");
 }
 
+/**
+ * Catalog names carry a uniform "… command protection" / "… protection"
+ * suffix. Inside the Extensions list every row already sits under that
+ * context, so rows and search headings show the distinguishing part only.
+ * Names whose remainder would be mangled ("Guard self-protection") stay
+ * verbatim. Detail pages keep the full catalog name.
+ */
+export function extensionDisplayName(name: string): string {
+  for (const suffix of [" command protection", " protection"]) {
+    if (!name.toLowerCase().endsWith(suffix)) continue;
+    const shortened = name.slice(0, name.length - suffix.length);
+    if (shortened.length < 3 || /[-\s,.]$/.test(shortened)) break;
+    return shortened;
+  }
+  return name;
+}
+
 export function extensionStateLabel(
   effective: EffectiveExtensionControls,
   extension: ExtensionCatalogItem,

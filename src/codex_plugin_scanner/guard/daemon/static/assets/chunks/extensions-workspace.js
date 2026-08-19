@@ -101,6 +101,15 @@ function extensionEffectiveState(effective, extension2) {
   if (extension2.required) return "enabled";
   return explicitControlState(effective, "extension", extension2.extension_id) ?? "enabled";
 }
+function extensionDisplayName(name) {
+  for (const suffix of [" command protection", " protection"]) {
+    if (!name.toLowerCase().endsWith(suffix)) continue;
+    const shortened = name.slice(0, name.length - suffix.length);
+    if (shortened.length < 3 || /[-\s,.]$/.test(shortened)) break;
+    return shortened;
+  }
+  return name;
+}
 function extensionStateLabel(effective, extension2) {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
@@ -1861,10 +1870,10 @@ function ExtensionPolicyPanel(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "extension-policy-editor", "aria-labelledby": "extension-policy-heading", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "extension-policy-heading", className: "text-lg font-semibold text-brand-dark", children: "Protection settings" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/80", children: "Recommended follows Guard defaults. Allow is available only where built-in safety and organization policy still permit it. Block is a stricter local floor." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile(policyExtension.permissions, "recommended"), className: "min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40", children: "Recommended" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile(policyExtension.permissions, "stricter"), className: "min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40", children: "Stricter" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: true, className: "min-h-10 px-1 text-xs font-semibold text-brand-dark/55", children: "Custom" })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-x-3 gap-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-brand-dark/60", children: "Apply to every pattern:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile(policyExtension.permissions, "recommended"), className: "min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40", children: "Reset to Recommended" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: baseEffective.health !== "protected" || refreshRequired, onClick: () => applyProfile(policyExtension.permissions, "stricter"), className: "min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40", children: "Block all variants" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "extension-settings-history", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionSettingsHistory, { catalogDigest: baseEffective.catalog_digest, disabled: baseEffective.health !== "protected" || refreshRequired, onUse: (layers) => useHistoricalDraft(layers) }) }),
     baseEffective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 flex gap-2 text-sm text-brand-dark", children: [
@@ -3360,7 +3369,9 @@ function searchCommandPatterns(extensions, rawQuery, limit = 24) {
   ).slice(0, limit);
 }
 function PatternSearchConsole(props) {
-  const [query, setQuery] = reactExports.useState("");
+  const [internalQuery, setInternalQuery] = reactExports.useState("");
+  const query = props.query ?? internalQuery;
+  const setQuery = props.onQueryChange ?? setInternalQuery;
   const [focused, setFocused] = reactExports.useState(false);
   const inputRef = reactExports.useRef(null);
   const searchActive = props.active ?? true;
@@ -3444,9 +3455,22 @@ function PatternSearchConsole(props) {
           onChange: (event) => setQuery(event.target.value.slice(0, 160)),
           placeholder: 'Search any command Guard watches — "squash", "git push --force", "kubectl"…',
           "aria-describedby": "pattern-search-hint",
-          className: "min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-3 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+          className: "min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
         }
-      )
+      ),
+      showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            setQuery("");
+            inputRef.current?.focus();
+          },
+          "aria-label": "Clear search",
+          className: "absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-brand-dark/55 hover:bg-[rgba(63,65,116,0.06)] hover:text-brand-dark",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" })
+        }
+      ) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "pattern-search-hint", className: `mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`, children: "Matches patterns across every tool. Press / to focus search from anywhere on this page." }),
     showResults ? matches.length || toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
@@ -3462,8 +3486,8 @@ function PatternSearchConsole(props) {
               size: "sm"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: group.extension.executables[0] ?? group.extension.extension_id }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: group.extension.name })
+          group.extension.executables.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: group.extension.executables[0] }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: extensionDisplayName(group.extension.name) })
         ] }),
         group.permissionIds.map((permissionId) => {
           const permission2 = group.extension.permissions.find((item) => item.permission_id === permissionId);
@@ -3488,9 +3512,9 @@ function PatternSearchConsole(props) {
           ProtectionModuleRow,
           {
             extensionId: extension2.extension_id,
-            name: extension2.name,
+            name: extensionDisplayName(extension2.name),
             description: extension2.description,
-            behavior: extension2.executables.join(" · "),
+            behavior: extension2.executables.join(" · ") || extension2.description,
             required: extension2.required,
             executables: extension2.executables,
             ecosystemIds: extension2.ecosystem_ids,
@@ -3567,6 +3591,11 @@ function sourceIsManaged(effective, extensionId) {
     (control) => control.target_kind === "extension" && control.target_id === extensionId
   ));
 }
+function catalogRowSecondLine(extension2, state) {
+  if (state === "Blocked" || state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
+  const executables = extension2.executables.join(" · ").trim();
+  return executables || extension2.description;
+}
 function CatalogExtensionRow(props) {
   const handleOpen = reactExports.useCallback(() => {
     props.onOpen(props.extension);
@@ -3575,9 +3604,9 @@ function CatalogExtensionRow(props) {
     ProtectionModuleRow,
     {
       extensionId: props.extension.extension_id,
-      name: props.extension.name,
+      name: extensionDisplayName(props.extension.name),
       description: props.extension.description,
-      behavior: extensionStateLabel(props.effective, props.extension),
+      behavior: catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension)),
       required: props.extension.required,
       managed: sourceIsManaged(props.effective, props.extension.extension_id),
       executables: props.extension.executables,
@@ -3587,6 +3616,8 @@ function CatalogExtensionRow(props) {
   );
 }
 function ExtensionsOverview(props) {
+  const [query, setQuery] = reactExports.useState("");
+  const searching = query.trim().length > 0;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: !props.active, inert: !props.active || void 0, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       WorkspacePageHeader,
@@ -3613,41 +3644,45 @@ function ExtensionsOverview(props) {
         catalog: props.catalogExtensions,
         effective: props.effective,
         active: props.active,
+        query,
+        onQueryChange: setQuery,
         onRefresh: props.onRefresh,
         onOpenExtension: props.onOpenExtension
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      CustomExtensionsSection,
-      {
-        items: props.localCliItems,
-        onOpen: props.onOpenLocalCli,
-        onAdd: props.onAddCustom
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/70", children: [
-            props.catalogExtensions.length,
-            " tools"
-          ] })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: props.catalogExtensions.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CatalogExtensionRow,
+    searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      props.localCliItems.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CustomExtensionsSection,
         {
-          extension: extension2,
-          effective: props.effective,
-          onOpen: props.onOpenExtension
-        },
-        extension2.extension_id
-      )) })
+          items: props.localCliItems,
+          onOpen: props.onOpenLocalCli,
+          onAdd: props.onAddCustom
+        }
+      ) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
+            props.localCliItems.length ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/70", children: [
+              props.catalogExtensions.length,
+              " tools"
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: props.catalogExtensions.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CatalogExtensionRow,
+          {
+            extension: extension2,
+            effective: props.effective,
+            onOpen: props.onOpenExtension
+          },
+          extension2.extension_id
+        )) })
+      ] })
     ] }),
     props.addingCustom ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       AddCustomExtensionDialog,
@@ -3852,7 +3887,7 @@ function sourceForTarget(effective, targetKind, targetId2) {
 }
 function requiredLine(extension2) {
   if (!extension2.required) return null;
-  return "This tool stays on. Individual command patterns below can follow recommended settings or be blocked on this device.";
+  return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
 }
 function DeveloperModuleDetails(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalDetails, { title: "Developer details", testId: "protection-more-detail", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5", children: [
@@ -3985,7 +4020,7 @@ function ProtectionModuleDetail(props) {
         ] })
       ] }),
       requiredNote ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/80", children: requiredNote }) : null,
-      props.extension.required ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/70", children: "This protection is required by Guard and cannot be turned off." }) : props.onRequestExtensionChange ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
+      props.extension.required ? null : props.onRequestExtensionChange ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {

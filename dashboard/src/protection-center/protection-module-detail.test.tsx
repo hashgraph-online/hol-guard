@@ -55,7 +55,7 @@ assert.match(simple, /git push --force/);
 assert.match(simple, /Recommended/);
 assert.match(simple, />Allow</);
 assert.match(simple, />Block</);
-assert.match(simple, /cannot be turned off/);
+assert.match(simple, /Required by Guard/);
 assert.match(simple, /Test Lab/);
 assert.match(simple, /Developer details/);
 assert.doesNotMatch(simple, /data-testid="protection-more-detail"[^>]* open/, "developer details stay collapsed by default");
@@ -71,7 +71,7 @@ const required = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   onBack: () => undefined,
   onRefresh: () => undefined,
 }));
-assert.match(required, /cannot be turned off/);
+assert.match(required, /Required by Guard/);
 assert.doesNotMatch(required, />Change settings</);
 
 const fixedSettingSimple = renderToStaticMarkup(createElement(ProtectionModuleDetail, {

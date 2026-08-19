@@ -22,7 +22,7 @@ function sourceForTarget(
 
 function requiredLine(extension: ExtensionCatalogItem): string | null {
   if (!extension.required) return null;
-  return "This tool stays on. Individual command patterns below can follow recommended settings or be blocked on this device.";
+  return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
 }
 
 function DeveloperModuleDetails(props: {
@@ -183,9 +183,7 @@ export function ProtectionModuleDetail(props: {
           </div>
         </div>
         {requiredNote ? <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/80">{requiredNote}</p> : null}
-        {props.extension.required ? (
-          <p className="mt-2 text-sm text-brand-dark/70">This protection is required by Guard and cannot be turned off.</p>
-        ) : props.onRequestExtensionChange ? (
+        {props.extension.required ? null : props.onRequestExtensionChange ? (
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
