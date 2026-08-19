@@ -14,20 +14,28 @@ _PASSWORD_ENV = "HOL_GUARD_APPROVAL_PASSWORD"
 _TOTP_ENV = "HOL_GUARD_APPROVAL_TOTP_CODE"
 
 
-def _take_env(name: str, *, strip: bool) -> str | None:
+def _pop_env(name: str) -> str | None:
     value = os.environ.pop(name, None)
-    if not isinstance(value, str):
-        return None
-    if strip:
-        value = value.strip()
-    return value or None
+    return value if isinstance(value, str) else None
 
 
-def _desktop_child_proof(*, totp_enabled: bool, use_cooldown: bool, cooldown_seconds: int) -> ApprovalGateInput | None:
+def consume_desktop_lifecycle_env(
+    *,
+    totp_enabled: bool,
+    use_cooldown: bool,
+    cooldown_seconds: int,
+) -> ApprovalGateInput | None:
+    """Take Desktop child proof for protection lifecycle commands only.
+
+    The approval factor variables are always removed from the process environment
+    so later subprocesses cannot inherit unused credentials.
+    """
+
+    password = _pop_env(_PASSWORD_ENV)
+    totp_raw = _pop_env(_TOTP_ENV)
+    totp_code = totp_raw.strip() if totp_raw is not None and totp_raw.strip() else None
     if os.environ.get(_DESKTOP_CHILD_ENV) != "1":
         return None
-    password = _take_env(_PASSWORD_ENV, strip=False)
-    totp_code = _take_env(_TOTP_ENV, strip=True)
     if password is not None and totp_code is not None:
         raise ApprovalGateError(
             "approval_gate_factor_conflict",
@@ -37,7 +45,7 @@ def _desktop_child_proof(*, totp_enabled: bool, use_cooldown: bool, cooldown_sec
         if totp_code is None:
             return None
         return ApprovalGateInput(password=None, totp_code=totp_code, use_cooldown=False)
-    if password is None:
+    if not password:
         return None
     return ApprovalGateInput(
         password=password,
@@ -51,22 +59,12 @@ def prompt_for_approval_gate(
     *,
     use_cooldown: bool = True,
     summary: str | None = None,
-    allow_desktop_env: bool = False,
 ) -> ApprovalGateInput | None:
     gate = public_config(guard_home)
     if not gate.enabled:
         return None
-    desktop_proof = None
-    if allow_desktop_env:
-        desktop_proof = _desktop_child_proof(
-            totp_enabled=gate.totp_enabled,
-            use_cooldown=use_cooldown,
-            cooldown_seconds=gate.cooldown_seconds,
-        )
     if gate.totp_enabled and recent_totp_satisfied(guard_home):
         return None
-    if desktop_proof is not None:
-        return desktop_proof
     if not sys.stdin.isatty():
         proof_name = "Authenticator code" if gate.totp_enabled else "Approval password"
         raise ApprovalGateError(
