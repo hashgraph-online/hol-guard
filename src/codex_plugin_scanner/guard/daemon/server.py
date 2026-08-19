@@ -551,6 +551,7 @@ class _GuardDaemonHttpServer(HTTPServer):
         self.unclassified_watchdog_thread = None
         self.hook_process_runner = HookProcessRunner(guard_home=store.guard_home)
         self.hook_process_runner.set_capacity_listener(self.runtime_hook_process_scheduler.set_active_limit)
+        self.runtime_hook_process_scheduler.set_queue_listener(self.hook_process_runner.notify_queued_work)
         self.runtime_heartbeat = RuntimeHeartbeatWriter(
             store=store,
             session_id=runtime_session_id,

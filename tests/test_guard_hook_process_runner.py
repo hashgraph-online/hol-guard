@@ -615,6 +615,62 @@ def test_deferred_runner_does_not_adapt_before_backfill_is_enabled(tmp_path: Pat
         runner.close()
 
 
+def test_default_backfill_grace_yields_immediately_to_queued_work(tmp_path: Path) -> None:
+    runner = HookProcessRunner(guard_home=tmp_path)
+    scheduler = RuntimeHookScheduler(active_limit=0)
+    runner.set_capacity_listener(scheduler.set_active_limit)
+    scheduler.set_queue_listener(runner.notify_queued_work)
+    permits = []
+    third_admission = []
+    try:
+        runner.start(defer_backfill=True)
+        enabled_at = time.monotonic()
+        runner.enable_full_capacity()
+
+        assert runner._backfill_not_before - enabled_at >= 29.9  # pyright: ignore[reportPrivateUsage]
+        assert runner.stats()["ready"] == 2
+        for client_key in ("first", "second"):
+            admission = scheduler.acquire(
+                harness="codex",
+                client_key=client_key,
+                lane="decision",
+                payload_bytes=1,
+                deadline=time.monotonic() + 10,
+            )
+            assert admission.permit is not None
+            permits.append(admission.permit)
+        with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
+            runner._backfill_not_before = time.monotonic() - 1  # pyright: ignore[reportPrivateUsage]
+            runner._backfill_force_after = time.monotonic() + 5  # pyright: ignore[reportPrivateUsage]
+            generation = runner._generation  # pyright: ignore[reportPrivateUsage]
+            runner._active_reviews[generation] = 1  # pyright: ignore[reportPrivateUsage]
+
+        def acquire_third() -> None:
+            third_admission.append(
+                scheduler.acquire(
+                    harness="codex",
+                    client_key="third",
+                    lane="decision",
+                    payload_bytes=1,
+                    deadline=time.monotonic() + 10,
+                )
+            )
+
+        queued = threading.Thread(target=acquire_third)
+        queued.start()
+        assert runner.wait_for_capacity(minimum_workers=4, timeout_seconds=8)
+        queued.join(timeout=2)
+        assert third_admission and third_admission[0].permit is not None
+    finally:
+        with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
+            runner._active_reviews.clear()  # pyright: ignore[reportPrivateUsage]
+        for permit in permits:
+            permit.release()
+        if third_admission and third_admission[0].permit is not None:
+            third_admission[0].permit.release()
+        runner.close()
+
+
 def test_deferred_runner_bounds_backfill_deferral_during_active_reviews(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

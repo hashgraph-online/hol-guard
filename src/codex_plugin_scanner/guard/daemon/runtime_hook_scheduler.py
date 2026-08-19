@@ -48,6 +48,7 @@ class RuntimeHookScheduler:
         per_client_queued_limit: int = 32,
         retained_bytes_limit: int = 32 * 1024 * 1024,
         monotonic: Callable[[], float] = time.monotonic,
+        queue_listener: Callable[[], None] | None = None,
     ):
         limits = (
             active_limit,
@@ -66,6 +67,7 @@ class RuntimeHookScheduler:
         self._per_client_queued_limit = per_client_queued_limit
         self._retained_bytes_limit = retained_bytes_limit
         self._monotonic = monotonic
+        self._queue_listener = queue_listener
         self._condition = threading.Condition()
         self._queues: dict[
             RuntimeHookLane,
@@ -156,6 +158,8 @@ class RuntimeHookScheduler:
             else:
                 self._retained_bytes += payload_bytes
             self._dispatch()
+            if not item.admitted and self._queue_listener is not None:
+                self._queue_listener()
             while not item.admitted and item.rejection_reason is None:
                 remaining = resolved_deadline.expires_at - self._monotonic()
                 if remaining <= 0:
@@ -274,6 +278,10 @@ class RuntimeHookScheduler:
         with self._condition:
             self._active_limit = active_limit
             self._dispatch()
+
+    def set_queue_listener(self, listener: Callable[[], None]) -> None:
+        with self._condition:
+            self._queue_listener = listener
 
     def _reject(self, reason_code: RuntimeHookAdmissionReason) -> RuntimeHookAdmission:
         self._rejected[reason_code] = self._rejected.get(reason_code, 0) + 1
