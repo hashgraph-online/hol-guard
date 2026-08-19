@@ -81,7 +81,11 @@ def enforce_lifecycle_gate(
     if not gate.enabled:
         print(_ENROLLMENT_NOTICE, file=error_stream or sys.stderr)
         return
-    gate_input = prompt_for_approval_gate(authority_home, use_cooldown=False)
+    gate_input = prompt_for_approval_gate(
+        authority_home,
+        use_cooldown=False,
+        allow_desktop_env=True,
+    )
     _ = require_high_risk(
         authority_home,
         purpose="protection_lifecycle",

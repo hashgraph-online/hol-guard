@@ -302,11 +302,80 @@ def test_desktop_child_env_supplies_totp_when_authenticator_is_on(
         "codex_plugin_scanner.guard.cli.approval_gate_prompt.public_config",
         lambda _home: SimpleNamespace(enabled=True, totp_enabled=True, cooldown_seconds=0),
     )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.approval_gate_prompt.recent_totp_satisfied",
+        lambda _home: False,
+    )
 
-    proof = prompt_for_approval_gate(tmp_path)
+    proof = prompt_for_approval_gate(tmp_path, allow_desktop_env=True)
 
     assert proof is not None
     assert proof.password is None
     assert proof.totp_code == "123456"
     assert proof.use_cooldown is False
+    assert "HOL_GUARD_APPROVAL_TOTP_CODE" not in os.environ
+
+
+def test_desktop_child_env_is_ignored_outside_lifecycle_enforcement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli.approval_gate_prompt import prompt_for_approval_gate
+
+    password = "correct horse battery staple"
+    _ = update_settings(
+        tmp_path,
+        {"enabled": True, "new_password": password, "confirm_password": password},
+    )
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_PASSWORD", password)
+
+    with pytest.raises(ApprovalGateError, match="interactive terminal"):
+        prompt_for_approval_gate(tmp_path)
+
+    assert os.environ.get("HOL_GUARD_APPROVAL_PASSWORD") == password
+
+
+def test_desktop_child_env_preserves_password_whitespace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli.approval_gate_prompt import prompt_for_approval_gate
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_PASSWORD", " secret ")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.approval_gate_prompt.public_config",
+        lambda _home: SimpleNamespace(enabled=True, totp_enabled=False, cooldown_seconds=0),
+    )
+
+    proof = prompt_for_approval_gate(tmp_path, allow_desktop_env=True)
+
+    assert proof is not None
+    assert proof.password == " secret "
+
+
+def test_desktop_child_env_totp_defers_to_recent_session_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli.approval_gate_prompt import prompt_for_approval_gate
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    monkeypatch.setenv("HOL_GUARD_APPROVAL_TOTP_CODE", "123456")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.approval_gate_prompt.public_config",
+        lambda _home: SimpleNamespace(enabled=True, totp_enabled=True, cooldown_seconds=0),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.approval_gate_prompt.recent_totp_satisfied",
+        lambda _home: True,
+    )
+
+    proof = prompt_for_approval_gate(tmp_path, allow_desktop_env=True)
+
+    assert proof is None
     assert "HOL_GUARD_APPROVAL_TOTP_CODE" not in os.environ
