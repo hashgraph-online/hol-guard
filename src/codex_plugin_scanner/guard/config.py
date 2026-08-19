@@ -563,22 +563,26 @@ def update_guard_settings(
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue
         next_payload[key] = _coerce_editable_setting(key, value)
+    effective_next_payload = next_payload
     if current_config.managed_policy is not None:
-        composed = apply_managed_policy(next_payload, current_config.managed_policy)
+        effective_next_payload = apply_managed_policy(next_payload, current_config.managed_policy)
         missing = object()
         weakened = [
             key
             for key in current_config.managed_locked_settings
             if (requested := _nested_setting_value(next_payload, key, missing)) is not missing
-            and _nested_setting_value(composed, key, missing) != requested
+            and _nested_setting_value(effective_next_payload, key, missing) != requested
         ]
         if weakened:
             raise ValueError(f"Managed policy locks prevent weakening: {', '.join(sorted(weakened))}")
     preserving_sync_while_switching_to_watch_only = (
         current_config.sync is True
         and next_payload.get("sync") is True
+        and current.get("mode") != "observe"
         and current_config.mode != "observe"
+        and payload.get("mode") == "observe"
         and next_payload.get("mode") == "observe"
+        and effective_next_payload.get("mode") == "observe"
     )
     if (
         next_payload.get("sync") is True

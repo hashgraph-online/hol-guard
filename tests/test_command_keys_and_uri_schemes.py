@@ -218,7 +218,7 @@ def test_agent_guidance_read_rejects_non_markdown_and_symlink_escape(tmp_path):
     (docs / "credentials.json").write_text("{}\n", encoding="utf-8")
     outside = tmp_path / "outside.md"
     outside.write_text("outside\n", encoding="utf-8")
-    (docs / "linked.md").symlink_to(outside)
+    (docs / "harness-engineering.md").symlink_to(outside)
 
     assert not _codex_command_is_read_only_source_inspection(
         "sed -n '1,20p' ~/.codex/docs/credentials.json",
@@ -226,12 +226,31 @@ def test_agent_guidance_read_rejects_non_markdown_and_symlink_escape(tmp_path):
         home_dir=tmp_path,
     )
     assert not _codex_command_is_read_only_source_inspection(
-        "sed -n '1,20p' ~/.codex/docs/linked.md",
+        "sed -n '1,20p' ~/.codex/docs/harness-engineering.md",
         cwd=tmp_path,
         home_dir=tmp_path,
     )
     assert not _codex_command_is_read_only_source_inspection(
         "sed -n '1,20p' ~/.codex/docs/other.md",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert not _codex_command_is_read_only_source_inspection(
+        "sed -n '1,20p' ~/.codex/docs/token-discipline.md",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+
+def test_agent_guidance_read_rejects_parent_directory_symlink(tmp_path):
+    redirected_home = tmp_path / "redirected"
+    docs = redirected_home / "docs"
+    docs.mkdir(parents=True)
+    (docs / "harness-engineering.md").write_text("outside\n", encoding="utf-8")
+    (tmp_path / ".codex").symlink_to(redirected_home, target_is_directory=True)
+
+    assert not _codex_command_is_read_only_source_inspection(
+        "sed -n '1,20p' ~/.codex/docs/harness-engineering.md",
         cwd=tmp_path,
         home_dir=tmp_path,
     )

@@ -158,11 +158,11 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
             return True
     for suffix in KNOWN_AGENT_DOC_SUFFIXES:
         expected = f"{home}/{suffix}"
-        root = expected.rsplit("/", maxsplit=1)[0]
         if (
             normalized == expected
-            and not os.path.islink(root)
-            and not _path_has_symlink_component(normalized, root=root)
+            and os.path.isfile(expected)
+            and not os.path.islink(home)
+            and not _path_has_symlink_component(normalized, root=home)
         ):
             return True
     return False
