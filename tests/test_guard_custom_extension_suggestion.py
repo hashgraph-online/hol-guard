@@ -8,6 +8,7 @@ from codex_plugin_scanner.guard.runtime.custom_extension_suggestion import (
     common_utility_reject_message,
     is_common_shell_utility,
     is_suggestable_custom_tool,
+    observation_path_class,
     suggestion_score,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
@@ -42,6 +43,20 @@ def test_package_store_scripts_are_not_suggestable() -> None:
         kind="script",
         source_path="/workspace/app/node_modules/vitest/vitest.mjs",
     )
+
+
+def test_windows_system_bins_are_not_promoted() -> None:
+    assert observation_path_class(r"C:\Windows\System32\where.exe") == "system-bin"
+    assert (
+        suggestion_score(
+            name="where",
+            kind="executable",
+            source_path=r"C:\Windows\System32\where.exe",
+            observed_count=4,
+        )
+        == 0
+    )
+    assert observation_path_class("/opt/demo/windows/system32/ship-it") == "user-tool"
 
 
 def test_search_and_identity_reject_copy() -> None:
@@ -79,6 +94,10 @@ def test_screenshot_junk_is_not_observed_or_suggested(tmp_path: Path) -> None:
     suggestable = {str(item["name"]) for item in items if item["suggestable"] is True}
     assert suggestable == {"internal-deploy"}
     assert "vitest.mjs" not in suggestable
+    deploy = next(item for item in items if item["name"] == "internal-deploy")
+    assert deploy["source_path"] == "user-tool"
+    assert isinstance(deploy["suggestion_score"], int)
+    assert int(deploy["suggestion_score"]) >= 15
 
 
 def test_legacy_stored_junk_rows_are_not_suggestable(tmp_path: Path) -> None:

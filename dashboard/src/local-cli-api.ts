@@ -33,6 +33,7 @@ export type LocalCliItem = {
   grant_revision: number | null;
   authority_revision: number;
   suggestable: boolean;
+  suggestion_score: number;
   commands: LocalCliCommand[];
 };
 
@@ -133,6 +134,9 @@ export function seenSuggestionMeta(item: LocalCliItem): string {
 }
 
 function compareSeenSuggestions(left: LocalCliItem, right: LocalCliItem): number {
+  if (right.suggestion_score !== left.suggestion_score) {
+    return right.suggestion_score - left.suggestion_score;
+  }
   if (right.observed_count !== left.observed_count) {
     return right.observed_count - left.observed_count;
   }
@@ -177,6 +181,7 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
       : requiredInt(value.grant_revision, "grant revision"),
     authority_revision: requiredInt(value.authority_revision, "revision"),
     suggestable: value.suggestable === true,
+    suggestion_score: optionalScore(value.suggestion_score),
     commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
   };
 }
@@ -189,6 +194,14 @@ function normalizeHelpStatus(value: unknown): LocalCliItem["help_status"] {
 function normalizeIdentityHash(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
+  return value;
+}
+
+function optionalScore(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error("Invalid local CLI suggestion score");
+  }
   return value;
 }
 

@@ -243,6 +243,9 @@ function seenSuggestionMeta(item) {
   return `Seen ${item.observed_count} times`;
 }
 function compareSeenSuggestions(left, right) {
+  if (right.suggestion_score !== left.suggestion_score) {
+    return right.suggestion_score - left.suggestion_score;
+  }
   if (right.observed_count !== left.observed_count) {
     return right.observed_count - left.observed_count;
   }
@@ -283,6 +286,7 @@ function normalizeLocalCliItem(value) {
     grant_revision: value.grant_revision === null || value.grant_revision === void 0 ? null : requiredInt(value.grant_revision, "grant revision"),
     authority_revision: requiredInt(value.authority_revision, "revision"),
     suggestable: value.suggestable === true,
+    suggestion_score: optionalScore(value.suggestion_score),
     commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : []
   };
 }
@@ -293,6 +297,13 @@ function normalizeHelpStatus(value) {
 function normalizeIdentityHash(value) {
   if (value === null || value === void 0 || value === "") return null;
   if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
+  return value;
+}
+function optionalScore(value) {
+  if (value === null || value === void 0) return 0;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error("Invalid local CLI suggestion score");
+  }
   return value;
 }
 function optionalSourceLabel(value) {

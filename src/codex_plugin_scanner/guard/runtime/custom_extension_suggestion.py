@@ -70,6 +70,8 @@ _PACKAGE_STORE_MARKERS = (
     "/nvm/versions/",
 )
 _SYSTEM_BIN_PREFIXES = ("/bin/", "/usr/bin/", "/usr/sbin/", "/sbin/")
+_PATH_CLASSES = frozenset({"unknown", "package-store", "system-bin", "user-tool"})
+_WINDOWS_SYSTEM_PREFIXES = ("/windows/system32/", "/windows/syswow64/", "/windows/system/")
 _SCRIPT_SUFFIXES = frozenset({"py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rb", "sh"})
 COMMON_SHELL_UTILITIES = frozenset(
     {
@@ -251,6 +253,12 @@ def suggestion_score(
     return max(score, 0)
 
 
+def observation_path_class(source_path: str | None) -> str:
+    """Return a path class token that can be stored without the raw path."""
+
+    return _path_class(source_path)
+
+
 def common_utility_reject_message(name: str) -> str:
     """Return operator-facing copy when a pasted command is a common tool."""
 
@@ -301,6 +309,8 @@ def _path_is_junk(source_path: str | None) -> bool:
 def _path_class(source_path: str | None) -> str:
     if not source_path:
         return "unknown"
+    if source_path in _PATH_CLASSES:
+        return source_path
     posix = source_path.replace("\\", "/")
     lowered = posix.lower()
     padded = f"/{lowered.strip('/')}/"
@@ -308,7 +318,22 @@ def _path_class(source_path: str | None) -> str:
         return "package-store"
     if any(lowered == prefix[:-1] or lowered.startswith(prefix) for prefix in _SYSTEM_BIN_PREFIXES):
         return "system-bin"
+    if _is_windows_system_bin(lowered):
+        return "system-bin"
     return "user-tool"
+
+
+def _is_windows_system_bin(posix_lower: str) -> bool:
+    remainder = posix_lower
+    if len(remainder) >= 2 and remainder[1] == ":":
+        remainder = remainder[2:]
+    if remainder.startswith("//?/"):
+        remainder = remainder[4:]
+        if len(remainder) >= 2 and remainder[1] == ":":
+            remainder = remainder[2:]
+    if not remainder.startswith("/"):
+        remainder = f"/{remainder}"
+    return any(remainder.startswith(prefix) for prefix in _WINDOWS_SYSTEM_PREFIXES)
 
 
 def _name_keys(normalized: str) -> set[str]:

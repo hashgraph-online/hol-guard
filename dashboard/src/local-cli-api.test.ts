@@ -153,6 +153,7 @@ const frequentTool = normalizeLocalCliItem({
   observed_count: 4,
   last_seen_at: "2026-08-18T11:00:00Z",
   suggestable: true,
+  suggestion_score: 40,
 });
 const rareTool = normalizeLocalCliItem({
   ...unsetItem,
@@ -162,10 +163,21 @@ const rareTool = normalizeLocalCliItem({
   observed_count: 1,
   last_seen_at: "2026-08-18T12:30:00Z",
   suggestable: true,
+  suggestion_score: 30,
+});
+const frequentGeneric = normalizeLocalCliItem({
+  ...unsetItem,
+  cli_id: "local-cli.foo-dddddddd",
+  name: "foo",
+  example_label: "foo",
+  observed_count: 12,
+  last_seen_at: "2026-08-18T13:00:00Z",
+  suggestable: true,
+  suggestion_score: 20,
 });
 assert.deepEqual(
-  suggestedSeenExtensions([recentJunk, rareTool, frequentTool, harnessUnset]).map((entry) => entry.name),
-  ["cwv.py", "ship-it"],
+  suggestedSeenExtensions([recentJunk, frequentGeneric, rareTool, frequentTool, harnessUnset]).map((entry) => entry.name),
+  ["cwv.py", "ship-it", "foo"],
 );
 assert.deepEqual(
   filterExtensionSuggestions(suggestedSeenExtensions([frequentTool, rareTool]), "cwv").map((entry) => entry.name),

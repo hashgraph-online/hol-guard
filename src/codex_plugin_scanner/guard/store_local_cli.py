@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, cast
 
-from .runtime.custom_extension_suggestion import is_suggestable_custom_tool
+from .runtime.custom_extension_suggestion import is_suggestable_custom_tool, suggestion_score
 from .runtime.local_cli_commands import (
     LocalCliCommand,
     LocalCliCommandState,
@@ -382,20 +382,34 @@ def _load_commands_by_cli(connection: sqlite3.Connection) -> dict[str, list[dict
 def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
     kind = item.get("kind")
     name = item.get("name")
-    source_path = item.get("source_path")
-    observed_count = item.get("observed_count")
-    help_status = item.get("help_status")
-    surface = item.get("surface")
+    source_path = item.get("source_path") if isinstance(item.get("source_path"), str) else None
+    observed_count = item.get("observed_count") if isinstance(item.get("observed_count"), int) else 0
+    help_status = item.get("help_status") if isinstance(item.get("help_status"), str) else None
+    surface = item.get("surface") if isinstance(item.get("surface"), str) else "cli"
+    typed_kind = "script" if kind == "script" else "executable"
+    score = (
+        suggestion_score(
+            name=name,
+            kind=typed_kind,
+            source_path=source_path,
+            observed_count=observed_count,
+            help_status=help_status,
+            surface=surface,
+        )
+        if isinstance(kind, str) and isinstance(name, str)
+        else 0
+    )
+    item["suggestion_score"] = score
     item["suggestable"] = (
         isinstance(kind, str)
         and isinstance(name, str)
         and is_suggestable_custom_tool(
             name=name,
-            kind="script" if kind == "script" else "executable",
-            source_path=source_path if isinstance(source_path, str) else None,
-            observed_count=observed_count if isinstance(observed_count, int) else 0,
-            help_status=help_status if isinstance(help_status, str) else None,
-            surface=surface if isinstance(surface, str) else "cli",
+            kind=typed_kind,
+            source_path=source_path,
+            observed_count=observed_count,
+            help_status=help_status,
+            surface=surface,
         )
     )
     return item

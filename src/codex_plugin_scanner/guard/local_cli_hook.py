@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .local_cli_trust import matching_local_cli_grant, utc_now
 from .models import GuardAction
+from .runtime.custom_extension_suggestion import observation_path_class
 from .runtime.local_cli_identity import identify_unlisted_cli
 
 
@@ -22,7 +23,7 @@ def observe_unlisted_cli(
     recorder = getattr(store, "record_local_cli_observation", None)
     if not callable(recorder):
         return
-    recorder(identity, seen_at=utc_now(), source_path=identity.source_path)
+    recorder(identity, seen_at=utc_now(), source_path=observation_path_class(identity.source_path))
 
 
 def apply_local_cli_grant(
