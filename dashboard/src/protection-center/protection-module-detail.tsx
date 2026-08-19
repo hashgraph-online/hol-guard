@@ -156,6 +156,7 @@ export function ProtectionModuleDetail(props: {
     layer.controls.some((control) => control.target_kind === "extension" && control.target_id === props.extension.extension_id && control.state === "disabled"),
   );
   const orgManaged = sourceForTarget(props.effective, "extension", props.extension.extension_id) === "organization";
+  const requestExtensionChange = props.extension.required ? undefined : props.onRequestExtensionChange;
   const handleBack = () => {
     if (policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) return;
     props.onBack();
@@ -183,14 +184,14 @@ export function ProtectionModuleDetail(props: {
           </div>
         </div>
         {requiredNote ? <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/80">{requiredNote}</p> : null}
-        {props.extension.required ? null : props.onRequestExtensionChange ? (
+        {requestExtensionChange ? (
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
               role="switch"
               aria-checked={extensionEnabled}
               disabled={props.effective.health !== "protected"}
-              onClick={() => props.onRequestExtensionChange?.(props.extension, !extensionEnabled)}
+              onClick={() => requestExtensionChange(props.extension, !extensionEnabled)}
               className="guard-tool-switch"
               data-testid="extension-availability-switch"
             >

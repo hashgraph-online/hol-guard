@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { HiMiniArrowPath, HiMiniExclamationTriangle, HiMiniInformationCircle, HiMiniMagnifyingGlass, HiMiniShieldCheck, HiMiniXMark } from "react-icons/hi2";
 
 import { extensionDisplayName } from "../../extension-control-center-model";
@@ -34,6 +35,8 @@ export function PatternSearchConsole(props: {
   active?: boolean;
   query?: string;
   onQueryChange?: (query: string) => void;
+  /** Rendered under the input while the parent hides its own header actions. */
+  actionSlot?: ReactNode;
 }) {
   const [internalQuery, setInternalQuery] = useState("");
   const query = props.query ?? internalQuery;
@@ -126,6 +129,8 @@ export function PatternSearchConsole(props: {
     <p id="pattern-search-hint" className={`mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`}>
       Matches patterns across every tool. Press / to focus search from anywhere on this page.
     </p>
+
+    {props.actionSlot ? <div className="mt-3">{props.actionSlot}</div> : null}
 
     {showResults ? (
       matches.length || toolMatches.length ? (

@@ -5,7 +5,7 @@ import {
   extensionStateLabel,
 } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
-import type { LocalCliItem } from "../local-cli-api";
+import { addedCustomExtensions, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import {
   AddCustomExtensionButton,
@@ -88,6 +88,10 @@ export function ExtensionsOverview(props: {
   // match group. Rendering the full list under the results would force the
   // operator to visually skip fifty-nine unchanged rows.
   const searching = query.trim().length > 0;
+  // Suggestion-only responses (discovered servers, observed CLIs not yet
+  // added) render no custom section: the section lists added extensions, and
+  // its Add button would otherwise be the section's only content.
+  const addedCustomCount = addedCustomExtensions(props.localCliItems).length;
   return (
     <div hidden={!props.active} inert={!props.active || undefined}>
       <WorkspacePageHeader
@@ -118,11 +122,12 @@ export function ExtensionsOverview(props: {
         onQueryChange={setQuery}
         onRefresh={props.onRefresh}
         onOpenExtension={props.onOpenExtension}
+        actionSlot={searching ? <AddCustomExtensionButton onClick={props.onAddCustom} /> : null}
       />
 
       {searching ? null : (
         <>
-          {props.localCliItems.length ? (
+          {addedCustomCount ? (
             <CustomExtensionsSection
               items={props.localCliItems}
               onOpen={props.onOpenLocalCli}
@@ -137,7 +142,7 @@ export function ExtensionsOverview(props: {
                 <p className="mt-1 text-sm text-slate-500">Every built-in tool Guard can watch on this device. Open one to adjust its command patterns.</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                {props.localCliItems.length ? null : <AddCustomExtensionButton onClick={props.onAddCustom} />}
+                {addedCustomCount ? null : <AddCustomExtensionButton onClick={props.onAddCustom} />}
                 <span className="text-sm text-brand-dark/70">{props.catalogExtensions.length} tools</span>
               </div>
             </div>
