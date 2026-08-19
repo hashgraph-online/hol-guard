@@ -104,6 +104,8 @@ def test_ci_workflow_cancels_stale_runs_and_executes_each_shard() -> None:
     assert "mutation_gate.py --target command-model" in mutation_job
     assert workflow.count("uv run --no-sync python scripts/ci/pytest_shard.py") == 2
     assert "--shard-count 16" in tests_job
+    assert 'python-version: "3.12.13"' in tests_job
+    assert "uv sync --frozen --extra dev --python 3.12.13" in tests_job
     assert "--granularity node" in tests_job
     assert "PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json" in tests_job
     assert "--duration-manifest ci/pytest-duration-manifest.json.gz" in tests_job
