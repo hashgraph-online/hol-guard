@@ -270,7 +270,7 @@ def test_alpha_tag_reservation_binds_version_to_build_source() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     job = workflow["jobs"]["reserve-alpha-tag"]
 
-    assert job["needs"] == ["build"]
+    assert job["needs"] == ["build", "assemble-native-guard-distributions"]
     assert job["permissions"] == {"contents": "write"}
     assert "needs.build.outputs.channel == 'alpha'" in job["if"]
     reservation_run = next(step["run"] for step in job["steps"] if step.get("name") == "Reserve exact alpha tag")
