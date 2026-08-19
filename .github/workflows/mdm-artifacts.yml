@@ -20,7 +20,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen --extra dev --python ${{ matrix.python }}
       - run: uv run --no-sync pytest tests/test_guard_mdm_*.py --tb=short
       - run: uv run --no-sync basedpyright --level error
@@ -40,7 +40,7 @@ jobs:
       HOL_GUARD_BUILD_ID: ${{ inputs.build_id }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --frozen --extra mdm-build --python 3.12
       - shell: bash
         run: echo "HOL_GUARD_VERSION=$(uv run python -c 'from codex_plugin_scanner.version import __version__; print(__version__)')" >> "$GITHUB_ENV"
