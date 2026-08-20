@@ -7,7 +7,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.approval_hook_copy import live_hook_approval_context
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _native_approval_center_context
+from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -16,7 +18,15 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def test_native_approval_center_context_adds_scoped_token_only_when_requested() -> None:
+def _write_daemon_token(guard_home: Path, token: str) -> None:
+    guard_home.mkdir(parents=True, exist_ok=True)
+    guard_home.chmod(0o700)
+    token_path = guard_home / "daemon-auth-token"
+    token_path.write_text(token, encoding="utf-8")
+    token_path.chmod(0o600)
+
+
+def test_stored_hook_copy_does_not_include_guard_token() -> None:
     payload = {
         "approval_center_url": "http://127.0.0.1:5474",
         "approval_requests": [
@@ -32,13 +42,22 @@ def test_native_approval_center_context_adds_scoped_token_only_when_requested() 
     assert "http://127.0.0.1:5474/requests/req-codex-1" in stored
     assert "guard-token=" not in stored
 
-    live = _native_approval_center_context(
-        payload,
-        harness="codex",
-        session_auth_token="secret-daemon-token",
-    )
+
+def test_live_hook_copy_adds_scoped_token_on_loopback(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    _write_daemon_token(guard_home, "secret-daemon-token")
+    payload = {
+        "approval_center_url": "http://127.0.0.1:5474",
+        "approval_requests": [
+            {
+                "request_id": "req-codex-1",
+                "approval_url": "http://127.0.0.1:5474/requests/req-codex-1",
+            }
+        ],
+        "primary_approval_url": "http://127.0.0.1:5474/requests/req-codex-1",
+    }
+    live = live_hook_approval_context(payload, harness="codex", guard_home=guard_home)
     assert live is not None
-    assert "Open HOL Guard to approve or keep this blocked:" in live
     assert "secret-daemon-token" not in live
     start = live.index("http://")
     review_url = live[start : live.index(". After you choose")]
@@ -46,7 +65,9 @@ def test_native_approval_center_context_adds_scoped_token_only_when_requested() 
     assert fragment["guard-token"][0].startswith("gld1.")
 
 
-def test_native_approval_center_context_does_not_token_external_urls() -> None:
+def test_live_hook_copy_does_not_token_external_urls(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    _write_daemon_token(guard_home, "secret-daemon-token")
     payload = {
         "approval_center_url": "https://example.invalid/approvals",
         "approval_requests": [
@@ -57,14 +78,21 @@ def test_native_approval_center_context_does_not_token_external_urls() -> None:
         ],
         "primary_approval_url": "https://example.invalid/approvals/req-ext-1",
     }
-    live = _native_approval_center_context(
-        payload,
-        harness="codex",
-        session_auth_token="secret-daemon-token",
-    )
+    live = live_hook_approval_context(payload, harness="codex", guard_home=guard_home)
     assert live is not None
     assert "https://example.invalid/approvals/req-ext-1" in live
     assert "guard-token=" not in live
+
+
+def test_load_reconciles_watch_posture_when_mode_is_still_prompt(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(
+        guard_home / "config.toml",
+        'protection_posture = "watch"\nmode = "prompt"\nsecurity_level = "balanced"\n',
+    )
+    config = load_guard_config(guard_home)
+    assert config.protection_posture == "watch"
+    assert config.mode == "observe"
 
 
 def test_watch_posture_with_stale_prompt_mode_does_not_block_codex_hook(tmp_path: Path, capsys) -> None:

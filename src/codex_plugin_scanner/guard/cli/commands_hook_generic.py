@@ -965,7 +965,7 @@ def _run_hook_generic_payload(
         policy_action = approval_reuse.action
         approval_reuse_source = "claimed_saved_policy_decision"
     observed_policy_action: GuardAction | None = None
-    if config.protection_is_off() and policy_action not in {"allow", "warn"}:
+    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         policy_action = "allow"
     policy_composition = {
@@ -1158,7 +1158,7 @@ def _run_hook_generic_payload(
             output_stream=output_stream,
         )
         return 0
-    if config.protection_is_off() and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
+    if config.mode == "observe" and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
         observed_artifact = GuardArtifact(
             artifact_id=artifact_id,
             name=artifact_name,
@@ -1257,11 +1257,7 @@ def _run_hook_generic_payload(
         or _decision_v2_harness_message(payload_map)
         or payload_map.get("permission_decision_reason")
     )
-    approval_context = _native_approval_center_context(
-        payload_map,
-        harness=args.harness,
-        session_auth_token=load_guard_daemon_auth_token(store.guard_home),
-    )
+    approval_context = live_hook_approval_context(payload_map, harness=args.harness, guard_home=store.guard_home)
     if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
         block_reason = _native_hook_reason_for_harness(
             args.harness,

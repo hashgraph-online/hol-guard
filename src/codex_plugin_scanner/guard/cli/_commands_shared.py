@@ -53,6 +53,7 @@ from ..approval_gate import (
 from ..approval_gate import (
     update_settings as update_approval_gate_settings,
 )
+from ..approval_hook_copy import live_hook_approval_context
 from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
@@ -60,7 +61,6 @@ from ..approvals import (
     attach_primary_approval_link,
     build_approval_browser_url,
     canonical_local_approval_url,
-    is_loopback_approval_url,
     evaluation_has_terminal_policy_action,
     first_approval_url,
     queue_blocked_approvals,

@@ -1125,7 +1125,7 @@ class RuntimeMcpGuardProxy:
         decision = authority.decision
         if (
             package_artifact is None
-            and self.config.protection_is_off()
+            and self.config.mode == "observe"
             and decision.pending_approval_reuse_decision is not None
             and decision.current_action is not None
         ):
@@ -1328,7 +1328,7 @@ class RuntimeMcpGuardProxy:
                         "policy_action": "block",
                         "approval_requests": [],
                     }
-            if self.config.protection_is_off():
+            if self.config.mode == "observe":
                 response, package_event = self._handle_package_request(
                     message=message,
                     child_stdin=child_stdin,
@@ -1474,7 +1474,7 @@ class RuntimeMcpGuardProxy:
                     "policy_action": "block",
                     "approval_requests": [],
                 }
-        if self.config.protection_is_off():
+        if self.config.mode == "observe":
             try:
                 catalog_current = self._drain_and_validate_catalog_authority(
                     child_stdin=child_stdin,
@@ -1765,7 +1765,7 @@ class RuntimeMcpGuardProxy:
                 scanner_evidence=fresh_scanner_evidence,
             )
 
-        if self.config.protection_is_off():
+        if self.config.mode == "observe":
             tool_observed_action = _enforcement_action(
                 fresh_tool_decision.current_action or fresh_tool_decision.action,
                 approval_decision=fresh_tool_decision,

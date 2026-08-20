@@ -1460,7 +1460,7 @@ def _build_package_protect_authority(
             launch_environment=launch_environment,
             additional_current_action=additional_current_action,
             additional_policy_context=additional_policy_context,
-            observe_mode=config is not None and config.protection_is_off(),
+            observe_mode=config is not None and config.mode == "observe",
         )
     except BaseException:
         _cleanup_external_archive_downloads(evaluation)
