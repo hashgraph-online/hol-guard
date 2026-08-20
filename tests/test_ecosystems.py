@@ -12,6 +12,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.ecosystems.claude import ClaudeAdapter
 from codex_plugin_scanner.ecosystems.detect import detect_packages
 from codex_plugin_scanner.ecosystems.opencode import OpenCodeAdapter
+from codex_plugin_scanner.ecosystems.registry import resolve_ecosystem
 from codex_plugin_scanner.ecosystems.types import Ecosystem, NormalizedPackage
 from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
@@ -37,6 +38,33 @@ def test_detect_gemini_package() -> None:
     packages = detect_packages(FIXTURES / "gemini-extension-good")
     ecosystems = {package.ecosystem for package in packages}
     assert Ecosystem.GEMINI in ecosystems
+
+
+def test_detect_native_deepseek_harness_package() -> None:
+    packages = detect_packages(FIXTURES / "deepseek-harness-good")
+    assert [package.ecosystem for package in packages] == [Ecosystem.DEEPSEEK_HARNESS]
+
+
+def test_deepseek_harness_ecosystem_alias() -> None:
+    assert resolve_ecosystem("dsh") == Ecosystem.DEEPSEEK_HARNESS
+
+
+def test_scan_native_deepseek_harness_package() -> None:
+    result = scan_plugin(
+        FIXTURES / "deepseek-harness-good",
+        ScanOptions(ecosystem="auto", cisco_skill_scan="off"),
+    )
+    assert result.ecosystems == ("deepseek-harness",)
+    assert any(category.name.endswith("DeepSeek Harness Plugin") for category in result.categories)
+    assert all(finding.rule_id != "PLUGIN_JSON_MISSING" for finding in result.findings)
+
+
+def test_verify_native_deepseek_harness_package(capsys) -> None:
+    rc = main(["verify", str(FIXTURES / "deepseek-harness-good"), "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["verify_pass"] is True
+    assert all(".codex-plugin/plugin.json" not in case["message"] for case in payload["cases"])
 
 
 def test_detect_opencode_package() -> None:

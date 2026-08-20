@@ -501,6 +501,9 @@ plugin-scanner scan ./plugins-repo --ecosystem claude
 # Scan only native Kimi Code plugin surfaces
 plugin-scanner scan ./plugins-repo --ecosystem kimi
 
+# Scan a native DeepSeek Harness (DSH/Cordis) package
+plugin-scanner scan ./dsh-plugin --ecosystem deepseek-harness
+
 # List supported ecosystems
 plugin-scanner --list-ecosystems
 
