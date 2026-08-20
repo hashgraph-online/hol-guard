@@ -45,6 +45,11 @@ def test_detect_native_deepseek_harness_package() -> None:
     assert [package.ecosystem for package in packages] == [Ecosystem.DEEPSEEK_HARNESS]
 
 
+def test_detect_deepseek_harness_skips_non_utf8_package_json(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_bytes(b'\xff\xfe{"dsh":{"bundle":{"patch":"x"}}}')
+    assert detect_packages(tmp_path, ecosystem=Ecosystem.DEEPSEEK_HARNESS) == []
+
+
 def test_deepseek_harness_ecosystem_alias() -> None:
     assert resolve_ecosystem("dsh") == Ecosystem.DEEPSEEK_HARNESS
 

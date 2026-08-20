@@ -12,7 +12,7 @@ from .types import Ecosystem, NormalizedPackage, PackageCandidate
 def _load_json(path: Path) -> tuple[dict[str, object], str | None]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
+    except (json.JSONDecodeError, OSError, UnicodeError) as exc:
         return {}, str(exc)
     if not isinstance(payload, dict):
         return {}, "package.json must contain a JSON object"
