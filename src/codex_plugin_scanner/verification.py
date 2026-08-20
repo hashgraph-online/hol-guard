@@ -12,9 +12,10 @@ from pathlib import Path
 
 from .checks.manifest import load_manifest
 from .checks.manifest_support import safe_manifest_path
+from .deepseek_harness_support import validate_dsh_package
 from .ecosystems.detect import detect_packages
 from .ecosystems.registry import get_default_adapters
-from .ecosystems.types import Ecosystem
+from .ecosystems.types import Ecosystem, PackageCandidate
 from .marketplace_support import (
     extract_marketplace_source,
     load_marketplace_context,
@@ -671,63 +672,73 @@ def _verify_single_plugin(plugin_dir: Path, *, online: bool) -> VerificationResu
     )
 
 
-def _verify_deepseek_harness(plugin_dir: Path) -> VerificationResult:
-    candidates = detect_packages(plugin_dir, Ecosystem.DEEPSEEK_HARNESS)
-    candidate = next((item for item in candidates if item.root_path.resolve() == plugin_dir.resolve()), None)
+def _verify_deepseek_harness_candidate(candidate: PackageCandidate) -> VerificationResult:
+    plugin_dir = candidate.root_path.resolve()
     adapter = next(item for item in get_default_adapters() if item.ecosystem_id == Ecosystem.DEEPSEEK_HARNESS)
-    package = adapter.parse(candidate) if candidate is not None else None
-    cases: list[VerificationCase] = []
-    if package is None:
-        cases.append(
-            VerificationCase(
-                "manifest",
-                "native DSH declaration",
-                False,
-                "package.json with dsh.bundle is missing",
-                "missing-manifest",
-            )
-        )
-    else:
-        manifest = package.raw_manifest
-        valid_fields = all(isinstance(manifest.get(key), str) and manifest[key].strip() for key in ("name", "version"))
-        cases.append(
-            VerificationCase(
-                "manifest",
-                "package.json metadata",
-                valid_fields,
-                "Native DSH package metadata is valid" if valid_fields else "package.json requires name and version",
-                "schema" if not valid_fields else "pass",
-            )
-        )
-        bundle = manifest.get("dsh", {}).get("bundle") if isinstance(manifest.get("dsh"), dict) else None
-        valid_bundle = isinstance(bundle, dict) and bool(bundle)
-        cases.append(
-            VerificationCase(
-                "manifest",
-                "dsh.bundle declaration",
-                valid_bundle,
-                "Native DSH bundle is declared" if valid_bundle else "dsh.bundle must be a non-empty object",
-                "schema" if not valid_bundle else "pass",
-            )
-        )
-        patch = bundle.get("patch") if isinstance(bundle, dict) else None
-        valid_patch = patch is None or (
-            isinstance(patch, str) and is_safe_relative_path(plugin_dir, patch, require_exists=True)
-        )
-        cases.append(
-            VerificationCase(
-                "assets",
-                "bundle patch path",
-                valid_patch,
-                "Bundle patch path is safe and exists" if valid_patch else "dsh.bundle.patch is missing or unsafe",
-                "path" if not valid_patch else "pass",
-            )
-        )
+    package = adapter.parse(candidate)
+    validation = validate_dsh_package(package)
+    cases = [
+        VerificationCase(
+            "manifest",
+            "package.json metadata",
+            validation.metadata_ok,
+            "Native DSH package metadata is valid"
+            if validation.metadata_ok
+            else "package.json requires a name and semantic version",
+            "schema" if not validation.metadata_ok else "pass",
+        ),
+        VerificationCase(
+            "manifest",
+            "dsh.bundle declaration",
+            validation.bundle_ok,
+            "Native DSH bundle is declared" if validation.bundle_ok else "dsh.bundle must be a non-empty object",
+            "schema" if not validation.bundle_ok else "pass",
+        ),
+        VerificationCase(
+            "assets",
+            "bundle patch path",
+            validation.patch_ok,
+            "Bundle patch path is a safe regular file"
+            if validation.patch_ok
+            else "dsh.bundle.patch is missing, unsafe, or not a regular file",
+            "path" if not validation.patch_ok else "pass",
+        ),
+        VerificationCase(
+            "runtime",
+            "Cordis apply(ctx) export",
+            validation.runtime_ok,
+            "Runtime entry point exports apply(ctx)"
+            if validation.runtime_ok
+            else "Runtime entry point is missing a detectable apply(ctx) export",
+            "runtime" if not validation.runtime_ok else "pass",
+        ),
+    ]
     return VerificationResult(
         verify_pass=all(case.passed for case in cases),
         cases=tuple(cases),
         workspace=str(plugin_dir.resolve()),
         scope="plugin",
+        plugin_name=package.name,
+    )
+
+
+def _verify_deepseek_harness(
+    plugin_dir: Path, candidates: tuple[PackageCandidate, ...] | list[PackageCandidate]
+) -> VerificationResult:
+    plugin_results = tuple(_verify_deepseek_harness_candidate(candidate) for candidate in candidates)
+    if len(plugin_results) == 1 and candidates[0].root_path.resolve() == plugin_dir.resolve():
+        return plugin_results[0]
+    cases = tuple(
+        case
+        for result in plugin_results
+        for case in _prefixed_cases(result.plugin_name or Path(result.workspace).name, result.cases)
+    )
+    return VerificationResult(
+        verify_pass=bool(plugin_results) and all(result.verify_pass for result in plugin_results),
+        cases=cases,
+        workspace=str(plugin_dir.resolve()),
+        scope="repository",
+        plugin_results=plugin_results,
     )
 
 
@@ -795,10 +806,9 @@ def _verify_repository(repo_root: Path, *, online: bool) -> VerificationResult:
 
 def verify_plugin(plugin_dir: str | Path, *, online: bool = False) -> VerificationResult:
     resolved = Path(plugin_dir).resolve()
-    if any(
-        candidate.root_path.resolve() == resolved for candidate in detect_packages(resolved, Ecosystem.DEEPSEEK_HARNESS)
-    ):
-        return _verify_deepseek_harness(resolved)
+    dsh_candidates = detect_packages(resolved, Ecosystem.DEEPSEEK_HARNESS)
+    if dsh_candidates:
+        return _verify_deepseek_harness(resolved, dsh_candidates)
     discovery = discover_scan_targets(resolved)
     if discovery.scope == "repository":
         return _verify_repository(resolved, online=online)

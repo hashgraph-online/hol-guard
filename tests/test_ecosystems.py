@@ -55,7 +55,9 @@ def test_scan_native_deepseek_harness_package() -> None:
         ScanOptions(ecosystem="auto", cisco_skill_scan="off"),
     )
     assert result.ecosystems == ("deepseek-harness",)
-    assert any(category.name.endswith("DeepSeek Harness Plugin") for category in result.categories)
+    dsh_category = next(category for category in result.categories if category.name.endswith("DeepSeek Harness Plugin"))
+    assert sum(check.points for check in dsh_category.checks) == 20
+    assert sum(check.max_points for check in dsh_category.checks) == 20
     assert all(finding.rule_id != "PLUGIN_JSON_MISSING" for finding in result.findings)
 
 
@@ -65,6 +67,35 @@ def test_verify_native_deepseek_harness_package(capsys) -> None:
     assert rc == 0
     assert payload["verify_pass"] is True
     assert all(".codex-plugin/plugin.json" not in case["message"] for case in payload["cases"])
+
+
+def test_scan_deepseek_harness_accepts_prerelease_semver(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
+    manifest_path = tmp_path / "plugin" / "package.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["version"] = "0.1.0-rc.8+build.1"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    result = scan_plugin(tmp_path / "plugin", ScanOptions(cisco_skill_scan="off"))
+    assert all(finding.rule_id != "DSH_PACKAGE_METADATA_INVALID" for finding in result.findings)
+
+
+def test_verify_deepseek_harness_rejects_directory_patch(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
+    manifest_path = tmp_path / "plugin" / "package.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["dsh"]["bundle"]["patch"] = "."
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    rc = main(["verify", str(tmp_path / "plugin"), "--format", "json"])
+    assert rc == 1
+
+
+def test_verify_nested_deepseek_harness_package(capsys, tmp_path: Path) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "packages" / "plugin")
+    rc = main(["verify", str(tmp_path), "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["scope"] == "repository"
+    assert payload["repository"]["localPluginCount"] == 1
 
 
 def test_detect_opencode_package() -> None:
