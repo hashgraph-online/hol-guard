@@ -151,6 +151,40 @@ const ok = { default: "workspace" };
 }
 
 {
+  let reloads = 0;
+  const blockedStorage: Pick<Storage, "getItem" | "setItem" | "removeItem"> = {
+    getItem() {
+      throw new Error("blocked");
+    },
+    setItem() {
+      throw new Error("blocked");
+    },
+    removeItem() {
+      throw new Error("blocked");
+    },
+  };
+  try {
+    await loadWorkspaceModule(
+      async () => {
+        throw new TypeError(
+          "Failed to fetch dynamically imported module: http://127.0.0.1:5474/assets/chunks/extensions-workspace.js",
+        );
+      },
+      {
+        storage: blockedStorage,
+        reload: () => {
+          reloads += 1;
+        },
+      },
+    );
+    throw new Error("blocked storage must not swallow the chunk-load error");
+  } catch (error) {
+    assert(isChunkLoadError(error), "blocked storage keeps the original chunk-load error");
+  }
+  assert(reloads === 0, "blocked storage disables automatic reload");
+}
+
+{
   const storage = memoryStorage();
   let reloads = 0;
   const failingChild = async () => {

@@ -41,6 +41,34 @@ function reloadDocument(reload: (() => void) | undefined): boolean {
   return false;
 }
 
+function storageGet(storage: Pick<Storage, "getItem">, key: string): string | null {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(storage: Pick<Storage, "setItem">, key: string, value: string): boolean {
+  try {
+    storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function browserSessionStorage(): Pick<Storage, "getItem" | "setItem" | "removeItem"> | undefined {
+  try {
+    if (typeof sessionStorage === "undefined") {
+      return undefined;
+    }
+    return sessionStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function loadWorkspaceModule<T>(
   loader: WorkspaceModuleLoader<T>,
   options: LoadWorkspaceModuleOptions = {},
@@ -52,11 +80,13 @@ export async function loadWorkspaceModule<T>(
       throw error;
     }
     const storage = options.storage;
-    if (!storage || storage.getItem(CHUNK_RELOAD_STORAGE_KEY) === "1") {
+    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === "1") {
       throw error;
     }
     // Keep this flag for the tab so a nested child chunk cannot reload forever after a parent load succeeds.
-    storage.setItem(CHUNK_RELOAD_STORAGE_KEY, "1");
+    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, "1")) {
+      throw error;
+    }
     const wait = options.wait ?? defaultWait;
     await wait(options.delayMs ?? CHUNK_RELOAD_DELAY_MS);
     if (!reloadDocument(options.reload)) {
@@ -73,7 +103,7 @@ export function lazyWorkspace<T extends ComponentType<unknown>>(
 ): LazyExoticComponent<T> {
   return lazy(() =>
     loadWorkspaceModule(loader, {
-      storage: typeof sessionStorage === "undefined" ? undefined : sessionStorage,
+      storage: browserSessionStorage(),
     }),
   );
 }

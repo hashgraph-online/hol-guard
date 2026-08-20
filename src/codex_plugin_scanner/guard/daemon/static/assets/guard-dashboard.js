@@ -30054,6 +30054,31 @@ function reloadDocument(reload) {
   }
   return false;
 }
+function storageGet(storage, key) {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function storageSet(storage, key, value) {
+  try {
+    storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function browserSessionStorage() {
+  try {
+    if (typeof sessionStorage === "undefined") {
+      return void 0;
+    }
+    return sessionStorage;
+  } catch {
+    return void 0;
+  }
+}
 async function loadWorkspaceModule(loader, options = {}) {
   try {
     return await loader();
@@ -30062,10 +30087,12 @@ async function loadWorkspaceModule(loader, options = {}) {
       throw error;
     }
     const storage = options.storage;
-    if (!storage || storage.getItem(CHUNK_RELOAD_STORAGE_KEY) === "1") {
+    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === "1") {
       throw error;
     }
-    storage.setItem(CHUNK_RELOAD_STORAGE_KEY, "1");
+    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, "1")) {
+      throw error;
+    }
     const wait = options.wait ?? defaultWait;
     await wait(options.delayMs ?? CHUNK_RELOAD_DELAY_MS);
     if (!reloadDocument(options.reload)) {
@@ -30078,7 +30105,7 @@ async function loadWorkspaceModule(loader, options = {}) {
 function lazyWorkspace(loader) {
   return reactExports.lazy(
     () => loadWorkspaceModule(loader, {
-      storage: typeof sessionStorage === "undefined" ? void 0 : sessionStorage
+      storage: browserSessionStorage()
     })
   );
 }
@@ -30453,7 +30480,7 @@ function ApprovalCenterLayout(props) {
                 onOpenSettings: handleOpenSettings
               }
             ) }) : null,
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: props.onGoHome, children: renderViewContent(props) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: props.onGoHome, children: renderViewContent(props) }, props.view)
           ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ShellFooter, {})
         ]

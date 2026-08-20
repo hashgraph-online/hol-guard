@@ -315,7 +315,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 />
               </div>
             ) : null}
-            <ErrorBoundary onReset={props.onGoHome}>
+            <ErrorBoundary key={props.view} onReset={props.onGoHome}>
               {renderViewContent(props)}
             </ErrorBoundary>
           </div>

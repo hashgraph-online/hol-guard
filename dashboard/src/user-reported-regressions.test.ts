@@ -46,7 +46,7 @@ assert(
   "extensions workspace loads through the retrying lazy wrapper",
 );
 assert(
-  layoutSource.includes("<ErrorBoundary onReset={props.onGoHome}>"),
+  layoutSource.includes("<ErrorBoundary key={props.view} onReset={props.onGoHome}>"),
   "workspace chrome recovers chunk-load failures without crashing the shell",
 );
 
