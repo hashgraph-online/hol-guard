@@ -125,7 +125,7 @@ def _review_runtime_artifact_hook(
         policy_action=policy_action,
         guard_payload=response_payload,
     )
-    observe_mode = config.is_watch()
+    observe_mode = config.protection_is_off()
     observe_request_queued = False
     terminal_action = policy_action in {
         "block",

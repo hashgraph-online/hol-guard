@@ -369,7 +369,7 @@ def test_load_reconciles_watch_posture_when_mode_is_still_prompt(tmp_path: Path)
     config = load_guard_config(guard_home)
     assert config.protection_posture == "watch"
     assert config.mode == "observe"
-    assert config.is_watch() is True
+    assert config.protection_is_off() is True
 
 
 def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path: Path) -> None:

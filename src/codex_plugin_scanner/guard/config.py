@@ -406,7 +406,9 @@ class GuardConfig:
     install_owner: str = "user"
     managed_policy: ManagedPolicy | None = None
 
-    def is_watch(self) -> bool:
+    def protection_is_off(self) -> bool:
+        """True when Watch posture or observe mode means Guard must not stop actions."""
+
         return protection_is_off(posture=self.protection_posture, mode=self.mode)
 
     def resolve_action_override(

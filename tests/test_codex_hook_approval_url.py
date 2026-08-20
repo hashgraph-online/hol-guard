@@ -46,6 +46,27 @@ def test_native_approval_center_context_adds_scoped_token_only_when_requested() 
     assert fragment["guard-token"][0].startswith("gld1.")
 
 
+def test_native_approval_center_context_does_not_token_external_urls() -> None:
+    payload = {
+        "approval_center_url": "https://example.invalid/approvals",
+        "approval_requests": [
+            {
+                "request_id": "req-ext-1",
+                "approval_url": "https://example.invalid/approvals/req-ext-1",
+            }
+        ],
+        "primary_approval_url": "https://example.invalid/approvals/req-ext-1",
+    }
+    live = _native_approval_center_context(
+        payload,
+        harness="codex",
+        session_auth_token="secret-daemon-token",
+    )
+    assert live is not None
+    assert "https://example.invalid/approvals/req-ext-1" in live
+    assert "guard-token=" not in live
+
+
 def test_watch_posture_with_stale_prompt_mode_does_not_block_codex_hook(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

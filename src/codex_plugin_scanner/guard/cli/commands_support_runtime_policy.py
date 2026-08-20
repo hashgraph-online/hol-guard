@@ -134,7 +134,7 @@ def _native_approval_center_context(
     if not isinstance(approval_center_url, str) or not approval_center_url.strip():
         return None
     review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
-    if session_auth_token:
+    if session_auth_token and is_loopback_approval_url(review_url):
         review_url = build_approval_browser_url(review_url, auth_token=session_auth_token) or review_url
     canonical_harness = _canonical_harness_name(harness)
     harness_label = {
@@ -1089,7 +1089,7 @@ def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
     from ..protection_posture import protection_status_fields
 
     issues: list[dict[str, str]] = []
-    if config.is_watch():
+    if config.protection_is_off():
         issues.append(
             {
                 "severity": "warning",

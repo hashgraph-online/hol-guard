@@ -144,10 +144,24 @@ def build_approval_request_url(approval_center_url: str, request_id: str) -> str
     return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
 
 
+_LOOPBACK_APPROVAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def is_loopback_approval_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    host = _parsed_url_host(parsed)
+    return parsed.scheme in {"http", "https"} and host in _LOOPBACK_APPROVAL_HOSTS
+
+
 def build_approval_browser_url(approval_url: str | None, *, auth_token: str | None) -> str | None:
     """Build a browser-openable approval URL with a scoped Guard session token."""
 
     if not approval_url or auth_token is None:
+        return approval_url
+    if not is_loopback_approval_url(approval_url):
         return approval_url
     parsed = urlparse(approval_url)
     fragment_pairs = [
@@ -264,9 +278,8 @@ def canonical_local_approval_url(approval_url: str, *, approval_center_url: str 
         parsed_approval = urlparse(approval_url)
     except ValueError:
         return approval_url
-    loopback_hosts = {"127.0.0.1", "::1", "localhost"}
     approval_host = _parsed_url_host(parsed_approval)
-    if parsed_approval.scheme not in {"http", "https"} or approval_host not in loopback_hosts:
+    if parsed_approval.scheme not in {"http", "https"} or approval_host not in _LOOPBACK_APPROVAL_HOSTS:
         return approval_url
     if not isinstance(approval_center_url, str) or not approval_center_url.strip():
         return approval_url
@@ -275,7 +288,7 @@ def canonical_local_approval_url(approval_url: str, *, approval_center_url: str 
     except ValueError:
         return approval_url
     center_host = _parsed_url_host(parsed_center)
-    if parsed_center.scheme not in {"http", "https"} or center_host not in loopback_hosts:
+    if parsed_center.scheme not in {"http", "https"} or center_host not in _LOOPBACK_APPROVAL_HOSTS:
         return approval_url
     return urlunparse(
         parsed_approval._replace(

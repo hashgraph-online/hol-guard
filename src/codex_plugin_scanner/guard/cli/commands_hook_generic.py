@@ -965,7 +965,7 @@ def _run_hook_generic_payload(
         policy_action = approval_reuse.action
         approval_reuse_source = "claimed_saved_policy_decision"
     observed_policy_action: GuardAction | None = None
-    if config.is_watch() and policy_action not in {"allow", "warn"}:
+    if config.protection_is_off() and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         policy_action = "allow"
     policy_composition = {
@@ -1158,7 +1158,7 @@ def _run_hook_generic_payload(
             output_stream=output_stream,
         )
         return 0
-    if config.is_watch() and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
+    if config.protection_is_off() and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
         observed_artifact = GuardArtifact(
             artifact_id=artifact_id,
             name=artifact_name,

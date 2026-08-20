@@ -60,6 +60,7 @@ from ..approvals import (
     attach_primary_approval_link,
     build_approval_browser_url,
     canonical_local_approval_url,
+    is_loopback_approval_url,
     evaluation_has_terminal_policy_action,
     first_approval_url,
     queue_blocked_approvals,
