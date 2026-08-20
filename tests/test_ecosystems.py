@@ -60,6 +60,33 @@ def test_scan_native_deepseek_harness_package() -> None:
     assert sum(check.max_points for check in dsh_category.checks) == 20
     assert all(finding.rule_id != "PLUGIN_JSON_MISSING" for finding in result.findings)
 
+    explicit_result = scan_plugin(
+        FIXTURES / "deepseek-harness-good",
+        ScanOptions(ecosystem="deepseek-harness", cisco_skill_scan="off"),
+    )
+    assert explicit_result.ecosystems == ("deepseek-harness",)
+    assert all(finding.rule_id != "PLUGIN_JSON_MISSING" for finding in explicit_result.findings)
+
+
+def test_scan_deepseek_harness_cli_alias(capsys) -> None:
+    rc = main(
+        [
+            "scan",
+            str(FIXTURES / "deepseek-harness-good"),
+            "--ecosystem",
+            "dsh",
+            "--cisco-skill-scan",
+            "off",
+            "--cisco-mcp-scan",
+            "off",
+            "--format",
+            "json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["ecosystems"] == ["deepseek-harness"]
+
 
 def test_verify_native_deepseek_harness_package(capsys) -> None:
     rc = main(["verify", str(FIXTURES / "deepseek-harness-good"), "--format", "json"])
@@ -85,6 +112,13 @@ def test_verify_deepseek_harness_rejects_directory_patch(tmp_path: Path) -> None
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["dsh"]["bundle"]["patch"] = "."
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    rc = main(["verify", str(tmp_path / "plugin"), "--format", "json"])
+    assert rc == 1
+
+
+def test_verify_deepseek_harness_rejects_missing_apply_export(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
+    (tmp_path / "plugin" / "index.js").write_text("export const name = 'missing-apply'\n", encoding="utf-8")
     rc = main(["verify", str(tmp_path / "plugin"), "--format", "json"])
     assert rc == 1
 
