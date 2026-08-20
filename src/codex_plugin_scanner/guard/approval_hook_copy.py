@@ -43,9 +43,7 @@ def join_native_hook_reason(*values: object | None) -> str:
             if candidate not in messages:
                 messages.append(candidate)
     tokenized = [
-        message
-        for message in messages
-        if "guard-token=" in message.lower() and _OPEN_GUARD_MARKER in message.lower()
+        message for message in messages if "guard-token=" in message.lower() and _OPEN_GUARD_MARKER in message.lower()
     ]
     if tokenized:
         replacement = tokenized[0]
