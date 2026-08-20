@@ -134,6 +134,110 @@ def test_transient_io_error_does_not_quarantine_healthy_store(
     assert store.get_runtime_state() is None
 
 
+def test_io_error_that_clears_after_directory_probe_does_not_quarantine(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    real_connect = store_connection_schema.sqlite3.connect
+    active_attempts = 0
+
+    def fail_first_active_probe(database: str | Path, timeout: float = 5.0) -> sqlite3.Connection:
+        nonlocal active_attempts
+        if Path(database) == store.path:
+            active_attempts += 1
+            if active_attempts == 1:
+                raise sqlite3.OperationalError("disk I/O error")
+        return real_connect(database, timeout=timeout)
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery.sqlite3.connect", fail_first_active_probe)
+
+    assert (
+        store._store_is_proven_unusable(  # pyright: ignore[reportPrivateUsage]
+            sqlite3.OperationalError("disk I/O error")
+        )
+        is False
+    )
+    assert active_attempts == 2
+    assert _quarantined_databases(store.guard_home) == []
+
+
+def test_fatal_error_recovers_when_rechecks_report_persistent_io(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    real_connect = store_connection_schema.sqlite3.connect
+    active_attempts = 0
+
+    def fail_active_probes(database: str | Path, timeout: float = 5.0) -> sqlite3.Connection:
+        nonlocal active_attempts
+        if Path(database) == store.path:
+            active_attempts += 1
+            raise sqlite3.OperationalError("disk I/O error")
+        return real_connect(database, timeout=timeout)
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery.sqlite3.connect", fail_active_probes)
+
+    assert (
+        store._store_is_proven_unusable(  # pyright: ignore[reportPrivateUsage]
+            sqlite3.DatabaseError("database disk image is malformed")
+        )
+        is True
+    )
+    assert active_attempts == 2
+
+
+def test_stale_fatal_error_does_not_quarantine_healthy_store(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+
+    recovered = store._recover_fatal_sqlite_store(  # pyright: ignore[reportPrivateUsage]
+        sqlite3.DatabaseError("database disk image is malformed")
+    )
+
+    assert recovered is False
+    assert _quarantined_databases(store.guard_home) == []
+    with sqlite3.connect(store.path) as connection:
+        assert connection.execute("pragma quick_check").fetchone() == ("ok",)
+
+
+def test_connect_does_not_quarantine_replacement_inode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard"
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    corrupt_bytes = _corrupt_store(store.path)
+    failed_stat = store.path.stat()
+    failed_identity = failed_stat.st_dev, failed_stat.st_ino
+    original_path = guard_home / "failed.db"
+    observed_identity: tuple[int, int] | None = None
+    original_recover = store._recover_fatal_sqlite_store  # pyright: ignore[reportPrivateUsage]
+
+    def replace_before_recovery(
+        error: BaseException,
+        *,
+        failed_identity: tuple[int, int] | None = None,
+    ) -> bool:
+        nonlocal observed_identity
+        observed_identity = failed_identity
+        store.path.replace(original_path)
+        with sqlite3.connect(store.path) as connection:
+            connection.execute("create table replacement (value integer)")
+        return original_recover(error, failed_identity=failed_identity)
+
+    monkeypatch.setattr(store, "_recover_fatal_sqlite_store", replace_before_recovery)
+
+    with pytest.raises(sqlite3.DatabaseError, match="file is not a database"):
+        store.get_runtime_state()
+
+    assert observed_identity == failed_identity
+    assert original_path.read_bytes() == corrupt_bytes
+    assert _quarantined_databases(store.guard_home) == []
+    with sqlite3.connect(store.path) as connection:
+        assert connection.execute("pragma quick_check").fetchone() == ("ok",)
+
+
 def test_recovery_waits_for_in_flight_connection(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
     entered = threading.Event()
