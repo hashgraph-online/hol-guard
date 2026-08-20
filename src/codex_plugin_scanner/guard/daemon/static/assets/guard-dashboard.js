@@ -31387,7 +31387,7 @@ function App() {
         } : null }) })
       }
     ),
-    helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) })
+    helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleCloseHelp, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) }) })
   ] });
 }
 const container = document.getElementById("guard-dashboard-root");

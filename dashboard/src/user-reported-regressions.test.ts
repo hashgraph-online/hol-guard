@@ -49,5 +49,9 @@ assert(
   layoutSource.includes("<ErrorBoundary key={props.view} onReset={props.onGoHome}>"),
   "workspace chrome recovers chunk-load failures without crashing the shell",
 );
+assert(
+  appSource.includes("<ErrorBoundary onReset={handleCloseHelp}>"),
+  "help modal chunk failures stay inside the dashboard recovery UI",
+);
 
 console.log("user-reported-regressions.test.ts: all tests passed");

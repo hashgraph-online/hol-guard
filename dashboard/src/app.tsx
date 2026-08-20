@@ -1041,9 +1041,11 @@ export function App() {
       }
     />
     {helpOpen && (
-      <Suspense fallback={null}>
-        <HelpModal open={helpOpen} onClose={handleCloseHelp} />
-      </Suspense>
+      <ErrorBoundary onReset={handleCloseHelp}>
+        <Suspense fallback={null}>
+          <HelpModal open={helpOpen} onClose={handleCloseHelp} />
+        </Suspense>
+      </ErrorBoundary>
     )}
     </>);
 }
