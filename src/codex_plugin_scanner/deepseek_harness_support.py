@@ -17,10 +17,6 @@ DSH_SEMVER_RE = re.compile(
         )
     )
 )
-APPLY_EXPORT_RE = re.compile(
-    r"(?:\bexport\s+(?:async\s+)?function\s+apply\b|\bexport\s*\{[^}]*\bapply\b|\bexports\.apply\s*=|\bmodule\.exports\.apply\s*=)",
-    re.DOTALL,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,22 +28,106 @@ class DshValidation:
     runtime_path: str | None
 
 
-def _runtime_path(manifest: dict[str, object]) -> str | None:
-    main = manifest.get("main")
-    if isinstance(main, str) and main.strip():
-        return main
-    exports = manifest.get("exports")
-    if isinstance(exports, str) and exports.strip():
-        return exports
-    if isinstance(exports, dict):
-        root_export = exports.get(".")
-        if isinstance(root_export, str) and root_export.strip():
-            return root_export
-        if isinstance(root_export, dict):
-            default = root_export.get("default")
-            if isinstance(default, str) and default.strip():
-                return default
+def _export_target(value: object) -> str | None:
+    """Resolve a package export target, preferring import/default conditions."""
+
+    if isinstance(value, str) and value.strip():
+        return value
+    if not isinstance(value, dict):
+        return None
+    for condition in ("import", "default", "require", "node"):
+        if condition in value and (resolved := _export_target(value[condition])) is not None:
+            return resolved
+    for nested in value.values():
+        if (resolved := _export_target(nested)) is not None:
+            return resolved
     return None
+
+
+def _runtime_path(manifest: dict[str, object]) -> str | None:
+    """Resolve the root runtime export, falling back to main only without exports."""
+
+    if "exports" in manifest:
+        exports = manifest["exports"]
+        if isinstance(exports, dict) and "." in exports:
+            return _export_target(exports["."])
+        return _export_target(exports)
+    main = manifest.get("main")
+    return main if isinstance(main, str) and main.strip() else None
+
+
+def _javascript_tokens(source: str) -> tuple[str, ...]:
+    """Tokenize identifiers and punctuation while ignoring JS comments and literals."""
+
+    tokens: list[str] = []
+    index = 0
+    length = len(source)
+    while index < length:
+        char = source[index]
+        following = source[index + 1] if index + 1 < length else ""
+        if char == "/" and following == "/":
+            index += 2
+            while index < length and source[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and following == "*":
+            end = source.find("*/", index + 2)
+            index = length if end < 0 else end + 2
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+            index += 1
+            while index < length:
+                if source[index] == "\\":
+                    index += 2
+                    continue
+                if source[index] == quote:
+                    index += 1
+                    break
+                index += 1
+            continue
+        if char.isalpha() or char in {"_", "$"}:
+            end = index + 1
+            while end < length and (source[end].isalnum() or source[end] in {"_", "$"}):
+                end += 1
+            tokens.append(source[index:end])
+            index = end
+            continue
+        if not char.isspace():
+            tokens.append(char)
+        index += 1
+    return tuple(tokens)
+
+
+def _exports_apply(source: str) -> bool:
+    """Return true only when tokenized ESM/CommonJS syntax exports ``apply``."""
+
+    tokens = _javascript_tokens(source)
+    for index, token in enumerate(tokens):
+        tail = tokens[index:]
+        if token == "export":
+            declaration_index = 1
+            if len(tail) > 1 and tail[1] == "async":
+                declaration_index = 2
+            if (
+                len(tail) > declaration_index + 1
+                and tail[declaration_index] in {"function", "const", "let", "var", "class"}
+                and tail[declaration_index + 1] == "apply"
+            ):
+                return True
+            if len(tail) > 1 and tail[1] == "{":
+                close = tail.index("}") if "}" in tail else len(tail)
+                entries = tail[2:close]
+                if "apply" in entries:
+                    return True
+                if any(entries[pos : pos + 3] == (name, "as", "apply") for pos, name in enumerate(entries[:-2])):
+                    return True
+        if tail[:4] in (("exports", ".", "apply", "="), ("module", ".", "exports", ".")):
+            if tail[:4] == ("exports", ".", "apply", "="):
+                return True
+            if len(tail) >= 6 and tail[4:6] == ("apply", "="):
+                return True
+    return False
 
 
 def validate_dsh_package(package: NormalizedPackage) -> DshValidation:
@@ -67,7 +147,7 @@ def validate_dsh_package(package: NormalizedPackage) -> DshValidation:
     bundle_ok = isinstance(bundle, dict) and bool(bundle)
     patch = bundle.get("patch") if isinstance(bundle, dict) else None
     patch_target = package.root_path / patch if isinstance(patch, str) else None
-    patch_ok = patch is None or (
+    patch_ok = (
         isinstance(patch, str)
         and bool(patch.strip())
         and is_safe_relative_path(package.root_path, patch, require_exists=True)
@@ -86,7 +166,7 @@ def validate_dsh_package(package: NormalizedPackage) -> DshValidation:
         and not runtime_target.is_symlink()
     ):
         try:
-            runtime_ok = APPLY_EXPORT_RE.search(runtime_target.read_text(encoding="utf-8")) is not None
-        except OSError:
+            runtime_ok = _exports_apply(runtime_target.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
             runtime_ok = False
     return DshValidation(metadata_ok, bundle_ok, patch_ok, runtime_ok, runtime_path)

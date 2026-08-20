@@ -123,6 +123,36 @@ def test_verify_deepseek_harness_rejects_missing_apply_export(tmp_path: Path) ->
     assert rc == 1
 
 
+def test_verify_deepseek_harness_ignores_apply_in_comments_and_strings(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
+    (tmp_path / "plugin" / "index.js").write_text(
+        "// export function apply(ctx) {}\nexport const text = 'exports.apply = fake'\n", encoding="utf-8"
+    )
+    rc = main(["verify", str(tmp_path / "plugin"), "--format", "json"])
+    assert rc == 1
+
+
+def test_verify_deepseek_harness_requires_patch(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
+    manifest_path = tmp_path / "plugin" / "package.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["dsh"]["bundle"]["patch"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    rc = main(["verify", str(tmp_path / "plugin"), "--format", "json"])
+    assert rc == 1
+
+
+def test_verify_deepseek_harness_prefers_conditional_exports(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "plugin")
+    manifest_path = tmp_path / "plugin" / "package.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["main"] = "missing.js"
+    manifest["exports"] = {".": {"import": "./index.js", "default": "./missing.js"}}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    rc = main(["verify", str(tmp_path / "plugin"), "--format", "json"])
+    assert rc == 0
+
+
 def test_verify_nested_deepseek_harness_package(capsys, tmp_path: Path) -> None:
     shutil.copytree(FIXTURES / "deepseek-harness-good", tmp_path / "packages" / "plugin")
     rc = main(["verify", str(tmp_path), "--format", "json"])
