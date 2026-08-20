@@ -9,6 +9,7 @@ from pathlib import Path
 from .checks.best_practices import run_best_practice_checks
 from .checks.claude import run_claude_checks
 from .checks.code_quality import run_code_quality_checks
+from .checks.deepseek_harness import run_deepseek_harness_checks
 from .checks.gemini import run_gemini_checks
 from .checks.kimi import run_kimi_checks
 from .checks.manifest import run_manifest_checks
@@ -467,6 +468,30 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
             categories.extend(
                 (
                     CategoryResult(name=f"{prefix}Claude Plugin", checks=claude_checks),
+                    CategoryResult(name=f"{prefix}Security", checks=security_checks),
+                    CategoryResult(name=f"{prefix}Operational Security", checks=operational_checks),
+                    CategoryResult(name=f"{prefix}Code Quality", checks=quality_checks),
+                )
+            )
+            processed_packages.append(package)
+            continue
+
+        if package.ecosystem == Ecosystem.DEEPSEEK_HARNESS:
+            dsh_checks = _maybe_rebase_checks(
+                run_deepseek_harness_checks(package), package_root, scan_root_resolved, needs_rebase
+            )
+            security_checks = _maybe_rebase_checks(
+                run_security_checks(package_root), package_root, scan_root_resolved, needs_rebase
+            )
+            operational_checks = _maybe_rebase_checks(
+                run_operational_security_checks(package_root), package_root, scan_root_resolved, needs_rebase
+            )
+            quality_checks = _maybe_rebase_checks(
+                run_code_quality_checks(package_root), package_root, scan_root_resolved, needs_rebase
+            )
+            categories.extend(
+                (
+                    CategoryResult(name=f"{prefix}DeepSeek Harness Plugin", checks=dsh_checks),
                     CategoryResult(name=f"{prefix}Security", checks=security_checks),
                     CategoryResult(name=f"{prefix}Operational Security", checks=operational_checks),
                     CategoryResult(name=f"{prefix}Code Quality", checks=quality_checks),
