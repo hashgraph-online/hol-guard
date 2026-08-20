@@ -1,11 +1,12 @@
-import { useCallback, useState, Suspense, lazy } from "react";
+import { useCallback, useState, Suspense } from "react";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { PolicyExceptionsToolbar, PolicyPageToolbar, PolicyUnderlineTabBar } from "./policy-page-chrome";
 import type { PolicyPageView } from "./policy-workspace";
 import { resolveCloudPolicyControlsUrl, resolveCloudExceptionsConnected } from "./policy-workspace-helpers";
+import { lazyWorkspace } from "./lazy-workspace";
 
-const PolicyWorkspace = lazy(() =>
+const PolicyWorkspace = lazyWorkspace(() =>
   import("./policy-workspace").then((module) => ({ default: module.PolicyWorkspace })),
 );
 

@@ -2247,6 +2247,16 @@
     }
   }
 
+  .border-brand-dark\/15 {
+    border-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-dark\/15 {
+      border-color: color-mix(in oklab, var(--brand-dark) 15%, transparent);
+    }
+  }
+
   .border-brand-green, .border-brand-green\/15 {
     border-color: var(--brand-green);
   }
