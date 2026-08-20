@@ -46,9 +46,7 @@ export async function loadWorkspaceModule<T>(
   options: LoadWorkspaceModuleOptions = {},
 ): Promise<T> {
   try {
-    const loaded = await loader();
-    options.storage?.removeItem(CHUNK_RELOAD_STORAGE_KEY);
-    return loaded;
+    return await loader();
   } catch (error) {
     if (!isChunkLoadError(error)) {
       throw error;
@@ -57,6 +55,7 @@ export async function loadWorkspaceModule<T>(
     if (!storage || storage.getItem(CHUNK_RELOAD_STORAGE_KEY) === "1") {
       throw error;
     }
+    // Keep this flag for the tab so a nested child chunk cannot reload forever after a parent load succeeds.
     storage.setItem(CHUNK_RELOAD_STORAGE_KEY, "1");
     const wait = options.wait ?? defaultWait;
     await wait(options.delayMs ?? CHUNK_RELOAD_DELAY_MS);

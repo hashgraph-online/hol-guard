@@ -30056,9 +30056,7 @@ function reloadDocument(reload) {
 }
 async function loadWorkspaceModule(loader, options = {}) {
   try {
-    const loaded = await loader();
-    options.storage?.removeItem(CHUNK_RELOAD_STORAGE_KEY);
-    return loaded;
+    return await loader();
   } catch (error) {
     if (!isChunkLoadError(error)) {
       throw error;

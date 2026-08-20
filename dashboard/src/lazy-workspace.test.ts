@@ -51,7 +51,10 @@ const ok = { default: "workspace" };
   storage.setItem(CHUNK_RELOAD_STORAGE_KEY, "1");
   const loaded = await loadWorkspaceModule(async () => ok, { storage });
   assert(loaded === ok, "successful loads return the module");
-  assert(storage.getItem(CHUNK_RELOAD_STORAGE_KEY) === null, "successful loads clear the one-shot reload flag");
+  assert(
+    storage.getItem(CHUNK_RELOAD_STORAGE_KEY) === "1",
+    "successful parent loads keep the one-shot flag so a nested child failure cannot reload forever",
+  );
 }
 
 {
@@ -145,6 +148,42 @@ const ok = { default: "workspace" };
   } catch (error) {
     assert(error instanceof Error && error.message === "policy save failed", "non-chunk errors stay unchanged");
   }
+}
+
+{
+  const storage = memoryStorage();
+  let reloads = 0;
+  const failingChild = async () => {
+    throw new TypeError(
+      "Failed to fetch dynamically imported module: http://127.0.0.1:5474/assets/chunks/audit-workspace.js",
+    );
+  };
+  await loadWorkspaceModule(async () => ok, { storage });
+  try {
+    await loadWorkspaceModule(failingChild, {
+      storage,
+      wait: async () => undefined,
+      reload: () => {
+        reloads += 1;
+        throw new Error("dashboard-reload");
+      },
+    });
+  } catch (error) {
+    assert(error instanceof Error && error.message === "dashboard-reload", "nested child failure still reloads once");
+  }
+  await loadWorkspaceModule(async () => ok, { storage });
+  try {
+    await loadWorkspaceModule(failingChild, {
+      storage,
+      reload: () => {
+        reloads += 1;
+      },
+    });
+    throw new Error("nested child failure must stop after the one-shot reload");
+  } catch (error) {
+    assert(isChunkLoadError(error), "nested child failure surfaces after the one-shot reload");
+  }
+  assert(reloads === 1, "parent success must not reset the nested child reload budget");
 }
 
 console.log("lazy-workspace.test.ts: all assertions passed");
