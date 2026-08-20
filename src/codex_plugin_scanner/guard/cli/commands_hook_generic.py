@@ -122,7 +122,6 @@ if TYPE_CHECKING:
     from .commands_support_runtime_policy import (
         _ensure_terminal_punctuation,
         _localize_pending_approval_copy,
-        _native_approval_center_context,
         _native_hook_reason,
         _native_hook_reason_for_harness,
     )

@@ -32,7 +32,6 @@ if TYPE_CHECKING:
         _runtime_artifact_native_reason,
     )
     from .commands_support_runtime_policy import (
-        _native_approval_center_context,
         _native_hook_reason,
         _native_hook_reason_for_harness,
     )

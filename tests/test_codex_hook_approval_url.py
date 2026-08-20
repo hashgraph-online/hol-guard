@@ -7,8 +7,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.approval_hook_copy import live_hook_approval_context
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _native_approval_center_context
+from codex_plugin_scanner.guard.approval_hook_copy import join_native_hook_reason, live_hook_approval_context
+from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
+    _native_approval_center_context,
+    _native_hook_reason_for_harness,
+)
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -63,6 +66,24 @@ def test_live_hook_copy_adds_scoped_token_on_loopback(tmp_path: Path) -> None:
     review_url = live[start : live.index(". After you choose")]
     fragment = parse_qs(urlparse(review_url).fragment)
     assert fragment["guard-token"][0].startswith("gld1.")
+
+
+def test_hook_reason_does_not_repeat_untokenized_approval_url() -> None:
+    untokenized = (
+        "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:5474/requests/req-1. "
+        "After you choose, retry the same Grok action."
+    )
+    tokenized = (
+        "Open HOL Guard to approve or keep this blocked: "
+        "http://127.0.0.1:5474/requests/req-1#guard-token=gld1.abc. "
+        "After you choose, retry the same Grok action."
+    )
+    joined = join_native_hook_reason(untokenized, tokenized)
+    grok_reason = _native_hook_reason_for_harness("grok", untokenized, tokenized)
+    assert joined == tokenized
+    assert grok_reason == tokenized
+    assert joined.count("http://") == 1
+    assert "guard-token=" in grok_reason
 
 
 def test_live_hook_copy_does_not_token_external_urls(tmp_path: Path) -> None:
