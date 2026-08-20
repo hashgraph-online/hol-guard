@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -11,6 +12,14 @@ from .daemon.manager import load_guard_daemon_auth_token
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _OPEN_GUARD_MARKER = "open hol guard to approve"
 _DEFAULT_HOOK_REASON = "HOL Guard flagged this tool call for review."
+_GUARD_TOKEN_FRAGMENT = re.compile(
+    r"#guard-token=(?:[A-Za-z0-9_~%+-]+\.)*[A-Za-z0-9_~%+-]+",
+    re.IGNORECASE,
+)
+
+
+def _without_guard_token_fragment(text: str) -> str:
+    return _GUARD_TOKEN_FRAGMENT.sub("", text)
 
 
 def is_loopback_approval_url(url: str) -> bool:
@@ -33,15 +42,31 @@ def join_native_hook_reason(*values: object | None) -> str:
             candidate = value.strip()
             if candidate not in messages:
                 messages.append(candidate)
-    has_tokenized = any(
-        "guard-token=" in message.lower() and _OPEN_GUARD_MARKER in message.lower() for message in messages
-    )
-    if has_tokenized:
-        messages = [
-            message
-            for message in messages
-            if _OPEN_GUARD_MARKER not in message.lower() or "guard-token=" in message.lower()
-        ]
+    tokenized = [
+        message
+        for message in messages
+        if "guard-token=" in message.lower() and _OPEN_GUARD_MARKER in message.lower()
+    ]
+    if tokenized:
+        replacement = tokenized[0]
+        untokenized = _without_guard_token_fragment(replacement)
+        merged: list[str] = []
+        used_replacement = False
+        for message in messages:
+            if message == replacement:
+                if not used_replacement:
+                    merged.append(message)
+                    used_replacement = True
+                continue
+            if untokenized and untokenized in message:
+                merged.append(message.replace(untokenized, replacement, 1))
+                used_replacement = True
+                continue
+            merged.append(message)
+        messages = []
+        for candidate in merged:
+            if candidate not in messages:
+                messages.append(candidate)
     if messages:
         return " ".join(messages)
     return _DEFAULT_HOOK_REASON

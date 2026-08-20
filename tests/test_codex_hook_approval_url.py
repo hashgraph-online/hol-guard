@@ -75,7 +75,7 @@ def test_hook_reason_does_not_repeat_untokenized_approval_url() -> None:
     )
     tokenized = (
         "Open HOL Guard to approve or keep this blocked: "
-        "http://127.0.0.1:5474/requests/req-1#guard-token=gld1.abc. "
+        "http://127.0.0.1:5474/requests/req-1#guard-token=gld1.abc.def. "
         "After you choose, retry the same Grok action."
     )
     joined = join_native_hook_reason(untokenized, tokenized)
@@ -84,6 +84,24 @@ def test_hook_reason_does_not_repeat_untokenized_approval_url() -> None:
     assert grok_reason == tokenized
     assert joined.count("http://") == 1
     assert "guard-token=" in grok_reason
+
+
+def test_hook_reason_keeps_policy_copy_with_one_tokenized_url() -> None:
+    policy = (
+        "HOL Guard needs your approval before this action can run. "
+        "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:5474/requests/req-1. "
+        "After you choose, retry the same Codex action."
+    )
+    tokenized = (
+        "Open HOL Guard to approve or keep this blocked: "
+        "http://127.0.0.1:5474/requests/req-1#guard-token=gld1.abc.def. "
+        "After you choose, retry the same Codex action."
+    )
+    joined = join_native_hook_reason(policy, tokenized)
+    assert "needs your approval" in joined.lower()
+    assert joined.count("http://") == 1
+    assert "guard-token=" in joined
+    assert "http://127.0.0.1:5474/requests/req-1." not in joined
 
 
 def test_live_hook_copy_does_not_token_external_urls(tmp_path: Path) -> None:
