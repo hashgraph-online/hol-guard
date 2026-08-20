@@ -120,7 +120,7 @@ class HookReviewEngine:
                 notice="warning",
                 reason_code="engine_exception",
             )
-        if config is not None and config.mode == "observe" and request.event_name == "PostToolUse":
+        if config is not None and config.is_watch() and request.event_name == "PostToolUse":
             response = self._observe_only_response(request, response)
         self._record_metrics(request, response, start)
         return response

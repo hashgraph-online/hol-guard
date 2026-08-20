@@ -6056,7 +6056,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         try:
             observe_mode = (
                 daemon_server is not None
-                and load_guard_config(cast(_GuardDaemonHttpServer, daemon_server).store.guard_home).mode == "observe"
+                and load_guard_config(cast(_GuardDaemonHttpServer, daemon_server).store.guard_home).is_watch()
             )
         except (OSError, RuntimeError, TypeError, ValueError):
             observe_mode = False

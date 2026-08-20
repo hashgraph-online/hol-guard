@@ -130,7 +130,7 @@ def build_protect_payload(
     request = parse_protect_command(command)
     advisories = store.list_cached_advisories(limit=None)
     cached_verdict = evaluate_protect_request(request, advisories)
-    observe_mode = config is not None and config.mode == "observe"
+    observe_mode = config is not None and config.is_watch()
     cached_gate = cached_verdict.blocking and not observe_mode
     cached_policy_context = _cached_advisory_policy_context(cached_verdict)
     from .local_supply_chain import build_package_protect_payload

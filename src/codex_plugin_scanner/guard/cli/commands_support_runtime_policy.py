@@ -124,11 +124,18 @@ def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str
         return f"{reason} Restart HOL Guard, then retry."
     return f"{reason} Approve it in HOL Guard, then retry."
 
-def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:
+def _native_approval_center_context(
+    response_payload: dict[str, object],
+    *,
+    harness: str,
+    session_auth_token: str | None = None,
+) -> str | None:
     approval_center_url = response_payload.get("approval_center_url")
     if not isinstance(approval_center_url, str) or not approval_center_url.strip():
         return None
     review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
+    if session_auth_token:
+        review_url = build_approval_browser_url(review_url, auth_token=session_auth_token) or review_url
     canonical_harness = _canonical_harness_name(harness)
     harness_label = {
         "claude-code": "Claude Code",
@@ -1082,7 +1089,7 @@ def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
     from ..protection_posture import protection_status_fields
 
     issues: list[dict[str, str]] = []
-    if config.protection_posture == "watch" or config.mode == "observe":
+    if config.is_watch():
         issues.append(
             {
                 "severity": "warning",

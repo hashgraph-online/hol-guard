@@ -125,7 +125,7 @@ def _run_hook_copilot_pretool(
     saved_policy_blocks = decision.saved_action == "block"
     now = _now()
     observed_policy_action: GuardAction | None = None
-    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
+    if config.is_watch() and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         observe_mode_evidence: dict[str, object] = {
             "source": "observe_mode",
@@ -134,7 +134,7 @@ def _run_hook_copilot_pretool(
         }
         decision_scanner_evidence = (*decision_scanner_evidence, observe_mode_evidence)
         policy_action = "allow"
-    if config.mode == "observe" and observed_policy_action is not None:
+    if config.is_watch() and observed_policy_action is not None:
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=runtime_artifact,
@@ -312,7 +312,7 @@ def _run_hook_copilot_permission_request(
     if decision_scanner_evidence:
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
     observed_policy_action: GuardAction | None = None
-    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
+    if config.is_watch() and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         response_payload["approval_requests"] = []
         if terminal_action:
@@ -327,7 +327,7 @@ def _run_hook_copilot_permission_request(
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
         policy_action = "allow"
         response_payload["policy_action"] = "allow"
-    if config.mode == "observe" and observed_policy_action is not None:
+    if config.is_watch() and observed_policy_action is not None:
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=runtime_artifact,
@@ -522,7 +522,11 @@ def _run_hook_copilot_permission_request(
         policy_action=policy_action,
     )
     if _should_emit_copilot_hook_response(args):
-        review_context = _native_approval_center_context(response_payload, harness=args.harness)
+        review_context = _native_approval_center_context(
+            response_payload,
+            harness=args.harness,
+            session_auth_token=load_guard_daemon_auth_token(store.guard_home),
+        )
         _emit_copilot_permission_request_response(
             behavior="deny",
             message=_copilot_hook_reason(

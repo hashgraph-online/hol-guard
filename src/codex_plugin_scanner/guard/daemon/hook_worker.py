@@ -124,7 +124,7 @@ class HookWorker:
             config = self._load_config(guard_home, workspace)
             response = review_post_tool_native(
                 request,
-                observe_mode=config.mode == "observe",
+                observe_mode=config.is_watch(),
             )
             if response is None:
                 response = self.engine.review(request)

@@ -34,6 +34,7 @@ from .protection_posture import (
     coerce_watch_auto_revert_hours,
     derive_protection_posture,
     dual_write_from_posture,
+    protection_is_off,
     resolve_posture_defaults,
 )
 
@@ -405,6 +406,9 @@ class GuardConfig:
     install_owner: str = "user"
     managed_policy: ManagedPolicy | None = None
 
+    def is_watch(self) -> bool:
+        return protection_is_off(posture=self.protection_posture, mode=self.mode)
+
     def resolve_action_override(
         self,
         harness: str,
@@ -509,6 +513,8 @@ def load_guard_config(
     elif explicit_posture is not None:
         loaded_posture = explicit_posture
         posture_explicit = True
+        if loaded_posture == "watch":
+            loaded_mode = "observe"
     else:
         loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
         posture_explicit = False
