@@ -8,8 +8,6 @@ from datetime import datetime, timezone
 from .codex_app_server import default_codex_app_server_socket_available, resume_codex_thread_for_request
 from .store import GuardStore
 
-_PRETOOL_BRIDGE_WAIT_SECONDS = 120
-
 
 class ResumeNotSupportedError(ValueError):
     """Raised when an approval request cannot be resumed automatically."""
@@ -153,7 +151,7 @@ def defer_request_resume_to_live_hook(
         return None
     event_name = str(metadata.get("hook_event_name") or metadata.get("event") or "")
     if not _live_hook_wait_is_active(metadata=metadata, now=now) and not (
-        event_name == "PreToolUse" and _pretool_bridge_wait_is_active(operation, now=now)
+        event_name == "PreToolUse" and _pretool_bridge_wait_is_active(store, operation, now=now)
     ):
         return None
     resume = get_request_resume_status(store, request_id=request_id, now=now)
@@ -222,12 +220,24 @@ def _live_hook_wait_is_active(*, metadata: Mapping[str, object], now: str) -> bo
     return now_at <= deadline_at
 
 
-def _pretool_bridge_wait_is_active(operation: Mapping[str, object], *, now: str) -> bool:
+def _pretool_bridge_wait_is_active(
+    store: GuardStore,
+    operation: Mapping[str, object],
+    *,
+    now: str,
+) -> bool:
     now_at = _parse_timestamp(now)
     started_at = _parse_timestamp(_first_string(operation, ("updated_at", "created_at")) or "")
     if now_at is None or started_at is None:
         return False
-    return (now_at - started_at).total_seconds() <= _PRETOOL_BRIDGE_WAIT_SECONDS
+    try:
+        from .config import load_guard_config
+
+        timeout_seconds = int(load_guard_config(store.guard_home).approval_wait_timeout_seconds)
+    except (OSError, TypeError, ValueError):
+        timeout_seconds = 120
+    timeout_seconds = 0 if timeout_seconds < 0 else min(timeout_seconds, 600)
+    return (now_at - started_at).total_seconds() <= timeout_seconds
 
 
 def _parse_timestamp(value: str) -> datetime | None:

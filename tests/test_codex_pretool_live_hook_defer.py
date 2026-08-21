@@ -94,3 +94,45 @@ def test_codex_approve_stale_pretooluse_requires_app_server_socket(
     assert payload["codex_resume"]["status"] == "failed"
     assert payload["codex_resume"]["reason"] == "socket_not_available"
     assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+
+
+def test_codex_approve_pretooluse_uses_configured_wait_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    (store.guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 1\n", encoding="utf-8")
+    store.add_approval_request(_request("req-pretool-short"), _FROZEN_NOW)
+    _seed_codex_operation(
+        store,
+        request_id="req-pretool-short",
+        socket_path=None,
+        thread_id="pretool-short-session-1",
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+        command_text="npm install minimist@1.2.8",
+        hook_event_name="PreToolUse",
+        waits_for_browser_approval=False,
+        status="waiting_on_approval",
+    )
+    monkeypatch.setattr(daemon_server, "_now", lambda: "2026-05-19T10:00:03+00:00")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-pretool-short/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codex_resume"]["status"] == "failed"
+    assert payload["codex_resume"]["reason"] == "socket_not_available"
