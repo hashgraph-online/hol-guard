@@ -2051,3 +2051,66 @@ def test_managed_ca_content_swap_is_rejected_before_execution(
 
     assert _error_reason(error) == "update_ca_bundle_changed"
     assert marker.exists() is False
+
+
+def test_distribution_query_reports_code_version_alongside_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "installed-environment" / "site-packages"
+    root.mkdir(parents=True)
+    result = TrustedProcessResult(
+        args=(str(sys.executable),),
+        returncode=0,
+        stdout=json.dumps(
+            {
+                "code_version": "2.0.0",
+                "direct_url": None,
+                "name": "hol-guard",
+                "root": str(root),
+                "version": "2.0.0",
+            }
+        ),
+        stderr="",
+    )
+    context, _ = _context_with_distribution_result(tmp_path, monkeypatch, result)
+
+    distribution = context.query_distribution()
+
+    assert distribution.code_version == "2.0.0"
+
+
+@pytest.mark.parametrize(
+    "code_version",
+    [
+        "not-a-version",
+        7,
+    ],
+)
+def test_distribution_query_rejects_invalid_code_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    code_version: object,
+) -> None:
+    root = tmp_path / "installed-environment" / "site-packages"
+    root.mkdir(parents=True)
+    result = TrustedProcessResult(
+        args=(str(sys.executable),),
+        returncode=0,
+        stdout=json.dumps(
+            {
+                "code_version": code_version,
+                "direct_url": None,
+                "name": "hol-guard",
+                "root": str(root),
+                "version": "2.0.0",
+            }
+        ),
+        stderr="",
+    )
+    context, _ = _context_with_distribution_result(tmp_path, monkeypatch, result)
+
+    with pytest.raises(UpdateSubprocessError) as error:
+        context.query_distribution()
+
+    assert _error_reason(error) == "update_version_output_invalid"

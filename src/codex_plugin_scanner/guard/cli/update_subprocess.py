@@ -91,7 +91,13 @@ if direct_url_entries:
     direct_url = json.loads(direct_url_path.read_text(encoding="utf-8"))
     if not isinstance(direct_url, dict):
         raise RuntimeError("invalid direct_url metadata payload")
+code_version = None
+try:
+    code_version = str(__import__("codex_plugin_scanner").__version__)
+except Exception:
+    code_version = None
 print(json.dumps({
+    "code_version": code_version,
     "direct_url": direct_url,
     "name": distribution.metadata.get("Name"),
     "version": distribution.version,
@@ -312,6 +318,7 @@ class InstalledDistribution:
     version: str
     root: Path
     direct_url: dict[str, object] | None = None
+    code_version: str | None = None
 
 
 @dataclass(slots=True)
@@ -626,12 +633,16 @@ class TrustedUpdateContext:
             output_limit_bytes=8192,
         )
         payload = _single_json_object(result, failure_reason="update_version_output_invalid")
-        if set(payload) != {"direct_url", "name", "root", "version"}:
+        required_keys = {"direct_url", "name", "root", "version"}
+        if not required_keys <= set(payload) or set(payload) - required_keys - {"code_version"}:
             raise UpdateSubprocessError("update_version_output_invalid")
         name = payload.get("name")
         version = payload.get("version")
         root_value = payload.get("root")
         direct_url_value = payload.get("direct_url")
+        code_version_value = payload.get("code_version")
+        if code_version_value is not None and not isinstance(code_version_value, str):
+            raise UpdateSubprocessError("update_version_output_invalid")
         if not isinstance(name, str) or name.lower().replace("_", "-") != "hol-guard":
             raise UpdateSubprocessError("update_version_output_invalid")
         if not isinstance(version, str):
@@ -640,6 +651,12 @@ class TrustedUpdateContext:
             normalized_version = str(Version(version))
         except InvalidVersion as error:
             raise UpdateSubprocessError("update_version_output_invalid") from error
+        code_version: str | None = None
+        if isinstance(code_version_value, str):
+            try:
+                code_version = str(Version(code_version_value))
+            except InvalidVersion as error:
+                raise UpdateSubprocessError("update_version_output_invalid") from error
         if not isinstance(root_value, str):
             raise UpdateSubprocessError("update_version_output_invalid")
         try:
@@ -660,6 +677,7 @@ class TrustedUpdateContext:
             version=normalized_version,
             root=root,
             direct_url=direct_url,
+            code_version=code_version,
         )
 
     def _launcher_for(self, command_path: str) -> ExecutableIdentity:

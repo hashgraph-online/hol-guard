@@ -13,6 +13,21 @@ _V3_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v3")
 _SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v4").hexdigest()
 
 
+class LocalCliSchemaError(ValueError):
+    """The persisted local-CLI schema cannot be safely interpreted by this runtime.
+
+    Distinguishing the failure mode matters for recovery: a store written by a
+    newer Guard is healthy and only needs an update, while a marker that does
+    not match any known schema signals damage or tampering. Both stay
+    fail-closed; only the remediation differs.
+    """
+
+    def __init__(self, message: str, *, store_version: int | None, supported_version: int) -> None:
+        super().__init__(message)
+        self.store_version = store_version
+        self.supported_version = supported_version
+
+
 def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
     _ = connection.execute(
         """
@@ -43,7 +58,20 @@ def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
         if version == 3 and checksum == _V3_CHECKSUM:
             _migrate_v3_to_v4(connection)
         elif version != LOCAL_CLI_SCHEMA_VERSION or checksum != _SCHEMA_CHECKSUM:
-            raise ValueError("unsupported or invalid local CLI schema")
+            if version > LOCAL_CLI_SCHEMA_VERSION:
+                raise LocalCliSchemaError(
+                    f"local CLI state schema v{version} is newer than this Guard build "
+                    f"understands (v{LOCAL_CLI_SCHEMA_VERSION}); update Guard and retry",
+                    store_version=version,
+                    supported_version=LOCAL_CLI_SCHEMA_VERSION,
+                )
+            raise LocalCliSchemaError(
+                f"local CLI state schema marker does not match this Guard build "
+                f"(supports v{LOCAL_CLI_SCHEMA_VERSION}); the store may be damaged or "
+                "come from an unsupported build",
+                store_version=version,
+                supported_version=LOCAL_CLI_SCHEMA_VERSION,
+            )
     _ = connection.execute(
         """
         create table if not exists local_cli_observation (

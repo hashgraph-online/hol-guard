@@ -622,6 +622,32 @@ def run_guard_update(
                     retain_trusted_wheel=installer_execution_started,
                 )
             )
+        try:
+            installation_consistent = _installed_code_matches_distribution(update_context)
+        except UpdateSubprocessError as error:
+            return finish_update(
+                _trusted_update_failure(
+                    payload,
+                    error,
+                    trusted_wheel=trusted_wheel,
+                    retain_trusted_wheel=installer_execution_started,
+                )
+            )
+        if not installation_consistent:
+            payload["status"] = "failed"
+            payload["changed"] = False
+            payload["reason_code"] = "update_install_inconsistent"
+            payload["message"] = (
+                "HOL Guard updated its version metadata but not all of its installed files. "
+                "Retry the update to finish the installation."
+            )
+            payload["retry_command"] = _safe_update_retry_command(
+                trusted_wheel.staged_path if trusted_wheel is not None else requested_wheel_path,
+                include_alpha=include_alpha,
+            )
+            if trusted_wheel is not None:
+                _retain_local_wheel_staging(payload)
+            return finish_update((payload, 1))
         initial_version_check = payload.get("version_check")
         resulting_version = str(payload.get("resulting_version") or current_version)
         if result.returncode != 0:
@@ -2048,6 +2074,24 @@ def _current_version_from_subprocess(update_context: TrustedUpdateContext) -> st
     """Return one validated version from the context's intended distribution."""
 
     return update_context.query_distribution().version
+
+
+def _installed_code_matches_distribution(update_context: TrustedUpdateContext) -> bool:
+    """Confirm installed code files agree with the installed version metadata.
+
+    An interrupted installer can leave fresh dist-info metadata beside stale
+    code files. The version probe then reports the new version while the
+    runtime executes the old one, which surfaces later as store schema
+    failures instead of an update problem. A missing code version means the
+    probe could not import the package, which the normal version checks
+    already cover.
+    """
+
+    distribution = update_context.query_distribution()
+    code_version = getattr(distribution, "code_version", None)
+    if code_version is None:
+        return True
+    return Version(code_version) == Version(distribution.version)
 
 
 def _standalone_update_context(context: HarnessContext) -> TrustedUpdateContext:
