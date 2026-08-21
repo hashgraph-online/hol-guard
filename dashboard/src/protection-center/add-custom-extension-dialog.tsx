@@ -73,6 +73,7 @@ export function AddCustomExtensionDialog(props: {
 
   const handleCommand = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     recognizeGeneration.current += 1;
+    autoRecognizedCommand.current = "";
     setBusy(false);
     setCommand(event.target.value);
     setRecognized(null);

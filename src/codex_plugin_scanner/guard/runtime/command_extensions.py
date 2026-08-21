@@ -147,9 +147,7 @@ class CommandSafetyExtensionRegistry:
         for extension in ordered:
             _validate_extension(extension)
             if len(extension.permissions) > MAX_PERMISSIONS_PER_EXTENSION:
-                raise ValueError(
-                    f"Command safety extension {extension.extension_id} exceeds permission limit"
-                )
+                raise ValueError(f"Command safety extension {extension.extension_id} exceeds permission limit")
             if extension.extension_id in by_id:
                 raise ValueError(f"Duplicate command safety extension ID: {extension.extension_id}")
             by_id[extension.extension_id] = extension

@@ -179,13 +179,7 @@ def parse_package_script_invocation(
         return None
     focused = _focused_script_name(normalized, remainder)
     if focused is None and remainder[0] not in _RUN_TOKENS:
-        if normalized == "yarn" and remainder[0] not in {"add", "install", "dlx", "up", "workspace"}:
-            if remainder[0] in _read_scripts(manifest):
-                focused = remainder[0]
-            else:
-                return None
-        else:
-            return None
+        return None
     return manifest, runner, focused
 
 
@@ -227,7 +221,7 @@ def commands_from_package_scripts(
     seen: set[str] = {ROOT_COMMAND_ID, OTHER_COMMAND_ID}
     for name in names:
         command_id = command_id_for_script(name)
-        if command_id in seen or command_id in {ROOT_COMMAND_ID, OTHER_COMMAND_ID}:
+        if command_id in seen:
             continue
         parent_id = parent_command_id(name)
         body = " ".join(scripts[name].split())
@@ -250,16 +244,23 @@ def commands_from_package_scripts(
 def command_id_for_script(script_name: str) -> str:
     parts = command_id_parts(script_name)
     if parts:
-        return ".".join(parts)
-    compact = "".join(ch.lower() if ch.isalnum() else "-" for ch in script_name).strip("-")
+        candidate = ".".join(parts)
+        if candidate not in {ROOT_COMMAND_ID, OTHER_COMMAND_ID}:
+            return candidate
     digest = hashlib.sha256(script_name.encode("utf-8")).hexdigest()[:8]
+    compact = "".join(ch.lower() if ch.isalnum() else "-" for ch in script_name).strip("-")
     base = (compact or "script")[:31]
     candidate = f"{base}-{digest}"
-    return candidate if _COMMAND_PART.fullmatch(candidate.split(".", 1)[0]) else OTHER_COMMAND_ID
+    if candidate in {ROOT_COMMAND_ID, OTHER_COMMAND_ID} or not _COMMAND_PART.fullmatch(candidate.split(".", 1)[0]):
+        return f"script-{digest}"
+    return candidate
 
 
 def command_id_parts(script_name: str) -> tuple[str, ...]:
-    parts = [part for part in script_name.split(":") if part]
+    raw_parts = script_name.split(":")
+    if any(part == "" for part in raw_parts):
+        return ()
+    parts = raw_parts
     if not parts or len(parts) > 4:
         return ()
     if not all(_COMMAND_PART.fullmatch(part) for part in parts):

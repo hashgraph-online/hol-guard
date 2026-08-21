@@ -104,6 +104,17 @@ def test_command_id_splits_colon_namespaces() -> None:
     assert command_id_for_script("guard:reddit-targeting:audit") == "guard.reddit-targeting.audit"
 
 
+def test_reserved_script_names_do_not_alias_synthetic_commands() -> None:
+    commands = commands_from_package_scripts(
+        {"root": "echo root", "other": "echo other"},
+        runner="npm",
+        focused_script=None,
+    )
+    named = {command.name: command.command_id for command in commands}
+    assert named["root"] != "root"
+    assert named["other"] != "other"
+
+
 def test_dotted_script_live_tokens_match_catalog(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.package_json_scripts import package_script_command_tokens
 
