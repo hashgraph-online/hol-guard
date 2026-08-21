@@ -84,7 +84,7 @@ def parse_distribution_probe_payload(
     version = payload.get("version")
     root_value = payload.get("root")
     direct_url_value = payload.get("direct_url")
-    code_source_value = payload.get("code_source", None)
+    code_source_value = payload.get("code_source")
     if code_source_value is not None and not isinstance(code_source_value, str):
         raise UpdateSubprocessError("update_version_output_invalid")
     code_version = None if code_source_value is None else _code_version_from_source(code_source_value)

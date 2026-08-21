@@ -26,8 +26,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import BinaryIO
 
-from packaging.version import InvalidVersion, Version
-
 from ..mdm.network import platform_system_proxies
 from ..redaction import redact_sensitive_text
 from ..shims import _trusted_python_flags
