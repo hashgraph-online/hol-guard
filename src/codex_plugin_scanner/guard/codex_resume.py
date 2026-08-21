@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .codex_app_server import default_codex_app_server_socket_available, resume_codex_thread_for_request
 from .store import GuardStore
@@ -230,14 +231,22 @@ def _pretool_bridge_wait_is_active(
     started_at = _parse_timestamp(_first_string(operation, ("updated_at", "created_at")) or "")
     if now_at is None or started_at is None:
         return False
+    metadata = operation.get("metadata")
+    workspace: Path | None = None
+    if isinstance(metadata, Mapping):
+        raw_workspace = metadata.get("workspace")
+        if isinstance(raw_workspace, str) and raw_workspace.strip():
+            workspace = Path(raw_workspace)
     try:
-        from .config import load_guard_config
+        from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
 
-        timeout_seconds = int(load_guard_config(store.guard_home).approval_wait_timeout_seconds)
+        configured = int(load_guard_config(store.guard_home, workspace).approval_wait_timeout_seconds)
+        configured = 0 if configured < 0 else min(configured, MAX_APPROVAL_WAIT_TIMEOUT_SECONDS)
     except (OSError, TypeError, ValueError):
-        timeout_seconds = 120
-    timeout_seconds = 0 if timeout_seconds < 0 else min(timeout_seconds, 600)
-    return (now_at - started_at).total_seconds() <= timeout_seconds
+        configured = 120
+    # Match Codex install: hook timeout = C + 5s managed grace; bridge holds C+5-2s.
+    bridge_hold_seconds = max(1, configured + 5 - 2)
+    return (now_at - started_at).total_seconds() <= bridge_hold_seconds
 
 
 def _parse_timestamp(value: str) -> datetime | None:
