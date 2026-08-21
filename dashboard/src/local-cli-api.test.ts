@@ -8,7 +8,9 @@ import {
   normalizeLocalCliList,
   seenSuggestionMeta,
   suggestedCustomExtensions,
+  looksLikePackageScriptPaste,
   suggestedHarnessExtensions,
+  suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
 } from "./local-cli-api";
 import { parseProtectionRoute, localCliHref } from "./local-cli-links";
@@ -134,6 +136,21 @@ const harnessUnset = normalizeLocalCliItem({
 });
 assert.deepEqual(suggestedHarnessExtensions([unsetItem, harnessUnset]).map((entry) => entry.name), ["github"]);
 assert.deepEqual(suggestedSeenExtensions([unsetItem, harnessUnset]).map((entry) => entry.name), ["unset-tool"]);
+const packageScripts = normalizeLocalCliItem({
+  ...unsetItem,
+  cli_id: "local-cli.pkg-demo-abcdef12",
+  name: "demo-app",
+  example_label: "pnpm run",
+  surface: "package-scripts",
+  suggestable: true,
+});
+assert.equal(packageScripts.surface, "package-scripts");
+assert.deepEqual(suggestedPackageScriptExtensions([unsetItem, packageScripts]).map((entry) => entry.name), ["demo-app"]);
+assert.deepEqual(suggestedSeenExtensions([unsetItem, packageScripts]).map((entry) => entry.name), ["unset-tool"]);
+assert.equal(looksLikePackageScriptPaste("npm run guard:audit"), true);
+assert.equal(looksLikePackageScriptPaste("pnpm run"), true);
+assert.equal(looksLikePackageScriptPaste("npx -y server"), false);
+assert.equal(looksLikePackageScriptPaste("npm"), false);
 
 const recentJunk = normalizeLocalCliItem({
   ...unsetItem,

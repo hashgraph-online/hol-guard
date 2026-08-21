@@ -3,7 +3,7 @@ import { fetchLocalCliApi } from "./guard-api";
 export type LocalCliKind = "executable" | "script";
 export type LocalCliState = "unset" | "allowed" | "blocked";
 export type LocalCliCommandState = "inherit" | "allow" | "block";
-export type LocalCliSurface = "cli" | "mcp";
+export type LocalCliSurface = "cli" | "mcp" | "package-scripts";
 
 export type LocalCliCommand = {
   command_id: string;
@@ -111,9 +111,29 @@ export function suggestedHarnessExtensions(items: readonly LocalCliItem[]): Loca
 
 export function suggestedSeenExtensions(items: readonly LocalCliItem[]): LocalCliItem[] {
   return suggestedCustomExtensions(items)
-    .filter((item) => item.source_label === null)
+    .filter((item) => item.source_label === null && item.surface !== "package-scripts")
     .slice()
     .sort(compareSeenSuggestions);
+}
+
+export function suggestedPackageScriptExtensions(items: readonly LocalCliItem[]): LocalCliItem[] {
+  return suggestedCustomExtensions(items)
+    .filter((item) => item.surface === "package-scripts")
+    .slice()
+    .sort(compareSeenSuggestions);
+}
+
+export function looksLikePackageScriptPaste(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/(^|\/)package\.json$/i.test(trimmed)) return true;
+  if (!trimmed.includes(" ") && (trimmed.includes("/") || trimmed.includes("\\") || trimmed === ".")) {
+    return true;
+  }
+  const manager = /^(npm|pnpm|yarn|bun)(?:\.cmd)?\b/i.exec(trimmed);
+  if (manager === null) return false;
+  if (/\b(run|run-script|start|test|stop|restart)\b/i.test(trimmed)) return true;
+  return /^yarn\s+\S+/i.test(trimmed);
 }
 
 export function filterExtensionSuggestions(
@@ -171,7 +191,7 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
     last_seen_at: optionalString(value.last_seen_at),
     source_path: optionalString(value.source_path),
     help_status: normalizeHelpStatus(value.help_status),
-    surface: value.surface === "mcp" ? "mcp" : "cli",
+    surface: normalizeSurface(value.surface),
     server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
     source_label: optionalSourceLabel(value.source_label),
     state,
@@ -184,6 +204,12 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
     suggestion_score: optionalScore(value.suggestion_score),
     commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
   };
+}
+
+function normalizeSurface(value: unknown): LocalCliSurface {
+  if (value === "mcp") return "mcp";
+  if (value === "package-scripts") return "package-scripts";
+  return "cli";
 }
 
 function normalizeHelpStatus(value: unknown): LocalCliItem["help_status"] {

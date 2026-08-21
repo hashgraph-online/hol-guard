@@ -6,10 +6,11 @@ import hashlib
 import sqlite3
 from typing import Final, cast
 
-LOCAL_CLI_SCHEMA_VERSION: Final = 3
+LOCAL_CLI_SCHEMA_VERSION: Final = 4
 _V1_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v1").hexdigest()
 _V2_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v2").hexdigest()
-_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v3").hexdigest()
+_V3_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v3").hexdigest()
+_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v4").hexdigest()
 
 
 def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
@@ -38,6 +39,9 @@ def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
             version, checksum = 2, _V2_CHECKSUM
         if version == 2 and checksum == _V2_CHECKSUM:
             _migrate_v2_to_v3(connection)
+            version, checksum = 3, _V3_CHECKSUM
+        if version == 3 and checksum == _V3_CHECKSUM:
+            _migrate_v3_to_v4(connection)
         elif version != LOCAL_CLI_SCHEMA_VERSION or checksum != _SCHEMA_CHECKSUM:
             raise ValueError("unsupported or invalid local CLI schema")
     _ = connection.execute(
@@ -53,7 +57,7 @@ def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
             last_seen_at text not null,
             source_path text,
             help_status text,
-            surface text not null default 'cli' check (surface in ('cli', 'mcp')),
+            surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),
             server_identity_hash text,
             server_command text,
             server_args_hash text
@@ -106,6 +110,49 @@ def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
         _ = connection.execute("alter table local_cli_observation add column server_command text")
     if "server_args_hash" not in columns:
         _ = connection.execute("alter table local_cli_observation add column server_args_hash text")
+    _ = connection.execute(
+        "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+        (3, _V3_CHECKSUM),
+    )
+
+
+def _migrate_v3_to_v4(connection: sqlite3.Connection) -> None:
+    _ = connection.execute("alter table local_cli_observation rename to local_cli_observation_v3")
+    _ = connection.execute(
+        """
+        create table local_cli_observation (
+            cli_id text primary key,
+            identity_hash text not null,
+            kind text not null check (kind in ('executable', 'script')),
+            name text not null,
+            interpreter_name text,
+            example_label text not null,
+            observed_count integer not null check (observed_count >= 1),
+            last_seen_at text not null,
+            source_path text,
+            help_status text,
+            surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),
+            server_identity_hash text,
+            server_command text,
+            server_args_hash text
+        )
+        """
+    )
+    _ = connection.execute(
+        """
+        insert into local_cli_observation (
+            cli_id, identity_hash, kind, name, interpreter_name, example_label,
+            observed_count, last_seen_at, source_path, help_status, surface,
+            server_identity_hash, server_command, server_args_hash
+        )
+        select
+            cli_id, identity_hash, kind, name, interpreter_name, example_label,
+            observed_count, last_seen_at, source_path, help_status, surface,
+            server_identity_hash, server_command, server_args_hash
+        from local_cli_observation_v3
+        """
+    )
+    _ = connection.execute("drop table local_cli_observation_v3")
     _ = connection.execute(
         "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
         (LOCAL_CLI_SCHEMA_VERSION, _SCHEMA_CHECKSUM),

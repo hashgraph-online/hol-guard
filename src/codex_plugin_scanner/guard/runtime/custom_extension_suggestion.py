@@ -202,7 +202,7 @@ def is_suggestable_custom_tool(
 ) -> bool:
     """Return whether an observed CLI is worth offering as a custom extension."""
 
-    if surface == "mcp":
+    if surface in {"mcp", "package-scripts"}:
         return True
     return (
         suggestion_score(
@@ -228,7 +228,7 @@ def suggestion_score(
 ) -> int:
     """Return a ranking score. Zero means hide the suggestion."""
 
-    if surface == "mcp":
+    if surface in {"mcp", "package-scripts"}:
         return 100
     if not _name_is_suggestable(name):
         return 0

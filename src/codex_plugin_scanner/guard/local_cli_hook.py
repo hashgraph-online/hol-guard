@@ -8,6 +8,7 @@ from .local_cli_trust import matching_local_cli_grant, utc_now
 from .models import GuardAction
 from .runtime.custom_extension_suggestion import observation_path_class
 from .runtime.local_cli_identity import identify_unlisted_cli
+from .runtime.package_json_scripts import identify_package_json_scripts
 
 
 def observe_unlisted_cli(
@@ -17,13 +18,19 @@ def observe_unlisted_cli(
     cwd: Path,
     home_dir: Path | None,
 ) -> None:
-    identity = identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
+    package_identity = identify_package_json_scripts(command, cwd=cwd, home_dir=home_dir)
+    identity = package_identity or identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
     if identity is None:
         return
     recorder = getattr(store, "record_local_cli_observation", None)
     if not callable(recorder):
         return
-    recorder(identity, seen_at=utc_now(), source_path=observation_path_class(identity.source_path))
+    recorder(
+        identity,
+        seen_at=utc_now(),
+        source_path=observation_path_class(identity.source_path),
+        surface="package-scripts" if package_identity is not None else "cli",
+    )
 
 
 def apply_local_cli_grant(

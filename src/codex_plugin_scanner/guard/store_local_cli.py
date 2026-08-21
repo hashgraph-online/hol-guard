@@ -42,7 +42,7 @@ class StoreLocalCliMixin:
     ) -> None:
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
-        surface_value = surface if surface in {"cli", "mcp"} else "cli"
+        surface_value = surface if surface in {"cli", "mcp", "package-scripts"} else "cli"
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
             current = connection.execute(
@@ -420,7 +420,7 @@ def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
 
 def _observation_from_row(row: object) -> dict[str, object]:
     values = _row_values(row, 12)
-    surface = values[10] if values[10] in {"cli", "mcp"} else "cli"
+    surface = values[10] if values[10] in {"cli", "mcp", "package-scripts"} else "cli"
     return {
         "cli_id": values[0],
         "identity_hash": values[1],

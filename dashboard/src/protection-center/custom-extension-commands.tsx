@@ -20,6 +20,12 @@ export function withCommandState(
   return commands.map((command) => (command.command_id === commandId ? { ...command, state } : command));
 }
 
+export function commandNestingDepth(command: LocalCliCommand): number {
+  if (command.parent_id) return command.parent_id.split(".").filter(Boolean).length;
+  const colons = command.name.split(":").length - 1;
+  return colons > 0 ? colons : 0;
+}
+
 export function CustomExtensionCommandList(props: {
   commands: readonly LocalCliCommand[];
   disabled: boolean;
@@ -29,9 +35,7 @@ export function CustomExtensionCommandList(props: {
   if (props.commands.length === 0) {
     return (
       <p className="text-sm leading-6 text-brand-dark/75">
-        {props.surface === "mcp"
-          ? "Guard has not loaded tools for this MCP server yet. Find the server again to list its tools."
-          : "Guard has not loaded commands for this tool yet. Find the tool again to read its --help output."}
+        {emptyCommandCopy(props.surface)}
       </p>
     );
   }
@@ -49,6 +53,16 @@ export function CustomExtensionCommandList(props: {
   );
 }
 
+function emptyCommandCopy(surface: LocalCliSurface | undefined): string {
+  if (surface === "mcp") {
+    return "Guard has not loaded tools for this MCP server yet. Find the server again to list its tools.";
+  }
+  if (surface === "package-scripts") {
+    return "Guard has not loaded scripts from package.json yet. Paste npm run, a project folder, or package.json.";
+  }
+  return "Guard has not loaded commands for this tool yet. Find the tool again to read its --help output.";
+}
+
 function CustomExtensionCommandRow(props: {
   command: LocalCliCommand;
   disabled: boolean;
@@ -57,11 +71,16 @@ function CustomExtensionCommandRow(props: {
   const handleChange = useCallback((state: LocalCliCommandState) => {
     props.onChange(props.command.command_id, state);
   }, [props]);
+  const depth = commandNestingDepth(props.command);
   return (
-    <article className="guard-pattern-row" data-command-id={props.command.command_id}>
+    <article
+      className="guard-pattern-row"
+      data-command-id={props.command.command_id}
+      style={depth > 0 ? { paddingLeft: `${0.75 + depth * 1.1}rem` } : undefined}
+    >
       <div className="min-w-0">
         <h3 className="text-sm font-semibold text-brand-dark">{props.command.name}</h3>
-        <p className="guard-pattern-example mt-1">{props.command.usage}</p>
+        <p className="guard-pattern-example mt-1" title={props.command.usage}>{props.command.usage}</p>
         {props.command.description ? (
           <p className="mt-2 text-xs leading-5 text-brand-dark/75">{props.command.description}</p>
         ) : null}

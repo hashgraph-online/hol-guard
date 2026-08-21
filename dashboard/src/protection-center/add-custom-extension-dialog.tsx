@@ -11,9 +11,11 @@ import {
   filterExtensionSuggestions,
   LocalCliApiError,
   previewLocalCliMutation,
+  looksLikePackageScriptPaste,
   recognizeLocalCli,
   seenSuggestionMeta,
   suggestedHarnessExtensions,
+  suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
   type LocalCliCommandState,
   type LocalCliItem,
@@ -46,6 +48,11 @@ export function AddCustomExtensionDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useModalDialog<HTMLFormElement>(props.onClose, !busy);
   const recognizeGeneration = useRef(0);
+  const autoRecognizedCommand = useRef("");
+  const packageScriptSuggestions = filterExtensionSuggestions(
+    suggestedPackageScriptExtensions(props.items),
+    command,
+  ).slice(0, 6);
   const harnessSuggestions = filterExtensionSuggestions(
     suggestedHarnessExtensions(props.items),
     command,
@@ -54,7 +61,9 @@ export function AddCustomExtensionDialog(props: {
     suggestedSeenExtensions(props.items),
     command,
   ).slice(0, 6);
-  const hasSuggestions = harnessSuggestions.length > 0 || seenSuggestions.length > 0;
+  const hasSuggestions = packageScriptSuggestions.length > 0
+    || harnessSuggestions.length > 0
+    || seenSuggestions.length > 0;
 
   useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
@@ -77,11 +86,11 @@ export function AddCustomExtensionDialog(props: {
   const handleTotp = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setTotp(event.target.value);
   }, []);
-  const runRecognize = useCallback(async (commandText: string, cliId?: string) => {
+  const runRecognize = useCallback(async (commandText: string, cliId?: string, silent = false) => {
     const generation = recognizeGeneration.current + 1;
     recognizeGeneration.current = generation;
     setBusy(true);
-    setError(null);
+    if (!silent) setError(null);
     try {
       const result = await recognizeLocalCli(commandText, cliId ? { cliId } : undefined);
       if (recognizeGeneration.current !== generation) return;
@@ -89,11 +98,14 @@ export function AddCustomExtensionDialog(props: {
       setCommands(result.item.commands);
       setSummary(result.summary);
       setPending(null);
+      setError(null);
     } catch (caught) {
       if (recognizeGeneration.current !== generation) return;
       setRecognized(null);
       setSummary(null);
-      setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not identify that command.");
+      if (!silent) {
+        setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not identify that command.");
+      }
     } finally {
       if (recognizeGeneration.current === generation) setBusy(false);
     }
@@ -116,6 +128,16 @@ export function AddCustomExtensionDialog(props: {
   const findTool = useCallback(async () => {
     await runRecognize(command);
   }, [command, runRecognize]);
+  useEffect(() => {
+    const trimmed = command.trim();
+    if (recognized !== null || busy || !looksLikePackageScriptPaste(trimmed)) return;
+    if (autoRecognizedCommand.current === trimmed) return;
+    const handle = window.setTimeout(() => {
+      autoRecognizedCommand.current = trimmed;
+      void runRecognize(trimmed, undefined, true);
+    }, 280);
+    return () => window.clearTimeout(handle);
+  }, [busy, command, recognized, runRecognize]);
   const requestAllow = useCallback(() => setPending("allowed"), []);
   const requestBlock = useCallback(() => setPending("blocked"), []);
   const handleSubmit = useCallback(async (event: FormEvent) => {
@@ -184,7 +206,7 @@ export function AddCustomExtensionDialog(props: {
       >
         <h2 id="add-custom-extension-title" className="text-xl font-semibold text-brand-dark">Add a custom extension</h2>
         <p className="mt-2 text-sm leading-6 text-brand-dark/80">
-          Paste a script, binary, or MCP launch command, or pick something Guard already found. Everyday commands such as rg, grep, and whoami are not custom extensions.
+          Paste a script, binary, MCP launch, or package scripts such as npm run. Everyday commands such as rg, grep, and whoami are not custom extensions.
         </p>
         <label htmlFor="custom-extension-command" className="mt-5 block text-sm font-semibold text-brand-dark">Command</label>
         <input
@@ -193,26 +215,26 @@ export function AddCustomExtensionDialog(props: {
           onChange={handleCommand}
           spellCheck={false}
           autoComplete="off"
-          placeholder="npx -y @modelcontextprotocol/server-github"
+          placeholder="npm run guard:audit"
           className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
         />
         <p className="mt-2 text-sm leading-6 text-brand-dark/70">
-          One command. A script, a binary, or an MCP launch such as <span className="font-medium">npx</span> or <span className="font-medium">uvx</span>. Not a pipeline.
+          One command. A script, a binary, <span className="font-medium">npm run</span>, a project folder, or an MCP launch. Not a pipeline.
         </p>
         {recognized ? (
           <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-brand-dark">{recognized.name}</p>
-              {recognized.surface === "mcp" ? (
+              {surfaceBadge(recognized.surface) ? (
                 <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold tracking-wide text-brand-dark/70 ring-1 ring-slate-200">
-                  MCP server
+                  {surfaceBadge(recognized.surface)}
                 </span>
               ) : null}
             </div>
             <p className="mt-1 font-mono text-xs text-brand-dark/70">{recognized.example_label}</p>
             {summary ? <p className="mt-2 text-sm leading-6 text-brand-dark/80">{summary}</p> : null}
             {commands.length > 0 ? (
-              <div className="mt-4 max-h-72 overflow-auto rounded-2xl bg-white">
+              <div className={`mt-4 overflow-auto rounded-2xl bg-white ${recognized.surface === "package-scripts" ? "max-h-96" : "max-h-72"}`}>
                 <CustomExtensionCommandList
                   commands={commands}
                   disabled={busy}
@@ -223,10 +245,10 @@ export function AddCustomExtensionDialog(props: {
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={requestAllow} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "allowed" ? "bg-brand-blue text-white" : "border border-slate-300 text-brand-dark"}`}>
-                {recognized.surface === "mcp" ? "Allow this server" : "Allow this tool"}
+                {allowActionLabel(recognized.surface)}
               </button>
               <button type="button" onClick={requestBlock} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "blocked" ? "bg-brand-dark text-white" : "border border-slate-300 text-brand-dark"}`}>
-                {recognized.surface === "mcp" ? "Block this server" : "Block this tool"}
+                {blockActionLabel(recognized.surface)}
               </button>
             </div>
           </div>
@@ -246,6 +268,7 @@ export function AddCustomExtensionDialog(props: {
           <SuggestionPanel
             query={command}
             hasSuggestions={hasSuggestions}
+            packageScriptSuggestions={packageScriptSuggestions}
             harnessSuggestions={harnessSuggestions}
             seenSuggestions={seenSuggestions}
             onSelect={selectSuggestion}
@@ -274,21 +297,44 @@ function addDialogSubmitLabel(input: {
   if (input.busy) {
     return "Saving…";
   }
-  const mcp = input.recognized.surface === "mcp";
   if (input.pending === "blocked") {
-    return mcp ? "Block this server" : "Block this tool";
+    return blockActionLabel(input.recognized.surface);
   }
-  return mcp ? "Allow this server" : "Allow this tool";
+  return allowActionLabel(input.recognized.surface);
+}
+
+function surfaceBadge(surface: LocalCliItem["surface"]): string | null {
+  if (surface === "mcp") return "MCP server";
+  if (surface === "package-scripts") return "Package scripts";
+  return null;
+}
+
+function allowActionLabel(surface: LocalCliItem["surface"]): string {
+  if (surface === "mcp") return "Allow this server";
+  if (surface === "package-scripts") return "Allow these scripts";
+  return "Allow this tool";
+}
+
+function blockActionLabel(surface: LocalCliItem["surface"]): string {
+  if (surface === "mcp") return "Block this server";
+  if (surface === "package-scripts") return "Block these scripts";
+  return "Block this tool";
 }
 
 function suggestionEmptyCopy(query: string): string {
   if (query.trim() !== "") {
-    return "No matching tools. Everyday commands such as rg, whoami, and script stay hidden.";
+    return "No matching tools. Try npm run, a project folder, or a script path. Everyday commands such as rg stay hidden.";
   }
-  return "No extra tools yet. Paste a command above. Guard hides everyday shell, search, and test-runner commands.";
+  return "No extra tools yet. Paste npm run, a project folder, a script, or an MCP launch.";
 }
 
 function suggestionSummary(item: LocalCliItem): string {
+  if (item.surface === "package-scripts" && item.commands.length > 0) {
+    return `Guard listed ${item.commands.length} scripts from this package.json. Nested names stay grouped. Recommended keeps the usual review.`;
+  }
+  if (item.surface === "package-scripts") {
+    return `Find this tool to list npm scripts from ${item.name}.`;
+  }
   if (item.surface === "mcp" && item.commands.length > 0) {
     return `Guard listed ${item.commands.length} tools from this MCP server. Recommended keeps the usual review. Allow or block each one.`;
   }
@@ -304,6 +350,7 @@ function suggestionSummary(item: LocalCliItem): string {
 function SuggestionPanel(props: {
   query: string;
   hasSuggestions: boolean;
+  packageScriptSuggestions: LocalCliItem[];
   harnessSuggestions: LocalCliItem[];
   seenSuggestions: LocalCliItem[];
   onSelect: (item: LocalCliItem) => void;
@@ -317,6 +364,12 @@ function SuggestionPanel(props: {
   }
   return (
     <>
+      <SuggestionGroup
+        heading="From this project"
+        helper="Scripts in package.json, including nested names such as guard:audit."
+        items={props.packageScriptSuggestions}
+        onSelect={props.onSelect}
+      />
       <SuggestionGroup
         heading="From your apps"
         helper="MCP servers already configured in apps on this device."

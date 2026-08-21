@@ -30,17 +30,51 @@ function randomToken(): string {
   return crypto.randomUUID().replaceAll("-", "");
 }
 
+function detailPolicyCopy(surface: LocalCliItem["surface"]): string {
+  if (surface === "mcp") {
+    return "Recommended keeps Guard's usual review. Allow or block applies to that tool from this MCP server. Destructive tools stay under Guard's usual rules.";
+  }
+  if (surface === "package-scripts") {
+    return "Recommended keeps Guard's usual review. Allow or block applies to that npm, pnpm, yarn, or bun script in this project. Nested names such as guard:audit stay grouped.";
+  }
+  return "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules.";
+}
+
+function detailCatalogHeading(surface: LocalCliItem["surface"]): string {
+  if (surface === "mcp") return "MCP tools";
+  if (surface === "package-scripts") return "Package scripts";
+  return "Command patterns";
+}
+
+function detailCatalogHelper(surface: LocalCliItem["surface"]): string {
+  if (surface === "mcp") {
+    return "Same settings as built-in tools. Recommended is the safe default for each MCP tool.";
+  }
+  if (surface === "package-scripts") {
+    return "Same settings as built-in tools. Nested scripts stay indented under their prefix.";
+  }
+  return "Same settings as built-in tools. Recommended is the safe default.";
+}
+
 function reviewTitle(name: string, state: LocalCliState): string {
   if (state === "allowed") return `Save ${name} command settings`;
   if (state === "blocked") return `Block ${name}`;
   return `Remove ${name}`;
 }
 
+function customExtensionUnits(surface: LocalCliItem["surface"]): { unit: string; units: string; source: string } {
+  if (surface === "mcp") return { unit: "tool", units: "tools", source: "this server" };
+  if (surface === "package-scripts") return { unit: "script", units: "scripts", source: "this project" };
+  return { unit: "command", units: "commands", source: "this file" };
+}
+
 export function customExtensionStateLabel(item: LocalCliItem): string {
-  const unit = item.surface === "mcp" ? "tool" : "command";
-  const units = item.surface === "mcp" ? "tools" : "commands";
-  const source = item.surface === "mcp" ? "this server" : "this file";
-  if (item.stale) return "This file changed. Review the extension again.";
+  const { unit, units, source } = customExtensionUnits(item.surface);
+  if (item.stale) {
+    return item.surface === "package-scripts"
+      ? "package.json scripts changed. Review the extension again."
+      : "This file changed. Review the extension again.";
+  }
   if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
   if (item.state === "allowed") {
     if (item.commands.length === 0) {
@@ -183,9 +217,7 @@ export function LocalCliDetail(props: {
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.item.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
-          {props.item.surface === "mcp"
-            ? "Recommended keeps Guard's usual review. Allow or block applies to that tool from this MCP server. Destructive tools stay under Guard's usual rules."
-            : "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules."}
+          {detailPolicyCopy(props.item.surface)}
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           {added ? (
@@ -210,12 +242,10 @@ export function LocalCliDetail(props: {
       {added ? (
         <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
           <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">
-            {props.item.surface === "mcp" ? "MCP tools" : "Command patterns"}
+            {detailCatalogHeading(props.item.surface)}
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-            {props.item.surface === "mcp"
-              ? "Same settings as built-in tools. Recommended is the safe default for each MCP tool."
-              : "Same settings as built-in tools. Recommended is the safe default."}
+            {detailCatalogHelper(props.item.surface)}
           </p>
           <div className="mt-4">
             <CustomExtensionCommandList

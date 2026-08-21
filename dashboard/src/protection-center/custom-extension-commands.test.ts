@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 import type { LocalCliCommand, LocalCliItem } from "../local-cli-api";
-import { commandStatesPayload, withCommandState } from "./custom-extension-commands";
+import { commandNestingDepth, commandStatesPayload, withCommandState } from "./custom-extension-commands";
 import { customExtensionStateLabel } from "./local-clis-panel";
 
 const commands: LocalCliCommand[] = [
@@ -67,6 +67,18 @@ assert.equal(
     state: "blocked",
   }),
   "Every tool from this server is blocked.",
+);
+
+assert.equal(
+  commandNestingDepth({
+    command_id: "guard.reddit-targeting.audit",
+    name: "guard:reddit-targeting:audit",
+    usage: "pnpm run guard:reddit-targeting:audit",
+    description: "audit",
+    parent_id: "guard.reddit-targeting",
+    state: "inherit",
+  }),
+  2,
 );
 
 console.log("custom-extension-commands.test.ts: all assertions passed");

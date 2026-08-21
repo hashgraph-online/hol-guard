@@ -123,6 +123,11 @@ def command_tokens_for_invocation(
     home_dir: Path | None,
     identity: UnlistedCliIdentity,
 ) -> tuple[str, ...]:
+    from .package_json_scripts import package_script_command_tokens
+
+    package_tokens = package_script_command_tokens(command_text, cwd=cwd, home_dir=home_dir)
+    if package_tokens is not None:
+        return package_tokens
     try:
         model = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
     except ValueError:
