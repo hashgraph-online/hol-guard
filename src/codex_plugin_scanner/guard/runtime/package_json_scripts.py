@@ -132,7 +132,10 @@ def package_script_command_tokens(command_text: str, *, cwd: Path, home_dir: Pat
     _manifest, _runner, focused = invocation
     if not focused:
         return ()
-    return command_id_parts(focused)
+    command_id = command_id_for_script(focused)
+    if command_id == OTHER_COMMAND_ID:
+        return ()
+    return tuple(command_id.split("."))
 
 
 def parse_package_script_invocation(
@@ -168,7 +171,7 @@ def parse_package_script_invocation(
     search_root = (cwd / prefix).resolve() if prefix is not None else cwd.resolve()
     if not search_root.is_dir():
         return None
-    manifest = find_nearest_package_json(search_root)
+    manifest = find_nearest_package_json(search_root, home_dir=home_dir)
     if manifest is None:
         return None
     runner = detect_package_runner(manifest.parent)
@@ -278,12 +281,15 @@ def detect_package_runner(directory: Path) -> str:
     return "npm"
 
 
-def find_nearest_package_json(start: Path) -> Path | None:
+def find_nearest_package_json(start: Path, *, home_dir: Path | None = None) -> Path | None:
     current = start.resolve()
+    home = home_dir.resolve() if home_dir is not None else None
     for _ in range(_MAX_WALK):
         candidate = current / "package.json"
         if candidate.is_file():
             return candidate
+        if home is not None and current == home:
+            return None
         parent = current.parent
         if parent == current:
             return None
@@ -292,28 +298,19 @@ def find_nearest_package_json(start: Path) -> Path | None:
 
 
 def observe_workspace_package_scripts(store: object, *, home_dir: Path) -> None:
-    """Offer the Guard workspace package.json as a custom-extension suggestion."""
+    """Offer package.json scripts from the Guard process working directory."""
 
-    from ..config import load_guard_config
     from ..local_cli_trust import utc_now
 
-    guard_home = getattr(store, "guard_home", None)
-    if not isinstance(guard_home, Path):
-        return
-    workspace = load_guard_config(guard_home).workspace
-    if workspace is None or not workspace.is_dir():
-        return
-    discovery = recognize_package_json_scripts("npm run", cwd=workspace, home_dir=home_dir)
-    if discovery is None:
-        return
     recorder = getattr(store, "record_local_cli_observation", None)
     replace_commands = getattr(store, "replace_local_cli_commands", None)
-    listed = getattr(store, "list_local_cli_items", None)
     if not callable(recorder) or not callable(replace_commands):
         return
-    existing = listed() if callable(listed) else []
-    already = any(isinstance(item, dict) and item.get("cli_id") == discovery.identity.cli_id for item in existing)
-    if already:
+    cwd = Path.cwd()
+    if not cwd.is_dir():
+        return
+    discovery = recognize_package_json_scripts("npm run", cwd=cwd, home_dir=home_dir)
+    if discovery is None:
         return
     recorder(
         discovery.identity,
@@ -415,7 +412,10 @@ def _read_scripts(manifest_path: Path) -> dict[str, str]:
 
 
 def _read_package_payload(manifest_path: Path) -> tuple[dict[str, object], str]:
-    data = manifest_path.read_bytes()
+    try:
+        data = manifest_path.read_bytes()
+    except OSError:
+        return {}, hashlib.sha256(b"").hexdigest()
     if len(data) > _MAX_JSON_BYTES:
         return {}, hashlib.sha256(data).hexdigest()
     digest = hashlib.sha256(data).hexdigest()

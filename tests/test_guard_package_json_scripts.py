@@ -104,6 +104,37 @@ def test_command_id_splits_colon_namespaces() -> None:
     assert command_id_for_script("guard:reddit-targeting:audit") == "guard.reddit-targeting.audit"
 
 
+def test_dotted_script_live_tokens_match_catalog(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.package_json_scripts import package_script_command_tokens
+
+    project = _write_package(tmp_path / "app", scripts={"db.migrate": "prisma migrate deploy"})
+    discovery = recognize_package_json_scripts("npm run db.migrate", cwd=project, home_dir=tmp_path)
+    assert discovery is not None
+    command_id = command_id_for_script("db.migrate")
+    assert command_id != "other"
+    assert any(command.command_id == command_id for command in discovery.commands)
+    tokens = package_script_command_tokens("npm run db.migrate", cwd=project, home_dir=tmp_path)
+    assert tokens is not None
+    assert ".".join(tokens) == command_id
+
+
+def test_recognize_explains_missing_package_json(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    service = LocalCliApiService(store=GuardStore(home))
+    try:
+        service.recognize({"command": "npm run", "cwd": str(empty)})
+    except LocalCliApiError as exc:
+        assert exc.code == "missing_package_json"
+        assert "package.json" in str(exc)
+    else:
+        raise AssertionError("expected missing_package_json")
+
+
 def test_recognize_api_lists_scripts_instead_of_built_in_npm(tmp_path: Path) -> None:
     project = _write_package(
         tmp_path / "app",

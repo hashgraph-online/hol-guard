@@ -73,6 +73,7 @@ export function AddCustomExtensionDialog(props: {
 
   const handleCommand = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     recognizeGeneration.current += 1;
+    setBusy(false);
     setCommand(event.target.value);
     setRecognized(null);
     setCommands([]);
@@ -130,7 +131,7 @@ export function AddCustomExtensionDialog(props: {
   }, [command, runRecognize]);
   useEffect(() => {
     const trimmed = command.trim();
-    if (recognized !== null || busy || !looksLikePackageScriptPaste(trimmed)) return;
+    if (recognized !== null || !looksLikePackageScriptPaste(trimmed)) return;
     if (autoRecognizedCommand.current === trimmed) return;
     const handle = window.setTimeout(() => {
       autoRecognizedCommand.current = trimmed;

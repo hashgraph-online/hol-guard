@@ -45,7 +45,11 @@ from ..runtime.local_mcp_probe import (
     mcp_launch_tokens,
     probe_stdio_mcp_server,
 )
-from ..runtime.package_json_scripts import observe_workspace_package_scripts, recognize_package_json_scripts
+from ..runtime.package_json_scripts import (
+    looks_like_package_script_paste,
+    observe_workspace_package_scripts,
+    recognize_package_json_scripts,
+)
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -102,7 +106,7 @@ class LocalCliApiService:
         mcp_item = self._recognize_mcp(live_command or command, home_dir)
         if mcp_item is not None:
             return mcp_item
-        operator_cwd = _operator_cwd(payload, home_dir=home_dir, store=self._store)
+        operator_cwd = _operator_cwd(payload, home_dir=home_dir)
         package_scripts = recognize_package_json_scripts(command, cwd=operator_cwd, home_dir=home_dir)
         if package_scripts is not None:
             identity = package_scripts.identity
@@ -116,6 +120,12 @@ class LocalCliApiService:
             self._store.replace_local_cli_commands(identity.cli_id, package_scripts.commands)
             return self._recognize_payload(identity.cli_id, identity.to_dict(), "ok", package_scripts.summary)
         identity, code, message = recognize_operator_cli(command, cwd=operator_cwd, home_dir=home_dir)
+        if identity is None and looks_like_package_script_paste(command):
+            raise LocalCliApiError(
+                400,
+                "missing_package_json",
+                "Guard could not find package.json. Paste a project folder, package.json, or npm --prefix <dir> run.",
+            )
         if identity is None:
             raise LocalCliApiError(400, code, message)
         commands, help_status, source_path = _discover_from_command(command, identity, operator_cwd, home_dir)
@@ -441,7 +451,7 @@ def _recognize_summary(name: str, help_status: str, command_count: int) -> str:
     )
 
 
-def _operator_cwd(payload: dict[str, object], *, home_dir: Path, store: object) -> Path:
+def _operator_cwd(payload: dict[str, object], *, home_dir: Path) -> Path:
     raw = payload.get("cwd")
     if isinstance(raw, str) and raw.strip():
         candidate = Path(raw.strip()).expanduser()
@@ -451,18 +461,11 @@ def _operator_cwd(payload: dict[str, object], *, home_dir: Path, store: object) 
             resolved = None
         if resolved is not None and resolved.is_dir():
             return resolved
-    load_config = None
-    try:
-        from ..config import load_guard_config
+    from ..runtime.package_json_scripts import find_nearest_package_json
 
-        load_config = load_guard_config
-    except ImportError:
-        load_config = None
-    guard_home = getattr(store, "guard_home", None)
-    if load_config is not None and isinstance(guard_home, Path):
-        workspace = load_config(guard_home).workspace
-        if workspace is not None and workspace.is_dir():
-            return workspace
+    process_cwd = Path.cwd()
+    if process_cwd.is_dir() and find_nearest_package_json(process_cwd, home_dir=home_dir) is not None:
+        return process_cwd
     return home_dir
 
 
