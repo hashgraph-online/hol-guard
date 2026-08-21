@@ -14,12 +14,14 @@ from ..command_decision_adapter import effect_decision_to_dict
 from ..command_evaluation import evaluate_command
 from ..direct_vitest import direct_local_typescript_execution_context, direct_local_vitest_execution_context
 from ..extension_control_contract import ExtensionControlLayer
+from ..false_positive_rules import KNOWN_AGENT_DOC_SUFFIXES, target_is_known_skill_doc_path
 from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..github_capability_contract import GitHubCommandAssessment
 from ..github_capability_interaction import github_capability_requires_confirmation
 from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
 from ..shell_command_wrappers import normalize_transparent_shell_command
+from ..shell_execution_context import model_shell_execution_context
 from .constants_core import _SHELL_TOOL_NAMES
 from .destructive_shell_detection import _shell_command_names_from_parts
 from .developer_routines import (
@@ -104,6 +106,13 @@ def is_explicitly_benign_tool_action_request(
         if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
             return False
         if _quote_aware_direct_github_read_is_safe(stripped_command, assessment=github_assessment):
+            found_benign_candidate = True
+            continue
+        if home_dir is not None and _is_bounded_agent_guidance_read_chain(
+            stripped_command,
+            cwd=cwd,
+            home_dir=home_dir,
+        ):
             found_benign_candidate = True
             continue
         if home_dir is not None and _is_guard_safety_doc_read(stripped_command, home_dir=home_dir):
@@ -207,6 +216,75 @@ def is_explicitly_benign_tool_action_request(
     return found_benign_candidate
 
 
+def _is_bounded_agent_guidance_read_chain(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path,
+) -> bool:
+    if any(marker in command_text for marker in ("$(", "`", "<(", ">(")):
+        return False
+    context = model_shell_execution_context(
+        command_text,
+        cwd=cwd,
+        workspace_root=cwd,
+        home_dir=home_dir,
+    )
+    if not context.complete or not 1 <= len(context.segments) <= 8:
+        return False
+    for segment in context.segments:
+        controls = (*segment.control_before, *segment.control_after)
+        if any(operator != "&&" for operator in controls) or segment.directory_operation is not None:
+            return False
+        parts = list(segment.tokens)
+        target = _bounded_sed_read_target(parts)
+        if target is None:
+            return False
+        if _is_approved_agent_guidance_target(target, home_dir=home_dir):
+            continue
+        if _is_guard_safety_doc_target(target, home_dir=home_dir):
+            continue
+        return False
+    return True
+
+
+def _bounded_sed_read_target(parts: list[str]) -> str | None:
+    if len(parts) != 4 or parts[:2] != ["sed", "-n"]:
+        return None
+    match = re.fullmatch(r"([1-9][0-9]{0,3}),([1-9][0-9]{0,3})p", parts[2])
+    if match is None:
+        return None
+    start, end = map(int, match.groups())
+    return parts[3] if start <= end and end - start + 1 <= 500 else None
+
+
+def _is_approved_agent_guidance_target(target: str, *, home_dir: Path) -> bool:
+    if not target_is_known_skill_doc_path(target, home_dir=home_dir):
+        return False
+    normalized = target.replace("\\", "/").rstrip("/")
+    return normalized.endswith("/SKILL.md") or any(normalized.endswith(suffix) for suffix in KNOWN_AGENT_DOC_SUFFIXES)
+
+
+def _is_guard_safety_doc_target(target: str, *, home_dir: Path) -> bool:
+    expected = home_dir / ".hol-support" / "SAFETY.md"
+    candidate = home_dir / target[2:] if target.startswith("~/") else Path(target)
+    try:
+        resolved_home = home_dir.resolve(strict=True)
+        resolved_support = (home_dir / ".hol-support").resolve(strict=True)
+        resolved_expected = expected.resolve(strict=True)
+        return (
+            candidate.absolute() == expected.absolute()
+            and not home_dir.is_symlink()
+            and not (home_dir / ".hol-support").is_symlink()
+            and not expected.is_symlink()
+            and resolved_support == resolved_home / ".hol-support"
+            and resolved_expected == resolved_support / "SAFETY.md"
+            and resolved_expected.is_file()
+        )
+    except (OSError, RuntimeError):
+        return False
+
+
 def _quote_aware_direct_github_read_is_safe(
     command_text: str,
     *,
@@ -269,18 +347,8 @@ def _is_guard_safety_doc_read(command_text: str, *, home_dir: Path) -> bool:
         parts = shlex.split(command_text)
     except ValueError:
         return False
-    if len(parts) != 4 or parts[:2] != ["sed", "-n"]:
-        return False
-    match = re.fullmatch(r"([1-9][0-9]{0,3}),([1-9][0-9]{0,3})p", parts[2])
-    if match is None or int(match.group(2)) - int(match.group(1)) > 500:
-        return False
-    target = parts[3]
-    expected = home_dir / ".hol-support" / "SAFETY.md"
-    candidate = home_dir / target[2:] if target.startswith("~/") else Path(target)
-    try:
-        return candidate.absolute() == expected.absolute() and expected.is_file() and not expected.is_symlink()
-    except OSError:
-        return False
+    target = _bounded_sed_read_target(parts)
+    return target is not None and _is_guard_safety_doc_target(target, home_dir=home_dir)
 
 
 def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
