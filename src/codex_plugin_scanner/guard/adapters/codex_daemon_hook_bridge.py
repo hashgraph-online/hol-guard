@@ -375,15 +375,24 @@ def main(
             else _FAIL_CLOSED_REASON
         )
         response = _unavailable_response(event_name, failure_reason)
-    else:
-        response = apply_browser_approval_wait(
-            response,
-            event_name=event_name,
-            state_path=state_path,
-            deadline=deadline,
-        )
-    sys.stdout.write(json.dumps(_codex_hook_response(response, event_name=event_name), separators=(",", ":")))
+    sys.stdout.write(_bridge_output(response, event_name=event_name, state_path=state_path, deadline=deadline))
     return 0
+
+
+def _bridge_output(
+    response: dict[str, object],
+    *,
+    event_name: str,
+    state_path: str | Path,
+    deadline: float,
+) -> str:
+    payload = apply_browser_approval_wait(
+        response,
+        event_name=event_name,
+        state_path=state_path,
+        deadline=deadline,
+    )
+    return json.dumps(_codex_hook_response(payload, event_name=event_name), separators=(",", ":"))
 
 
 def _authenticated_daemon_overload(error: BaseException) -> bool:

@@ -361,12 +361,9 @@ def _codex_browser_approval_decision(
     ]
     if not request_ids:
         return None
-    wait_timeout_seconds = min(
-        _codex_browser_wait_timeout_seconds(
-            event_name=event_name,
-            configured_timeout=config.approval_wait_timeout_seconds,
-        ),
-        _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS,
+    wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
+        event_name=event_name,
+        configured_timeout=config.approval_wait_timeout_seconds,
     )
     if wait_timeout_seconds <= 0:
         return None
@@ -600,20 +597,11 @@ def _codex_hook_waits_for_browser_approval(
     policy_action: str,
     payload: Mapping[str, object] | None = None,
 ) -> bool:
-    if _canonical_harness_name(args.harness) != "codex":
-        return False
-    if event_name not in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}:
-        return False
-    if policy_action not in {"review", "require-reapproval"}:
-        return False
     if event_name == "PreToolUse":
-        # The daemon worker uses --json and a sub-2s budget, so live wait happens
-        # in the Codex hook bridge. Mark every approvable PreToolUse as waiting so
-        # browser approval does not start a second Codex turn while the original
-        # hook is still held.
-        _ = payload
-        return True
-    return not getattr(args, "json", False)
+        return _canonical_harness_name(args.harness) == "codex" and policy_action in {"review", "require-reapproval"}
+    if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
+        return False
+    return payload is None or True
 
 def _codex_browser_wait_metadata(
     *,
@@ -646,10 +634,6 @@ def _codex_browser_wait_metadata(
 
 def _codex_browser_wait_timeout_seconds(*, event_name: str, configured_timeout: int) -> int:
     wait_timeout_seconds = max(configured_timeout, 0)
-    if event_name == "PreToolUse":
-        from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
-
-        return min(wait_timeout_seconds, MAX_APPROVAL_WAIT_TIMEOUT_SECONDS)
     if event_name in {"UserPromptSubmit", "PostToolUse"}:
         wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS)
     return wait_timeout_seconds

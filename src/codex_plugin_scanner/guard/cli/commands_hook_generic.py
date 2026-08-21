@@ -1384,7 +1384,6 @@ def _run_hook_generic_payload(
             reason=reason,
             system_message=system_message,
             output_stream=output_stream,
-            response_payload=payload_map,
         )
         return 0
     _emit(

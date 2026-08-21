@@ -7,14 +7,7 @@
 
 from __future__ import annotations
 
-import re
-from collections.abc import Mapping
 from typing import TYPE_CHECKING
-
-_GUARD_REQUEST_URL_RE = re.compile(
-    r"(https?://[^\s]+/requests/([A-Za-z0-9_-]{8,128}))",
-    re.IGNORECASE,
-)
 
 
 def _coalesce_string(*values: object | None) -> str:
@@ -70,45 +63,6 @@ from ..adapters.kimi_hooks import normalize_kimi_prompt
 from ..browser_opener import open_browser_url
 from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
 
-def _guard_approval_hook_fields(
-    response_payload: Mapping[str, object] | None,
-    *,
-    reason: str = "",
-) -> dict[str, str]:
-    def _field(value: object) -> str | None:
-        if not isinstance(value, str):
-            return None
-        stripped = value.strip()
-        return stripped or None
-
-    request_id: str | None = None
-    approval_url: str | None = None
-    if isinstance(response_payload, Mapping):
-        request_id = _field(response_payload.get("primary_approval_request_id"))
-        approval_url = _field(response_payload.get("primary_approval_url"))
-        queued = response_payload.get("approval_requests")
-        if request_id is None and isinstance(queued, list):
-            for item in queued:
-                if not isinstance(item, Mapping):
-                    continue
-                request_id = _field(item.get("request_id"))
-                if request_id is None:
-                    continue
-                approval_url = approval_url or _field(item.get("approval_url"))
-                break
-    if request_id is None or approval_url is None:
-        match = _GUARD_REQUEST_URL_RE.search(reason)
-        if match is not None:
-            approval_url = approval_url or match.group(1).rstrip(".,);")
-            request_id = request_id or match.group(2)
-    fields: dict[str, str] = {}
-    if request_id is not None:
-        fields["guardApprovalRequestId"] = request_id
-    if approval_url is not None:
-        fields["guardApprovalUrl"] = approval_url
-    return fields
-
-
 def _emit_native_hook_response(
     *,
     harness: str,
@@ -118,7 +72,6 @@ def _emit_native_hook_response(
     additional_context: str | None = None,
     system_message: str | None = None,
     output_stream: TextIO | None = None,
-    response_payload: Mapping[str, object] | None = None,
 ) -> None:
     payload: dict[str, object] = {}
     if isinstance(system_message, str) and system_message.strip():
@@ -210,13 +163,6 @@ def _emit_native_hook_response(
         if permission_decision != "allow" or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
             hook_specific_output["permissionDecisionReason"] = reason
     payload["hookSpecificOutput"] = hook_specific_output
-    if (
-        _canonical_harness_name(harness) == "codex"
-        and event_name == "PreToolUse"
-        and permission_decision == "deny"
-        and policy_action in {"review", "require-reapproval"}
-    ):
-        payload.update(_guard_approval_hook_fields(response_payload, reason=reason))
     _write_json_line(payload, output_stream=output_stream)
 
 def _emit_native_hook_block_stderr(reason: str) -> None:

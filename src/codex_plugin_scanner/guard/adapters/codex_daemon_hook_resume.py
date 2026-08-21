@@ -8,8 +8,11 @@ approve-then-continue flow without starting a second Codex run.
 
 from __future__ import annotations
 
+import http.client
+import re
 import sys
 import time
+import urllib.error
 from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import quote
@@ -21,6 +24,7 @@ GUARD_APPROVAL_REQUEST_ID_KEY = "guardApprovalRequestId"
 GUARD_APPROVAL_URL_KEY = "guardApprovalUrl"
 _POLL_INTERVAL_SECONDS = 0.2
 _GET_TIMEOUT_CAP_SECONDS = 1.5
+_REQUEST_URL_RE = re.compile(r"(https?://[^\s]+/requests/([A-Za-z0-9_-]{8,128}))", re.IGNORECASE)
 
 
 def apply_browser_approval_wait(
@@ -60,9 +64,15 @@ def pending_pretool_approval(
     if hook_output.get("permissionDecision") != "deny":
         return None
     request_id = _optional_safe_request_id(response.get(GUARD_APPROVAL_REQUEST_ID_KEY))
+    approval_url = _optional_http_url(response.get(GUARD_APPROVAL_URL_KEY))
+    if request_id is None or approval_url is None:
+        reason = hook_output.get("permissionDecisionReason")
+        match = _REQUEST_URL_RE.search(reason) if isinstance(reason, str) else None
+        if match is not None:
+            approval_url = approval_url or _optional_http_url(match.group(1).rstrip(".,);"))
+            request_id = request_id or _optional_safe_request_id(match.group(2))
     if request_id is None:
         return None
-    approval_url = _optional_http_url(response.get(GUARD_APPROVAL_URL_KEY))
     return request_id, approval_url
 
 
@@ -87,7 +97,7 @@ def _poll_resolution(
                 path=path,
                 timeout_seconds=min(remaining, _GET_TIMEOUT_CAP_SECONDS),
             )
-        except (OSError, TimeoutError, ValueError):
+        except (OSError, TimeoutError, ValueError, http.client.HTTPException, urllib.error.URLError):
             payload = None
         action = _resolution_action(payload)
         if action in {"allow", "block"}:
@@ -111,11 +121,11 @@ def _open_pending_approval(approval_url: str | None, *, state_path: str | Path) 
             )
             or approval_url
         )
-    except Exception:
+    except (OSError, TypeError, ValueError):
         browser_url = approval_url
     try:
         open_browser_url(browser_url)
-    except Exception:
+    except (OSError, ValueError):
         return
 
 

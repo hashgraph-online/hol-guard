@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import io
 import json
 import threading
@@ -16,7 +17,6 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
-from codex_plugin_scanner.guard.cli import commands_support_hook_payload as hook_payload
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from codex_plugin_scanner.guard.config import GuardConfig
 from tests.codex_daemon_hook_bridge_fixtures import (
@@ -50,17 +50,17 @@ class _ResumeDaemonHandler(_DaemonHandler):
         length = int(self.headers.get("Content-Length", "0"))
         _ = self.rfile.read(length)
         type(self).captured_guard_token = self.headers.get("X-Guard-Token")
+        request_url = f"http://127.0.0.1:{self.server.server_address[1]}/requests/{type(self).request_id}"
         self._write_json(
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": "HOL Guard needs a browser decision.",
-                },
-                "guardApprovalRequestId": type(self).request_id,
-                "guardApprovalUrl": (
-                    f"http://127.0.0.1:{self.server.server_address[1]}/requests/{type(self).request_id}"
-                ),
+                    "permissionDecisionReason": (
+                        "HOL Guard paused this command for review. "
+                        f"Open HOL Guard to approve or keep this blocked: {request_url}"
+                    ),
+                }
             }
         )
 
@@ -146,26 +146,29 @@ def test_codex_pretool_wait_metadata_covers_daemon_json_path(tmp_path: Path) -> 
     assert metadata["codex_browser_wait_timeout_seconds"] == 120
 
 
-def test_native_pretool_deny_includes_guard_approval_binding() -> None:
-    output = io.StringIO()
-    hook_payload._emit_native_hook_response(
-        harness="codex",
-        policy_action="require-reapproval",
-        reason="HOL Guard needs a browser decision.",
-        event_name="PreToolUse",
-        output_stream=output,
-        response_payload={
-            "primary_approval_request_id": "abcd1234ef567890",
-            "primary_approval_url": "http://127.0.0.1:5475/requests/abcd1234ef567890",
+def test_pending_pretool_parses_request_binding_from_reason() -> None:
+    pending = resume.pending_pretool_approval(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    "HOL Guard paused `is-even@1.0.0` for review before install. "
+                    "Open HOL Guard to approve or keep this blocked: "
+                    "http://127.0.0.1:4959/requests/e6a363623e084e69b3b5ff34c476deb4. "
+                    "After you choose, retry the same Codex action."
+                ),
+            }
         },
+        event_name="PreToolUse",
     )
-    payload = json.loads(output.getvalue())
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert payload["guardApprovalRequestId"] == "abcd1234ef567890"
-    assert payload["guardApprovalUrl"] == "http://127.0.0.1:5475/requests/abcd1234ef567890"
+    assert pending == (
+        "e6a363623e084e69b3b5ff34c476deb4",
+        "http://127.0.0.1:4959/requests/e6a363623e084e69b3b5ff34c476deb4",
+    )
 
 
-def test_codex_json_pretool_package_install_emits_resume_binding(tmp_path: Path) -> None:
+def test_codex_json_pretool_package_install_reason_includes_request(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
         harness="codex",
@@ -177,31 +180,35 @@ def test_codex_json_pretool_package_install_emits_resume_binding(tmp_path: Path)
         },
     )
     payload = _json_line(output)
-    request_id = payload.get("guardApprovalRequestId")
-    approval_url = payload.get("guardApprovalUrl")
+    pending = resume.pending_pretool_approval(payload, event_name="PreToolUse")
     assert exit_code == 0
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert isinstance(request_id, str) and len(request_id) >= 8
-    assert isinstance(approval_url, str) and request_id in approval_url
+    assert pending is not None
+    assert pending[0]
+    assert pending[1] is not None and pending[0] in pending[1]
 
 
-def test_native_pretool_deny_parses_request_binding_from_reason() -> None:
-    output = io.StringIO()
-    hook_payload._emit_native_hook_response(
-        harness="codex",
-        policy_action="require-reapproval",
-        reason=(
-            "HOL Guard paused `is-even@1.0.0` for review before install. "
-            "Open HOL Guard to approve or keep this blocked: "
-            "http://127.0.0.1:4959/requests/e6a363623e084e69b3b5ff34c476deb4. "
-            "After you choose, retry the same Codex action."
-        ),
-        event_name="PreToolUse",
-        output_stream=output,
+def test_poll_resolution_treats_http_exception_as_transient(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"count": 0}
+
+    def flaky_get(**_kwargs: object) -> dict[str, object]:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise http.client.IncompleteRead(b"")
+        return {"status": "resolved", "resolution_action": "allow"}
+
+    monkeypatch.setattr(resume, "_daemon_json_get", flaky_get)
+    monkeypatch.setattr(resume, "_POLL_INTERVAL_SECONDS", 0.01)
+    action = resume._poll_resolution(
+        request_id="abcd1234ef567890",
+        state_path=tmp_path / "daemon-state.json",
+        deadline=time.monotonic() + 1,
     )
-    payload = json.loads(output.getvalue())
-    assert payload["guardApprovalRequestId"] == "e6a363623e084e69b3b5ff34c476deb4"
-    assert payload["guardApprovalUrl"] == "http://127.0.0.1:4959/requests/e6a363623e084e69b3b5ff34c476deb4"
+    assert action == "allow"
+    assert calls["count"] >= 2
 
 
 def test_bridge_converts_denied_pretool_to_allow_after_browser_approval(
