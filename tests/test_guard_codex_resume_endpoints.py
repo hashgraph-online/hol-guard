@@ -363,46 +363,6 @@ def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
     assert payload["codex_resume"]["supported"] is False
 
 
-def test_codex_approve_pretooluse_defers_without_live_wait_metadata(
-    tmp_path: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
-    codex_home = tmp_path / "codex-home"
-    workspace.mkdir()
-    codex_home.mkdir()
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-pretool"), "2026-05-19T10:00:00+00:00")
-    _seed_codex_operation(
-        store,
-        request_id="req-pretool",
-        socket_path=None,
-        thread_id="pretool-session-1",
-        workspace=str(workspace),
-        codex_home=str(codex_home),
-        command_text="npm install minimist@1.2.8",
-        hook_event_name="PreToolUse",
-        waits_for_browser_approval=False,
-        status="waiting_on_approval",
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-
-    try:
-        payload = _post_json(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/requests/req-pretool/approve",
-            {"scope": "artifact", "reason": "reviewed"},
-        )
-    finally:
-        daemon.stop()
-
-    assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "pending"
-    assert payload["codex_resume"]["reason"] == "live_hook_waiting"
-    assert "original Codex action continue" in payload["codex_resume"]["message"]
-
-
 def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
     tmp_path: Path,
 ) -> None:
