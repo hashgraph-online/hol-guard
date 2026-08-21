@@ -14,7 +14,7 @@ services:
     command:
       - sh
       - -c
-      - pip install --no-cache-dir -e /hol-guard >/tmp/hol-guard-install.log && python -m pytest tests/test_codex_daemon_hook_resume.py -q --tb=short
+      - pip install --no-cache-dir --target /tmp/hol-guard-site /hol-guard >/tmp/hol-guard-install.log && PYTHONPATH=/tmp/hol-guard-site:/hol-guard/src python -m pytest tests/test_codex_daemon_hook_resume.py -q --tb=short
     cap_drop:
       - ALL
     security_opt:
