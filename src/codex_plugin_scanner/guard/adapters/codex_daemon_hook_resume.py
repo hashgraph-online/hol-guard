@@ -133,11 +133,13 @@ def _resolution_action(payload: Mapping[str, object] | None) -> str | None:
     if not isinstance(payload, Mapping) or payload.get("status") != "resolved":
         return None
     action = payload.get("resolution_action")
-    if action == "allow":
-        return "allow"
     if action in {"block", "deny", "denied", "blocked"}:
         return "block"
-    return None
+    if action != "allow":
+        return None
+    if payload.get("policy_action") not in {"review", "require-reapproval"}:
+        return "block"
+    return "allow"
 
 
 def _optional_safe_request_id(value: object) -> str | None:

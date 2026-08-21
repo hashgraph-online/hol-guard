@@ -597,11 +597,11 @@ def _codex_hook_waits_for_browser_approval(
     policy_action: str,
     payload: Mapping[str, object] | None = None,
 ) -> bool:
-    if event_name == "PreToolUse":
-        return _canonical_harness_name(args.harness) == "codex" and policy_action in {"review", "require-reapproval"}
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return False
-    return payload is None or True
+    if event_name == "PreToolUse":
+        return _codex_pretooluse_live_wait_candidate(payload)
+    return True
 
 def _codex_browser_wait_metadata(
     *,
@@ -634,7 +634,7 @@ def _codex_browser_wait_metadata(
 
 def _codex_browser_wait_timeout_seconds(*, event_name: str, configured_timeout: int) -> int:
     wait_timeout_seconds = max(configured_timeout, 0)
-    if event_name in {"UserPromptSubmit", "PostToolUse"}:
+    if event_name in {"UserPromptSubmit", "PreToolUse", "PostToolUse"}:
         wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS)
     return wait_timeout_seconds
 

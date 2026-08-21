@@ -363,7 +363,7 @@ def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
     assert payload["codex_resume"]["supported"] is False
 
 
-def test_codex_approve_pretooluse_no_wait_requires_app_server_socket(
+def test_codex_approve_pretooluse_defers_without_live_wait_metadata(
     tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
@@ -398,9 +398,9 @@ def test_codex_approve_pretooluse_no_wait_requires_app_server_socket(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["reason"] == "socket_not_available"
-    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert payload["codex_resume"]["status"] == "pending"
+    assert payload["codex_resume"]["reason"] == "live_hook_waiting"
+    assert "original Codex action continue" in payload["codex_resume"]["message"]
 
 
 def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(

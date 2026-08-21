@@ -163,6 +163,7 @@ def test_manifest_build_accepts_private_group_pipx_style_packaged_files(
     scanner_root = package_root / "codex_plugin_scanner"
     roles = (
         "bridge",
+        "bridge_resume",
         "bridge_runtime",
         "fallback_entrypoint",
         "daemon_entrypoint",

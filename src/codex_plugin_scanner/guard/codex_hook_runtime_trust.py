@@ -28,6 +28,7 @@ from .codex_hook_launch_runtime import (
 _REQUIRED_PACKAGE_ROLES = frozenset(
     {
         "bridge",
+        "bridge_resume",
         "bridge_runtime",
         "daemon_entrypoint",
         "daemon_manager",
@@ -175,12 +176,15 @@ def _verify_transport(
     manifest: Mapping[str, object],
 ) -> None:
     bridge_path = Path(__file__).with_name("adapters").joinpath("codex_daemon_hook_bridge.py").resolve()
+    bridge_resume_path = Path(__file__).with_name("adapters").joinpath("codex_daemon_hook_resume.py").resolve()
     bridge_runtime_path = Path(__file__).with_name("codex_hook_bridge_runtime.py").resolve()
     launch_runtime_path = Path(__file__).with_name("codex_hook_launch_runtime.py").resolve()
     runtime_trust_path = Path(__file__).resolve()
     windows_job_path = Path(__file__).with_name("codex_hook_windows_job.py").resolve()
     if packaged_by_role["bridge"].get("path") != str(bridge_path):
         raise ValueError("managed Codex hook bridge path is invalid")
+    if packaged_by_role["bridge_resume"].get("path") != str(bridge_resume_path):
+        raise ValueError("managed Codex hook resume path is invalid")
     if packaged_by_role["bridge_runtime"].get("path") != str(bridge_runtime_path):
         raise ValueError("managed Codex hook bridge runtime path is invalid")
     if packaged_by_role["launch_runtime"].get("path") != str(launch_runtime_path):
@@ -192,6 +196,7 @@ def _verify_transport(
     transport = _mapping(manifest.get("transport"), label="transport")
     if (
         transport.get("bridge") != packaged_by_role["bridge"]
+        or transport.get("bridge_resume") != packaged_by_role["bridge_resume"]
         or transport.get("bridge_runtime") != packaged_by_role["bridge_runtime"]
         or transport.get("launch_runtime") != packaged_by_role["launch_runtime"]
         or transport.get("runtime_trust") != packaged_by_role["runtime_trust"]

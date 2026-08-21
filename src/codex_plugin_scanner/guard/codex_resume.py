@@ -147,7 +147,10 @@ def defer_request_resume_to_live_hook(
     if str(operation.get("status")) != "waiting_on_approval":
         return None
     metadata = operation.get("metadata")
-    if not isinstance(metadata, Mapping) or not _live_hook_wait_is_active(metadata=metadata, now=now):
+    if not isinstance(metadata, Mapping):
+        return None
+    event_name = str(metadata.get("hook_event_name") or metadata.get("event") or "")
+    if not _live_hook_wait_is_active(metadata=metadata, now=now) and event_name != "PreToolUse":
         return None
     resume = get_request_resume_status(store, request_id=request_id, now=now)
     if resume is None:
