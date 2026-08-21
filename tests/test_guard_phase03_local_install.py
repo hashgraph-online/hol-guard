@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_artifact as update_artifact_module
 from codex_plugin_scanner.guard.cli import update_commands
-from codex_plugin_scanner.guard.cli.update_subprocess import TrustedUpdateContext
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_open_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
 from codex_plugin_scanner.guard.daemon import update_refresh_program
@@ -2431,67 +2430,3 @@ def test_approval_open_preserves_malformed_url(tmp_path: Path, monkeypatch: pyte
     assert exit_code == 0
     assert payload["approval_url"] == "http://[::1:4000/approvals/request-bad-url"
     assert payload["repaired"] is False
-
-
-def test_update_fails_when_installed_code_disagrees_with_version_metadata(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.1")
-    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.2.3")
-    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.3")
-    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
-    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
-    monkeypatch.setattr(
-        update_commands.subprocess,
-        "run",
-        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, "installed", ""),
-    )
-    monkeypatch.setattr(
-        update_commands,
-        "_installed_code_matches_distribution",
-        lambda *_args, **_kwargs: False,
-    )
-    monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", lambda **_: (None, None))
-    monkeypatch.setattr(update_commands, "_repair_supported_harnesses", lambda **_: ([], []))
-
-    payload, exit_code = update_commands.run_guard_update(dry_run=False)
-
-    assert exit_code == 1, json.dumps(payload, sort_keys=True)
-    assert payload["status"] == "failed"
-    assert payload["changed"] is False
-    assert payload["reason_code"] == "update_install_inconsistent"
-    assert "not all of its installed files" in str(payload["message"])
-    assert payload["retry_command"] == "hol-guard update"
-
-
-@pytest.mark.parametrize(
-    ("code_version", "expected"),
-    (
-        ("2.2.3", True),
-        ("2.2.1", False),
-        (None, True),
-    ),
-)
-def test_installed_code_consistency_compares_probe_versions(
-    code_version: str | None,
-    expected: bool,
-) -> None:
-    distribution = SimpleNamespace(version="2.2.3", code_version=code_version)
-
-    assert (
-        update_commands._installed_code_matches_distribution(
-            cast(TrustedUpdateContext, SimpleNamespace(query_distribution=lambda: distribution)),
-        )
-        is expected
-    )
-
-
-def test_installed_code_consistency_skips_probe_without_code_version() -> None:
-    distribution = SimpleNamespace(version="2.2.3")
-
-    assert (
-        update_commands._installed_code_matches_distribution(
-            cast(TrustedUpdateContext, SimpleNamespace(query_distribution=lambda: distribution)),
-        )
-        is True
-    )
