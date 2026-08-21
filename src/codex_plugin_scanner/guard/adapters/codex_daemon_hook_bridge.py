@@ -20,6 +20,7 @@ if __package__:
     from ..codex_hook_launch_runtime import isolated_hook_environment as _isolated_hook_environment
     from ..codex_hook_launch_runtime import run_isolated_hook_process as _run_isolated_hook_process
     from .codex_daemon_hook_auth import _DaemonResponseError
+    from .codex_daemon_hook_resume import apply_browser_approval_wait
     from .codex_daemon_hook_transport import _daemon_response_once, _DaemonGenerationChangedError
 else:  # pragma: no cover - exercised by subprocess integration tests
     _package_root = str(Path(__file__).resolve().parents[3])
@@ -27,6 +28,9 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         sys.path.insert(0, _package_root)
     from codex_plugin_scanner.guard.adapters.codex_daemon_hook_auth import (
         _DaemonResponseError,
+    )
+    from codex_plugin_scanner.guard.adapters.codex_daemon_hook_resume import (
+        apply_browser_approval_wait,
     )
     from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
         _daemon_response_once,
@@ -371,6 +375,13 @@ def main(
             else _FAIL_CLOSED_REASON
         )
         response = _unavailable_response(event_name, failure_reason)
+    else:
+        response = apply_browser_approval_wait(
+            response,
+            event_name=event_name,
+            state_path=state_path,
+            deadline=deadline,
+        )
     sys.stdout.write(json.dumps(_codex_hook_response(response, event_name=event_name), separators=(",", ":")))
     return 0
 

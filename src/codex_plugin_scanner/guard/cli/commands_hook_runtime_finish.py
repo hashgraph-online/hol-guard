@@ -380,6 +380,7 @@ def _finalize_runtime_artifact_hook(
             reason=runtime_reason,
             system_message=system_message,
             output_stream=output_stream,
+            response_payload=response_payload,
         )
         _record_harness_usage_for_hook(
             store=store,
