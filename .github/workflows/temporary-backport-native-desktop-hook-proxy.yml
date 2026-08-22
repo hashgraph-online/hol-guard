@@ -1,0 +1,127 @@
+name: Temporary apply native Desktop hook proxy backport
+
+on:
+  push:
+    branches:
+      - backport/native-desktop-hook-proxy-release-3.0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backport-native-desktop-hook-proxy-release-3.0
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out release backport branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: backport/native-desktop-hook-proxy-release-3.0
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply reviewed source and preserve release-only security tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin d7386b7caa06499764f008d362949e7cae5527e4
+          git show FETCH_HEAD:src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_bridge.py \
+            > src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_bridge.py
+          git show FETCH_HEAD:tests/test_bounded_cli_hook_bridge.py > "$RUNNER_TEMP/main-tests.py"
+          python3 - <<'PY'
+          import ast
+          import os
+          from pathlib import Path
+
+          release_path = Path('tests/test_bounded_cli_hook_bridge.py')
+          main_path = Path(os.environ['RUNNER_TEMP']) / 'main-tests.py'
+          release_source = release_path.read_text(encoding='utf-8')
+          main_source = main_path.read_text(encoding='utf-8')
+          release_tree = ast.parse(release_source)
+          main_tree = ast.parse(main_source)
+
+          definition_types = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+          release_names = {
+              node.name for node in release_tree.body if isinstance(node, definition_types)
+          }
+          lines = main_source.splitlines(keepends=True)
+          additions: list[str] = []
+          for node in main_tree.body:
+              if not isinstance(node, definition_types) or node.name in release_names:
+                  continue
+              starts = [node.lineno]
+              starts.extend(decorator.lineno for decorator in node.decorator_list)
+              start = min(starts) - 1
+              end = node.end_lineno
+              if end is None:
+                  raise SystemExit(f'missing end line for {node.name}')
+              additions.append(''.join(lines[start:end]).rstrip() + '\n')
+
+          expected = {
+              '_signed_bundle_fixture',
+              'test_desktop_proxy_rejects_writable_or_cross_bundle_paths',
+              'test_desktop_proxy_requires_one_real_team_and_same_bundle',
+              'test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy',
+              'test_linux_never_uses_caller_controlled_appimage_as_proxy_provenance',
+              'test_macos_launcher_reverifies_normal_paths_and_falls_back_by_status',
+              'test_untrusted_native_proxy_falls_back_to_internal_frozen_bridge',
+          }
+          added_names = {
+              node.name
+              for node in main_tree.body
+              if isinstance(node, definition_types) and node.name not in release_names
+          }
+          if added_names != expected:
+              raise SystemExit(
+                  f'unexpected main-only definitions: added={sorted(added_names)} expected={sorted(expected)}'
+              )
+          release_path.write_text(
+              release_source.rstrip() + '\n\n\n' + '\n\n'.join(additions),
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+
+      - name: Install frozen release dependencies
+        run: uv sync --frozen --python 3.12
+
+      - name: Validate focused proxy contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync ruff format \
+            src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_bridge.py \
+            tests/test_bounded_cli_hook_bridge.py
+          uv run --no-sync ruff check \
+            src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_bridge.py \
+            tests/test_bounded_cli_hook_bridge.py
+          uv run --no-sync pytest -q tests/test_bounded_cli_hook_bridge.py
+
+      - name: Remove one-shot workflow and publish backport branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/temporary-backport-native-desktop-hook-proxy.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_bridge.py \
+            tests/test_bounded_cli_hook_bridge.py
+          git commit -m "perf(hooks): prefer the verified native macOS Desktop proxy"
+          git push origin HEAD:backport/native-desktop-hook-proxy-release-3.0
