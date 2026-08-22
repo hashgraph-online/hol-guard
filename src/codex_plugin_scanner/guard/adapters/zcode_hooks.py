@@ -89,7 +89,8 @@ def prepare_zcode_hook_payload(payload: Mapping[str, object]) -> dict[str, objec
 
     workspace_root = normalized.get("workspace_root")
     if workspace_root is None and isinstance(normalized.get("workspaceRoot"), str):
-        normalized["workspace_root"] = normalized["workspaceRoot"]
+        workspace_root = normalized["workspaceRoot"]
+        normalized["workspace_root"] = workspace_root
     if workspace_root is None and isinstance(normalized.get("cwd"), str):
         normalized["workspace_root"] = normalized["cwd"]
 

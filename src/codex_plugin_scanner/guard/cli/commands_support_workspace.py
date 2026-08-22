@@ -28,7 +28,6 @@ from .commands_parser_helpers import (
 from ..browser_opener import open_browser_url
 
 
-
 def _aibom_cli_options_from_args(args: argparse.Namespace) -> AibomCliOptions:
     return AibomCliOptions(
         include_symlinks=bool(getattr(args, "include_symlinks", True)),
@@ -354,7 +353,9 @@ def _normalize_explicit_workspace_path(value: str | None) -> Path | None:
         return path
 
 
-def _workspace_from_hook_payload(payload: object) -> Path | None:
+def _workspace_from_hook_payload(payload: object, workspace: Path | None = None) -> Path | None:
+    if workspace is not None:
+        return workspace
     if not isinstance(payload, dict):
         return None
     for key in ("workspace_root", "workspaceRoot", "cwd"):
@@ -363,7 +364,6 @@ def _workspace_from_hook_payload(payload: object) -> Path | None:
         if resolved is not None:
             return resolved
     return None
-
 _INSTALL_WORKSPACE_COMMANDS = frozenset({"install", "uninstall"})
 
 _PROJECT_ROOT_MARKERS = (
@@ -376,7 +376,6 @@ _PROJECT_ROOT_MARKERS = (
     "build.gradle",
     "build.gradle.kts",
 )
-
 def _requested_install_harness(args: argparse.Namespace) -> str | None:
     if bool(getattr(args, "all", False)):
         return None
@@ -496,5 +495,6 @@ __all__ = [
     "_skip_init_step_payload",
     "_workspace_from_cursor_project_dir",
     "_workspace_from_harness_detection",
+    "_workspace_from_hook_payload",
     "_workspace_has_project_markers",
 ]
