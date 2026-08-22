@@ -60,6 +60,7 @@ HARNESS_PROTECTION_CAPABILITIES: tuple[HarnessProtectionCapability, ...] = (
     HarnessProtectionCapability("pi", True, False, False, True),
     HarnessProtectionCapability("omp", True, False, False, True),
     HarnessProtectionCapability("zcode", True, False, False, True),
+    HarnessProtectionCapability("optiqra", True, False, False, True),
 )
 
 _CAPABILITY_BY_HARNESS = {item.harness: item for item in HARNESS_PROTECTION_CAPABILITIES}
