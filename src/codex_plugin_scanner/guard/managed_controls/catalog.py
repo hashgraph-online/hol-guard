@@ -8,10 +8,13 @@ import re
 from dataclasses import dataclass
 from typing import cast
 
+from ..runtime.extension_control_limits import (
+    MAX_CATALOG_EXTENSIONS,
+    MAX_CATALOG_PAYLOAD_BYTES,
+    MAX_PERMISSIONS_PER_EXTENSION,
+)
+
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
-MAX_EXTENSIONS = 512
-MAX_PERMISSIONS_PER_EXTENSION = 512
-MAX_CATALOG_BYTES = 1_000_000
 
 
 class CatalogValidationError(ValueError):
@@ -116,12 +119,12 @@ class CatalogProjection:
             isinstance(item, CatalogExtension) for item in self.extensions
         ):
             raise CatalogValidationError("extensions must be an extension tuple")
-        if len(self.extensions) > MAX_EXTENSIONS:
+        if len(self.extensions) > MAX_CATALOG_EXTENSIONS:
             raise CatalogValidationError("extension limit exceeded")
         extension_ids = [item.extension_id for item in self.extensions]
         if len(extension_ids) != len(set(extension_ids)):
             raise CatalogValidationError("duplicate extension id")
-        if len(self.canonical_bytes()) > MAX_CATALOG_BYTES:
+        if len(self.canonical_bytes()) > MAX_CATALOG_PAYLOAD_BYTES:
             raise CatalogValidationError("catalog payload limit exceeded")
 
     def payload(self) -> dict[str, object]:
