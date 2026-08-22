@@ -58,6 +58,7 @@
         "grok",
         "pi",
         "omp",
+        "optiqra",
         "zcode"
     ],
     "action_categories": [

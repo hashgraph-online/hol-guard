@@ -117,6 +117,12 @@ Current Guard support in this repo:
   - installs Guard-managed `PreToolUse` and `UserPromptSubmit` hooks in the `hooks` section of `~/.zcode/cli/config.json` without touching user `mcp`, `plugins`, or pre-existing hooks
   - blocks by returning exit code `2` and ZCode-native stdout JSON `hookSpecificOutput.permissionDecision: "deny"` with approval-center copy in stderr
   - fails open if a hook crashes or times out, so ZCode keeps working when Guard is unreachable
+- `optiqra`
+  - has no local config file or launchable executable for Guard to discover; `detect()` always reports not installed, and `install`/`uninstall` are unsupported since there is no local shim to manage
+  - is expected to call `guard hook --harness optiqra` directly from its own `/api/auto-fix-project` backend, once per resolved fix action, before that action is written
+  - the resolved action's target files are passed as `tool_input.file_paths` on a `write_file`-style payload, which Guard normalizes into a `file_write` action with those target paths
+  - Guard's action envelope has no dedicated diff/content field yet: any payload key that looks like file content (for example `content`) is redacted before policy evaluation, so today Guard gates on the resolved action and target files only, not the diff text itself
+  - like the other CLI-hook-boundary harnesses, whether a failed or unreachable `guard hook` call fails open is controlled by OptiQra's own calling code, not by Guard, since there is no Guard-managed shim in the loop
 
 Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
 inventory identity to the complete accepted skill directory rather than only
@@ -188,4 +194,5 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `grok` | `grok`, `grok-build`, `grok-build-cli`, `xai-grok` | ❌ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, file_write |
 | `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
+| `optiqra` | `optiqra` | ❌ | ❌ | ❌ | file_write |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |

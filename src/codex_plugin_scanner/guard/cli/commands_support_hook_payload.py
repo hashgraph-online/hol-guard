@@ -477,6 +477,7 @@ _ACTION_ENVELOPE_HARNESSES = frozenset(
         "pi",
         "omp",
         "zcode",
+        "optiqra",
     }
 )
 
