@@ -22,6 +22,15 @@ from .policy_bundle_trusted_keys import (
 )
 from .policy_document import JsonValue, canonical_json_bytes, canonical_policy_document_bytes
 from .policy_document_yaml import PolicyDocumentError, parse_policy_document_yaml
+from .policy_extension_fields import (
+    PolicyExtensionFieldError,
+    ValidatedPolicyExtensionProjection,
+    validate_and_project_policy_extension_fields,
+)
+from .runtime.command_extensions import (
+    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    CommandSafetyExtensionRegistry,
+)
 
 POLICY_BUNDLE_V2_CONTRACT = "guard-policy-bundle.v2"
 POLICY_BUNDLE_V2_ENVELOPE_VERSION = 2
@@ -275,73 +284,108 @@ def _verify_signature(
     return None
 
 
-def validated_policy_bundle_v2_payload(
+def validated_policy_bundle_v2_payload_with_extensions(
     policy_bundle: dict[str, object],
     *,
     trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
     anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
+    negotiated_capabilities: frozenset[str] = frozenset(),
+    extension_registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     now: datetime | None = None,
-) -> tuple[dict[str, object] | None, str | None]:
-    """Validate one bounded signed v2 envelope and its canonical policy document."""
+) -> tuple[dict[str, object] | None, ValidatedPolicyExtensionProjection | None, str | None]:
+    """Validate one signed v2 envelope and project negotiated Extension semantics."""
 
     try:
         encoded = canonical_json_bytes(_json_value(policy_bundle))
     except ValueError as error:
-        return None, str(error)
+        return None, None, str(error)
     if len(encoded) > POLICY_BUNDLE_MAX_BYTES:
-        return None, "limit_bytes"
+        return None, None, "limit_bytes"
     if not _validate_keys(policy_bundle, _ALLOWED_TOP_LEVEL):
-        return None, "unknown_field"
+        return None, None, "unknown_field"
     required = _ALLOWED_TOP_LEVEL - {"expiresAt", "rollback"}
     if any(key not in policy_bundle for key in required):
-        return None, "missing_required_field"
+        return None, None, "missing_required_field"
     if policy_bundle.get("envelopeVersion") != POLICY_BUNDLE_V2_ENVELOPE_VERSION:
-        return None, "unsupported_envelope_version"
+        return None, None, "unsupported_envelope_version"
     if policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
-        return None, "unsupported_contract_version"
+        return None, None, "unsupported_contract_version"
     bundle_version = policy_bundle.get("bundleVersion")
     if not isinstance(bundle_version, int) or isinstance(bundle_version, bool) or bundle_version < 1:
-        return None, "invalid_bundle_version"
+        return None, None, "invalid_bundle_version"
     if _non_empty_string(policy_bundle.get("workspaceId"), maximum=128) is None:
-        return None, "invalid_workspace_id"
+        return None, None, "invalid_workspace_id"
     canonicalization = policy_bundle.get("canonicalization")
     if canonicalization != POLICY_BUNDLE_V2_CANONICALIZATION:
-        return None, "unsupported_canonicalization"
+        return None, None, "unsupported_canonicalization"
     issued_at = _strict_utc_timestamp(policy_bundle.get("issuedAt"))
     if issued_at is None:
-        return None, "invalid_issued_at"
+        return None, None, "invalid_issued_at"
     expires_at_value = policy_bundle.get("expiresAt")
     expires_at = None if expires_at_value is None else _strict_utc_timestamp(expires_at_value)
     if expires_at_value is not None and expires_at is None:
-        return None, "invalid_expires_at"
+        return None, None, "invalid_expires_at"
     if expires_at is not None and expires_at <= issued_at:
-        return None, "invalid_expires_at"
+        return None, None, "invalid_expires_at"
     comparison_time = now or datetime.now(timezone.utc)
     if expires_at is not None and expires_at <= comparison_time:
-        return None, "bundle_expired"
+        return None, None, "bundle_expired"
     rollback_error = _validate_rollback(policy_bundle.get("rollback"))
     if rollback_error is not None:
-        return None, rollback_error
+        return None, None, rollback_error
     try:
         expected_payload_hash = payload_hash_for_policy_bundle_v2(policy_bundle)
     except (PolicyDocumentError, ValueError):
-        return None, "invalid_policy_document"
+        return None, None, "invalid_policy_document"
     if policy_bundle.get("payloadHash") != expected_payload_hash:
-        return None, "payload_hash_mismatch"
+        return None, None, "payload_hash_mismatch"
     try:
         expected_bundle_hash = computed_policy_bundle_v2_hash(policy_bundle)
     except ValueError:
-        return None, "invalid_bundle"
+        return None, None, "invalid_bundle"
     if policy_bundle.get("bundleHash") != expected_bundle_hash:
-        return None, "bundle_hash_mismatch"
+        return None, None, "bundle_hash_mismatch"
     signature_error = _verify_signature(
         policy_bundle,
         trusted_verification_keys=trusted_verification_keys,
         anchored_verification_keys=anchored_verification_keys,
     )
     if signature_error is not None:
-        return None, signature_error
-    return policy_bundle, None
+        return None, None, signature_error
+    payload = policy_bundle.get("payload")
+    if not _is_object_mapping(payload):
+        return None, None, "invalid_policy_document"
+    try:
+        projection = validate_and_project_policy_extension_fields(
+            payload,
+            negotiated_capabilities=negotiated_capabilities,
+            registry=extension_registry,
+        )
+    except PolicyExtensionFieldError as error:
+        return None, None, error.code
+    return policy_bundle, projection, None
+
+
+def validated_policy_bundle_v2_payload(
+    policy_bundle: dict[str, object],
+    *,
+    trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
+    anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
+    negotiated_capabilities: frozenset[str] = frozenset(),
+    extension_registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    now: datetime | None = None,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Compatibility wrapper returning the validated signed envelope."""
+
+    validated, _projection, reason = validated_policy_bundle_v2_payload_with_extensions(
+        policy_bundle,
+        trusted_verification_keys=trusted_verification_keys,
+        anchored_verification_keys=anchored_verification_keys,
+        negotiated_capabilities=negotiated_capabilities,
+        extension_registry=extension_registry,
+        now=now,
+    )
+    return validated, reason
 
 
 def validate_policy_bundle_v2_transition(
@@ -445,7 +489,10 @@ def validated_policy_bundle_v2_acknowledgement(
     if sequence < previous_sequence:
         return None, "acknowledgement_replay"
     if sequence == previous_sequence:
-        return (acknowledgement, None) if acknowledgement == previous else (None, "acknowledgement_sequence_conflict")
+        return (acknowledgement, None) if acknowledgement == previous else (
+            None,
+            "acknowledgement_sequence_conflict",
+        )
     if status not in _ALLOWED_ACK_TRANSITIONS[str(previous_status)]:
         return None, "acknowledgement_transition_rejected"
     return acknowledgement, None
