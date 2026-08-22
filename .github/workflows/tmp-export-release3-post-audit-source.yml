@@ -1,0 +1,53 @@
+name: Temporary export release 3 post-audit source
+
+on:
+  pull_request:
+    branches:
+      - release/3.0
+    types: [opened, reopened, synchronize]
+    paths:
+      - .github/workflows/tmp-export-release3-post-audit-source.yml
+  push:
+    branches:
+      - chore/release-3-post-audit-cleanup-20260819
+    paths:
+      - .github/workflows/tmp-export-release3-post-audit-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-3-post-audit-source-export
+  cancel-in-progress: true
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: release/3.0
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Archive exact release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/release-head.txt"
+          tar \
+            --exclude=.git \
+            --exclude=.venv \
+            --exclude=dashboard/node_modules \
+            --exclude='**/__pycache__' \
+            -czf "$RUNNER_TEMP/release-3-source.tar.gz" .
+      - name: Upload source archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-3-post-audit-source
+          path: |
+            ${{ runner.temp }}/release-3-source.tar.gz
+            ${{ runner.temp }}/release-head.txt
+          if-no-files-found: error
+          retention-days: 1

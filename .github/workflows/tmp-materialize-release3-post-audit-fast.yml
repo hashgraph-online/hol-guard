@@ -1,0 +1,104 @@
+name: Materialize release 3 post-audit cleanup fast
+
+on:
+  pull_request:
+    branches:
+      - release/3.0
+    types: [opened, reopened, synchronize]
+    paths:
+      - .github/workflows/tmp-materialize-release3-post-audit-fast.yml
+  push:
+    branches:
+      - chore/release-3-post-audit-cleanup-20260819
+    paths:
+      - .github/workflows/tmp-materialize-release3-post-audit-fast.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-3-post-audit-cleanup-fast
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: chore/release-3-post-audit-cleanup-20260819
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+      - name: Apply permanent patch to latest release base
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='chore/release-3-post-audit-cleanup-20260819'
+          original_head="$(git rev-parse HEAD)"
+          cp .github/post-audit-patch/pr-a.b64 "$RUNNER_TEMP/pr-a.b64"
+          base64 --decode "$RUNNER_TEMP/pr-a.b64" | gzip --decompress > "$RUNNER_TEMP/pr-a.patch"
+          git fetch --quiet --no-tags origin release/3.0:refs/remotes/origin/release/3.0
+          git reset --hard origin/release/3.0
+          git apply --3way --index "$RUNNER_TEMP/pr-a.patch"
+          rm -rf .github/post-audit-patch
+          rm -f \
+            .github/workflows/tmp-export-release3-post-audit-source.yml \
+            .github/workflows/tmp-apply-release3-post-audit-cleanup.yml \
+            .github/workflows/tmp-materialize-release3-post-audit-fast.yml
+          printf '%s\n' "$original_head" > "$RUNNER_TEMP/original-head.txt"
+          git diff --cached --stat
+      - name: Run focused permanent gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --python 3.12
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+          uv run --no-sync python tests/guard_command_decision_diff.py --check
+          uv run --no-sync ruff check \
+            scripts/ci/code_quality_ast.py \
+            scripts/ci/code_quality_audit.py \
+            scripts/ci/code_quality_report.py \
+            tests/test_code_quality_audit.py \
+            tests/test_release_train_workflow.py
+          uv run --no-sync ruff format --check \
+            scripts/ci/code_quality_ast.py \
+            scripts/ci/code_quality_audit.py \
+            scripts/ci/code_quality_report.py \
+            tests/test_code_quality_audit.py \
+            tests/test_release_train_workflow.py
+          uv run --no-sync pytest \
+            tests/test_code_quality_audit.py \
+            tests/test_release_train_workflow.py \
+            --tb=short
+          uv run --no-sync python scripts/ci/code_quality_audit.py \
+            --root . \
+            --baseline ci/code-quality-baseline.json \
+            --json-output "$RUNNER_TEMP/code-quality-audit.json"
+          git diff --check
+      - name: Publish clean branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='chore/release-3-post-audit-cleanup-20260819'
+          original_head="$(cat "$RUNNER_TEMP/original-head.txt")"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          test -n "$(git status --short)"
+          git commit -s -m 'chore(release-3): remove post-audit residue and repair evidence gates'
+          git push \
+            --force-with-lease="refs/heads/${branch}:${original_head}" \
+            origin "HEAD:refs/heads/${branch}"

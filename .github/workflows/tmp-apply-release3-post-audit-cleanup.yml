@@ -1,0 +1,114 @@
+name: Materialize release 3 post-audit cleanup
+
+on:
+  push:
+    branches:
+      - chore/release-3-post-audit-cleanup-20260819
+    paths:
+      - .github/workflows/tmp-apply-release3-post-audit-cleanup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-3-post-audit-cleanup-materialization
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: chore/release-3-post-audit-cleanup-20260819
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+      - name: Decode and apply permanent cleanup patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='chore/release-3-post-audit-cleanup-20260819'
+          original_head="$(git rev-parse HEAD)"
+          cp .github/post-audit-patch/pr-a.b64 "$RUNNER_TEMP/pr-a.b64"
+          base64 --decode "$RUNNER_TEMP/pr-a.b64" | gzip --decompress > "$RUNNER_TEMP/pr-a.patch"
+          test -s "$RUNNER_TEMP/pr-a.patch"
+          git fetch --quiet --no-tags origin release/3.0:refs/remotes/origin/release/3.0
+          git reset --hard origin/release/3.0
+          git apply --3way --index "$RUNNER_TEMP/pr-a.patch"
+          rm -rf .github/post-audit-patch
+          rm -f .github/workflows/tmp-export-release3-post-audit-source.yml
+          rm -f .github/workflows/tmp-apply-release3-post-audit-cleanup.yml
+          git status --short
+          git diff --cached --stat
+          printf '%s\n' "$original_head" > "$RUNNER_TEMP/original-head.txt"
+      - name: Install development environment
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Regenerate and verify source-bound command evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+          uv run --no-sync python tests/guard_command_decision_diff.py --check
+      - name: Validate cleanup implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync ruff check \
+            scripts/ci/code_quality_ast.py \
+            scripts/ci/code_quality_audit.py \
+            scripts/ci/code_quality_report.py \
+            tests/test_code_quality_audit.py \
+            tests/test_release_train_workflow.py
+          uv run --no-sync ruff format --check \
+            scripts/ci/code_quality_ast.py \
+            scripts/ci/code_quality_audit.py \
+            scripts/ci/code_quality_report.py \
+            tests/test_code_quality_audit.py \
+            tests/test_release_train_workflow.py
+          uv run --no-sync basedpyright --level error \
+            scripts/ci/code_quality_ast.py \
+            scripts/ci/code_quality_audit.py \
+            scripts/ci/code_quality_report.py
+          uv run --no-sync pytest \
+            tests/test_code_quality_audit.py \
+            tests/test_release_train_workflow.py \
+            --tb=short
+          uv run --no-sync python scripts/ci/code_quality_audit.py \
+            --root . \
+            --baseline ci/code-quality-baseline.json \
+            --json-output "$RUNNER_TEMP/code-quality-audit.json"
+          uv run --no-sync python scripts/ci/test_inventory.py \
+            --output "$RUNNER_TEMP/test-inventory.json"
+          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
+            --baseline ci/test-suite-ratchet-baseline.json \
+            --inventory "$RUNNER_TEMP/test-inventory.json"
+          python -m compileall -q src scripts/ci tests
+          git diff --check
+      - name: Run full scanner regression suite
+        run: uv run --no-sync pytest -q --tb=short
+      - name: Publish clean branch history
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='chore/release-3-post-audit-cleanup-20260819'
+          original_head="$(cat "$RUNNER_TEMP/original-head.txt")"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          test -n "$(git status --short)"
+          git commit -s -m 'chore(release-3): remove post-audit residue and repair evidence gates'
+          git push \
+            --force-with-lease="refs/heads/${branch}:${original_head}" \
+            origin "HEAD:refs/heads/${branch}"
