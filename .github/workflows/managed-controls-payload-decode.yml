@@ -1,0 +1,55 @@
+name: Decode Managed Controls payload
+
+on:
+  push:
+    branches:
+      - managed-controls/full-implementation
+    paths:
+      - '.github/workflows/managed-controls-payload-decode.yml'
+  pull_request:
+    branches:
+      - release/3.0
+    paths:
+      - '.github/workflows/managed-controls-payload-decode.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out payload branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: managed-controls/full-implementation
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Decode payload
+        run: |
+          set -euo pipefail
+          cat .managed-controls-payload/part* | base64 --decode > payload.zst
+          zstd --decompress payload.zst -o payload.decoded
+          file payload.decoded | tee payload-type.txt
+          sha256sum payload.zst payload.decoded | tee payload-sha256.txt
+          if tar -tf payload.decoded >/tmp/payload-list.txt 2>/dev/null; then
+            mkdir payload-extracted
+            tar -xf payload.decoded -C payload-extracted
+          else
+            cp payload.decoded payload.txt
+          fi
+      - name: Upload decoded payload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: managed-controls-decoded-payload
+          path: |
+            payload.zst
+            payload.decoded
+            payload.txt
+            payload-extracted
+            payload-type.txt
+            payload-sha256.txt
+          if-no-files-found: warn
+          retention-days: 1
