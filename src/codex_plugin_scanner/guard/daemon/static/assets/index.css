@@ -1117,10 +1117,6 @@
     max-height: calc(var(--spacing) * 40);
   }
 
-  .max-h-72 {
-    max-height: calc(var(--spacing) * 72);
-  }
-
   .max-h-96 {
     max-height: calc(var(--spacing) * 96);
   }
@@ -1199,6 +1195,10 @@
 
   .min-h-\[60vh\] {
     min-height: 60vh;
+  }
+
+  .min-h-\[70vh\] {
+    min-height: 70vh;
   }
 
   .min-h-\[72px\] {

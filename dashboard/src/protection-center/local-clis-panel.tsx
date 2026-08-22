@@ -24,7 +24,7 @@ import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError, ProtectionModuleRow } from "./components/protection-primitives";
 
-export { AddCustomExtensionDialog } from "./add-custom-extension-dialog";
+export { AddCustomExtensionWorkspace } from "./add-custom-extension-dialog";
 
 function randomToken(): string {
   return crypto.randomUUID().replaceAll("-", "");

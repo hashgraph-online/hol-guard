@@ -13,8 +13,8 @@ import {
   readExtensionDetailUrlState,
   type ExtensionDetailUrlState,
 } from "../extension-control-center-model";
-import { parseProtectionRoute, localCliHref, type ProtectionRoute } from "../local-cli-links";
-import { LocalCliDetail, useLocalCliCatalog } from "./local-clis-panel";
+import { parseProtectionRoute, localCliHref, addCustomExtensionHref, type ProtectionRoute } from "../local-cli-links";
+import { AddCustomExtensionWorkspace, LocalCliDetail, useLocalCliCatalog } from "./local-clis-panel";
 import {
   acknowledgeDegradedExtensionControlAuthority,
   applyExtensionMutation,
@@ -218,8 +218,6 @@ export function ProtectionCenterWorkspace() {
   const aliasRedirected = useRef<string | null>(null);
   const overviewKeepAlive = useRef(false);
   const localClis = useLocalCliCatalog();
-  const [addingCustom, setAddingCustom] = useState(false);
-
   const load = useCallback(async (): Promise<EffectiveExtensionControls | null> => {
     // Keep the already-rendered protection data mounted while a refresh is in
     // flight so an applied change's confirmation toast survives the reload.
@@ -273,24 +271,22 @@ export function ProtectionCenterWorkspace() {
   }, []);
 
   const openLocalCliDetail = useCallback((cliId: string) => {
-    setAddingCustom(false);
     pushExtensionHistory(localCliHref(cliId));
     setRouteState({ route: { kind: "local-cli", cliId }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
-  const openAddCustom = useCallback(() => setAddingCustom(true), []);
-  const closeAddCustom = useCallback(() => setAddingCustom(false), []);
+  const openAddCustom = useCallback(() => {
+    pushExtensionHistory(addCustomExtensionHref());
+    setRouteState({ route: { kind: "add-custom" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
   const handleCustomExtensionAdded = useCallback((cliId: string) => {
     void localClis.load();
-    closeAddCustom();
     openLocalCliDetail(cliId);
-  }, [closeAddCustom, localClis.load, openLocalCliDetail]);
-  const retryLocalClis = useCallback(() => {
-    void localClis.load();
-  }, [localClis.load]);
-  const retryLoad = useCallback(() => {
-    void load();
-  }, [load]);
+  }, [localClis.load, openLocalCliDetail]);
+
+  const retryLocalClis = useCallback(() => { void localClis.load(); }, [localClis.load]);
+  const retryLoad = useCallback(() => { void load(); }, [load]);
   const refreshProtection = useCallback(async () => {
     await load();
   }, [load]);
@@ -392,9 +388,7 @@ export function ProtectionCenterWorkspace() {
   }, [authorityNeedsAttention, resolveApprovalGate]);
 
   const showOverview = state.kind === "ready" && routeState.route.kind === "overview";
-  if (showOverview) {
-    overviewKeepAlive.current = true;
-  }
+  if (showOverview) overviewKeepAlive.current = true;
   const keepOverviewMounted = state.kind === "ready" && (showOverview || overviewKeepAlive.current);
   const localCliRoute = routeState.route.kind === "local-cli" ? routeState.route : null;
   const selectedLocalCli = localCliRoute
@@ -439,20 +433,16 @@ export function ProtectionCenterWorkspace() {
           catalogExtensions={catalogExtensions}
           effective={state.effective}
           localCliItems={localClis.data?.items ?? []}
-          localCliRevision={localClis.data?.revision ?? 0}
           mutationError={mutationError && !pending ? mutationError : null}
           recoveryStatus={recoveryStatus}
           healthBroken={healthBroken}
           status={status}
-          addingCustom={addingCustom && showOverview}
           active={showOverview}
           onPrimaryStatusAction={handlePrimaryStatusAction}
           onRefresh={refreshProtection}
           onOpenExtension={openExtension}
           onOpenLocalCli={openLocalCliDetail}
           onAddCustom={openAddCustom}
-          onCloseAddCustom={closeAddCustom}
-          onCustomExtensionAdded={handleCustomExtensionAdded}
         />
       ) : null}
       {showLocalCli && localClis.error && !localClis.data ? (
@@ -464,6 +454,14 @@ export function ProtectionCenterWorkspace() {
       ) : null}
       {showLocalCli && !localClis.data && !localClis.error ? (
         <ExtensionsLoadingState label="Loading custom extension" />
+      ) : null}
+      {routeState.route.kind === "add-custom" && state.kind === "ready" ? (
+        <AddCustomExtensionWorkspace
+          items={localClis.data?.items ?? []}
+          revision={localClis.data?.revision ?? 0}
+          onBack={closeExtension}
+          onAdded={handleCustomExtensionAdded}
+        />
       ) : null}
       {showLocalCli && selectedLocalCli && localClis.data ? (
         <LocalCliDetail

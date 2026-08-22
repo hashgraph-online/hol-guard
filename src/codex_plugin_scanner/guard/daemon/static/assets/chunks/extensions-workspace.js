@@ -182,7 +182,13 @@ function groupPermissionsByFamily(permissions) {
   return { ungrouped, families };
 }
 const LOCAL_CLI_ID_PATTERN = /^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$/;
+function addCustomExtensionHref() {
+  return "/extensions/add";
+}
 function parseProtectionRoute(pathname) {
+  if (pathname === "/extensions/add" || pathname === "/extensions/add/") {
+    return { kind: "add-custom" };
+  }
   if (pathname.startsWith("/extensions/local-cli/")) {
     try {
       const cliId = decodeURIComponent(pathname.slice("/extensions/local-cli/".length)).trim().toLowerCase();
@@ -286,7 +292,39 @@ function filterPackageScriptCommands(commands, query) {
   return commands.filter((command) => commandMatchesQuery(command, needle));
 }
 function commandMatchesQuery(command, needle) {
-  return [command.name, command.usage, command.description].some((value) => value.toLowerCase().includes(needle));
+  const haystacks = [command.name, command.usage, command.description];
+  if (haystacks.some((value) => value.toLowerCase().includes(needle))) return true;
+  return colonPartsMatch(command.name, needle);
+}
+function enrollablePackageScriptCommands(commands) {
+  return commands.filter((command) => command.command_id !== "root" && command.command_id !== "other");
+}
+function enrollmentCommandStates(commands, pending, surface) {
+  if (surface !== "package-scripts") return commandStatesFrom(commands);
+  return commands.map((command) => ({
+    command_id: command.command_id,
+    state: packageScriptEnrollmentState(command, pending)
+  }));
+}
+function commandStatesFrom(commands) {
+  return commands.map((command) => ({ command_id: command.command_id, state: command.state }));
+}
+function packageScriptEnrollmentState(command, pending) {
+  if (command.command_id === "root" || command.command_id === "other") return command.state;
+  if (pending === "blocked") return "block";
+  if (command.state === "block") return "block";
+  if (pending === "allowed") return "allow";
+  return command.state;
+}
+function colonPartsMatch(name, needle) {
+  const queryParts = needle.split(":").map((part) => part.trim()).filter(Boolean);
+  if (queryParts.length < 2) return false;
+  const nameParts = name.toLowerCase().split(":");
+  let index = 0;
+  for (const part of nameParts) {
+    if (index < queryParts.length && part.includes(queryParts[index])) index += 1;
+  }
+  return index === queryParts.length;
 }
 function packageScriptFilterNeedle(query) {
   const trimmed = query.trim().toLowerCase();
@@ -2716,6 +2754,9 @@ function TechnicalDetails(props) {
 function InlineError({ message }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", children: message });
 }
+function enrollableCount(item) {
+  return Math.max(enrollablePackageScriptCommands(item.commands).length, 0);
+}
 function addDialogSubmitLabel(input) {
   if (input.recognized === null) {
     return input.busy ? "Looking…" : "Find this tool";
@@ -2727,11 +2768,6 @@ function addDialogSubmitLabel(input) {
     return blockActionLabel(input.recognized.surface);
   }
   return allowActionLabel(input.recognized.surface);
-}
-function surfaceBadge(surface) {
-  if (surface === "mcp") return "MCP server";
-  if (surface === "package-scripts") return "Package scripts";
-  return null;
 }
 function allowActionLabel(surface) {
   if (surface === "mcp") return "Allow this server";
@@ -2745,7 +2781,7 @@ function blockActionLabel(surface) {
 }
 function dialogIntro(hasProjects, showingCatalog) {
   if (showingCatalog) {
-    return "Confirm these project scripts, or type a nested name to find one fast.";
+    return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (hasProjects) {
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
@@ -2753,15 +2789,15 @@ function dialogIntro(hasProjects, showingCatalog) {
   return "Paste a script, binary, MCP launch, or package scripts such as npm run. Everyday commands such as rg, grep, and whoami are not custom extensions.";
 }
 function filterCountCopy(visible, total) {
-  if (visible === 0) return "No scripts match that name. Try another nested name, or paste a different project folder.";
+  if (visible === 0) return "No scripts match that name. Try another nested name, or pick a different project.";
   if (visible === total) return `${visible} scripts in this project.`;
-  return `Showing ${visible} of ${total} scripts. Allow still covers the whole project.`;
+  return `${visible} of ${total} scripts match. Allow still enrolls the whole project.`;
 }
 function suggestionSummary(item) {
   if (item.surface === "package-scripts" && item.commands.length > 0) {
-    const count = item.commands.length;
+    const count = enrollableCount(item);
     const unit = count === 1 ? "script" : "scripts";
-    return `Ready to enroll ${count} ${unit} from ${item.source_label ?? item.name}. Nested names stay grouped. Recommended keeps the usual review.`;
+    return `${count} ${unit} from ${item.source_label ?? item.name}. Allow lets this project's scripts run. Nested names stay grouped.`;
   }
   if (item.surface === "package-scripts") {
     return `Find this tool to list npm scripts from ${item.name}.`;
@@ -2867,7 +2903,7 @@ function SuggestionButton(props) {
 function randomToken$2() {
   return crypto.randomUUID().replaceAll("-", "");
 }
-function AddCustomExtensionDialog(props) {
+function AddCustomExtensionWorkspace(props) {
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const [command, setCommand] = reactExports.useState("");
   const [recognized, setRecognized] = reactExports.useState(null);
@@ -2878,23 +2914,14 @@ function AddCustomExtensionDialog(props) {
   const [totp, setTotp] = reactExports.useState("");
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
-  const dialogRef = useModalDialog(props.onClose, !busy);
+  const [reviewingScripts, setReviewingScripts] = reactExports.useState(false);
   const recognizeGeneration = reactExports.useRef(0);
   const autoRecognizedCommand = reactExports.useRef("");
   const didAutoSelect = reactExports.useRef(false);
   const rememberedProjects = suggestedPackageScriptExtensions(props.items);
-  const packageScriptSuggestions = filterExtensionSuggestions(
-    rememberedProjects,
-    command
-  ).slice(0, 6);
-  const harnessSuggestions = filterExtensionSuggestions(
-    suggestedHarnessExtensions(props.items),
-    command
-  ).slice(0, 8);
-  const seenSuggestions = filterExtensionSuggestions(
-    suggestedSeenExtensions(props.items),
-    command
-  ).slice(0, 6);
+  const packageScriptSuggestions = filterExtensionSuggestions(rememberedProjects, command).slice(0, 8);
+  const harnessSuggestions = filterExtensionSuggestions(suggestedHarnessExtensions(props.items), command).slice(0, 8);
+  const seenSuggestions = filterExtensionSuggestions(suggestedSeenExtensions(props.items), command).slice(0, 6);
   const hasSuggestions = packageScriptSuggestions.length > 0 || harnessSuggestions.length > 0 || seenSuggestions.length > 0;
   reactExports.useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
@@ -2914,6 +2941,7 @@ function AddCustomExtensionDialog(props) {
     setCommands([]);
     setSummary(null);
     setPending(null);
+    setReviewingScripts(false);
   }, [commands, recognized]);
   const handlePassword = reactExports.useCallback((event) => {
     setPassword(event.target.value);
@@ -2960,6 +2988,7 @@ function AddCustomExtensionDialog(props) {
     setCommands(item.commands);
     setSummary(suggestionSummary(item));
     setPending(item.surface === "package-scripts" && item.commands.length > 0 ? "allowed" : null);
+    setReviewingScripts(false);
   }, [runRecognize]);
   const findTool = reactExports.useCallback(async () => {
     await runRecognize(command);
@@ -2983,6 +3012,8 @@ function AddCustomExtensionDialog(props) {
   }, [busy, command, recognized, runRecognize]);
   const requestAllow = reactExports.useCallback(() => setPending("allowed"), []);
   const requestBlock = reactExports.useCallback(() => setPending("blocked"), []);
+  const openScriptReview = reactExports.useCallback(() => setReviewingScripts(true), []);
+  const closeScriptReview = reactExports.useCallback(() => setReviewingScripts(false), []);
   const handleSubmit = reactExports.useCallback(async (event) => {
     event.preventDefault();
     if (recognized === null) {
@@ -3003,7 +3034,7 @@ function AddCustomExtensionDialog(props) {
         state: pending,
         previous_revision: props.revision,
         session_nonce: randomToken$2(),
-        commands: commandStatesPayload(commands),
+        commands: enrollmentCommandStates(commands, pending, recognized.surface),
         ...buildApprovalProofCredentials(resolvedApprovalGate, {
           approvalPassword: password,
           approvalTotpCode: totp
@@ -3027,29 +3058,26 @@ function AddCustomExtensionDialog(props) {
     { approvalPassword: password, approvalTotpCode: totp },
     busy
   );
-  const submitLabel = addDialogSubmitLabel({
-    recognized,
-    busy,
-    pending
-  });
   const showingPackageCatalog = recognized?.surface === "package-scripts";
-  const visibleCommands = showingPackageCatalog ? filterPackageScriptCommands(commands, command) : commands;
-  const commandLabel = showingPackageCatalog ? "Filter scripts" : "Command";
-  const commandPlaceholder = showingPackageCatalog ? "guard:audit" : "npm run guard:audit";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  const enrollable = enrollablePackageScriptCommands(commands);
+  const visibleCommands = showingPackageCatalog ? filterPackageScriptCommands(enrollable, command) : commands;
+  const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "form",
     {
-      ref: dialogRef,
-      tabIndex: -1,
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": "add-custom-extension-title",
+      "data-testid": "add-custom-extension",
       onSubmit: handleSubmit,
-      className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none",
+      className: "flex min-h-[70vh] w-full flex-col",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "add-custom-extension-title", className: "text-xl font-semibold text-brand-dark", children: "Add a custom extension" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: dialogIntro(rememberedProjects.length > 0, showingPackageCatalog === true) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-5 block text-sm font-semibold text-brand-dark", children: commandLabel }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onBack, className: "inline-flex min-h-11 w-fit items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { className: "size-4", "aria-hidden": "true" }),
+          "Extensions"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mt-4 max-w-2xl border-b border-slate-200 pb-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "add-custom-extension-title", className: "text-2xl font-semibold tracking-tight text-brand-dark", children: "Add a custom extension" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: dialogIntro(rememberedProjects.length > 0, showingPackageCatalog === true) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-6 block text-sm font-semibold text-brand-dark", children: showingPackageCatalog ? "Find a script" : "Command" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
           {
@@ -3058,32 +3086,28 @@ function AddCustomExtensionDialog(props) {
             onChange: handleCommand,
             spellCheck: false,
             autoComplete: "off",
-            placeholder: commandPlaceholder,
-            className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+            placeholder: showingPackageCatalog ? "guard:audit" : "npm run guard:audit",
+            className: "mt-2 min-h-11 w-full max-w-xl rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/70", children: showingPackageCatalog ? "Typing filters nested names. Allow still enrolls every script in this project." : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          "One command. A script, a binary, ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "npm run" }),
-          ", a project folder, or an MCP launch. Not a pipeline."
-        ] }) }),
-        recognized !== null && showingPackageCatalog ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ProjectSwitcher,
-          {
-            items: rememberedProjects,
-            currentId: recognized.cli_id,
-            onSelect: selectSuggestion
-          }
-        ) : null,
-        recognized ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: recognized.name }),
-            surfaceBadge(recognized.surface) ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold tracking-wide text-brand-dark/70 ring-1 ring-slate-200", children: surfaceBadge(recognized.surface) }) : null
-          ] }),
+        recognized !== null && showingPackageCatalog ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProjectSwitcher, { items: rememberedProjects, currentId: recognized.cli_id, onSelect: selectSuggestion }) : null,
+        recognized ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8 max-w-3xl", "aria-labelledby": "custom-extension-selected", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-selected", className: "text-xl font-semibold tracking-tight text-brand-dark", children: recognized.name }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-xs text-brand-dark/70", children: recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label }),
-          summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: summary }) : null,
-          showingPackageCatalog && command.trim() !== "" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs leading-5 text-brand-dark/60", children: filterCountCopy(visibleCommands.length, commands.length) }) : null,
-          visibleCommands.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mt-4 overflow-auto rounded-2xl bg-white ${showingPackageCatalog ? "max-h-96" : "max-h-72"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-slate-500", children: summary }) : null,
+          showingPackageCatalog ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            PackageScriptPreview,
+            {
+              query: command,
+              previewNames,
+              visibleCount: visibleCommands.length,
+              totalCount: enrollable.length,
+              reviewing: reviewingScripts,
+              onOpenReview: openScriptReview,
+              onCloseReview: closeScriptReview
+            }
+          ) : null,
+          (!showingPackageCatalog || reviewingScripts) && visibleCommands.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 overflow-auto rounded-2xl border border-slate-200 bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
             CustomExtensionCommandList,
             {
               commands: visibleCommands,
@@ -3091,23 +3115,8 @@ function AddCustomExtensionDialog(props) {
               surface: recognized.surface,
               onChange: handleCommandState
             }
-          ) }) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestAllow, className: `min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "allowed" ? "bg-brand-blue text-white" : "border border-slate-300 text-brand-dark"}`, children: allowActionLabel(recognized.surface) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestBlock, className: `min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "blocked" ? "bg-brand-dark text-white" : "border border-slate-300 text-brand-dark"}`, children: blockActionLabel(recognized.surface) })
-          ] })
-        ] }) : null,
-        proofReady ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ApprovalProofFieldInputs,
-          {
-            approvalGate: resolvedApprovalGate,
-            approvalPassword: password,
-            approvalTotpCode: totp,
-            onApprovalPasswordChange: handlePassword,
-            onApprovalTotpCodeChange: handleTotp
-          }
-        ) }) : null,
-        recognized === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ) }) : null
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
           SuggestionPanel,
           {
             query: command,
@@ -3117,15 +3126,50 @@ function AddCustomExtensionDialog(props) {
             seenSuggestions,
             onSelect: selectSuggestion
           }
-        ) : null,
-        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: error }) }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: busy, onClick: props.onClose, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: "Cancel" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: submitLabel })
+        ),
+        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 max-w-xl", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: error }) }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sticky bottom-0 mt-auto border-t border-slate-200 bg-white py-4", children: [
+          proofReady ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 max-w-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ApprovalProofFieldInputs,
+            {
+              approvalGate: resolvedApprovalGate,
+              approvalPassword: password,
+              approvalTotpCode: totp,
+              onApprovalPasswordChange: handlePassword,
+              onApprovalTotpCodeChange: handleTotp
+            }
+          ) }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: addDialogSubmitLabel({ recognized, busy, pending }) }),
+            recognized && showingPackageCatalog && pending === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestBlock, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: blockActionLabel(recognized.surface) }) : null,
+            recognized && showingPackageCatalog && pending === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestAllow, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: allowActionLabel(recognized.surface) }) : null
+          ] })
         ] })
       ]
     }
-  ) });
+  );
+}
+function PackageScriptPreview(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
+    props.query.trim() !== "" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/60", children: filterCountCopy(props.visibleCount, props.totalCount) }) : null,
+    props.previewNames.length > 0 && !props.reviewing ? /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-3 flex flex-wrap gap-2", children: [
+      props.previewNames.map((name) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "rounded-full bg-slate-100 px-3 py-1.5 font-mono text-xs text-brand-dark", children: name }, name)),
+      props.visibleCount > props.previewNames.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "rounded-full px-3 py-1.5 text-xs font-semibold text-brand-dark/60", children: [
+        "+",
+        props.visibleCount - props.previewNames.length,
+        " more"
+      ] }) : null
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.reviewing ? props.onCloseReview : props.onOpenReview,
+        className: "mt-4 min-h-11 text-sm font-semibold text-brand-blue",
+        children: props.reviewing ? "Hide individual settings" : "Adjust individual scripts"
+      }
+    )
+  ] });
 }
 function randomToken$1() {
   return crypto.randomUUID().replaceAll("-", "");
@@ -3920,16 +3964,7 @@ function ExtensionsOverview(props) {
           extension2.extension_id
         )) })
       ] })
-    ] }),
-    props.addingCustom ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      AddCustomExtensionDialog,
-      {
-        items: props.localCliItems,
-        revision: props.localCliRevision,
-        onClose: props.onCloseAddCustom,
-        onAdded: props.onCustomExtensionAdded
-      }
-    ) : null
+    ] })
   ] });
 }
 function pushExtensionHistory(href) {
@@ -4541,7 +4576,6 @@ function ProtectionCenterWorkspace() {
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
   const localClis = useLocalCliCatalog();
-  const [addingCustom, setAddingCustom] = reactExports.useState(false);
   const load = reactExports.useCallback(async () => {
     setState((current) => current.kind === "ready" ? current : { kind: "loading" });
     try {
@@ -4586,18 +4620,19 @@ function ProtectionCenterWorkspace() {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
   const openLocalCliDetail = reactExports.useCallback((cliId) => {
-    setAddingCustom(false);
     pushExtensionHistory(localCliHref(cliId));
     setRouteState({ route: { kind: "local-cli", cliId }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
-  const openAddCustom = reactExports.useCallback(() => setAddingCustom(true), []);
-  const closeAddCustom = reactExports.useCallback(() => setAddingCustom(false), []);
+  const openAddCustom = reactExports.useCallback(() => {
+    pushExtensionHistory(addCustomExtensionHref());
+    setRouteState({ route: { kind: "add-custom" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
   const handleCustomExtensionAdded = reactExports.useCallback((cliId) => {
     void localClis.load();
-    closeAddCustom();
     openLocalCliDetail(cliId);
-  }, [closeAddCustom, localClis.load, openLocalCliDetail]);
+  }, [localClis.load, openLocalCliDetail]);
   const retryLocalClis = reactExports.useCallback(() => {
     void localClis.load();
   }, [localClis.load]);
@@ -4688,9 +4723,7 @@ function ProtectionCenterWorkspace() {
     });
   }, [authorityNeedsAttention, resolveApprovalGate]);
   const showOverview = state.kind === "ready" && routeState.route.kind === "overview";
-  if (showOverview) {
-    overviewKeepAlive.current = true;
-  }
+  if (showOverview) overviewKeepAlive.current = true;
   const keepOverviewMounted = state.kind === "ready" && (showOverview || overviewKeepAlive.current);
   const localCliRoute = routeState.route.kind === "local-cli" ? routeState.route : null;
   const selectedLocalCli = localCliRoute ? localClis.data?.items.find((item) => item.cli_id === localCliRoute.cliId) ?? null : null;
@@ -4725,20 +4758,16 @@ function ProtectionCenterWorkspace() {
         catalogExtensions,
         effective: state.effective,
         localCliItems: localClis.data?.items ?? [],
-        localCliRevision: localClis.data?.revision ?? 0,
         mutationError: mutationError && !pending ? mutationError : null,
         recoveryStatus,
         healthBroken,
         status,
-        addingCustom: addingCustom && showOverview,
         active: showOverview,
         onPrimaryStatusAction: handlePrimaryStatusAction,
         onRefresh: refreshProtection,
         onOpenExtension: openExtension,
         onOpenLocalCli: openLocalCliDetail,
-        onAddCustom: openAddCustom,
-        onCloseAddCustom: closeAddCustom,
-        onCustomExtensionAdded: handleCustomExtensionAdded
+        onAddCustom: openAddCustom
       }
     ) : null,
     showLocalCli && localClis.error && !localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4750,6 +4779,15 @@ function ProtectionCenterWorkspace() {
       }
     ) : null,
     showLocalCli && !localClis.data && !localClis.error ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading custom extension" }) : null,
+    routeState.route.kind === "add-custom" && state.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AddCustomExtensionWorkspace,
+      {
+        items: localClis.data?.items ?? [],
+        revision: localClis.data?.revision ?? 0,
+        onBack: closeExtension,
+        onAdded: handleCustomExtensionAdded
+      }
+    ) : null,
     showLocalCli && selectedLocalCli && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       LocalCliDetail,
       {

@@ -9,7 +9,6 @@ import { addedCustomExtensions, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import {
   AddCustomExtensionButton,
-  AddCustomExtensionDialog,
   CustomExtensionsSection,
 } from "./local-clis-panel";
 import { PatternSearchConsole } from "./components/pattern-search-console";
@@ -68,20 +67,16 @@ export function ExtensionsOverview(props: {
   catalogExtensions: ExtensionCatalogItem[];
   effective: EffectiveExtensionControls;
   localCliItems: LocalCliItem[];
-  localCliRevision: number;
   mutationError: string | null;
   recoveryStatus: string | null;
   healthBroken: boolean;
   status: ProtectionStatusView;
-  addingCustom: boolean;
   active: boolean;
   onPrimaryStatusAction?: () => void;
   onRefresh: () => Promise<void> | void;
   onOpenExtension: (extension: ExtensionCatalogItem) => void;
   onOpenLocalCli: (cliId: string) => void;
   onAddCustom: () => void;
-  onCloseAddCustom: () => void;
-  onCustomExtensionAdded: (cliId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   // An active search replaces the catalogs below it: results, then the Tools
@@ -160,14 +155,6 @@ export function ExtensionsOverview(props: {
         </>
       )}
 
-      {props.addingCustom ? (
-        <AddCustomExtensionDialog
-          items={props.localCliItems}
-          revision={props.localCliRevision}
-          onClose={props.onCloseAddCustom}
-          onAdded={props.onCustomExtensionAdded}
-        />
-      ) : null}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   addedCustomExtensions,
   filterExtensionSuggestions,
+  enrollmentCommandStates,
   filterPackageScriptCommands,
   isLocalCliId,
   normalizeLocalCliItem,
@@ -17,7 +18,7 @@ import {
   suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
 } from "./local-cli-api";
-import { parseProtectionRoute, localCliHref } from "./local-cli-links";
+import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./local-cli-links";
 
 assert.equal(isLocalCliId("local-cli.cwv-py-abcdef12"), true);
 assert.equal(isLocalCliId("command.git"), false);
@@ -99,6 +100,8 @@ assert.deepEqual(parseProtectionRoute("/extensions/local-cli/local-cli.cwv-py-ab
   kind: "local-cli",
   cliId: "local-cli.cwv-py-abcdef12",
 });
+assert.equal(parseProtectionRoute("/extensions/add").kind, "add-custom");
+assert.equal(addCustomExtensionHref(), "/extensions/add");
 assert.equal(parseProtectionRoute("/extensions/command.git").kind, "detail");
 assert.equal(localCliHref("local-cli.cwv-py-abcdef12"), "/extensions/local-cli/local-cli.cwv-py-abcdef12");
 assert.equal(addedCustomExtensions(list.items).length, 1);
@@ -236,6 +239,10 @@ assert.deepEqual(
   ["guard:reddit-targeting:audit"],
 );
 assert.deepEqual(
+  filterPackageScriptCommands(packageScripts.commands, "guard:audit").map((entry) => entry.name),
+  ["guard:reddit-targeting:audit"],
+);
+assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "npm run").map((entry) => entry.name),
   ["guard:reddit-targeting:audit", "build"],
 );
@@ -245,8 +252,13 @@ assert.equal(looksLikeProjectRelocatePaste("guard:audit"), false);
 assert.equal(looksLikeProjectRelocatePaste("/proj/My App"), true);
 assert.equal(looksLikeProjectRelocatePaste("C:\\\\My App\\\\package.json"), true);
 assert.equal(keepsPackageScriptCatalog("guard:reddit", packageScripts.commands), true);
+assert.equal(keepsPackageScriptCatalog("guard:audit", packageScripts.commands), true);
 assert.equal(keepsPackageScriptCatalog("my-cli", packageScripts.commands), false);
 assert.equal(keepsPackageScriptCatalog("npx -y @scope/mcp-server", packageScripts.commands), false);
+assert.deepEqual(
+  enrollmentCommandStates(packageScripts.commands, "allowed", "package-scripts").map((entry) => entry.state),
+  ["allow", "allow"],
+);
 assert.equal(seenSuggestionMeta(frequentTool), "Seen 4 times");
 assert.equal(seenSuggestionMeta(rareTool), "Seen once");
 

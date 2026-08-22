@@ -40,12 +40,9 @@ const packageItem: LocalCliItem = {
   ],
 };
 
-assert.equal(
-  dialogIntro(true, true),
-  "Confirm these project scripts, or type a nested name to find one fast.",
-);
-assert.match(filterCountCopy(1, 8), /Showing 1 of 8/);
-assert.match(suggestionSummary(packageItem), /Ready to enroll 1 script from ads-app/);
+assert.match(dialogIntro(true, true), /Allow these scripts/);
+assert.match(filterCountCopy(1, 8), /1 of 8 scripts match/);
+assert.match(suggestionSummary(packageItem), /1 script from ads-app/);
 assert.equal(
   addDialogSubmitLabel({ recognized: packageItem, busy: false, pending: "allowed" }),
   "Allow these scripts",

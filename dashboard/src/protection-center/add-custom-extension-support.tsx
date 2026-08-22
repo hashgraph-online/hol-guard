@@ -1,6 +1,10 @@
 import { useCallback } from "react";
 
-import { seenSuggestionMeta, type LocalCliItem, type LocalCliState } from "../local-cli-api";
+import { enrollablePackageScriptCommands, seenSuggestionMeta, type LocalCliItem, type LocalCliState } from "../local-cli-api";
+
+function enrollableCount(item: LocalCliItem): number {
+  return Math.max(enrollablePackageScriptCommands(item.commands).length, 0);
+}
 
 export function addDialogSubmitLabel(input: {
   recognized: LocalCliItem | null;
@@ -39,7 +43,7 @@ export function blockActionLabel(surface: LocalCliItem["surface"]): string {
 
 export function dialogIntro(hasProjects: boolean, showingCatalog: boolean): string {
   if (showingCatalog) {
-    return "Confirm these project scripts, or type a nested name to find one fast.";
+    return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (hasProjects) {
     return "Guard already found project scripts on this device. Pick a project, or paste another folder.";
@@ -48,16 +52,16 @@ export function dialogIntro(hasProjects: boolean, showingCatalog: boolean): stri
 }
 
 export function filterCountCopy(visible: number, total: number): string {
-  if (visible === 0) return "No scripts match that name. Try another nested name, or paste a different project folder.";
+  if (visible === 0) return "No scripts match that name. Try another nested name, or pick a different project.";
   if (visible === total) return `${visible} scripts in this project.`;
-  return `Showing ${visible} of ${total} scripts. Allow still covers the whole project.`;
+  return `${visible} of ${total} scripts match. Allow still enrolls the whole project.`;
 }
 
 export function suggestionSummary(item: LocalCliItem): string {
   if (item.surface === "package-scripts" && item.commands.length > 0) {
-    const count = item.commands.length;
+    const count = enrollableCount(item);
     const unit = count === 1 ? "script" : "scripts";
-    return `Ready to enroll ${count} ${unit} from ${item.source_label ?? item.name}. Nested names stay grouped. Recommended keeps the usual review.`;
+    return `${count} ${unit} from ${item.source_label ?? item.name}. Allow lets this project's scripts run. Nested names stay grouped.`;
   }
   if (item.surface === "package-scripts") {
     return `Find this tool to list npm scripts from ${item.name}.`;

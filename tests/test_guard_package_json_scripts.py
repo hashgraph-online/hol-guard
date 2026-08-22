@@ -227,6 +227,16 @@ def test_allowed_nested_script_grant_matches_live_command(tmp_path: Path) -> Non
             home_dir=home,
             current_action="review",
         )
+        == "allow"
+    )
+    assert (
+        apply_local_cli_grant(
+            store=store,
+            command="pnpm run not-a-script",
+            cwd=project,
+            home_dir=home,
+            current_action="review",
+        )
         == "review"
     )
 

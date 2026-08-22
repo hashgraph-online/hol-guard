@@ -182,7 +182,55 @@ export function filterPackageScriptCommands(
 }
 
 export function commandMatchesQuery(command: LocalCliCommand, needle: string): boolean {
-  return [command.name, command.usage, command.description].some((value) => value.toLowerCase().includes(needle));
+  const haystacks = [command.name, command.usage, command.description];
+  if (haystacks.some((value) => value.toLowerCase().includes(needle))) return true;
+  return colonPartsMatch(command.name, needle);
+}
+
+export function enrollablePackageScriptCommands(
+  commands: readonly LocalCliCommand[],
+): LocalCliCommand[] {
+  return commands.filter((command) => command.command_id !== "root" && command.command_id !== "other");
+}
+
+export function enrollmentCommandStates(
+  commands: readonly LocalCliCommand[],
+  pending: LocalCliState,
+  surface: LocalCliSurface,
+): Array<{ command_id: string; state: LocalCliCommandState }> {
+  if (surface !== "package-scripts") return commandStatesFrom(commands);
+  return commands.map((command) => ({
+    command_id: command.command_id,
+    state: packageScriptEnrollmentState(command, pending),
+  }));
+}
+
+function commandStatesFrom(
+  commands: readonly LocalCliCommand[],
+): Array<{ command_id: string; state: LocalCliCommandState }> {
+  return commands.map((command) => ({ command_id: command.command_id, state: command.state }));
+}
+
+function packageScriptEnrollmentState(
+  command: LocalCliCommand,
+  pending: LocalCliState,
+): LocalCliCommandState {
+  if (command.command_id === "root" || command.command_id === "other") return command.state;
+  if (pending === "blocked") return "block";
+  if (command.state === "block") return "block";
+  if (pending === "allowed") return "allow";
+  return command.state;
+}
+
+function colonPartsMatch(name: string, needle: string): boolean {
+  const queryParts = needle.split(":").map((part) => part.trim()).filter(Boolean);
+  if (queryParts.length < 2) return false;
+  const nameParts = name.toLowerCase().split(":");
+  let index = 0;
+  for (const part of nameParts) {
+    if (index < queryParts.length && part.includes(queryParts[index]!)) index += 1;
+  }
+  return index === queryParts.length;
 }
 
 function packageScriptFilterNeedle(query: string): string {

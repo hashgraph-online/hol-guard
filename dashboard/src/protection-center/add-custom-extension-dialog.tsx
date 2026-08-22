@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { HiMiniArrowLeft } from "react-icons/hi2";
 
 import {
   ApprovalProofFieldInputs,
@@ -8,6 +9,8 @@ import {
 } from "../approval-proof-inline";
 import {
   applyLocalCliMutation,
+  enrollablePackageScriptCommands,
+  enrollmentCommandStates,
   filterExtensionSuggestions,
   filterPackageScriptCommands,
   LocalCliApiError,
@@ -32,10 +35,8 @@ import {
   ProjectSwitcher,
   SuggestionPanel,
   suggestionSummary,
-  surfaceBadge,
 } from "./add-custom-extension-support";
-import { CustomExtensionCommandList, commandStatesPayload, withCommandState } from "./custom-extension-commands";
-import { useModalDialog } from "../use-modal-dialog";
+import { CustomExtensionCommandList, withCommandState } from "./custom-extension-commands";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
 
@@ -43,10 +44,10 @@ function randomToken(): string {
   return crypto.randomUUID().replaceAll("-", "");
 }
 
-export function AddCustomExtensionDialog(props: {
+export function AddCustomExtensionWorkspace(props: {
   items: LocalCliItem[];
   revision: number;
-  onClose: () => void;
+  onBack: () => void;
   onAdded: (cliId: string) => void;
 }) {
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
@@ -59,23 +60,14 @@ export function AddCustomExtensionDialog(props: {
   const [totp, setTotp] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dialogRef = useModalDialog<HTMLFormElement>(props.onClose, !busy);
+  const [reviewingScripts, setReviewingScripts] = useState(false);
   const recognizeGeneration = useRef(0);
   const autoRecognizedCommand = useRef("");
   const didAutoSelect = useRef(false);
   const rememberedProjects = suggestedPackageScriptExtensions(props.items);
-  const packageScriptSuggestions = filterExtensionSuggestions(
-    rememberedProjects,
-    command,
-  ).slice(0, 6);
-  const harnessSuggestions = filterExtensionSuggestions(
-    suggestedHarnessExtensions(props.items),
-    command,
-  ).slice(0, 8);
-  const seenSuggestions = filterExtensionSuggestions(
-    suggestedSeenExtensions(props.items),
-    command,
-  ).slice(0, 6);
+  const packageScriptSuggestions = filterExtensionSuggestions(rememberedProjects, command).slice(0, 8);
+  const harnessSuggestions = filterExtensionSuggestions(suggestedHarnessExtensions(props.items), command).slice(0, 8);
+  const seenSuggestions = filterExtensionSuggestions(suggestedSeenExtensions(props.items), command).slice(0, 6);
   const hasSuggestions = packageScriptSuggestions.length > 0
     || harnessSuggestions.length > 0
     || seenSuggestions.length > 0;
@@ -99,6 +91,7 @@ export function AddCustomExtensionDialog(props: {
     setCommands([]);
     setSummary(null);
     setPending(null);
+    setReviewingScripts(false);
   }, [commands, recognized]);
   const handlePassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setPassword(event.target.value);
@@ -145,6 +138,7 @@ export function AddCustomExtensionDialog(props: {
     setCommands(item.commands);
     setSummary(suggestionSummary(item));
     setPending(item.surface === "package-scripts" && item.commands.length > 0 ? "allowed" : null);
+    setReviewingScripts(false);
   }, [runRecognize]);
   const findTool = useCallback(async () => {
     await runRecognize(command);
@@ -168,6 +162,8 @@ export function AddCustomExtensionDialog(props: {
   }, [busy, command, recognized, runRecognize]);
   const requestAllow = useCallback(() => setPending("allowed"), []);
   const requestBlock = useCallback(() => setPending("blocked"), []);
+  const openScriptReview = useCallback(() => setReviewingScripts(true), []);
+  const closeScriptReview = useCallback(() => setReviewingScripts(false), []);
   const handleSubmit = useCallback(async (event: FormEvent) => {
     event.preventDefault();
     if (recognized === null) {
@@ -188,7 +184,7 @@ export function AddCustomExtensionDialog(props: {
         state: pending,
         previous_revision: props.revision,
         session_nonce: randomToken(),
-        commands: commandStatesPayload(commands),
+        commands: enrollmentCommandStates(commands, pending, recognized.surface),
         ...buildApprovalProofCredentials(resolvedApprovalGate, {
           approvalPassword: password,
           approvalTotpCode: totp,
@@ -215,98 +211,89 @@ export function AddCustomExtensionDialog(props: {
       { approvalPassword: password, approvalTotpCode: totp },
       busy,
     );
-  const submitLabel = addDialogSubmitLabel({
-    recognized,
-    busy,
-    pending,
-  });
   const showingPackageCatalog = recognized?.surface === "package-scripts";
+  const enrollable = enrollablePackageScriptCommands(commands);
   const visibleCommands = showingPackageCatalog
-    ? filterPackageScriptCommands(commands, command)
+    ? filterPackageScriptCommands(enrollable, command)
     : commands;
-  const commandLabel = showingPackageCatalog ? "Filter scripts" : "Command";
-  const commandPlaceholder = showingPackageCatalog
-    ? "guard:audit"
-    : "npm run guard:audit";
+  const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm">
-      <form
-        ref={dialogRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-custom-extension-title"
-        onSubmit={handleSubmit}
-        className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none"
-      >
-        <h2 id="add-custom-extension-title" className="text-xl font-semibold text-brand-dark">Add a custom extension</h2>
-        <p className="mt-2 text-sm leading-6 text-brand-dark/80">
+    <form
+      data-testid="add-custom-extension"
+      onSubmit={handleSubmit}
+      className="flex min-h-[70vh] w-full flex-col"
+    >
+      <button type="button" onClick={props.onBack} className="inline-flex min-h-11 w-fit items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark">
+        <HiMiniArrowLeft className="size-4" aria-hidden="true" />
+        Extensions
+      </button>
+      <header className="mt-4 max-w-2xl border-b border-slate-200 pb-6">
+        <h1 id="add-custom-extension-title" className="text-2xl font-semibold tracking-tight text-brand-dark">Add a custom extension</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-500">
           {dialogIntro(rememberedProjects.length > 0, showingPackageCatalog === true)}
         </p>
-        <label htmlFor="custom-extension-command" className="mt-5 block text-sm font-semibold text-brand-dark">{commandLabel}</label>
-        <input
-          id="custom-extension-command"
-          value={command}
-          onChange={handleCommand}
-          spellCheck={false}
-          autoComplete="off"
-          placeholder={commandPlaceholder}
-          className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+      </header>
+      <label htmlFor="custom-extension-command" className="mt-6 block text-sm font-semibold text-brand-dark">
+        {showingPackageCatalog ? "Find a script" : "Command"}
+      </label>
+      <input
+        id="custom-extension-command"
+        value={command}
+        onChange={handleCommand}
+        spellCheck={false}
+        autoComplete="off"
+        placeholder={showingPackageCatalog ? "guard:audit" : "npm run guard:audit"}
+        className="mt-2 min-h-11 w-full max-w-xl rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+      />
+      {recognized !== null && showingPackageCatalog ? (
+        <ProjectSwitcher items={rememberedProjects} currentId={recognized.cli_id} onSelect={selectSuggestion} />
+      ) : null}
+      {recognized ? (
+        <section className="mt-8 max-w-3xl" aria-labelledby="custom-extension-selected">
+          <h2 id="custom-extension-selected" className="text-xl font-semibold tracking-tight text-brand-dark">
+            {recognized.name}
+          </h2>
+          <p className="mt-1 font-mono text-xs text-brand-dark/70">
+            {recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label}
+          </p>
+          {summary ? <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">{summary}</p> : null}
+          {showingPackageCatalog ? (
+            <PackageScriptPreview
+              query={command}
+              previewNames={previewNames}
+              visibleCount={visibleCommands.length}
+              totalCount={enrollable.length}
+              reviewing={reviewingScripts}
+              onOpenReview={openScriptReview}
+              onCloseReview={closeScriptReview}
+            />
+          ) : null}
+          {(!showingPackageCatalog || reviewingScripts) && visibleCommands.length > 0 ? (
+            <div className="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-white">
+              <CustomExtensionCommandList
+                commands={visibleCommands}
+                disabled={busy}
+                surface={recognized.surface}
+                onChange={handleCommandState}
+              />
+            </div>
+          ) : null}
+        </section>
+      ) : (
+        <SuggestionPanel
+          query={command}
+          hasSuggestions={hasSuggestions}
+          packageScriptSuggestions={packageScriptSuggestions}
+          harnessSuggestions={harnessSuggestions}
+          seenSuggestions={seenSuggestions}
+          onSelect={selectSuggestion}
         />
-        <p className="mt-2 text-sm leading-6 text-brand-dark/70">
-          {showingPackageCatalog
-            ? "Typing filters nested names. Allow still enrolls every script in this project."
-            : <>One command. A script, a binary, <span className="font-medium">npm run</span>, a project folder, or an MCP launch. Not a pipeline.</>}
-        </p>
-        {recognized !== null && showingPackageCatalog ? (
-          <ProjectSwitcher
-            items={rememberedProjects}
-            currentId={recognized.cli_id}
-            onSelect={selectSuggestion}
-          />
-        ) : null}
-        {recognized ? (
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-semibold text-brand-dark">{recognized.name}</p>
-              {surfaceBadge(recognized.surface) ? (
-                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold tracking-wide text-brand-dark/70 ring-1 ring-slate-200">
-                  {surfaceBadge(recognized.surface)}
-                </span>
-              ) : null}
-            </div>
-            <p className="mt-1 font-mono text-xs text-brand-dark/70">
-              {recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label}
-            </p>
-            {summary ? <p className="mt-2 text-sm leading-6 text-brand-dark/80">{summary}</p> : null}
-            {showingPackageCatalog && command.trim() !== "" ? (
-              <p className="mt-2 text-xs leading-5 text-brand-dark/60">
-                {filterCountCopy(visibleCommands.length, commands.length)}
-              </p>
-            ) : null}
-            {visibleCommands.length > 0 ? (
-              <div className={`mt-4 overflow-auto rounded-2xl bg-white ${showingPackageCatalog ? "max-h-96" : "max-h-72"}`}>
-                <CustomExtensionCommandList
-                  commands={visibleCommands}
-                  disabled={busy}
-                  surface={recognized.surface}
-                  onChange={handleCommandState}
-                />
-              </div>
-            ) : null}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" onClick={requestAllow} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "allowed" ? "bg-brand-blue text-white" : "border border-slate-300 text-brand-dark"}`}>
-                {allowActionLabel(recognized.surface)}
-              </button>
-              <button type="button" onClick={requestBlock} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "blocked" ? "bg-brand-dark text-white" : "border border-slate-300 text-brand-dark"}`}>
-                {blockActionLabel(recognized.surface)}
-              </button>
-            </div>
-          </div>
-        ) : null}
+      )}
+      {error ? <div className="mt-4 max-w-xl"><InlineError message={error} /></div> : null}
+      <div className="sticky bottom-0 mt-auto border-t border-slate-200 bg-white py-4">
         {proofReady ? (
-          <div className="mt-5">
+          <div className="mb-4 max-w-sm">
             <ApprovalProofFieldInputs
               approvalGate={resolvedApprovalGate}
               approvalPassword={password}
@@ -316,24 +303,61 @@ export function AddCustomExtensionDialog(props: {
             />
           </div>
         ) : null}
-        {recognized === null ? (
-          <SuggestionPanel
-            query={command}
-            hasSuggestions={hasSuggestions}
-            packageScriptSuggestions={packageScriptSuggestions}
-            harnessSuggestions={harnessSuggestions}
-            seenSuggestions={seenSuggestions}
-            onSelect={selectSuggestion}
-          />
-        ) : null}
-        {error ? <div className="mt-4"><InlineError message={error} /></div> : null}
-        <div className="mt-6 flex justify-end gap-3">
-          <button type="button" disabled={busy} onClick={props.onClose} className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark">Cancel</button>
+        <div className="flex flex-wrap items-center gap-3">
           <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60">
-            {submitLabel}
+            {addDialogSubmitLabel({ recognized, busy, pending })}
           </button>
+          {recognized && showingPackageCatalog && pending === "allowed" ? (
+            <button type="button" onClick={requestBlock} className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark">
+              {blockActionLabel(recognized.surface)}
+            </button>
+          ) : null}
+          {recognized && showingPackageCatalog && pending === "blocked" ? (
+            <button type="button" onClick={requestAllow} className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark">
+              {allowActionLabel(recognized.surface)}
+            </button>
+          ) : null}
         </div>
-      </form>
+      </div>
+    </form>
+  );
+}
+
+function PackageScriptPreview(props: {
+  query: string;
+  previewNames: string[];
+  visibleCount: number;
+  totalCount: number;
+  reviewing: boolean;
+  onOpenReview: () => void;
+  onCloseReview: () => void;
+}) {
+  return (
+    <div className="mt-5">
+      {props.query.trim() !== "" ? (
+        <p className="text-xs leading-5 text-brand-dark/60">{filterCountCopy(props.visibleCount, props.totalCount)}</p>
+      ) : null}
+      {props.previewNames.length > 0 && !props.reviewing ? (
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {props.previewNames.map((name) => (
+            <li key={name} className="rounded-full bg-slate-100 px-3 py-1.5 font-mono text-xs text-brand-dark">
+              {name}
+            </li>
+          ))}
+          {props.visibleCount > props.previewNames.length ? (
+            <li className="rounded-full px-3 py-1.5 text-xs font-semibold text-brand-dark/60">
+              +{props.visibleCount - props.previewNames.length} more
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+      <button
+        type="button"
+        onClick={props.reviewing ? props.onCloseReview : props.onOpenReview}
+        className="mt-4 min-h-11 text-sm font-semibold text-brand-blue"
+      >
+        {props.reviewing ? "Hide individual settings" : "Adjust individual scripts"}
+      </button>
     </div>
   );
 }
