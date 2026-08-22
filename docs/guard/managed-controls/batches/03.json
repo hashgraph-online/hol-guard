@@ -1,0 +1,16 @@
+{
+  "batch": 3,
+  "evidence": [
+    "src/codex_plugin_scanner/guard/managed_controls/capabilities.py",
+    "src/codex_plugin_scanner/guard/managed_controls/catalog.py",
+    "tests/managed_controls/test_capabilities_catalog.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 45,
+    "start": 31
+  },
+  "theme": "Runtime capability negotiation and canonical Extension catalog"
+}
