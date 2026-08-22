@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from typing import cast
 
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 MAX_EXTENSIONS = 512
@@ -17,10 +18,22 @@ class CatalogValidationError(ValueError):
     """Raised when a catalog cannot be trusted or represented."""
 
 
-def _identity(value: str, label: str) -> str:
-    if not _ID_PATTERN.fullmatch(value):
+def _identity(value: object, label: str) -> str:
+    if not isinstance(value, str) or not _ID_PATTERN.fullmatch(value):
         raise CatalogValidationError(f"invalid {label}")
     return value
+
+
+def _required_text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise CatalogValidationError(f"{label} is required")
+    return value
+
+
+def _boolean(value: object, label: str) -> bool:
+    if type(value) is not bool:
+        raise CatalogValidationError(f"{label} must be a boolean")
+    return cast(bool, value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,8 +46,11 @@ class CatalogPermission:
 
     def __post_init__(self) -> None:
         _identity(self.permission_id, "permission id")
-        if not self.name.strip():
-            raise CatalogValidationError("permission name is required")
+        _required_text(self.name, "permission name")
+        _boolean(self.configurable, "permission configurable")
+        _boolean(self.required, "permission required")
+        if self.delegated_protection is not None:
+            _identity(self.delegated_protection, "delegated protection")
         if self.required and self.configurable:
             raise CatalogValidationError("required permissions cannot be configurable")
 
@@ -59,8 +75,14 @@ class CatalogExtension:
 
     def __post_init__(self) -> None:
         _identity(self.extension_id, "extension id")
-        if not self.name.strip() or not self.version.strip():
-            raise CatalogValidationError("extension name and version are required")
+        _required_text(self.name, "extension name")
+        _required_text(self.version, "extension version")
+        _boolean(self.required, "extension required")
+        _boolean(self.custom, "extension custom")
+        if not isinstance(self.permissions, tuple) or not all(
+            isinstance(item, CatalogPermission) for item in self.permissions
+        ):
+            raise CatalogValidationError("permissions must be a permission tuple")
         if len(self.permissions) > MAX_PERMISSIONS_PER_EXTENSION:
             raise CatalogValidationError("permission limit exceeded")
         permission_ids = [item.permission_id for item in self.permissions]
@@ -68,13 +90,17 @@ class CatalogExtension:
             raise CatalogValidationError("duplicate permission id")
 
     def to_dict(self) -> dict[str, object]:
+        ordered_permissions = sorted(
+            self.permissions,
+            key=lambda item: item.permission_id,
+        )
         return {
             "extension_id": self.extension_id,
             "name": self.name,
             "version": self.version,
             "required": self.required,
             "custom": self.custom,
-            "permissions": [item.to_dict() for item in self.permissions],
+            "permissions": [item.to_dict() for item in ordered_permissions],
         }
 
 
@@ -84,8 +110,12 @@ class CatalogProjection:
     extensions: tuple[CatalogExtension, ...]
 
     def __post_init__(self) -> None:
-        if self.schema_version != 1:
+        if type(self.schema_version) is not int or self.schema_version != 1:
             raise CatalogValidationError("unsupported catalog schema")
+        if not isinstance(self.extensions, tuple) or not all(
+            isinstance(item, CatalogExtension) for item in self.extensions
+        ):
+            raise CatalogValidationError("extensions must be an extension tuple")
         if len(self.extensions) > MAX_EXTENSIONS:
             raise CatalogValidationError("extension limit exceeded")
         extension_ids = [item.extension_id for item in self.extensions]
@@ -120,4 +150,5 @@ class CatalogProjection:
             for permission in extension.permissions:
                 if permission.permission_id == permission_id:
                     return permission
-        raise CatalogValidationError("unknown extension or permission target")
+            raise CatalogValidationError("unknown permission target")
+        raise CatalogValidationError("unknown extension target")
