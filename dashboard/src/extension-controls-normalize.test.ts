@@ -155,9 +155,30 @@ rejects((payload) => { payload.extensions[0]!.permissions[0]!.rule_ids = ["comma
 }
 rejects((payload) => { delete (payload.extensions[0] as Record<string, unknown>).name; }, /name must be a string/);
 
-const oversized = catalog();
-oversized.extensions = Array.from({ length: EXTENSION_CLIENT_LIMITS.extensions + 1 }, () => catalog().extensions[0]!);
-assert.throws(() => normalizeExtensionCatalog(oversized), /exceeds/);
+function catalogWithExtensionCount(count: number) {
+  const payload = catalog();
+  payload.extensions = Array.from({ length: count }, (_, index) => {
+    const extensionId = `command.limit${index}`;
+    const ruleId = `${extensionId}.rule`;
+    const permissionId = `${extensionId}.permission.capability`;
+    return {
+      ...catalog().extensions[0]!,
+      extension_id: extensionId,
+      aliases: [],
+      rules: [rule(ruleId)],
+      permissions: [{
+        ...permission(permissionId),
+        extension_id: extensionId,
+        rule_ids: [ruleId],
+      }],
+    };
+  });
+  return payload;
+}
+
+assert.equal(normalizeExtensionCatalog(catalogWithExtensionCount(511)).extensions.length, 511);
+assert.equal(normalizeExtensionCatalog(catalogWithExtensionCount(512)).extensions.length, 512);
+assert.throws(() => normalizeExtensionCatalog(catalogWithExtensionCount(513)), /exceeds 512 items/);
 
 const duplicateEffective = effective();
 duplicateEffective.controls.push({ target: { kind: "permission", target_id: "command.git.permission.reset-hard" }, state: "enabled" });

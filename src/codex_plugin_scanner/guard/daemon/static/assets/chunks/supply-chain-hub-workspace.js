@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/approval-proof-modal.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { b4 as isSupplyChainAuditIncomplete, b5 as isSupplyChainAuditEvidence, a$ as GuardHarnessActionError, b6 as readString$1, b7 as isRecord$1, r as reactExports, j as jsxRuntimeExports, o as HiMiniCheckCircle, aw as HiMiniArrowPath, M as HiMiniExclamationTriangle, as as Tag, w as formatRelativeTime, b8 as HiMiniClock, b9 as IconActionButton, X as HiMiniXCircle, b1 as HiMiniTrash, t as HiMiniShieldCheck, R as HiMiniWrenchScrewdriver, ba as HiMiniBeaker, bb as ActivationSummary, bc as ActionResultPanel, ap as HiMiniMagnifyingGlass, m as EmptyState, A as ActionButton, bd as HiMiniBugAnt, z as HiMiniXMark, aA as buildApprovalProofCredentials, be as GuardModalLayer, bf as ConnectFlowCard, bg as ApprovalProofInline, bh as HiMiniArrowTopRightOnSquare, bi as HiMiniCloudArrowDown, bj as fetchPackageFirewallStatus, bk as runPackageAudit, bl as resolveSupplyChainAuditFailure, bm as runPackageSync, bn as startPackageFirewallConnect, bo as openPackageFirewallAuthorizeFallback, bp as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bq as repairSupplyChainProtection, br as runPackageFirewallAction, bs as parseInterceptProofSnapshot, bt as activatePackageFirewallRuntime, S as SectionLabel, bu as EntitlementNotice, bv as fetchReceipts, ao as WorkspacePageHeader, bw as __vitePreload } from "../guard-dashboard.js";
+import { b4 as isSupplyChainAuditIncomplete, b5 as isSupplyChainAuditEvidence, a$ as GuardHarnessActionError, b6 as readString$1, b7 as isRecord$1, r as reactExports, j as jsxRuntimeExports, o as HiMiniCheckCircle, aw as HiMiniArrowPath, M as HiMiniExclamationTriangle, as as Tag, w as formatRelativeTime, b8 as HiMiniClock, b9 as IconActionButton, X as HiMiniXCircle, b1 as HiMiniTrash, t as HiMiniShieldCheck, R as HiMiniWrenchScrewdriver, ba as HiMiniBeaker, bb as ActivationSummary, bc as ActionResultPanel, ap as HiMiniMagnifyingGlass, m as EmptyState, A as ActionButton, bd as HiMiniBugAnt, z as HiMiniXMark, aA as buildApprovalProofCredentials, be as GuardModalLayer, bf as ConnectFlowCard, bg as ApprovalProofInline, bh as HiMiniArrowTopRightOnSquare, bi as HiMiniCloudArrowDown, bj as fetchPackageFirewallStatus, bk as runPackageAudit, bl as resolveSupplyChainAuditFailure, bm as runPackageSync, bn as startPackageFirewallConnect, bo as openPackageFirewallAuthorizeFallback, bp as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bq as repairSupplyChainProtection, br as runPackageFirewallAction, bs as parseInterceptProofSnapshot, bt as activatePackageFirewallRuntime, S as SectionLabel, bu as EntitlementNotice, bv as fetchReceipts, ao as WorkspacePageHeader, bw as lazyWorkspace, bx as __vitePreload } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./approval-proof-modal.js";
 const SEVERITY_RANK = {
   critical: 4,
@@ -2442,13 +2442,13 @@ function useSupplyChainAuditSession({
     handleRunAudit
   };
 }
-const SupplyChainWorkspace = reactExports.lazy(
+const SupplyChainWorkspace = lazyWorkspace(
   () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
 );
-const AuditWorkspace = reactExports.lazy(
+const AuditWorkspace = lazyWorkspace(
   () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([7,1,2,6,5]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
 );
-const FeedHealthWorkspace = reactExports.lazy(
+const FeedHealthWorkspace = lazyWorkspace(
   () => __vitePreload(() => import("./feed-health-workspace.js"), true ? __vite__mapDeps([3,1,2]) : void 0).then((m) => ({ default: m.FeedHealthWorkspace }))
 );
 const hubTabs = [

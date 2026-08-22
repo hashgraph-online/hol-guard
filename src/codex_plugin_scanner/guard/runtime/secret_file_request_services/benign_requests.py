@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import shlex
 from pathlib import Path
 
@@ -23,6 +22,7 @@ from ..github_capability_interaction import github_capability_requires_confirmat
 from ..read_only_git_audit import is_read_only_git_ancestry_audit
 from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
 from ..shell_command_wrappers import normalize_transparent_shell_command
+from .agent_guidance_reads import is_benign_agent_guidance_read
 from .constants_core import _SHELL_TOOL_NAMES
 from .destructive_shell_detection import _shell_command_names_from_parts
 from .developer_routines import (
@@ -131,7 +131,7 @@ def is_explicitly_benign_tool_action_request(
         if _quote_aware_direct_github_read_is_safe(stripped_command, assessment=github_assessment):
             found_benign_candidate = True
             continue
-        if home_dir is not None and _is_guard_safety_doc_read(stripped_command, home_dir=home_dir):
+        if home_dir is not None and is_benign_agent_guidance_read(stripped_command, cwd, home_dir):
             found_benign_candidate = True
             continue
         parts = _split_shell_parts(stripped_command)
@@ -287,25 +287,6 @@ def _looks_like_safe_existence_probe(
     except (OSError, RuntimeError):
         return False
     return bool(allowed_roots) and any(resolved.is_relative_to(root) for root in allowed_roots)
-
-
-def _is_guard_safety_doc_read(command_text: str, *, home_dir: Path) -> bool:
-    try:
-        parts = shlex.split(command_text)
-    except ValueError:
-        return False
-    if len(parts) != 4 or parts[:2] != ["sed", "-n"]:
-        return False
-    match = re.fullmatch(r"([1-9][0-9]{0,3}),([1-9][0-9]{0,3})p", parts[2])
-    if match is None or int(match.group(2)) - int(match.group(1)) > 500:
-        return False
-    target = parts[3]
-    expected = home_dir / ".hol-support" / "SAFETY.md"
-    candidate = home_dir / target[2:] if target.startswith("~/") else Path(target)
-    try:
-        return candidate.absolute() == expected.absolute() and expected.is_file() and not expected.is_symlink()
-    except OSError:
-        return False
 
 
 def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:

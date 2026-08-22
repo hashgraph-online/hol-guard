@@ -1745,20 +1745,67 @@ class TestGuardApprovals:
 
         assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 
-    def test_load_guard_daemon_url_rejects_daemon_from_different_source_root(self, tmp_path, monkeypatch):
+    def test_load_guard_daemon_url_adopts_same_fingerprint_from_different_source_root(self, tmp_path, monkeypatch):
         guard_home = tmp_path / "guard-home"
 
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self) -> FakeResponse:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "tables": ["guard_connect_states"],
+                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+                    }
+                ).encode("utf-8")
+
+        daemon_manager_module.write_guard_daemon_state(
+            guard_home,
+            5530,
+            "token-123",
+            pid=12345,
+        )
         monkeypatch.setattr(
             daemon_manager_module,
-            "_load_state",
-            lambda _guard_home: {
-                "port": 5530,
-                "auth_token": "token-123",
-                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                "source_root": "/tmp/older-source-root",
-                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
-            },
+            "_current_guard_daemon_source_root",
+            lambda: "/different/install/path",
         )
+        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_guard_daemon_pid_matches_command",
+            lambda _pid, expected_guard_home=None: True,
+        )
+        monkeypatch.setattr(
+            daemon_manager_module.urllib.request,
+            "urlopen",
+            lambda request, timeout=1: FakeResponse(),
+        )
+
+        assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
+
+    def test_load_guard_daemon_url_rejects_different_runtime_fingerprint(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+
+        daemon_manager_module.write_guard_daemon_state(
+            guard_home,
+            5530,
+            "token-123",
+            pid=12345,
+        )
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_current_guard_daemon_runtime_fingerprint",
+            lambda: "stale-runtime-fingerprint",
+        )
+        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
 
         assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 

@@ -8,15 +8,32 @@ import {
 } from "../approval-proof-inline";
 import {
   applyLocalCliMutation,
+  filterExtensionSuggestions,
+  filterPackageScriptCommands,
   LocalCliApiError,
   previewLocalCliMutation,
+  looksLikePackageScriptPaste,
+  keepsPackageScriptCatalog,
+  preferredPackageScriptExtension,
   recognizeLocalCli,
   suggestedHarnessExtensions,
+  suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
   type LocalCliCommandState,
   type LocalCliItem,
   type LocalCliState,
 } from "../local-cli-api";
+import {
+  addDialogSubmitLabel,
+  allowActionLabel,
+  blockActionLabel,
+  dialogIntro,
+  filterCountCopy,
+  ProjectSwitcher,
+  SuggestionPanel,
+  suggestionSummary,
+  surfaceBadge,
+} from "./add-custom-extension-support";
 import { CustomExtensionCommandList, commandStatesPayload, withCommandState } from "./custom-extension-commands";
 import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
@@ -44,8 +61,24 @@ export function AddCustomExtensionDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useModalDialog<HTMLFormElement>(props.onClose, !busy);
   const recognizeGeneration = useRef(0);
-  const harnessSuggestions = suggestedHarnessExtensions(props.items).slice(0, 8);
-  const seenSuggestions = suggestedSeenExtensions(props.items).slice(0, 4);
+  const autoRecognizedCommand = useRef("");
+  const didAutoSelect = useRef(false);
+  const rememberedProjects = suggestedPackageScriptExtensions(props.items);
+  const packageScriptSuggestions = filterExtensionSuggestions(
+    rememberedProjects,
+    command,
+  ).slice(0, 6);
+  const harnessSuggestions = filterExtensionSuggestions(
+    suggestedHarnessExtensions(props.items),
+    command,
+  ).slice(0, 8);
+  const seenSuggestions = filterExtensionSuggestions(
+    suggestedSeenExtensions(props.items),
+    command,
+  ).slice(0, 6);
+  const hasSuggestions = packageScriptSuggestions.length > 0
+    || harnessSuggestions.length > 0
+    || seenSuggestions.length > 0;
 
   useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
@@ -54,59 +87,85 @@ export function AddCustomExtensionDialog(props: {
   }, [resolveApprovalGate]);
 
   const handleCommand = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    const keepCatalog = recognized?.surface === "package-scripts" && keepsPackageScriptCatalog(value, commands);
+    setCommand(value);
+    setError(null);
+    if (keepCatalog) return;
     recognizeGeneration.current += 1;
-    setCommand(event.target.value);
+    autoRecognizedCommand.current = "";
+    setBusy(false);
     setRecognized(null);
     setCommands([]);
     setSummary(null);
     setPending(null);
-    setError(null);
-  }, []);
+  }, [commands, recognized]);
   const handlePassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setPassword(event.target.value);
   }, []);
   const handleTotp = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setTotp(event.target.value);
   }, []);
-  const runRecognize = useCallback(async (commandText: string, cliId?: string) => {
+  const runRecognize = useCallback(async (commandText: string, cliId?: string, silent = false) => {
     const generation = recognizeGeneration.current + 1;
     recognizeGeneration.current = generation;
     setBusy(true);
-    setError(null);
+    if (!silent) setError(null);
     try {
       const result = await recognizeLocalCli(commandText, cliId ? { cliId } : undefined);
       if (recognizeGeneration.current !== generation) return;
       setRecognized(result.item);
       setCommands(result.item.commands);
       setSummary(result.summary);
-      setPending(null);
+      setPending(result.item.surface === "package-scripts" ? "allowed" : null);
+      setError(null);
     } catch (caught) {
       if (recognizeGeneration.current !== generation) return;
       setRecognized(null);
       setSummary(null);
-      setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not identify that command.");
+      if (!silent) {
+        setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not identify that command.");
+      }
     } finally {
       if (recognizeGeneration.current === generation) setBusy(false);
     }
   }, []);
   const selectSuggestion = useCallback((item: LocalCliItem) => {
-    setCommand(item.example_label);
-    setPending(null);
+    if (item.surface !== "package-scripts") setCommand(item.example_label);
     setError(null);
     if (item.surface === "mcp" && item.commands.length === 0) {
       setRecognized(null);
       setCommands([]);
       setSummary(null);
+      setPending(null);
       void runRecognize(item.example_label, item.cli_id);
       return;
     }
     setRecognized(item);
     setCommands(item.commands);
     setSummary(suggestionSummary(item));
+    setPending(item.surface === "package-scripts" && item.commands.length > 0 ? "allowed" : null);
   }, [runRecognize]);
   const findTool = useCallback(async () => {
     await runRecognize(command);
   }, [command, runRecognize]);
+  useEffect(() => {
+    if (didAutoSelect.current || recognized !== null || command.trim() !== "") return;
+    const preferred = preferredPackageScriptExtension(props.items);
+    if (preferred === null) return;
+    didAutoSelect.current = true;
+    selectSuggestion(preferred);
+  }, [command, props.items, recognized, selectSuggestion]);
+  useEffect(() => {
+    const trimmed = command.trim();
+    if (recognized !== null || !looksLikePackageScriptPaste(trimmed)) return;
+    if (autoRecognizedCommand.current === trimmed) return;
+    const handle = window.setTimeout(() => {
+      autoRecognizedCommand.current = trimmed;
+      void runRecognize(trimmed, undefined, true);
+    }, 280);
+    return () => window.clearTimeout(handle);
+  }, [busy, command, recognized, runRecognize]);
   const requestAllow = useCallback(() => setPending("allowed"), []);
   const requestBlock = useCallback(() => setPending("blocked"), []);
   const handleSubmit = useCallback(async (event: FormEvent) => {
@@ -161,6 +220,14 @@ export function AddCustomExtensionDialog(props: {
     busy,
     pending,
   });
+  const showingPackageCatalog = recognized?.surface === "package-scripts";
+  const visibleCommands = showingPackageCatalog
+    ? filterPackageScriptCommands(commands, command)
+    : commands;
+  const commandLabel = showingPackageCatalog ? "Filter scripts" : "Command";
+  const commandPlaceholder = showingPackageCatalog
+    ? "guard:audit"
+    : "npm run guard:audit";
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm">
@@ -175,37 +242,53 @@ export function AddCustomExtensionDialog(props: {
       >
         <h2 id="add-custom-extension-title" className="text-xl font-semibold text-brand-dark">Add a custom extension</h2>
         <p className="mt-2 text-sm leading-6 text-brand-dark/80">
-          Paste a local command or an MCP server launch command, or pick a server Guard found in your apps. Guard lists commands from --help, or tools from a stdio MCP server, then you set Recommended, Allow, or Block.
+          {dialogIntro(rememberedProjects.length > 0, showingPackageCatalog === true)}
         </p>
-        <label htmlFor="custom-extension-command" className="mt-5 block text-sm font-semibold text-brand-dark">Command</label>
+        <label htmlFor="custom-extension-command" className="mt-5 block text-sm font-semibold text-brand-dark">{commandLabel}</label>
         <input
           id="custom-extension-command"
           value={command}
           onChange={handleCommand}
           spellCheck={false}
           autoComplete="off"
-          placeholder="npx -y @modelcontextprotocol/server-github"
+          placeholder={commandPlaceholder}
           className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
         />
         <p className="mt-2 text-sm leading-6 text-brand-dark/70">
-          One command. A script, a binary, or an MCP launch such as <span className="font-medium">npx</span> or <span className="font-medium">uvx</span>. Not <span className="font-medium">ls</span>, <span className="font-medium">grep</span>, or a pipeline.
+          {showingPackageCatalog
+            ? "Typing filters nested names. Allow still enrolls every script in this project."
+            : <>One command. A script, a binary, <span className="font-medium">npm run</span>, a project folder, or an MCP launch. Not a pipeline.</>}
         </p>
+        {recognized !== null && showingPackageCatalog ? (
+          <ProjectSwitcher
+            items={rememberedProjects}
+            currentId={recognized.cli_id}
+            onSelect={selectSuggestion}
+          />
+        ) : null}
         {recognized ? (
           <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-brand-dark">{recognized.name}</p>
-              {recognized.surface === "mcp" ? (
+              {surfaceBadge(recognized.surface) ? (
                 <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold tracking-wide text-brand-dark/70 ring-1 ring-slate-200">
-                  MCP server
+                  {surfaceBadge(recognized.surface)}
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 font-mono text-xs text-brand-dark/70">{recognized.example_label}</p>
+            <p className="mt-1 font-mono text-xs text-brand-dark/70">
+              {recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label}
+            </p>
             {summary ? <p className="mt-2 text-sm leading-6 text-brand-dark/80">{summary}</p> : null}
-            {commands.length > 0 ? (
-              <div className="mt-4 max-h-72 overflow-auto rounded-2xl bg-white">
+            {showingPackageCatalog && command.trim() !== "" ? (
+              <p className="mt-2 text-xs leading-5 text-brand-dark/60">
+                {filterCountCopy(visibleCommands.length, commands.length)}
+              </p>
+            ) : null}
+            {visibleCommands.length > 0 ? (
+              <div className={`mt-4 overflow-auto rounded-2xl bg-white ${showingPackageCatalog ? "max-h-96" : "max-h-72"}`}>
                 <CustomExtensionCommandList
-                  commands={commands}
+                  commands={visibleCommands}
                   disabled={busy}
                   surface={recognized.surface}
                   onChange={handleCommandState}
@@ -214,10 +297,10 @@ export function AddCustomExtensionDialog(props: {
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={requestAllow} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "allowed" ? "bg-brand-blue text-white" : "border border-slate-300 text-brand-dark"}`}>
-                {recognized.surface === "mcp" ? "Allow this server" : "Allow this tool"}
+                {allowActionLabel(recognized.surface)}
               </button>
               <button type="button" onClick={requestBlock} className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${pending === "blocked" ? "bg-brand-dark text-white" : "border border-slate-300 text-brand-dark"}`}>
-                {recognized.surface === "mcp" ? "Block this server" : "Block this tool"}
+                {blockActionLabel(recognized.surface)}
               </button>
             </div>
           </div>
@@ -234,10 +317,14 @@ export function AddCustomExtensionDialog(props: {
           </div>
         ) : null}
         {recognized === null ? (
-          <>
-            <SuggestionGroup heading="From your apps" items={harnessSuggestions} onSelect={selectSuggestion} />
-            <SuggestionGroup heading="Seen on this device" items={seenSuggestions} onSelect={selectSuggestion} />
-          </>
+          <SuggestionPanel
+            query={command}
+            hasSuggestions={hasSuggestions}
+            packageScriptSuggestions={packageScriptSuggestions}
+            harnessSuggestions={harnessSuggestions}
+            seenSuggestions={seenSuggestions}
+            onSelect={selectSuggestion}
+          />
         ) : null}
         {error ? <div className="mt-4"><InlineError message={error} /></div> : null}
         <div className="mt-6 flex justify-end gap-3">
@@ -248,73 +335,5 @@ export function AddCustomExtensionDialog(props: {
         </div>
       </form>
     </div>
-  );
-}
-
-function addDialogSubmitLabel(input: {
-  recognized: LocalCliItem | null;
-  busy: boolean;
-  pending: LocalCliState | null;
-}): string {
-  if (input.recognized === null) {
-    return input.busy ? "Looking…" : "Find this tool";
-  }
-  if (input.busy) {
-    return "Saving…";
-  }
-  const mcp = input.recognized.surface === "mcp";
-  if (input.pending === "blocked") {
-    return mcp ? "Block this server" : "Block this tool";
-  }
-  return mcp ? "Allow this server" : "Allow this tool";
-}
-
-function suggestionSummary(item: LocalCliItem): string {
-  if (item.surface === "mcp" && item.commands.length > 0) {
-    return `Guard listed ${item.commands.length} tools from this MCP server. Recommended keeps the usual review. Allow or block each one.`;
-  }
-  if (item.surface === "mcp") {
-    return `Find this tool to list MCP tools from ${item.name}.`;
-  }
-  if (item.commands.length > 0) {
-    return `Guard loaded ${item.commands.length} commands. Recommended keeps the usual review. Allow or block each one.`;
-  }
-  return `Find this tool to read ${item.name} --help and load its commands.`;
-}
-
-function SuggestionGroup(props: {
-  heading: string;
-  items: LocalCliItem[];
-  onSelect: (item: LocalCliItem) => void;
-}) {
-  if (props.items.length === 0) return null;
-  return (
-    <div className="mt-5">
-      <p className="text-sm font-semibold text-brand-dark">{props.heading}</p>
-      <ul className="mt-2 divide-y divide-slate-200">
-        {props.items.map((item) => (
-          <li key={item.cli_id}>
-            <SuggestionButton item={item} onSelect={props.onSelect} />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function SuggestionButton(props: { item: LocalCliItem; onSelect: (item: LocalCliItem) => void }) {
-  const handleSelect = useCallback(() => {
-    props.onSelect(props.item);
-  }, [props]);
-  return (
-    <button type="button" onClick={handleSelect} className="flex min-h-11 w-full items-baseline justify-between gap-3 py-2 text-left">
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-brand-dark">{props.item.name}</span>
-        {props.item.source_label ? (
-          <span className="block truncate text-xs text-brand-dark/60">{props.item.source_label}</span>
-        ) : null}
-      </span>
-      <span className="truncate font-mono text-xs text-brand-dark/60">{props.item.example_label}</span>
-    </button>
   );
 }

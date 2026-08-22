@@ -1,11 +1,12 @@
-import { useCallback, useState, Suspense, lazy } from "react";
+import { useCallback, useState, Suspense } from "react";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { PolicyExceptionsToolbar, PolicyPageToolbar, PolicyUnderlineTabBar } from "./policy-page-chrome";
 import type { PolicyPageView } from "./policy-workspace";
 import { resolveCloudPolicyControlsUrl, resolveCloudExceptionsConnected } from "./policy-workspace-helpers";
+import { lazyWorkspace } from "./lazy-workspace";
 
-const PolicyWorkspace = lazy(() =>
+const PolicyWorkspace = lazyWorkspace(() =>
   import("./policy-workspace").then((module) => ({ default: module.PolicyWorkspace })),
 );
 
@@ -59,9 +60,9 @@ export function PolicyWorkspacePage(props: {
   return (
     <div className="space-y-6">
       <WorkspacePageHeader
-        eyebrow="Policy"
-        title="Remembered rules and exceptions"
-        description="Inspect remembered outcomes, cloud exceptions, and the order Guard uses to decide. Configure protection behavior in Settings."
+        eyebrow="Rules & exceptions"
+        title="Remembered decisions and exceptions"
+        description="Review decisions remembered on this device, contextual rules synced from Guard Cloud, exceptions, and the order Guard uses to decide. Configure tools and capability posture in Extensions."
         actions={
           activeView === "exceptions" ? (
             <PolicyExceptionsToolbar

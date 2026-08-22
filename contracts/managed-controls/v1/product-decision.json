@@ -1,0 +1,43 @@
+{
+  "authority_modes": [
+    "personal-shared",
+    "workspace-shared",
+    "managed-restrictive"
+  ],
+  "compatibility": {
+    "internal_policy_bundle_names_retained": true,
+    "policy_route_aliases_retained": true,
+    "technical_guard_policy_names_retained": true
+  },
+  "decision_id": "hol-guard.extension-first-managed-controls.v1",
+  "definitions": {
+    "control_set": "A versioned, scoped, simulated, reviewed, signed, deployed, acknowledged, and auditable collection of Extension controls and contextual rules in Guard Cloud.",
+    "deployment": "A signed Control Set version delivered to an eligible runtime cohort with acknowledgement, drift, pause, rollback, and audit state.",
+    "detector_rule": "A Local runtime implementation detail that recognizes security-relevant evidence for an Extension permission. Detector rules do not grant authority and are not authored by Cloud by default.",
+    "exception": "A time-bounded, reviewed contextual deviation. In release 3.0, an exception cannot weaken a managed-restrictive Extension or permission block.",
+    "extension": "A stable Local capability boundary for a protected tool or capability domain, such as Git, Docker, Kubernetes, GitHub, npm, or MCP.",
+    "local_setting": "A device-specific Extension or permission preference that can preserve or strengthen protection but cannot weaken a managed restriction or required floor.",
+    "managed_restriction": "A signed workspace restriction that can disable an Extension, disable a permission, or activate global lockdown and cannot be weakened locally.",
+    "permission": "A stable, independently configurable capability inside an Extension. Permissions own the detector rules needed to recognize that capability.",
+    "remembered_rule": "A contextual local decision remembered from an approval. It is not an Extension setting and cannot bypass a managed restriction or required floor."
+  },
+  "enforcement": {
+    "cloud_must_not_redefine_detector_matchers": true,
+    "contextual_policy_precedence_preserved": true,
+    "local_registry_authoritative": true,
+    "managed_restrictive_actions": [
+      "disable-extension",
+      "disable-permission",
+      "global-lockdown"
+    ],
+    "non_weakenable_authority_requires_negotiation": true,
+    "package_manager_delegate": "package-firewall"
+  },
+  "product_language": {
+    "cloud_primary_object": "Control Set",
+    "cloud_surface": "Managed controls",
+    "local_extension_surface": "Extensions",
+    "local_rule_surface": "Rules & exceptions"
+  },
+  "schema_version": 1
+}

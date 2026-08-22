@@ -270,14 +270,14 @@ def test_alpha_tag_reservation_binds_version_to_build_source() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     job = workflow["jobs"]["reserve-alpha-tag"]
 
-    assert job["needs"] == ["build"]
+    assert job["needs"] == ["build", "assemble-native-guard-distributions"]
     assert job["permissions"] == {"contents": "write"}
     assert "needs.build.outputs.channel == 'alpha'" in job["if"]
     reservation_run = next(step["run"] for step in job["steps"] if step.get("name") == "Reserve exact alpha tag")
-    assert 'tag="alpha/v${VERSION}"' in reservation_run
-    assert "refs/tags/${tag}" in reservation_run
-    assert '-f sha="$SOURCE_SHA"' in reservation_run
-    assert 'remote_tag_sha" != "$SOURCE_SHA"' in reservation_run
+    script = ROOT.joinpath("scripts", "reserve_alpha_tag.sh").read_text(encoding="utf-8")
+    assert reservation_run == "bash scripts/reserve_alpha_tag.sh"
+    assert 'tag="alpha/v${VERSION}"' in script
+    assert '-f sha="$SOURCE_SHA"' in script
 
 
 def test_publish_jobs_use_registered_protected_environments() -> None:

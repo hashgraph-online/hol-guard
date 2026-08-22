@@ -16,6 +16,7 @@ from .runtime.local_cli_commands import (
     slug_local_cli_command_id,
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
+from .runtime.package_json_scripts import identify_package_json_scripts
 
 LocalCliGrantState = Literal["allowed", "blocked"]
 
@@ -41,7 +42,9 @@ def matching_local_cli_grant(
 
     if current_action not in {"review", "require-reapproval", "warn"}:
         return None
-    identity = identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
+    identity = identify_package_json_scripts(command, cwd=cwd, home_dir=home_dir)
+    if identity is None:
+        identity = identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
     if identity is None:
         return None
     lookup = getattr(store, "read_local_cli_grant", None)

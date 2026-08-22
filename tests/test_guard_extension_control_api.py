@@ -32,6 +32,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_limits import (
+    advertised_extension_control_limits,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_proof import ExtensionControlProof
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
@@ -86,10 +89,11 @@ def test_catalog_and_effective_responses_are_bounded_public_dtos(tmp_path: Path)
 
     assert catalog["catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     assert isinstance(catalog["extensions"], list)
+    limits = advertised_extension_control_limits()
     assert catalog["limits"] == {
-        "max_body_bytes": 1_000_000,
-        "max_controls": 4096,
-        "max_observations": 2048,
+        **limits,
+        "max_body_bytes": limits["max_catalog_payload_bytes"],
+        "max_controls": limits["max_controls_total"],
     }
     projection = cast(dict[str, object], effective.pop("projection"))
     assert projection["schema_version"] == "guard.daemon.extension-control-projection.v1"

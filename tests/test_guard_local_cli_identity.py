@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard.runtime.custom_extension_suggestion import is_suggestable_custom_tool
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     catalog_owned_executables,
     identify_unlisted_cli,
     is_local_cli_id,
-    is_suggestable_custom_tool,
     recognize_operator_cli,
 )
 
@@ -67,14 +67,14 @@ def test_compound_command_is_not_unlisted(tmp_path: Path) -> None:
 
 
 def test_common_shell_utilities_are_not_unlisted(tmp_path: Path) -> None:
-    for command in ("ls -la", "grep foo", "echo hi"):
+    for command in ("ls -la", "grep foo", "echo hi", "rg foo", "whoami", "script"):
         assert identify_unlisted_cli(command, cwd=tmp_path, home_dir=tmp_path) is None
 
 
 def test_recognize_script_path_and_reject_grep(tmp_path: Path) -> None:
     script = tmp_path / "cwv.py"
     script.write_text("print('ok')\n", encoding="utf-8")
-    identity, code, message = recognize_operator_cli(str(script), cwd=tmp_path, home_dir=tmp_path)
+    identity, code, _message = recognize_operator_cli(str(script), cwd=tmp_path, home_dir=tmp_path)
     assert identity is not None
     assert identity.name == "cwv.py"
     assert code == ""
@@ -84,6 +84,16 @@ def test_recognize_script_path_and_reject_grep(tmp_path: Path) -> None:
     assert "grep" in reject_message
     assert is_suggestable_custom_tool(name="cwv.py", kind="script")
     assert not is_suggestable_custom_tool(name="ls", kind="executable")
+    for junk in ("rg", "whoami", "script"):
+        rejected_junk, junk_code, junk_message = recognize_operator_cli(
+            junk,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        assert rejected_junk is None
+        assert junk_code == "common_shell_utility"
+        assert junk in junk_message
+        assert "custom extension" in junk_message
 
 
 def test_recognize_script_path_with_spaces(tmp_path: Path) -> None:

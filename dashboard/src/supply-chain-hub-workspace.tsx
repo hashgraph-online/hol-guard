@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useMemo, useRef, useState } from "react";
 import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
@@ -9,14 +9,15 @@ import {
   IDLE_SUPPLY_CHAIN_FIX_ALL_STATE,
   type SupplyChainFixAllState,
 } from "./supply-chain-fix-all";
+import { lazyWorkspace } from "./lazy-workspace";
 
-const SupplyChainWorkspace = lazy(() =>
+const SupplyChainWorkspace = lazyWorkspace(() =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
 );
-const AuditWorkspace = lazy(() =>
+const AuditWorkspace = lazyWorkspace(() =>
   import("./audit-workspace").then((m) => ({ default: m.AuditWorkspace }))
 );
-const FeedHealthWorkspace = lazy(() =>
+const FeedHealthWorkspace = lazyWorkspace(() =>
   import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
 );
 

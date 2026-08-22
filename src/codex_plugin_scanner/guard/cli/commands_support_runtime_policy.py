@@ -102,15 +102,9 @@ def _approval_delivery_payload(
     return approval_delivery_payload(approval_prompt_flow(harness, managed_install=managed_install))
 
 def _native_hook_reason(*values: object | None) -> str:
-    messages: list[str] = []
-    for value in values:
-        if isinstance(value, str) and value.strip():
-            candidate = value.strip()
-            if candidate not in messages:
-                messages.append(candidate)
-    if messages:
-        return " ".join(messages)
-    return "HOL Guard flagged this tool call for review."
+    from ..approval_hook_copy import join_native_hook_reason
+
+    return join_native_hook_reason(*values)
 
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)

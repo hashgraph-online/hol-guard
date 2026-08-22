@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { AppView } from "./approval-center-primitives";
@@ -7,10 +7,8 @@ import { ShellNavigation } from "./shell-navigation";
 import { ReceiptsWorkspace } from "./receipts-workspace";
 import { ReviewWorkspace } from "./review-workspace";
 import { QueueConnectionError } from "./queue-connection-error";
-
-const McpPolicyRequestPanel = lazy(() =>
-  import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
-);
+import { ErrorBoundary } from "./error-boundary";
+import { lazyWorkspace } from "./lazy-workspace";
 import type { BulkGateCredentials } from "./approval-gate-utils";
 import type {
   GuardApprovalGatePublicConfig,
@@ -26,6 +24,10 @@ import type {
 import { useGuardUpdate } from "./guard-update-panel";
 import { updateSettings } from "./guard-api";
 import { WatchProtectionBanner } from "./watch-protection-banner";
+
+const McpPolicyRequestPanel = lazyWorkspace(() =>
+  import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
+);
 
 type RequestState =
   | { kind: "loading" }
@@ -313,7 +315,9 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 />
               </div>
             ) : null}
-            {renderViewContent(props)}
+            <ErrorBoundary key={props.view} onReset={props.onGoHome}>
+              {renderViewContent(props)}
+            </ErrorBoundary>
           </div>
         </main>
         <ShellFooter />

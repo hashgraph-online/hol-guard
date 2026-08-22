@@ -1,10 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
 import {
+  extensionDisplayName,
   extensionStateLabel,
 } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
-import type { LocalCliItem } from "../local-cli-api";
+import { addedCustomExtensions, type LocalCliItem } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import {
   AddCustomExtensionButton,
@@ -28,6 +29,18 @@ function sourceIsManaged(effective: EffectiveExtensionControls, extensionId: str
     ));
 }
 
+/**
+ * The row's second line carries the state only when it deviates from the
+ * default. A healthy, enabled tool has nothing to decide, so the line shows
+ * the tool's executables (or its description) instead — information that
+ * helps recognition rather than repeating "Allowed" fifty-nine times.
+ */
+function catalogRowSecondLine(extension: ExtensionCatalogItem, state: string): string {
+  if (state === "Blocked" || state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
+  const executables = extension.executables.join(" · ").trim();
+  return executables || extension.description;
+}
+
 function CatalogExtensionRow(props: {
   extension: ExtensionCatalogItem;
   effective: EffectiveExtensionControls;
@@ -39,9 +52,9 @@ function CatalogExtensionRow(props: {
   return (
     <ProtectionModuleRow
       extensionId={props.extension.extension_id}
-      name={props.extension.name}
+      name={extensionDisplayName(props.extension.name)}
       description={props.extension.description}
-      behavior={extensionStateLabel(props.effective, props.extension)}
+      behavior={catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension))}
       required={props.extension.required}
       managed={sourceIsManaged(props.effective, props.extension.extension_id)}
       executables={props.extension.executables}
@@ -70,6 +83,15 @@ export function ExtensionsOverview(props: {
   onCloseAddCustom: () => void;
   onCustomExtensionAdded: (cliId: string) => void;
 }) {
+  const [query, setQuery] = useState("");
+  // An active search replaces the catalogs below it: results, then the Tools
+  // match group. Rendering the full list under the results would force the
+  // operator to visually skip fifty-nine unchanged rows.
+  const searching = query.trim().length > 0;
+  // Suggestion-only responses (discovered servers, observed CLIs not yet
+  // added) render no custom section: the section lists added extensions, and
+  // its Add button would otherwise be the section's only content.
+  const addedCustomCount = addedCustomExtensions(props.localCliItems).length;
   return (
     <div hidden={!props.active} inert={!props.active || undefined}>
       <WorkspacePageHeader
@@ -96,38 +118,47 @@ export function ExtensionsOverview(props: {
         catalog={props.catalogExtensions}
         effective={props.effective}
         active={props.active}
+        query={query}
+        onQueryChange={setQuery}
         onRefresh={props.onRefresh}
         onOpenExtension={props.onOpenExtension}
+        actionSlot={searching ? <AddCustomExtensionButton onClick={props.onAddCustom} /> : null}
       />
 
-      <CustomExtensionsSection
-        items={props.localCliItems}
-        onOpen={props.onOpenLocalCli}
-        onAdd={props.onAddCustom}
-      />
-
-      <section className="mt-10" aria-labelledby="all-tools-heading">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 id="all-tools-heading" className="text-xl font-semibold tracking-tight text-brand-dark">All tools</h2>
-            <p className="mt-1 text-sm text-slate-500">Every built-in tool Guard can watch on this device. Open one to adjust its command patterns.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <AddCustomExtensionButton onClick={props.onAddCustom} />
-            <span className="text-sm text-brand-dark/70">{props.catalogExtensions.length} tools</span>
-          </div>
-        </div>
-        <div className="mt-4">
-          {props.catalogExtensions.map((extension) => (
-            <CatalogExtensionRow
-              key={extension.extension_id}
-              extension={extension}
-              effective={props.effective}
-              onOpen={props.onOpenExtension}
+      {searching ? null : (
+        <>
+          {addedCustomCount ? (
+            <CustomExtensionsSection
+              items={props.localCliItems}
+              onOpen={props.onOpenLocalCli}
+              onAdd={props.onAddCustom}
             />
-          ))}
-        </div>
-      </section>
+          ) : null}
+
+          <section className="mt-10" aria-labelledby="all-tools-heading">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 id="all-tools-heading" className="text-xl font-semibold tracking-tight text-brand-dark">All tools</h2>
+                <p className="mt-1 text-sm text-slate-500">Every built-in tool Guard can watch on this device. Open one to adjust its command patterns.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {addedCustomCount ? null : <AddCustomExtensionButton onClick={props.onAddCustom} />}
+                <span className="text-sm text-brand-dark/70">{props.catalogExtensions.length} tools</span>
+              </div>
+            </div>
+            <div className="mt-4">
+              {props.catalogExtensions.map((extension) => (
+                <CatalogExtensionRow
+                  key={extension.extension_id}
+                  extension={extension}
+                  effective={props.effective}
+                  onOpen={props.onOpenExtension}
+                />
+              ))}
+            </div>
+          </section>
+        </>
+      )}
 
       {props.addingCustom ? (
         <AddCustomExtensionDialog

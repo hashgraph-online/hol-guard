@@ -421,7 +421,7 @@ jobs:
       )
     needs: build
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 45
     permissions:
       contents: read
     strategy:
@@ -776,13 +776,13 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      needs.build.result == 'success' &&
+      needs.build.result == 'success' && needs.assemble-native-guard-distributions.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
         (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
       )
-    needs: [build]
+    needs: [build, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -796,34 +796,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          tag="alpha/v${VERSION}"
-          for attempt in 1 2 3; do
-            remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
-            if [[ -n "$remote_tag_sha" ]]; then
-              break
-            fi
-            if gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -f ref="refs/tags/${tag}" \
-              -f sha="$SOURCE_SHA" >/dev/null; then
-              remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
-              if [[ -n "$remote_tag_sha" ]]; then
-                break
-              fi
-            fi
-            if [[ "$attempt" != "3" ]]; then
-              sleep $((attempt * 5))
-            fi
-          done
-          if [[ -z "$remote_tag_sha" ]]; then
-            git tag "$tag" "$SOURCE_SHA"
-            git push origin "refs/tags/${tag}" || true
-            remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
-          fi
-          if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
-            echo "Alpha tag reservation does not target the published source" >&2
-            exit 1
-          fi
+        run: bash scripts/reserve_alpha_tag.sh
 
   publish-alpha-testpypi:
     name: Verify alpha artifact on TestPyPI
@@ -1084,6 +1057,29 @@ jobs:
           [[ -n "$guard_wheel" && -n "$scanner_wheel" ]]
           [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
           [[ "$(uv tool run --from "$scanner_wheel" plugin-scanner --version)" == "plugin-scanner $VERSION" ]]
+
+  release-unpublished-alpha-reservation:
+    name: Release unpublished alpha reservation
+    if: >-
+      always() &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      needs.build.outputs.channel == 'alpha' &&
+      needs.reserve-alpha-tag.result == 'success' &&
+      needs.publish-alpha-pypi.result != 'success'
+    needs: [build, reserve-alpha-tag, publish-alpha-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Delete unpublished reservation tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: bash scripts/release_unpublished_alpha_reservation.sh
 
   publish-main-testpypi:
     name: Verify main artifact on TestPyPI

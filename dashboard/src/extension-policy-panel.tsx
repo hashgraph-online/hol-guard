@@ -369,10 +369,10 @@ export function ExtensionPolicyPanel(props: {
       <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/80">
         Recommended follows Guard defaults. Allow is available only where built-in safety and organization policy still permit it. Block is a stricter local floor.
       </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "recommended")} className="min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40">Recommended</button>
-        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "stricter")} className="min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40">Stricter</button>
-        <button type="button" disabled className="min-h-10 px-1 text-xs font-semibold text-brand-dark/55">Custom</button>
+      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-xs font-semibold text-brand-dark/60">Apply to every pattern you can change:</span>
+        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "recommended")} className="min-h-10 px-1 text-xs font-semibold text-brand-blue disabled:opacity-40">Reset to Recommended</button>
+        <button type="button" disabled={baseEffective.health !== "protected" || refreshRequired} onClick={() => applyProfile(policyExtension.permissions, "stricter")} className="min-h-10 px-1 text-xs font-semibold text-brand-dark disabled:opacity-40">Block all changeable variants</button>
       </div>
       <div id="extension-settings-history"><ProtectionSettingsHistory catalogDigest={baseEffective.catalog_digest} disabled={baseEffective.health !== "protected" || refreshRequired} onUse={(layers) => useHistoricalDraft(layers)} /></div>
       {baseEffective.global_lockdown ? (

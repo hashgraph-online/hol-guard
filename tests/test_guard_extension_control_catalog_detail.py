@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_contract import CONTROL_SCHEMA_VERSION
+from codex_plugin_scanner.guard.runtime.extension_control_limits import advertised_extension_control_limits
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -82,10 +83,11 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
     assert payload["schema_version"] == _API_SCHEMA
     assert payload["control_schema_version"] == CONTROL_SCHEMA_VERSION
     assert payload["catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    limits = advertised_extension_control_limits()
     assert payload["limits"] == {
-        "max_body_bytes": 1_000_000,
-        "max_controls": 4096,
-        "max_observations": 2048,
+        **limits,
+        "max_body_bytes": limits["max_catalog_payload_bytes"],
+        "max_controls": limits["max_controls_total"],
     }
 
     extensions = payload["extensions"]

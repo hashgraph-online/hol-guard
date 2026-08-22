@@ -2044,10 +2044,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
         if parsed.path == "/v1/extension-controls/catalog":
-            self._write_json(
-                self._daemon_server().extension_control_api.catalog(),
-                extra_headers={"Cache-Control": "no-store"},
-            )
+            try:
+                catalog = self._daemon_server().extension_control_api.catalog()
+            except ExtensionControlApiError as error:
+                self._write_json(error.to_payload(), status=error.status)
+                return
+            self._write_json(catalog, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path == "/v1/extension-controls/effective":
             self._write_json(

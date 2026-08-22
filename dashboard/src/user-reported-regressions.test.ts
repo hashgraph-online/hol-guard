@@ -14,6 +14,8 @@ const feedHealthSource = readFileSync(join(__dirname, "feed-health-workspace.tsx
 const policyTabSource = readFileSync(join(__dirname, "policy-strict-config-tab.tsx"), "utf8");
 const strictModeSource = readFileSync(join(__dirname, "policy-strict-config-strict-mode-card.tsx"), "utf8");
 const sparklineSource = readFileSync(join(__dirname, "evidence/sparkline.tsx"), "utf8");
+const appSource = readFileSync(join(__dirname, "app.tsx"), "utf8");
+const layoutSource = readFileSync(join(__dirname, "approval-center-layout.tsx"), "utf8");
 
 assert(
   !feedHealthSource.includes("onClick={onOpenSettings}"),
@@ -38,6 +40,18 @@ assert(
 assert(
   sparklineSource.includes("aria-label={`Guard activity over the last ${days} days`}"),
   "evidence activity chart has an accessible label",
+);
+assert(
+  appSource.includes("lazyWorkspace(() =>") && appSource.includes('import("./extensions-workspace")'),
+  "extensions workspace loads through the retrying lazy wrapper",
+);
+assert(
+  layoutSource.includes("<ErrorBoundary key={props.view} onReset={props.onGoHome}>"),
+  "workspace chrome recovers chunk-load failures without crashing the shell",
+);
+assert(
+  appSource.includes("<ErrorBoundary onReset={handleCloseHelp}>"),
+  "help modal chunk failures stay inside the dashboard recovery UI",
 );
 
 console.log("user-reported-regressions.test.ts: all tests passed");

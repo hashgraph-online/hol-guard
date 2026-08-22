@@ -19973,9 +19973,9 @@ const SHELL_NAV_ITEMS = [
   },
   {
     href: "/policy",
-    label: "Policy",
-    shortLabel: "Policy",
-    description: "Saved decisions and local controls",
+    label: "Rules & exceptions",
+    shortLabel: "Rules",
+    description: "Remembered decisions, Guard Cloud rules, and exceptions",
     view: "policy",
     group: "manage",
     icon: HiMiniClipboardDocumentList
@@ -19984,7 +19984,7 @@ const SHELL_NAV_ITEMS = [
     href: "/extensions",
     label: "Extensions",
     shortLabel: "Extensions",
-    description: "Managed extensions and integrations",
+    description: "Tools and capabilities protected on this device",
     view: "extensions",
     group: "manage",
     icon: HiMiniPuzzlePiece
@@ -30031,6 +30031,201 @@ function QueueConnectionError(props) {
     ] })
   ] }) });
 }
+const CHUNK_RELOAD_STORAGE_KEY = "hol-guard-dashboard-chunk-reload";
+const CHUNK_RELOAD_DELAY_MS = 400;
+function isChunkLoadError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return normalized.includes("failed to fetch dynamically imported module") || normalized.includes("error loading dynamically imported module") || normalized.includes("importing a module script failed") || normalized.includes("loading chunk");
+}
+function defaultWait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+function reloadDocument(reload) {
+  if (reload) {
+    reload();
+    return true;
+  }
+  if (typeof window !== "undefined") {
+    window.location.reload();
+    return true;
+  }
+  return false;
+}
+function storageGet(storage, key) {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function storageSet(storage, key, value) {
+  try {
+    storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function browserSessionStorage() {
+  try {
+    if (typeof sessionStorage === "undefined") {
+      return void 0;
+    }
+    return sessionStorage;
+  } catch {
+    return void 0;
+  }
+}
+async function loadWorkspaceModule(loader, options = {}) {
+  try {
+    return await loader();
+  } catch (error) {
+    if (!isChunkLoadError(error)) {
+      throw error;
+    }
+    const storage = options.storage;
+    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === "1") {
+      throw error;
+    }
+    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, "1")) {
+      throw error;
+    }
+    const wait = options.wait ?? defaultWait;
+    await wait(options.delayMs ?? CHUNK_RELOAD_DELAY_MS);
+    if (!reloadDocument(options.reload)) {
+      throw error;
+    }
+    return new Promise(() => {
+    });
+  }
+}
+function lazyWorkspace(loader) {
+  return reactExports.lazy(
+    () => loadWorkspaceModule(loader, {
+      storage: browserSessionStorage()
+    })
+  );
+}
+const CHUNK_LOAD_ERROR_HEADLINE = "This screen couldn't load";
+const CHUNK_LOAD_ERROR_BODY = "Guard lost its connection while opening this page. Reload once Guard is running on this device.";
+const GENERIC_ERROR_HEADLINE = "This screen ran into a problem";
+const GENERIC_ERROR_BODY = "Reload this page, or go back home and try again.";
+const DASHBOARD_RELOAD_LABEL = "Reload dashboard";
+const DASHBOARD_GO_HOME_LABEL = "Go home";
+const DASHBOARD_TRY_AGAIN_LABEL = "Try again";
+function dashboardErrorCopy(error) {
+  if (error && isChunkLoadError(error)) {
+    return {
+      kind: "chunk",
+      headline: CHUNK_LOAD_ERROR_HEADLINE,
+      body: CHUNK_LOAD_ERROR_BODY
+    };
+  }
+  return {
+    kind: "generic",
+    headline: GENERIC_ERROR_HEADLINE,
+    body: GENERIC_ERROR_BODY
+  };
+}
+class ErrorBoundary extends reactExports.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught:", error, errorInfo);
+  }
+  handleReload = () => {
+    if (this.props.reload) {
+      this.props.reload();
+      return;
+    }
+    window.location.reload();
+  };
+  handleGoHome = () => {
+    this.setState({ hasError: false, error: null });
+    this.props.onReset?.();
+  };
+  handleTryAgain = () => {
+    this.setState({ hasError: false, error: null });
+  };
+  render() {
+    if (!this.state.hasError) {
+      return this.props.children;
+    }
+    if (this.props.fallback) {
+      return this.props.fallback;
+    }
+    const copy = dashboardErrorCopy(this.state.error);
+    const showTryAgain = copy.kind === "generic";
+    const showGoHome = Boolean(this.props.onReset);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "guard-surface-in flex flex-col items-center justify-center py-12 text-center",
+        role: "alert",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-attention/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "svg",
+            {
+              className: "h-7 w-7 text-brand-attention",
+              fill: "none",
+              viewBox: "0 0 24 24",
+              stroke: "currentColor",
+              strokeWidth: 2,
+              "aria-hidden": "true",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  strokeLinecap: "round",
+                  strokeLinejoin: "round",
+                  d: "M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                }
+              )
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold tracking-tight text-brand-dark", children: copy.headline }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-2 max-w-md text-sm text-brand-dark/70", children: copy.body }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-wrap items-center justify-center gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: this.handleReload,
+                className: "inline-flex min-h-11 items-center rounded-lg bg-brand-blue px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+                children: DASHBOARD_RELOAD_LABEL
+              }
+            ),
+            showGoHome ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: this.handleGoHome,
+                className: "inline-flex min-h-11 items-center rounded-lg border border-brand-dark/15 bg-white px-4 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+                children: DASHBOARD_GO_HOME_LABEL
+              }
+            ) : null,
+            showTryAgain ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: this.handleTryAgain,
+                className: "inline-flex min-h-11 items-center rounded-lg border border-brand-dark/15 bg-white px-4 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+                children: DASHBOARD_TRY_AGAIN_LABEL
+              }
+            ) : null
+          ] })
+        ]
+      }
+    );
+  }
+}
 const PROTECTION_POSTURE_COPY = {
   protected: {
     label: "Protected",
@@ -30098,7 +30293,7 @@ function WatchProtectionBanner(props) {
     }
   );
 }
-const McpPolicyRequestPanel = reactExports.lazy(
+const McpPolicyRequestPanel = lazyWorkspace(
   () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
@@ -30285,7 +30480,7 @@ function ApprovalCenterLayout(props) {
                 onOpenSettings: handleOpenSettings
               }
             ) }) : null,
-            renderViewContent(props)
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: props.onGoHome, children: renderViewContent(props) }, props.view)
           ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ShellFooter, {})
         ]
@@ -30364,43 +30559,6 @@ function clearLabelForScope(scope) {
       return "Clear global decision";
   }
 }
-class ErrorBoundary extends reactExports.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-  componentDidCatch(error, errorInfo) {
-    console.error("ErrorBoundary caught:", error, errorInfo);
-  }
-  render() {
-    if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
-      }
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in flex flex-col items-center justify-center py-12 text-center", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-attention/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { className: "h-7 w-7 text-brand-attention", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", d: "M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" }) }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold tracking-tight text-brand-dark", children: "Something went wrong" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-2 max-w-md text-sm text-muted-foreground", children: this.state.error?.message ?? "An unexpected error occurred." }),
-        this.props.onReset && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: () => {
-              this.setState({ hasError: false, error: null });
-              this.props.onReset?.();
-            },
-            className: "mt-6 inline-flex min-h-11 items-center rounded-lg bg-brand-blue px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90",
-            children: "Try again"
-          }
-        )
-      ] });
-    }
-    return this.props.children;
-  }
-}
 function useRouteFocus(view, mainSelector = "main#main-content") {
   const prevViewRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
@@ -30418,24 +30576,21 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
-const ExtensionsWorkspace = reactExports.lazy(
+const HomeWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const ExtensionsWorkspace = lazyWorkspace(
   () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([6,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
-const SupplyChainHubWorkspace = reactExports.lazy(
+const AppDetailWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const SupplyChainHubWorkspace = lazyWorkspace(
   () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
-const PolicyWorkspacePage = reactExports.lazy(
+const PolicyWorkspacePage = lazyWorkspace(
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
-reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
-);
-const AboutWorkspace = reactExports.lazy(
+const AboutWorkspace = lazyWorkspace(
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 function LazyFallback() {
@@ -30483,7 +30638,7 @@ function viewTitle(view) {
   if (view === "settings") return "Settings";
   if (view === "supply-chain") return "Supply Chain";
   if (view === "audit") return "Audit";
-  if (view === "policy") return "Policy";
+  if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
   if (view === "extensions") return "Extensions";
@@ -31232,7 +31387,7 @@ function App() {
         } : null }) })
       }
     ),
-    helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) })
+    helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleCloseHelp, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) }) })
   ] });
 }
 const container = document.getElementById("guard-dashboard-root");
@@ -31337,7 +31492,7 @@ export {
   isApprovalProofSubmitDisabled as ay,
   ApprovalProofFieldInputs as az,
   HiMiniCommandLine as b,
-  HiMiniComputerDesktop as b$,
+  HiMiniShieldExclamation as b$,
   HiMiniRocketLaunch as b0,
   HiMiniTrash as b1,
   clearLabelForScope as b2,
@@ -31348,33 +31503,33 @@ export {
   isRecord$2 as b7,
   HiMiniClock as b8,
   IconActionButton as b9,
-  HiMiniCheck as bA,
-  HiMiniCodeBracket as bB,
-  HiMiniClipboardDocument as bC,
-  HiMiniUsers as bD,
-  HiMiniIdentification as bE,
-  policyActionLabel as bF,
-  createCloudExceptionRequest as bG,
-  HiMiniArrowRight as bH,
-  HiMiniPuzzlePiece as bI,
-  fetchCloudExceptions as bJ,
-  fetchCloudExceptionRequests as bK,
-  downloadBlob as bL,
-  PolicyStatField as bM,
-  PaginationControls as bN,
-  HiMiniNoSymbol as bO,
-  HiMiniArrowDownTray as bP,
-  HiMiniQueueList as bQ,
-  fetchMcpPolicyRequest as bR,
-  resolveMcpPolicyRequest as bS,
-  HiMiniDocumentPlus as bT,
-  HiMiniDocumentMagnifyingGlass as bU,
-  Surface as bV,
-  HiMiniCheckBadge as bW,
-  fetchSupplyChainBundle as bX,
-  isSupplyChainScannerEvidence as bY,
-  isBlockedGuardAction as bZ,
-  HiMiniShieldExclamation as b_,
+  HiMiniCloudArrowUp as bA,
+  HiMiniCheck as bB,
+  HiMiniCodeBracket as bC,
+  HiMiniClipboardDocument as bD,
+  HiMiniUsers as bE,
+  HiMiniIdentification as bF,
+  policyActionLabel as bG,
+  createCloudExceptionRequest as bH,
+  HiMiniArrowRight as bI,
+  HiMiniPuzzlePiece as bJ,
+  fetchCloudExceptions as bK,
+  fetchCloudExceptionRequests as bL,
+  downloadBlob as bM,
+  PolicyStatField as bN,
+  PaginationControls as bO,
+  HiMiniNoSymbol as bP,
+  HiMiniArrowDownTray as bQ,
+  HiMiniQueueList as bR,
+  Surface as bS,
+  HiMiniCheckBadge as bT,
+  fetchMcpPolicyRequest as bU,
+  resolveMcpPolicyRequest as bV,
+  HiMiniDocumentPlus as bW,
+  HiMiniDocumentMagnifyingGlass as bX,
+  fetchSupplyChainBundle as bY,
+  isSupplyChainScannerEvidence as bZ,
+  isBlockedGuardAction as b_,
   HiMiniBeaker as ba,
   ActivationSummary as bb,
   ActionResultPanel as bc,
@@ -31397,17 +31552,18 @@ export {
   activatePackageFirewallRuntime as bt,
   EntitlementNotice as bu,
   fetchReceipts as bv,
-  __vitePreload as bw,
-  scopeLabel as bx,
-  HiMiniDocumentText as by,
-  HiMiniCloudArrowUp as bz,
+  lazyWorkspace as bw,
+  __vitePreload as bx,
+  scopeLabel as by,
+  HiMiniDocumentText as bz,
   HiMiniChevronRight as c,
-  HiMiniChevronLeft as c0,
-  HiMiniFunnel as c1,
-  HiMiniArrowDown as c2,
-  HiMiniArrowUp as c3,
-  runAuditRemediation as c4,
-  HiMiniSignal as c5,
+  HiMiniComputerDesktop as c0,
+  HiMiniChevronLeft as c1,
+  HiMiniFunnel as c2,
+  HiMiniArrowDown as c3,
+  HiMiniArrowUp as c4,
+  runAuditRemediation as c5,
+  HiMiniSignal as c6,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,

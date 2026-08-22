@@ -76,6 +76,8 @@ _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES = 1024 * 1024
 _GUARD_DAEMON_PROCESS_QUERY_MONITOR_INTERVAL_SECONDS = 0.01
 _GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS = 0.25
+_RUNTIME_FINGERPRINT_CACHE_MAX_BYTES = 4096
+_RUNTIME_FINGERPRINT_HEX_LENGTH = 64
 _WINDOWS_CREATE_NEW_PROCESS_GROUP = 0x00000200
 _WINDOWS_DETACHED_PROCESS = 0x00000008
 _WINDOWS_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
@@ -100,6 +102,7 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "APPDATA",
         "COMSPEC",
         "HOME",
+        "HOL_GUARD_DESKTOP",
         "LANG",
         "LC_ALL",
         "LC_CTYPE",
@@ -132,7 +135,7 @@ _EPHEMERAL_REAP_IN_FLIGHT = False
 _DUPLICATE_RETIRE_SCHEDULE_LOCK = threading.Lock()
 _DUPLICATE_RETIRE_IN_FLIGHT: set[str] = set()
 _LAST_EPHEMERAL_REAP_AT = 0.0
-_runtime_fingerprint_cache: str | None = None
+_runtime_fingerprint_cache: tuple[str, str] | None = None
 
 GuardDaemonHookFailureKind = Literal[
     "authenticated-control-plane-failure",
@@ -190,8 +193,6 @@ def _daemon_launcher_env(
     )
     if getattr(sys, "frozen", False) is True:
         env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-        if os.environ.get("HOL_GUARD_DESKTOP") == "1":
-            env["HOL_GUARD_DESKTOP"] = "1"
     if os.name == "nt":
         env["USERPROFILE"] = str(trusted_home)
     if guard_home is not None and not _guard_home_is_ephemeral(guard_home):
@@ -326,6 +327,16 @@ def _guard_daemon_launch_command(
     )
 
 
+def desktop_preflight_requested() -> bool:
+    return os.environ.get("HOL_GUARD_DESKTOP_PREFLIGHT", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _default_guard_daemon_start_timeout() -> float:
+    if os.environ.get("HOL_GUARD_DESKTOP", "").strip() == "1":
+        return GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS
+    return GUARD_DAEMON_START_TIMEOUT_SECONDS
+
+
 def ensure_guard_daemon(
     guard_home: Path,
     *,
@@ -334,7 +345,9 @@ def ensure_guard_daemon(
     preferred_port: int | None = None,
     allow_windows_job_breakaway: bool = False,
 ) -> str:
-    timeout = GUARD_DAEMON_START_TIMEOUT_SECONDS if start_timeout is None else start_timeout
+    if desktop_preflight_requested():
+        raise RuntimeError("Guard daemon start is disabled during Desktop preflight.")
+    timeout = _default_guard_daemon_start_timeout() if start_timeout is None else start_timeout
     start_deadline = time.monotonic() + max(0.0, timeout)
     launch_cwd = _trusted_daemon_home(home_dir)
     _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
@@ -885,18 +898,25 @@ def schedule_guard_daemon_ensure(
     *,
     home_dir: Path | None = None,
 ) -> str:
-    """Reserve one detached daemon ensure without delaying a hook response."""
+    """Reserve one detached daemon ensure without delaying a hook response.
 
+    When a healthy daemon is not ready yet, return the predicted loopback origin
+    so approval deep links stay absolute and repairable. Callers must not treat
+    that predicted origin as a verified live URL.
+    """
+
+    if desktop_preflight_requested():
+        return load_guard_daemon_url(guard_home) or ""
     existing_url = load_guard_daemon_url(guard_home)
     if existing_url is not None:
         return existing_url
-    fallback_url = guard_daemon_url_for_home(guard_home)
+    predicted_url = guard_daemon_url_for_home(guard_home)
     try:
         wake_token = _claim_guard_daemon_wake_reservation(guard_home)
     except (OSError, RuntimeError, ValueError):
-        return fallback_url
+        return predicted_url
     if wake_token is None:
-        return fallback_url
+        return predicted_url
     try:
         trusted_home = _trusted_daemon_home(home_dir)
         command = _isolated_python_module_command(
@@ -938,7 +958,7 @@ def schedule_guard_daemon_ensure(
     except (OSError, RuntimeError, subprocess.SubprocessError, ValueError):
         with suppress(OSError, RuntimeError, ValueError):
             clear_guard_daemon_wake_reservation(guard_home, token=wake_token)
-    return fallback_url
+    return predicted_url
 
 
 def load_guard_daemon_url(guard_home: Path) -> str | None:
@@ -2505,9 +2525,6 @@ def _guard_daemon_state_matches_current_runtime(payload: dict[str, object]) -> b
     compatibility_version = payload.get("compatibility_version")
     if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
         return False
-    source_root = payload.get("source_root")
-    if not isinstance(source_root, str) or source_root != _current_guard_daemon_source_root():
-        return False
     runtime_fingerprint = payload.get("runtime_fingerprint")
     return isinstance(runtime_fingerprint, str) and runtime_fingerprint == _current_guard_daemon_runtime_fingerprint()
 
@@ -2516,28 +2533,120 @@ def _current_guard_daemon_source_root() -> str:
     return str(Path(__file__).resolve().parents[3])
 
 
-def _current_guard_daemon_runtime_fingerprint() -> str:
-    global _runtime_fingerprint_cache
-    if _runtime_fingerprint_cache is not None:
-        return _runtime_fingerprint_cache
-    source_root = Path(_current_guard_daemon_source_root())
+def _runtime_identity_paths(source_root: Path) -> list[Path]:
     package_root = source_root / "codex_plugin_scanner"
     static_root = package_root / "guard" / "daemon" / "static"
-    digest = hashlib.sha256()
-    digest.update(__version__.encode("utf-8"))
     paths = [*package_root.rglob("*.py")]
     if static_root.is_dir():
         paths.extend(path for path in static_root.rglob("*") if path.is_file())
+    return paths
+
+
+def _runtime_tree_signature(source_root: Path, paths: list[Path]) -> str:
+    digest = hashlib.sha256()
+    digest.update(__version__.encode("utf-8"))
     for path in sorted(paths):
         try:
             stat_result = path.stat()
         except OSError:
             continue
         digest.update(str(path.relative_to(source_root)).encode("utf-8"))
-        digest.update(str(stat_result.st_mtime_ns).encode("utf-8"))
         digest.update(str(stat_result.st_size).encode("utf-8"))
-    _runtime_fingerprint_cache = digest.hexdigest()
-    return _runtime_fingerprint_cache
+        digest.update(str(stat_result.st_mtime_ns).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _hash_runtime_contents(source_root: Path, paths: list[Path]) -> str:
+    digest = hashlib.sha256()
+    digest.update(__version__.encode("utf-8"))
+    for path in sorted(paths):
+        try:
+            stat_result = path.stat()
+        except OSError:
+            continue
+        digest.update(str(path.relative_to(source_root)).encode("utf-8"))
+        digest.update(str(stat_result.st_size).encode("utf-8"))
+        try:
+            with path.open("rb") as handle:
+                while chunk := handle.read(65536):
+                    digest.update(chunk)
+        except OSError:
+            continue
+    return digest.hexdigest()
+
+
+def _runtime_fingerprint_cache_path(source_root: Path) -> Path:
+    digest = hashlib.sha256(os.fsencode(str(source_root))).hexdigest()
+    return Path.home() / ".hol-guard" / "runtime-fingerprint-cache" / f"{digest}.json"
+
+
+def _is_sha256_hex(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == _RUNTIME_FINGERPRINT_HEX_LENGTH
+        and not set(value) - set("0123456789abcdef")
+    )
+
+
+def _load_runtime_fingerprint_cache(source_root: Path, tree_sig: str) -> str | None:
+    raw_payload = read_private_regular_text(
+        _runtime_fingerprint_cache_path(source_root),
+        max_bytes=_RUNTIME_FINGERPRINT_CACHE_MAX_BYTES,
+        require_private_parent=True,
+    )
+    if raw_payload is None:
+        return None
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("source_root") != str(source_root):
+        return None
+    cached_tree_sig = payload.get("tree_sig")
+    cached_fingerprint = payload.get("content_fingerprint")
+    if cached_tree_sig != tree_sig or not isinstance(cached_fingerprint, str):
+        return None
+    if not _is_sha256_hex(cached_fingerprint):
+        return None
+    return cached_fingerprint
+
+
+def _store_runtime_fingerprint_cache(source_root: Path, tree_sig: str, fingerprint: str) -> None:
+    cache_path = _runtime_fingerprint_cache_path(source_root)
+    try:
+        _ensure_private_directory(cache_path.parent)
+        _write_private_atomic_text(
+            cache_path,
+            json.dumps(
+                {
+                    "content_fingerprint": fingerprint,
+                    "source_root": str(source_root),
+                    "tree_sig": tree_sig,
+                },
+                sort_keys=True,
+            ),
+        )
+    except (OSError, RuntimeError, ValueError):
+        return
+
+
+def _current_guard_daemon_runtime_fingerprint() -> str:
+    global _runtime_fingerprint_cache
+    if _runtime_fingerprint_cache is not None:
+        return _runtime_fingerprint_cache[1]
+    source_root = Path(_current_guard_daemon_source_root())
+    paths = _runtime_identity_paths(source_root)
+    tree_sig = _runtime_tree_signature(source_root, paths)
+    cached = _load_runtime_fingerprint_cache(source_root, tree_sig)
+    if cached is not None:
+        _runtime_fingerprint_cache = (tree_sig, cached)
+        return cached
+    fingerprint = _hash_runtime_contents(source_root, paths)
+    _store_runtime_fingerprint_cache(source_root, tree_sig, fingerprint)
+    _runtime_fingerprint_cache = (tree_sig, fingerprint)
+    return fingerprint
 
 
 def current_guard_daemon_runtime_fingerprint() -> str:
@@ -2548,10 +2657,7 @@ def current_guard_daemon_runtime_fingerprint() -> str:
 
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:
     payload = _load_state(guard_home)
-    if not isinstance(payload, dict):
-        return False
-    compatibility_version = payload.get("compatibility_version")
-    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
+    if not isinstance(payload, dict) or not _guard_daemon_state_matches_current_runtime(payload):
         return False
     pid = payload.get("pid")
     return isinstance(pid, int) and pid > 0 and _guard_daemon_pid_is_running(pid)

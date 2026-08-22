@@ -56,6 +56,9 @@ All matches survive evaluation. The engine creates one composite artifact contai
 
 The artifact is evidence, not policy. Guard policy resolves configured risk actions, source/workspace scope, managed policy, remembered decisions, approvals, and final `allow`, `warn`, `review`, `sandbox-required`, `require-reapproval`, or `block` behavior. Extension metadata, modes, and safer alternatives cannot grant authority.
 
+The Extension-first authority boundary between Local detector facts, remembered decisions, and Guard Cloud Control Sets is defined by
+[`ADR 0011: Extension-First Managed Controls`](adr/0011-extension-first-managed-controls.md).
+
 Decision composition must be monotonic:
 
 1. Required critical rules establish a minimum action that lower-authority input cannot reduce.

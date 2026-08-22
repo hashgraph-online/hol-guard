@@ -44,7 +44,11 @@ from codex_plugin_scanner.guard.runtime.extension_control_proof import (
     issue_extension_control_proof,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore, SystemKeyringSecretStore
+from codex_plugin_scanner.guard.store_base import (
+    EncryptedFileSecretStore,
+    MigratingFallbackSecretStore,
+    SystemKeyringSecretStore,
+)
 
 _PASSWORD = "correct horse battery staple"
 
@@ -732,19 +736,74 @@ def test_credential_store_failure_requires_explicit_degraded_acknowledgement(tmp
         _commit(store)
 
 
-def test_unavailable_system_keyring_never_silently_falls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unavailable_system_keyring_uses_owner_only_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(
         SystemKeyringSecretStore,
-        "_is_available",
-        classmethod(lambda cls: False),
+        "get_secret",
+        lambda _self, _secret_id: (_ for _ in ()).throw(RuntimeError("keyring unavailable")),
+    )
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "set_secret",
+        lambda _self, _secret_id, _value: (_ for _ in ()).throw(RuntimeError("keyring unavailable")),
     )
     store = GuardStore(tmp_path, prime_policy_integrity=False)
+    update_settings(
+        tmp_path,
+        {
+            "enabled": True,
+            "new_password": _PASSWORD,
+            "confirm_password": _PASSWORD,
+            "cooldown_seconds": 0,
+        },
+    )
 
-    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    assert isinstance(store._secret_store(), MigratingFallbackSecretStore)
+    assert _enroll(store).health is AuthorityHealth.PROTECTED
 
-    assert view.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
-    assert view.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
+    restarted = GuardStore(tmp_path, prime_policy_integrity=False)
+    view = restarted.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
+    assert view.health is AuthorityHealth.PROTECTED
+    secrets_dir = tmp_path / "secrets"
+    if os.name != "nt":
+        assert secrets_dir.stat().st_mode & 0o777 == 0o700
+        assert all(path.stat().st_mode & 0o777 == 0o600 for path in secrets_dir.iterdir() if path.is_file())
+
+
+def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    legacy_secrets = MemorySecretStore()
+    legacy_store = _store(tmp_path, legacy_secrets)
+    assert legacy_store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    ).health is AuthorityHealth.PROTECTED
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret",
+        lambda _self, secret_id: legacy_secrets.get_secret(secret_id),
+    )
+    monkeypatch.setattr(SystemKeyringSecretStore, "set_secret", lambda _self, _secret_id, _value: None)
+
+    migrated = GuardStore(tmp_path, prime_policy_integrity=False)
+    assert migrated.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    ).health is AuthorityHealth.PROTECTED
+
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "get_secret",
+        lambda _self, _secret_id: (_ for _ in ()).throw(RuntimeError("session keyring disappeared")),
+    )
+    restarted = GuardStore(tmp_path, prime_policy_integrity=False)
+    assert restarted.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    ).health is AuthorityHealth.PROTECTED
 
 
 def test_macos_extension_authority_default_never_probes_keychain(

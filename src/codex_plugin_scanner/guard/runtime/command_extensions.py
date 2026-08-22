@@ -23,6 +23,11 @@ from .command_permission_catalog import (
     permissions_for_rules,
 )
 from .command_rules import CommandSafetyRule, matcher_index_hints
+from .extension_control_limits import (
+    MAX_CATALOG_EXTENSIONS,
+    MAX_CATALOG_PAYLOAD_BYTES,
+    MAX_PERMISSIONS_PER_EXTENSION,
+)
 
 COMMAND_EXTENSION_SCHEMA_VERSION = 2
 _VERSION_PATTERN = re.compile(r"^[1-9][0-9]*\.[0-9]+\.[0-9]+$")
@@ -128,6 +133,8 @@ class CommandSafetyExtensionRegistry:
 
     def __init__(self, extensions: tuple[CommandSafetyExtension, ...]) -> None:
         ordered = tuple(sorted(extensions, key=lambda extension: extension.extension_id))
+        if len(ordered) > MAX_CATALOG_EXTENSIONS:
+            raise ValueError("Command safety extension registry exceeds catalog extension limit")
         by_id: dict[str, CommandSafetyExtension] = {}
         by_action_class: dict[str, CommandSafetyExtension] = {}
         by_action_rule: dict[str, CommandSafetyRule] = {}
@@ -139,6 +146,8 @@ class CommandSafetyExtensionRegistry:
         unindexed_rule_ids: set[str] = set()
         for extension in ordered:
             _validate_extension(extension)
+            if len(extension.permissions) > MAX_PERMISSIONS_PER_EXTENSION:
+                raise ValueError(f"Command safety extension {extension.extension_id} exceeds permission limit")
             if extension.extension_id in by_id:
                 raise ValueError(f"Duplicate command safety extension ID: {extension.extension_id}")
             by_id[extension.extension_id] = extension
@@ -230,6 +239,8 @@ class CommandSafetyExtensionRegistry:
             separators=(",", ":"),
             ensure_ascii=True,
         ).encode()
+        if len(catalog_payload) > MAX_CATALOG_PAYLOAD_BYTES:
+            raise ValueError("Command safety extension catalog exceeds payload limit")
         catalog_digest = hashlib.sha256(catalog_payload).hexdigest()
         self._extensions = ordered
         self._by_id = MappingProxyType(by_id)

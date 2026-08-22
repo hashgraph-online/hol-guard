@@ -8,6 +8,7 @@ import {
   DEFAULT_EXTENSION_DETAIL_URL_STATE,
   extensionDetailHref,
   extensionDetailSearch,
+  extensionDisplayName,
   extensionStateLabel,
   filterDetailPermissions,
   filterDetailRules,
@@ -223,6 +224,18 @@ assert.equal(sortedById.at(-1)?.rule_id, "command.git.rule-99");
   assert.equal(grouped.families[0]!.permissions.length, 3);
   const noExamples = groupPermissionsByFamily([variant(4, "git-destructive", null)]);
   assert.equal(noExamples.families[0]!.heading, noExamples.families[0]!.permissions[0]!.label);
+}
+
+// Row display names strip the uniform catalog suffix where it is pure noise.
+{
+  assert.equal(extensionDisplayName("AWS command protection"), "AWS");
+  assert.equal(extensionDisplayName("Git protection"), "Git");
+  assert.equal(extensionDisplayName("Shell, Git, and filesystem protection"), "Shell, Git, and filesystem");
+  assert.equal(extensionDisplayName("Command data protection"), "Command data");
+  // "Guard self-protection" must not collapse to a dangling "Guard self-".
+  assert.equal(extensionDisplayName("Guard self-protection"), "Guard self-protection");
+  assert.equal(extensionDisplayName("kubectl"), "kubectl");
+  assert.equal(extensionDisplayName("protection"), "protection");
 }
 
 console.log("extension-control-center-model.test.ts: all assertions passed");

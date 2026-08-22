@@ -122,7 +122,6 @@ if TYPE_CHECKING:
     from .commands_support_runtime_policy import (
         _ensure_terminal_punctuation,
         _localize_pending_approval_copy,
-        _native_approval_center_context,
         _native_hook_reason,
         _native_hook_reason_for_harness,
     )
@@ -1257,7 +1256,7 @@ def _run_hook_generic_payload(
         or _decision_v2_harness_message(payload_map)
         or payload_map.get("permission_decision_reason")
     )
-    approval_context = _native_approval_center_context(payload_map, harness=args.harness)
+    approval_context = live_hook_approval_context(payload_map, harness=args.harness, guard_home=store.guard_home)
     if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
         block_reason = _native_hook_reason_for_harness(
             args.harness,

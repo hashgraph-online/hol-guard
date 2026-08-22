@@ -1,0 +1,21 @@
+services:
+  e2e:
+    build:
+      context: ../../..
+      dockerfile: tests/dockerlabs/codex-cli-resume/Dockerfile
+    volumes:
+      - ../../..:/hol-guard
+    working_dir: /hol-guard
+    environment:
+      PYTHONPATH: /hol-guard/src
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      PYTEST_ADDOPTS: "-o cache_dir=/tmp/pytest-cache"
+    command:
+      - sh
+      - -c
+      - pip install --no-cache-dir --target /tmp/hol-guard-site /hol-guard >/tmp/hol-guard-install.log && PYTHONPATH=/tmp/hol-guard-site:/hol-guard/src python -m pytest tests/test_codex_daemon_hook_resume.py -q --tb=short
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

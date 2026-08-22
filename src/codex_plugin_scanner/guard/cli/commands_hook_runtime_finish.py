@@ -32,7 +32,6 @@ if TYPE_CHECKING:
         _runtime_artifact_native_reason,
     )
     from .commands_support_runtime_policy import (
-        _native_approval_center_context,
         _native_hook_reason,
         _native_hook_reason_for_harness,
     )
@@ -222,7 +221,7 @@ def _finalize_runtime_artifact_hook(
         policy_action = state.policy_action
         response_payload = state.response_payload
     record_runtime_artifact_hook_receipt(state, store)
-    approval_context = _native_approval_center_context(response_payload, harness=args.harness)
+    approval_context = live_hook_approval_context(response_payload, harness=args.harness, guard_home=store.guard_home)
     raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
     if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
         if _canonical_harness_name(args.harness) == "codex" and approval_context is not None:

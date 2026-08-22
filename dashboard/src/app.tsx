@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, Suspense } from "react";
 
 import {
   clearPolicy,
@@ -29,28 +29,26 @@ import type { AppView } from "./approval-center-primitives";
 import { buildClearPayload } from "./clear-policy-payload";
 import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
+import { lazyWorkspace } from "./lazy-workspace";
 import { protectionHealthFor, remainingProtectionRepairParts } from "./protection-health";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
 
-const HomeWorkspace = lazy(() => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazy(() => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazy(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
-const ExtensionsWorkspace = lazy(() =>
+const HomeWorkspace = lazyWorkspace(() => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace(() => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
+const ExtensionsWorkspace = lazyWorkspace(() =>
   import("./extensions-workspace").then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazy(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
-const SupplyChainHubWorkspace = lazy(() =>
+const AppDetailWorkspace = lazyWorkspace(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
+const SupplyChainHubWorkspace = lazyWorkspace(() =>
   import("./supply-chain-hub-workspace").then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
-const PolicyWorkspacePage = lazy(() =>
+const PolicyWorkspacePage = lazyWorkspace(() =>
   import("./policy-workspace-page").then((m) => ({ default: m.PolicyWorkspacePage }))
 );
-const McpPolicyRequestPanel = lazy(() =>
-  import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel }))
-);
-const AboutWorkspace = lazy(() =>
+const AboutWorkspace = lazyWorkspace(() =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
 );
 
@@ -161,7 +159,7 @@ export function viewTitle(view: AppView): string {
   if (view === "settings") return "Settings";
   if (view === "supply-chain") return "Supply Chain";
   if (view === "audit") return "Audit";
-  if (view === "policy") return "Policy";
+  if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
   if (view === "extensions") return "Extensions";
@@ -1043,9 +1041,11 @@ export function App() {
       }
     />
     {helpOpen && (
-      <Suspense fallback={null}>
-        <HelpModal open={helpOpen} onClose={handleCloseHelp} />
-      </Suspense>
+      <ErrorBoundary onReset={handleCloseHelp}>
+        <Suspense fallback={null}>
+          <HelpModal open={helpOpen} onClose={handleCloseHelp} />
+        </Suspense>
+      </ErrorBoundary>
     )}
     </>);
 }

@@ -246,9 +246,9 @@ def test_schedule_guard_daemon_ensure_suppresses_duplicate_reservation(
         lambda *_args, **_kwargs: pytest.fail("reserved wake must not spawn another helper"),
     )
 
-    assert daemon_manager_module.schedule_guard_daemon_ensure(guard_home) == (
-        daemon_manager_module.guard_daemon_url_for_home(guard_home)
-    )
+    assert daemon_manager_module.schedule_guard_daemon_ensure(
+        guard_home
+    ) == daemon_manager_module.guard_daemon_url_for_home(guard_home)
 
 
 def test_schedule_guard_daemon_ensure_clears_reservation_after_spawn_failure(
@@ -291,9 +291,9 @@ def test_schedule_guard_daemon_ensure_contains_reservation_failure(
         lambda _home: (_ for _ in ()).throw(OSError("state unavailable")),
     )
 
-    assert daemon_manager_module.schedule_guard_daemon_ensure(guard_home) == (
-        daemon_manager_module.guard_daemon_url_for_home(guard_home)
-    )
+    assert daemon_manager_module.schedule_guard_daemon_ensure(
+        guard_home
+    ) == daemon_manager_module.guard_daemon_url_for_home(guard_home)
 
 
 def test_schedule_guard_daemon_ensure_contains_spawn_and_cleanup_failure(
@@ -348,6 +348,18 @@ def test_schedule_guard_daemon_ensure_contains_home_validation_failure(
         home_dir=missing_home,
     ) == daemon_manager_module.guard_daemon_url_for_home(guard_home)
     assert cleared == [(guard_home, "wake-token")]
+
+
+def test_schedule_guard_daemon_ensure_skips_spawn_during_preflight(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_PREFLIGHT", "1")
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: None)
+    monkeypatch.setattr(
+        daemon_manager_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: pytest.fail("preflight must not spawn a daemon"),
+    )
+
+    assert daemon_manager_module.schedule_guard_daemon_ensure(tmp_path / "guard-home") == ""
 
 
 def test_duplicate_retirement_reauthenticates_replacement_before_cleanup(tmp_path, monkeypatch) -> None:
@@ -1239,7 +1251,7 @@ def test_ensure_guard_daemon_uses_one_start_deadline_across_candidate_ports(tmp_
     os.name == "nt",
     reason="models POSIX signal retirement and omits native Windows process creation identities",
 )
-def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp_path, monkeypatch):
+def test_ensure_guard_daemon_retires_stale_daemon_from_different_runtime_fingerprint(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     launched_commands: list[list[str]] = []
     killed: list[int] = []
@@ -1261,8 +1273,8 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp
         lambda _guard_home, **kwargs: {
             "pid": 98765,
             "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "source_root": "/tmp/older-source-root",
-            "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+            "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+            "runtime_fingerprint": "stale-runtime-fingerprint",
         },
     )
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: running["value"])
@@ -1290,6 +1302,130 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp
     assert url == "http://127.0.0.1:5412"
     assert killed == [98765]
     assert launched_commands[0][-2:] == ["--port", "5412"]
+
+
+def test_guard_daemon_state_matches_same_fingerprint_from_different_source_root():
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "source_root": "/different/install/path",
+        "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+    }
+
+    assert daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_guard_daemon_state_rejects_different_runtime_fingerprint():
+    payload = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+        "runtime_fingerprint": "stale-runtime-fingerprint",
+    }
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
+
+
+def test_runtime_fingerprint_ignores_mtime_and_tracks_content(tmp_path, monkeypatch):
+    package = tmp_path / "codex_plugin_scanner" / "guard" / "daemon"
+    package.mkdir(parents=True)
+    target = package / "runtime.py"
+    target.write_text("x = 1\n", encoding="utf-8")
+    monkeypatch.setattr(daemon_manager_module, "_current_guard_daemon_source_root", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_runtime_fingerprint_cache_path",
+        lambda _source_root: tmp_path / "fp-cache" / "runtime-fingerprint-cache.json",
+    )
+    daemon_manager_module._runtime_fingerprint_cache = None
+    try:
+        first = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
+        os.utime(target, (1_700_000_000, 1_700_000_000))
+        daemon_manager_module._runtime_fingerprint_cache = None
+        second = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
+        assert first == second
+        target.write_text("x = 2\n", encoding="utf-8")
+        daemon_manager_module._runtime_fingerprint_cache = None
+        third = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
+        assert third != first
+    finally:
+        daemon_manager_module._runtime_fingerprint_cache = None
+
+
+def test_runtime_fingerprint_reuses_content_hash_when_tree_signature_matches(tmp_path, monkeypatch):
+    package = tmp_path / "codex_plugin_scanner" / "guard" / "daemon"
+    package.mkdir(parents=True)
+    target = package / "runtime.py"
+    target.write_text("x = 1\n", encoding="utf-8")
+    cache_path = tmp_path / "fp-cache" / "runtime-fingerprint-cache.json"
+    monkeypatch.setattr(daemon_manager_module, "_current_guard_daemon_source_root", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_runtime_fingerprint_cache_path",
+        lambda _source_root: cache_path,
+    )
+    daemon_manager_module._runtime_fingerprint_cache = None
+    opened_python: list[Path] = []
+    real_open = Path.open
+
+    def counting_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.suffix == ".py":
+            opened_python.append(self)
+        return real_open(self, *args, **kwargs)
+
+    try:
+        first = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
+        daemon_manager_module._runtime_fingerprint_cache = None
+        monkeypatch.setattr(Path, "open", counting_open)
+        second = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
+        assert first == second
+        assert opened_python == []
+        assert cache_path.is_file()
+    finally:
+        daemon_manager_module._runtime_fingerprint_cache = None
+
+
+def test_desktop_ensure_uses_post_update_timeout(monkeypatch):
+    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+    assert (
+        daemon_manager_module._default_guard_daemon_start_timeout()
+        == daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS
+    )
+    monkeypatch.delenv("HOL_GUARD_DESKTOP")
+    assert (
+        daemon_manager_module._default_guard_daemon_start_timeout()
+        == daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS
+    )
+
+
+def test_ensure_guard_daemon_refuses_desktop_preflight(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_PREFLIGHT", "1")
+    with pytest.raises(RuntimeError, match="disabled during Desktop preflight"):
+        daemon_manager_module.ensure_guard_daemon(tmp_path / "guard-home")
+
+
+def test_start_in_progress_requires_current_runtime_fingerprint(tmp_path, monkeypatch):
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_load_state",
+        lambda _guard_home, **kwargs: {
+            "pid": 4242,
+            "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+            "runtime_fingerprint": "stale-runtime-fingerprint",
+        },
+    )
+    assert not daemon_manager_module._guard_daemon_start_in_progress(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_load_state",
+        lambda _guard_home, **kwargs: {
+            "pid": 4242,
+            "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "source_root": "/different/install/path",
+            "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+        },
+    )
+    assert daemon_manager_module._guard_daemon_start_in_progress(tmp_path / "guard-home")
 
 
 @pytest.mark.skipif(

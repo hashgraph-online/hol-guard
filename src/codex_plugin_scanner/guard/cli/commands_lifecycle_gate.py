@@ -9,10 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO, cast
 
-from ..approval_gate import public_config, require_high_risk
+from ..approval_gate import public_config, recent_totp_satisfied, require_high_risk
 from ..config import resolve_guard_home_for_user_home
 from ..windows_paths import trusted_windows_user_profile
-from .approval_gate_prompt import prompt_for_approval_gate
+from .approval_gate_prompt import consume_desktop_lifecycle_env, prompt_for_approval_gate
 
 _ENROLLMENT_NOTICE = (
     "Security recommendation: protect Guard administration with an approval password or Authenticator. "
@@ -78,10 +78,20 @@ def enforce_lifecycle_gate(
         return
     authority_home = lifecycle_authority_home(guard_home, requirement=requirement)
     gate = public_config(authority_home)
+    desktop_proof = consume_desktop_lifecycle_env(
+        totp_enabled=gate.totp_enabled,
+        use_cooldown=False,
+        cooldown_seconds=gate.cooldown_seconds,
+    )
     if not gate.enabled:
         print(_ENROLLMENT_NOTICE, file=error_stream or sys.stderr)
         return
-    gate_input = prompt_for_approval_gate(authority_home, use_cooldown=False)
+    if gate.totp_enabled and recent_totp_satisfied(authority_home):
+        gate_input = None
+    elif desktop_proof is not None:
+        gate_input = desktop_proof
+    else:
+        gate_input = prompt_for_approval_gate(authority_home, use_cooldown=False)
     _ = require_high_risk(
         authority_home,
         purpose="protection_lifecycle",

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HiMiniArrowPath, HiMiniExclamationTriangle, HiMiniInformationCircle, HiMiniMagnifyingGlass, HiMiniShieldCheck } from "react-icons/hi2";
+import type { ReactNode } from "react";
+import { HiMiniArrowPath, HiMiniExclamationTriangle, HiMiniInformationCircle, HiMiniMagnifyingGlass, HiMiniShieldCheck, HiMiniXMark } from "react-icons/hi2";
 
+import { extensionDisplayName } from "../../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../../extension-controls-api";
 import {
   AppliedPolicyToast,
@@ -22,6 +24,8 @@ import { ExtensionBrandMark } from "./extension-brand-mark";
  * control used on the tool page, and the same review + proof flow commits the
  * change without leaving the page. Tools whose names match the query render
  * as a final group so a query like "kubernetes" finds both patterns and tools.
+ * While a query is active the parent hides the full catalogs: the results are
+ * the page.
  */
 export function PatternSearchConsole(props: {
   catalog: readonly ExtensionCatalogItem[];
@@ -29,8 +33,14 @@ export function PatternSearchConsole(props: {
   onRefresh: () => Promise<void> | void;
   onOpenExtension: (extension: ExtensionCatalogItem) => void;
   active?: boolean;
+  query?: string;
+  onQueryChange?: (query: string) => void;
+  /** Rendered under the input while the parent hides its own header actions. */
+  actionSlot?: ReactNode;
 }) {
-  const [query, setQuery] = useState("");
+  const [internalQuery, setInternalQuery] = useState("");
+  const query = props.query ?? internalQuery;
+  const setQuery = props.onQueryChange ?? setInternalQuery;
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchActive = props.active ?? true;
@@ -103,12 +113,24 @@ export function PatternSearchConsole(props: {
         onChange={(event) => setQuery(event.target.value.slice(0, 160))}
         placeholder='Search any command Guard watches — "squash", "git push --force", "kubectl"…'
         aria-describedby="pattern-search-hint"
-        className="min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-3 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+        className="min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
       />
+      {showResults ? (
+        <button
+          type="button"
+          onClick={() => { setQuery(""); inputRef.current?.focus(); }}
+          aria-label="Clear search"
+          className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-brand-dark/55 hover:bg-[rgba(63,65,116,0.06)] hover:text-brand-dark"
+        >
+          <HiMiniXMark className="size-4" aria-hidden="true" />
+        </button>
+      ) : null}
     </label>
     <p id="pattern-search-hint" className={`mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`}>
       Matches patterns across every tool. Press / to focus search from anywhere on this page.
     </p>
+
+    {props.actionSlot ? <div className="mt-3">{props.actionSlot}</div> : null}
 
     {showResults ? (
       matches.length || toolMatches.length ? (
@@ -123,8 +145,8 @@ export function PatternSearchConsole(props: {
                   ecosystem_ids={group.extension.ecosystem_ids}
                   size="sm"
                 />
-                <code>{group.extension.executables[0] ?? group.extension.extension_id}</code>
-                <span>{group.extension.name}</span>
+                {group.extension.executables.length ? <code>{group.extension.executables[0]}</code> : null}
+                <span>{extensionDisplayName(group.extension.name)}</span>
               </h3>
               {group.permissionIds.map((permissionId) => {
                 const permission = group.extension.permissions.find((item) => item.permission_id === permissionId);
@@ -147,9 +169,9 @@ export function PatternSearchConsole(props: {
               {toolMatches.map((extension) => <ProtectionModuleRow
                 key={extension.extension_id}
                 extensionId={extension.extension_id}
-                name={extension.name}
+                name={extensionDisplayName(extension.name)}
                 description={extension.description}
-                behavior={extension.executables.join(" · ")}
+                behavior={extension.executables.join(" · ") || extension.description}
                 required={extension.required}
                 executables={extension.executables}
                 ecosystemIds={extension.ecosystem_ids}

@@ -249,7 +249,7 @@ def _verify_frozen_transport(
     transport = manifest.get("transport")
     if not isinstance(transport, dict) or transport.get("wrapper") is not None:
         raise ValueError("managed frozen Codex hook transport identity is invalid")
-    for role in ("bridge", "bridge_runtime", "launch_runtime", "runtime_trust", "windows_job"):
+    for role in ("bridge", "bridge_resume", "bridge_runtime", "launch_runtime", "runtime_trust", "windows_job"):
         if transport.get(role) != packaged_by_role.get(role):
             raise ValueError("managed frozen Codex hook transport identity is invalid")
 

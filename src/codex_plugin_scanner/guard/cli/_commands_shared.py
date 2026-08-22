@@ -53,6 +53,7 @@ from ..approval_gate import (
 from ..approval_gate import (
     update_settings as update_approval_gate_settings,
 )
+from ..approval_hook_copy import live_hook_approval_context
 from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,

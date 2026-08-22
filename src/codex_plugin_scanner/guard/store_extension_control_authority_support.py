@@ -77,20 +77,19 @@ class _ExtensionControlAuthoritySupportMixin:
     def _secret_store(self) -> SecretStore:
         current = self._extension_control_authority_secret_store
         if current is None:
-            if sys.platform == "darwin":
-                fallback = EncryptedFileSecretStore(cast(Path, self.guard_home))
-                if bool(getattr(self, "_allow_system_keyring", False)):
-                    current = MigratingFallbackSecretStore(
-                        SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority"),
-                        fallback,
-                    )
-                else:
-                    current = fallback
+            fallback = EncryptedFileSecretStore(cast(Path, self.guard_home))
+            system = SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority")
+            if sys.platform == "darwin" and not bool(getattr(self, "_allow_system_keyring", False)):
+                # Passive macOS reads must never trigger Keychain UI. Explicit account
+                # actions opt in to the migrating wrapper below.
+                current = fallback
             else:
-                current = SystemKeyringSecretStore(service_name="hol-guard.extension-control-authority")
+                # Persist every new authority secret in Guard's owner-only vault while
+                # retaining the OS keyring as a best-effort legacy source. This makes
+                # daemon, hook, and terminal processes converge on one prompt-free copy
+                # instead of flapping when a session keyring is temporarily unavailable.
+                current = MigratingFallbackSecretStore(system, fallback)
             self._extension_control_authority_secret_store = current
-        if isinstance(current, SystemKeyringSecretStore) and not current._is_available():
-            raise RuntimeError("extension control credential store unavailable")
         return current
 
     def legacy_extension_control_authority_secret_migration_required(self) -> bool:

@@ -32,9 +32,12 @@ assert(tabSource.includes("PolicyCloudExceptionDetailPanel"), "cloud exceptions 
 assert(tabSource.includes("PolicyCloudExceptionsList"), "cloud exceptions tab renders grouped lists");
 assert(chromeSource.includes("Open Guard Cloud"), "policy header exposes Open Guard Cloud on exceptions tab");
 assert(tabSource.includes("Guard Cloud is not connected"), "disconnected Cloud copy present");
-assert(pageSource.includes("Configure protection behavior in Settings."), "page header explains configuration ownership");
+assert(
+  pageSource.includes("Configure tools and capability posture in Extensions."),
+  "page header explains configuration ownership",
+);
 assert(!workspaceSource.includes("bypass"), "policy workspace removes bypass copy");
 const sidebarSource = readFileSync(join(here, "approval-center-primitives.tsx"), "utf8");
-assert(sidebarSource.includes('label: "Policy"'), "sidebar Policy label unchanged");
+assert(sidebarSource.includes('label: "Policy"'), "legacy view label remains compatible");
 
 console.log("policy-cloud-exceptions-ia.test.ts: all assertions passed");

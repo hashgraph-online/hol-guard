@@ -515,7 +515,7 @@ def load_guard_config(
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
-        mode=loaded_mode,
+        mode=("observe" if loaded_posture == "watch" else loaded_mode),
         protection_posture=loaded_posture,
         protection_posture_explicit=posture_explicit,
         watch_auto_revert_hours=coerce_watch_auto_revert_hours(merged.get("watch_auto_revert_hours")),
@@ -669,7 +669,7 @@ def update_guard_settings(
         ]
         if weakened:
             raise ValueError(f"Managed policy locks prevent weakening: {', '.join(sorted(weakened))}")
-    if next_payload.get("sync") is True and not cloud_sync_entitled:
+    if next_payload.get("sync") is True and current.get("sync") is not True and not cloud_sync_entitled:
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)

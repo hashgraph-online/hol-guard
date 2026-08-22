@@ -244,7 +244,7 @@ assert(
 assert(
   viewTitle("supply-chain") === "Supply Chain" &&
     viewTitle("audit") === "Audit" &&
-    viewTitle("policy") === "Policy" &&
+    viewTitle("policy") === "Rules & exceptions" &&
     viewTitle("feed-health") === "Feed Health",
   "SCRG171-H2: route titles stay specific inside Trust Center views",
 );

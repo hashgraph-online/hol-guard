@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .codex_app_server import default_codex_app_server_socket_available, resume_codex_thread_for_request
 from .store import GuardStore
@@ -147,7 +148,12 @@ def defer_request_resume_to_live_hook(
     if str(operation.get("status")) != "waiting_on_approval":
         return None
     metadata = operation.get("metadata")
-    if not isinstance(metadata, Mapping) or not _live_hook_wait_is_active(metadata=metadata, now=now):
+    if not isinstance(metadata, Mapping):
+        return None
+    event_name = str(metadata.get("hook_event_name") or metadata.get("event") or "")
+    if not _live_hook_wait_is_active(metadata=metadata, now=now) and not (
+        event_name == "PreToolUse" and _pretool_bridge_wait_is_active(store, operation, now=now)
+    ):
         return None
     resume = get_request_resume_status(store, request_id=request_id, now=now)
     if resume is None:
@@ -213,6 +219,34 @@ def _live_hook_wait_is_active(*, metadata: Mapping[str, object], now: str) -> bo
     if deadline_at is None or now_at is None:
         return False
     return now_at <= deadline_at
+
+
+def _pretool_bridge_wait_is_active(
+    store: GuardStore,
+    operation: Mapping[str, object],
+    *,
+    now: str,
+) -> bool:
+    now_at = _parse_timestamp(now)
+    started_at = _parse_timestamp(_first_string(operation, ("updated_at", "created_at")) or "")
+    if now_at is None or started_at is None:
+        return False
+    metadata = operation.get("metadata")
+    workspace: Path | None = None
+    if isinstance(metadata, Mapping):
+        raw_workspace = metadata.get("workspace")
+        if isinstance(raw_workspace, str) and raw_workspace.strip():
+            workspace = Path(raw_workspace)
+    try:
+        from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
+
+        configured = int(load_guard_config(store.guard_home, workspace).approval_wait_timeout_seconds)
+        configured = 0 if configured < 0 else min(configured, MAX_APPROVAL_WAIT_TIMEOUT_SECONDS)
+    except (OSError, TypeError, ValueError):
+        configured = 120
+    # Match Codex install: hook timeout = C + 5s managed grace; bridge holds C+5-2s.
+    bridge_hold_seconds = max(1, configured + 5 - 2)
+    return (now_at - started_at).total_seconds() <= bridge_hold_seconds
 
 
 def _parse_timestamp(value: str) -> datetime | None:

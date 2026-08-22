@@ -18,6 +18,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -343,6 +344,8 @@ _GUARD_STORE_PRIVATE_FILE_MODE = 0o600
 _SYSTEM_KEYRING_AVAILABILITY_CACHE_FILE = "system-keyring-availability.json"
 _SYSTEM_KEYRING_AVAILABILITY_CACHE_TTL_SECONDS = 86_400.0
 _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES = frozenset({"missing_integrity", "unknown_key"})
+_ENCRYPTED_SECRET_INIT_LOCKS_GUARD = threading.Lock()
+_ENCRYPTED_SECRET_INIT_LOCKS: dict[str, threading.Lock] = {}
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -862,9 +865,32 @@ class EncryptedFileSecretStore:
         # Owner-only directory access is required for encrypted secret material.
         # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         os.chmod(self.base_dir, 0o700)
-        if not self.key_path.exists():
-            self._atomic_write_bytes(self.key_path, Fernet.generate_key(), 0o600)
-        self._fernet = Fernet(self._load_fernet_key())
+        lock_key = os.path.realpath(os.fspath(self.key_path))
+        with _ENCRYPTED_SECRET_INIT_LOCKS_GUARD:
+            thread_lock = _ENCRYPTED_SECRET_INIT_LOCKS.setdefault(lock_key, threading.Lock())
+        with thread_lock:
+            if self._fernet is not None:
+                return
+            lock_path = self.base_dir / ".key-init.lock"
+            with lock_path.open("a+b") as lock_handle:
+                os.chmod(lock_path, 0o600)
+                deadline = time.monotonic() + 30.0
+                while True:
+                    try:
+                        _acquire_advisory_file_lock(lock_handle)
+                        break
+                    except BlockingIOError:
+                        if time.monotonic() >= deadline:
+                            raise RuntimeError("timed out initializing encrypted Guard secrets") from None
+                        time.sleep(0.01)
+                try:
+                    if not self.key_path.exists():
+                        self._atomic_write_bytes(self.key_path, Fernet.generate_key(), 0o600)
+                    key = self._load_fernet_key()
+                    os.chmod(self.key_path, 0o600)
+                    self._fernet = Fernet(key)
+                finally:
+                    _release_advisory_file_lock(lock_handle)
 
     def set_secret(self, secret_id: str, value: str) -> None:
         self._ensure_ready()
@@ -905,9 +931,7 @@ class EncryptedFileSecretStore:
     def _load_fernet_key(self) -> bytes:
         existing = self.key_path.read_bytes().strip()
         if not existing:
-            key = Fernet.generate_key()
-            self._atomic_write_bytes(self.key_path, key, 0o600)
-            return key
+            raise RuntimeError("encrypted Guard secret key is empty")
         try:
             decoded = base64.urlsafe_b64decode(existing)
         except (ValueError, TypeError):
@@ -922,9 +946,7 @@ class EncryptedFileSecretStore:
             upgraded = base64.urlsafe_b64encode(existing)
             self._atomic_write_bytes(self.key_path, upgraded, 0o600)
             return upgraded
-        key = Fernet.generate_key()
-        self._atomic_write_bytes(self.key_path, key, 0o600)
-        return key
+        raise RuntimeError("encrypted Guard secret key is invalid")
 
     def _atomic_write_bytes(self, path: Path, payload: bytes, mode: int) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

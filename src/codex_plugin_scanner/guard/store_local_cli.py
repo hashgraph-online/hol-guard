@@ -7,6 +7,11 @@ from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, cast
 
+from .runtime.custom_extension_suggestion import (
+    LocalCliKind,
+    is_suggestable_custom_tool,
+    suggestion_score,
+)
 from .runtime.local_cli_commands import (
     LocalCliCommand,
     LocalCliCommandState,
@@ -14,7 +19,7 @@ from .runtime.local_cli_commands import (
     is_local_cli_command_state,
     local_cli_command_state,
 )
-from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id, is_suggestable_custom_tool
+from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .store_local_cli_schema import ensure_local_cli_schema
 
 
@@ -37,7 +42,7 @@ class StoreLocalCliMixin:
     ) -> None:
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
-        surface_value = surface if surface in {"cli", "mcp"} else "cli"
+        surface_value = surface if surface in {"cli", "mcp", "package-scripts"} else "cli"
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
             current = connection.execute(
@@ -381,20 +386,41 @@ def _load_commands_by_cli(connection: sqlite3.Connection) -> dict[str, list[dict
 def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
     kind = item.get("kind")
     name = item.get("name")
-    item["suggestable"] = (
-        isinstance(kind, str)
-        and isinstance(name, str)
-        and is_suggestable_custom_tool(
-            name=name,
-            kind="script" if kind == "script" else "executable",
-        )
+    if not isinstance(kind, str) or not isinstance(name, str):
+        item["suggestion_score"] = 0
+        item["suggestable"] = False
+        return item
+    raw_path = item.get("source_path")
+    raw_count = item.get("observed_count")
+    raw_help = item.get("help_status")
+    raw_surface = item.get("surface")
+    source_path = raw_path if isinstance(raw_path, str) else None
+    observed_count = raw_count if isinstance(raw_count, int) else 0
+    help_status = raw_help if isinstance(raw_help, str) else None
+    surface = raw_surface if isinstance(raw_surface, str) else "cli"
+    typed_kind: LocalCliKind = "script" if kind == "script" else "executable"
+    item["suggestion_score"] = suggestion_score(
+        name=name,
+        kind=typed_kind,
+        source_path=source_path,
+        observed_count=observed_count,
+        help_status=help_status,
+        surface=surface,
+    )
+    item["suggestable"] = is_suggestable_custom_tool(
+        name=name,
+        kind=typed_kind,
+        source_path=source_path,
+        observed_count=observed_count,
+        help_status=help_status,
+        surface=surface,
     )
     return item
 
 
 def _observation_from_row(row: object) -> dict[str, object]:
     values = _row_values(row, 12)
-    surface = values[10] if values[10] in {"cli", "mcp"} else "cli"
+    surface = values[10] if values[10] in {"cli", "mcp", "package-scripts"} else "cli"
     return {
         "cli_id": values[0],
         "identity_hash": values[1],

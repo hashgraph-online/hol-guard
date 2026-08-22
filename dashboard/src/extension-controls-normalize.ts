@@ -16,12 +16,12 @@ const DIGEST = /^[a-f0-9]{64}$/;
 const VERSION = /^[1-9][0-9]*\.[0-9]+\.[0-9]+$/;
 
 export const EXTENSION_CLIENT_LIMITS = Object.freeze({
-  extensions: 256,
+  extensions: 512,
   rulesPerExtension: 1024,
-  permissionsPerExtension: 1024,
+  permissionsPerExtension: 512,
   relationshipIds: 1024,
-  controls: 4096,
-  layers: 16,
+  controls: 1024,
+  layers: 2,
   failures: 256,
   stringLength: 8192,
 });

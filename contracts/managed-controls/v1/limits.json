@@ -1,0 +1,14 @@
+{
+  "max_catalog_extensions": 512,
+  "max_catalog_payload_bytes": 1000000,
+  "max_control_layers": 2,
+  "max_control_set_rules": 1024,
+  "max_control_set_targets": 1024,
+  "max_controls_per_layer": 512,
+  "max_controls_total": 1024,
+  "max_input_text_length": 256,
+  "max_observations": 2048,
+  "max_permissions_per_extension": 512,
+  "max_resolution_ids": 1024,
+  "schema_version": 1
+}

@@ -1,0 +1,133 @@
+name: Finish extension authority stability fix
+
+on:
+  push:
+    branches:
+      - fix/extension-control-authority-stability
+    paths:
+      - .github/workflows/finish-extension-authority-stability.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finish-extension-authority-stability
+  cancel-in-progress: false
+
+jobs:
+  finish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact feature branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/extension-control-authority-stability
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure commit identity and merge latest release base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin release/3.0
+          git merge --no-edit origin/release/3.0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+
+      - name: Apply the reviewed refactor
+        run: python scripts/ci/finish_extension_authority_stability.py
+
+      - name: Install exact development environment
+        run: uv sync --frozen --extra dev --python 3.12
+
+      - name: Format and autofix touched sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            src/codex_plugin_scanner/guard/store_base.py
+            src/codex_plugin_scanner/guard/encrypted_secret_store_key.py
+            src/codex_plugin_scanner/guard/store_extension_control_authority_support.py
+            tests/test_guard_encrypted_secret_store_stability.py
+            tests/test_guard_extension_control_authority.py
+            tests/test_guard_extension_control_authority_keyring_stability.py
+          )
+          uv run --no-sync ruff check --fix "${files[@]}"
+          uv run --no-sync ruff format "${files[@]}"
+          uv run --no-sync ruff check "${files[@]}"
+          uv run --no-sync ruff format --check "${files[@]}"
+
+      - name: Run focused authority and encrypted-vault regressions
+        run: |
+          uv run --no-sync pytest -q \
+            tests/test_guard_encrypted_secret_store_stability.py \
+            tests/test_guard_extension_control_authority.py \
+            tests/test_guard_extension_control_authority_keyring_stability.py
+
+      - name: Enforce test-suite and structural quality ratchets
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync python scripts/ci/test_inventory.py --output test-inventory.json
+          uv run --no-sync python scripts/ci/test_suite_ratchet.py \
+            --baseline ci/test-suite-ratchet-baseline.json \
+            --inventory test-inventory.json
+          uv run --no-sync python scripts/ci/code_quality_audit.py \
+            --root . \
+            --baseline ci/code-quality-baseline.json \
+            --json-output code-quality-audit.json
+
+      - name: Run static type validation
+        run: uv run --no-sync basedpyright --level error
+
+      - name: Run HOL Guard locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --no-sync python -m codex_plugin_scanner.cli --version
+          uv run --no-sync python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          from codex_plugin_scanner.guard.store import GuardStore
+
+          with TemporaryDirectory() as temporary_home:
+              store = GuardStore(Path(temporary_home), prime_policy_integrity=False)
+              print(store.guard_home)
+          PY
+
+      - name: Verify final diff and squash away temporary automation
+        shell: bash
+        env:
+          EXPECTED_REMOTE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git diff --check
+          git rm .github/workflows/finish-extension-authority-stability.yml
+          git rm scripts/ci/finish_extension_authority_stability.py
+          git add \
+            ci/test-suite-ratchet-baseline.json \
+            src/codex_plugin_scanner/guard/store_base.py \
+            src/codex_plugin_scanner/guard/encrypted_secret_store_key.py \
+            src/codex_plugin_scanner/guard/store_extension_control_authority_support.py \
+            tests/test_guard_encrypted_secret_store_stability.py \
+            tests/test_guard_extension_control_authority.py \
+            tests/test_guard_extension_control_authority_keyring_stability.py
+          git reset --soft origin/release/3.0
+          git commit -s -m "fix(guard): stabilize extension-control authority across restarts" \
+            -m "Keep authority trust material in Guard's owner-only encrypted vault, migrate legacy keyring material, serialize first-use key creation across processes, and fail closed without destructive key rotation."
+          git push \
+            --force-with-lease=refs/heads/fix/extension-control-authority-stability:${EXPECTED_REMOTE_SHA} \
+            origin HEAD:refs/heads/fix/extension-control-authority-stability

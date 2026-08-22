@@ -28,7 +28,11 @@ if TYPE_CHECKING:
     from codex_plugin_scanner.guard.config import GuardConfig
     from codex_plugin_scanner.guard.store import GuardStore
 
-from .daemon.manager import ensure_guard_daemon, load_guard_daemon_auth_token
+from .daemon.manager import (
+    desktop_preflight_requested,
+    ensure_guard_daemon,
+    load_guard_daemon_auth_token,
+)
 from .local_dashboard_session import build_local_dashboard_session_token
 from .runtime.surface_server import GuardSurfaceRuntime
 from .secret_redaction import sanitize_secret
@@ -73,6 +77,12 @@ _in_flight = False
 _last_result: DashboardLaunchResult | None = None
 
 
+def desktop_bootstrap_is_preflight() -> bool:
+    """True when Desktop is validating a candidate Core without starting a daemon."""
+
+    return desktop_preflight_requested()
+
+
 def build_desktop_dashboard_session_url(*, guard_home: Path) -> str:
     """Return a short-lived canonical dashboard URL for trusted Desktop embedding.
 
@@ -83,6 +93,8 @@ def build_desktop_dashboard_session_url(*, guard_home: Path) -> str:
     remain non-frameable.
     """
 
+    if desktop_bootstrap_is_preflight():
+        raise RuntimeError("Desktop preflight does not start a local daemon")
     approval_center_url = ensure_guard_daemon(guard_home)
     auth_token = load_guard_daemon_auth_token(guard_home)
     if auth_token is None:

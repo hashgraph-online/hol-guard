@@ -58,12 +58,20 @@ from .update_artifact import (
     stage_trusted_wheel,
 )
 from .update_grok_repair import append_grok_repair
+from .update_install_verify import verify_installed_distribution
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
     UpdateSubprocessError,
     build_trusted_update_context,
 )
+
+_TRUSTED_UPDATE_FAILURE_MESSAGES = {
+    "update_install_inconsistent": (
+        "HOL Guard updated its version metadata but not all of its installed files. "
+        "Retry the update to finish the installation."
+    ),
+}
 
 _ALREADY_CURRENT_HINTS = (
     "already at latest version",
@@ -908,10 +916,19 @@ def _trusted_update_failure(
             "changed": False,
             "reason_code": error.reason_code,
             "error": error.reason_code,
-            "message": "HOL Guard update could not complete in its trusted maintenance environment.",
+            "message": _TRUSTED_UPDATE_FAILURE_MESSAGES.get(
+                error.reason_code,
+                "HOL Guard update could not complete in its trusted maintenance environment.",
+            ),
         }
     )
     return payload, 1
+
+
+def _current_version_from_subprocess(update_context: TrustedUpdateContext) -> str:
+    """Return the validated post-install version from one trusted probe."""
+
+    return verify_installed_distribution(update_context)
 
 
 def _trusted_update_public_payload(context: TrustedUpdateContext) -> dict[str, object]:
@@ -2042,12 +2059,6 @@ def _credential_safe_url(value: str) -> str:
         rendered_host = f"[{hostname}]" if ":" in hostname else hostname
         netloc = f"{rendered_host}:{port}" if port is not None else rendered_host
     return parsed._replace(netloc=netloc, query="", fragment="").geturl()
-
-
-def _current_version_from_subprocess(update_context: TrustedUpdateContext) -> str:
-    """Return one validated version from the context's intended distribution."""
-
-    return update_context.query_distribution().version
 
 
 def _standalone_update_context(context: HarnessContext) -> TrustedUpdateContext:
