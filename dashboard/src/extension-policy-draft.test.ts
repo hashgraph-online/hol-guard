@@ -94,6 +94,24 @@ const bulkBlocked = setLocalPermissionDraftStates(
 assert.equal(localPermissionDraftState(bulkBlocked, "command.git.permission.force-clean"), "block");
 assert.equal(localPermissionDraftState(bulkBlocked, "command.git.permission.branch-delete"), "block");
 assert.equal(effective.layers[0]?.controls.length, 1, "bulk drafting must not mutate authoritative layers");
+const noLocalEffective = { ...effective, layers: [managed] };
+const transientBulkBlock = setLocalPermissionDraftStates(
+  noLocalEffective.layers,
+  digest,
+  ["command.git.permission.force-clean", "command.git.permission.branch-delete"],
+  "block",
+);
+const bulkRecommended = setLocalPermissionDraftStates(
+  transientBulkBlock,
+  digest,
+  ["command.git.permission.force-clean", "command.git.permission.branch-delete"],
+  "inherit",
+);
+assert.equal(
+  extensionPolicyDraftIsDirty(noLocalEffective, bulkRecommended),
+  false,
+  "reverting the final bulk override to recommended must remove the transient empty local layer",
+);
 
 const mutation = buildExtensionPolicyDraftMutation(effective, digest, allowed, {
   idempotencyKey: "draft-idempotency",

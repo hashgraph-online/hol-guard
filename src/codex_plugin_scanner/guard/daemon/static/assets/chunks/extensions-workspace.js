@@ -607,6 +607,9 @@ function setLocalPermissionDraftState(layers, catalogDigest, permissionId, state
     };
     next.push(local);
   }
+  const hadPermissionControl = local.controls.some(
+    (control) => control.target_kind === "permission" && control.target_id === permissionId
+  );
   local.controls = local.controls.filter(
     (control) => control.target_kind !== "permission" || control.target_id !== permissionId
   );
@@ -616,6 +619,10 @@ function setLocalPermissionDraftState(layers, catalogDigest, permissionId, state
       target_id: permissionId,
       state: state === "allow" ? "enabled" : "disabled"
     });
+  }
+  if (state === "inherit" && hadPermissionControl && !local.global_lockdown && local.controls.length === 0) {
+    const localIndex = next.indexOf(local);
+    next.splice(localIndex, 1);
   }
   const normalized = next.map((layer) => sortedControls(layer));
   normalized.sort((left, right) => left.kind.localeCompare(right.kind));
@@ -3736,6 +3743,7 @@ const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
   humanSearchTermCap: 8,
   developerRelationshipCap: 1024
 });
+const COMMAND_PATTERN_DISPLAY_LIMIT = 24;
 function patternSearchText(extension2, permission2) {
   return [
     permission2.label,
@@ -3748,7 +3756,7 @@ function patternSearchText(extension2, permission2) {
     ...extension2.executables
   ].join(" ").toLowerCase();
 }
-function searchCommandPatterns(extensions, rawQuery, limit = 24) {
+function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DISPLAY_LIMIT) {
   const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
   if (!normalized) return [];
   const terms = normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap);
@@ -3889,7 +3897,15 @@ function PatternSearchConsole(props) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [searchActive]);
-  const matches = reactExports.useMemo(() => searchCommandPatterns(props.catalog, query), [props.catalog, query]);
+  const totalPermissionCount = reactExports.useMemo(
+    () => props.catalog.reduce((total, extension2) => total + extension2.permissions.length, 0),
+    [props.catalog]
+  );
+  const allMatches = reactExports.useMemo(
+    () => searchCommandPatterns(props.catalog, query, totalPermissionCount),
+    [props.catalog, query, totalPermissionCount]
+  );
+  const matches = reactExports.useMemo(() => allMatches.slice(0, COMMAND_PATTERN_DISPLAY_LIMIT), [allMatches]);
   const toolMatches = reactExports.useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
@@ -3907,7 +3923,7 @@ function PatternSearchConsole(props) {
     }
     return [...groups.values()];
   }, [matches]);
-  const involvedPermissions = reactExports.useMemo(() => matches.map((match) => match.permission), [matches]);
+  const involvedPermissions = reactExports.useMemo(() => allMatches.map((match) => match.permission), [allMatches]);
   const changeCount = changedPermissionCount;
   const showResults = query.trim().length > 0;
   reactExports.useEffect(() => {
@@ -3955,16 +3971,27 @@ function PatternSearchConsole(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "pattern-search-hint", className: `mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`, children: "Matches patterns across every tool. Press / to focus search from anywhere on this page." }),
     props.actionSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: props.actionSlot }) : null,
     showResults ? matches.length || toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
-      matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        QuickApplyToolbar,
-        {
-          permissions: involvedPermissions,
-          effective: baseEffective,
-          disabled: refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected",
-          permissionState,
-          onApply: setPermissionStates
-        }
-      ) : null,
+      matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          QuickApplyToolbar,
+          {
+            permissions: involvedPermissions,
+            effective: baseEffective,
+            disabled: refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected",
+            permissionState,
+            onApply: setPermissionStates
+          }
+        ),
+        allMatches.length > matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-3 text-xs text-brand-dark/65", children: [
+          "Showing ",
+          matches.length,
+          " of ",
+          allMatches.length,
+          " matching capabilities. Quick actions apply to all ",
+          allMatches.length,
+          "."
+        ] }) : null
+      ] }) : null,
       grouped.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": `${group.extension.name} patterns`, className: "guard-pattern-family", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "guard-pattern-family-heading", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(

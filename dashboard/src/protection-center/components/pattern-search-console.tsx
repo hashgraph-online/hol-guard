@@ -13,7 +13,7 @@ import {
 } from "../../extension-policy-panel";
 import { useResolvedApprovalGate } from "../../use-resolved-approval-gate";
 import { useExtensionPolicyDraft } from "../../use-extension-policy-draft";
-import { searchCommandPatterns } from "../model/protection-landing";
+import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns } from "../model/protection-landing";
 import { ProtectionModuleRow } from "./protection-primitives";
 import { ExtensionBrandMark } from "./extension-brand-mark";
 
@@ -176,7 +176,15 @@ export function PatternSearchConsole(props: {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [searchActive]);
 
-  const matches = useMemo(() => searchCommandPatterns(props.catalog, query), [props.catalog, query]);
+  const totalPermissionCount = useMemo(
+    () => props.catalog.reduce((total, extension) => total + extension.permissions.length, 0),
+    [props.catalog],
+  );
+  const allMatches = useMemo(
+    () => searchCommandPatterns(props.catalog, query, totalPermissionCount),
+    [props.catalog, query, totalPermissionCount],
+  );
+  const matches = useMemo(() => allMatches.slice(0, COMMAND_PATTERN_DISPLAY_LIMIT), [allMatches]);
   const toolMatches = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
@@ -194,7 +202,7 @@ export function PatternSearchConsole(props: {
     }
     return [...groups.values()];
   }, [matches]);
-  const involvedPermissions = useMemo(() => matches.map((match) => match.permission), [matches]);
+  const involvedPermissions = useMemo(() => allMatches.map((match) => match.permission), [allMatches]);
   const changeCount = changedPermissionCount;
   const showResults = query.trim().length > 0;
 
@@ -247,13 +255,20 @@ export function PatternSearchConsole(props: {
       matches.length || toolMatches.length ? (
         <div className="mt-3">
           {matches.length ? (
-            <QuickApplyToolbar
-              permissions={involvedPermissions}
-              effective={baseEffective}
-              disabled={refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected"}
-              permissionState={permissionState}
-              onApply={setPermissionStates}
-            />
+            <>
+              <QuickApplyToolbar
+                permissions={involvedPermissions}
+                effective={baseEffective}
+                disabled={refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected"}
+                permissionState={permissionState}
+                onApply={setPermissionStates}
+              />
+              {allMatches.length > matches.length ? (
+                <p role="status" className="mt-3 text-xs text-brand-dark/65">
+                  Showing {matches.length} of {allMatches.length} matching capabilities. Quick actions apply to all {allMatches.length}.
+                </p>
+              ) : null}
+            </>
           ) : null}
           {grouped.map((group) => (
             <section key={group.extension.extension_id} aria-label={`${group.extension.name} patterns`} className="guard-pattern-family">

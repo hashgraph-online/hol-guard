@@ -53,6 +53,17 @@ import { searchCommandPatterns } from "./model/protection-landing";
 
   assert.deepEqual(searchCommandPatterns(catalog, ""), []);
   assert.deepEqual(searchCommandPatterns(catalog, "   "), []);
+
+  const manyPermissions = Array.from({ length: 30 }, (_, index) =>
+    permission("command.github", `routine-${index}`, `Routine GitHub action ${index}`, `gh routine ${index}`)
+  );
+  const largeCatalog = [{ ...github, permissions: manyPermissions }];
+  assert.equal(searchCommandPatterns(largeCatalog, "routine").length, 24, "render-oriented search stays bounded");
+  assert.equal(
+    searchCommandPatterns(largeCatalog, "routine", manyPermissions.length).length,
+    30,
+    "callers can obtain the full match set for bulk actions",
+  );
 }
 
 console.log("protection-landing.test.tsx: all assertions passed");

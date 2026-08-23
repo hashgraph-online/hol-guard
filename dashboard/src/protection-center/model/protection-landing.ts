@@ -7,6 +7,8 @@ export type CommandPatternMatch = {
   score: number;
 };
 
+export const COMMAND_PATTERN_DISPLAY_LIMIT = 24;
+
 function patternSearchText(extension: ExtensionCatalogItem, permission: ExtensionPermission): string {
   return [
     permission.label,
@@ -23,7 +25,7 @@ function patternSearchText(extension: ExtensionCatalogItem, permission: Extensio
 export function searchCommandPatterns(
   extensions: readonly ExtensionCatalogItem[],
   rawQuery: string,
-  limit = 24,
+  limit = COMMAND_PATTERN_DISPLAY_LIMIT,
 ): CommandPatternMatch[] {
   const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
   if (!normalized) return [];

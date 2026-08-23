@@ -53,6 +53,9 @@ export function setLocalPermissionDraftState(
     };
     next.push(local);
   }
+  const hadPermissionControl = local.controls.some(
+    (control) => control.target_kind === "permission" && control.target_id === permissionId,
+  );
   local.controls = local.controls.filter(
     (control) => control.target_kind !== "permission" || control.target_id !== permissionId,
   );
@@ -62,6 +65,10 @@ export function setLocalPermissionDraftState(
       target_id: permissionId,
       state: state === "allow" ? "enabled" : "disabled",
     });
+  }
+  if (state === "inherit" && hadPermissionControl && !local.global_lockdown && local.controls.length === 0) {
+    const localIndex = next.indexOf(local);
+    next.splice(localIndex, 1);
   }
   const normalized = next.map((layer) => sortedControls(layer));
   normalized.sort((left, right) => left.kind.localeCompare(right.kind));
