@@ -156,6 +156,22 @@ def test_execution_config_fetch_stays_unowned(tmp_path: Path, command: str) -> N
     assert payload["extensions"] == []
 
 
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git fetch origin; rm -rf target",
+        "git fetch origin && rm -rf target",
+        "git -c core.sshCommand=payload fetch origin && git fetch origin",
+        "git fetch origin && git -c core.sshCommand=payload fetch origin",
+    ),
+)
+def test_compound_or_config_override_fetch_stays_unowned(tmp_path: Path, command: str) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] != "git origin refresh"
+
+
 def test_url_remote_fetch_stays_unowned(tmp_path: Path) -> None:
     payload = inspect_command("git fetch https://example.invalid/project.git", cwd=tmp_path, home_dir=tmp_path)
 

@@ -84,14 +84,12 @@ def git_fetch_operands(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
 
 
 def command_is_origin_shaped_git_fetch(segments: tuple[tuple[str, ...], ...]) -> bool:
-    """Return whether every fetch segment is a named-origin refresh."""
+    """Return whether every executable segment is a named-origin refresh."""
 
-    saw_fetch = False
+    if not segments:
+        return False
     for tokens in segments:
         operands = git_fetch_operands(tokens)
-        if operands is None:
-            continue
-        saw_fetch = True
-        if not origin_shaped_git_fetch_args(operands):
+        if operands is None or not origin_shaped_git_fetch_args(operands):
             return False
-    return saw_fetch
+    return True

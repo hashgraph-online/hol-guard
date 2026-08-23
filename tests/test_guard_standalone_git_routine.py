@@ -152,7 +152,7 @@ def test_git_fetch_without_repository_bound_cwd_is_sensitive(tmp_path: Path, com
     )
 
     assert request is not None
-    if " -c " in command or "--exec-path=" in command or "--config-env" in command:
+    if any(marker in command for marker in (" -c ", "--exec-path=", "--config-env", ";", "&&")):
         assert request.action_class == "unverified Git remote refresh"
     else:
         assert request.action_class == "git origin refresh"
