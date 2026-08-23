@@ -596,6 +596,7 @@ function localPermissionDraftState(layers, permissionId) {
 function setLocalPermissionDraftState(layers, catalogDigest, permissionId, state) {
   const next = cloneLayers$1(layers);
   let local = next.find((layer) => layer.kind === "local-admin");
+  if (!local && state === "inherit") return next;
   if (!local) {
     local = {
       schema_version: "1.0.0",
@@ -1379,10 +1380,10 @@ function useExtensionPolicyDraft(props) {
     ).length;
   }, [baseEffective, draftLayers]);
   const changedPermissionCount = reactExports.useMemo(
-    () => changeCountFor(
-      baseEffective.layers.flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2))
-    ),
-    [baseEffective, changeCountFor]
+    () => changeCountFor([...new Set(
+      baseEffective.layers.concat(draftLayers).flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2))
+    )]),
+    [baseEffective.layers, changeCountFor, draftLayers]
   );
   const resetDraft = reactExports.useCallback(() => {
     draftGeneration.current += 1;
@@ -3792,6 +3793,11 @@ function QuickApplyToolbar(props) {
   const managedBlockCount = props.permissions.filter(
     (permission2) => permission2.configurable && managedPermissionState(props.effective, permission2.permission_id) === "disabled"
   ).length;
+  let managedBlockCopy = "";
+  if (managedBlockCount) {
+    const subject = managedBlockCount === 1 ? "block stays" : "blocks stay";
+    managedBlockCopy = ` ${managedBlockCount} organization ${subject} enforced.`;
+  }
   if (!configurableCount) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-col gap-3 border-y border-[rgba(63,65,116,0.12)] bg-[rgba(85,153,254,0.045)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
@@ -3803,7 +3809,7 @@ function QuickApplyToolbar(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-xs leading-5 text-brand-dark/65", children: [
         "Changes stay in draft until you review and approve them.",
-        managedBlockCount ? ` ${managedBlockCount} organization ${managedBlockCount === 1 ? "block stays" : "blocks stay"} enforced.` : ""
+        managedBlockCopy
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "group", "aria-label": `Quick apply to ${configurableCount} matching capabilities`, className: "flex flex-wrap gap-2", children: QUICK_APPLY_CHOICES.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -3862,14 +3868,14 @@ function PatternSearchConsole(props) {
     refreshRequired,
     lastApplied,
     undoLastApplied,
+    changedPermissionCount,
     setReviewOpen,
     setPermissionState,
     setPermissionStates,
     resetDraft,
     runPreview,
     apply,
-    permissionState,
-    changeCountFor
+    permissionState
   } = draft;
   reactExports.useEffect(() => {
     if (!searchActive) return;
@@ -3902,7 +3908,7 @@ function PatternSearchConsole(props) {
     return [...groups.values()];
   }, [matches]);
   const involvedPermissions = reactExports.useMemo(() => matches.map((match) => match.permission), [matches]);
-  const changeCount = changeCountFor(involvedPermissions.map((permission2) => permission2.permission_id));
+  const changeCount = changedPermissionCount;
   const showResults = query.trim().length > 0;
   reactExports.useEffect(() => {
     if (!reviewOpen) return;
@@ -4013,47 +4019,47 @@ function PatternSearchConsole(props) {
         " matched setting",
         managedCount === 1 ? "" : "s are",
         " managed by your organization and cannot be weakened on this device."
-      ] }) : null,
-      dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-review-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-brand-dark", children: [
-          changeCount,
-          " unsaved setting change",
-          changeCount === 1 ? "" : "s",
-          "."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: previewBusy || applyBusy, onClick: resetDraft, className: "min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark", children: "Reset changes" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: previewBusy || applyBusy || baseEffective.health !== "protected" || stale, onClick: () => {
-            void runPreview();
-          }, className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40", children: [
-            previewBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin motion-reduce:animate-none" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4" }),
-            "Review ",
-            changeCount,
-            " change",
-            changeCount === 1 ? "" : "s"
-          ] })
-        ] })
-      ] }) }) : null,
-      lastApplied ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        AppliedPolicyToast,
-        {
-          revision: lastApplied.revision,
-          onUndo: () => {
-            undoLastApplied();
-          },
-          onViewHistory: () => {
-            document.getElementById("pattern-search-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
-        }
-      ) : null,
-      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "alert", className: "mt-4 text-sm text-red-950", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: error })
-      ] }) }) : dirty && !preview ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change." })
       ] }) : null
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No command patterns or tools match this search." }) : null,
+    dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-review-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-brand-dark", children: [
+        changeCount,
+        " unsaved setting change",
+        changeCount === 1 ? "" : "s",
+        "."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: previewBusy || applyBusy, onClick: resetDraft, className: "min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark", children: "Reset changes" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: previewBusy || applyBusy || baseEffective.health !== "protected" || stale, onClick: () => {
+          void runPreview();
+        }, className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40", children: [
+          previewBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin motion-reduce:animate-none" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4" }),
+          "Review ",
+          changeCount,
+          " change",
+          changeCount === 1 ? "" : "s"
+        ] })
+      ] })
+    ] }) }) : null,
+    lastApplied ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AppliedPolicyToast,
+      {
+        revision: lastApplied.revision,
+        onUndo: () => {
+          undoLastApplied();
+        },
+        onViewHistory: () => {
+          document.getElementById("pattern-search-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    ) : null,
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "alert", className: "mt-4 text-sm text-red-950", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: error })
+    ] }) }) : dirty && !preview ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change." })
+    ] }) : null,
     reviewOpen && preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       PolicyReviewSheet,
       {

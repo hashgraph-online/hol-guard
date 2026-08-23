@@ -45,6 +45,18 @@ const effective: EffectiveExtensionControls = {
 
 assert.equal(localPermissionDraftState(effective.layers, "command.git.permission.force-clean"), "inherit");
 
+const inheritedWithoutLocalLayer = setLocalPermissionDraftStates(
+  [managed],
+  digest,
+  ["command.git.permission.force-clean"],
+  "inherit",
+);
+assert.equal(
+  inheritedWithoutLocalLayer.some((layer) => layer.kind === "local-admin"),
+  false,
+  "recommended must not create an empty local policy layer",
+);
+
 const blocked = setLocalPermissionDraftState(
   effective.layers,
   digest,

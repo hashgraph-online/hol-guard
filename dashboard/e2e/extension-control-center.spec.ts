@@ -188,10 +188,17 @@ test("search results offer safe bulk actions with clear scope on desktop and mob
   await expect(page.getByText("Quick apply to 1 matching capability")).toBeVisible();
   const quickApply = page.getByRole("group", { name: "Quick apply to 1 matching capabilities" });
   await expect(quickApply.getByRole("button", { name: "Recommended" })).toHaveAttribute("aria-pressed", "true");
+  await quickApply.getByRole("button", { name: "Recommended" }).click();
+  await expect(page.getByText("1 unsaved setting change.")).toHaveCount(0);
 
   await quickApply.getByRole("button", { name: "Deny all" }).click();
   await expect(page.getByText("1 unsaved setting change.")).toBeVisible();
   await expect(page.getByRole("radio", { name: "Block" })).toHaveAttribute("aria-checked", "true");
+
+  await page.getByRole("searchbox", { name: "Search command patterns" }).fill("no matching capability");
+  await expect(page.getByText("No command patterns or tools match this search.")).toBeVisible();
+  await expect(page.getByText("1 unsaved setting change.")).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search command patterns" }).fill("git");
 
   await quickApply.getByRole("button", { name: "Recommended" }).click();
   await expect(page.getByText("1 unsaved setting change.")).toHaveCount(0);

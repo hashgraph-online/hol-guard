@@ -67,6 +67,11 @@ function QuickApplyToolbar(props: {
   const managedBlockCount = props.permissions.filter((permission) =>
     permission.configurable && managedPermissionState(props.effective, permission.permission_id) === "disabled"
   ).length;
+  let managedBlockCopy = "";
+  if (managedBlockCount) {
+    const subject = managedBlockCount === 1 ? "block stays" : "blocks stay";
+    managedBlockCopy = ` ${managedBlockCount} organization ${subject} enforced.`;
+  }
   if (!configurableCount) return null;
   return (
     <div className="mt-4 flex flex-col gap-3 border-y border-[rgba(63,65,116,0.12)] bg-[rgba(85,153,254,0.045)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
@@ -74,7 +79,7 @@ function QuickApplyToolbar(props: {
         <p className="text-sm font-semibold text-brand-dark">Quick apply to {configurableCount} matching {configurableCount === 1 ? "capability" : "capabilities"}</p>
         <p className="mt-0.5 text-xs leading-5 text-brand-dark/65">
           Changes stay in draft until you review and approve them.
-          {managedBlockCount ? ` ${managedBlockCount} organization ${managedBlockCount === 1 ? "block stays" : "blocks stay"} enforced.` : ""}
+          {managedBlockCopy}
         </p>
       </div>
       <div role="group" aria-label={`Quick apply to ${configurableCount} matching capabilities`} className="flex flex-wrap gap-2">
@@ -154,7 +159,8 @@ export function PatternSearchConsole(props: {
   const {
     baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen,
     error, stale, refreshRequired, lastApplied, undoLastApplied,
-    setReviewOpen, setPermissionState, setPermissionStates, resetDraft, runPreview, apply, permissionState, changeCountFor,
+    changedPermissionCount, setReviewOpen, setPermissionState, setPermissionStates,
+    resetDraft, runPreview, apply, permissionState,
   } = draft;
 
   useEffect(() => {
@@ -189,7 +195,7 @@ export function PatternSearchConsole(props: {
     return [...groups.values()];
   }, [matches]);
   const involvedPermissions = useMemo(() => matches.map((match) => match.permission), [matches]);
-  const changeCount = changeCountFor(involvedPermissions.map((permission) => permission.permission_id));
+  const changeCount = changedPermissionCount;
   const showResults = query.trim().length > 0;
 
   useEffect(() => {
@@ -296,44 +302,45 @@ export function PatternSearchConsole(props: {
           {managedCount ? (
             <p className="mt-3 text-xs text-indigo-950">{managedCount} matched setting{managedCount === 1 ? "" : "s are"} managed by your organization and cannot be weakened on this device.</p>
           ) : null}
-          {dirty ? (
-            <div className="guard-review-bar">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-brand-dark">{changeCount} unsaved setting change{changeCount === 1 ? "" : "s"}.</div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={previewBusy || applyBusy} onClick={resetDraft} className="min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark">Reset changes</button>
-                  <button type="button" disabled={previewBusy || applyBusy || baseEffective.health !== "protected" || stale} onClick={() => { void runPreview(); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
-                    {previewBusy ? <HiMiniArrowPath className="size-4 animate-spin motion-reduce:animate-none" /> : <HiMiniShieldCheck className="size-4" />}
-                    Review {changeCount} change{changeCount === 1 ? "" : "s"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          {lastApplied ? (
-            <AppliedPolicyToast
-              revision={lastApplied.revision}
-              onUndo={() => { undoLastApplied(); }}
-              onViewHistory={() => { document.getElementById("pattern-search-heading")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-            />
-          ) : null}
-          {error ? (
-            <div role="alert" className="mt-4 text-sm text-red-950">
-              <div className="flex items-start gap-2">
-                <HiMiniExclamationTriangle className="mt-0.5 size-5 shrink-0" />
-                <span>{error}</span>
-              </div>
-            </div>
-          ) : dirty && !preview ? (
-            <div className="mt-4 flex items-start gap-3 text-sm text-brand-dark">
-              <HiMiniInformationCircle className="mt-0.5 size-5 shrink-0" />
-              <p>Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change.</p>
-            </div>
-          ) : null}
         </div>
       ) : (
         <p className="mt-3 text-sm text-brand-dark/75">No command patterns or tools match this search.</p>
       )
+    ) : null}
+
+    {dirty ? (
+      <div className="guard-review-bar">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-brand-dark">{changeCount} unsaved setting change{changeCount === 1 ? "" : "s"}.</div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={previewBusy || applyBusy} onClick={resetDraft} className="min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark">Reset changes</button>
+            <button type="button" disabled={previewBusy || applyBusy || baseEffective.health !== "protected" || stale} onClick={() => { void runPreview(); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
+              {previewBusy ? <HiMiniArrowPath className="size-4 animate-spin motion-reduce:animate-none" /> : <HiMiniShieldCheck className="size-4" />}
+              Review {changeCount} change{changeCount === 1 ? "" : "s"}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    {lastApplied ? (
+      <AppliedPolicyToast
+        revision={lastApplied.revision}
+        onUndo={() => { undoLastApplied(); }}
+        onViewHistory={() => { document.getElementById("pattern-search-heading")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+      />
+    ) : null}
+    {error ? (
+      <div role="alert" className="mt-4 text-sm text-red-950">
+        <div className="flex items-start gap-2">
+          <HiMiniExclamationTriangle className="mt-0.5 size-5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      </div>
+    ) : dirty && !preview ? (
+      <div className="mt-4 flex items-start gap-3 text-sm text-brand-dark">
+        <HiMiniInformationCircle className="mt-0.5 size-5 shrink-0" />
+        <p>Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change.</p>
+      </div>
     ) : null}
 
     {reviewOpen && preview ? (

@@ -42,6 +42,7 @@ export function setLocalPermissionDraftState(
 ): ExtensionControlLayer[] {
   const next = cloneLayers(layers);
   let local = next.find((layer) => layer.kind === "local-admin");
+  if (!local && state === "inherit") return next;
   if (!local) {
     local = {
       schema_version: "1.0.0",

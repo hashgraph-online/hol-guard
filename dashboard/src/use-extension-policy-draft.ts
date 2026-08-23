@@ -97,12 +97,12 @@ export function useExtensionPolicyDraft(props: {
   }, [baseEffective, draftLayers]);
 
   const changedPermissionCount = useMemo(
-    () => changeCountFor(
-      baseEffective.layers.flatMap((layer) => layer.controls)
+    () => changeCountFor([...new Set(
+      baseEffective.layers.concat(draftLayers).flatMap((layer) => layer.controls)
         .map((control) => (control.target_kind === "permission" ? control.target_id : null))
         .filter((id): id is string => Boolean(id)),
-    ),
-    [baseEffective, changeCountFor],
+    )]),
+    [baseEffective.layers, changeCountFor, draftLayers],
   );
 
   const resetDraft = useCallback(() => {
