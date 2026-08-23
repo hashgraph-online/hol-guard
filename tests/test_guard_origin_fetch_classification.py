@@ -161,15 +161,31 @@ def test_execution_config_fetch_stays_unowned(tmp_path: Path, command: str) -> N
     (
         "git fetch origin; rm -rf target",
         "git fetch origin && rm -rf target",
-        "git -c core.sshCommand=payload fetch origin && git fetch origin",
-        "git fetch origin && git -c core.sshCommand=payload fetch origin",
     ),
 )
-def test_compound_or_config_override_fetch_stays_unowned(tmp_path: Path, command: str) -> None:
+def test_compound_fetch_with_delete_is_not_origin_refresh(tmp_path: Path, command: str) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
 
     assert payload["status"] == "review"
     assert payload["classification"]["action_class"] != "git origin refresh"
+    assert payload["controlling_rule_id"] == "command.filesystem.recursive-delete"
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "git -c core.sshCommand=payload fetch origin && git fetch origin",
+        "git fetch origin && git -c core.sshCommand=payload fetch origin",
+    ),
+)
+def test_config_override_compound_fetch_stays_unowned(tmp_path: Path, command: str) -> None:
+    payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
+
+    assert payload["status"] == "review"
+    assert payload["classification"]["action_class"] == "unverified Git remote refresh"
+    assert payload["controlling_rule_id"] is None
+    assert payload["extensions"] == []
+    assert payload["rules"] == []
 
 
 def test_url_remote_fetch_stays_unowned(tmp_path: Path) -> None:
