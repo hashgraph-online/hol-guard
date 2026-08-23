@@ -621,9 +621,7 @@ def _parse_optional_scoped_git_config(
 def _git_fetch_config_routes_execution(config: dict[str, tuple[str, ...]]) -> bool:
     if config.get("remote.origin.uploadpack"):
         return True
-    if any(value.strip() for value in config.get("core.askpass", ())):
-        return True
-    if any(value.strip() for value in config.get("core.sshcommand", ())):
+    if any(value.strip() for key in ("core.askpass", "core.sshcommand") for value in config.get(key, ())):
         return True
     for key, values in config.items():
         if not (key.startswith("url.") and key.endswith(".insteadof")):
