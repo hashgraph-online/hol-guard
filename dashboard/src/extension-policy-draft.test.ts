@@ -5,6 +5,7 @@ import {
   extensionPolicyDraftIsDirty,
   localPermissionDraftState,
   setLocalPermissionDraftState,
+  setLocalPermissionDraftStates,
 } from "./extension-policy-draft";
 import type { EffectiveExtensionControls, ExtensionControlLayer } from "./extension-controls-api";
 
@@ -71,6 +72,16 @@ const allowed = setLocalPermissionDraftState(
   "allow",
 );
 assert.equal(localPermissionDraftState(allowed, "command.git.permission.force-clean"), "allow");
+
+const bulkBlocked = setLocalPermissionDraftStates(
+  effective.layers,
+  digest,
+  ["command.git.permission.force-clean", "command.git.permission.branch-delete"],
+  "block",
+);
+assert.equal(localPermissionDraftState(bulkBlocked, "command.git.permission.force-clean"), "block");
+assert.equal(localPermissionDraftState(bulkBlocked, "command.git.permission.branch-delete"), "block");
+assert.equal(effective.layers[0]?.controls.length, 1, "bulk drafting must not mutate authoritative layers");
 
 const mutation = buildExtensionPolicyDraftMutation(effective, digest, allowed, {
   idempotencyKey: "draft-idempotency",

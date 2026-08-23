@@ -2051,6 +2051,10 @@
     border-color: #3f417429;
   }
 
+  .border-\[rgba\(63\,65\,116\,0\.18\)\] {
+    border-color: #3f41742e;
+  }
+
   .border-accent\/20 {
     border-color: hsl(var(--accent));
   }
@@ -2635,6 +2639,10 @@
 
   .bg-\[rgba\(85\,153\,254\,0\.08\)\] {
     background-color: #5599fe14;
+  }
+
+  .bg-\[rgba\(85\,153\,254\,0\.045\)\] {
+    background-color: #5599fe0b;
   }
 
   .bg-\[var\(--surface-1\)\] {
@@ -4549,6 +4557,16 @@
     }
   }
 
+  .text-brand-dark\/65 {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-dark\/65 {
+      color: color-mix(in oklab, var(--brand-dark) 65%, transparent);
+    }
+  }
+
   .text-brand-dark\/70 {
     color: var(--brand-dark);
   }
@@ -5325,7 +5343,7 @@
       border-color: var(--color-blue-200);
     }
 
-    .hover\:border-brand-blue\/20:hover {
+    .hover\:border-brand-blue:hover, .hover\:border-brand-blue\/20:hover {
       border-color: var(--brand-blue);
     }
 
@@ -6025,6 +6043,18 @@
     .disabled\:hover\:bg-transparent:disabled:hover {
       background-color: #0000;
     }
+  }
+
+  .aria-pressed\:border-brand-blue[aria-pressed="true"] {
+    border-color: var(--brand-blue);
+  }
+
+  .aria-pressed\:bg-brand-blue[aria-pressed="true"] {
+    background-color: var(--brand-blue);
+  }
+
+  .aria-pressed\:text-white[aria-pressed="true"] {
+    color: var(--color-white);
   }
 
   @media (prefers-reduced-motion: no-preference) {

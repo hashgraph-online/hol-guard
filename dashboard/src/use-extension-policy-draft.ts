@@ -17,6 +17,7 @@ import {
   localPermissionDraftState,
   newExtensionPolicyDraftIdentity,
   setLocalPermissionDraftState,
+  setLocalPermissionDraftStates,
   type PermissionDraftState,
 } from "./extension-policy-draft";
 import {
@@ -118,6 +119,24 @@ export function useExtensionPolicyDraft(props: {
   const setPermissionState = useCallback((permissionId: string, state: PermissionDraftState) => {
     draftGeneration.current += 1;
     setDraftLayers((current) => setLocalPermissionDraftState(current, baseEffective.catalog_digest, permissionId, state));
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+    setLastApplied(null);
+  }, [baseEffective.catalog_digest]);
+
+  const setPermissionStates = useCallback((permissionIds: readonly string[], state: PermissionDraftState) => {
+    if (!permissionIds.length) return;
+    draftGeneration.current += 1;
+    setDraftLayers((current) => setLocalPermissionDraftStates(
+      current,
+      baseEffective.catalog_digest,
+      permissionIds,
+      state,
+    ));
+    setIdentity(newExtensionPolicyDraftIdentity());
     setPreview(null);
     setReviewOpen(false);
     setError(null);
@@ -356,6 +375,7 @@ export function useExtensionPolicyDraft(props: {
     permissionState: useCallback((permissionId: string) => localPermissionDraftState(draftLayers, permissionId), [draftLayers]),
     changeCountFor,
     setPermissionState,
+    setPermissionStates,
     resetDraft,
     runPreview,
     apply,

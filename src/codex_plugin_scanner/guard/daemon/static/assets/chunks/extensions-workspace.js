@@ -1,4 +1,4 @@
-import { ax as fetchLocalCliApi, r as reactExports, ay as fetchExtensionControlApi, j as jsxRuntimeExports, a6 as HiMiniLockClosed, M as HiMiniExclamationTriangle, az as HiMiniArrowPath, t as HiMiniShieldCheck, aA as HiMiniInformationCircle, aB as isApprovalProofSubmitDisabled, z as HiMiniXMark, aC as ApprovalProofFieldInputs, aD as buildApprovalProofCredentials, aE as GenIcon, N as HiMiniBolt, aF as HiMiniGlobeAlt, aG as HiMiniCube, I as HiMiniCloud, aH as HiMiniServerStack, b as HiMiniCommandLine, aI as HiMiniFolder, aJ as FaWindows, aK as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aL as HiMiniArrowLeft, aM as HiMiniPlus, $ as HiMiniClipboardDocumentCheck, a0 as HiMiniClipboard, as as HiMiniMagnifyingGlass, ar as WorkspacePageHeader, aN as guardAwareHref } from "../guard-dashboard.js";
+import { ax as fetchLocalCliApi, r as reactExports, ay as fetchExtensionControlApi, j as jsxRuntimeExports, a6 as HiMiniLockClosed, M as HiMiniExclamationTriangle, az as HiMiniArrowPath, t as HiMiniShieldCheck, aA as HiMiniInformationCircle, aB as isApprovalProofSubmitDisabled, z as HiMiniXMark, aC as ApprovalProofFieldInputs, aD as buildApprovalProofCredentials, aE as GenIcon, N as HiMiniBolt, aF as HiMiniGlobeAlt, aG as HiMiniCube, I as HiMiniCloud, aH as HiMiniServerStack, b as HiMiniCommandLine, aI as HiMiniFolder, aJ as FaWindows, aK as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aL as HiMiniArrowLeft, aM as HiMiniPlus, $ as HiMiniClipboardDocumentCheck, a0 as HiMiniClipboard, as as HiMiniMagnifyingGlass, y as HiMiniSparkles, aN as HiMiniNoSymbol, ar as WorkspacePageHeader, aO as guardAwareHref } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -619,6 +619,12 @@ function setLocalPermissionDraftState(layers, catalogDigest, permissionId, state
   const normalized = next.map((layer) => sortedControls(layer));
   normalized.sort((left, right) => left.kind.localeCompare(right.kind));
   return normalized;
+}
+function setLocalPermissionDraftStates(layers, catalogDigest, permissionIds, state) {
+  return permissionIds.reduce(
+    (next, permissionId) => setLocalPermissionDraftState(next, catalogDigest, permissionId, state),
+    layers
+  );
 }
 function canonicalLayerValue(layers) {
   return JSON.stringify(
@@ -1398,6 +1404,23 @@ function useExtensionPolicyDraft(props) {
     setPendingRebase(null);
     setLastApplied(null);
   }, [baseEffective.catalog_digest]);
+  const setPermissionStates = reactExports.useCallback((permissionIds, state) => {
+    if (!permissionIds.length) return;
+    draftGeneration.current += 1;
+    setDraftLayers((current) => setLocalPermissionDraftStates(
+      current,
+      baseEffective.catalog_digest,
+      permissionIds,
+      state
+    ));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+    setLastApplied(null);
+  }, [baseEffective.catalog_digest]);
   const mutation = reactExports.useCallback(
     () => buildExtensionPolicyDraftMutation(baseEffective, baseEffective.catalog_digest, draftLayers, identity),
     [baseEffective, draftLayers, identity]
@@ -1610,6 +1633,7 @@ function useExtensionPolicyDraft(props) {
     permissionState: reactExports.useCallback((permissionId) => localPermissionDraftState(draftLayers, permissionId), [draftLayers]),
     changeCountFor,
     setPermissionState,
+    setPermissionStates,
     resetDraft,
     runPreview,
     apply,
@@ -3740,6 +3764,83 @@ function searchCommandPatterns(extensions, rawQuery, limit = 24) {
     (left, right) => right.permission.risk_tier.localeCompare(left.permission.risk_tier) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
   ).slice(0, limit);
 }
+const QUICK_APPLY_CHOICES = [
+  {
+    state: "inherit",
+    label: "Recommended",
+    detail: "Use Guard defaults for every matching capability.",
+    icon: HiMiniSparkles
+  },
+  {
+    state: "allow",
+    label: "Allow all",
+    detail: "Allow every matching capability that organization policy permits.",
+    icon: HiMiniCheckCircle
+  },
+  {
+    state: "block",
+    label: "Deny all",
+    detail: "Add a local block to every matching capability.",
+    icon: HiMiniNoSymbol
+  }
+];
+function quickApplyPermissionIds(permissions, effective, state) {
+  return permissions.filter((permission2) => permission2.configurable).filter((permission2) => state !== "allow" || managedPermissionState(effective, permission2.permission_id) !== "disabled").map((permission2) => permission2.permission_id);
+}
+function QuickApplyToolbar(props) {
+  const configurableCount = props.permissions.filter((permission2) => permission2.configurable).length;
+  const managedBlockCount = props.permissions.filter(
+    (permission2) => permission2.configurable && managedPermissionState(props.effective, permission2.permission_id) === "disabled"
+  ).length;
+  if (!configurableCount) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-col gap-3 border-y border-[rgba(63,65,116,0.12)] bg-[rgba(85,153,254,0.045)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+        "Quick apply to ",
+        configurableCount,
+        " matching ",
+        configurableCount === 1 ? "capability" : "capabilities"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-xs leading-5 text-brand-dark/65", children: [
+        "Changes stay in draft until you review and approve them.",
+        managedBlockCount ? ` ${managedBlockCount} organization ${managedBlockCount === 1 ? "block stays" : "blocks stay"} enforced.` : ""
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "group", "aria-label": `Quick apply to ${configurableCount} matching capabilities`, className: "flex flex-wrap gap-2", children: QUICK_APPLY_CHOICES.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QuickApplyButton,
+      {
+        choice,
+        permissionIds: quickApplyPermissionIds(props.permissions, props.effective, choice.state),
+        disabled: props.disabled,
+        permissionState: props.permissionState,
+        onApply: props.onApply
+      },
+      choice.state
+    )) })
+  ] });
+}
+function QuickApplyButton(props) {
+  const active = props.permissionIds.length > 0 && props.permissionIds.every((permissionId) => props.permissionState(permissionId) === props.choice.state);
+  const handleClick = reactExports.useCallback(() => {
+    props.onApply(props.permissionIds, props.choice.state);
+  }, [props.choice.state, props.onApply, props.permissionIds]);
+  const Icon = props.choice.icon;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-pressed": active,
+      title: props.choice.detail,
+      disabled: props.disabled || props.permissionIds.length === 0,
+      onClick: handleClick,
+      className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue aria-pressed:bg-brand-blue aria-pressed:text-white",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "size-4", "aria-hidden": "true" }),
+        props.choice.label
+      ]
+    }
+  );
+}
 function PatternSearchConsole(props) {
   const [internalQuery, setInternalQuery] = reactExports.useState("");
   const query = props.query ?? internalQuery;
@@ -3763,6 +3864,7 @@ function PatternSearchConsole(props) {
     undoLastApplied,
     setReviewOpen,
     setPermissionState,
+    setPermissionStates,
     resetDraft,
     runPreview,
     apply,
@@ -3847,6 +3949,16 @@ function PatternSearchConsole(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "pattern-search-hint", className: `mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`, children: "Matches patterns across every tool. Press / to focus search from anywhere on this page." }),
     props.actionSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: props.actionSlot }) : null,
     showResults ? matches.length || toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        QuickApplyToolbar,
+        {
+          permissions: involvedPermissions,
+          effective: baseEffective,
+          disabled: refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected",
+          permissionState,
+          onApply: setPermissionStates
+        }
+      ) : null,
       grouped.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": `${group.extension.name} patterns`, className: "guard-pattern-family", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "guard-pattern-family-heading", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(

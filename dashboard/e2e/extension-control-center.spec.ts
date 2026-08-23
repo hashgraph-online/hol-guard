@@ -180,6 +180,54 @@ test("global lockdown and narrow viewport remain explicit and usable", async ({ 
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
+test("search results offer safe bulk actions with clear scope on desktop and mobile", async ({ page }) => {
+  await mount(page);
+  await initialize(page);
+
+  await page.getByRole("searchbox", { name: "Search command patterns" }).fill("git");
+  await expect(page.getByText("Quick apply to 1 matching capability")).toBeVisible();
+  const quickApply = page.getByRole("group", { name: "Quick apply to 1 matching capabilities" });
+  await expect(quickApply.getByRole("button", { name: "Recommended" })).toHaveAttribute("aria-pressed", "true");
+
+  await quickApply.getByRole("button", { name: "Deny all" }).click();
+  await expect(page.getByText("1 unsaved setting change.")).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Block" })).toHaveAttribute("aria-checked", "true");
+
+  await quickApply.getByRole("button", { name: "Recommended" }).click();
+  await expect(page.getByText("1 unsaved setting change.")).toHaveCount(0);
+  await quickApply.getByRole("button", { name: "Allow all" }).click();
+  await expect(page.getByRole("button", { name: "Review 1 change" })).toBeVisible();
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await expect(quickApply.getByRole("button", { name: "Allow all" })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test("bulk allow preserves organization blocks", async ({ page }) => {
+  await mount(page, {
+    effective: effective({
+      layers: [{
+        schema_version: "1.0.0",
+        kind: "signed-cloud",
+        catalog_digest: DIGEST,
+        global_lockdown: false,
+        controls: [{
+          target_kind: "permission",
+          target_id: "command.git.permission.hard-reset",
+          state: "disabled",
+        }],
+      }],
+    }),
+  });
+  await initialize(page);
+  await page.getByRole("searchbox", { name: "Search command patterns" }).fill("git");
+
+  await expect(page.getByText("1 organization block stays enforced.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow all" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Deny all" })).toBeEnabled();
+});
+
 test("malformed catalog response is rejected at the client boundary", async ({ page }) => {
   await mount(page, { malformedCatalog: true });
   await page.goto(`/extensions?guardDaemon=${DAEMON_ORIGIN}`);

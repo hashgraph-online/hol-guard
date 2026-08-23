@@ -24,6 +24,7 @@ import {
   isCurrentExtensionPolicyDraft,
   nextExtensionPolicyRadioIndex,
 } from "./extension-policy-panel";
+import { quickApplyPermissionIds } from "./protection-center/components/pattern-search-console";
 
 // Every authority action failure maps to plain language with a next step;
 // raw protocol codes never reach the operator.
@@ -166,6 +167,49 @@ const effective: EffectiveExtensionControls = {
   controls: [{ target: { kind: "permission", target_id: "command.git.permission.hard-reset" }, state: "disabled" }],
   layers: [], failures: [],
 };
+const bulkPermissions = [
+  extension.permissions[0]!,
+  {
+    ...extension.permissions[0]!,
+    permission_id: "command.git.permission.managed-block",
+    label: "Managed block",
+  },
+  {
+    ...extension.permissions[0]!,
+    permission_id: "command.git.permission.fixed",
+    label: "Fixed safety rule",
+    configurable: false,
+  },
+];
+const bulkEffective: EffectiveExtensionControls = {
+  ...effective,
+  layers: [{
+    schema_version: "1.0.0",
+    kind: "signed-cloud",
+    catalog_digest: effective.catalog_digest,
+    global_lockdown: false,
+    controls: [{
+      target_kind: "permission",
+      target_id: "command.git.permission.managed-block",
+      state: "disabled",
+    }],
+  }],
+};
+assert.deepEqual(
+  quickApplyPermissionIds(bulkPermissions, bulkEffective, "allow"),
+  ["command.git.permission.hard-reset"],
+  "bulk allow skips fixed permissions and organization-enforced blocks",
+);
+assert.deepEqual(
+  quickApplyPermissionIds(bulkPermissions, bulkEffective, "block"),
+  ["command.git.permission.hard-reset", "command.git.permission.managed-block"],
+  "bulk deny can add a stricter local block to every configurable match",
+);
+assert.deepEqual(
+  quickApplyPermissionIds(bulkPermissions, bulkEffective, "inherit"),
+  ["command.git.permission.hard-reset", "command.git.permission.managed-block"],
+  "recommended clears only configurable local overrides",
+);
 const totpChangeMarkup = renderToStaticMarkup(createElement(ReviewModal, {
   change: { extension, enabled: true }, busy: false, error: null,
   approvalGate: { enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: true },
@@ -209,6 +253,7 @@ const policyDetailSource = readFileSync(new URL("./extension-control-center-deta
 const policyPanelSource = readFileSync(new URL("./extension-policy-panel.tsx", import.meta.url), "utf8");
 const policyDraftSource = readFileSync(new URL("./use-extension-policy-draft.ts", import.meta.url), "utf8");
 const workspaceHostSource = readFileSync(new URL("./protection-center/protection-center-workspace.tsx", import.meta.url), "utf8");
+const patternSearchSource = readFileSync(new URL("./protection-center/components/pattern-search-console.tsx", import.meta.url), "utf8");
 const extensionNavigationSource = readFileSync(new URL("./protection-center/extension-navigation.ts", import.meta.url), "utf8");
 assert.match(workspaceHostSource, /data-testid="extensions-workspace"/);
 assert.match(workspaceHostSource, /pushExtensionHistory/);
@@ -221,5 +266,10 @@ assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draf
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)[\s\S]*Guard could not rebase this draft/);
 assert.match(policyPanelSource, /ArrowLeft[\s\S]*ArrowRight[\s\S]*ArrowUp[\s\S]*ArrowDown/);
 assert.match(policyPanelSource, /Settings applied\. Editing stays locked/);
+assert.match(patternSearchSource, /Quick apply to/);
+assert.match(patternSearchSource, /Recommended/);
+assert.match(patternSearchSource, /Allow all/);
+assert.match(patternSearchSource, /Deny all/);
+assert.match(patternSearchSource, /Changes stay in draft until you review and approve them/);
 
 console.log("extensions-workspace.test.ts: all assertions passed");

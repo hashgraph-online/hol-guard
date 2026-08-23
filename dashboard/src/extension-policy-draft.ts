@@ -67,6 +67,18 @@ export function setLocalPermissionDraftState(
   return normalized;
 }
 
+export function setLocalPermissionDraftStates(
+  layers: ExtensionControlLayer[],
+  catalogDigest: string,
+  permissionIds: readonly string[],
+  state: PermissionDraftState,
+): ExtensionControlLayer[] {
+  return permissionIds.reduce(
+    (next, permissionId) => setLocalPermissionDraftState(next, catalogDigest, permissionId, state),
+    layers,
+  );
+}
+
 function canonicalLayerValue(layers: ExtensionControlLayer[]): string {
   return JSON.stringify(
     [...layers]

@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, M as HiMiniExclamationTriangle, az as HiMiniArrowPath, o as HiMiniCheckCircle, c8 as HiMiniSignal, _ as HiMiniXCircle, bb as HiMiniClock, w as formatRelativeTime, P as Badge, av as Tag } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, M as HiMiniExclamationTriangle, az as HiMiniArrowPath, o as HiMiniCheckCircle, c8 as HiMiniSignal, _ as HiMiniXCircle, bc as HiMiniClock, w as formatRelativeTime, P as Badge, av as Tag } from "../guard-dashboard.js";
 function resolveFeedSourceMode(cloudState) {
   if (cloudState === "local_only") return "sample";
   if (cloudState === "paired_waiting") return "full";
