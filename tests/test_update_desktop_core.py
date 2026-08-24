@@ -543,6 +543,13 @@ def test_select_desktop_core_latest_stays_on_current_series() -> None:
         ["3.1.0a13", "3.1.0a5", "3.0.0a239", "3.0.0a238", "2.2.122"],
     )
     assert selected == "3.0.0a239"
+    assert (
+        update_desktop_core.select_desktop_core_latest(
+            "4.0.0a2",
+            ["4.0.0a2", "4.0.0a1", "3.0.0a239"],
+        )
+        == "4.0.0a2"
+    )
 
 
 def test_select_desktop_core_latest_picks_newer_same_series() -> None:
@@ -643,6 +650,46 @@ def test_desktop_cli_update_does_not_apply_newer_train(
     assert payload["resulting_version"] == "3.0.0a239"
     assert payload["changed"] is False
     assert payload["version_check"]["latest_version"] == "3.0.0a239"
+
+
+def test_refine_keeps_current_when_older_same_series_is_listed() -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refine_desktop_version_check
+
+    refined = refine_desktop_version_check(
+        "3.0.0a239",
+        {
+            "source": "pypi",
+            "status": "stale",
+            "current_version": "3.0.0a239",
+            "latest_version": "3.1.0a13",
+            "update_available": True,
+        },
+        candidates=["3.1.0a13", "3.0.0a238"],
+    )
+    assert refined["latest_version"] == "3.0.0a239"
+    assert refined["update_available"] is False
+    assert refined["status"] == "current"
+
+
+def test_refine_preserves_unavailable_and_managed_sources() -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refine_desktop_version_check
+
+    unavailable = {
+        "source": "pypi",
+        "status": "unavailable",
+        "current_version": "3.0.0a239",
+        "latest_version": None,
+        "update_available": None,
+    }
+    managed = {
+        "source": "managed_index",
+        "status": "stale",
+        "current_version": "3.0.0a239",
+        "latest_version": "3.0.0a240",
+        "update_available": True,
+    }
+    assert refine_desktop_version_check("3.0.0a239", unavailable, candidates=["3.0.0a239"]) == unavailable
+    assert refine_desktop_version_check("3.0.0a239", managed, candidates=["3.1.0a13"]) == managed
 
 
 def test_desktop_apply_download_failure_explains_missing_core() -> None:

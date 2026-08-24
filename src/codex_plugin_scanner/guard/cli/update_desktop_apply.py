@@ -64,13 +64,18 @@ def refine_desktop_version_check(
     *,
     candidates: list[str],
 ) -> dict[str, object]:
+    status = str(version_check.get("status") or "")
+    source = str(version_check.get("source") or "")
+    if status == "unavailable" or source not in {"pypi", "desktop_core"}:
+        return version_check
     known = [item.strip() for item in candidates if item.strip()]
     latest = version_check.get("latest_version")
     if isinstance(latest, str) and latest.strip() and latest.strip() not in known:
         known.append(latest.strip())
+    current = current_version.strip()
+    if current and current not in known:
+        known.append(current)
     selected = select_desktop_core_latest(current_version, known)
-    if selected is None and str(version_check.get("status") or "") == "unavailable":
-        return version_check
     refined = dict(version_check)
     refined["source"] = "desktop_core"
     if selected is None:

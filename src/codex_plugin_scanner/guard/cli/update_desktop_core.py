@@ -88,8 +88,6 @@ def desktop_core_release_series(version: str) -> tuple[int, int] | None:
         parsed = Version(version)
     except InvalidVersion:
         return None
-    if parsed.major != 3:
-        return None
     return (parsed.major, parsed.minor)
 
 
