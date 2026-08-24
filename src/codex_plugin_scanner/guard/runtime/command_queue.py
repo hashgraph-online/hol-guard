@@ -29,7 +29,6 @@ from .command_capability import (
 from .command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
-    _local_request_snapshot_payload,
     command_job_operation,
     execute_guard_command_job,
 )
@@ -92,15 +91,6 @@ _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
 _LOGGER = logging.getLogger(__name__)
-_LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS = (
-    "requests",
-    "pendingComplete",
-    "resolvedComplete",
-    "pendingLimit",
-    "resolvedLimit",
-    "pendingCount",
-    "resolvedCount",
-)
 Observer = LifecycleObserver | None
 observe_execution = exact_cloud_review_lifecycle.observe_exact_review_execution
 
@@ -282,7 +272,6 @@ def _lease_payload(
         "deviceId": machine_id,
         "daemonVersion": __version__,
         "capabilities": capabilities,
-        "localRequestsSnapshot": _local_requests_snapshot(store),
         "maxJobs": 1,
         "waitMs": _command_queue_lease_wait_ms() if wait_ms is None else wait_ms,
     }
@@ -294,17 +283,6 @@ def _live_request_sync_repair_status(store: GuardStore) -> dict[str, object] | N
     except Exception as exc:
         _LOGGER.warning("Guard live request repair status failed: %s", _redacted_error(exc))
         return None
-
-
-def _local_requests_snapshot(store: GuardStore) -> dict[str, object]:
-    try:
-        payload = _local_request_snapshot_payload(store)
-    except Exception as exc:
-        _LOGGER.warning("Guard command local request snapshot failed: %s", _redacted_error(exc))
-        return {"requests": []}
-    if not isinstance(payload, dict):
-        return {"requests": []}
-    return {key: payload[key] for key in _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS if key in payload}
 
 
 def _repair_guard_cloud_authorization(store: GuardStore) -> dict[str, bool]:

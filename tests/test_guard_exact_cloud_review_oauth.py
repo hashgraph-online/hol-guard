@@ -19,10 +19,20 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     enable_exact_cloud_review,
     exact_cloud_review_status,
 )
-from tests.guard_exact_cloud_review_support import connected_exact_review_store
-from tests.test_guard_exact_cloud_review import _add_request, _remote_approval, _request
+from tests.guard_exact_cloud_review_support import (
+    add_review_request as _add_request,
+)
+from tests.guard_exact_cloud_review_support import (
+    connected_exact_review_store,
+)
+from tests.guard_exact_cloud_review_support import (
+    remote_approval as _remote_approval,
+)
+from tests.guard_exact_cloud_review_support import (
+    review_request as _request,
+)
 
-_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review-v2" / "oauth-device-fixtures.json"
+_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review" / "oauth-device-fixtures.json"
 _FIXTURE_SHA256 = "63adcc35f5ebd09c8b18407ccad4241bbf8f1eafb4c4524f4262972877bc9c77"
 
 

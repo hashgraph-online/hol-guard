@@ -64,7 +64,7 @@ def resume_harness_operation(
     if normalized_action is None:
         return None
     request = store.get_approval_request(request_id)
-    if isinstance(request, dict) and _supports_durable_continuation(store):
+    if isinstance(request, dict):
         continuation = continue_request_after_application(
             store,
             request_row=request,
@@ -144,10 +144,3 @@ def _normalize_action(value: object) -> str | None:
     if normalized in {"block", "deny", "denied", "blocked"}:
         return "block"
     return None
-
-
-def _supports_durable_continuation(store: GuardStore) -> bool:
-    return all(
-        callable(getattr(store, name, None))
-        for name in ("get_request_resume", "seed_request_resume", "update_request_resume")
-    )

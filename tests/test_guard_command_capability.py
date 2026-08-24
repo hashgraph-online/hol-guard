@@ -161,49 +161,28 @@ def test_every_supported_operation_has_one_local_side_effect_classification() ->
     assert not (set(READ_ONLY_COMMAND_OPERATIONS) & set(STATE_CHANGING_COMMAND_OPERATIONS))
 
 
-def test_existing_review_capability_implies_mfa_gated_sync_repair(tmp_path: Path) -> None:
+def test_policy_memory_capability_requires_its_own_local_confirmation(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
-    status = _issue(
-        store,
-        "guard.approval.resolve",
-        "guard.localRequests.snapshot",
-    )
+    _issue(store, "guard.review.syncPolicyMemory")
 
-    operations = status["operations"]
-    assert isinstance(operations, list)
-    assert "guard.liveRequests.reassignQuarantined" in operations
-
-
-def test_snapshot_only_capability_does_not_imply_sync_repair(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
-    status = _issue(store, "guard.localRequests.snapshot")
-
-    operations = status["operations"]
-    assert isinstance(operations, list)
-    assert "guard.liveRequests.reassignQuarantined" not in operations
-
-
-def test_mfa_gated_sync_repair_does_not_require_a_second_local_approval(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
-    _issue(
-        store,
-        "guard.approval.resolve",
-        "guard.localRequests.snapshot",
-    )
     authorized = authorize_command_job(
         store,
-        _job(
-            store,
-            "guard.liveRequests.reassignQuarantined",
-            payload={
-                "source": "default",
-                "workspaceId": "workspace-1",
-            },
-        ),
+        _job(store, "guard.review.syncPolicyMemory", payload={"decisionMemoryBundle": {}}),
         schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
     )
 
-    assert authorized.requires_local_approval is False
+    assert authorized.requires_local_approval is True
+
+
+def test_policy_memory_capability_cannot_be_combined_with_routine_operations(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+
+    with pytest.raises(CommandCapabilityError, match="policy_memory_capability_must_be_isolated"):
+        issue_command_capability(
+            store,
+            operations=("guard.packageShims.status", "guard.review.syncPolicyMemory"),
+            supported_operations=SUPPORTED_COMMAND_OPERATIONS,
+        )
 
 
 def test_capability_is_signed_exact_revocable_and_does_not_disable_sync(tmp_path: Path) -> None:

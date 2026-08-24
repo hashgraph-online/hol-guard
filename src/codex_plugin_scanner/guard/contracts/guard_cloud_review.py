@@ -327,7 +327,7 @@ def validate_semantic_rules(result: Mapping[str, object]) -> None:
 
 
 def validate_review_result(result: Mapping[str, object]) -> None:
-    """Validate the v2 result without submitting, queueing, or applying a decision."""
+    """Validate the versioned result without submitting, queueing, or applying a decision."""
 
     _validate_schema(result)
     validate_semantic_rules(result)

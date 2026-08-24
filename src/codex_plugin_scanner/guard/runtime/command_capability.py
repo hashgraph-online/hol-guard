@@ -32,7 +32,6 @@ READ_ONLY_COMMAND_OPERATIONS: tuple[str, ...] = (
     "guard.packageShims.audit",
     "guard.app.status",
     "guard.app.updateCheck",
-    "guard.localRequests.snapshot",
 )
 LOCAL_CONFIRMATION_COMMAND_OPERATIONS: frozenset[str] = frozenset(
     {
@@ -48,19 +47,14 @@ STATE_CHANGING_COMMAND_OPERATIONS: frozenset[str] = frozenset(
         "guard.app.repair",
         "guard.app.connect",
         "guard.app.update",
-        "guard.approval.resolve",
+        "guard.review.syncPolicyMemory",
         "guard.liveRequests.reassignQuarantined",
     }
 )
+POLICY_MEMORY_COMMAND_OPERATIONS: frozenset[str] = frozenset({"guard.review.syncPolicyMemory"})
 REMOTE_STEP_UP_COMMAND_OPERATIONS: frozenset[str] = frozenset(
     {
         "guard.liveRequests.reassignQuarantined",
-    }
-)
-_REVIEW_SYNC_REPAIR_PREREQUISITES = frozenset(
-    {
-        "guard.approval.resolve",
-        "guard.localRequests.snapshot",
     }
 )
 
@@ -154,11 +148,10 @@ def _oauth_target(store: GuardStore) -> tuple[str, str]:
         oauth = guard_review_oauth_metadata(store)
     except GuardReviewContractError as error:
         raise CommandCapabilityError("cloud_connection_required") from error
-    if not oauth.machine_id:
+    if not oauth.machine_id or not oauth.installation_id:
         raise CommandCapabilityError("cloud_connection_required")
-    local_device = store.get_device_metadata().get("installation_id")
-    if local_device != oauth.machine_id:
-        raise CommandCapabilityError("cloud_device_binding_mismatch")
+    # OAuth machine identity and the local installation identity are separate
+    # canonical bindings; the DPoP device ID binds command capabilities.
     device_id = oauth.device_id
     workspace_id = oauth.workspace_id
     return device_id, workspace_id
@@ -186,6 +179,8 @@ def issue_command_capability(
         raise CommandCapabilityError("capability_operations_required")
     if set(normalized_operations) - supported or "guard.review.resolveExact" in operations:
         raise CommandCapabilityError("unsupported_capability_operation")
+    if POLICY_MEMORY_COMMAND_OPERATIONS & set(normalized_operations) and len(normalized_operations) != 1:
+        raise CommandCapabilityError("policy_memory_capability_must_be_isolated")
     device_id, workspace_id = _oauth_target(store)
     capability = _signed_payload(
         store,
@@ -268,12 +263,9 @@ def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[s
     )
     if any(operation not in classified_operations for operation in operations):
         raise CommandCapabilityError("capability_operation_unsupported")
-    expanded_operations = set(operations)
-    if _REVIEW_SYNC_REPAIR_PREREQUISITES.issubset(expanded_operations):
-        expanded_operations.update(REMOTE_STEP_UP_COMMAND_OPERATIONS)
     return {
         **capability,
-        "operations": sorted(expanded_operations),
+        "operations": sorted(operations),
     }
 
 

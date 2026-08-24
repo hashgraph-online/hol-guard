@@ -14,7 +14,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.review_contracts import (
-    validate_local_review_request_claim,
+    build_local_review_request_claim,
     validated_remote_approval_envelope,
 )
 from codex_plugin_scanner.guard.runtime import command_queue
@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabil
 from codex_plugin_scanner.guard.runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
+    _oauth_metadata,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
 )
@@ -30,11 +31,24 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import (
     exact_result,
     exact_transport_job,
 )
-from tests.guard_exact_cloud_review_support import connected_exact_review_store
-from tests.test_guard_exact_cloud_review import _add_request, _job, _remote_approval, _request
+from tests.guard_exact_cloud_review_support import (
+    add_review_request as _add_request,
+)
+from tests.guard_exact_cloud_review_support import (
+    connected_exact_review_store,
+)
+from tests.guard_exact_cloud_review_support import (
+    exact_review_job as _job,
+)
+from tests.guard_exact_cloud_review_support import (
+    remote_approval as _remote_approval,
+)
+from tests.guard_exact_cloud_review_support import (
+    review_request as _request,
+)
 
-_TRANSPORT_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review-v2" / "exact-transport-fixture.json"
-_TRANSPORT_FIXTURE_SHA256 = "5e265b19ecaaa43b581d3a0b75d9d287ffa3762fad02ed7fdf130b710c1bfbd7"
+_TRANSPORT_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review" / "exact-transport-fixture.json"
+_TRANSPORT_FIXTURE_SHA256 = "6503806bfc0ca098a312eb291c37c94a2f47f4f6007272b476b6fdbf11eac4bb"
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -51,12 +65,12 @@ def _transport_fixture() -> dict[str, object]:
 
 def _exact_job(tmp_path: Path):
     store = connected_exact_review_store(tmp_path)
-    request = _request("exact-v2-transport")
+    request = _request("exact-transport")
     _add_request(store, request)
     enable_exact_cloud_review(store)
     job = _job(
         store,
-        _remote_approval(store, request.request_id, receipt_id="exact-v2-transport-receipt"),
+        _remote_approval(store, request.request_id, receipt_id="exact-transport-receipt"),
     )
     job.update(
         {
@@ -85,24 +99,12 @@ def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_sig
     eligibility = fixture["queueEligibility"]
     assert isinstance(lease_request, dict) and isinstance(lease_response, dict)
     assert isinstance(eligibility, dict)
-    snapshot = lease_request["localRequestsSnapshot"]
-    assert isinstance(snapshot, dict)
-    requests = snapshot["requests"]
-    assert isinstance(requests, list) and len(requests) == 1
-    request_item = requests[0]
-    assert isinstance(request_item, dict)
-    claim = request_item["claim"]
-    assert isinstance(claim, dict)
-    validate_local_review_request_claim(claim)
-    advertisement = claim["exactReviewCapability"]
-    assert isinstance(advertisement, dict)
-    assert lease_request["deviceId"] == advertisement["deviceId"] == eligibility["deviceId"]
-    assert lease_request["workspaceId"] == advertisement["workspaceId"] == eligibility["workspaceId"]
-    assert advertisement["capabilityId"] == eligibility["capabilityId"]
-    assert advertisement["machineInstallationId"] == advertisement["machineId"]
-    assert advertisement["sourceClaimHash"] == eligibility["requestClaimHash"] == claim["claimHash"]
-    assert advertisement["actionDigest"] == eligibility["actionEnvelopeHash"] == claim["actionEnvelopeHash"]
-    assert advertisement["requestVersion"] == eligibility["requestVersion"] == claim["policyVersion"]
+    assert "localRequestsSnapshot" not in lease_request
+    assert lease_request["deviceId"] == eligibility["deviceId"]
+    assert lease_request["workspaceId"] == eligibility["workspaceId"]
+    assert eligibility["machineId"] == "machine-device-fixture"
+    assert eligibility["machineInstallationId"] == "machine-installation-fixture"
+    assert eligibility["machineId"] != eligibility["machineInstallationId"]
 
     item = lease_response["item"]
     assert isinstance(item, dict)
@@ -110,8 +112,10 @@ def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_sig
     assert isinstance(payload, dict)
     remote_approval = payload["remoteApproval"]
     assert isinstance(remote_approval, dict)
-    assert remote_approval["capabilityId"] == advertisement["capabilityId"]
-    assert remote_approval["grantId"] == claim["grantId"] == advertisement["grantId"]
+    assert remote_approval["capabilityId"] == eligibility["capabilityId"]
+    assert remote_approval["machineId"] == eligibility["machineId"]
+    assert remote_approval["machineInstallationId"] == eligibility["machineInstallationId"]
+    assert remote_approval["sourceClaimHash"] == eligibility["requestClaimHash"]
     keys = remote_approval["verificationKeys"]
     store = connected_exact_review_store(tmp_path)
     store.set_sync_payload("guard_review_verification_keyring", keys, "2026-08-24T00:00:00+00:00")
@@ -136,38 +140,33 @@ def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_sig
     )
 
 
-def test_live_request_claim_advertises_only_current_local_exact_authority(tmp_path: Path) -> None:
+def test_exact_claim_binds_current_local_authority_without_queue_snapshot(tmp_path: Path) -> None:
     store, _job_payload = _exact_job(tmp_path)
-    request = store.get_approval_request("exact-v2-transport")
+    request = store.get_approval_request("exact-transport")
     assert isinstance(request, dict)
-    lease = command_queue._lease_payload(store, operations=(EXACT_CLOUD_REVIEW_OPERATION,))
-    snapshot = lease["localRequestsSnapshot"]
-    assert isinstance(snapshot, dict)
-    items = snapshot["requests"]
-    assert isinstance(items, list) and items
-    claim = items[0]["claim"]
-    assert isinstance(claim, dict)
+    oauth = _oauth_metadata(store)
+    claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
     advertisement = claim["exactReviewCapability"]
     assert isinstance(advertisement, dict)
     capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
     assert isinstance(capability, dict)
     assert advertisement["operation"] == EXACT_CLOUD_REVIEW_OPERATION
-    assert advertisement["deviceId"] == lease["deviceId"] == capability["deviceId"]
-    assert advertisement["workspaceId"] == lease["workspaceId"] == capability["workspaceId"]
-    assert advertisement["machineInstallationId"] == advertisement["machineId"]
+    assert advertisement["deviceId"] == oauth.device_id == capability["deviceId"]
+    assert advertisement["workspaceId"] == oauth.workspace_id == capability["workspaceId"]
+    assert advertisement["machineId"] == oauth.machine_id
+    assert advertisement["machineInstallationId"] == oauth.installation_id
+    assert advertisement["machineId"] != advertisement["machineInstallationId"]
     assert advertisement["localRequestId"] == request["request_id"]
     assert advertisement["sourceClaimHash"] == claim["claimHash"]
 
+    lease = command_queue._lease_payload(store, operations=(EXACT_CLOUD_REVIEW_OPERATION,))
+    assert "localRequestsSnapshot" not in lease
     disable_exact_cloud_review(store)
-    refreshed = command_queue._local_requests_snapshot(store)
-    refreshed_items = refreshed["requests"]
-    assert isinstance(refreshed_items, list) and refreshed_items
-    refreshed_claim = refreshed_items[0]["claim"]
-    assert isinstance(refreshed_claim, dict)
+    refreshed_claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
     assert "exactReviewCapability" not in refreshed_claim
 
 
-def test_poll_exact_v2_leases_acks_applies_and_posts_versioned_result(
+def test_poll_exact_leases_acks_applies_and_posts_versioned_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -225,7 +224,7 @@ def test_poll_exact_v2_leases_acks_applies_and_posts_versioned_result(
     assert result["contractVersion"] == "guard-cloud-review-command-result-v2"
     assert result["applicationStatus"] == "applied"
     assert result["continuationStatus"] in {"resumed", "already_resumed", "manual_retry_required"}
-    row = store.get_approval_request("exact-v2-transport")
+    row = store.get_approval_request("exact-transport")
     assert row is not None and row["status"] == "resolved"
     assert [item["event"] for item in lifecycle] == [
         "command_leased",
@@ -338,7 +337,7 @@ def test_missing_exact_route_preserves_generic_queue_progress_and_exact_health(
         "/generic-status-job/heartbeat",
         "/generic-status-job/result",
     ]
-    approval = store.get_approval_request("exact-v2-transport")
+    approval = store.get_approval_request("exact-transport")
     assert approval is not None and approval["status"] == "pending"
 
 
@@ -386,7 +385,7 @@ def test_exact_transport_rejects_cross_queue_operations_and_fails_closed_when_ro
         command_queue._lease_next_job(store, {"sync_url": "https://guard.example", "access_token": "token"})
 
 
-def test_pending_exact_result_retries_on_v2_result_route(
+def test_pending_exact_result_retries_on_versioned_result_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

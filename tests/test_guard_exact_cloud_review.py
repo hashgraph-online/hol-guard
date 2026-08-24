@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -16,10 +16,8 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.headless_exact_cloud_review import build_headless_exact_cloud_review_response
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
-    payload_hash_for_remote_approval_envelope,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.command_capability import (
@@ -30,7 +28,6 @@ from codex_plugin_scanner.guard.runtime.command_capability import (
 from codex_plugin_scanner.guard.runtime.command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
-    _local_request_snapshot_payload,
     execute_guard_command_job,
 )
 from codex_plugin_scanner.guard.runtime.command_queue_authority import (
@@ -48,130 +45,21 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import (
+    add_review_request as _add_request,
+)
+from tests.guard_exact_cloud_review_support import (
     connected_exact_review_store as _connected_store,
 )
 from tests.guard_exact_cloud_review_support import (
-    post_json,
+    exact_review_job as _job,
 )
-from tests.guard_review_signing_helpers import (
-    REVIEW_SIGNING_KEY_ID,
-    review_verification_keys,
-    sign_review_payload,
+from tests.guard_exact_cloud_review_support import post_json
+from tests.guard_exact_cloud_review_support import (
+    remote_approval as _remote_approval,
 )
-
-
-def _request(request_id: str, *, harness: str = "codex") -> GuardApprovalRequest:
-    return GuardApprovalRequest(
-        request_id=request_id,
-        harness=harness,
-        artifact_id=f"{harness}:project:{request_id}",
-        artifact_name="Exact Cloud Review request",
-        artifact_type="tool_action_request",
-        artifact_hash=f"hash-{request_id}",
-        publisher=None,
-        policy_action="require-reapproval",
-        recommended_scope="artifact",
-        changed_fields=("shell_command",),
-        source_scope="project",
-        config_path="/workspace/repo/.guard/config.toml",
-        workspace="/workspace/repo",
-        launch_target="cat /workspace/repo/.npmrc",
-        review_command=f"hol-guard approvals approve {request_id}",
-        approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
-        action_envelope_json={
-            "action_type": "shell_command",
-            "command": "cat /workspace/repo/.npmrc",
-            "tool_name": "Bash",
-        },
-    )
-
-
-def _add_request(store: GuardStore, request: GuardApprovalRequest) -> None:
-    store.add_approval_request(request, datetime.now(timezone.utc).isoformat())
-
-
-def _remote_approval(
-    store: GuardStore,
-    request_id: str,
-    *,
-    receipt_id: str,
-    decision: str = "allow_once",
-    issued_at: datetime | None = None,
-    expires_at: datetime | None = None,
-    source_claim: dict[str, object] | None = None,
-) -> dict[str, object]:
-    request = store.get_approval_request(request_id)
-    assert isinstance(request, dict)
-    claim = source_claim or build_local_review_request_claim(
-        request_row=request, oauth=_oauth_metadata(store), store=store
-    )
-    advertisement = claim["exactReviewCapability"]
-    assert isinstance(advertisement, dict)
-    issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0)
-    expires_at = expires_at or issued_at + timedelta(minutes=5)
-    envelope: dict[str, object] = {
-        "actionEnvelopeHash": claim["actionEnvelopeHash"],
-        "approvalId": claim["approvalId"],
-        "capabilityId": advertisement["capabilityId"],
-        "capabilityCategory": claim["capabilityCategory"],
-        "contractVersion": "guard.remote-approval.v1",
-        "decision": decision,
-        "decisionId": receipt_id,
-        "deviceId": claim["deviceId"],
-        "expiresAt": expires_at.isoformat(),
-        "grantId": claim["grantId"],
-        "harnessId": claim["harnessId"],
-        "issuedAt": issued_at.isoformat(),
-        "keyId": REVIEW_SIGNING_KEY_ID,
-        "localRequestId": claim["localRequestId"],
-        "machineId": claim["machineId"],
-        "machineInstallationId": claim["machineInstallationId"],
-        "nonce": f"{claim['nonce']}:{receipt_id}",
-        "policyVersion": claim["policyVersion"],
-        "projectIdentity": claim["projectIdentity"],
-        "receiptId": receipt_id,
-        "reviewerRole": "owner",
-        "reviewerUserId": "user-1",
-        "riskCategory": claim["riskCategory"],
-        "runtimeGrantId": claim["runtimeGrantId"],
-        "scope": "artifact",
-        "sourceClaimHash": claim["claimHash"],
-        "stepUpChallengeId": None,
-        "verificationKeys": review_verification_keys(),
-        "signatureAlgorithm": "rsa-pss-sha256",
-        "workspaceId": claim["workspaceId"],
-    }
-    envelope["payloadHash"] = payload_hash_for_remote_approval_envelope(envelope)
-    envelope["signature"] = sign_review_payload(envelope)
-    return envelope
-
-
-def _job(
-    store: GuardStore,
-    remote_approval: dict[str, object],
-    *,
-    created_at: datetime | None = None,
-    expires_at: datetime | None = None,
-) -> dict[str, object]:
-    credentials = store.get_oauth_local_credentials(allow_primary=False)
-    assert isinstance(credentials, dict)
-    capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
-    assert isinstance(capability, dict)
-    device_id = capability.get("deviceId")
-    assert isinstance(device_id, str) and device_id
-    return {
-        "id": "exact-job-1",
-        "leaseId": "exact-lease-1",
-        "operation": EXACT_CLOUD_REVIEW_OPERATION,
-        "schemaVersion": COMMAND_OPERATION_SCHEMA_VERSIONS[EXACT_CLOUD_REVIEW_OPERATION],
-        "deviceId": device_id,
-        "workspaceId": credentials["workspace_id"],
-        "nonce": "exact-job-nonce",
-        "createdAt": (created_at or datetime.now(timezone.utc)).isoformat(),
-        "expiresAt": (expires_at or datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
-        "idempotencyKey": "exact-idempotency-key",
-        "payload": {"harness": "codex", "remoteApproval": remote_approval},
-    }
+from tests.guard_exact_cloud_review_support import (
+    review_request as _request,
+)
 
 
 def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_path: Path) -> None:
@@ -322,13 +210,15 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     request = _request("exact-queue")
     _add_request(store, request)
     enable_exact_cloud_review(store)
-    snapshot = _local_request_snapshot_payload(store)
-    snapshot_requests = snapshot.get("requests")
-    assert isinstance(snapshot_requests, list) and snapshot_requests
-    snapshot_claim = snapshot_requests[0].get("claim")
-    assert isinstance(snapshot_claim, dict)
-    assert snapshot_claim["deviceId"] == oauth_state["device_id"]
-    assert snapshot_claim["machineId"] == oauth_state["machine_id"]
+    request_row = store.get_approval_request(request.request_id)
+    assert isinstance(request_row, dict)
+    request_claim = build_local_review_request_claim(
+        request_row=request_row,
+        oauth=_oauth_metadata(store),
+        store=store,
+    )
+    assert request_claim["deviceId"] == oauth_state["device_id"]
+    assert request_claim["machineId"] == oauth_state["machine_id"]
     assert command_queue_oauth_target(store) == (oauth_state["device_id"], oauth_state["workspace_id"])
     job = _job(
         store,
@@ -336,7 +226,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
             store,
             request.request_id,
             receipt_id="exact-receipt-queue",
-            source_claim=snapshot_claim,
+            source_claim=request_claim,
         ),
     )
 

@@ -33,7 +33,6 @@ from codex_plugin_scanner.guard.review_contracts import (
     guard_review_oauth_metadata,
     payload_hash_for_remote_approval_envelope,
 )
-from codex_plugin_scanner.guard.runtime import command_executors
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -3216,64 +3215,6 @@ def test_headless_remote_once_rejects_unknown_signed_decision_before_claim(tmp_p
     assert stored is not None
     assert stored["status"] == "pending"
     assert store.has_remote_once_receipt("receipt-unknown") is False
-
-
-def _execute_remote_decision(
-    store: GuardStore,
-    tmp_path: Path,
-    *,
-    request_id: str,
-    action: str,
-    remote_approval: dict[str, object],
-) -> dict[str, object]:
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    return command_executors.execute_guard_command_job(
-        {
-            "createdAt": now,
-            "operation": "guard.approval.resolve",
-            "payload": {
-                "action": action,
-                "localRequestId": request_id,
-                "remoteApproval": remote_approval,
-            },
-        },
-        context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=store.guard_home),
-        store=store,
-        now=lambda: now,
-    )
-
-
-@pytest.mark.parametrize(("decision", "action"), [("allow_once", "allow_once"), ("block", "block")])
-def test_command_executor_rejects_all_resolutions_for_current_block(
-    tmp_path: Path,
-    decision: str,
-    action: str,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
-    request_id = f"req-command-{decision}"
-    store.add_approval_request(
-        _remote_once_request(request_id, policy_action="block", recommended_scope="workspace"),
-        "2026-05-14T11:59:00+00:00",
-    )
-    result = _execute_remote_decision(
-        store,
-        tmp_path,
-        request_id=request_id,
-        action=action,
-        remote_approval=_signed_remote_approval_for_request(
-            store,
-            request_id,
-            decision=decision,
-            receipt_id=f"receipt-{decision}",
-        ),
-    )
-    stored = store.get_approval_request(request_id)
-    assert stored is not None
-
-    assert result["failureCode"] == "terminal_policy_action_not_resolvable"
-    assert stored["status"] == "pending"
-    assert store.has_remote_once_receipt(f"receipt-{decision}") is False
 
 
 def test_headless_remote_once_sanitizes_codex_resume_metadata(
