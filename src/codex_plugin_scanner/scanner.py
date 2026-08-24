@@ -21,7 +21,6 @@ from .ecosystems.base import EcosystemAdapter
 from .ecosystems.detect import detect_packages
 from .ecosystems.registry import get_default_adapters, resolve_ecosystem
 from .ecosystems.types import Ecosystem, NormalizedPackage, PackageCandidate
-from .integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from .models import (
     CategoryResult,
     CheckResult,
@@ -34,100 +33,12 @@ from .models import (
     get_grade,
 )
 from .repo_detect import LocalPluginTarget, discover_scan_targets
+from .scanner_support import (
+    build_integration_results as _build_integration_results,
+    scan_generic_target as _scan_generic_target,
+    score_categories as _score_categories,
+)
 from .trust_scoring import build_plugin_trust_report, build_repository_trust_report
-
-
-def _build_skill_integration_results(skill_security_context, package_label: str = "") -> tuple[IntegrationResult, ...]:
-    integration_name = "cisco-skill-scanner" if not package_label else f"cisco-skill-scanner[{package_label}]"
-    if skill_security_context.skip_message:
-        return (
-            IntegrationResult(
-                name=integration_name,
-                status=CiscoIntegrationStatus.SKIPPED,
-                message=skill_security_context.skip_message,
-            ),
-        )
-
-    summary = skill_security_context.summary
-    if summary is None:
-        return (
-            IntegrationResult(
-                name=integration_name,
-                status=CiscoIntegrationStatus.SKIPPED,
-                message="Cisco scan context unavailable.",
-            ),
-        )
-
-    metadata = {"policy": summary.policy_name}
-    if summary.analyzers_used:
-        metadata["analyzers"] = ",".join(summary.analyzers_used)
-    return (
-        IntegrationResult(
-            name=integration_name,
-            status=summary.status,
-            message=summary.message,
-            findings_count=summary.total_findings,
-            metadata=metadata,
-        ),
-    )
-
-
-def _build_mcp_integration_results(mcp_security_context, package_label: str = "") -> tuple[IntegrationResult, ...]:
-    integration_name = "cisco-mcp-scanner" if not package_label else f"cisco-mcp-scanner[{package_label}]"
-    if mcp_security_context.skip_message:
-        return (
-            IntegrationResult(
-                name=integration_name,
-                status=CiscoIntegrationStatus.SKIPPED,
-                message=mcp_security_context.skip_message,
-            ),
-        )
-
-    summary = mcp_security_context.summary
-    if summary is None:
-        return (
-            IntegrationResult(
-                name=integration_name,
-                status=CiscoIntegrationStatus.SKIPPED,
-                message="Cisco MCP scan context unavailable.",
-            ),
-        )
-
-    metadata = {
-        "scan_mode": summary.scan_mode,
-        "targets_scanned": str(summary.targets_scanned),
-    }
-    if summary.analyzers_used:
-        metadata["analyzers"] = ",".join(summary.analyzers_used)
-    return (
-        IntegrationResult(
-            name=integration_name,
-            status=summary.status,
-            message=summary.message,
-            findings_count=summary.total_findings,
-            metadata=metadata,
-        ),
-    )
-
-
-def _build_integration_results(
-    skill_security_context,
-    mcp_security_context,
-    package_label: str = "",
-) -> tuple[IntegrationResult, ...]:
-    return _build_skill_integration_results(
-        skill_security_context,
-        package_label,
-    ) + _build_mcp_integration_results(
-        mcp_security_context,
-        package_label,
-    )
-
-
-def _score_categories(categories: tuple[CategoryResult, ...]) -> int:
-    earned_points = sum(check.points for category in categories for check in category.checks)
-    max_points = sum(check.max_points for category in categories for check in category.checks)
-    return 100 if max_points == 0 else round((earned_points / max_points) * 100)
 
 
 def _build_adapter_map() -> dict[Ecosystem, EcosystemAdapter]:
@@ -579,6 +490,8 @@ def _scan_non_repository_target(target_dir: Path, options: ScanOptions) -> ScanR
     requested_ecosystem = resolve_ecosystem(options.ecosystem)
     candidates = detect_packages(target_dir, requested_ecosystem)
     if not candidates:
+        if requested_ecosystem is None and not (target_dir / ".codex-plugin").exists():
+            return _scan_generic_target(target_dir, options)
         candidates = _build_candidate_fallback(target_dir, requested_ecosystem)
 
     adapter_map = _build_adapter_map()

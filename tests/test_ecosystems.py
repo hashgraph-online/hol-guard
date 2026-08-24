@@ -174,6 +174,33 @@ def test_scan_opencode_with_explicit_ecosystem() -> None:
     assert result.score > 0
 
 
+def test_scan_auto_uses_generic_profile_without_codex_marker(tmp_path: Path) -> None:
+    standalone = tmp_path / "standalone"
+    standalone.mkdir()
+    (standalone / "README.md").write_text("Standalone agent harness", encoding="utf-8")
+
+    result = scan_plugin(
+        standalone,
+        ScanOptions(ecosystem="auto", cisco_skill_scan="off", cisco_mcp_scan="off"),
+    )
+
+    assert result.scope == "repository"
+    assert result.ecosystems == ("generic",)
+    assert result.packages[0].package_kind == "standalone-repository"
+    assert all(category.name != "Manifest Validation" for category in result.categories)
+    assert all(finding.rule_id != "CODEXIGNORE_MISSING" for finding in result.findings)
+
+    codex_intent = tmp_path / "codex-intent"
+    (codex_intent / ".codex-plugin").mkdir(parents=True)
+    codex_result = scan_plugin(
+        codex_intent,
+        ScanOptions(ecosystem="auto", cisco_skill_scan="off", cisco_mcp_scan="off"),
+    )
+
+    assert codex_result.ecosystems == ("codex",)
+    assert any(finding.rule_id == "PLUGIN_JSON_MISSING" for finding in codex_result.findings)
+
+
 def test_scan_auto_detects_multiple_packages() -> None:
     result = scan_plugin(
         FIXTURES / "multi-ecosystem-repo",

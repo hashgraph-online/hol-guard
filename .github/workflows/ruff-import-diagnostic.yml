@@ -1,0 +1,31 @@
+name: Ruff import diagnostic
+
+on:
+  pull_request:
+    branches: [release/3.0]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ruff-import-diagnostic-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  imports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Show Ruff import fix
+        run: uv run --no-sync python -m ruff check src/codex_plugin_scanner/scanner.py --select I --fix --diff || true
