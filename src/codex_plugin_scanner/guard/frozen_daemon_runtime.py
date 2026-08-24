@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import secrets
 import subprocess
 import sys
 from collections.abc import Callable
@@ -41,6 +42,12 @@ def _frozen_runtime_fingerprint() -> str:
     if cached is not None and cached[0] == executable:
         return cached[1]
 
+    fingerprint = _executable_sha256(executable)
+    _frozen_runtime_fingerprint_cache = (executable, fingerprint)
+    return fingerprint
+
+
+def _executable_sha256(executable: Path) -> str:
     digest = hashlib.sha256()
     try:
         with executable.open("rb") as handle:
@@ -48,9 +55,7 @@ def _frozen_runtime_fingerprint() -> str:
                 digest.update(chunk)
     except OSError as error:
         raise RuntimeError("Frozen Guard daemon executable identity could not be read.") from error
-    fingerprint = digest.hexdigest()
-    _frozen_runtime_fingerprint_cache = (executable, fingerprint)
-    return fingerprint
+    return digest.hexdigest()
 
 
 def _macos_signing_team(executable: Path) -> str | None:
@@ -100,6 +105,12 @@ def _trusted_frozen_peer_state(payload: dict[str, object]) -> bool:
     except (OSError, RuntimeError):
         return False
     if not peer.is_file():
+        return False
+    try:
+        peer_fingerprint = _executable_sha256(peer)
+    except RuntimeError:
+        return False
+    if not secrets.compare_digest(peer_fingerprint, fingerprint):
         return False
     current_team = _macos_signing_team(current)
     return current_team is not None and _macos_signing_team(peer) == current_team

@@ -185,6 +185,28 @@ def test_frozen_runtime_rejects_same_release_from_different_macos_publisher(
     )
 
 
+def test_frozen_runtime_rejects_same_team_peer_with_mismatched_fingerprint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = tmp_path / "desktop-core"
+    peer = tmp_path / "managed-core"
+    current.write_bytes(b"desktop-wrapper")
+    peer.write_bytes(b"managed-wrapper")
+    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(current))
+    monkeypatch.setattr(frozen_daemon_runtime, "_macos_signing_team", lambda _path: "TEAM123")
+    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_state_matcher", lambda _payload: False)
+
+    assert not frozen_daemon_runtime._frozen_runtime_state_matches(
+        {
+            "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "package_version": manager.__version__,
+            "source_root": str(peer),
+            "runtime_fingerprint": hashlib.sha256(b"other-bytes").hexdigest(),
+        }
+    )
+
+
 def test_frozen_runtime_consumes_pyinstaller_reset_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     inventory = manager._guard_daemon_process_inventory_for_guard_home
     source_root = manager._current_guard_daemon_source_root
