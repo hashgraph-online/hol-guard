@@ -35,7 +35,11 @@ from .models import (
 from .repo_detect import LocalPluginTarget, discover_scan_targets
 from .scanner_support import (
     build_integration_results as _build_integration_results,
+)
+from .scanner_support import (
     scan_generic_target as _scan_generic_target,
+)
+from .scanner_support import (
     score_categories as _score_categories,
 )
 from .trust_scoring import build_plugin_trust_report, build_repository_trust_report
