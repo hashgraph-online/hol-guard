@@ -165,6 +165,8 @@ def interaction_policy_factors(
     for observation in observations:
         if not observation.effective_evidence or not observation.rule.action_classes:
             continue
+        if legacy_rule_floor(observation.extension, observation.rule) in {"allow", "monitor"}:
+            continue
         segment_indexes = sorted({item.segment_index for item in observation.effective_evidence})
         for segment_index in segment_indexes:
             factors.append(

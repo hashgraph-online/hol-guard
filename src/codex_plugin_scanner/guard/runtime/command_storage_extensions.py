@@ -224,7 +224,7 @@ STORAGE_COMMAND_RULES = (
     _rule(
         f"{_AWS}.ls",
         "Amazon S3 list",
-        None,
+        _aws("s3", "ls"),
         _AWS_ACT,
         "aws-s3",
         mode="disabled",
@@ -270,7 +270,7 @@ STORAGE_COMMAND_RULES = (
     _rule(
         f"{_GCS}.ls",
         "Google Cloud Storage list",
-        None,
+        _gcloud("storage", "ls"),
         _GCS_ACT,
         _GCS_FAMILY,
         mode="disabled",
@@ -282,7 +282,7 @@ STORAGE_COMMAND_RULES = (
     _rule(
         f"{_GCS}.cat",
         "Google Cloud Storage cat",
-        None,
+        _gcloud("storage", "cat"),
         _GCS_ACT,
         _GCS_FAMILY,
         mode="disabled",
@@ -313,7 +313,7 @@ STORAGE_COMMAND_RULES = (
     _rule(
         f"{_AZURE}.list",
         "Azure blob list",
-        None,
+        _az("storage", "blob", "list"),
         _AZ_ACT,
         "azure-blob",
         mode="disabled",
@@ -342,7 +342,7 @@ STORAGE_COMMAND_RULES = (
     _rule(
         f"{_MINIO}.ls",
         "MinIO list",
-        None,
+        _mc("ls"),
         _MC_ACT,
         "minio",
         mode="disabled",
@@ -355,7 +355,7 @@ STORAGE_COMMAND_RULES = (
     _rule(
         f"{_MINIO}.cat",
         "MinIO cat",
-        None,
+        _mc("cat"),
         _MC_ACT,
         "minio",
         mode="disabled",

@@ -3621,7 +3621,7 @@ function LocalCliDetail(props) {
     added ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8", "aria-labelledby": "custom-extension-commands-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-commands-heading", className: "text-lg font-semibold text-brand-dark", children: detailCatalogHeading(props.item.surface) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-6 text-slate-500", children: detailCatalogHelper(props.item.surface) }),
-      commands.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      bulkTargets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         BulkPolicyPicker,
         {
           value: bulkState,

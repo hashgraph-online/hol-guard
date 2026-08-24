@@ -312,7 +312,7 @@ export function LocalCliDetail(props: {
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
             {detailCatalogHelper(props.item.surface)}
           </p>
-          {commands.length > 0 ? (
+          {bulkTargets.length > 0 ? (
             <BulkPolicyPicker
               value={bulkState}
               disabled={busy}
