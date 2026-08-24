@@ -150,8 +150,11 @@ def _oauth_target(store: GuardStore) -> tuple[str, str]:
         raise CommandCapabilityError("cloud_connection_required") from error
     if not oauth.machine_id or not oauth.installation_id:
         raise CommandCapabilityError("cloud_connection_required")
-    # OAuth machine identity and the local installation identity are separate
-    # canonical bindings; the DPoP device ID binds command capabilities.
+    local_installation_id = str(store.get_device_metadata().get("installation_id") or "")
+    if local_installation_id != oauth.installation_id:
+        raise CommandCapabilityError("cloud_device_binding_mismatch")
+    # OAuth machine and local-installation identities remain distinct; the
+    # DPoP device ID binds command capabilities.
     device_id = oauth.device_id
     workspace_id = oauth.workspace_id
     return device_id, workspace_id

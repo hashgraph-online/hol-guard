@@ -23,12 +23,13 @@ def _store(tmp_path: Path) -> GuardStore:
         dpop_private_key_pem=dpop.private_key_pem,
         dpop_public_jwk=dpop.public_jwk,
         dpop_public_jwk_thumbprint=dpop.public_jwk_thumbprint,
-        device_id=machine_id,
+        device_id=dpop.public_jwk_thumbprint,
         grant_id="grant-1",
         machine_id=machine_id,
         workspace_id="workspace-1",
         now=datetime.now(timezone.utc).isoformat(),
     )
+    assert machine_id != store.get_device_metadata()["installation_id"]
     store.set_sync_payload(
         "policy_bundle_keyring",
         review_verification_keys(workspace_id=None, purpose="unscoped"),
@@ -83,6 +84,10 @@ def _bundle(store: GuardStore, *, rule_scope: str = "workspace") -> dict[str, ob
         "signatureAlgorithm": "rsa-pss-sha256",
         "workspaceId": credentials["workspace_id"],
     }
+    return _resign_bundle(bundle)
+
+
+def _resign_bundle(bundle: dict[str, object]) -> dict[str, object]:
     payload_hash = payload_hash_for_decision_memory_bundle(bundle)
     bundle["bundleHash"] = payload_hash
     bundle["payloadHash"] = payload_hash
@@ -137,3 +142,26 @@ def test_policy_memory_command_reports_rejected_rules_without_updating_policy_ve
     assert isinstance(ack, dict)
     assert ack["rejectedRuleIds"] == ["review-memory:receipt-1"]
     assert store.get_sync_payload("guard_review_memory_policy_version") is None
+
+
+def test_rejected_memory_bundle_keeps_existing_policies_registry_version_and_revocations_unchanged(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    assert _execute(store, {"decisionMemoryBundle": _bundle(store)})["data"]["status"] == "accepted"
+    before_registry = store.get_sync_payload("guard_review_memory_registry")
+    before_version = store.get_sync_payload("guard_review_memory_policy_version")
+    before_policies = store.list_policy_decisions()
+
+    rejected_bundle = _bundle(store)
+    rejected_bundle["policyVersion"] = "policy-version-next"
+    rejected_bundle["revocations"] = ["review-memory:receipt-1"]
+    rules = rejected_bundle["memoryRules"]
+    assert isinstance(rules, list) and isinstance(rules[0], dict)
+    rules[0]["scope"] = "team"
+    result = _execute(store, {"decisionMemoryBundle": _resign_bundle(rejected_bundle)})
+
+    assert result["data"]["status"] == "rejected"
+    assert store.get_sync_payload("guard_review_memory_registry") == before_registry
+    assert store.get_sync_payload("guard_review_memory_policy_version") == before_version
+    assert store.list_policy_decisions() == before_policies

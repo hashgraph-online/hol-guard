@@ -38,7 +38,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 def _connected_store(tmp_path: Path) -> GuardStore:
     store = GuardStore(tmp_path / "guard-home")
     dpop = generate_dpop_key_pair()
-    installation_id = store.get_device_metadata()["installation_id"]
+    machine_id = "machine-device-command-capability"
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
@@ -46,9 +46,9 @@ def _connected_store(tmp_path: Path) -> GuardStore:
         dpop_private_key_pem=dpop.private_key_pem,
         dpop_public_jwk=dpop.public_jwk,
         dpop_public_jwk_thumbprint=dpop.public_jwk_thumbprint,
-        device_id=installation_id,
+        device_id=dpop.public_jwk_thumbprint,
         grant_id="grant-1",
-        machine_id=installation_id,
+        machine_id=machine_id,
         workspace_id="workspace-1",
         now=datetime.now(timezone.utc).isoformat(),
     )
@@ -77,7 +77,7 @@ def _job(
         "leaseId": f"lease-{job_id}",
         "operation": operation,
         "schemaVersion": COMMAND_OPERATION_SCHEMA_VERSIONS[operation],
-        "deviceId": credentials["machine_id"],
+        "deviceId": credentials["device_id"],
         "workspaceId": credentials["workspace_id"],
         "nonce": f"nonce-{job_id}",
         "expiresAt": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
@@ -92,6 +92,33 @@ def _context(tmp_path: Path) -> HarnessContext:
         workspace_dir=tmp_path,
         guard_home=tmp_path / "guard-home",
     )
+
+
+def test_capability_uses_distinct_machine_and_local_installation_bindings(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    credentials = store.get_oauth_local_credentials(allow_primary=False)
+    assert isinstance(credentials, dict)
+    assert credentials["machine_id"] != store.get_device_metadata()["installation_id"]
+
+    status = _issue(store, "guard.packageShims.status")
+
+    assert status["enabled"] is True
+
+
+def test_capability_rejects_local_installation_binding_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    local_metadata = store.get_device_metadata()
+    monkeypatch.setattr(
+        store,
+        "get_device_metadata",
+        lambda: {**local_metadata, "installation_id": "unexpected-local-installation"},
+    )
+
+    with pytest.raises(CommandCapabilityError, match="cloud_device_binding_mismatch"):
+        _issue(store, "guard.packageShims.status")
 
 
 def test_command_channel_defaults_off_and_environment_cannot_enable_it(tmp_path: Path) -> None:

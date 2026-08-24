@@ -41,14 +41,8 @@ def execute_review_policy_memory(
         oauth=oauth,
         last_policy_version=_stored_policy_version(store),
     )
-    registry = _stored_registry(store)
-    revocations = bundle.get("revocations")
-    for revoked_rule_id in revocations if isinstance(revocations, list) else []:
-        revoked_key = _text(revoked_rule_id)
-        if revoked_key is not None:
-            registry.pop(revoked_key, None)
     rejected_rule_ids: list[str] = []
-    applied_rule_count = 0
+    validated_rules: list[tuple[str, PolicyDecision]] = []
     rules = bundle.get("memoryRules")
     for rule in rules if isinstance(rules, list) else []:
         if not isinstance(rule, dict):
@@ -61,8 +55,33 @@ def execute_review_policy_memory(
         except GuardReviewContractError:
             rejected_rule_ids.append(rule_id)
             continue
+        validated_rules.append((rule_id, decision))
+    status = "accepted" if not rejected_rule_ids else "rejected"
+    if status == "rejected":
+        ack = build_decision_memory_ack(
+            bundle=bundle,
+            oauth=oauth,
+            status=status,
+            applied_rule_count=0,
+            reason="decision_memory_rule_rejected",
+            rejected_rule_ids=rejected_rule_ids,
+        )
+        store.set_sync_payload(_MEMORY_ACK_KEY, ack, generated_at)
+        return {
+            "bundleHash": _text(bundle.get("bundleHash")),
+            "bundleVersion": _text(bundle.get("bundleVersion")),
+            "decisionMemoryAck": ack,
+            "status": str(ack["status"]),
+        }
+
+    registry = _stored_registry(store)
+    revocations = bundle.get("revocations")
+    for revoked_rule_id in revocations if isinstance(revocations, list) else []:
+        revoked_key = _text(revoked_rule_id)
+        if revoked_key is not None:
+            registry.pop(revoked_key, None)
+    for rule_id, decision in validated_rules:
         registry[rule_id] = {"decision": decision.to_dict(), "ruleId": rule_id}
-        applied_rule_count += 1
     store.replace_remote_policies(
         [
             *_existing_non_memory_policies(store),
@@ -72,19 +91,17 @@ def execute_review_policy_memory(
         remote_write_authorized=True,
     )
     store.set_sync_payload(_MEMORY_REGISTRY_KEY, list(registry.values()), generated_at)
-    status = "accepted" if not rejected_rule_ids else "rejected"
-    if status == "accepted":
-        store.set_sync_payload(
-            _MEMORY_VERSION_KEY,
-            {"policyVersion": _text(bundle.get("policyVersion"))},
-            generated_at,
-        )
+    store.set_sync_payload(
+        _MEMORY_VERSION_KEY,
+        {"policyVersion": _text(bundle.get("policyVersion"))},
+        generated_at,
+    )
     ack = build_decision_memory_ack(
         bundle=bundle,
         oauth=oauth,
         status=status,
-        applied_rule_count=applied_rule_count,
-        reason=None if not rejected_rule_ids else "decision_memory_rule_rejected",
+        applied_rule_count=len(validated_rules),
+        reason=None,
         rejected_rule_ids=rejected_rule_ids,
     )
     store.set_sync_payload(_MEMORY_ACK_KEY, ack, generated_at)
