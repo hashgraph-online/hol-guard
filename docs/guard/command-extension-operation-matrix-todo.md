@@ -6,8 +6,8 @@ Each numbered line is one operation task. Completion requires the exact path in 
 
 ## Progress
 
-- Completed batches: 1/4
-- Completed operation tasks: 100/400
+- Completed batches: 2/4
+- Completed operation tasks: 200/400
 
 ## Batch 1: AWS core and high-frequency services
 
@@ -114,106 +114,106 @@ Each numbered line is one operation task. Completion requires the exact path in 
 
 ## Batch 2: Google Cloud resource deletion
 
-- [ ] 101. `gcloud projects delete`
-- [ ] 102. `gcloud resource-manager folders delete`
-- [ ] 103. `gcloud resource-manager tags keys delete`
-- [ ] 104. `gcloud resource-manager tags values delete`
-- [ ] 105. `gcloud iam service-accounts delete`
-- [ ] 106. `gcloud iam service-accounts keys delete`
-- [ ] 107. `gcloud iam roles delete`
-- [ ] 108. `gcloud compute disks delete`
-- [ ] 109. `gcloud compute snapshots delete`
-- [ ] 110. `gcloud compute images delete`
-- [ ] 111. `gcloud compute networks delete`
-- [ ] 112. `gcloud compute networks subnets delete`
-- [ ] 113. `gcloud compute firewall-rules delete`
-- [ ] 114. `gcloud compute routes delete`
-- [ ] 115. `gcloud compute addresses delete`
-- [ ] 116. `gcloud compute backend-services delete`
-- [ ] 117. `gcloud compute backend-buckets delete`
-- [ ] 118. `gcloud compute target-http-proxies delete`
-- [ ] 119. `gcloud compute target-https-proxies delete`
-- [ ] 120. `gcloud compute target-pools delete`
-- [ ] 121. `gcloud compute target-ssl-proxies delete`
-- [ ] 122. `gcloud compute target-tcp-proxies delete`
-- [ ] 123. `gcloud compute url-maps delete`
-- [ ] 124. `gcloud compute health-checks delete`
-- [ ] 125. `gcloud compute http-health-checks delete`
-- [ ] 126. `gcloud compute https-health-checks delete`
-- [ ] 127. `gcloud compute instance-templates delete`
-- [ ] 128. `gcloud compute instance-groups managed delete`
-- [ ] 129. `gcloud compute routers delete`
-- [ ] 130. `gcloud compute vpn-gateways delete`
-- [ ] 131. `gcloud compute vpn-tunnels delete`
-- [ ] 132. `gcloud compute interconnects delete`
-- [ ] 133. `gcloud compute ssl-certificates delete`
-- [ ] 134. `gcloud compute security-policies delete`
-- [ ] 135. `gcloud compute network-endpoint-groups delete`
-- [ ] 136. `gcloud compute reservations delete`
-- [ ] 137. `gcloud compute resource-policies delete`
-- [ ] 138. `gcloud compute sole-tenancy node-groups delete`
-- [ ] 139. `gcloud compute sole-tenancy node-templates delete`
-- [ ] 140. `gcloud compute interconnects attachments delete`
-- [ ] 141. `gcloud compute machine-images delete`
-- [ ] 142. `gcloud compute packet-mirrorings delete`
-- [ ] 143. `gcloud compute service-attachments delete`
-- [ ] 144. `gcloud compute instant-snapshots delete`
-- [ ] 145. `gcloud compute composite-health-checks delete`
-- [ ] 146. `gcloud container clusters delete`
-- [ ] 147. `gcloud container node-pools delete`
-- [ ] 148. `gcloud run services delete`
-- [ ] 149. `gcloud run jobs delete`
-- [ ] 150. `gcloud functions delete`
-- [ ] 151. `gcloud app services delete`
-- [ ] 152. `gcloud app versions delete`
-- [ ] 153. `gcloud artifacts repositories delete`
-- [ ] 154. `gcloud artifacts docker images delete`
-- [ ] 155. `gcloud artifacts files delete`
-- [ ] 156. `gcloud artifacts packages delete`
-- [ ] 157. `gcloud artifacts versions delete`
-- [ ] 158. `gcloud pubsub topics delete`
-- [ ] 159. `gcloud pubsub subscriptions delete`
-- [ ] 160. `gcloud pubsub schemas delete`
-- [ ] 161. `gcloud pubsub snapshots delete`
-- [ ] 162. `gcloud secrets delete`
-- [ ] 163. `gcloud secrets versions destroy`
-- [ ] 164. `gcloud scheduler jobs delete`
-- [ ] 165. `gcloud tasks queues delete`
-- [ ] 166. `gcloud tasks delete`
-- [ ] 167. `gcloud workflows delete`
-- [ ] 168. `gcloud deployment-manager deployments delete`
-- [ ] 169. `gcloud dataproc clusters delete`
-- [ ] 170. `gcloud bigtable instances delete`
-- [ ] 171. `gcloud bigtable clusters delete`
-- [ ] 172. `gcloud bigtable app-profiles delete`
-- [ ] 173. `gcloud bigtable backups delete`
-- [ ] 174. `gcloud bigtable tables delete`
-- [ ] 175. `gcloud spanner instances delete`
-- [ ] 176. `gcloud spanner databases delete`
-- [ ] 177. `gcloud spanner backups delete`
-- [ ] 178. `gcloud spanner instance-configs delete`
-- [ ] 179. `gcloud redis instances delete`
-- [ ] 180. `gcloud memcache instances delete`
-- [ ] 181. `gcloud alloydb clusters delete`
-- [ ] 182. `gcloud alloydb instances delete`
-- [ ] 183. `gcloud alloydb backups delete`
-- [ ] 184. `gcloud composer environments delete`
-- [ ] 185. `gcloud service-directory namespaces delete`
-- [ ] 186. `gcloud service-directory services delete`
-- [ ] 187. `gcloud service-directory endpoints delete`
-- [ ] 188. `gcloud network-services gateways delete`
-- [ ] 189. `gcloud network-services meshes delete`
-- [ ] 190. `gcloud network-services service-bindings delete`
-- [ ] 191. `gcloud network-services endpoint-policies delete`
-- [ ] 192. `gcloud network-services grpc-routes delete`
-- [ ] 193. `gcloud network-services http-routes delete`
-- [ ] 194. `gcloud network-services tcp-routes delete`
-- [ ] 195. `gcloud network-services tls-routes delete`
-- [ ] 196. `gcloud network-connectivity hubs delete`
-- [ ] 197. `gcloud network-connectivity spokes delete`
-- [ ] 198. `gcloud builds triggers delete`
-- [ ] 199. `gcloud builds worker-pools delete`
-- [ ] 200. `gcloud source repos delete`
+- [x] 101. `gcloud projects delete`
+- [x] 102. `gcloud resource-manager folders delete`
+- [x] 103. `gcloud resource-manager tags keys delete`
+- [x] 104. `gcloud resource-manager tags values delete`
+- [x] 105. `gcloud iam service-accounts delete`
+- [x] 106. `gcloud iam service-accounts keys delete`
+- [x] 107. `gcloud iam roles delete`
+- [x] 108. `gcloud compute disks delete`
+- [x] 109. `gcloud compute snapshots delete`
+- [x] 110. `gcloud compute images delete`
+- [x] 111. `gcloud compute networks delete`
+- [x] 112. `gcloud compute networks subnets delete`
+- [x] 113. `gcloud compute firewall-rules delete`
+- [x] 114. `gcloud compute routes delete`
+- [x] 115. `gcloud compute addresses delete`
+- [x] 116. `gcloud compute backend-services delete`
+- [x] 117. `gcloud compute backend-buckets delete`
+- [x] 118. `gcloud compute target-http-proxies delete`
+- [x] 119. `gcloud compute target-https-proxies delete`
+- [x] 120. `gcloud compute target-pools delete`
+- [x] 121. `gcloud compute target-ssl-proxies delete`
+- [x] 122. `gcloud compute target-tcp-proxies delete`
+- [x] 123. `gcloud compute url-maps delete`
+- [x] 124. `gcloud compute health-checks delete`
+- [x] 125. `gcloud compute http-health-checks delete`
+- [x] 126. `gcloud compute https-health-checks delete`
+- [x] 127. `gcloud compute instance-templates delete`
+- [x] 128. `gcloud compute instance-groups managed delete`
+- [x] 129. `gcloud compute routers delete`
+- [x] 130. `gcloud compute vpn-gateways delete`
+- [x] 131. `gcloud compute vpn-tunnels delete`
+- [x] 132. `gcloud compute interconnects delete`
+- [x] 133. `gcloud compute ssl-certificates delete`
+- [x] 134. `gcloud compute security-policies delete`
+- [x] 135. `gcloud compute network-endpoint-groups delete`
+- [x] 136. `gcloud compute reservations delete`
+- [x] 137. `gcloud compute resource-policies delete`
+- [x] 138. `gcloud compute sole-tenancy node-groups delete`
+- [x] 139. `gcloud compute sole-tenancy node-templates delete`
+- [x] 140. `gcloud compute interconnects attachments delete`
+- [x] 141. `gcloud compute machine-images delete`
+- [x] 142. `gcloud compute packet-mirrorings delete`
+- [x] 143. `gcloud compute service-attachments delete`
+- [x] 144. `gcloud compute instant-snapshots delete`
+- [x] 145. `gcloud compute composite-health-checks delete`
+- [x] 146. `gcloud container clusters delete`
+- [x] 147. `gcloud container node-pools delete`
+- [x] 148. `gcloud run services delete`
+- [x] 149. `gcloud run jobs delete`
+- [x] 150. `gcloud functions delete`
+- [x] 151. `gcloud app services delete`
+- [x] 152. `gcloud app versions delete`
+- [x] 153. `gcloud artifacts repositories delete`
+- [x] 154. `gcloud artifacts docker images delete`
+- [x] 155. `gcloud artifacts files delete`
+- [x] 156. `gcloud artifacts packages delete`
+- [x] 157. `gcloud artifacts versions delete`
+- [x] 158. `gcloud pubsub topics delete`
+- [x] 159. `gcloud pubsub subscriptions delete`
+- [x] 160. `gcloud pubsub schemas delete`
+- [x] 161. `gcloud pubsub snapshots delete`
+- [x] 162. `gcloud secrets delete`
+- [x] 163. `gcloud secrets versions destroy`
+- [x] 164. `gcloud scheduler jobs delete`
+- [x] 165. `gcloud tasks queues delete`
+- [x] 166. `gcloud tasks delete`
+- [x] 167. `gcloud workflows delete`
+- [x] 168. `gcloud deployment-manager deployments delete`
+- [x] 169. `gcloud dataproc clusters delete`
+- [x] 170. `gcloud bigtable instances delete`
+- [x] 171. `gcloud bigtable clusters delete`
+- [x] 172. `gcloud bigtable app-profiles delete`
+- [x] 173. `gcloud bigtable backups delete`
+- [x] 174. `gcloud bigtable tables delete`
+- [x] 175. `gcloud spanner instances delete`
+- [x] 176. `gcloud spanner databases delete`
+- [x] 177. `gcloud spanner backups delete`
+- [x] 178. `gcloud spanner instance-configs delete`
+- [x] 179. `gcloud redis instances delete`
+- [x] 180. `gcloud memcache instances delete`
+- [x] 181. `gcloud alloydb clusters delete`
+- [x] 182. `gcloud alloydb instances delete`
+- [x] 183. `gcloud alloydb backups delete`
+- [x] 184. `gcloud composer environments delete`
+- [x] 185. `gcloud service-directory namespaces delete`
+- [x] 186. `gcloud service-directory services delete`
+- [x] 187. `gcloud service-directory endpoints delete`
+- [x] 188. `gcloud network-services gateways delete`
+- [x] 189. `gcloud network-services meshes delete`
+- [x] 190. `gcloud network-services service-bindings delete`
+- [x] 191. `gcloud network-services endpoint-policies delete`
+- [x] 192. `gcloud network-services grpc-routes delete`
+- [x] 193. `gcloud network-services http-routes delete`
+- [x] 194. `gcloud network-services tcp-routes delete`
+- [x] 195. `gcloud network-services tls-routes delete`
+- [x] 196. `gcloud network-connectivity hubs delete`
+- [x] 197. `gcloud network-connectivity spokes delete`
+- [x] 198. `gcloud builds triggers delete`
+- [x] 199. `gcloud builds worker-pools delete`
+- [x] 200. `gcloud source repos delete`
 
 ## Batch 3: Azure resource deletion
 
