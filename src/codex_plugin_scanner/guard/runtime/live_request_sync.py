@@ -1,12 +1,9 @@
 """Durable, independent synchronization for local Guard approval requests."""
 
-import base64
-import json
 import logging
 import os
 import threading
 import urllib.error
-import urllib.parse
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,6 +22,16 @@ from .live_request_event_projection import (
 from .live_request_event_projection import (
     project_live_request_outbox_row,
 )
+from .live_request_sync_transport import (
+    LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
+    _post_sync_events,
+)
+from .live_request_sync_transport import (
+    _encode_live_request_events as _encode_live_request_events,
+)
+from .live_request_sync_transport import (
+    _resolve_sync_url as _resolve_sync_url,
+)
 from .local_request_snapshots import (
     _cloud_scrub_text,
     _resolve_cloud_receipt_redaction_level,
@@ -37,7 +44,6 @@ _LOGGER = logging.getLogger(__name__)
 
 LIVE_REQUEST_SYNC_BATCH_SIZE = 1
 LIVE_REQUEST_SYNC_MAX_BATCHES = 200
-LIVE_REQUEST_SYNC_PROTOCOL_VERSION = "2"
 LIVE_REQUEST_SYNC_STATE_KEY = "guard_live_request_sync_state"
 DEFAULT_POLL_INTERVAL_SECONDS = 0.1
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
@@ -55,26 +61,6 @@ def _redacted_error(error: BaseException) -> str:
     return str(error)
 
 
-def _resolve_sync_url(auth_context: dict[str, object], path: str) -> str:
-    sync_url = str(auth_context.get("sync_url") or "")
-    if not sync_url:
-        raise RuntimeError("Guard sync URL is not configured.")
-    parsed = urllib.parse.urlsplit(sync_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError("Guard sync URL must be an absolute HTTP(S) URL.")
-    normalized_path = path if path.startswith("/") else f"/{path}"
-    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, normalized_path, parsed.query, ""))
-
-
-def _encode_live_request_events(events: list[dict[str, object]]) -> str:
-    event_json = json.dumps(
-        events,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return base64.urlsafe_b64encode(event_json).decode("ascii")
-
-
 def _live_request_sync_state_key(store: GuardStore) -> str:
     source = store.guard_source
     if source == "default":
@@ -89,39 +75,6 @@ def _load_sync_state(store: GuardStore) -> dict[str, object]:
 
 def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
     store.set_sync_payload(_live_request_sync_state_key(store), state, _now())
-
-
-def _post_sync_events(
-    auth_context: dict[str, object],
-    *,
-    workspace_id: str,
-    machine_id: str,
-    machine_installation_id: str,
-    cursor: str | None,
-    events: list[dict[str, object]],
-) -> dict[str, object]:
-    from .runner import _guard_sync_request, _urlopen_json_with_timeout_retry
-
-    request_url = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
-    payload: dict[str, object] = {
-        "protocolVersion": LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
-        "deviceId": machine_id,
-        "workspaceId": workspace_id,
-        "machineInstallationId": machine_installation_id,
-        "inboundCursor": cursor,
-        "eventsBase64Url": _encode_live_request_events(events),
-    }
-    request = _guard_sync_request(
-        auth_context,
-        request_url=request_url,
-        method="POST",
-        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-    )
-    return _urlopen_json_with_timeout_retry(
-        request=request,
-        timeout_seconds=35,
-        retry_timeout_seconds=60,
-    )
 
 
 def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
