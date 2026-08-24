@@ -11,8 +11,21 @@ from .command_rules import (
 )
 
 _GIT_GLOBAL_OPTIONS = frozenset(
-    {"-c", "-C", "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree"}
+    {
+        "-c",
+        "-C",
+        "--config-env",
+        "--exec-path",
+        "--git-dir",
+        "--help",
+        "--namespace",
+        "--super-prefix",
+        "--version",
+        "--work-tree",
+        "-h",
+    }
 )
+_GIT_HELP_FLAGS = frozenset({"--help", "--version", "-h"})
 _PUSH_VALUE_OPTIONS = frozenset({"--exec", "--push-option", "--receive-pack", "--repo", "-o"})
 _UNSAFE_READ_FLAGS = frozenset({"--output", "--ext-diff", "--textconv"})
 _NONE: frozenset[str] = frozenset()
@@ -36,7 +49,7 @@ def _git(
                 executables=frozenset({"git"}),
                 subcommands=subs,
                 required_flags=required,
-                forbidden_flags=forbidden,
+                forbidden_flags=forbidden | _GIT_HELP_FLAGS,
                 allow_leading_options=True,
                 leading_options_with_values=_GIT_GLOBAL_OPTIONS,
                 options_with_values=options_with_values,

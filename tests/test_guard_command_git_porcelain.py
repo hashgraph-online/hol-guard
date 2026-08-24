@@ -6,6 +6,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 
 GIT_PORCELAIN_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
@@ -82,6 +83,20 @@ def test_git_helper_and_output_reads_are_reviewed(tmp_path: Path) -> None:
             ("git diff --ext-diff", "git workspace command", "command.git.unsafe-read"),
             ("git show --textconv HEAD", "git workspace command", "command.git.unsafe-read"),
         ),
+        tmp_path,
+    )
+
+
+def test_git_help_modes_are_not_reviewed(tmp_path: Path) -> None:
+    assert_safe_command_cases(("git --help rm", "git switch --help", "git --version"), tmp_path)
+
+
+def test_github_account_switch_is_reviewed(tmp_path: Path) -> None:
+    assessment = classify_github_cli(("auth", "switch"))
+    assert assessment.capability == "write_local"
+    assert assessment.reason_code == "github.command.local-auth-write"
+    assert_reviewed_command_cases(
+        (("gh auth switch", "GitHub local configuration write", "command.github.local-write"),),
         tmp_path,
     )
 

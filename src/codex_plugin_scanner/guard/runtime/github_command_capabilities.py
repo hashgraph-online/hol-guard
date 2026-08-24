@@ -11,6 +11,7 @@ import re
 from collections.abc import Sequence
 from typing import Literal
 
+from .github_auth_capabilities import classify_github_auth
 from .github_capability_contract import (
     GitHubCommandAssessment,
     GitHubCommandCapability,
@@ -141,28 +142,9 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
         return classify_github_api(normalized[1:])
     if top_level in _LOCAL_TOP_LEVEL:
         return _assessment("read_local", "github.command.local-metadata", "The command reads local CLI metadata.")
-    if top_level == "auth" and len(normalized) > 1:
-        auth_subcommand = normalized[1].lower()
-        if auth_subcommand == "token" or (
-            auth_subcommand == "status" and _has_any_option(normalized[2:], "--show-token", "-t")
-        ):
-            return _assessment(
-                "secret_remote",
-                "github.command.auth-token-read",
-                "The command reads a GitHub authentication token.",
-            )
-        if auth_subcommand == "status":
-            return _assessment(
-                "read_local",
-                "github.command.local-auth-read",
-                "The command reads local CLI auth state.",
-            )
-        if auth_subcommand in {"login", "logout", "switch", "refresh", "setup-git"}:
-            return _assessment(
-                "write_local",
-                "github.command.local-auth-write",
-                "The command changes local GitHub CLI authentication.",
-            )
+    auth_assessment = classify_github_auth(normalized)
+    if auth_assessment is not None:
+        return auth_assessment
     if top_level in _READ_ONLY_TOP_LEVEL:
         return _assessment(
             "read_remote",
