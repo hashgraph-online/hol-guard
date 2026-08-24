@@ -11,7 +11,10 @@ import {
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import {
   addedCustomExtensions,
+  applyBulkCommandState,
   applyLocalCliMutation,
+  bulkCommandState,
+  enrollablePackageScriptCommands,
   fetchLocalCliList,
   LocalCliApiError,
   previewLocalCliMutation,
@@ -20,6 +23,7 @@ import {
   type LocalCliListResponse,
   type LocalCliState,
 } from "../local-cli-api";
+import { BulkPolicyPicker } from "./add-custom-extension-catalog";
 import { CustomExtensionCommandList, commandStatesPayload, withCommandState } from "./custom-extension-commands";
 import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
@@ -55,6 +59,25 @@ function detailCatalogHelper(surface: LocalCliItem["surface"]): string {
     return "Same settings as built-in tools. Nested scripts stay indented under their prefix.";
   }
   return "Same settings as built-in tools. Recommended is the safe default.";
+}
+
+function bulkPolicyCopy(surface: LocalCliItem["surface"]): { groupLabel: string; mixedCopy: string } {
+  if (surface === "mcp") {
+    return {
+      groupLabel: "All tools protection setting",
+      mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every tool.",
+    };
+  }
+  if (surface === "package-scripts") {
+    return {
+      groupLabel: "All scripts protection setting",
+      mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every script.",
+    };
+  }
+  return {
+    groupLabel: "All commands protection setting",
+    mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every command.",
+  };
 }
 
 function reviewTitle(name: string, state: LocalCliState): string {
@@ -185,6 +208,18 @@ export function LocalCliDetail(props: {
   const handleCommandState = useCallback((commandId: string, state: LocalCliCommandState) => {
     setCommands((current) => withCommandState(current, commandId, state));
   }, []);
+  const applyBulk = useCallback((state: LocalCliCommandState) => {
+    setCommands((current) => applyBulkCommandState(
+      current,
+      state,
+      props.item.surface === "package-scripts" ? new Set(["root", "other"]) : new Set(),
+    ));
+  }, [props.item.surface]);
+  const bulkTargets = props.item.surface === "package-scripts"
+    ? enrollablePackageScriptCommands(commands)
+    : commands;
+  const bulkState = bulkCommandState(bulkTargets);
+  const bulkCopy = bulkPolicyCopy(props.item.surface);
   const clearPending = useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -277,6 +312,15 @@ export function LocalCliDetail(props: {
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
             {detailCatalogHelper(props.item.surface)}
           </p>
+          {commands.length > 0 ? (
+            <BulkPolicyPicker
+              value={bulkState}
+              disabled={busy}
+              onChange={applyBulk}
+              groupLabel={bulkCopy.groupLabel}
+              mixedCopy={bulkCopy.mixedCopy}
+            />
+          ) : null}
           <div className="mt-4">
             <CustomExtensionCommandList
               commands={commands}
