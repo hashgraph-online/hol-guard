@@ -65,6 +65,8 @@ _SEVERITY: dict[str, EvidenceSeverity] = {
 def legacy_rule_floor(extension: CommandSafetyExtension, rule: CommandSafetyRule) -> LegacyCommandFloor:
     if extension.required and rule.severity == "critical":
         return "block"
+    if extension.required and rule.default_mode == "disabled":
+        return "allow"
     if extension.required:
         return "review"
     return _MODE_FLOOR[rule.default_mode]

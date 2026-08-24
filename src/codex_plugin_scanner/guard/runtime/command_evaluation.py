@@ -274,9 +274,9 @@ def evaluate_command(
         ),
     )
     authorized_action_class = authorization_evidence[1] if authorization_evidence is not None else None
-    if contained_routine_candidate is not None:
+    if contained_routine_candidate is not None and not _matches_are_allow_floor(owned_matches):
         minimum_action = _stronger_floor(minimum_action, "review")
-    if verified_read_candidate is not None:
+    if verified_read_candidate is not None and not _matches_are_allow_floor(owned_matches):
         minimum_action = _stronger_floor(minimum_action, "review")
     for candidate in workspace_write_candidates:
         candidate_floor: CommandDecisionFloor = "block" if candidate.basis.action_floor == "block" else "review"
@@ -444,10 +444,16 @@ def _direct_github_permission_ids(command: CanonicalCommand) -> set[str]:
     return permission_ids
 
 
+def _matches_are_allow_floor(owned_matches: tuple[OwnedCommandRuleMatch, ...]) -> bool:
+    return bool(owned_matches) and all(_rule_floor(owned) == "allow" for owned in owned_matches)
+
+
 def _rule_floor(owned: OwnedCommandRuleMatch) -> CommandDecisionFloor:
     rule = owned.match.rule
     if owned.extension.required and rule.severity == "critical":
         return "block"
+    if owned.extension.required and rule.default_mode == "disabled":
+        return "allow"
     if owned.extension.required:
         return "review"
     return _MODE_FLOOR[rule.default_mode]

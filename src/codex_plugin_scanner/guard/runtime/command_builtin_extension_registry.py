@@ -55,10 +55,16 @@ _CORE_COMMAND_EXTENSION_SPECS: Final[tuple[CommandExtensionSpec, ...]] = (
         extension_id="command.git",
         name="Git protection",
         description=(
-            "Reviews local and remote Git operations that can discard work, replace history, "
-            "refresh a remote Guard cannot verify, or read a staged index Guard cannot bound."
+            "Reviews everyday Git porcelain plus local and remote operations that can discard work, "
+            "replace history, refresh a remote Guard cannot verify, or read a staged index Guard cannot bound."
         ),
-        action_classes=("git destructive command", "git origin refresh", "git index inspection"),
+        action_classes=(
+            "git destructive command",
+            "git origin refresh",
+            "git index inspection",
+            "git workspace command",
+            "git read command",
+        ),
         risk_classes=("destructive_shell", "network_egress", "local_secret_read"),
         safer_alternatives=(
             "Preview affected files and refs before destructive repository operations.",

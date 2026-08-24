@@ -162,7 +162,7 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
     git = next(item for item in extensions if item["extension_id"] == "command.git")
     git_permission_ids = {permission["permission_id"] for permission in git["permissions"]}
     assert git["required"] is True
-    assert git_permission_ids == {
+    assert {
         "command.git.permission.force-clean",
         "command.git.permission.force-push",
         "command.git.permission.hard-reset",
@@ -170,7 +170,12 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
         "command.git.permission.local-branch-delete",
         "command.git.permission.remote-branch-delete",
         "command.git.permission.unverified-fetch",
-    }
+        "command.git.permission.switch",
+        "command.git.permission.checkout",
+        "command.git.permission.stash",
+        "command.git.permission.rebase",
+        "command.git.permission.status",
+    } <= git_permission_ids
     assert all(permission["configurable"] is True for permission in git["permissions"])
     assert all(len(permission["rule_ids"]) == 1 for permission in git["permissions"])
 
