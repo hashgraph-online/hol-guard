@@ -49,7 +49,7 @@ SECRET_PATTERNS: tuple[SecretPattern, ...] = (
     SecretPattern(re.compile(r"xoxe-[A-Za-z0-9\-]{10,}")),
     SecretPattern(re.compile(r"xoxr-[A-Za-z0-9\-]{10,}")),
     SecretPattern(re.compile(r"xapp-[A-Za-z0-9\-]{10,}")),
-    SecretPattern(re.compile(r"sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}")),
+    SecretPattern(re.compile(r"(?<![A-Za-z0-9])sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}")),
 )
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}

@@ -262,6 +262,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     guardVersion,
     updateStatus,
     updatePhase,
+    updateError,
     onUpdateGuard,
     onReinstallGuard,
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
@@ -277,6 +278,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         guardVersion={guardVersion}
         updateStatus={updateStatus}
         updatePhase={updatePhase}
+        updateError={updateError}
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
         approvalGate={props.approvalGate ?? null}

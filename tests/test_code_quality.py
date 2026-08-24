@@ -61,6 +61,138 @@ class TestCheckNoShellInjection:
             r = check_no_shell_injection(Path(tmpdir))
             assert r.passed and r.points == 5
 
+    def test_ignores_template_literal_near_spawn_switch_label(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "dispatcher.ts").write_text(
+                "const message = `failed ${reason}`;\n"
+                "switch (kind) {\n"
+                "  case 'spawn':\n"
+                "    return message;\n"
+                "}\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is True
+            assert result.points == 5
+
+    def test_ignores_regexp_exec_with_interpolated_template(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "matcher.ts").write_text(
+                "const match = new RegExp(pattern).exec(`value ${candidate}`);\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is True
+            assert result.points == 5
+
+    @pytest.mark.parametrize("receiver", ("mycp", "scp", "foochild_process"))
+    def test_ignores_shell_receiver_identifier_suffixes(self, receiver: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.js").write_text(
+                f"{receiver}.exec(`echo ${{userInput}}`);\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is True
+            assert result.points == 5
+
+    def test_detects_interpolated_template_passed_directly_to_exec(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.js").write_text(
+                "exec(`echo ${userInput}`);\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings[0].file_path == "runner.js"
+
+    def test_detects_interpolated_template_passed_to_required_child_process(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.js").write_text(
+                "require('child_process').exec(`echo ${userInput}`);\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings[0].file_path == "runner.js"
+
+    def test_detects_one_hop_variable_passed_to_required_node_child_process(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.js").write_text(
+                "const cmd = `echo ${userInput}`;\n"
+                'require("node:child_process").exec(cmd);\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings[0].file_path == "runner.js"
+
+    def test_detects_typed_interpolated_template_variable_in_typescript(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.ts").write_text(
+                "export const command: string = `echo ${userInput}`;\n"
+                "child_process.exec(command);\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings[0].file_path == "runner.ts"
+
+    @pytest.mark.parametrize("suffix", ("as const", "satisfies string"))
+    def test_detects_typescript_template_assertion_suffixes(self, suffix: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.ts").write_text(
+                f"const cmd = `echo ${{userInput}}` {suffix};\n"
+                "child_process.exec(cmd);\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings[0].file_path == "runner.ts"
+
+    def test_detects_interpolated_template_dollar_variable_passed_to_child_process_exec(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.js").write_text(
+                "const cmd$ = `echo ${userInput}`;\nchild_process.exec(cmd$);\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings[0].file_path == "runner.js"
+
 
 class TestFindCodeFiles:
     def test_finds_js_files(self):

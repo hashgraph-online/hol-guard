@@ -220,6 +220,7 @@ function PersistentSidebar(
               guardVersion={props.guardVersion}
               updateStatus={props.updateStatus}
               updatePhase={props.updatePhase}
+              updateError={props.updateError}
               onUpdateGuard={props.onUpdateGuard}
               onReinstallGuard={props.onReinstallGuard}
               approvalGate={props.approvalGate}

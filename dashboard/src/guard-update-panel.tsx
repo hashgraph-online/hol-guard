@@ -30,6 +30,7 @@ export type GuardUpdatePanelProps = {
   guardVersion?: string | null;
   updateStatus?: GuardUpdateStatus | null;
   updatePhase?: GuardUpdatePhase;
+  updateError?: string | null;
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
   approvalGate?: GuardApprovalGatePublicConfig | null;
@@ -69,7 +70,11 @@ function recoveryReinstallHelpCopy(status: GuardUpdateStatus | null | undefined)
   return "This install came from a local folder, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
 }
 
-function updateHelpCopy(status: GuardUpdateStatus | null | undefined, phase: GuardUpdatePhase): string | null {
+function updateHelpCopy(
+  status: GuardUpdateStatus | null | undefined,
+  phase: GuardUpdatePhase,
+  errorMessage?: string | null,
+): string | null {
   if (phase === "updating") {
     return "Guard is installing the update. The dashboard will pause briefly and reopen when ready.";
   }
@@ -77,7 +82,7 @@ function updateHelpCopy(status: GuardUpdateStatus | null | undefined, phase: Gua
     return "Reconnecting to Guard after the update…";
   }
   if (phase === "error") {
-    return "The update did not finish. Try again or run hol-guard update from your terminal.";
+    return errorMessage?.trim() || "The update did not finish. The installed version stays in place. Try again, or run hol-guard update from your terminal.";
   }
   if (status?.update_suppressed) {
     if (status.retry_command) {
@@ -103,7 +108,7 @@ function updateHelpCopy(status: GuardUpdateStatus | null | undefined, phase: Gua
 export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
-  const helpCopy = updateHelpCopy(props.updateStatus, phase);
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError);
   const showUpdateButton =
     props.updateStatus?.update_available === true &&
     props.updateStatus.auto_updatable &&
@@ -260,6 +265,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
   const enabled = options?.enabled !== false;
   const [updateStatus, setUpdateStatus] = useState<GuardUpdateStatus | null>(null);
   const [updatePhase, setUpdatePhase] = useState<GuardUpdatePhase>(enabled ? "checking" : "idle");
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const reconnectStartedAt = useRef<number | null>(null);
   const updatePhaseRef = useRef<GuardUpdatePhase>("checking");
   const updateStatusEpoch = useRef(0);
@@ -395,6 +401,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
       expectedLatestVersion: string | null;
     }): Promise<void> => {
       setUpdatePhase("updating");
+      setUpdateError(null);
       try {
         const reconnectAuthorization = await prepareGuardDaemonReconnect();
         const scheduleResult = await scheduleGuardUpdate(
@@ -413,7 +420,9 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
           return;
         }
         if (scheduleResult.scheduled !== true) {
-          throw new Error(scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled.");
+          throw new Error(
+            scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled. The installed version stays in place.",
+          );
         }
         setUpdatePhase("reconnecting");
         const redirected = await waitForReconnect(
@@ -424,8 +433,9 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
         if (!redirected) {
           window.location.reload();
         }
-      } catch {
+      } catch (error) {
         setUpdatePhase("error");
+        setUpdateError(error instanceof Error ? error.message : "The update did not finish. The installed version stays in place.");
       }
     },
     [waitForReconnect],
@@ -478,6 +488,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
     updatePhase,
+    updateError,
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,

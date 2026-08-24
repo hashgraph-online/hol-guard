@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from packaging.version import InvalidVersion, Version
+
 from ..adapters.base import HarnessContext
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..store import GuardStore
@@ -13,10 +15,30 @@ from .update_desktop_core import (
     apply_desktop_core_update,
     desktop_core_updates_supported,
     desktop_core_uses_alpha_channel,
+    pypi_alpha_versions,
+    select_desktop_core_latest,
 )
 
 _STABLE_CORE_FEED_MESSAGE = "Stable Core updates are not published yet. Switch the update channel to alpha."
 _DAEMON_REFRESH_FAILED = "HOL Guard was updated, but its daemon could not be restarted safely."
+_APPLY_FAILURE_FALLBACK = "HOL Guard could not apply the signed Core update. The installed version stays in place."
+_APPLY_FAILURE_MESSAGES = {
+    "desktop_core_download_failed": (
+        "This Core build is not available for Desktop yet. The installed version stays in place."
+    ),
+    "desktop_core_integrity_mismatch": (
+        "The downloaded Core did not match its signed manifest. The installed version stays in place."
+    ),
+    "desktop_core_signature_invalid": (
+        "Desktop could not verify the Core signature. The installed version stays in place."
+    ),
+    "desktop_core_signature_mismatch": (
+        "Desktop could not verify the Core signature. The installed version stays in place."
+    ),
+    "desktop_core_desktop_too_old": (
+        "This Desktop app is too old for the latest Core. Install the newest Desktop, then update Guard again."
+    ),
+}
 
 
 def desktop_update_status_state(
@@ -34,6 +56,68 @@ def desktop_update_status_state(
     if include_alpha:
         return True, True, None
     return False, False, _STABLE_CORE_FEED_MESSAGE
+
+
+def refine_desktop_version_check(
+    current_version: str,
+    version_check: dict[str, object],
+    *,
+    candidates: list[str],
+) -> dict[str, object]:
+    status = str(version_check.get("status") or "")
+    source = str(version_check.get("source") or "")
+    if status == "unavailable" or source not in {"pypi", "desktop_core"}:
+        return version_check
+    known = [item.strip() for item in candidates if item.strip()]
+    latest = version_check.get("latest_version")
+    if isinstance(latest, str) and latest.strip() and latest.strip() not in known:
+        known.append(latest.strip())
+    current = current_version.strip()
+    if current and current not in known:
+        known.append(current)
+    selected = select_desktop_core_latest(current_version, known)
+    refined = dict(version_check)
+    refined["source"] = "desktop_core"
+    if selected is None:
+        refined["latest_version"] = current_version
+        refined["update_available"] = False
+        refined["status"] = "current"
+        return refined
+    try:
+        newer = Version(selected) > Version(current_version)
+    except InvalidVersion:
+        newer = False
+    refined["latest_version"] = selected
+    refined["update_available"] = newer
+    refined["status"] = "stale" if newer else "current"
+    return refined
+
+
+def desktop_core_apply_failure_message(reason_code: str) -> str:
+    return _APPLY_FAILURE_MESSAGES.get(reason_code, _APPLY_FAILURE_FALLBACK)
+
+
+def finalize_desktop_update_status(
+    payload: dict[str, object],
+    *,
+    candidates: list[str],
+) -> dict[str, object]:
+    if payload.get("installer") != "desktop":
+        return payload
+    version_check = payload.get("version_check")
+    if not isinstance(version_check, dict):
+        return payload
+    current_version = str(payload.get("current_version") or "")
+    refined = refine_desktop_version_check(
+        current_version,
+        version_check,
+        candidates=candidates,
+    )
+    latest_version = refined.get("latest_version")
+    payload["version_check"] = refined
+    payload["latest_version"] = latest_version if isinstance(latest_version, str) else None
+    payload["update_available"] = payload.get("auto_updatable") is True and refined.get("update_available") is True
+    return payload
 
 
 def run_desktop_managed_update(
@@ -62,11 +146,15 @@ def run_desktop_managed_update(
 
     include_alpha = payload.get("release_channel") == "alpha"
     current_version = str(payload["current_version"])
-    version_check = commands._version_check_payload(
+    version_check = refine_desktop_version_check(
         current_version,
-        source_kind="pypi",
-        network_policy=network_policy,
-        include_alpha=include_alpha,
+        commands._version_check_payload(
+            current_version,
+            source_kind="pypi",
+            network_policy=network_policy,
+            include_alpha=include_alpha,
+        ),
+        candidates=pypi_alpha_versions(commands._last_pypi_payload),
     )
     payload["version_check"] = version_check
     already_current = (
@@ -222,7 +310,7 @@ def _desktop_apply_target(
                 "changed": False,
                 "reason_code": error.reason_code,
                 "error": str(error),
-                "message": "HOL Guard could not apply the signed Core update.",
+                "message": desktop_core_apply_failure_message(error.reason_code),
             }
         )
         return payload, 1

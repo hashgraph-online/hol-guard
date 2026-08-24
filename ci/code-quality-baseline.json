@@ -509,7 +509,7 @@
     "src/codex_plugin_scanner/guard/cli/product.py": 636,
     "src/codex_plugin_scanner/guard/cli/render.py": 2914,
     "src/codex_plugin_scanner/guard/cli/update_artifact.py": 1279,
-    "src/codex_plugin_scanner/guard/cli/update_commands.py": 2838,
+    "src/codex_plugin_scanner/guard/cli/update_commands.py": 2842,
     "src/codex_plugin_scanner/guard/cli/update_subprocess.py": 2087,
     "src/codex_plugin_scanner/guard/codex_app_server.py": 627,
     "src/codex_plugin_scanner/guard/config.py": 1394,
@@ -729,7 +729,7 @@
     "tests/test_policy_bundle_v2.py": 534,
     "tests/test_policy_document_io.py": 679,
     "tests/test_release_train_workflow.py": 568,
-    "tests/test_update_desktop_core.py": 553,
+    "tests/test_update_desktop_core.py": 716,
     "tests/test_verify_release_registry.py": 567
   },
   "schema_version": 2,

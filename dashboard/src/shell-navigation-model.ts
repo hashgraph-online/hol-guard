@@ -43,6 +43,7 @@ export type ShellNavigationProps = {
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
   updatePhase?: GuardUpdatePhase;
+  updateError?: string | null;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   cloudUserProfile?: GuardCloudUserProfile | null;
   workspaceId?: string | null;
