@@ -5,17 +5,74 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
+from typing import Protocol, cast
 
 from ..adapters import get_adapter
 from ..harness_resume import resume_harness_operation
 from ..runtime.exact_cloud_review import ExactCloudReviewError, apply_exact_cloud_review
 from ..store import GuardStore
 
+
+class _QueueLifecycle(Protocol):
+    def refresh_command_queue_worker(self) -> dict[str, object]: ...
+
+
+class _HandlerServer(Protocol):
+    store: GuardStore
+    command_queue_lifecycle: _QueueLifecycle | None
+
+
+class _CloudReviewHandler(Protocol):
+    server: _HandlerServer
+
+    def _handle_headless_remote_once(self, payload: dict[str, object]) -> None: ...
+    def _policy_memory_payload(self, value: object) -> dict[str, object]: ...
+    def _optional_string(self, value: object) -> str | None: ...
+    def _record_headless_receipt(self, **kwargs: object) -> dict[str, object]: ...
+    def _codex_resume_after_remote_once(self, **kwargs: object) -> dict[str, object] | None: ...
+    def _write_json(self, payload: object, **kwargs: object) -> None: ...
+
+
+def dispatch_cloud_review_post(handler: object, path: str, payload: dict[str, object]) -> bool:
+    typed_handler = cast(_CloudReviewHandler, handler)
+    if path == "/v1/requests/remote-once":
+        typed_handler._handle_headless_remote_once(payload)
+        return True
+    if path == "/v1/requests/remote-exact":
+        _handle_remote_exact(typed_handler, payload)
+        return True
+    if path == "/v1/cloud-review/worker/refresh":
+        _handle_worker_refresh(typed_handler)
+        return True
+    return False
+
+
 _PayloadDecoder = Callable[[object], dict[str, object]]
 _OptionalString = Callable[[object], str | None]
 _ReceiptRecorder = Callable[..., dict[str, object]]
 _CodexResumer = Callable[..., dict[str, object] | None]
 _Now = Callable[[], str]
+
+
+def _handle_remote_exact(handler: _CloudReviewHandler, payload: dict[str, object]) -> None:
+    status, response = build_headless_exact_cloud_review_response(
+        store=handler.server.store,
+        payload=payload,
+        decode_mapping=handler._policy_memory_payload,
+        optional_string=handler._optional_string,
+        record_receipt=handler._record_headless_receipt,
+        resume_codex=handler._codex_resume_after_remote_once,
+        now=lambda: datetime.now(timezone.utc).isoformat(),
+    )
+    handler._write_json(response, status=status)
+
+
+def _handle_worker_refresh(handler: _CloudReviewHandler) -> None:
+    lifecycle = handler.server.command_queue_lifecycle
+    if lifecycle is None:
+        handler._write_json({"error": "command_queue_lifecycle_unavailable"}, status=503)
+        return
+    handler._write_json(lifecycle.refresh_command_queue_worker(), extra_headers={"Cache-Control": "no-store"})
 
 
 def build_headless_exact_cloud_review_response(
@@ -124,3 +181,6 @@ def _exact_error_response(code: str) -> tuple[int, dict[str, object]]:
     if code.endswith(("_invalid", "_missing", "_unsupported")):
         return 400, {"error": code}
     return 409, {"error": code}
+
+
+__all__ = ["build_headless_exact_cloud_review_response", "dispatch_cloud_review_post"]

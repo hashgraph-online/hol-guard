@@ -229,7 +229,12 @@ from .command_activity_api import (
     parse_command_activity_event_cursor,
     stream_command_activity_events,
 )
-from .command_queue_worker import CommandQueueWorker, start_command_queue_worker, stop_command_queue_worker
+from .command_queue_worker import (
+    CommandQueueWorker,
+    refresh_command_queue_worker,
+    start_command_queue_worker,
+    stop_command_queue_worker,
+)
 from .dashboard_reconnect import (
     DASHBOARD_RECONNECT_PROTOCOL_VERSION,
     consume_dashboard_reconnect_challenge,
@@ -247,7 +252,8 @@ from .discovery import (
     load_daemon_discovery_key,
 )
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
-from .headless_exact_cloud_review import build_headless_exact_cloud_review_response
+from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
+from .headless_exact_cloud_review import dispatch_cloud_review_post
 from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_cli_api import LocalCliApiError, LocalCliApiService
@@ -273,6 +279,12 @@ _LOGGER = logging.getLogger(__name__)
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
+_REMOTE_REVIEW_POST_ROUTES = {
+    "/v1/cloud-review/worker/refresh",
+    "/v1/requests/bulk-allow-once",
+    "/v1/requests/remote-exact",
+    "/v1/requests/remote-once",
+}
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {
     "activate",
     "install",
@@ -1389,20 +1401,11 @@ def _queue_headless_cloud_sync(
 
 
 def _queue_headless_cloud_sync_with_optional_publish(
-    *,
-    store: GuardStore,
-    managed_controls_publish: Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None,
+    *, store: GuardStore, managed_controls_publish: Callable[..., object] | None
 ) -> dict[str, object]:
-    try:
-        queue_parameters = inspect.signature(_queue_headless_cloud_sync).parameters
-    except (TypeError, ValueError):
-        queue_parameters = {}
-    if managed_controls_publish is not None and "managed_controls_publish" in queue_parameters:
-        return _queue_headless_cloud_sync(
-            store=store,
-            managed_controls_publish=managed_controls_publish,
-        )
-    return _queue_headless_cloud_sync(store=store)
+    return queue_sync_with_optional_publish(
+        store=store, queue_sync=_queue_headless_cloud_sync, managed_controls_publish=managed_controls_publish
+    )
 
 
 def _maybe_queue_first_cloud_sync(
@@ -1410,32 +1413,11 @@ def _maybe_queue_first_cloud_sync(
     store: GuardStore,
     managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
 ) -> dict[str, object] | None:
-    if store.get_cloud_sync_profile() is None:
-        # Startup recovery remains best-effort so local protection never depends on Cloud availability.
-        try:
-            repair_guard_cloud_connect_storage(store)
-        except Exception:
-            return None
-    if store.get_cloud_sync_profile() is None:
-        return None
-    oauth_health = store.get_oauth_local_credential_health()
-    if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":
-        try:
-            repair_guard_cloud_connect_storage(store)
-        except Exception:
-            return None
-        oauth_health = store.get_oauth_local_credential_health()
-        if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":
-            return None
-    latest_state = store.get_effective_guard_connect_state(now=_now())
-    if latest_state is None:
-        return None
-    if str(latest_state.get("status") or "") != "connected":
-        return None
-    if str(latest_state.get("milestone") or "") != "first_sync_pending":
-        return None
-    return _queue_headless_cloud_sync_with_optional_publish(
+    return maybe_queue_first_cloud_sync(
         store=store,
+        queue_sync=_queue_headless_cloud_sync,
+        repair_connect=repair_guard_cloud_connect_storage,
+        now=_now,
         managed_controls_publish=managed_controls_publish,
     )
 
@@ -2744,14 +2726,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/policy/cloud-exception-requests":
             self._handle_cloud_exception_request_create(payload)
             return
-        if parsed.path == "/v1/requests/remote-once":
-            self._handle_headless_remote_once(payload)
-            return
-        if parsed.path == "/v1/requests/remote-exact":
-            self._handle_headless_remote_exact(payload)
-            return
-        if parsed.path == "/v1/cloud-review/worker/refresh":
-            self._handle_cloud_review_worker_refresh()
+        if dispatch_cloud_review_post(self, parsed.path, payload):
             return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
@@ -3762,25 +3737,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 response_payload["harnessResume"] = harness_resume
         self._write_json(response_payload)
 
-    def _handle_headless_remote_exact(self, payload: dict[str, object]) -> None:
-        status, response = build_headless_exact_cloud_review_response(
-            store=self.server.store,  # type: ignore[attr-defined]
-            payload=payload,
-            decode_mapping=self._policy_memory_payload,
-            optional_string=self._optional_string,
-            record_receipt=self._record_headless_receipt,
-            resume_codex=self._codex_resume_after_remote_once,
-            now=_now,
-        )
-        self._write_json(response, status=status)
-
-    def _handle_cloud_review_worker_refresh(self) -> None:
-        lifecycle = self.server.command_queue_lifecycle
-        if lifecycle is None:
-            self._write_json({"error": "command_queue_lifecycle_unavailable"}, status=503)
-            return
-        self._write_json(lifecycle.refresh_command_queue_worker(), extra_headers={"Cache-Control": "no-store"})
-
     def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
         if action != "package_shim_path":
             self._write_json({"error": "unsupported_remediation", "operation": action}, status=404)
@@ -4256,7 +4212,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     refresh_token=token_result.refresh_token,
                     dpop_key_material=session.dpop_key_material,
                     grant_id=token_result.grant_id,
-                    machine_id=token_result.machine_id,
+                    **token_result.target_binding(),
                     supply_chain_entitlement=token_result.supply_chain_entitlement,
                     workspace_id=token_result.workspace_id,
                     runtime_id="hol-guard",
@@ -4442,7 +4398,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     refresh_token=token_result.refresh_token,
                     dpop_key_material=session.dpop_key_material,
                     grant_id=token_result.grant_id,
-                    machine_id=token_result.machine_id,
+                    **token_result.target_binding(),
                     supply_chain_entitlement=token_result.supply_chain_entitlement,
                     workspace_id=token_result.workspace_id,
                     runtime_id="hol-guard",
@@ -7025,10 +6981,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/operations/block",
             "/v1/policy/sync",
             "/v1/requests/clear",
-            "/v1/requests/bulk-allow-once",
-            "/v1/requests/remote-once",
-            "/v1/requests/remote-exact",
-            "/v1/cloud-review/worker/refresh",
+            *_REMOTE_REVIEW_POST_ROUTES,
             "/v1/settings/import",
             "/v1/settings/reset",
             "/v1/read-state",
@@ -7933,10 +7886,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/requests/clear",
-            "/v1/requests/bulk-allow-once",
-            "/v1/requests/remote-once",
-            "/v1/requests/remote-exact",
-            "/v1/cloud-review/worker/refresh",
+            *_REMOTE_REVIEW_POST_ROUTES,
             "/v1/settings",
             "/v1/settings/import",
             "/v1/settings/reset",
@@ -8346,17 +8296,14 @@ class GuardDaemonServer:
         """Apply a changed local Cloud Review capability without a daemon restart."""
 
         with self._finish_service_lock:
-            if self._shutdown_started.is_set():
-                self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
-            else:
-                self._command_queue_worker = start_command_queue_worker(
-                    self._server.store,
-                    self._command_queue_worker,
-                )
-            worker = self._command_queue_worker
+            self._command_queue_worker, running = refresh_command_queue_worker(
+                self._server.store,
+                self._command_queue_worker,
+                shutting_down=self._shutdown_started.is_set(),
+            )
         return {
             "operation": "guard.review.resolveExact",
-            "running": worker is not None and worker.thread.is_alive() and not worker.stop_event.is_set(),
+            "running": running,
         }
 
     def _refresh_stale_harness_shims_best_effort(self) -> None:

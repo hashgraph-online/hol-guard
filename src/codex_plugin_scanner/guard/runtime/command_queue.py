@@ -4,21 +4,19 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, urlunparse
 
 from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
+from . import exact_cloud_review_lifecycle
 from .auto_update import maybe_auto_update
 from .command_capability import (
     CommandCapabilityError,
     audit_command_decision,
-    authorize_command_job,
     command_capability_operations,
     command_capability_status,
     command_environment_allows_queue,
@@ -33,10 +31,40 @@ from .command_executors import (
     command_job_operation,
     execute_guard_command_job,
 )
+from .command_queue_activation import (
+    COMMAND_QUEUE_LEASE_WAIT_MS_ENV as _COMMAND_QUEUE_LEASE_WAIT_MS_ENV,
+)
+from .command_queue_activation import (
+    command_queue_is_enabled,
+)
+from .command_queue_activation import (
+    command_queue_lease_wait_ms as _command_queue_lease_wait_ms,
+)
+from .command_queue_activation import (
+    command_queue_long_poll_enabled as _command_queue_long_poll_enabled,
+)
+from .command_queue_activation import (
+    nonnegative_env_float as _env_float,
+)
+from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
+from .command_queue_authority import command_queue_oauth_target
+from .command_queue_protocol import command_api_url as _command_api_url
+from .command_queue_protocol import job_id as _job_id
+from .command_queue_protocol import lease_id as _lease_id
+from .command_queue_protocol import pending_result_is_stale as _pending_result_is_stale
+from .command_queue_protocol import redacted_error as _format_redacted_error
+from .command_queue_protocol import result_payload as _result_payload
+from .command_queue_protocol import retry_wait_seconds as _retry_wait_seconds
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     exact_cloud_review_operations,
     exact_cloud_review_status,
+)
+from .exact_cloud_review_lifecycle import ExactReviewLifecycleObserver as LifecycleObserver
+from .exact_cloud_review_transport import (
+    EXACT_CLOUD_REVIEW_COMMAND_API_BASE,
+    lease_next_job,
+    uses_exact_transport,
 )
 from .live_request_repair import live_request_sync_repair_status
 from .runner import (
@@ -49,18 +77,15 @@ from .runner import (
     _urlopen_json_with_timeout_retry,
     repair_guard_cloud_connect_storage,
 )
-from .time_support import parse_utc_timestamp
 
 COMMAND_QUEUE_STATE_KEY = "guard_command_queue_state"
 COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
-COMMAND_QUEUE_LEASE_WAIT_MS_ENV = "GUARD_CLOUD_COMMAND_QUEUE_LEASE_WAIT_MS"
+COMMAND_QUEUE_LEASE_WAIT_MS_ENV = _COMMAND_QUEUE_LEASE_WAIT_MS_ENV
 COMMAND_QUEUE_POLL_INTERVAL_ENV = "GUARD_CLOUD_COMMAND_QUEUE_POLL_INTERVAL_SECONDS"
 COMMAND_QUEUE_ERROR_BACKOFF_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ERROR_BACKOFF_SECONDS"
 
-_DEFAULT_LEASE_WAIT_MS = 25_000
 _DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
-_MIN_RETRY_WAIT_SECONDS = 0.1
 _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
@@ -74,6 +99,8 @@ _LEASE_LOCAL_REQUEST_SNAPSHOT_KEYS = (
     "pendingCount",
     "resolvedCount",
 )
+Observer = LifecycleObserver | None
+observe_execution = exact_cloud_review_lifecycle.observe_exact_review_execution
 
 
 def _now() -> str:
@@ -90,82 +117,29 @@ def command_queue_enabled(
     capability or restore an expired/revoked capability.
     """
 
-    if not command_environment_allows_queue(environ):
-        value = (os.environ if environ is None else environ).get(COMMAND_QUEUE_ENABLED_ENV)
-        if isinstance(value, str) and value.strip().lower() not in {"", "0", "false", "no", "off", "disabled"}:
-            _LOGGER.warning(
-                "Ignoring unrecognized %s value; command queue disabled.",
-                COMMAND_QUEUE_ENABLED_ENV,
-            )
-        return False
-    return store is not None and bool(command_queue_operations(store))
+    return command_queue_is_enabled(
+        store,
+        environ,
+        enabled_env=COMMAND_QUEUE_ENABLED_ENV,
+        environment_allows_queue=command_environment_allows_queue,
+        operations=command_queue_operations,
+        logger=_LOGGER,
+    )
 
 
 def command_queue_operations(store: GuardStore) -> tuple[str, ...]:
-    """Return operations enabled by their own local authority boundary."""
-
-    generic_operations = tuple(
+    generic = tuple(
         operation for operation in command_capability_operations(store) if operation != EXACT_CLOUD_REVIEW_OPERATION
     )
-    return generic_operations + tuple(
-        operation for operation in exact_cloud_review_operations(store) if operation not in generic_operations
-    )
-
-
-def _env_float(name: str, default: float) -> float:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        return default
-    try:
-        parsed = float(value)
-    except ValueError:
-        return default
-    return parsed if parsed >= 0 else default
-
-
-def _env_int(name: str, default: int) -> int:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        return default
-    try:
-        parsed = int(value)
-    except ValueError:
-        return default
-    return parsed if parsed >= 0 else default
-
-
-def _command_queue_lease_wait_ms(environ: dict[str, str] | None = None) -> int:
-    source = os.environ if environ is None else environ
-    value = source.get(COMMAND_QUEUE_LEASE_WAIT_MS_ENV, "").strip()
-    if not value:
-        return _DEFAULT_LEASE_WAIT_MS
-    try:
-        parsed = int(value)
-    except ValueError:
-        return _DEFAULT_LEASE_WAIT_MS
-    return parsed if parsed >= 0 else _DEFAULT_LEASE_WAIT_MS
-
-
-def _command_queue_long_poll_enabled(environ: dict[str, str] | None = None) -> bool:
-    return _command_queue_lease_wait_ms(environ) > 0
-
-
-def _command_api_url(sync_url: object, path: str) -> str:
-    parsed = urlparse(str(sync_url))
-    base_path = "/api/guard/commands"
-    normalized_path = path if path.startswith("/") else f"/{path}"
-    return urlunparse((parsed.scheme, parsed.netloc, f"{base_path}{normalized_path}", "", "", ""))
+    return generic + tuple(operation for operation in exact_cloud_review_operations(store) if operation not in generic)
 
 
 def _redacted_error(error: BaseException) -> str:
-    if isinstance(error, urllib.error.HTTPError):
-        try:
-            return _sync_http_error_message(error)
-        except Exception:
-            return f"HTTP Error {error.code}: {error.reason}"
-    if isinstance(error, OSError):
-        return _sync_url_error_message(error)
-    return str(error)
+    return _format_redacted_error(
+        error,
+        http_formatter=_sync_http_error_message,
+        os_formatter=_sync_url_error_message,
+    )
 
 
 def _json_request(
@@ -175,7 +149,34 @@ def _json_request(
     path: str,
     payload: dict[str, object],
 ) -> dict[str, object]:
-    request_url = _command_api_url(auth_context["sync_url"], path)
+    return _json_request_base(auth_context, method=method, path=path, payload=payload)
+
+
+def _exact_json_request(
+    auth_context: dict[str, object],
+    *,
+    method: str,
+    path: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    return _json_request_base(
+        auth_context,
+        method=method,
+        path=path,
+        payload=payload,
+        base_path=EXACT_CLOUD_REVIEW_COMMAND_API_BASE,
+    )
+
+
+def _json_request_base(
+    auth_context: dict[str, object],
+    *,
+    method: str,
+    path: str,
+    payload: dict[str, object],
+    base_path: str = "/api/guard/commands",
+) -> dict[str, object]:
+    request_url = _command_api_url(auth_context["sync_url"], path, base_path=base_path)
     request = _guard_sync_request(
         auth_context,
         request_url=request_url,
@@ -196,29 +197,6 @@ def _load_state(store: GuardStore) -> dict[str, object]:
 
 def _save_state(store: GuardStore, payload: dict[str, object]) -> None:
     store.set_sync_payload(COMMAND_QUEUE_STATE_KEY, payload, _now())
-
-
-def _retry_wait_seconds(
-    poll_interval: float,
-    error_backoff: float,
-    error_streak: int,
-) -> float:
-    retry_base = max(poll_interval, _MIN_RETRY_WAIT_SECONDS)
-    retry_cap = max(error_backoff, _MIN_RETRY_WAIT_SECONDS)
-    retry_exponent = min(max(0, error_streak - 1), 30)
-    return min(retry_cap, retry_base * (2**retry_exponent))
-
-
-_parse_iso8601_timestamp = parse_utc_timestamp
-
-
-def _pending_result_is_stale(job: dict[str, object]) -> bool:
-    now = datetime.now(timezone.utc)
-    for key in ("leaseExpiresAt", "expiresAt"):
-        expires_at = _parse_iso8601_timestamp(job.get(key))
-        if expires_at is not None and expires_at <= now:
-            return True
-    return False
 
 
 def command_queue_status(store: GuardStore) -> dict[str, object]:
@@ -272,29 +250,25 @@ def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
     }
 
 
-def _oauth_metadata(store: GuardStore) -> tuple[str, str]:
-    credentials = store.get_oauth_local_credentials(allow_primary=False)
-    if not isinstance(credentials, dict):
-        raise GuardSyncNotConfiguredError("Guard command queue requires OAuth credentials.")
-    machine_id = credentials.get("machine_id")
-    workspace_id = credentials.get("workspace_id")
-    if not isinstance(machine_id, str) or not machine_id:
-        raise GuardSyncNotConfiguredError("Guard command queue requires a machine-bound OAuth grant.")
-    if not isinstance(workspace_id, str) or not workspace_id:
-        raise GuardSyncNotConfiguredError("Guard command queue requires a workspace-bound OAuth grant.")
-    return machine_id, workspace_id
-
-
-def _lease_payload(store: GuardStore) -> dict[str, object]:
-    machine_id, workspace_id = _oauth_metadata(store)
-    operations = command_queue_operations(store)
+def _lease_payload(
+    store: GuardStore,
+    *,
+    operations: tuple[str, ...] | None = None,
+    wait_ms: int | None = None,
+) -> dict[str, object]:
+    machine_id, workspace_id = command_queue_oauth_target(store)
+    operations = command_queue_operations(store) if operations is None else operations
     if not operations:
         raise CommandCapabilityError("command_capability_required")
     capabilities: dict[str, object] = {
         "operations": list(operations),
         # Schema negotiation is a compatibility registry, not an authority
         # grant. `operations` remains the complete locally authorized set.
-        "schemaVersions": dict(COMMAND_OPERATION_SCHEMA_VERSIONS),
+        "schemaVersions": {
+            operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation]
+            for operation in operations
+            if operation in COMMAND_OPERATION_SCHEMA_VERSIONS
+        },
     }
     repair_status = _live_request_sync_repair_status(store)
     if repair_status is not None:
@@ -306,7 +280,7 @@ def _lease_payload(store: GuardStore) -> dict[str, object]:
         "capabilities": capabilities,
         "localRequestsSnapshot": _local_requests_snapshot(store),
         "maxJobs": 1,
-        "waitMs": _command_queue_lease_wait_ms(),
+        "waitMs": _command_queue_lease_wait_ms() if wait_ms is None else wait_ms,
     }
 
 
@@ -356,67 +330,60 @@ def _resolve_guard_sync_auth_context_with_repair(store: GuardStore) -> dict[str,
         raise
 
 
-def _job_id(job: dict[str, object]) -> str:
-    job_id = job.get("id")
-    if not isinstance(job_id, str) or not job_id:
-        raise RuntimeError("Guard command job is missing an id.")
-    return job_id
-
-
-def _lease_id(job: dict[str, object]) -> str:
-    lease_id = job.get("leaseId")
-    if not isinstance(lease_id, str) or not lease_id:
-        raise RuntimeError("Guard command job is missing a lease id.")
-    return lease_id
-
-
 def _execute_job(job: dict[str, object], context: HarnessContext, store: GuardStore) -> dict[str, object]:
     return execute_guard_command_job(job, context=context, store=store, now=_now)
 
 
 def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
-    _json_request(
+    request = _exact_json_request if uses_exact_transport(job) else _json_request
+    path = f"/{_job_id(job)}/ack" if uses_exact_transport(job) else f"/{_job_id(job)}/heartbeat"
+    request(
         auth_context,
         method="POST",
-        path=f"/{_job_id(job)}/heartbeat",
+        path=path,
         payload={"leaseId": _lease_id(job)},
     )
 
 
-def _result_payload(job: dict[str, object], execution: dict[str, object]) -> dict[str, object]:
-    if execution.get("waitingLocalConfirm") is True:
-        sanitized_execution = dict(execution)
-        sanitized_execution.pop("waitingLocalConfirm", None)
-        return {
-            "leaseId": _lease_id(job),
-            "idempotencyKey": f"{_job_id(job)}:{_lease_id(job)}:waiting_local_confirm",
-            "status": "waiting_local_confirm",
-            "result": sanitized_execution,
-        }
-    failure_code = execution.get("failureCode")
-    if isinstance(failure_code, str) and failure_code:
-        payload: dict[str, object] = {
-            "leaseId": _lease_id(job),
-            "idempotencyKey": f"{_job_id(job)}:{_lease_id(job)}:failed",
-            "status": "failed",
-            "failureCode": failure_code,
-            "failureMessage": str(execution.get("failureMessage") or failure_code),
-        }
-        return payload
-    return {
-        "leaseId": _lease_id(job),
-        "idempotencyKey": f"{_job_id(job)}:{_lease_id(job)}:succeeded",
-        "status": "succeeded",
-        "result": execution,
-    }
-
-
 def _post_result(auth_context: dict[str, object], job: dict[str, object], payload: dict[str, object]) -> None:
-    _json_request(
+    request = _exact_json_request if uses_exact_transport(job) else _json_request
+    request(
         auth_context,
         method="POST",
         path=f"/{_job_id(job)}/result",
         payload=payload,
+    )
+
+
+def _lease_next_job(
+    store: GuardStore,
+    auth_context: dict[str, object],
+) -> dict[str, object] | None:
+    operations = command_queue_operations(store)
+    return lease_next_job(
+        operations=operations,
+        wait_ms=_command_queue_lease_wait_ms(),
+        exact_request=lambda options: _exact_json_request(
+            auth_context,
+            method="POST",
+            path="/lease",
+            payload=_lease_payload(
+                store,
+                operations=options["operations"],  # type: ignore[arg-type]
+                wait_ms=options["wait_ms"],  # type: ignore[arg-type]
+            ),
+        ),
+        legacy_request=lambda options: _json_request(
+            auth_context,
+            method="POST",
+            path="/lease",
+            payload=_lease_payload(
+                store,
+                operations=options["operations"],  # type: ignore[arg-type]
+                wait_ms=options["wait_ms"],  # type: ignore[arg-type]
+            ),
+        ),
+        logger=_LOGGER,
     )
 
 
@@ -465,11 +432,6 @@ def _retry_pending_result(
     return True
 
 
-def _maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
-    """Delegate to auto_update.maybe_auto_update."""
-    maybe_auto_update(store, context)
-
-
 def _resolve_command_queue_auth_context(
     store: GuardStore,
     *,
@@ -488,7 +450,25 @@ def _resolve_command_queue_auth_context(
         return _resolve_guard_sync_auth_context(store)
 
 
-def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
+def _record_leased_job(
+    store: GuardStore, state: dict[str, object], item: dict[str, object], observer: Observer
+) -> None:
+    state.update(
+        {
+            "state": "leased",
+            "last_lease_at": _now(),
+            "active_job": item,
+            "last_poll_was_empty": False,
+        }
+    )
+    _save_state(store, state)
+    if uses_exact_transport(item):
+        exact_cloud_review_lifecycle.observe_exact_review_lease(observer, item, occurred_at=str(state["last_lease_at"]))
+
+
+def poll_command_queue_once(
+    store: GuardStore, context: HarnessContext, *, observer: Observer = None
+) -> dict[str, object]:
     if not command_queue_enabled(store):
         state = _load_state(store)
         state.update(
@@ -513,14 +493,8 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
     _save_state(store, state)
     if _retry_pending_result(store, auth_context, state):
         return command_queue_status(store)
-    lease_response = _json_request(
-        auth_context,
-        method="POST",
-        path="/lease",
-        payload=_lease_payload(store),
-    )
-    item = lease_response.get("item")
-    if not isinstance(item, dict):
+    item = _lease_next_job(store, auth_context)
+    if item is None:
         empty_at = _now()
         state.update(
             {
@@ -531,17 +505,9 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
             }
         )
         _save_state(store, state)
-        _maybe_auto_update(store, context)
+        maybe_auto_update(store, context)
         return command_queue_status(store)
-    state.update(
-        {
-            "state": "leased",
-            "last_lease_at": _now(),
-            "active_job": item,
-            "last_poll_was_empty": False,
-        }
-    )
-    _save_state(store, state)
+    _record_leased_job(store, state, item, observer)
     try:
         _heartbeat(auth_context, item)
     except urllib.error.HTTPError as error:
@@ -564,7 +530,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         _save_state(store, state)
         raise
     try:
-        authorized = authorize_command_job(
+        authorized = authorize_command_queue_job(
             store,
             item,
             schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
@@ -610,6 +576,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
                     command_job_operation(item),
                 )
                 execution = _execute_job(item, context, store)
+                observe_execution(observer, item, execution, occurred_at=_now())
             except Exception as error:
                 _LOGGER.warning(
                     "Guard command execution failed: job_id=%s error=%s",
@@ -673,6 +640,10 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         reason=str(payload.get("status") or "unknown"),
     )
     _LOGGER.info("Guard command completed: job_id=%s status=%s", _job_id(item), payload.get("status"))
+    if uses_exact_transport(item):
+        exact_cloud_review_lifecycle.observe_exact_review_result(
+            observer, item, occurred_at=str(state["last_result_at"]), status=payload.get("status")
+        )
     return command_queue_status(store)
 
 

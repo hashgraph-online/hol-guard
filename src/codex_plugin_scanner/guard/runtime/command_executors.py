@@ -58,8 +58,10 @@ from ..shims import (
 )
 from ..store import GuardStore
 from . import local_request_snapshots
-from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, ExactCloudReviewError, apply_exact_cloud_review
+from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
+from .exact_cloud_review_executor import execute_exact_cloud_review_operation
 from .live_request_repair import execute_live_request_sync_repair
+from .remote_approval_execution import remote_resume_confirmed, target_string
 
 _GUARD_REVIEW_MEMORY_REGISTRY_SYNC_KEY = "guard_review_memory_registry"
 _GUARD_REVIEW_MEMORY_VERSION_SYNC_KEY = "guard_review_memory_policy_version"
@@ -137,11 +139,11 @@ def execute_guard_command_job(
                 generated_at=generated_at,
             )
         if operation in EXACT_CLOUD_REVIEW_OPERATIONS:
-            return _execute_exact_cloud_review_operation(
-                job=job,
+            return execute_exact_cloud_review_operation(
                 payload=payload,
                 store=store,
                 generated_at=generated_at,
+                resume_after_approval=_resume_after_remote_approval,
             )
         if operation in LIVE_REQUEST_OPERATIONS:
             return execute_live_request_sync_repair(
@@ -330,7 +332,7 @@ def _execute_approval_operation(
             "failureMessage": f"Unsupported approval operation: {operation}",
         }
     action = _optional_string(payload.get("action"))
-    local_request_id = _target_string(payload, "localRequestId", "local_request_id") or _target_string(
+    local_request_id = target_string(payload, "localRequestId", "local_request_id") or target_string(
         job,
         "localRequestId",
         "local_request_id",
@@ -452,7 +454,7 @@ def _execute_approval_operation(
         "action": resolution_action,
         "daemonAckStatus": (
             "resolved"
-            if resolved and _remote_resume_confirmed(resume_metadata, resolution_action)
+            if resolved and remote_resume_confirmed(resume_metadata, resolution_action)
             else "resolved_unconfirmed"
             if resolved
             else "not_resolved"
@@ -467,72 +469,6 @@ def _execute_approval_operation(
         response_data,
         generated_at=generated_at,
     )
-
-
-def _execute_exact_cloud_review_operation(
-    *,
-    job: dict[str, object],
-    payload: dict[str, object],
-    store: GuardStore,
-    generated_at: str,
-) -> dict[str, object]:
-    remote_approval = _payload_mapping(payload.get("remoteApproval") or payload.get("remote_approval"))
-    if not remote_approval:
-        raise ValueError("remote_exact_approval_missing")
-    expected_harness = _optional_string(payload.get("harness"))
-    try:
-        resolution = apply_exact_cloud_review(
-            store,
-            remote_approval=remote_approval,
-            expected_harness=expected_harness,
-            now=generated_at,
-        )
-    except ExactCloudReviewError as error:
-        raise ValueError(error.code) from error
-    request_row = store.get_approval_request(resolution.request_id)
-    if not isinstance(request_row, dict):
-        raise ValueError("remote_exact_request_not_pending")
-    resume_metadata = _resume_after_remote_approval(
-        store=store,
-        request_row=request_row,
-        request_id=resolution.request_id,
-        action=resolution.action,
-        now=generated_at,
-    )
-    response: dict[str, object] = {
-        "action": resolution.action,
-        "daemonAckStatus": (
-            "resolved" if _remote_resume_confirmed(resume_metadata, resolution.action) else "resolved_unconfirmed"
-        ),
-        "localRequestId": resolution.request_id,
-        "receiptId": resolution.receipt_id,
-        "remoteDecision": resolution.action,
-        "resolution": {
-            "resolved_duplicate_ids": [],
-            "resolved_request": resolution.resolved_request,
-        },
-        "status": "completed",
-    }
-    response.update(resume_metadata)
-    return _result(response, generated_at=generated_at)
-
-
-def _remote_resume_confirmed(resume_metadata: dict[str, object], action: str) -> bool:
-    status = _optional_string(resume_metadata.get("resumeStatus"))
-    if status in {"already_sent", "blocked", "not_applicable", "resumed", "sent"}:
-        return True
-    if action != "block" or status != "skipped":
-        return False
-    detail = resume_metadata.get("codexResume") or resume_metadata.get("harnessResume")
-    return isinstance(detail, dict) and detail.get("reason") == "blocked_not_resumed"
-
-
-def _target_string(mapping: dict[str, object], *keys: str) -> str | None:
-    for key in keys:
-        value = _optional_string(mapping.get(key))
-        if value is not None:
-            return value
-    return None
 
 
 def _validate_approval_resolve_target(

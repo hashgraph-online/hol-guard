@@ -203,6 +203,7 @@ class _RecoveredOAuthLocalCredentialInputs(TypedDict):
     dpop_private_key_pem: str
     dpop_public_jwk: dict[str, str]
     dpop_public_jwk_thumbprint: str
+    device_id: str | None
     grant_id: str | None
     machine_id: str | None
     supply_chain_entitlement_expires_at: str | None
@@ -232,10 +233,8 @@ _OAUTH_LOCAL_CREDENTIALS_REF_KEY = "credentials_ref"
 _OAUTH_PRIMARY_SECRET_TIMEOUT_SECONDS = 2.0
 _APPROVAL_GATE_POLICY_SOURCE = "approval-gate"
 _GUARD_CLOUD_COMMAND_STATE_KEYS = (
-    "guard_command_queue_state",
-    "guard_command_capability_v1",
-    "guard_command_pending_approvals_v1",
-    "guard_command_local_approvals_v1",
+    *("guard_command_queue_state", "guard_command_capability_v1"),
+    *("guard_command_pending_approvals_v1", "guard_command_local_approvals_v1"),
     "guard_command_replay_state_v1",
     "guard_exact_cloud_review_capability_v1",
     "guard_exact_cloud_review_revocation_v1",
@@ -464,10 +463,9 @@ class SystemKeyringSecretStore:
     def _load_keyring_module():
         """Load the optional keyring package.
 
-        Returns None when the top-level package is genuinely absent. A keyring
-        install that is present but fails to import (broken transitive import,
-        backend init error, etc.) is allowed to propagate so callers can surface
-        it rather than silently degrading credential storage.
+        Returns None when the package is absent. Installed-keyring failures
+        propagate so callers can surface them instead of silently degrading
+        credential storage.
         """
         test_keyring = SystemKeyringSecretStore._test_keyring_module()
         if test_keyring is not None:

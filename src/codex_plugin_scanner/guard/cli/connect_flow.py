@@ -14,6 +14,7 @@ import urllib.request
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import TypedDict
 from uuid import uuid4
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -23,6 +24,8 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from ...version import __version__
 from ..browser_opener import open_browser_url
 from ..mdm.network import managed_urlopen
+from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
+from ..oauth_token_claims import oauth_device_id
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -40,6 +43,7 @@ from .oauth_client import (
     guard_api_base_path,
     resolve_guard_oauth_client_config,
 )
+from .oauth_credential_persistence import persist_oauth_local_credentials
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
@@ -93,6 +97,11 @@ class GuardOAuthLoopbackCallback:
     error_description: str | None = None
 
 
+class GuardOAuthTargetBinding(TypedDict):
+    machine_id: str | None
+    device_id: str | None
+
+
 @dataclass(frozen=True)
 class GuardOAuthTokenExchangeResult:
     access_token: str
@@ -104,6 +113,7 @@ class GuardOAuthTokenExchangeResult:
     machine_id: str | None
     supply_chain_entitlement: dict[str, object] | None
     workspace_id: str | None
+    device_id: str | None = None
     cloud_user_profile: dict[str, str] | None = None
     access_token_expires_at: str | None = None
 
@@ -119,6 +129,12 @@ class GuardOAuthTokenExchangeResult:
                 now=datetime.now(timezone.utc),
             ),
         )
+
+    def target_binding(self, *, machine_fallback: str | None = None) -> GuardOAuthTargetBinding:
+        return {
+            "machine_id": self.machine_id or machine_fallback,
+            "device_id": self.device_id,
+        }
 
 
 @dataclass
@@ -159,17 +175,6 @@ def _base64url_encode(data: bytes) -> str:
 def _base64url_decode(data: str) -> bytes:
     padding = "=" * (-len(data) % 4)
     return base64.urlsafe_b64decode(f"{data}{padding}")
-
-
-def _decode_access_token_claims(access_token: str) -> dict[str, object]:
-    parts = access_token.split(".")
-    if len(parts) != 3:
-        return {}
-    try:
-        payload = json.loads(_base64url_decode(parts[1]).decode("utf-8"))
-    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
 
 
 def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
@@ -537,6 +542,7 @@ def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAut
         token_type=token_type,
         grant_id=_read_nested_string(claims, "grant", "grantId"),
         machine_id=_read_nested_string(claims, "machine", "machineId"),
+        device_id=oauth_device_id(claims),
         supply_chain_entitlement=build_oauth_package_firewall_entitlement(
             payload,
             now=now,
@@ -942,6 +948,7 @@ def _persist_oauth_local_credentials(
     now: str,
     grant_id: str | None = None,
     machine_id: str | None = None,
+    device_id: str | None = None,
     supply_chain_entitlement: dict[str, object] | None = None,
     workspace_id: str | None = None,
     cloud_user_profile: dict[str, str] | None = None,
@@ -950,43 +957,25 @@ def _persist_oauth_local_credentials(
     access_token: str | None = None,
     access_token_expires_at: str | None = None,
 ) -> None:
-    with store.hold_oauth_refresh_lock():
-        store.set_oauth_local_credentials(
-            issuer=issuer,
-            client_id=client_id,
-            refresh_token=refresh_token,
-            dpop_private_key_pem=dpop_key_material.private_key_pem,
-            dpop_public_jwk=dpop_key_material.public_jwk,
-            dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
-            grant_id=grant_id,
-            machine_id=machine_id,
-            supply_chain_entitlement_expires_at=(
-                str(supply_chain_entitlement.get("supply_chain_entitlement_expires_at"))
-                if isinstance(supply_chain_entitlement, dict)
-                and isinstance(supply_chain_entitlement.get("supply_chain_entitlement_expires_at"), str)
-                else None
-            ),
-            supply_chain_firewall=(
-                bool(supply_chain_entitlement.get("supply_chain_firewall"))
-                if isinstance(supply_chain_entitlement, dict)
-                and isinstance(supply_chain_entitlement.get("supply_chain_firewall"), bool)
-                else None
-            ),
-            supply_chain_plan_id=(
-                str(supply_chain_entitlement.get("supply_chain_plan_id"))
-                if isinstance(supply_chain_entitlement, dict)
-                and isinstance(supply_chain_entitlement.get("supply_chain_plan_id"), str)
-                else None
-            ),
-            workspace_id=workspace_id,
-            cloud_user_profile=cloud_user_profile,
-            runtime_id=runtime_id,
-            runtime_label=runtime_label,
-            access_token=access_token,
-            access_token_expires_at=access_token_expires_at,
-            now=now,
-        )
-        reconcile_connect_state_with_oauth_entitlement(store, now=now)
+    persist_oauth_local_credentials(
+        store=store,
+        issuer=issuer,
+        client_id=client_id,
+        refresh_token=refresh_token,
+        dpop_key_material=dpop_key_material,
+        now=now,
+        grant_id=grant_id,
+        machine_id=machine_id,
+        device_id=device_id,
+        supply_chain_entitlement=supply_chain_entitlement,
+        workspace_id=workspace_id,
+        cloud_user_profile=cloud_user_profile,
+        runtime_id=runtime_id,
+        runtime_label=runtime_label,
+        access_token=access_token,
+        access_token_expires_at=access_token_expires_at,
+        reconcile=lambda target: reconcile_connect_state_with_oauth_entitlement(target, now=now),
+    )
 
 
 def run_guard_disconnect_command(
@@ -1034,15 +1023,19 @@ def run_guard_disconnect_command(
             "reconnect_command": CONNECT_COMMAND,
         }
     rotated_refresh_token = token_result.refresh_token
-    if rotated_refresh_token and rotated_refresh_token != refresh_token:
+    persisted_device_id = _read_nested_string(credentials, "device_id")
+    if (rotated_refresh_token and rotated_refresh_token != refresh_token) or (
+        token_result.device_id and token_result.device_id != persisted_device_id
+    ):
         _persist_oauth_local_credentials(
             store=store,
             issuer=oauth_client.issuer,
             client_id=client_id,
-            refresh_token=rotated_refresh_token,
+            refresh_token=rotated_refresh_token or refresh_token,
             dpop_key_material=dpop_key_material,
             grant_id=_read_nested_string(credentials, "grant_id"),
             machine_id=_read_nested_string(credentials, "machine_id"),
+            device_id=token_result.device_id or persisted_device_id,
             supply_chain_entitlement=token_result.supply_chain_entitlement,
             workspace_id=workspace_id,
             cloud_user_profile=token_result.cloud_user_profile,
@@ -1164,7 +1157,7 @@ def run_guard_device_connect_command(
         refresh_token=token_result.refresh_token,
         dpop_key_material=dpop_key_material,
         grant_id=token_result.grant_id,
-        machine_id=token_result.machine_id,
+        **token_result.target_binding(),
         supply_chain_entitlement=token_result.supply_chain_entitlement,
         workspace_id=token_result.workspace_id,
         cloud_user_profile=token_result.cloud_user_profile,
@@ -1251,7 +1244,7 @@ def run_guard_browser_connect_command(
             refresh_token=token_result.refresh_token,
             dpop_key_material=session.dpop_key_material,
             grant_id=token_result.grant_id,
-            machine_id=token_result.machine_id,
+            **token_result.target_binding(),
             supply_chain_entitlement=token_result.supply_chain_entitlement,
             workspace_id=token_result.workspace_id,
             cloud_user_profile=token_result.cloud_user_profile,

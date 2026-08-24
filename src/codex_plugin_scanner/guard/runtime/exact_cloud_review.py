@@ -102,22 +102,14 @@ def _capability_digest(capability: dict[str, object]) -> str:
 
 
 def _oauth_metadata(store: GuardStore) -> GuardReviewOAuthMetadata:
+    oauth_state = store.get_sync_payload("oauth_local_credentials")
+    if not isinstance(oauth_state, dict) or _text(oauth_state.get("device_id")) is None:
+        raise ExactCloudReviewError("cloud_review_device_binding_missing")
     try:
-        oauth = guard_review_oauth_metadata(store)
+        oauth = guard_review_oauth_metadata(store, require_device_dpop_binding=True)
     except GuardReviewContractError as error:
         raise ExactCloudReviewError(f"cloud_review_{error}") from error
-    raw_oauth = store.get_sync_payload("oauth_local_credentials")
-    device_id = _text(raw_oauth.get("device_id")) if isinstance(raw_oauth, dict) else None
-    if device_id is None or device_id == oauth.device_id:
-        return oauth
-    return GuardReviewOAuthMetadata(
-        device_id=device_id,
-        grant_id=oauth.grant_id,
-        installation_id=oauth.installation_id,
-        machine_id=oauth.machine_id,
-        runtime_id=oauth.runtime_id,
-        workspace_id=oauth.workspace_id,
-    )
+    return oauth
 
 
 def _oauth_binding(store: GuardStore) -> dict[str, object]:
@@ -252,7 +244,12 @@ def disable_exact_cloud_review(
     return exact_cloud_review_status(store, now=revoked_at.isoformat())
 
 
-def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
+def _verified_capability(
+    store: GuardStore,
+    *,
+    now: str | None = None,
+    revoke_binding_drift: bool = True,
+) -> dict[str, object]:
     capability = _verify(store, store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY))
     if capability.get("version") != EXACT_CLOUD_REVIEW_SCHEMA_VERSION:
         raise ExactCloudReviewError("cloud_review_capability_version_unsupported")
@@ -272,7 +269,8 @@ def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[s
     if expires_at <= current:
         raise ExactCloudReviewError("cloud_review_capability_expired")
     if any(capability.get(key) != value for key, value in _oauth_binding(store).items()):
-        _revoke_binding_drift(store, capability, now=current)
+        if revoke_binding_drift:
+            _revoke_binding_drift(store, capability, now=current)
         raise ExactCloudReviewError("cloud_review_capability_binding_mismatch")
     revocation = store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY)
     if revocation is not None:
@@ -366,7 +364,12 @@ def authorize_exact_cloud_review_job(
 ) -> AuthorizedCommandJob:
     """Authorize the dedicated operation without borrowing command permissions."""
 
-    from .command_capability import AuthorizedCommandJob, CommandCapabilityError, command_job_identity
+    from .command_capability import (
+        AuthorizedCommandJob,
+        CommandCapabilityError,
+        _command_job_seen,
+        command_job_identity,
+    )
 
     try:
         capability = _verified_capability(store, now=now)
@@ -383,6 +386,8 @@ def authorize_exact_cloud_review_job(
             raise ExactCloudReviewError("remote_exact_job_wrong_target")
         if identity["workspaceId"] != capability["workspaceId"]:
             raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
+        if _command_job_seen(store, identity, now=now):
+            raise ExactCloudReviewError("remote_exact_job_replayed")
     except (ExactCloudReviewError, KeyError) as error:
         code = error.code if isinstance(error, ExactCloudReviewError) else "remote_exact_job_invalid"
         raise CommandCapabilityError(code) from error

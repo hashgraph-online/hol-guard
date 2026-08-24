@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ..approval_resolution import approval_resolution_block_reason
@@ -127,7 +128,26 @@ def apply_exact_cloud_review(
         receipt_expires_at=receipt_expires_at,
         request_expires_at=request_expires_at.isoformat(),
     )
-    checked_at = parse_utc_timestamp(_text(result.get("checked_at"))) or current
+    return _resolution_from_result(
+        store,
+        result=result,
+        action=action,
+        receipt_id=receipt_id,
+        request_id=request_id,
+        fallback_time=current,
+    )
+
+
+def _resolution_from_result(
+    store: GuardStore,
+    *,
+    result: dict[str, object],
+    action: str,
+    receipt_id: str,
+    request_id: str,
+    fallback_time: datetime,
+) -> ExactCloudReviewResolution:
+    checked_at = parse_utc_timestamp(_text(result.get("checked_at"))) or fallback_time
     if result.get("replayed") is True:
         raise _reject(store, "remote_exact_replayed", now=checked_at)
     if result.get("resolved") is not True:
@@ -142,12 +162,7 @@ def apply_exact_cloud_review(
         {"operation": EXACT_CLOUD_REVIEW_OPERATION, "receipt_id": receipt_id, "request_id": request_id},
         now=resolved_at,
     )
-    return ExactCloudReviewResolution(
-        action=action,
-        receipt_id=receipt_id,
-        request_id=request_id,
-        resolved_request=resolved,
-    )
+    return ExactCloudReviewResolution(action, receipt_id, request_id, resolved)
 
 
 def _binding_error_code(code: str) -> str:

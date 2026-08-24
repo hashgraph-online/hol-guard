@@ -6,7 +6,6 @@ import base64
 import hashlib
 import json
 from copy import deepcopy
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
@@ -30,6 +29,12 @@ from .policy_bundle_trusted_keys import (
     safe_load_policy_bundle_verification_keys,
     signing_key_is_current,
 )
+from .review_exact_capability_advertisement import attach_exact_review_capability
+from .review_oauth_binding import (
+    GuardReviewContractError,
+    GuardReviewOAuthMetadata,
+    guard_review_oauth_metadata,  # noqa: F401 - compatibility re-export
+)
 from .stable_json import stable_json_serialize
 
 _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION = "guard.local-review-request.v1"
@@ -40,25 +45,11 @@ _REMOTE_APPROVAL_RESOLVER_ROLES = frozenset({"owner", "workspace-owner", "admin"
 _REMOTE_APPROVAL_KEY_PURPOSE = "remote_approval"
 _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
-_CLAIM_HASH_KEYS = ("claimHash",)
+_CLAIM_HASH_KEYS = ("claimHash", "exactReviewCapability")
 _SIGNED_PAYLOAD_STRIP_KEYS = ("payloadHash", "signature", "signatureAlgorithm", "verificationKeys", "bundleHash")
 _GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY = "guard_review_verification_keyring"
 
 RemoteApprovalDecision = Literal["allow", "block"]
-
-
-class GuardReviewContractError(ValueError):
-    """Raised when a Guard Review backend contract is malformed or unsafe."""
-
-
-@dataclass(frozen=True, slots=True)
-class GuardReviewOAuthMetadata:
-    device_id: str
-    grant_id: str | None
-    installation_id: str
-    machine_id: str
-    runtime_id: str | None
-    workspace_id: str
 
 
 def _now() -> datetime:
@@ -213,26 +204,6 @@ def _verify_signed_payload(
         raise GuardReviewContractError("signature_mismatch") from error
 
 
-def guard_review_oauth_metadata(store) -> GuardReviewOAuthMetadata:
-    credentials = store.get_oauth_local_credentials(allow_primary=False)
-    if not isinstance(credentials, dict):
-        raise GuardReviewContractError("missing_oauth_credentials")
-    installation_id = _non_empty_string(store.get_or_create_installation_id())
-    machine_id = _non_empty_string(credentials.get("machine_id"))
-    workspace_id = _non_empty_string(credentials.get("workspace_id"))
-    if installation_id is None or machine_id is None or workspace_id is None:
-        raise GuardReviewContractError("missing_oauth_binding")
-    device_id = _non_empty_string(credentials.get("device_id")) or machine_id
-    return GuardReviewOAuthMetadata(
-        device_id=device_id,
-        grant_id=_non_empty_string(credentials.get("grant_id")),
-        installation_id=installation_id,
-        machine_id=machine_id,
-        runtime_id=_non_empty_string(credentials.get("runtime_id")),
-        workspace_id=workspace_id,
-    )
-
-
 def _action_envelope_hash(request_row: dict[str, object]) -> str:
     envelope = _read_json_mapping(request_row.get("action_envelope_json")) or {}
     return _sha256_hex(_stable_serialize(envelope))
@@ -357,7 +328,7 @@ def build_local_review_request_claim(
         "workspaceId": oauth.workspace_id,
     }
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
-    return claim
+    return attach_exact_review_capability(claim, oauth, store)
 
 
 def compute_local_review_request_claim_hash(claim: dict[str, object]) -> str:

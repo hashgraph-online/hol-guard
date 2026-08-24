@@ -67,12 +67,7 @@ def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
-    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
-
-    Also installs a test-only resolver override so sync-path exercises stay hermetic
-    (no OAuth token refresh against the network). Tests that need real sync against a
-    local server pass sync_url=<url>.
-    """
+    """Seed OAuth and a hermetic sync resolver; pass sync_url for local servers."""
     from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
     from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
@@ -84,6 +79,7 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
         dpop_private_key_pem=dpop_key_material.private_key_pem,
         dpop_public_jwk=dpop_key_material.public_jwk,
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        device_id="machine-1",
         grant_id="grant-1",
         machine_id="machine-1",
         workspace_id=workspace_id,

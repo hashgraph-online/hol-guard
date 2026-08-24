@@ -31,11 +31,13 @@ from codex_plugin_scanner.guard.review_contracts import (
 from codex_plugin_scanner.guard.runtime import (
     command_executors,
     command_queue,
+    command_queue_authority,
     local_request_snapshots,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_oauth_token_support import oauth_binding_access_token
 from tests.guard_review_signing_helpers import (
     REVIEW_SIGNING_KEY_ID,
     review_trusted_keyring_payload,
@@ -51,12 +53,6 @@ def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _isolate_legacy_queue_mechanics(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep existing transport/executor tests focused on their original layer.
-
-    Signed capability validation has dedicated integration coverage in
-    test_guard_command_capability.py.
-    """
-
     monkeypatch.setattr(
         command_queue,
         "command_capability_operations",
@@ -72,7 +68,7 @@ def _isolate_legacy_queue_mechanics(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     )
     monkeypatch.setattr(
-        command_queue,
+        command_queue_authority,
         "authorize_command_job",
         lambda _store, job, **_kwargs: SimpleNamespace(
             identity={"id": job.get("id")},
@@ -107,6 +103,7 @@ class FakeStore:
 
     def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object]:
         return {
+            "device_id": "machine-1",
             "grant_id": "grant-1",
             "machine_id": "machine-1",
             "runtime_id": "runtime-1",
@@ -466,7 +463,6 @@ def _signed_decision_memory_bundle(
 def test_decision_memory_accepts_its_unscoped_signing_authority(tmp_path: Path) -> None:
     store = FakeStore(tmp_path / "guard-home")
     bundle = _signed_decision_memory_bundle(store)
-
     assert validated_decision_memory_bundle(bundle, store=store) == bundle
 
 
@@ -489,6 +485,7 @@ def _oauth_store(tmp_path: Path) -> GuardStore:
         dpop_private_key_pem=dpop_key_material.private_key_pem,
         dpop_public_jwk=dpop_key_material.public_jwk,
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        device_id="machine-1",
         grant_id="grant-1",
         machine_id="machine-1",
         workspace_id="workspace-1",
@@ -1281,7 +1278,11 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
                     for operation in command_executors.SUPPORTED_COMMAND_OPERATIONS
                     if operation not in command_executors.EXACT_CLOUD_REVIEW_OPERATIONS
                 ],
-                "schemaVersions": dict(command_executors.COMMAND_OPERATION_SCHEMA_VERSIONS),
+                "schemaVersions": {
+                    operation: command_executors.COMMAND_OPERATION_SCHEMA_VERSIONS[operation]
+                    for operation in command_executors.SUPPORTED_COMMAND_OPERATIONS
+                    if operation not in command_executors.EXACT_CLOUD_REVIEW_OPERATIONS
+                },
             },
             "localRequestsSnapshot": {
                 "requests": [],
@@ -1801,7 +1802,7 @@ def test_poll_once_reuses_cached_access_token_across_oauth_polls(
         observed_refresh_tokens.append(refresh_token)
         current_index = len(observed_refresh_tokens)
         return {
-            "access_token": f"access-token-{current_index}",
+            "access_token": oauth_binding_access_token("machine-1", "grant-1", "machine-1", "workspace-1"),
             "access_token_expires_at": "2099-07-05T00:00:00+00:00",
             "refresh_token": f"refresh-token-{current_index + 1}",
             "package_firewall_entitlement": {
@@ -1825,18 +1826,17 @@ def test_poll_once_reuses_cached_access_token_across_oauth_polls(
 
     monkeypatch.setattr(guard_runner_module, "_refresh_guard_oauth_access_token", fake_refresh)
     monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
-
     first_status = command_queue.poll_command_queue_once(store, _context(tmp_path))
     second_status = command_queue.poll_command_queue_once(store, _context(tmp_path))
 
     assert first_status["last_poll_was_empty"] is True
     assert second_status["last_poll_was_empty"] is True
     assert observed_refresh_tokens == ["refresh-token-1"]
-    assert observed_access_tokens == ["access-token-1", "access-token-1"]
+    assert len(set(observed_access_tokens)) == 1
     credentials = store.get_oauth_local_credentials()
     assert credentials is not None
     assert credentials["refresh_token"] == "refresh-token-2"
-    assert credentials["access_token"] == "access-token-1"
+    assert credentials["access_token"] == observed_access_tokens[0]
     assert credentials["access_token_expires_at"] == "2099-07-05T00:00:00+00:00"
 
 

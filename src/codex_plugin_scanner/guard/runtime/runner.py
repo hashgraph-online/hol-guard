@@ -16,7 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from base64 import urlsafe_b64decode, urlsafe_b64encode
+from base64 import urlsafe_b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
@@ -49,6 +49,8 @@ from ..managed_controls_policy_bundle import parsed_managed_controls_from_valida
 from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
 from ..models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
+from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
+from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
 from ..package_firewall_defaults import extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -4576,52 +4578,11 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
 
 
 _OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
-
-
-def _decode_oauth_access_token_claims(access_token: str) -> dict[str, object]:
-    parts = access_token.split(".")
-    if len(parts) != 3:
-        return {}
-    try:
-        padding = "=" * (-len(parts[1]) % 4)
-        payload = json.loads(urlsafe_b64decode(parts[1] + padding).decode("utf-8"))
-    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _nested_oauth_claim(claims: dict[str, object], section: str, key: str) -> str | None:
-    nested = claims.get(section)
-    if not isinstance(nested, dict):
-        return None
-    return _optional_string(nested.get(key))
-
-
-def _oauth_binding_metadata_from_access_token(credentials: dict[str, object]) -> dict[str, str]:
-    access_token = _optional_string(credentials.get("access_token"))
-    issuer = _optional_string(credentials.get("issuer"))
-    if access_token is None or issuer is None:
-        return {}
-    claims = _decode_oauth_access_token_claims(access_token)
-    token_issuer = _optional_string(claims.get("iss"))
-    if token_issuer is not None and token_issuer.rstrip("/") != issuer.rstrip("/"):
-        return {}
-    claimed = {
-        "grant_id": _nested_oauth_claim(claims, "grant", "grantId"),
-        "machine_id": _nested_oauth_claim(claims, "machine", "machineId"),
-        "workspace_id": _nested_oauth_claim(claims, "workspace", "workspaceId"),
-    }
-    if not all(claimed.values()):
-        return {}
-    for key, claimed_value in claimed.items():
-        existing_value = _optional_string(credentials.get(key))
-        if existing_value is not None and existing_value != claimed_value:
-            return {}
-    return {key: str(value) for key, value in claimed.items()}
+_oauth_binding_metadata_from_access_token = oauth_binding_from_credentials
 
 
 def _persist_recovered_oauth_binding(store: GuardStore, credentials: dict[str, object]) -> bool:
-    recovered = _oauth_binding_metadata_from_access_token(credentials)
+    recovered = oauth_binding_from_credentials(credentials)
     if not recovered or all(_optional_string(credentials.get(key)) is not None for key in recovered):
         return False
     refresh_token = _optional_string(credentials.get("refresh_token"))
@@ -4718,8 +4679,14 @@ def _persist_rotated_oauth_refresh_token(
             credentials_supply_chain_firewall if isinstance(credentials_supply_chain_firewall, bool) else None
         )
     effective_access_token = access_token or _optional_string(credentials.get("access_token"))
-    recovered_binding = _oauth_binding_metadata_from_access_token(
-        {**credentials, "access_token": effective_access_token}
+    if access_token is not None:
+        recovered_binding = oauth_binding_metadata(access_token, issuer=issuer)
+    else:
+        recovered_binding = oauth_binding_from_credentials({**credentials, "access_token": effective_access_token})
+    effective_binding = oauth_refresh_binding(
+        credentials,
+        recovered_binding,
+        refreshed=access_token is not None,
     )
     store.set_oauth_local_credentials(
         issuer=issuer,
@@ -4728,8 +4695,9 @@ def _persist_rotated_oauth_refresh_token(
         dpop_private_key_pem=dpop_private_key_pem,
         dpop_public_jwk={str(key): str(value) for key, value in dpop_public_jwk.items()},
         dpop_public_jwk_thumbprint=dpop_public_jwk_thumbprint,
-        grant_id=_optional_string(credentials.get("grant_id")) or recovered_binding.get("grant_id"),
-        machine_id=_optional_string(credentials.get("machine_id")) or recovered_binding.get("machine_id"),
+        grant_id=effective_binding["grant_id"],
+        machine_id=effective_binding["machine_id"],
+        device_id=effective_binding["device_id"],
         supply_chain_entitlement_expires_at=(
             _optional_string(package_firewall_entitlement.get("supply_chain_entitlement_expires_at"))
             if isinstance(package_firewall_entitlement, dict)
@@ -4741,7 +4709,7 @@ def _persist_rotated_oauth_refresh_token(
             if isinstance(package_firewall_entitlement, dict)
             else _optional_string(credentials.get("supply_chain_plan_id"))
         ),
-        workspace_id=_optional_string(credentials.get("workspace_id")) or recovered_binding.get("workspace_id"),
+        workspace_id=effective_binding["workspace_id"],
         cloud_user_profile=cloud_user_profile,
         runtime_id=_optional_string(credentials.get("runtime_id")),
         runtime_label=_optional_string(credentials.get("runtime_label")),

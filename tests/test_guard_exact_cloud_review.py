@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import threading
-import urllib.error
-import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -13,7 +11,6 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args, main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.daemon import command_queue_worker as queue_worker_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.headless_exact_cloud_review import build_headless_exact_cloud_review_response
@@ -24,15 +21,21 @@ from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     payload_hash_for_remote_approval_envelope,
 )
+from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.command_capability import (
     CommandCapabilityError,
-    authorize_command_job,
     issue_command_capability,
+    mark_command_job_consumed,
 )
 from codex_plugin_scanner.guard.runtime.command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
+    _local_request_snapshot_payload,
     execute_guard_command_job,
+)
+from codex_plugin_scanner.guard.runtime.command_queue_authority import (
+    authorize_command_queue_job,
+    command_queue_oauth_target,
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
@@ -44,36 +47,17 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     exact_cloud_review_operations,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_exact_cloud_review_support import (
+    connected_exact_review_store as _connected_store,
+)
+from tests.guard_exact_cloud_review_support import (
+    post_json,
+)
 from tests.guard_review_signing_helpers import (
     REVIEW_SIGNING_KEY_ID,
-    review_trusted_keyring_payload,
     review_verification_keys,
     sign_review_payload,
 )
-
-
-def _connected_store(tmp_path: Path) -> GuardStore:
-    store = GuardStore(tmp_path / "guard-home")
-    dpop = generate_dpop_key_pair()
-    machine_id = str(store.get_device_metadata()["installation_id"])
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-token",
-        dpop_private_key_pem=dpop.private_key_pem,
-        dpop_public_jwk=dpop.public_jwk,
-        dpop_public_jwk_thumbprint=dpop.public_jwk_thumbprint,
-        grant_id="grant-1",
-        machine_id=machine_id,
-        workspace_id="workspace-1",
-        now=datetime.now(timezone.utc).isoformat(),
-    )
-    store.set_sync_payload(
-        "guard_review_verification_keyring",
-        review_trusted_keyring_payload(workspace_id="workspace-1"),
-        datetime.now(timezone.utc).isoformat(),
-    )
-    return store
 
 
 def _request(request_id: str, *, harness: str = "codex") -> GuardApprovalRequest:
@@ -114,13 +98,12 @@ def _remote_approval(
     decision: str = "allow_once",
     issued_at: datetime | None = None,
     expires_at: datetime | None = None,
+    source_claim: dict[str, object] | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     assert isinstance(request, dict)
-    claim = build_local_review_request_claim(
-        request_row=request,
-        oauth=_oauth_metadata(store),
-        store=store,
+    claim = source_claim or build_local_review_request_claim(
+        request_row=request, oauth=_oauth_metadata(store), store=store
     )
     issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = expires_at or issued_at + timedelta(minutes=5)
@@ -169,7 +152,9 @@ def _job(
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
     capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
-    device_id = capability.get("deviceId") if isinstance(capability, dict) else credentials["machine_id"]
+    assert isinstance(capability, dict)
+    device_id = capability.get("deviceId")
+    assert isinstance(device_id, str) and device_id
     return {
         "id": "exact-job-1",
         "leaseId": "exact-lease-1",
@@ -183,24 +168,6 @@ def _job(
         "idempotencyKey": "exact-idempotency-key",
         "payload": {"harness": "codex", "remoteApproval": remote_approval},
     }
-
-
-def _request_json(port: int, path: str, token: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{port}{path}",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Origin": "http://127.0.0.1:6174",
-            "X-Guard-Token": token,
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            return response.status, json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read().decode("utf-8"))
 
 
 def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_path: Path) -> None:
@@ -249,10 +216,31 @@ def test_exact_cloud_review_replay_is_durable_and_rejected_before_resolution(tmp
 
 
 def test_exact_cloud_review_capability_is_separate_from_generic_commands(tmp_path: Path) -> None:
+    missing_store = _connected_store(tmp_path / "missing-device", missing_device_id=True)
+    missing_credentials = missing_store.get_oauth_local_credentials(allow_primary=False)
+    assert isinstance(missing_credentials, dict) and missing_credentials["machine_id"]
+    with pytest.raises(ExactCloudReviewError, match="cloud_review_device_binding_missing"):
+        enable_exact_cloud_review(missing_store)
     store = _connected_store(tmp_path)
+    oauth_state = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(oauth_state, dict)
+    without_device = {key: value for key, value in oauth_state.items() if key != "device_id"}
+    store.set_sync_payload("oauth_local_credentials", without_device, datetime.now(timezone.utc).isoformat())
+    with pytest.raises(ExactCloudReviewError, match="cloud_review_device_binding_missing"):
+        enable_exact_cloud_review(store)
+    store.set_sync_payload("oauth_local_credentials", oauth_state, datetime.now(timezone.utc).isoformat())
     status = enable_exact_cloud_review(store)
 
     assert status["enabled"] is True
+    request = _request("exact-missing-device-atomic")
+    _add_request(store, request)
+    approval = _remote_approval(store, request.request_id, receipt_id="exact-missing-device-atomic")
+    store.set_sync_payload("oauth_local_credentials", without_device, datetime.now(timezone.utc).isoformat())
+    with pytest.raises(ExactCloudReviewError, match="cloud_review_device_binding_missing"):
+        apply_exact_cloud_review(store, remote_approval=approval)
+    pending = store.get_approval_request(request.request_id)
+    assert pending is not None and pending["status"] == "pending"
+    store.set_sync_payload("oauth_local_credentials", oauth_state, datetime.now(timezone.utc).isoformat())
     diagnostics = status.get("diagnostics")
     assert isinstance(diagnostics, dict)
     assert {"capability", "oauth", "outbox", "worker"} <= diagnostics.keys()
@@ -315,23 +303,42 @@ def test_hol_guard_routes_cloud_review_as_a_top_level_command() -> None:
 
 
 def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_approval(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path)
+    store = _connected_store(tmp_path, device_id="device-1")
+    credentials = store.get_oauth_local_credentials(allow_primary=False)
+    assert isinstance(credentials, dict)
+    guard_runner_module._persist_rotated_oauth_refresh_token(
+        store=store,
+        credentials=credentials,
+        refresh_token="rotated-refresh-token",
+    )
     oauth_state = store.get_sync_payload("oauth_local_credentials")
     assert isinstance(oauth_state, dict)
-    store.set_sync_payload(
-        "oauth_local_credentials",
-        {**oauth_state, "device_id": "device-1"},
-        datetime.now(timezone.utc).isoformat(),
-    )
+    assert oauth_state["device_id"] == "device-1"
     request = _request("exact-queue")
     _add_request(store, request)
+    snapshot = _local_request_snapshot_payload(store)
+    snapshot_requests = snapshot.get("requests")
+    assert isinstance(snapshot_requests, list) and snapshot_requests
+    snapshot_claim = snapshot_requests[0].get("claim")
+    assert isinstance(snapshot_claim, dict)
+    assert snapshot_claim["deviceId"] == "device-1"
+    assert snapshot_claim["machineId"] == oauth_state["machine_id"]
     enable_exact_cloud_review(store)
-    job = _job(store, _remote_approval(store, request.request_id, receipt_id="exact-receipt-queue"))
+    assert command_queue_oauth_target(store) == ("device-1", oauth_state["workspace_id"])
+    job = _job(
+        store,
+        _remote_approval(
+            store,
+            request.request_id,
+            receipt_id="exact-receipt-queue",
+            source_claim=snapshot_claim,
+        ),
+    )
 
-    authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+    authorized = authorize_command_queue_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
     assert authorized.identity["deviceId"] == "device-1"
     with pytest.raises(CommandCapabilityError, match="remote_exact_job_wrong_target"):
-        authorize_command_job(
+        authorize_command_queue_job(
             store,
             {**job, "deviceId": oauth_state["machine_id"]},
             schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
@@ -348,6 +355,25 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     assert isinstance(result_data, dict)
     assert result_data["status"] == "completed"
     assert store.get_sync_payload("guard_review_memory_registry") is None
+    second = _request("exact-queue-replay-second")
+    _add_request(store, second)
+    mark_command_job_consumed(store, authorized)
+    replay = _job(store, _remote_approval(store, second.request_id, receipt_id="exact-job-second"))
+
+    with pytest.raises(CommandCapabilityError, match="remote_exact_job_replayed"):
+        authorize_command_queue_job(store, replay, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+
+    second_row = store.get_approval_request(second.request_id)
+    assert second_row is not None and second_row["status"] == "pending"
+    recovery_now = datetime.now(timezone.utc).isoformat()
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=recovery_now,
+    )
+    store.delete_sync_payload("oauth_local_credentials")
+    recovered = store._recover_missing_oauth_local_credentials_payload(now=recovery_now)
+    assert isinstance(recovered, dict) and recovered["device_id"] == "device-1"
 
 
 def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -361,7 +387,7 @@ def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypat
     try:
         token = load_guard_daemon_auth_token(store.guard_home)
         assert token is not None
-        status, payload = _request_json(
+        status, payload = post_json(
             daemon.port,
             "/v1/requests/remote-exact",
             token,
@@ -413,8 +439,12 @@ def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypat
     assert failure_payload["delivery_status"] == "incomplete"
     assert failure_payload["post_commit_errors"] == ["receipt_record_failed", "harness_resume_failed"]
     assert side_effect_calls == ["receipt", "resume"]
-    delivery_events = store.list_events(limit=10, event_name="cloud_review.exact_delivery_failed")
-    assert {event["payload"]["code"] for event in delivery_events} == {
+    delivery_codes: set[object] = set()
+    for event in store.list_events(limit=10, event_name="cloud_review.exact_delivery_failed"):
+        event_payload = event.get("payload")
+        assert isinstance(event_payload, dict)
+        delivery_codes.add(event_payload.get("code"))
+    assert delivery_codes == {
         "harness_resume_failed",
         "receipt_record_failed",
     }

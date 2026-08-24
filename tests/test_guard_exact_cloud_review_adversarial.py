@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     disable_exact_cloud_review,
     enable_exact_cloud_review,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_exact_cloud_review import _add_request, _connected_store, _job, _remote_approval, _request
 
 
@@ -164,6 +165,7 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
         dpop_public_jwk_thumbprint=dpop.public_jwk_thumbprint,
         grant_id="grant-2",
         machine_id="machine-2",
+        device_id=dpop.public_jwk_thumbprint,
         workspace_id="workspace-2",
         now=datetime.now(timezone.utc).isoformat(),
     )
@@ -179,9 +181,10 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
         refresh_token="restored-refresh-token",
         dpop_private_key_pem=restored_dpop.private_key_pem,
         dpop_public_jwk=restored_dpop.public_jwk,
-        dpop_public_jwk_thumbprint=restored_dpop.public_jwk_thumbprint,
+        dpop_public_jwk_thumbprint="device-default",
         grant_id="grant-1",
         machine_id=str(store.get_device_metadata()["installation_id"]),
+        device_id="device-default",
         workspace_id="workspace-1",
         now=datetime.now(timezone.utc).isoformat(),
     )
@@ -205,8 +208,8 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     assert isinstance(oauth, dict)
     verified = exact_apply_module._verified_capability
 
-    def _verify_then_remove_oauth(*args: object, **kwargs: object) -> dict[str, object]:
-        capability = verified(*args, **kwargs)
+    def _verify_then_remove_oauth(store_arg: GuardStore, *, now: str | None = None) -> dict[str, object]:
+        capability = verified(store_arg, now=now)
         store.delete_sync_payload("oauth_local_credentials")
         return capability
 
@@ -263,17 +266,56 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     )
     monkeypatch.setattr(store, "resolve_one_request_with_signed_remote_exact_result", original_resolve)
 
+    missing_device = _request("exact-device-disappears")
+    _add_request(store, missing_device)
+
+    def _remove_device_then_resolve(*args: object, **kwargs: object) -> dict[str, object]:
+        store.set_sync_payload(
+            "oauth_local_credentials",
+            {key: value for key, value in rotation_oauth_state.items() if key != "device_id"},
+            datetime.now(timezone.utc).isoformat(),
+        )
+        return original_resolve(*args, **kwargs)
+
+    monkeypatch.setattr(store, "resolve_one_request_with_signed_remote_exact_result", _remove_device_then_resolve)
+    with pytest.raises(ExactCloudReviewError, match="remote_exact_oauth_changed"):
+        apply_exact_cloud_review(
+            store,
+            remote_approval=_remote_approval(store, missing_device.request_id, receipt_id="exact-device-disappears"),
+        )
+    missing_device_row = store.get_approval_request(missing_device.request_id)
+    assert missing_device_row is not None and missing_device_row["status"] == "pending"
+    store.set_sync_payload("oauth_local_credentials", rotation_oauth_state, datetime.now(timezone.utc).isoformat())
+    monkeypatch.setattr(store, "resolve_one_request_with_signed_remote_exact_result", original_resolve)
+
     previous_capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
     assert isinstance(previous_capability, dict)
     original_replace = store.replace_exact_cloud_review_state
     raced_enable = False
 
-    def _enable_before_disable(**kwargs: object) -> bool:
+    def _enable_before_disable(
+        *,
+        capability: dict[str, object] | None,
+        revocation: dict[str, object] | None,
+        now: str,
+        event_name: str,
+        event_payload: dict[str, object],
+        expected_capability: object = None,
+        require_expected_capability: bool = False,
+    ) -> bool:
         nonlocal raced_enable
-        if kwargs.get("event_name") == "cloud_review.exact_capability_revoked" and not raced_enable:
+        if event_name == "cloud_review.exact_capability_revoked" and not raced_enable:
             raced_enable = True
             enable_exact_cloud_review(store)
-        return original_replace(**kwargs)
+        return original_replace(
+            capability=capability,
+            revocation=revocation,
+            now=now,
+            event_name=event_name,
+            event_payload=event_payload,
+            expected_capability=expected_capability,
+            require_expected_capability=require_expected_capability,
+        )
 
     monkeypatch.setattr(store, "replace_exact_cloud_review_state", _enable_before_disable)
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_changed"):
@@ -323,18 +365,21 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     assert store.has_exact_cloud_review_receipt("exact-request-cas") is False
 
 
-def test_exact_cloud_review_receipt_table_is_added_to_prechange_store(tmp_path: Path) -> None:
+def test_exact_cloud_review_reuses_durable_remote_receipt_ledger(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
+    request = _request("exact-shared-receipt-ledger")
+    _add_request(store, request)
+    enable_exact_cloud_review(store)
+    apply_exact_cloud_review(
+        store,
+        remote_approval=_remote_approval(store, request.request_id, receipt_id="exact-shared-receipt"),
+    )
     with sqlite3.connect(store.path) as connection:
-        connection.execute("drop table guard_exact_cloud_review_receipts")
-
-    reopened = type(store)(store.guard_home)
-
-    with sqlite3.connect(reopened.path) as connection:
         row = connection.execute(
-            "select 1 from sqlite_master where type = 'table' and name = 'guard_exact_cloud_review_receipts'"
+            "select request_id from guard_remote_once_receipts where receipt_id = ?",
+            ("exact-shared-receipt",),
         ).fetchone()
-    assert row is not None
+    assert row == (request.request_id,)
 
 
 def test_connect_time_consent_provisions_exact_review_only_after_success(

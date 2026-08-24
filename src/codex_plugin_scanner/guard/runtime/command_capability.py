@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
 from .time_support import parse_utc_timestamp
 
@@ -149,18 +150,17 @@ def _verify_signed_payload(store: GuardStore, payload: object) -> dict[str, obje
 def _oauth_target(store: GuardStore) -> tuple[str, str]:
     # Routine daemon/dashboard checks must stay non-interactive. Explicit
     # connection repair can promote credentials before capability issuance.
-    credentials = store.get_oauth_local_credentials(allow_primary=False)
-    if not isinstance(credentials, dict):
+    try:
+        oauth = guard_review_oauth_metadata(store)
+    except GuardReviewContractError as error:
+        raise CommandCapabilityError("cloud_connection_required") from error
+    if not oauth.machine_id:
         raise CommandCapabilityError("cloud_connection_required")
-    device_id = credentials.get("machine_id")
-    workspace_id = credentials.get("workspace_id")
-    if not isinstance(device_id, str) or not device_id:
-        raise CommandCapabilityError("cloud_device_binding_missing")
-    if not isinstance(workspace_id, str) or not workspace_id:
-        raise CommandCapabilityError("cloud_workspace_binding_missing")
     local_device = store.get_device_metadata().get("installation_id")
-    if local_device != device_id:
+    if local_device != oauth.machine_id:
         raise CommandCapabilityError("cloud_device_binding_mismatch")
+    device_id = oauth.device_id
+    workspace_id = oauth.workspace_id
     return device_id, workspace_id
 
 
@@ -184,12 +184,7 @@ def issue_command_capability(
     normalized_operations = tuple(sorted(set(operations)))
     if not normalized_operations:
         raise CommandCapabilityError("capability_operations_required")
-    classified_operations = (
-        set(READ_ONLY_COMMAND_OPERATIONS)
-        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
-        | set(STATE_CHANGING_COMMAND_OPERATIONS)
-    )
-    if any(operation not in supported or operation not in classified_operations for operation in normalized_operations):
+    if set(normalized_operations) - supported or "guard.review.resolveExact" in operations:
         raise CommandCapabilityError("unsupported_capability_operation")
     device_id, workspace_id = _oauth_target(store)
     capability = _signed_payload(
@@ -393,11 +388,6 @@ def authorize_command_job(
     now: str | None = None,
 ) -> AuthorizedCommandJob:
     """Validate capability and complete source-to-target lease bindings."""
-
-    if job.get("operation") == "guard.review.resolveExact":
-        from .exact_cloud_review import authorize_exact_cloud_review_job
-
-        return authorize_exact_cloud_review_job(store, job, schema_versions=schema_versions, now=now)
 
     capability = _verified_capability(store, now=now)
     identity = command_job_identity(job, schema_versions=schema_versions)

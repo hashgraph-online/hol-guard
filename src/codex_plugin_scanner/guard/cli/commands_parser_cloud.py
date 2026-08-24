@@ -16,6 +16,13 @@ import argparse
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
+def _add_exact_review_connect_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--enable-exact-cloud-review",
+        action="store_true",
+        help="After successful sign-in, explicitly enable signed one-request Cloud Review on this device.",
+    )
+
 def _configure_guard_cloud_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -35,7 +42,6 @@ def _configure_guard_cloud_parsers(
         help="Named connection profile for multi-environment usage.",
     )
     login_parser.add_argument("--json", action="store_true")
-
     connect_parser = guard_subparsers.add_parser(
         "connect",
         help="Open browser OAuth, pair this runtime to HOL Guard, and send the first sync",
@@ -78,11 +84,7 @@ def _configure_guard_cloud_parsers(
         default="default",
         help="Named connection profile for multi-environment usage (e.g. 'staging'). Defaults to 'default'.",
     )
-    connect_parser.add_argument(
-        "--enable-exact-cloud-review",
-        action="store_true",
-        help="After successful sign-in, explicitly enable signed one-request Cloud Review on this device.",
-    )
+    _add_exact_review_connect_option(connect_parser)
     connect_parser.add_argument(
         "--confirm-source",
         help="With reassign-quarantined, approve the exact destination source name.",

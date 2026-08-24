@@ -46,6 +46,7 @@ def _connected_store(tmp_path: Path) -> GuardStore:
         dpop_private_key_pem=dpop.private_key_pem,
         dpop_public_jwk=dpop.public_jwk,
         dpop_public_jwk_thumbprint=dpop.public_jwk_thumbprint,
+        device_id=installation_id,
         grant_id="grant-1",
         machine_id=installation_id,
         workspace_id="workspace-1",

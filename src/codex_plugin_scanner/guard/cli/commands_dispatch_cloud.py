@@ -182,53 +182,30 @@ def _run_guard_connect_command(
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
-    if not bool(getattr(args, "headless", False)):
-        payload, exit_code = _build_guard_device_connect_payload(
-            store=store,
-            connect_url=args.connect_url,
-            use_browser_oauth=True,
-            open_device_browser=False,
-            wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-            announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
-            home_dir=context.home_dir if context is not None else None,
-            workspace_dir=context.workspace_dir if context is not None else workspace,
-        )
-        if payload is None:
-            return exit_code
-        payload = provision_connect_time_exact_cloud_review(
-            args=args,
-            store=store,
-            guard_home=guard_home or store.guard_home,
-            payload=payload,
-            exit_code=exit_code,
-        )
-        _emit("connect", payload, getattr(args, "json", False))
+    headless = bool(getattr(args, "headless", False))
+    payload, exit_code = _build_guard_device_connect_payload(
+        store=store,
+        connect_url=args.connect_url,
+        use_browser_oauth=not headless,
+        open_device_browser=headless and bool(getattr(args, "open_browser", False)),
+        wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
+        announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
+        ci_safe=ci_safe if headless else False,
+        machine_label=machine_label if headless else None,
+        home_dir=context.home_dir if context is not None else None,
+        workspace_dir=context.workspace_dir if context is not None else workspace,
+    )
+    if payload is None:
         return exit_code
-    if bool(getattr(args, "headless", False)):
-        payload, exit_code = _build_guard_device_connect_payload(
-            store=store,
-            connect_url=args.connect_url,
-            use_browser_oauth=False,
-            open_device_browser=bool(getattr(args, "open_browser", False)),
-            wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
-            announce_copy=None if getattr(args, "json", False) else _announce_guard_device_connect_copy,
-            ci_safe=ci_safe,
-            machine_label=machine_label,
-            home_dir=context.home_dir if context is not None else None,
-            workspace_dir=context.workspace_dir if context is not None else workspace,
-        )
-        if payload is None:
-            return exit_code
-        payload = provision_connect_time_exact_cloud_review(
-            args=args,
-            store=store,
-            guard_home=guard_home or store.guard_home,
-            payload=payload,
-            exit_code=exit_code,
-        )
-        _emit("connect", payload, getattr(args, "json", False))
-        return exit_code
-    return 2
+    payload = provision_connect_time_exact_cloud_review(
+        args=args,
+        store=store,
+        guard_home=guard_home or store.guard_home,
+        payload=payload,
+        exit_code=exit_code,
+    )
+    _emit("connect", payload, getattr(args, "json", False))
+    return exit_code
 
 
 def _run_guard_disconnect_command(
