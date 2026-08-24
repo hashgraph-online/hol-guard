@@ -238,7 +238,7 @@ def test_exact_cloud_review_rejects_envelope_after_oauth_grant_rotation(tmp_path
         apply_exact_cloud_review(store, remote_approval=old_envelope)
 
 
-def test_exact_cloud_review_rechecks_dpop_thumbprint_inside_apply_transaction(
+def test_exact_cloud_review_rechecks_active_dpop_keypair_inside_apply_transaction(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -259,7 +259,7 @@ def test_exact_cloud_review_rechecks_dpop_thumbprint_inside_apply_transaction(
             refresh_token=str(credentials["refresh_token"]),
             dpop_private_key_pem=rotated.private_key_pem,
             dpop_public_jwk=rotated.public_jwk,
-            dpop_public_jwk_thumbprint=rotated.public_jwk_thumbprint,
+            dpop_public_jwk_thumbprint=str(credentials["dpop_public_jwk_thumbprint"]),
             grant_id=str(credentials["grant_id"]),
             machine_id=str(credentials["machine_id"]),
             device_id=str(credentials["device_id"]),
@@ -332,11 +332,13 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
         return original_resolve(*args, **kwargs)
 
     monkeypatch.setattr(store, "resolve_one_request_with_signed_remote_exact_result", _rotate_oauth_then_resolve)
-    rotation = apply_exact_cloud_review(
-        store,
-        remote_approval=_remote_approval(store, rotating.request_id, receipt_id="exact-oauth-rotation"),
-    )
-    assert rotation.request_id == rotating.request_id
+    with pytest.raises(ExactCloudReviewError, match="remote_exact_oauth_changed"):
+        apply_exact_cloud_review(
+            store,
+            remote_approval=_remote_approval(store, rotating.request_id, receipt_id="exact-oauth-rotation"),
+        )
+    rotating_row = store.get_approval_request(rotating.request_id)
+    assert rotating_row is not None and rotating_row["status"] == "pending"
     store.set_sync_payload(
         "oauth_local_credentials",
         rotation_oauth_state,

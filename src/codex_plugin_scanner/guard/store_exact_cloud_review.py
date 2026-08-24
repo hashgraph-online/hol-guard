@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Protocol
 
 from .approval_resolution import require_resolvable_approval_request
+from .dpop_key_binding import verified_dpop_jwk_thumbprint
 from .runtime.time_support import parse_utc_timestamp
 from .store_approvals import get_approval_request as load_approval_request
 from .store_approvals import resolve_one_request_only as persist_one_resolution
@@ -20,6 +21,16 @@ _REVOCATION_KEY = "guard_exact_cloud_review_revocation_v1"
 
 class _ConnectionOwner(Protocol):
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
+
+    def hold_oauth_credential_lock(self) -> AbstractContextManager[None]: ...
+
+    def _load_oauth_secret_payload(
+        self,
+        payload: dict[str, object],
+        *,
+        promote: bool = True,
+        allow_primary: bool = True,
+    ) -> dict[str, object] | None: ...
 
 
 class StoreExactCloudReviewMixin:
@@ -124,7 +135,7 @@ class StoreExactCloudReviewMixin:
     ) -> dict[str, object]:
         """Claim and apply an exact receipt after rechecking all mutable state."""
 
-        with self._connect() as connection:
+        with self.hold_oauth_credential_lock(), self._connect() as connection:
             connection.execute("begin immediate")
             resolved_at = StoreExactCloudReviewMixin._exact_transaction_now()
             capability = StoreExactCloudReviewMixin._load_exact_state(connection, _CAPABILITY_KEY)
@@ -132,10 +143,13 @@ class StoreExactCloudReviewMixin:
                 return _exact_error("remote_exact_capability_changed", now=resolved_at)
             if StoreExactCloudReviewMixin._load_exact_state(connection, _REVOCATION_KEY) is not None:
                 return _exact_error("cloud_review_capability_revoked", now=resolved_at)
-            oauth_binding = _oauth_binding_from_state(
-                connection,
-                StoreExactCloudReviewMixin._load_exact_state(connection, _OAUTH_KEY),
+            oauth_state = StoreExactCloudReviewMixin._load_exact_state(connection, _OAUTH_KEY)
+            oauth_secret = (
+                self._load_oauth_secret_payload(oauth_state, promote=False, allow_primary=False)
+                if isinstance(oauth_state, dict)
+                else None
             )
+            oauth_binding = _oauth_binding_from_state(connection, oauth_state, oauth_secret)
             if oauth_binding != expected_oauth_binding:
                 return _exact_error("remote_exact_oauth_changed", now=resolved_at)
             if not _capability_matches_oauth_binding(capability, oauth_binding):
@@ -216,8 +230,9 @@ def _exact_error(code: str, *, now: str) -> dict[str, object]:
 def _oauth_binding_from_state(
     connection: sqlite3.Connection,
     oauth_state: object,
+    oauth_secret: object,
 ) -> dict[str, object] | None:
-    if not isinstance(oauth_state, dict):
+    if not isinstance(oauth_state, dict) or not isinstance(oauth_secret, dict):
         return None
     device = connection.execute(
         "select installation_id from guard_devices where device_key = ?",
@@ -226,11 +241,24 @@ def _oauth_binding_from_state(
     installation_id = str(device["installation_id"]) if device is not None else None
     machine_id = oauth_state.get("machine_id")
     device_id = oauth_state.get("device_id")
-    if not isinstance(device_id, str) or not device_id.strip():
+    try:
+        dpop_thumbprint = verified_dpop_jwk_thumbprint(
+            private_key_pem=oauth_secret.get("dpop_private_key_pem"),
+            public_jwk=oauth_secret.get("dpop_public_jwk"),
+        )
+    except ValueError:
+        return None
+    if (
+        not isinstance(device_id, str)
+        or not device_id.strip()
+        or device_id != dpop_thumbprint
+        or oauth_state.get("dpop_public_jwk_thumbprint") != dpop_thumbprint
+        or oauth_secret.get("dpop_public_jwk_thumbprint") != dpop_thumbprint
+    ):
         return None
     return {
         "deviceId": device_id,
-        "dpopThumbprint": oauth_state.get("dpop_public_jwk_thumbprint"),
+        "dpopThumbprint": dpop_thumbprint,
         "grantId": oauth_state.get("grant_id"),
         "installationId": installation_id,
         "machineId": machine_id,
