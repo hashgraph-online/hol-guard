@@ -1,5 +1,6 @@
 """Tests for package/CLI version consistency."""
 
+from importlib.metadata import version as distribution_version
 from pathlib import Path
 
 import pytest
@@ -13,10 +14,10 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
     import tomli as tomllib
 
 
-def test_pyproject_version_matches_package_version():
+def test_source_distribution_and_package_versions_match():
     pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
     pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
-    assert pyproject["project"]["version"] == package_version
+    assert pyproject["project"]["version"] == distribution_version("hol-guard") == package_version == "3.0.0a0"
 
 
 def test_cli_version_matches_package_version(capsys: pytest.CaptureFixture[str]):
