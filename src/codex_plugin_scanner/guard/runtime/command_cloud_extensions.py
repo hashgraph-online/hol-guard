@@ -215,10 +215,7 @@ CLOUD_COMMAND_RULES = (
     _cloud_delete_rule(
         rule_id="command.cloud.gcp.resource-deletion",
         title="Google Cloud resource deletion",
-        description=(
-            "Identifies deletion of validated compute, data, identity, application, "
-            "network, and control-plane resources through Google Cloud CLI."
-        ),
+        description="Identifies deletion of compute and database resources through Google Cloud CLI.",
         matcher=_GCLOUD_RESOURCE_DELETE,
         action_class="Google Cloud destructive command",
         safer_alternative="Describe the exact resources and confirm the active project and location before deletion.",
@@ -234,10 +231,7 @@ CLOUD_COMMAND_RULES = (
     _cloud_delete_rule(
         rule_id="command.cloud.azure.resource-deletion",
         title="Azure resource deletion",
-        description=(
-            "Identifies deletion of validated compute, data, identity, application, "
-            "network, and control-plane resources through Azure CLI."
-        ),
+        description="Identifies deletion of virtual machines through Azure CLI.",
         matcher=_AZURE_RESOURCE_DELETE,
         action_class="Azure destructive command",
         safer_alternative=(
@@ -277,15 +271,11 @@ CLOUD_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id="command.cloud.gcp",
         name="Google Cloud command protection",
-        description=(
-            "Reviews a validated gcloud operation matrix for permanent resource deletion "
-            "across stable and supported release tracks."
-        ),
+        description="Reviews Google Cloud CLI operations that permanently delete compute or database resources.",
         action_classes=("Google Cloud destructive command",),
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternatives=("Inspect resource state, project, location, and recovery options before deletion.",),
         reference_urls=(
-            "https://cloud.google.com/sdk/gcloud/reference",
             "https://cloud.google.com/sdk/gcloud/reference/compute/instances/delete",
             "https://cloud.google.com/sdk/gcloud/reference/sql/instances/delete",
         ),
@@ -293,16 +283,10 @@ CLOUD_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id="command.cloud.azure",
         name="Azure command protection",
-        description=(
-            "Reviews a validated Azure CLI operation matrix for permanent resource deletion "
-            "across subscription and resource-group scopes."
-        ),
+        description="Reviews Azure CLI operations that permanently delete virtual machines.",
         action_classes=("Azure destructive command",),
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternatives=("Inspect resource state, subscription, resource group, and attached resources first.",),
-        reference_urls=(
-            "https://learn.microsoft.com/cli/azure/reference-index",
-            "https://learn.microsoft.com/cli/azure/vm#az-vm-delete",
-        ),
+        reference_urls=("https://learn.microsoft.com/cli/azure/vm#az-vm-delete",),
     ),
 )
