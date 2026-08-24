@@ -10,6 +10,22 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 
+def validate_exact_review_envelope_authority(
+    envelope: dict[str, object],
+    oauth: GuardReviewOAuthMetadata,
+    *,
+    capability_id: str,
+) -> None:
+    """Bind a signed exact decision to the current local grant and capability."""
+
+    from .review_oauth_binding import GuardReviewContractError
+
+    if envelope.get("grantId") != oauth.grant_id:
+        raise GuardReviewContractError("remote_approval_grant_mismatch")
+    if envelope.get("capabilityId") != capability_id:
+        raise GuardReviewContractError("remote_approval_capability_mismatch")
+
+
 def exact_review_capability_advertisement(
     *,
     claim: dict[str, object],
@@ -62,4 +78,8 @@ def attach_exact_review_capability(
     return claim
 
 
-__all__ = ["attach_exact_review_capability", "exact_review_capability_advertisement"]
+__all__ = [
+    "attach_exact_review_capability",
+    "exact_review_capability_advertisement",
+    "validate_exact_review_envelope_authority",
+]

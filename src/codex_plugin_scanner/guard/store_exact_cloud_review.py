@@ -230,6 +230,7 @@ def _oauth_binding_from_state(
         return None
     return {
         "deviceId": device_id,
+        "dpopThumbprint": oauth_state.get("dpop_public_jwk_thumbprint"),
         "grantId": oauth_state.get("grant_id"),
         "installationId": installation_id,
         "machineId": machine_id,

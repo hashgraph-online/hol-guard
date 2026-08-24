@@ -15,7 +15,12 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.commands_dispatch_cloud_review import provision_connect_time_exact_cloud_review
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.runtime import exact_cloud_review_apply as exact_apply_module
-from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
+from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabilityError
+from codex_plugin_scanner.guard.runtime.command_executors import (
+    COMMAND_OPERATION_SCHEMA_VERSIONS,
+    execute_guard_command_job,
+)
+from codex_plugin_scanner.guard.runtime.command_queue_authority import authorize_command_queue_job
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     ExactCloudReviewError,
     apply_exact_cloud_review,
@@ -155,6 +160,8 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
     enable_exact_cloud_review(store)
     capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
     assert isinstance(capability, dict)
+    drift_approval = _remote_approval(store, fresh.request_id, receipt_id="exact-binding-drift")
+    restored_approval = _remote_approval(store, fresh.request_id, receipt_id="exact-binding-restore")
     dpop = generate_dpop_key_pair()
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
@@ -172,7 +179,7 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_binding_mismatch"):
         apply_exact_cloud_review(
             store,
-            remote_approval=_remote_approval(store, fresh.request_id, receipt_id="exact-binding-drift"),
+            remote_approval=drift_approval,
         )
     restored_dpop = generate_dpop_key_pair()
     store.set_oauth_local_credentials(
@@ -192,8 +199,75 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
         apply_exact_cloud_review(
             store,
-            remote_approval=_remote_approval(store, fresh.request_id, receipt_id="exact-binding-restore"),
+            remote_approval=restored_approval,
         )
+
+
+def test_exact_cloud_review_rejects_envelope_after_oauth_grant_rotation(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("exact-grant-rotation")
+    _add_request(store, request)
+    enable_exact_cloud_review(store)
+    old_envelope = _remote_approval(store, request.request_id, receipt_id="exact-grant-1")
+    old_job = _job(store, old_envelope)
+    credentials = store.get_oauth_local_credentials(allow_primary=False)
+    assert isinstance(credentials, dict)
+    public_jwk = credentials["dpop_public_jwk"]
+    assert isinstance(public_jwk, dict)
+    store.set_oauth_local_credentials(
+        issuer=str(credentials["issuer"]),
+        client_id=str(credentials["client_id"]),
+        refresh_token=str(credentials["refresh_token"]),
+        dpop_private_key_pem=str(credentials["dpop_private_key_pem"]),
+        dpop_public_jwk={str(key): str(value) for key, value in public_jwk.items()},
+        dpop_public_jwk_thumbprint=str(credentials["dpop_public_jwk_thumbprint"]),
+        grant_id="grant-2",
+        machine_id=str(credentials["machine_id"]),
+        device_id=str(credentials["device_id"]),
+        workspace_id=str(credentials["workspace_id"]),
+        now=datetime.now(timezone.utc).isoformat(),
+    )
+    enable_exact_cloud_review(store)
+
+    with pytest.raises(CommandCapabilityError, match="remote_exact_job_wrong_grant"):
+        authorize_command_queue_job(store, old_job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+    with pytest.raises(ExactCloudReviewError, match="remote_exact_wrong_target"):
+        apply_exact_cloud_review(store, remote_approval=old_envelope)
+
+
+def test_exact_cloud_review_rechecks_dpop_thumbprint_inside_apply_transaction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("exact-dpop-race")
+    _add_request(store, request)
+    enable_exact_cloud_review(store)
+    envelope = _remote_approval(store, request.request_id, receipt_id="exact-dpop-race")
+    original_resolve = store.resolve_one_request_with_signed_remote_exact_result
+
+    def rotate_then_resolve(request_id: str, **kwargs: object) -> dict[str, object]:
+        credentials = store.get_oauth_local_credentials(allow_primary=False)
+        assert isinstance(credentials, dict)
+        rotated = generate_dpop_key_pair()
+        store.set_oauth_local_credentials(
+            issuer=str(credentials["issuer"]),
+            client_id=str(credentials["client_id"]),
+            refresh_token=str(credentials["refresh_token"]),
+            dpop_private_key_pem=rotated.private_key_pem,
+            dpop_public_jwk=rotated.public_jwk,
+            dpop_public_jwk_thumbprint=rotated.public_jwk_thumbprint,
+            grant_id=str(credentials["grant_id"]),
+            machine_id=str(credentials["machine_id"]),
+            device_id=str(credentials["device_id"]),
+            workspace_id=str(credentials["workspace_id"]),
+            now=datetime.now(timezone.utc).isoformat(),
+        )
+        return original_resolve(request_id, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(store, "resolve_one_request_with_signed_remote_exact_result", rotate_then_resolve)
+    with pytest.raises(ExactCloudReviewError, match="remote_exact_oauth_changed"):
+        apply_exact_cloud_review(store, remote_approval=envelope)
 
 
 def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disable(
@@ -225,6 +299,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     malformed = _request("exact-bad-revocation")
     _add_request(store, malformed)
     enable_exact_cloud_review(store)
+    malformed_approval = _remote_approval(store, malformed.request_id, receipt_id="exact-bad-revocation")
     store.set_sync_payload(
         "guard_exact_cloud_review_revocation_v1",
         ["invalid"],
@@ -233,7 +308,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revocation_invalid"):
         apply_exact_cloud_review(
             store,
-            remote_approval=_remote_approval(store, malformed.request_id, receipt_id="exact-bad-revocation"),
+            remote_approval=malformed_approval,
         )
     assert store.list_events(limit=1, event_name="cloud_review.exact_rejected")
 

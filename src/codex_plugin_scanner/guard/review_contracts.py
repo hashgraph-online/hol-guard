@@ -312,6 +312,7 @@ def build_local_review_request_claim(
         "createdAt": created_at,
         "deviceId": oauth.device_id,
         "expiresAt": _claim_expiry(request_row),
+        "grantId": oauth.grant_id,
         "harnessId": harness_id,
         "lastSeenAt": last_seen_at,
         "localRequestId": local_request_id,
@@ -350,7 +351,6 @@ def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> st
 
 def normalize_remote_approval_decision(value: object) -> RemoteApprovalDecision | None:
     """Normalize only the documented signed remote decision wire values."""
-
     if not isinstance(value, str) or not value.strip():
         return None
     normalized = value.strip()

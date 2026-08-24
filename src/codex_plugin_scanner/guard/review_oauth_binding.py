@@ -13,6 +13,7 @@ class GuardReviewContractError(ValueError):
 @dataclass(frozen=True, slots=True)
 class GuardReviewOAuthMetadata:
     device_id: str
+    dpop_thumbprint: str | None
     grant_id: str | None
     installation_id: str
     machine_id: str
@@ -45,6 +46,7 @@ def guard_review_oauth_metadata(
         raise GuardReviewContractError("oauth_device_binding_mismatch")
     return GuardReviewOAuthMetadata(
         device_id=device_id,
+        dpop_thumbprint=dpop_thumbprint,
         grant_id=_text(credentials.get("grant_id")),
         installation_id=installation_id,
         machine_id=machine_id,

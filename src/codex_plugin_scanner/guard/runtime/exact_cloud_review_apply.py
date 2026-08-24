@@ -17,12 +17,14 @@ from ..review_contracts import (
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
+from ..review_exact_capability_advertisement import validate_exact_review_envelope_authority as validate_exact_authority
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
     EXACT_CLOUD_REVIEW_OPERATION,
     ExactCloudReviewError,
     ExactCloudReviewResolution,
     _audit,
+    _capability_digest,
     _exact_action,
     _now,
     _oauth_metadata,
@@ -50,7 +52,7 @@ def apply_exact_cloud_review(
 
     current = _now(now)
     try:
-        _verified_capability(store, now=current.isoformat())
+        verified_capability = _verified_capability(store, now=current.isoformat())
     except ExactCloudReviewError as error:
         raise _reject(store, error.code, now=current) from error
     raw_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
@@ -104,6 +106,7 @@ def apply_exact_cloud_review(
             contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
             contract_digest=contract.digest,
         ).applied_scope
+        validate_exact_authority(envelope, oauth, capability_id=_capability_digest(verified_capability))
         validate_remote_approval_request_binding(envelope=envelope, request_row=request, oauth=oauth, store=store)
     except IneligibleApprovalScopeError as error:
         raise _reject(store, "remote_exact_not_permitted", now=current) from error
@@ -118,6 +121,7 @@ def apply_exact_cloud_review(
         expected_capability=raw_capability,
         expected_oauth_binding={
             "deviceId": oauth.device_id,
+            "dpopThumbprint": oauth.dpop_thumbprint,
             "grantId": oauth.grant_id,
             "installationId": oauth.installation_id,
             "machineId": oauth.machine_id,
@@ -181,8 +185,11 @@ def _binding_error_code(code: str) -> str:
         "remote_approval_installation_mismatch",
         "remote_approval_machine_mismatch",
         "remote_approval_device_mismatch",
+        "remote_approval_grant_mismatch",
     }:
         return "remote_exact_wrong_target"
+    if code == "remote_approval_capability_mismatch":
+        return "remote_exact_capability_mismatch"
     if code == "remote_approval_reviewer_not_authorized":
         return "remote_exact_reviewer_not_authorized"
     return code

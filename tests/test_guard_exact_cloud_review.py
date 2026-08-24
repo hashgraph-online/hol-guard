@@ -105,17 +105,21 @@ def _remote_approval(
     claim = source_claim or build_local_review_request_claim(
         request_row=request, oauth=_oauth_metadata(store), store=store
     )
+    advertisement = claim["exactReviewCapability"]
+    assert isinstance(advertisement, dict)
     issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = expires_at or issued_at + timedelta(minutes=5)
     envelope: dict[str, object] = {
         "actionEnvelopeHash": claim["actionEnvelopeHash"],
         "approvalId": claim["approvalId"],
+        "capabilityId": advertisement["capabilityId"],
         "capabilityCategory": claim["capabilityCategory"],
         "contractVersion": "guard.remote-approval.v1",
         "decision": decision,
         "decisionId": receipt_id,
         "deviceId": claim["deviceId"],
         "expiresAt": expires_at.isoformat(),
+        "grantId": claim["grantId"],
         "harnessId": claim["harnessId"],
         "issuedAt": issued_at.isoformat(),
         "keyId": REVIEW_SIGNING_KEY_ID,
@@ -262,6 +266,7 @@ def test_exact_cloud_review_rejects_tampered_or_revoked_capabilities(tmp_path: P
     request = _request("exact-revoked")
     _add_request(store, request)
     enable_exact_cloud_review(store)
+    remote_approval = _remote_approval(store, request.request_id, receipt_id="exact-tampered")
     capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
     assert isinstance(capability, dict)
     tampered = {**capability, "workspaceId": "other-workspace"}
@@ -269,7 +274,7 @@ def test_exact_cloud_review_rejects_tampered_or_revoked_capabilities(tmp_path: P
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_signature_invalid"):
         apply_exact_cloud_review(
             store,
-            remote_approval=_remote_approval(store, request.request_id, receipt_id="exact-tampered"),
+            remote_approval=remote_approval,
         )
 
     disable_exact_cloud_review(store)
@@ -277,7 +282,7 @@ def test_exact_cloud_review_rejects_tampered_or_revoked_capabilities(tmp_path: P
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
         apply_exact_cloud_review(
             store,
-            remote_approval=_remote_approval(store, request.request_id, receipt_id="exact-revoked"),
+            remote_approval=remote_approval,
         )
 
 
@@ -316,6 +321,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     assert oauth_state["device_id"] == "device-1"
     request = _request("exact-queue")
     _add_request(store, request)
+    enable_exact_cloud_review(store)
     snapshot = _local_request_snapshot_payload(store)
     snapshot_requests = snapshot.get("requests")
     assert isinstance(snapshot_requests, list) and snapshot_requests
@@ -323,7 +329,6 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     assert isinstance(snapshot_claim, dict)
     assert snapshot_claim["deviceId"] == "device-1"
     assert snapshot_claim["machineId"] == oauth_state["machine_id"]
-    enable_exact_cloud_review(store)
     assert command_queue_oauth_target(store) == ("device-1", oauth_state["workspace_id"])
     job = _job(
         store,

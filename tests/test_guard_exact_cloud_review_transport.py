@@ -34,7 +34,7 @@ from tests.guard_exact_cloud_review_support import connected_exact_review_store
 from tests.test_guard_exact_cloud_review import _add_request, _job, _remote_approval, _request
 
 _TRANSPORT_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review-v2" / "exact-transport-fixture.json"
-_TRANSPORT_FIXTURE_SHA256 = "dc0df6459ea39a0ed4b55a81d987a4d64843ba5181fba77c7cd996b258e45e03"
+_TRANSPORT_FIXTURE_SHA256 = "5e265b19ecaaa43b581d3a0b75d9d287ffa3762fad02ed7fdf130b710c1bfbd7"
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -110,6 +110,8 @@ def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_sig
     assert isinstance(payload, dict)
     remote_approval = payload["remoteApproval"]
     assert isinstance(remote_approval, dict)
+    assert remote_approval["capabilityId"] == advertisement["capabilityId"]
+    assert remote_approval["grantId"] == claim["grantId"] == advertisement["grantId"]
     keys = remote_approval["verificationKeys"]
     store = connected_exact_review_store(tmp_path, device_id=str(eligibility["deviceId"]))
     store.set_sync_payload("guard_review_verification_keyring", keys, "2026-08-24T00:00:00+00:00")

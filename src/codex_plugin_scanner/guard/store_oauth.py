@@ -18,7 +18,6 @@ from .store_oauth_metadata import copy_oauth_binding_metadata
 class StoreOAuthConnectMixin:
     def legacy_macos_oauth_secret_migration_required(self) -> bool:
         """Return whether authenticated OAuth metadata lacks its local vault copy."""
-
         if sys.platform != "darwin":
             return False
         payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
@@ -224,6 +223,7 @@ class StoreOAuthConnectMixin:
         payload: dict[str, object] = {
             "issuer": normalized_issuer,
             "client_id": client_id,
+            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
             _OAUTH_LOCAL_CREDENTIALS_REF_KEY: self._oauth_local_credentials_ref,
             _OAUTH_LOCAL_CREDENTIALS_HASH_KEY: secret_hash,
         }

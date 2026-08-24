@@ -109,6 +109,8 @@ def _oauth_metadata(store: GuardStore) -> GuardReviewOAuthMetadata:
         oauth = guard_review_oauth_metadata(store, require_device_dpop_binding=True)
     except GuardReviewContractError as error:
         raise ExactCloudReviewError(f"cloud_review_{error}") from error
+    if oauth.grant_id is None:
+        raise ExactCloudReviewError("cloud_review_grant_binding_missing")
     return oauth
 
 
@@ -116,6 +118,7 @@ def _oauth_binding(store: GuardStore) -> dict[str, object]:
     oauth = _oauth_metadata(store)
     return {
         "deviceId": oauth.device_id,
+        "dpopThumbprint": oauth.dpop_thumbprint,
         "grantId": oauth.grant_id,
         "installationId": oauth.installation_id,
         "machineId": oauth.machine_id,
@@ -386,6 +389,14 @@ def authorize_exact_cloud_review_job(
             raise ExactCloudReviewError("remote_exact_job_wrong_target")
         if identity["workspaceId"] != capability["workspaceId"]:
             raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
+        payload = job.get("payload")
+        remote_approval = payload.get("remoteApproval") if isinstance(payload, Mapping) else None
+        if not isinstance(remote_approval, Mapping):
+            raise ExactCloudReviewError("remote_exact_job_invalid")
+        if remote_approval.get("grantId") != capability["grantId"]:
+            raise ExactCloudReviewError("remote_exact_job_wrong_grant")
+        if remote_approval.get("capabilityId") != _capability_digest(capability):
+            raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
         if _command_job_seen(store, identity, now=now):
             raise ExactCloudReviewError("remote_exact_job_replayed")
     except (ExactCloudReviewError, KeyError) as error:
