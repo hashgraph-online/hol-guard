@@ -30,8 +30,11 @@ def classify_command_extension_interaction(
 
     observations = registry.observations(command)
     reviewable_signal = any(
-        (item.effective_evidence or item.uncertainty_reasons)
-        and legacy_rule_floor(item.extension, item.rule) not in {"allow", "monitor"}
+        bool(item.uncertainty_reasons)
+        or (
+            bool(item.effective_evidence)
+            and legacy_rule_floor(item.extension, item.rule) not in {"allow", "monitor"}
+        )
         for item in observations
     )
     decision = evaluate_extension_interaction(command, observations)
