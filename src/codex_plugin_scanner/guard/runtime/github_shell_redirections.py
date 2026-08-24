@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 
 _SAFE_DISCARD_TARGETS = frozenset({"/dev/null", "/dev/stdout", "/dev/stderr", "nul"})
-_ATTACHED_SAFE_DISCARD = re.compile(r"\A[012]?(?:>|>>|<)(/dev/(?:null|stdout|stderr)|nul)\Z", re.IGNORECASE)
+_ATTACHED_SAFE_DISCARD = re.compile(
+    r"\A[012]?(?:>>|>\||>|<)(/dev/(?:null|stdout|stderr)|nul)\Z",
+    re.IGNORECASE,
+)
 
 
 def github_shell_args_and_redirection(segment: list[str], command_index: int) -> tuple[list[str], bool]:

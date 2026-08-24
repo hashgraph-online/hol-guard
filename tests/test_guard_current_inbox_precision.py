@@ -23,6 +23,7 @@ def test_github_auth_switch_help_is_local_metadata() -> None:
     "command",
     (
         "gh api repos/example/project/check-runs/17/annotations 2>/dev/null | head -c 2000",
+        "gh pr checks 17 --repo example/project >|/dev/null | head -c 10",
         "gh pr checks 17 --repo example/project 2>&1 | rg -v pass",
     ),
 )
