@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .command_cloud_aws_operation_matrix import aws_destructive_command_matchers
+from .command_cloud_gcp_operation_matrix import gcp_destructive_command_matchers
 from .command_extension_matchers import executable_matcher, safe_flag_variant, safe_option_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import AnyMatcher, CommandSafetyRule, CommandSafeVariant
@@ -144,6 +145,10 @@ _GCLOUD_RESOURCE_DELETE = AnyMatcher(
             )
             for track in ((), ("alpha",), ("beta",))
         ),
+        *gcp_destructive_command_matchers(
+            global_options_with_values=_GCLOUD_GLOBAL_OPTIONS,
+            global_flags=_GCLOUD_GLOBAL_FLAGS,
+        ),
     )
 )
 _AZURE_RESOURCE_DELETE = AnyMatcher(
@@ -215,7 +220,10 @@ CLOUD_COMMAND_RULES = (
     _cloud_delete_rule(
         rule_id="command.cloud.gcp.resource-deletion",
         title="Google Cloud resource deletion",
-        description="Identifies deletion of compute and database resources through Google Cloud CLI.",
+        description=(
+            "Identifies deletion of validated compute, data, identity, application, "
+            "network, and control-plane resources through Google Cloud CLI."
+        ),
         matcher=_GCLOUD_RESOURCE_DELETE,
         action_class="Google Cloud destructive command",
         safer_alternative="Describe the exact resources and confirm the active project and location before deletion.",
@@ -270,11 +278,15 @@ CLOUD_COMMAND_EXTENSION_SPECS = (
     CommandExtensionSpec(
         extension_id="command.cloud.gcp",
         name="Google Cloud command protection",
-        description="Reviews Google Cloud CLI operations that permanently delete compute or database resources.",
+        description=(
+            "Reviews a validated gcloud operation matrix for permanent resource deletion "
+            "across stable and supported release tracks."
+        ),
         action_classes=("Google Cloud destructive command",),
         risk_classes=("destructive_shell", "network_egress"),
         safer_alternatives=("Inspect resource state, project, location, and recovery options before deletion.",),
         reference_urls=(
+            "https://cloud.google.com/sdk/gcloud/reference",
             "https://cloud.google.com/sdk/gcloud/reference/compute/instances/delete",
             "https://cloud.google.com/sdk/gcloud/reference/sql/instances/delete",
         ),
