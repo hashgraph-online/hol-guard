@@ -157,6 +157,12 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
                 "github.command.local-auth-read",
                 "The command reads local CLI auth state.",
             )
+        if auth_subcommand in {"login", "logout", "switch", "refresh", "setup-git"}:
+            return _assessment(
+                "write_local",
+                "github.command.local-auth-write",
+                "The command changes local GitHub CLI authentication.",
+            )
     if top_level in _READ_ONLY_TOP_LEVEL:
         return _assessment(
             "read_remote",

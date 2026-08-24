@@ -274,9 +274,10 @@ def evaluate_command(
         ),
     )
     authorized_action_class = authorization_evidence[1] if authorization_evidence is not None else None
-    if contained_routine_candidate is not None and not _matches_are_allow_floor(owned_matches):
+    allow_floor_matches = _matches_are_allow_floor(tuple(owned_matches))
+    if contained_routine_candidate is not None and not allow_floor_matches:
         minimum_action = _stronger_floor(minimum_action, "review")
-    if verified_read_candidate is not None and not _matches_are_allow_floor(owned_matches):
+    if verified_read_candidate is not None and not allow_floor_matches:
         minimum_action = _stronger_floor(minimum_action, "review")
     for candidate in workspace_write_candidates:
         candidate_floor: CommandDecisionFloor = "block" if candidate.basis.action_floor == "block" else "review"
@@ -334,8 +335,16 @@ def evaluate_command(
         EffectDecisionRequest(
             factors=(
                 *current_decision_factors,
-                *((contained_routine_candidate,) if contained_routine_candidate is not None else ()),
-                *((verified_read_candidate,) if verified_read_candidate is not None else ()),
+                *(
+                    (contained_routine_candidate,)
+                    if contained_routine_candidate is not None and not allow_floor_matches
+                    else ()
+                ),
+                *(
+                    (verified_read_candidate,)
+                    if verified_read_candidate is not None and not allow_floor_matches
+                    else ()
+                ),
                 *workspace_write_candidates,
                 *critical_floor_factors,
                 *control_resolution.factors,

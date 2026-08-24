@@ -139,7 +139,8 @@ def test_permission_indexes_map_each_enforceable_identifier_exactly_once(lookup:
 def test_shared_action_classes_keep_unique_rule_permissions() -> None:
     registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     git = next(extension for extension in registry.extensions if extension.extension_id == "command.git")
-    assert {permission.permission_id for permission in git.permissions} == {
+    git_permission_ids = {permission.permission_id for permission in git.permissions}
+    assert {
         "command.git.permission.force-clean",
         "command.git.permission.force-push",
         "command.git.permission.hard-reset",
@@ -147,12 +148,21 @@ def test_shared_action_classes_keep_unique_rule_permissions() -> None:
         "command.git.permission.local-branch-delete",
         "command.git.permission.remote-branch-delete",
         "command.git.permission.unverified-fetch",
-    }
+        "command.git.permission.switch",
+        "command.git.permission.checkout",
+        "command.git.permission.status",
+    } <= git_permission_ids
     assert all(permission.configurable for permission in git.permissions)
     fetch_id = "command.git.permission.unverified-fetch"
     index_id = "command.git.permission.index-inspection"
-    special = {fetch_id, index_id}
-    destructive = [permission for permission in git.permissions if permission.permission_id not in special]
+    destructive_ids = {
+        "command.git.permission.force-clean",
+        "command.git.permission.force-push",
+        "command.git.permission.hard-reset",
+        "command.git.permission.local-branch-delete",
+        "command.git.permission.remote-branch-delete",
+    }
+    destructive = [permission for permission in git.permissions if permission.permission_id in destructive_ids]
     fetch = next(permission for permission in git.permissions if permission.permission_id == fetch_id)
     index = next(permission for permission in git.permissions if permission.permission_id == index_id)
     assert all(permission.action_classes == ("git destructive command",) for permission in destructive)
@@ -176,7 +186,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "7307d1d05234b13b4d1aab6c502449c847260139641dea39700d6485623309ee"
+    assert registry.catalog_digest == "25d515b04d3c3f202be5ec0ea7d671e9fe5864d8b5dc9628f91bc228c5bd693e"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )

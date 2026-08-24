@@ -48,6 +48,9 @@ GITHUB_CAPABILITY_CASES = (
     (("auth", "token"), "secret_remote", "github.command.auth-token-read"),
     (("auth", "status", "--show-token"), "secret_remote", "github.command.auth-token-read"),
     (("auth", "status", "-t"), "secret_remote", "github.command.auth-token-read"),
+    (("auth", "switch"), "write_local", "github.command.local-auth-write"),
+    (("auth", "login"), "write_local", "github.command.local-auth-write"),
+    (("auth", "logout"), "write_local", "github.command.local-auth-write"),
     (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
     (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
     (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
@@ -343,6 +346,7 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
     ("gh repo edit --visibility private", "GitHub access mutation command"),
     ("gh ssh-key delete 123 --yes", "GitHub access mutation command"),
     ("gh repo set-default o/r", "GitHub local configuration write"),
+    ("gh auth switch", "GitHub local configuration write"),
     ("gh pr lock 1; gh repo delete o/r --yes", "GitHub delete command"),
     (
         _text(
@@ -522,6 +526,9 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
         (("auth", "token"), "secret_remote", "github.command.auth-token-read"),
         (("auth", "status", "--show-token"), "secret_remote", "github.command.auth-token-read"),
         (("auth", "status", "-t"), "secret_remote", "github.command.auth-token-read"),
+        (("auth", "switch"), "write_local", "github.command.local-auth-write"),
+        (("auth", "login"), "write_local", "github.command.local-auth-write"),
+        (("auth", "logout"), "write_local", "github.command.local-auth-write"),
         (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
         (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
         (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
@@ -918,6 +925,7 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ("gh repo edit --visibility private", "GitHub access mutation command"),
         ("gh ssh-key delete 123 --yes", "GitHub access mutation command"),
         ("gh repo set-default o/r", "GitHub local configuration write"),
+        ("gh auth switch", "GitHub local configuration write"),
         ("gh pr lock 1; gh repo delete o/r --yes", "GitHub delete command"),
         (
             _text(
