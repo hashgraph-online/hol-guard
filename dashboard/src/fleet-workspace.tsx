@@ -349,6 +349,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
           repairHarness={repairHarness}
           repairHarnesses={repairHarnesses}
           onRepairProtection={props.onRepairProtection}
+          onRepairHarness={props.onRepairHarness}
         />
       ) : null}
 
