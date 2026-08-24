@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from threading import Event
+from time import monotonic, sleep
 
 import pytest
 
@@ -140,3 +142,95 @@ def test_coordinator_proves_live_hook_and_rejects_invalid_opaque_target() -> Non
             original_hook_attached=False,
             opaque_target_id="raw socket path",
         )
+
+
+def test_bounded_adapter_cancels_a_hung_worker_and_records_timeout() -> None:
+    class HangingAdapter:
+        def __init__(self) -> None:
+            self.cancelled = Event()
+
+        def continue_after_application(
+            self, offer: ContinuationOffer, *, action: str, timeout_seconds: float, cancelled: object
+        ) -> ContinuationResult:
+            assert callable(cancelled)
+            while not cancelled():
+                sleep(0.001)
+            self.cancelled.set()
+            return ContinuationResult(
+                correlation_id=offer.correlation_id,
+                capability=offer.capability,
+                status="failed",
+                reason="worker_cancelled",
+                completed_at=NOW,
+                evidence_id="evidence-hung-worker-0001",
+            )
+
+    adapter = HangingAdapter()
+    attempts: list[ContinuationResult] = []
+    coordinator = ContinuationCoordinator(
+        adapter,
+        record_attempt=lambda _offer, _action, result: attempts.append(result),
+        notify_manual_retry=lambda _offer, _result: None,
+        now=lambda: NOW,
+    )
+    offer = capability_offer(
+        correlation_id=CORRELATION_ID,
+        harness="codex",
+        original_hook_attached=False,
+        wait_deadline=None,
+        opaque_target_id="codex-thread-opaque-01",
+        session_target_verified=True,
+    )
+
+    started = monotonic()
+    result = coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=0.02)
+
+    assert monotonic() - started < 0.2
+    assert result.status == "failed"
+    assert result.reason == "continuation_adapter_timeout"
+    assert attempts == [result]
+    assert adapter.cancelled.wait(0.2)
+
+
+def test_failed_attempt_persistence_never_populates_the_in_memory_cache() -> None:
+    adapter = FakeAdapter()
+    offer = ContinuationOffer(
+        correlation_id=CORRELATION_ID,
+        harness="codex",
+        capability="suspended-response",
+        original_hook_attached=True,
+        wait_deadline=NOW + timedelta(seconds=10),
+    )
+    coordinator = ContinuationCoordinator(
+        adapter,
+        record_attempt=lambda _offer, _action, _result: (_ for _ in ()).throw(RuntimeError("store unavailable")),
+        notify_manual_retry=lambda _offer, _result: None,
+        now=lambda: NOW,
+    )
+
+    with pytest.raises(RuntimeError, match="store unavailable"):
+        coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=3)
+    with pytest.raises(RuntimeError, match="store unavailable"):
+        coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=3)
+
+    assert adapter.calls == 2
+
+
+def test_terminal_evidence_identifiers_are_unique() -> None:
+    offer = capability_offer(
+        correlation_id=CORRELATION_ID,
+        harness="pi",
+        original_hook_attached=False,
+        wait_deadline=None,
+    )
+    results: list[ContinuationResult] = []
+    for _ in range(2):
+        coordinator = ContinuationCoordinator(
+            FakeAdapter(),
+            record_attempt=lambda _offer, _action, result: results.append(result),
+            notify_manual_retry=lambda _offer, _result: None,
+            now=lambda: NOW,
+        )
+        coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=3)
+
+    assert results[0].evidence_id != results[1].evidence_id

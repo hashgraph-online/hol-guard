@@ -30,6 +30,7 @@ from ..cli.update_commands import (
 )
 from ..codex_resume import ResumeNotSupportedError, defer_request_resume_to_live_hook, retry_request_resume
 from ..config import load_guard_config
+from ..continuation_runtime import continue_request_after_application
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
     build_workspace_audit_payload,
@@ -461,6 +462,10 @@ def _execute_approval_operation(
 
 def _remote_resume_confirmed(resume_metadata: dict[str, object], action: str) -> bool:
     status = _optional_string(resume_metadata.get("resumeStatus"))
+    if status is None:
+        # The daemon did apply the signed decision; no continuation surface is not
+        # evidence that local application failed.
+        return True
     if status in {"already_sent", "blocked", "not_applicable", "resumed", "sent"}:
         return True
     if action != "block" or status != "skipped":
@@ -573,15 +578,6 @@ def _resume_after_remote_approval(
     now: str,
 ) -> dict[str, object]:
     harness = _optional_string(request_row.get("harness"))
-    if harness not in {"codex", "pi", "omp", "grok"}:
-        return {
-            "resumeStatus": "not_applicable",
-            "harnessResume": {
-                "harness": harness or "unknown",
-                "status": "not_applicable",
-                "reason": "harness_has_no_resumable_operation",
-            },
-        }
     if harness == "codex" and action in {"allow", "block"}:
         codex_resume = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
         if codex_resume is None:
@@ -590,6 +586,7 @@ def _resume_after_remote_approval(
         payload: dict[str, object] = {
             "codexResume": safe,
             "codex_resume": safe,
+            "resumeReason": safe.get("reason"),
             "resumeStatus": safe.get("status"),
         }
         completed_at = safe.get("completedAt") or safe.get("sentAt")
@@ -603,6 +600,7 @@ def _resume_after_remote_approval(
     payload = {
         "harnessResume": safe_harness_resume,
         "harness_resume": safe_harness_resume,
+        "resumeReason": safe_harness_resume.get("reason"),
         "resumeStatus": safe_harness_resume.get("status"),
     }
     completed_at = safe_harness_resume.get("completedAt")
@@ -618,6 +616,35 @@ def _resume_codex_request(
     action: str,
     now: str,
 ) -> dict[str, object] | None:
+    request = store.get_approval_request(request_id)
+    if not isinstance(request, dict):
+        return None
+    if not _supports_durable_continuation(store):
+        return _legacy_resume_codex_request(store=store, request_id=request_id, action=action, now=now)
+    try:
+        continuation = continue_request_after_application(
+            store,
+            request_row=request,
+            action=action,
+            now=now,
+        )
+        value = continuation.get("codexResume")
+        return value if isinstance(value, dict) else None
+    except ValueError as error:
+        return {
+            "status": "failed",
+            "reason": str(error) or "resume_failed",
+            "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
+        }
+
+
+def _legacy_resume_codex_request(
+    *,
+    store: GuardStore,
+    request_id: str,
+    action: str,
+    now: str,
+) -> dict[str, object] | None:
     try:
         codex_resume = defer_request_resume_to_live_hook(
             store,
@@ -626,11 +653,7 @@ def _resume_codex_request(
             now=now,
         )
         if codex_resume is None:
-            codex_resume = retry_request_resume(
-                store,
-                request_id=request_id,
-                now=now,
-            )
+            codex_resume = retry_request_resume(store, request_id=request_id, now=now)
         return codex_resume
     except ResumeNotSupportedError:
         return {
@@ -644,6 +667,13 @@ def _resume_codex_request(
             "reason": str(error) or "resume_failed",
             "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
         }
+
+
+def _supports_durable_continuation(store: GuardStore) -> bool:
+    return all(
+        callable(getattr(store, name, None))
+        for name in ("get_request_resume", "seed_request_resume", "update_request_resume")
+    )
 
 
 def _execute_policy_sync(

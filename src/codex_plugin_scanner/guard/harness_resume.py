@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 
 from .adapters.contracts import contract_for
+from .continuation_runtime import continue_request_after_application
 from .store import GuardStore
 
 
@@ -56,11 +57,29 @@ def resume_harness_operation(
     if operation is None:
         return None
     canonical_harness = _canonical_harness(operation.get("harness"))
-    if canonical_harness not in {"pi", "omp", "grok"}:
+    if canonical_harness not in {"pi", "omp", "grok", "openclaw", "hermes"}:
         return None
     normalized_action = _normalize_action(action)
     if normalized_action is None:
         return None
+    request = store.get_approval_request(request_id)
+    if isinstance(request, dict) and _supports_durable_continuation(store):
+        continuation = continue_request_after_application(
+            store,
+            request_row=request,
+            action=normalized_action,
+            now=now,
+        )
+        detail = continuation.get("harnessResume")
+        if isinstance(detail, dict):
+            return {
+                "action": normalized_action,
+                "completedAt": detail.get("completedAt"),
+                "harness": canonical_harness,
+                "operationId": str(operation["operation_id"]),
+                "reason": detail.get("reason"),
+                "status": detail.get("status"),
+            }
     # Pi/OMP/Grok have no proven original-session continuation transport.  A
     # locally applied allow therefore requires an explicit retry, not a resume.
     status = "manual_retry_required" if normalized_action == "allow" else "blocked"
@@ -123,3 +142,10 @@ def _normalize_action(value: object) -> str | None:
     if normalized in {"block", "deny", "denied", "blocked"}:
         return "block"
     return None
+
+
+def _supports_durable_continuation(store: GuardStore) -> bool:
+    return all(
+        callable(getattr(store, name, None))
+        for name in ("get_request_resume", "seed_request_resume", "update_request_resume")
+    )

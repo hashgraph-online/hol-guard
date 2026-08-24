@@ -34,6 +34,7 @@ from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_live_request_outbox import ensure_live_request_outbox_schema, seed_live_request_outbox
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_resume import ensure_resume_schema
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
 from .store_storage_maintenance import (
     STORAGE_MAINTENANCE_MIGRATION_VERSION,
@@ -969,6 +970,7 @@ class StoreConnectionSchemaMixin:
             self._enable_wal_mode(connection)
             for statement in statements:
                 connection.execute(statement)
+            ensure_resume_schema(connection)
             ensure_command_activity_schema(connection, applied_at=_now())
             ensure_command_activity_health_schema(connection, applied_at=_now())
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())

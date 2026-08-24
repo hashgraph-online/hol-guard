@@ -76,6 +76,7 @@ def retry_request_resume(
     request_id: str,
     now: str,
     force: bool = False,
+    timeout_seconds: float | None = None,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     if request is None:
@@ -129,6 +130,7 @@ def retry_request_resume(
         action=action,
         resume=refreshed,
         now=now,
+        timeout_seconds=timeout_seconds,
     )
     return final
 
@@ -266,6 +268,7 @@ def _finalize_resume_attempt(
     action: str,
     resume: dict[str, object],
     now: str,
+    timeout_seconds: float | None,
 ) -> dict[str, object]:
     strategy = str(resume["strategy"])
     supported = bool(resume["supported"])
@@ -298,6 +301,7 @@ def _finalize_resume_attempt(
         action=action,
         strategy=strategy,
         thread_id=thread_id,
+        timeout_seconds=timeout_seconds,
     )
     normalized = _normalize_dispatch_result(
         action=action,
@@ -361,11 +365,17 @@ def _dispatch_resume_attempt(
     action: str,
     strategy: str,
     thread_id: str | None,
+    timeout_seconds: float | None,
 ) -> dict[str, object] | None:
     if thread_id is None:
         return None
 
-    app_server_result = resume_codex_thread_for_request(store=store, request_id=request_id, action=action)
+    app_server_result = resume_codex_thread_for_request(
+        store=store,
+        request_id=request_id,
+        action=action,
+        **({"timeout_seconds": timeout_seconds} if timeout_seconds is not None else {}),
+    )
     if app_server_result is None:
         return {
             "status": "skipped",
