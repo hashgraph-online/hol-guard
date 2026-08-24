@@ -462,6 +462,11 @@ class TestGuardSurfaceServer:
             "_containment_health_payload",
             lambda self, **_kwargs: (_ for _ in ()).throw(RuntimeError("probe failed")),
         )
+        monkeypatch.setattr(
+            daemon_server_module,
+            "_repair_failing_managed_harness_hooks",
+            lambda _store: (_ for _ in ()).throw(RuntimeError("hook discovery failed")),
+        )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
         request = urllib.request.Request(
@@ -479,6 +484,7 @@ class TestGuardSurfaceServer:
 
         assert error.value.code == 409
         assert payload["failed_check_ids"] == [
+            "harness_hooks",
             "decision_plane_compatibility",
             "containment_compatibility",
             "sandbox",

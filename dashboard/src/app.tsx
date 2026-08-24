@@ -831,41 +831,34 @@ export function App() {
       failures.push(error instanceof Error ? error.message : "integrity protection");
     }
     const refreshedSnapshot = await refreshStateAfterAction();
-    if (failures.length > 0) {
-      const nextStep = failedHarnesses.size > 0
-        ? "Open the app repair below to finish that protection layer."
-        : "Retry the remaining checks from this page.";
-      throw new ProtectionRepairFlowError(
-        `Repair paused at ${failures.join(", ")}. ${nextStep}`,
-        [...failedHarnesses],
-      );
-    }
     if (refreshedSnapshot === null) {
-      throw new Error("Repair completed, but Guard could not recheck protection. Check again in a moment.");
+      const detail = failures.length > 0 ? ` Repair reported: ${failures.join(", ")}.` : "";
+      throw new ProtectionRepairFlowError(
+        `Guard could not recheck protection. Check again in a moment.${detail}`,
+        [],
+      );
     }
     const remainingHealth = protectionHealthFor(refreshedSnapshot);
-    if (remainingHealth.state !== "protected") {
-      const remainingParts = remainingProtectionRepairParts(remainingHealth);
-      const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
-      const remainingMessages: string[] = [];
-      if (failedHookApps.length > 0) {
-        for (const harness of remainingParts.failedHookHarnesses) failedHarnesses.add(harness);
-        remainingMessages.push(
-          `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`,
-        );
-      }
-      if (remainingParts.evidenceFailed) {
-        remainingMessages.push("Command evidence still needs repair.");
-      }
-      const remaining = remainingMessages.length > 0
-        ? remainingMessages.join(" ")
-        : "A local protection check still needs attention.";
-      throw new ProtectionRepairFlowError(
-        `${remaining} Open the repair details below for the exact check.`,
-        [...failedHarnesses],
+    if (remainingHealth.state === "protected") {
+      return "Automatic repairs completed. Guard rechecked every protection layer below.";
+    }
+    const remainingParts = remainingProtectionRepairParts(remainingHealth);
+    const currentFailedHarnesses = new Set(remainingParts.failedHookHarnesses);
+    const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
+    const remainingMessages: string[] = [];
+    if (failedHookApps.length > 0) {
+      remainingMessages.push(
+        `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`,
       );
     }
-    return "Automatic repairs completed. Guard rechecked every protection layer below.";
+    if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
+    const remaining = remainingMessages.length > 0
+      ? remainingMessages.join(" ")
+      : "A local protection check still needs attention.";
+    throw new ProtectionRepairFlowError(
+      `${remaining} Open the repair details below for the exact check.`,
+      [...failedHarnesses].filter((harness) => currentFailedHarnesses.has(harness)),
+    );
   }, [refreshStateAfterAction]);
 
   const appDetailContent = useMemo(() => {

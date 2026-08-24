@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniChevronDown,
@@ -17,7 +17,7 @@ import type {
   GuardProtectionCheck,
   GuardProtectionHealth,
 } from "./guard-types";
-import { ProtectionRepairFlowError } from "./protection-repair-flow";
+import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 
 type GapAction = {
   label: string;
@@ -158,6 +158,21 @@ function ProtectionGapItem({
   );
 }
 
+function TargetedRepairButton({
+  harness,
+  onRepair,
+}: {
+  harness: string;
+  onRepair: (harness: string) => void;
+}) {
+  const handleRepair = useCallback(() => onRepair(harness), [harness, onRepair]);
+  return (
+    <ActionButton onClick={handleRepair} variant="outline">
+      Open {harnessDisplayName(harness)} repair
+    </ActionButton>
+  );
+}
+
 type FleetProtectionRecoveryProps = {
   cloudPolicy: CloudPolicyRecoveryInput;
   health: GuardProtectionHealth;
@@ -228,6 +243,11 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const failCount = gaps.filter((check) => check.status === "fail").length;
   const unknownCount = gaps.length - failCount;
   const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
+  const repairHarnessKey = props.repairHarnesses.join("\u0000");
+  const repairHarnessList = useMemo(
+    () => repairHarnessKey ? repairHarnessKey.split("\u0000") : [],
+    [repairHarnessKey],
+  );
   const isActiveCloudConnect = useCallback(
     (controller: AbortController) =>
       cloudConnectControllerRef.current === controller && !controller.signal.aborted,
@@ -263,10 +283,6 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const handleDetailsToggle = useCallback(() => {
     setDetailsOpen((open) => !open);
   }, []);
-  const handleTargetedRepair = useCallback(() => {
-    const harness = repairState?.failedHarnesses?.[0];
-    if (harness) props.onRepairHarness?.(harness);
-  }, [props.onRepairHarness, repairState?.failedHarnesses]);
   const handleCloudConnect = useCallback(async () => {
     cloudConnectControllerRef.current?.abort();
     const controller = new AbortController();
@@ -352,6 +368,15 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
 
   useEffect(() => () => cloudConnectControllerRef.current?.abort(), []);
 
+  useEffect(() => {
+    setRepairState((state) => {
+      if (state?.status !== "error" || !state.failedHarnesses) return state;
+      const activeFailures = activeFailedHarnesses(state.failedHarnesses, repairHarnessList);
+      if (activeFailures.length === state.failedHarnesses.length) return state;
+      return { ...state, failedHarnesses: activeFailures };
+    });
+  }, [repairHarnessList]);
+
   if (gaps.length === 0) return null;
   const working = repairState?.status === "working";
   const cloudConnectDisabled = ["working", "success"].includes(
@@ -429,10 +454,16 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           {repairState.message}
         </p>
       ) : null}
-      {repairState?.status === "error" && repairState.failedHarnesses?.[0] && props.onRepairHarness ? (
-        <ActionButton onClick={handleTargetedRepair} variant="outline" className="mt-3">
-          Open {harnessDisplayName(repairState.failedHarnesses[0])} repair
-        </ActionButton>
+      {repairState?.status === "error" && repairState.failedHarnesses?.length && props.onRepairHarness ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {Array.from(new Set(repairState.failedHarnesses)).map((harness) => (
+            <TargetedRepairButton
+              key={harness}
+              harness={harness}
+              onRepair={props.onRepairHarness}
+            />
+          ))}
+        </div>
       ) : null}
       <button
         type="button"

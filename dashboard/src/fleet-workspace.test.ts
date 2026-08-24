@@ -1,5 +1,5 @@
 import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
-import { ProtectionRepairFlowError } from "./protection-repair-flow";
+import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
 import type { FleetHeroCopy } from "./fleet-workspace";
 
@@ -9,10 +9,14 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-const targetedRepairError = new ProtectionRepairFlowError("Codex hooks need repair.", ["codex"]);
+const targetedRepairError = new ProtectionRepairFlowError("App hooks need repair.", ["codex", "grok"]);
 assert(
-  targetedRepairError.failedHarnesses[0] === "codex",
-  "repair failures retain the app needed for the next action",
+  targetedRepairError.failedHarnesses.length === 2,
+  "repair failures retain every app needed for the next actions",
+);
+assert(
+  activeFailedHarnesses(["codex", "codex", "grok"], ["grok"])[0] === "grok",
+  "resolved and duplicate app failures do not leave stale repair actions",
 );
 
 const urls = {

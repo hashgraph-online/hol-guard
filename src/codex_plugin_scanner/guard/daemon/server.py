@@ -5045,15 +5045,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             pending_check_ids: list[str] = []
             failed_check_ids: list[str] = []
             if check_id == "all":
+                hook_repair_unknown = False
                 try:
                     hook_failures = _repair_failing_managed_harness_hooks(store)
                 except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                    hook_failures = ["harness_hooks"]
+                    hook_failures = []
+                    hook_repair_unknown = True
                 has_active_hooks = any(
                     isinstance(install.get("harness"), str) and install.get("active") is True
                     for install in store.list_managed_installs()
                 )
-                if hook_failures:
+                if hook_failures or hook_repair_unknown:
                     failed_check_ids.append("harness_hooks")
                 elif has_active_hooks:
                     repaired_check_ids.append("harness_hooks")

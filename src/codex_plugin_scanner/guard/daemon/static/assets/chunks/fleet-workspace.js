@@ -1,4 +1,4 @@
-import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as ProtectionRepairFlowError, V as openPackageFirewallAuthorizeFallback, j as jsxRuntimeExports, X as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, i as harnessDisplayName, C as HiMiniChevronDown, Y as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, Z as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, _ as HiMiniEye, $ as HiMiniXCircle, a0 as HiMiniClipboardDocumentCheck, a1 as HiMiniClipboard } from "../guard-dashboard.js";
+import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as ProtectionRepairFlowError, V as openPackageFirewallAuthorizeFallback, X as activeFailedHarnesses, j as jsxRuntimeExports, Y as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, Z as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, _ as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, $ as HiMiniEye, a0 as HiMiniXCircle, a1 as HiMiniClipboardDocumentCheck, a2 as HiMiniClipboard } from "../guard-dashboard.js";
 import { S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 class CloudRequestTimeoutError extends Error {
@@ -171,6 +171,17 @@ function ProtectionGapItem({
     ] })
   ] }) });
 }
+function TargetedRepairButton({
+  harness,
+  onRepair
+}) {
+  const handleRepair = reactExports.useCallback(() => onRepair(harness), [harness, onRepair]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleRepair, variant: "outline", children: [
+    "Open ",
+    harnessDisplayName(harness),
+    " repair"
+  ] });
+}
 function recoverySummary(failCount, unknownCount) {
   if (failCount === 0) {
     return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
@@ -224,6 +235,11 @@ function FleetProtectionRecovery(props) {
   const failCount = gaps.filter((check) => check.status === "fail").length;
   const unknownCount = gaps.length - failCount;
   const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
+  const repairHarnessKey = props.repairHarnesses.join("\0");
+  const repairHarnessList = reactExports.useMemo(
+    () => repairHarnessKey ? repairHarnessKey.split("\0") : [],
+    [repairHarnessKey]
+  );
   const isActiveCloudConnect = reactExports.useCallback(
     (controller) => cloudConnectControllerRef.current === controller && !controller.signal.aborted,
     []
@@ -253,10 +269,6 @@ function FleetProtectionRecovery(props) {
   const handleDetailsToggle = reactExports.useCallback(() => {
     setDetailsOpen((open) => !open);
   }, []);
-  const handleTargetedRepair = reactExports.useCallback(() => {
-    const harness = repairState?.failedHarnesses?.[0];
-    if (harness) props.onRepairHarness?.(harness);
-  }, [props.onRepairHarness, repairState?.failedHarnesses]);
   const handleCloudConnect = reactExports.useCallback(async () => {
     cloudConnectControllerRef.current?.abort();
     const controller = new AbortController();
@@ -331,6 +343,14 @@ function FleetProtectionRecovery(props) {
     setCloudConnectState(null);
   }, [props.cloudPolicy.cloudState, props.cloudPolicy.connectUrl]);
   reactExports.useEffect(() => () => cloudConnectControllerRef.current?.abort(), []);
+  reactExports.useEffect(() => {
+    setRepairState((state) => {
+      if (state?.status !== "error" || !state.failedHarnesses) return state;
+      const activeFailures = activeFailedHarnesses(state.failedHarnesses, repairHarnessList);
+      if (activeFailures.length === state.failedHarnesses.length) return state;
+      return { ...state, failedHarnesses: activeFailures };
+    });
+  }, [repairHarnessList]);
   if (gaps.length === 0) return null;
   const working = repairState?.status === "working";
   const cloudConnectDisabled = ["working", "success"].includes(
@@ -393,11 +413,14 @@ function FleetProtectionRecovery(props) {
             ]
           }
         ) : null,
-        repairState?.status === "error" && repairState.failedHarnesses?.[0] && props.onRepairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleTargetedRepair, variant: "outline", className: "mt-3", children: [
-          "Open ",
-          harnessDisplayName(repairState.failedHarnesses[0]),
-          " repair"
-        ] }) : null,
+        repairState?.status === "error" && repairState.failedHarnesses?.length && props.onRepairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", children: Array.from(new Set(repairState.failedHarnesses)).map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          TargetedRepairButton,
+          {
+            harness,
+            onRepair: props.onRepairHarness
+          },
+          harness
+        )) }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
