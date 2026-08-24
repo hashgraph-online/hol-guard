@@ -49,7 +49,7 @@ def maybe_queue_first_cloud_sync(
         try:
             repair_connect(store)
         except Exception as error:
-            _LOGGER.warning("Guard Cloud credential repair failed: %s", type(error).__name__)
+            _LOGGER.warning("Guard Cloud authentication-state repair failed: %s", type(error).__name__)
             return None
         oauth_health = store.get_oauth_local_credential_health()
         if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":

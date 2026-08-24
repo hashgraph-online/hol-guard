@@ -546,6 +546,25 @@ def test_release_push_can_be_explicitly_suppressed_by_merge_marker() -> None:
     assert "github.event.pull_request.merged" in workflow["jobs"]["build"]["if"]
 
 
+def test_release_merged_pr_can_be_explicitly_suppressed_by_label() -> None:
+    workflow = _workflow(PUBLISH_WORKFLOW)
+    jobs = workflow["jobs"]
+    label_gate = "!contains(github.event.pull_request.labels.*.name, 'skip-release-publish')"
+
+    for job_name in (
+        "build",
+        "build-native-guard-wheels",
+        "assemble-native-guard-distributions",
+        "reserve-alpha-tag",
+        "publish-alpha-testpypi",
+        "publish-alpha-pypi",
+        "release-unpublished-alpha-reservation",
+        "release-alpha",
+        "publish-container",
+    ):
+        assert label_gate in jobs[job_name]["if"]
+
+
 def test_release_merged_same_repo_pr_publishes_alpha_when_push_is_missing() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]

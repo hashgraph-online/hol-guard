@@ -82,6 +82,7 @@ jobs:
     name: Build + Verify
     if: >-
       (github.event.action != 'closed' || github.event.pull_request.merged) &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
       (github.event_name != 'push' || github.run_attempt == 1) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip release publish]')) &&
@@ -404,6 +405,7 @@ jobs:
     name: Build native Guard wheel (${{ matrix.target }})
     if: >-
       needs.build.result == 'success' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       (
         (
           github.event_name == 'pull_request' &&
@@ -524,6 +526,7 @@ jobs:
     name: Assemble native Guard distributions
     if: >-
       needs.build.result == 'success' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build-native-guard-wheels.result == 'success'
     needs: [build, build-native-guard-wheels]
     runs-on: ubuntu-latest
@@ -776,6 +779,7 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.result == 'success' && needs.assemble-native-guard-distributions.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
@@ -803,6 +807,7 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       vars.ALPHA_TESTPYPI_ENABLED == 'true' &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
@@ -909,6 +914,7 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
       needs.reserve-alpha-tag.result == 'success' &&
@@ -1063,6 +1069,7 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.outputs.channel == 'alpha' &&
       needs.reserve-alpha-tag.result == 'success' &&
       needs.publish-alpha-pypi.result != 'success'
@@ -1429,6 +1436,7 @@ jobs:
     name: Create alpha GitHub prerelease
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
@@ -1536,6 +1544,7 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.result == 'success' &&
       (
         (
