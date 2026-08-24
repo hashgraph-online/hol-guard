@@ -1,9 +1,4 @@
-"""Classify GitHub CLI commands by their observable security capability.
-
-The classifier uses reviewed command sets for prompt-free reads and routine
-mutations. A new or aliased ``gh`` command therefore cannot inherit trusted
-status merely because it is followed by an output formatter in a shell pipeline.
-"""
+"""Classify GitHub CLI commands without trusting unknown commands through output filters."""
 
 from __future__ import annotations
 
@@ -15,6 +10,7 @@ from .github_capability_contract import (
     GitHubCommandAssessment,
     GitHubCommandCapability,
     github_assessment,
+    github_cli_invocation_is_help,
 )
 from .github_rest_capabilities import classify_github_api
 from .github_routine_merge import ROUTINE_SQUASH_MERGE_DETAIL, is_routine_squash_merge
@@ -135,7 +131,7 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
     top_level = normalized[0].lower()
     if top_level in {"--version", "-v"}:
         return _assessment("read_local", "github.command.local-metadata", "The command reads local CLI metadata.")
-    if top_level in {"--help", "-h"}:
+    if github_cli_invocation_is_help(normalized):
         return _assessment("read_local", "github.command.local-help", "The command displays local CLI help.")
     if top_level == "api":
         return classify_github_api(normalized[1:])
