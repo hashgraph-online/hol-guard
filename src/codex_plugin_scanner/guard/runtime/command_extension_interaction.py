@@ -31,15 +31,12 @@ def classify_command_extension_interaction(
     observations = registry.observations(command)
     reviewable_signal = any(
         bool(item.uncertainty_reasons)
-        or (
-            bool(item.effective_evidence)
-            and legacy_rule_floor(item.extension, item.rule) not in {"allow", "monitor"}
-        )
+        or (bool(item.effective_evidence) and legacy_rule_floor(item.extension, item.rule) not in {"allow", "monitor"})
         for item in observations
     )
     decision = evaluate_extension_interaction(command, observations)
-    requires_interaction = (
-        reviewable_signal and guard_action_severity(decision.action) >= guard_action_severity("review")
+    requires_interaction = reviewable_signal and guard_action_severity(decision.action) >= guard_action_severity(
+        "review"
     )
     if not requires_interaction:
         return CommandExtensionInteraction(None, None)
