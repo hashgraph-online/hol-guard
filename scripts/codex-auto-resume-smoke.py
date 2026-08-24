@@ -166,9 +166,9 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
             payload={"scope": "artifact", "reason": f"{decision}-smoke"},
             timeout_seconds=args.timeout_seconds,
         )
-        resume_payload = approval_payload.get("codex_resume") if isinstance(approval_payload, dict) else None
+        resume_payload = approval_payload.get("codexResume") if isinstance(approval_payload, dict) else None
         if not isinstance(resume_payload, dict):
-            raise RuntimeError(f"approval response did not include codex_resume: {approval_payload}")
+            raise RuntimeError(f"approval response did not include codexResume: {approval_payload}")
     finally:
         daemon.stop()
         codex_server.join(timeout=1.0)
@@ -258,9 +258,9 @@ def _start_fake_codex_app_server(
                         if line.lower().startswith("sec-websocket-key:"):
                             key = line.split(":", 1)[1].strip()
                             break
-                    accept = base64.b64encode(
-                        hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()
-                    ).decode("ascii")
+                    accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode(
+                        "ascii"
+                    )
                     connection.sendall(
                         (
                             "HTTP/1.1 101 Switching Protocols\r\n"
@@ -430,13 +430,13 @@ def _assert_expected_outcome(
     proof_created: bool,
     transcript: str,
 ) -> None:
-    codex_resume = approval_payload.get("codex_resume")
+    codex_resume = approval_payload.get("codexResume")
     if not isinstance(codex_resume, dict):
-        raise AssertionError("approval payload did not include codex_resume")
+        raise AssertionError("approval payload did not include codexResume")
     status = str(codex_resume.get("status") or "")
     if decision == "allow":
         if status not in {"in_progress", "sent", "already_sent"}:
-            raise AssertionError(f"expected codex_resume status to show live continuation, got {status!r}")
+            raise AssertionError(f"expected codexResume status to show live continuation, got {status!r}")
         if "turn/start" not in transcript:
             raise AssertionError(f"same-thread Codex app-server prompt was not sent:\n{transcript}")
         if proof_created:

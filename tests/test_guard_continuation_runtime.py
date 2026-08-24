@@ -123,7 +123,7 @@ def test_retry_only_harnesses_persist_a_manual_retry_once(tmp_path: Path, harnes
 
     assert first["continuationStatus"] == "manual_retry_required"
     assert first["localManualRetryNotification"] is True
-    assert first["harnessResume"] == first["harness_resume"]
+    assert "harness_resume" not in first
     assert "resume-token-not-in-response" not in str(first)
     assert second["continuationEvidenceId"] == first["continuationEvidenceId"]
     assert "localManualRetryNotification" not in second
@@ -155,8 +155,8 @@ def test_live_codex_hook_reports_waiting_without_starting_a_second_resume(tmp_pa
     payload = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
 
     assert payload["continuationStatus"] == "waiting"
-    assert payload["resumeStatus"] == "pending"
-    assert payload["resumeReason"] == "live_hook_waiting"
+    assert "resumeStatus" not in payload
+    assert "resumeReason" not in payload
     codex_resume = payload["codexResume"]
     assert isinstance(codex_resume, Mapping)
     assert codex_resume["strategy"] == "codex-live-hook"
@@ -257,7 +257,7 @@ def test_codex_app_server_result_is_bounded_and_opaque(tmp_path: Path, monkeypat
     )
 
     assert payload["continuationStatus"] == "resumed", payload
-    assert payload["resumeStatus"] == "sent"
+    assert "resumeStatus" not in payload
     codex_resume = payload["codexResume"]
     assert isinstance(codex_resume, Mapping)
     assert codex_resume["strategy"] == "codex-app-server-thread"

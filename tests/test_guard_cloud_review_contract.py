@@ -14,17 +14,21 @@ from jsonschema.exceptions import ValidationError
 
 from codex_plugin_scanner.guard.contracts import guard_cloud_review as contract_adapter
 from codex_plugin_scanner.guard.contracts.guard_cloud_review import (
+    COMMAND_RESULT_CONTRACT_PATH,
+    COMMAND_RESULT_CONTRACT_VERSION,
     CONTRACT_PATH,
     CONTRACT_VERSION,
     FIXTURES_PATH,
     PUBLIC_DOCUMENTATION_PATH,
     expected_artifact_digests,
     load_contract,
+    load_exact_command_result_contract,
     load_fixtures,
     render_public_documentation,
     resolve_json_pointer,
     result_validation_schema,
     status_values,
+    validate_exact_command_result,
     validate_generated_artifacts,
     validate_review_result,
     validate_reviewability_case,
@@ -102,11 +106,46 @@ def _result_by_name(name: object) -> Mapping[str, object]:
 
 def test_contract_and_fixtures_are_versioned_and_present() -> None:
     assert CONTRACT_PATH.is_file()
+    assert COMMAND_RESULT_CONTRACT_PATH.is_file()
     assert FIXTURES_PATH.is_file()
     metadata = load_contract()["x-hol-contract"]
     assert isinstance(metadata, Mapping)
     assert metadata["contractVersion"] == CONTRACT_VERSION
     assert load_fixtures()["contractVersion"] == CONTRACT_VERSION
+
+
+def test_command_result_contract_is_runtime_backed_and_maps_cloud_aggregation() -> None:
+    command_result = load_exact_command_result_contract()
+    metadata = command_result["x-hol-contract"]
+    assert isinstance(metadata, Mapping)
+    assert metadata["contractVersion"] == COMMAND_RESULT_CONTRACT_VERSION
+    correlation = metadata["correlation"]
+    assert isinstance(correlation, Mapping)
+    assert correlation["field"] == "correlationId"
+    aggregation = correlation["cloudAggregation"]
+    assert aggregation == {
+        "agentContinuationStatus": "/continuationStatus",
+        "commandJobId": "/correlationId",
+        "decisionReceiptId": "/receiptId",
+        "localApplicationStatus": "/applicationStatus",
+        "reviewRequestLocalId": "/localRequestId",
+    }
+    result = {
+        "applicationReason": None,
+        "applicationStatus": "applied",
+        "applicationUpdatedAt": "2026-08-24T00:03:00+00:00",
+        "continuationReason": None,
+        "continuationStatus": "resumed",
+        "continuationUpdatedAt": "2026-08-24T00:03:00+00:00",
+        "contractVersion": COMMAND_RESULT_CONTRACT_VERSION,
+        "correlationId": "command-123",
+        "localRequestId": "request-123",
+        "receiptId": "receipt-123",
+    }
+    validate_exact_command_result(result)
+    result.pop("receiptId")
+    with pytest.raises(ValueError, match="receiptId"):
+        validate_exact_command_result(result)
 
 
 def test_result_schema_is_valid_draft_2020_12_with_root_addressable_references() -> None:
@@ -121,6 +160,7 @@ def test_result_schema_is_valid_draft_2020_12_with_root_addressable_references()
 def test_contract_defines_phase_zero_glossary_invariants_and_operation_boundary() -> None:
     metadata = load_contract()["x-hol-contract"]
     assert isinstance(metadata, Mapping)
+    assert metadata["implementationPhase"] == "runtime-backed"
     glossary = _string_keyed_mapping(metadata["glossary"], "glossary")
     assert set(glossary) == {
         "localRequest",
@@ -294,7 +334,7 @@ def test_generated_artifacts_match_non_self_referential_contract_digests(tmp_pat
     assert isinstance(generation, Mapping)
     assert generation["excludes"] == ["contract.json"]
     expected = expected_artifact_digests()
-    assert set(expected) == {"fixtures", "publicDocumentation"}
+    assert set(expected) == {"commandResult", "fixtures", "publicDocumentation"}
     assert validate_generated_artifacts() == expected
     wheel_directory = tmp_path / "wheel"
     wheel_directory.mkdir()
@@ -308,6 +348,7 @@ def test_generated_artifacts_match_non_self_referential_contract_digests(tmp_pat
     wheel_path = wheel_paths[0]
     resource_names = {
         "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json",
+        "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/command-result.json",
         "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json",
         "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md",
     }
@@ -324,9 +365,16 @@ def test_generated_artifacts_match_non_self_referential_contract_digests(tmp_pat
             "    return Path(entry or '.').resolve() in checkout_import_roots",
             "sys.path[:] = [str(unpacked), *(entry for entry in sys.path if not is_checkout_import_path(entry))]",
             "from codex_plugin_scanner.guard.contracts import guard_cloud_review as contract",
-            "resources = (contract.CONTRACT_PATH, contract.FIXTURES_PATH, contract.PUBLIC_DOCUMENTATION_PATH)",
+            (
+                "resources = (contract.CONTRACT_PATH, contract.COMMAND_RESULT_CONTRACT_PATH, "
+                "contract.FIXTURES_PATH, contract.PUBLIC_DOCUMENTATION_PATH)"
+            ),
             "assert all(path.is_relative_to(unpacked) for path in resources)",
             "assert contract.load_contract()['x-hol-contract']['contractVersion'] == contract.CONTRACT_VERSION",
+            (
+                "assert contract.load_exact_command_result_contract()['x-hol-contract']['contractVersion'] "
+                "== contract.COMMAND_RESULT_CONTRACT_VERSION"
+            ),
             "assert contract.validate_generated_artifacts() == contract.expected_artifact_digests()",
         )
     )

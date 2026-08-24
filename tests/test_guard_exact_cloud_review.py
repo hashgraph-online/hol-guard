@@ -307,8 +307,8 @@ def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypat
         daemon.stop()
 
     assert status == 200
-    assert payload["operation"] == "remote_exact"
-    resolved_request = payload.get("resolved_request")
+    assert payload["operation"] == "guard.review.resolveExact"
+    resolved_request = payload.get("resolvedRequest")
     assert isinstance(resolved_request, dict)
     assert resolved_request["request_id"] == request.request_id
 
@@ -343,8 +343,8 @@ def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypat
 
     assert failure_status == 200
     assert failure_payload["status"] == "completed"
-    assert failure_payload["delivery_status"] == "incomplete"
-    assert failure_payload["post_commit_errors"] == ["receipt_record_failed", "harness_resume_failed"]
+    assert failure_payload["deliveryStatus"] == "incomplete"
+    assert failure_payload["postCommitErrors"] == ["receipt_record_failed", "harness_resume_failed"]
     assert side_effect_calls == ["receipt", "resume"]
     delivery_codes: set[object] = set()
     for event in store.list_events(limit=10, event_name="cloud_review.exact_delivery_failed"):
@@ -400,3 +400,30 @@ def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypat
     finally:
         old_release.set()
         old_thread.join(timeout=1)
+
+
+@pytest.mark.parametrize("retired_field", ("remote_approval", "remote_exact"))
+def test_headless_exact_endpoint_rejects_retired_signed_decision_fields(
+    tmp_path: Path,
+    retired_field: str,
+) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("exact-retired-field")
+    _add_request(store, request)
+    enable_exact_cloud_review(store)
+
+    status, response = build_headless_exact_cloud_review_response(
+        store=store,
+        payload={
+            "harness": "codex",
+            retired_field: _remote_approval(store, request.request_id, receipt_id="exact-retired-field-receipt"),
+        },
+        decode_mapping=lambda value: value if isinstance(value, dict) else {},
+        optional_string=lambda value: value if isinstance(value, str) and value else None,
+        record_receipt=lambda **_kwargs: {},
+        resume_codex=lambda **_kwargs: None,
+        now=lambda: datetime.now(timezone.utc).isoformat(),
+    )
+
+    assert status == 400
+    assert response == {"error": "missing_remote_approval"}

@@ -173,9 +173,9 @@ def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, obj
                         if line.lower().startswith("sec-websocket-key:"):
                             key = line.split(":", 1)[1].strip()
                             break
-                    accept = base64.b64encode(
-                        hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()
-                    ).decode("ascii")
+                    accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode(
+                        "ascii"
+                    )
                     connection.sendall(
                         (
                             "HTTP/1.1 101 Switching Protocols\r\n"
@@ -517,7 +517,7 @@ def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Pat
         "turn/steer",
     ]
     turn_steer = received_messages[-1]
-    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["codexResume"]["status"] == "sent"
     assert payload["resolution_summary"] == (
         "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
     )

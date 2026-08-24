@@ -369,42 +369,6 @@ class StoreEventReceiptsMixin:
             )
             return True
 
-    def claim_remote_once_receipt(
-        self,
-        receipt_id: str,
-        *,
-        request_id: str,
-        claimed_at: str,
-    ) -> bool:
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            try:
-                connection.execute(
-                    """
-                    insert into guard_remote_once_receipts (receipt_id, request_id, claimed_at)
-                    values (?, ?, ?)
-                    """,
-                    (receipt_id, request_id, claimed_at),
-                )
-            except sqlite3.IntegrityError:
-                return False
-            return True
-
-    def release_remote_once_receipt(self, receipt_id: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                "delete from guard_remote_once_receipts where receipt_id = ?",
-                (receipt_id,),
-            )
-
-    def has_remote_once_receipt(self, receipt_id: str) -> bool:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select 1 from guard_remote_once_receipts where receipt_id = ?",
-                (receipt_id,),
-            ).fetchone()
-        return row is not None
-
     def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
         query, params = _list_events_query(limit, event_name)
         with self._connect() as connection:

@@ -294,34 +294,14 @@ def _resume_after_remote_approval(
 ) -> dict[str, object]:
     harness = _optional_string(request_row.get("harness"))
     if harness == "codex" and action in {"allow", "block"}:
-        codex_resume = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
-        if codex_resume is None:
+        continuation = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
+        if continuation is None:
             return {}
-        safe = safe_resume_metadata(codex_resume)
-        payload: dict[str, object] = {
-            "codexResume": safe,
-            "codex_resume": safe,
-            "resumeReason": safe.get("reason"),
-            "resumeStatus": safe.get("status"),
-        }
-        completed_at = safe.get("completedAt") or safe.get("sentAt")
-        if completed_at is not None:
-            payload["resumeCompletedAt"] = completed_at
-        return payload
+        return _continuation_resume_metadata(continuation, detail_key="codexResume")
     harness_resume = resume_harness_operation(store, request_id=request_id, action=action, now=now)
     if harness_resume is None:
         return {}
-    safe_harness_resume = safe_resume_metadata(harness_resume)
-    payload = {
-        "harnessResume": safe_harness_resume,
-        "harness_resume": safe_harness_resume,
-        "resumeReason": safe_harness_resume.get("reason"),
-        "resumeStatus": safe_harness_resume.get("status"),
-    }
-    completed_at = safe_harness_resume.get("completedAt")
-    if completed_at is not None:
-        payload["resumeCompletedAt"] = completed_at
-    return payload
+    return _continuation_resume_metadata(harness_resume, detail_key="harnessResume")
 
 
 def _resume_codex_request(
@@ -341,14 +321,35 @@ def _resume_codex_request(
             action=action,
             now=now,
         )
-        value = continuation.get("codexResume")
-        return value if isinstance(value, dict) else None
+        return continuation
     except ValueError as error:
         return {
-            "status": "failed",
-            "reason": str(error) or "resume_failed",
-            "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
+            "codexResume": {
+                "reason": str(error) or "resume_failed",
+                "status": "failed",
+                "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
+            },
+            "continuationReason": str(error) or "resume_failed",
+            "continuationStatus": "failed",
         }
+
+
+def _continuation_resume_metadata(continuation: dict[str, object], *, detail_key: str) -> dict[str, object]:
+    detail = continuation.get(detail_key)
+    safe = safe_resume_metadata(detail) if isinstance(detail, dict) else {}
+    status = _optional_string(continuation.get("continuationStatus"))
+    if status is None:
+        raise ValueError("continuation_status_missing")
+    payload: dict[str, object] = {
+        "continuationReason": _optional_string(continuation.get("continuationReason")),
+        "continuationStatus": status,
+    }
+    if safe:
+        payload[detail_key] = safe
+    completed_at = _optional_string(continuation.get("continuationCompletedAt"))
+    if completed_at is not None:
+        payload["continuationCompletedAt"] = completed_at
+    return payload
 
 
 def _package_shim_context(

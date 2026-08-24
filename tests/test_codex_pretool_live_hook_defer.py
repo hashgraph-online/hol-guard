@@ -60,9 +60,9 @@ def test_codex_approve_pretooluse_defers_within_bridge_wait(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "pending"
-    assert payload["codex_resume"]["reason"] == "live_hook_waiting"
-    assert "original Codex action continue" in payload["codex_resume"]["message"]
+    assert payload["codexResume"]["status"] == "pending"
+    assert payload["codexResume"]["reason"] == "live_hook_waiting"
+    assert "original Codex action continue" in payload["codexResume"]["message"]
 
 
 def test_codex_approve_stale_pretooluse_requires_app_server_socket(
@@ -100,9 +100,9 @@ def test_codex_approve_stale_pretooluse_requires_app_server_socket(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["reason"] == "socket_not_available"
-    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["reason"] == "socket_not_available"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
 
 
 def test_codex_approve_pretooluse_uses_configured_wait_timeout(
@@ -143,5 +143,5 @@ def test_codex_approve_pretooluse_uses_configured_wait_timeout(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["reason"] == "socket_not_available"
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["reason"] == "socket_not_available"

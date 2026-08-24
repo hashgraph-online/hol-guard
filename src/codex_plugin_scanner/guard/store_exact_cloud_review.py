@@ -114,7 +114,7 @@ class StoreExactCloudReviewMixin:
     def has_exact_cloud_review_receipt(self: _ConnectionOwner, receipt_id: str) -> bool:
         with self._connect() as connection:
             row = connection.execute(
-                "select 1 from guard_remote_once_receipts where receipt_id = ?",
+                "select 1 from guard_exact_cloud_review_receipts where receipt_id = ?",
                 (receipt_id,),
             ).fetchone()
         return row is not None
@@ -174,7 +174,7 @@ class StoreExactCloudReviewMixin:
             try:
                 connection.execute(
                     """
-                    insert into guard_remote_once_receipts (receipt_id, request_id, claimed_at)
+                    insert into guard_exact_cloud_review_receipts (receipt_id, request_id, claimed_at)
                     values (?, ?, ?)
                     """,
                     (receipt_id, request_id, resolved_at),
@@ -192,7 +192,7 @@ class StoreExactCloudReviewMixin:
             )
             if not resolved:
                 connection.execute(
-                    "delete from guard_remote_once_receipts where receipt_id = ?",
+                    "delete from guard_exact_cloud_review_receipts where receipt_id = ?",
                     (receipt_id,),
                 )
                 return _exact_error("remote_exact_apply_failed", now=resolved_at)

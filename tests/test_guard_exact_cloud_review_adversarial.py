@@ -295,7 +295,7 @@ def test_exact_cloud_review_reuses_durable_remote_receipt_ledger(tmp_path: Path)
     )
     with sqlite3.connect(store.path) as connection:
         row = connection.execute(
-            "select request_id from guard_remote_once_receipts where receipt_id = ?",
+            "select request_id from guard_exact_cloud_review_receipts where receipt_id = ?",
             ("exact-shared-receipt",),
         ).fetchone()
     assert row == (request.request_id,)

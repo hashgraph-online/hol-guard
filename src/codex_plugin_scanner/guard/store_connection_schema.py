@@ -738,7 +738,7 @@ class StoreConnectionSchemaMixin:
             on guard_events (event_name, occurred_at desc, event_id desc)
             """,
             """
-            create table if not exists guard_remote_once_receipts (
+            create table if not exists guard_exact_cloud_review_receipts (
               receipt_id text primary key,
               request_id text not null,
               claimed_at text not null

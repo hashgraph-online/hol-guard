@@ -129,19 +129,6 @@ class FakeStore:
         del request_id
         return None
 
-    def claim_remote_once_receipt(
-        self,
-        receipt_id: str,
-        *,
-        request_id: str,
-        claimed_at: str,
-    ) -> bool:
-        del receipt_id, request_id, claimed_at
-        return True
-
-    def release_remote_once_receipt(self, receipt_id: str) -> None:
-        del receipt_id
-
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         del harness
         return []

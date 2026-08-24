@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.contracts.guard_cloud_review import validate_exact_command_result
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     validated_remote_approval_envelope,
@@ -48,7 +49,7 @@ from tests.guard_exact_cloud_review_support import (
 )
 
 _TRANSPORT_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review" / "exact-transport-fixture.json"
-_TRANSPORT_FIXTURE_SHA256 = "6503806bfc0ca098a312eb291c37c94a2f47f4f6007272b476b6fdbf11eac4bb"
+_TRANSPORT_FIXTURE_SHA256 = "7fbf367c5825d7fd6ad24e156c837c297d9c0ed82997125d0a7987e083bcb850"
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -131,13 +132,20 @@ def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_sig
     assert isinstance(expected_result, dict)
     assert (
         exact_result(
+            item,
             {
                 "generatedAt": "2026-08-24T00:03:00+00:00",
-                "data": {"daemonAckStatus": "resolved", "resumeStatus": "resumed"},
-            }
+                "data": {
+                    "daemonAckStatus": "resolved",
+                    "localRequestId": "fixture-request",
+                    "receiptId": "fixture-receipt",
+                    "continuationStatus": "resumed",
+                },
+            },
         )
         == expected_result["result"]
     )
+    validate_exact_command_result(expected_result["result"])
 
 
 def test_exact_claim_binds_current_local_authority_without_queue_snapshot(tmp_path: Path) -> None:
@@ -224,6 +232,10 @@ def test_poll_exact_leases_acks_applies_and_posts_versioned_result(
     assert result["contractVersion"] == "guard-cloud-review-command-result-v2"
     assert result["applicationStatus"] == "applied"
     assert result["continuationStatus"] in {"resumed", "already_resumed", "manual_retry_required"}
+    assert result["correlationId"] == job["id"]
+    assert result["localRequestId"] == "exact-transport"
+    assert result["receiptId"] == "exact-transport-receipt"
+    validate_exact_command_result(result)
     row = store.get_approval_request("exact-transport")
     assert row is not None and row["status"] == "resolved"
     assert [item["event"] for item in lifecycle] == [
@@ -395,7 +407,18 @@ def test_pending_exact_result_retries_on_versioned_result_route(
         "leaseId": tagged["leaseId"],
         "idempotencyKey": "retry-result",
         "status": "succeeded",
-        "result": {"contractVersion": "guard-cloud-review-command-result-v2"},
+        "result": exact_result(
+            tagged,
+            {
+                "generatedAt": "2026-08-24T00:03:00+00:00",
+                "data": {
+                    "daemonAckStatus": "resolved",
+                    "localRequestId": "exact-transport",
+                    "receiptId": "exact-transport-receipt",
+                    "continuationStatus": "resumed",
+                },
+            },
+        ),
     }
     state: dict[str, object] = {
         "state": "result_pending",
@@ -421,3 +444,24 @@ def test_pending_exact_result_retries_on_versioned_result_route(
         state,
     )
     assert calls == [f"/{job['id']}/result"]
+
+
+def test_exact_result_validates_unsupported_continuation_status(tmp_path: Path) -> None:
+    _store, job = _exact_job(tmp_path)
+
+    result = exact_result(
+        job,
+        {
+            "generatedAt": "2026-08-24T00:03:00+00:00",
+            "data": {
+                "daemonAckStatus": "resolved_unconfirmed",
+                "localRequestId": "exact-transport",
+                "receiptId": "exact-transport-receipt",
+                "continuationReason": "no_resume_transport",
+                "continuationStatus": "unsupported",
+            },
+        },
+    )
+
+    assert result["continuationStatus"] == "unsupported"
+    validate_exact_command_result(result)

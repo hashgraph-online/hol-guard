@@ -81,7 +81,7 @@ def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict
         "leaseId": lease_id(job),
         "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:succeeded",
         "status": "succeeded",
-        "result": exact_result(execution) if uses_exact_transport(job) else execution,
+        "result": exact_result(job, execution) if uses_exact_transport(job) else execution,
     }
 
 

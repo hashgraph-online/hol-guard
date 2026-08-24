@@ -18,13 +18,13 @@ def execute_exact_cloud_review_operation(
     generated_at: str,
     resume_after_approval: ResumeAfterApproval,
 ) -> dict[str, object]:
-    remote_approval = _mapping(payload.get("remoteApproval") or payload.get("remote_approval"))
-    if not remote_approval:
+    signed_decision = _mapping(payload.get("remoteApproval"))
+    if not signed_decision:
         raise ValueError("remote_exact_approval_missing")
     try:
         resolution = apply_exact_cloud_review(
             store,
-            remote_approval=remote_approval,
+            remote_approval=signed_decision,
             expected_harness=_text(payload.get("harness")),
             now=generated_at,
         )
@@ -48,7 +48,7 @@ def execute_exact_cloud_review_operation(
         "localRequestId": resolution.request_id,
         "receiptId": resolution.receipt_id,
         "remoteDecision": resolution.action,
-        "resolution": {"resolved_duplicate_ids": [], "resolved_request": resolution.resolved_request},
+        "resolution": {"resolvedDuplicateIds": [], "resolvedRequest": resolution.resolved_request},
         "status": "completed",
     }
     response.update(resume_metadata)

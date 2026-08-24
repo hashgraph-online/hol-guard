@@ -82,10 +82,9 @@ def test_pi_approval_with_session_id_metadata_does_not_attempt_codex_resume(tmp_
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert "codex_resume" not in payload
-    assert payload["harness_resume"]["status"] == "manual_retry_required"
-    assert payload["harnessResume"] == payload["harness_resume"]
-    assert "resume_token" not in str(payload["harness_resume"])
+    assert "codexResume" not in payload
+    assert payload["harnessResume"]["status"] == "manual_retry_required"
+    assert "resume_token" not in str(payload["harnessResume"])
     assert payload["copy"]["body"] == "Return to Pi and retry"
     assert store.list_events(event_name="codex/thread_resume") == []
     operation = store.get_guard_operation("pi-operation")
@@ -152,10 +151,9 @@ def test_grok_approval_marks_waiting_operation_manual_retry_required(tmp_path: P
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert "codex_resume" not in payload
-    assert payload["harness_resume"]["status"] == "manual_retry_required"
-    assert payload["harnessResume"] == payload["harness_resume"]
-    assert payload["harness_resume"]["harness"] == "grok"
+    assert "codexResume" not in payload
+    assert payload["harnessResume"]["status"] == "manual_retry_required"
+    assert payload["harnessResume"]["harness"] == "grok"
     assert payload["copy"]["body"]
     assert store.get_guard_operation("grok-operation")["status"] == "manual_retry_required"
     assert store.list_events(event_name="harness/operation_resume")
@@ -195,11 +193,18 @@ def test_omp_denial_marks_waiting_operation_blocked_without_leaking_resume_token
     )
 
     assert result == {
-        "operationId": "pi-operation-block",
-        "harness": "omp",
-        "status": "blocked",
         "action": "block",
-        "completedAt": "2026-05-08T10:01:00+00:00",
+        "continuationCompletedAt": "2026-05-08T10:01:00+00:00",
+        "continuationReason": "blocked_not_resumed",
+        "continuationStatus": "blocked_not_resumed",
+        "harnessResume": {
+            "completedAt": "2026-05-08T10:01:00+00:00",
+            "harness": "omp",
+            "operationId": "pi-operation-block",
+            "reason": "blocked_not_resumed",
+            "status": "blocked_not_resumed",
+            "supported": False,
+        },
     }
     assert "resume-token-secret" not in str(result)
     operation = store.get_guard_operation("pi-operation-block")

@@ -7,22 +7,19 @@ from typing import cast
 
 
 def remote_resume_confirmed(resume_metadata: dict[str, object], action: str) -> bool:
-    status = _text(resume_metadata.get("resumeStatus"))
+    status = _text(resume_metadata.get("continuationStatus"))
     if status is None:
         # Applying a signed decision remains authoritative when the request has
         # no resumable harness surface.
         return True
-    if status in {"already_sent", "blocked", "not_applicable", "resumed", "sent"}:
+    if status in {"already_resumed", "not_applicable", "resumed"}:
         return True
-    if status in {"manual_retry_required", "skipped", "unsupported"} and _explicitly_not_resumable(resume_metadata):
+    if status in {"manual_retry_required", "unsupported"} and _explicitly_not_resumable(resume_metadata):
         # The signed decision is fully applied when the harness advertises no
         # continuation transport. Retry/failure states on a supported transport
         # remain unconfirmed.
         return True
-    if action != "block" or status != "skipped":
-        return False
-    detail = _detail(resume_metadata)
-    return detail is not None and detail.get("reason") == "blocked_not_resumed"
+    return action == "block" and status == "blocked_not_resumed"
 
 
 def _explicitly_not_resumable(resume_metadata: dict[str, object]) -> bool:

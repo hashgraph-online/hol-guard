@@ -41,16 +41,11 @@ def continuation_payload(offer: ContinuationOffer, result: ContinuationResult, *
         "continuationEvidenceId": result.evidence_id,
         "continuationReason": result.reason,
         "continuationStatus": result.status,
-        "resumeCompletedAt": result.completed_at.isoformat(),
-        "resumeReason": reason,
-        "resumeStatus": status,
     }
     if offer.harness == "codex":
         payload["codexResume"] = detail
-        payload["codex_resume"] = detail
     else:
         payload["harnessResume"] = detail
-        payload["harness_resume"] = detail
     if result.status == "manual_retry_required" and not replayed:
         payload["localManualRetryNotification"] = True
     return payload

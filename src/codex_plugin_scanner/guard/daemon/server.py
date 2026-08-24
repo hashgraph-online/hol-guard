@@ -56,13 +56,10 @@ from ..approval_gate import (
 from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
-from ..approval_resolution import approval_resolution_block_reason
 from ..approval_scope_support import (
-    APPROVAL_SCOPE_CONTRACT_VERSION,
     APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX,
     IneligibleApprovalScopeError,
     StaleApprovalScopeContractError,
-    request_scope_contract,
     request_scope_contract_payload,
     resolve_request_scope_selection,
 )
@@ -97,7 +94,7 @@ from ..cloud_exception_requests import (
     fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
-from ..codex_resume import get_request_resume_status, retry_request_resume
+from ..codex_resume import defer_request_resume_to_live_hook, get_request_resume_status, retry_request_resume
 from ..config import (
     VALID_RECEIPT_REDACTION_LEVELS,
     GuardConfig,
@@ -113,7 +110,6 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..harness_resume import safe_resume_metadata
 from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
@@ -145,13 +141,6 @@ from ..policy_bundle_trusted_keys import (
 )
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
 from ..receipts.manager import build_receipt
-from ..review_contracts import (
-    GuardReviewContractError,
-    guard_review_oauth_metadata,
-    normalize_remote_approval_decision,
-    validate_remote_approval_request_binding,
-    validated_remote_approval_envelope,
-)
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
 from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
@@ -279,7 +268,6 @@ _REMOTE_REVIEW_POST_ROUTES = {
     "/v1/cloud-review/worker/refresh",
     "/v1/requests/bulk-allow-once",
     "/v1/requests/remote-exact",
-    "/v1/requests/remote-once",
 }
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {
     "activate",
@@ -3065,10 +3053,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             _now(),
         )
         harness = str(updated.get("harness", ""))
-        copy = _build_resolution_copy(action, harness_str or harness)
-        codex_resume = None
+        resolved_harness = harness_str or harness
+        copy = _build_resolution_copy(action, resolved_harness)
+        updated, copy = self._apply_local_approval_continuation(
+            updated=updated,
+            request_id=request_id,
+            action=action,
+            harness=resolved_harness,
+            copy=copy,
+        )
+        updated["copy"] = copy
+        updated["retry_hint"] = copy["body"]
+        self._write_json(updated)
+
+    def _apply_local_approval_continuation(
+        self,
+        *,
+        updated: dict[str, object],
+        request_id: str,
+        action: str,
+        harness: str,
+        copy: dict[str, str],
+    ) -> tuple[dict[str, object], dict[str, str]]:
+        """Attach the local harness continuation after a browser decision is stored."""
+
         resolved_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
-        if isinstance(resolved_request, dict) and action in {"allow", "block"}:
+        if not isinstance(resolved_request, dict) or action not in {"allow", "block"}:
+            return updated, copy
+        if harness != "codex":
             continuation = continue_request_after_application(
                 self.server.store,  # type: ignore[attr-defined]
                 request_row=resolved_request,
@@ -3076,29 +3088,36 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 now=_now(),
                 headless=False,
             )
-            if harness_str == "codex":
-                value = continuation.get("codexResume")
-                codex_resume = value if isinstance(value, dict) else None
-            else:
-                value = continuation.get("harnessResume")
-                if isinstance(value, dict):
-                    updated = self._apply_harness_resume_result(updated=updated, harness_resume=value)
-        if codex_resume is not None:
-            updated = self._apply_codex_resume_result(
-                updated=updated,
+            harness_resume = continuation.get("harnessResume")
+            if isinstance(harness_resume, dict):
+                updated = self._apply_harness_resume_result(updated=updated, harness_resume=harness_resume)
+            return updated, copy
+        now = _now()
+        codex_resume = defer_request_resume_to_live_hook(
+            self.server.store,  # type: ignore[attr-defined]
+            request_id=request_id,
+            action=action,
+            now=now,
+        )
+        if codex_resume is None:
+            codex_resume = retry_request_resume(
+                self.server.store,  # type: ignore[attr-defined]
                 request_id=request_id,
-                action=action,
-                copy=copy,
-                codex_resume=codex_resume,
+                now=now,
             )
-            updated_copy = updated.get("copy")
-            if _is_string_object_dict(updated_copy):
-                title = self._optional_string(updated_copy.get("title")) or copy["title"]
-                body = self._optional_string(updated_copy.get("body")) or copy["body"]
-                copy = {"title": title, "body": body}
-        updated["copy"] = copy
-        updated["retry_hint"] = copy["body"]
-        self._write_json(updated)
+        updated = self._apply_codex_resume_result(
+            updated=updated,
+            request_id=request_id,
+            action=action,
+            copy=copy,
+            codex_resume=codex_resume,
+        )
+        updated_copy = updated.get("copy")
+        if _is_string_object_dict(updated_copy):
+            title = self._optional_string(updated_copy.get("title")) or copy["title"]
+            body = self._optional_string(updated_copy.get("body")) or copy["body"]
+            copy = {"title": title, "body": body}
+        return updated, copy
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         return
@@ -3541,183 +3560,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "status": "completed",
             }
         )
-
-    def _handle_headless_remote_once(self, payload: dict[str, object]) -> None:
-        harness = self._optional_string(payload.get("harness"))
-        if harness is None:
-            self._write_json({"error": "missing_harness"}, status=400)
-            return
-        try:
-            adapter = get_adapter(harness)
-        except ValueError:
-            self._write_json({"error": "unknown_harness"}, status=404)
-            return
-        remote_approval = self._policy_memory_payload(
-            payload.get("remoteApproval")
-            or payload.get("remote_approval")
-            or payload.get("remote_once")
-            or payload.get("remoteOnce")
-        )
-        if not remote_approval:
-            self._write_json({"error": "missing_remote_approval"}, status=400)
-            return
-        try:
-            envelope = validated_remote_approval_envelope(
-                remote_approval,
-                store=self.server.store,  # type: ignore[attr-defined]
-            )
-            oauth = guard_review_oauth_metadata(self.server.store)  # type: ignore[attr-defined]
-        except GuardReviewContractError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
-        request_id = self._coalesce_string(envelope, "localRequestId", "requestId")
-        receipt_id = self._coalesce_string(envelope, "receiptId")
-        if request_id is None or receipt_id is None:
-            self._write_json({"error": "missing_remote_once_fields"}, status=400)
-            return
-        if self._remote_once_receipt_replayed(receipt_id):
-            self._write_json({"error": "remote_once_replayed"}, status=409)
-            return
-        request_row = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
-        if not isinstance(request_row, dict) or request_row.get("status") != "pending":
-            self._write_json({"error": "remote_once_request_not_pending"}, status=409)
-            return
-        request_policy_action = self._optional_string(request_row.get("policy_action"))
-        resolution_action = normalize_remote_approval_decision(envelope.get("decision"))
-        if resolution_action is None:
-            self._write_json({"error": "invalid_remote_approval_decision"}, status=400)
-            return
-        contract = request_scope_contract(request_row)
-        request_recommended_scope = self._optional_string(envelope.get("scope"))
-        resolution_block_reason = approval_resolution_block_reason(request_row)
-        if (
-            resolution_block_reason is not None
-            or request_policy_action not in {"review", "require-reapproval"}
-            or request_recommended_scope not in DECISION_SCOPE_VALUES
-        ):
-            self._write_json({"error": "remote_once_not_permitted"}, status=409)
-            return
-        try:
-            scope_selection = resolve_request_scope_selection(
-                request_row,
-                action=resolution_action,
-                requested_scope=request_recommended_scope,
-                contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
-                contract_digest=contract.digest,
-            )
-        except IneligibleApprovalScopeError:
-            self._write_json({"error": "remote_once_not_permitted"}, status=409)
-            return
-        try:
-            validate_remote_approval_request_binding(
-                envelope=envelope,
-                request_row=request_row,
-                oauth=oauth,
-                store=self.server.store,  # type: ignore[attr-defined]
-            )
-        except GuardReviewContractError as error:
-            error_code = str(error)
-            if error_code in {
-                "remote_approval_request_id_mismatch",
-                "remote_approval_approval_id_mismatch",
-                "remote_approval_harness_mismatch",
-                "remote_approval_action_hash_mismatch",
-                "remote_approval_claim_hash_mismatch",
-                "remote_approval_policy_version_mismatch",
-                "remote_approval_nonce_mismatch",
-            }:
-                self._write_json({"error": "remote_once_request_stale"}, status=409)
-                return
-            if error_code in {
-                "remote_approval_workspace_mismatch",
-                "remote_approval_installation_mismatch",
-                "remote_approval_machine_mismatch",
-                "remote_approval_device_mismatch",
-            }:
-                self._write_json({"error": "remote_once_wrong_target"}, status=409)
-                return
-            if error_code == "remote_approval_reviewer_not_authorized":
-                self._write_json({"error": "remote_once_reviewer_not_authorized"}, status=403)
-                return
-            self._write_json({"error": error_code}, status=400)
-            return
-        if not self.server.store.claim_remote_once_receipt(  # type: ignore[attr-defined]
-            receipt_id,
-            request_id=request_id,
-            claimed_at=_now(),
-        ):
-            self._write_json({"error": "remote_once_replayed"}, status=409)
-            return
-        try:
-            result = self.server.store.resolve_request_with_signed_remote_result(  # type: ignore[attr-defined]
-                request_id,
-                resolution_action=resolution_action,
-                resolution_scope=scope_selection.applied_scope,
-                reason="Guard Cloud signed remote approval",
-                resolved_at=_now(),
-            )
-        except Exception:
-            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
-            raise
-        if result.get("resolved") is not True:
-            self.server.store.release_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
-            self._write_json({"error": "remote_once_apply_failed"}, status=409)
-            return
-        resolved_request_value = result.get("resolved_request")
-        resolved_request: dict[str, object] = (
-            resolved_request_value if _is_string_object_dict(resolved_request_value) else {}
-        )
-        resolved_at = self._optional_string(resolved_request.get("resolved_at")) or _now()
-        self.server.store.add_event(  # type: ignore[attr-defined]
-            "approval.remote_once_applied",
-            {
-                "approval_url": self._optional_string(resolved_request.get("approval_url")),
-                "receipt_id": receipt_id,
-                "request_id": request_id,
-                "review_command": self._optional_string(resolved_request.get("review_command")),
-                "scope": scope_selection.applied_scope,
-            },
-            resolved_at,
-        )
-        artifact_name = self._optional_string(request_row.get("artifact_name")) or request_id
-        receipt = self._record_headless_receipt(
-            harness=adapter.harness,
-            operation="remote_once",
-            payload=payload,
-            result=result,
-            workspace_id=self._optional_string(request_row.get("workspace")),
-            artifact_name=f"Remote once approval for {artifact_name}",
-            scanner_evidence_extra={
-                "receipt_id": receipt_id,
-                "request_id": request_id,
-            },
-        )
-        response_payload: dict[str, object] = {
-            "harness": adapter.harness,
-            "operation": "remote_once",
-            "receipt": receipt,
-            "request_id": request_id,
-            "resolved_request": resolved_request,
-            "status": "completed",
-        }
-        continuation = continue_request_after_application(
-            self.server.store,  # type: ignore[attr-defined]
-            request_row=resolved_request,
-            action=resolution_action,
-            now=_now(),
-        )
-        codex_resume = continuation.get("codexResume")
-        if isinstance(codex_resume, dict):
-            safe_codex_resume = safe_resume_metadata(codex_resume)
-            continuation["codexResume"] = safe_codex_resume
-            continuation["codex_resume"] = safe_codex_resume
-            self.server.store.add_event(  # type: ignore[attr-defined]
-                "codex/thread_resume",
-                {"request_id": request_id, "action": resolution_action, **safe_codex_resume},
-                resolved_at,
-            )
-        response_payload.update(continuation)
-        self._write_json(response_payload)
 
     def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
         if action != "package_shim_path":
@@ -4460,9 +4302,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return {}
             return parsed if isinstance(parsed, dict) else {}
         return {}
-
-    def _remote_once_receipt_replayed(self, receipt_id: str) -> bool:
-        return self.server.store.has_remote_once_receipt(receipt_id)  # type: ignore[attr-defined]
 
     def _record_headless_receipt(
         self,
@@ -5783,7 +5622,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         copy: dict[str, str],
         codex_resume: dict[str, object],
     ) -> dict[str, object]:
-        updated["codex_resume"] = codex_resume
+        updated["codexResume"] = codex_resume
         self.server.store.add_event(  # type: ignore[attr-defined]
             "codex/thread_resume",
             {"request_id": request_id, "action": action, **codex_resume},
@@ -5831,11 +5670,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         updated: dict[str, object],
         harness_resume: dict[str, object],
     ) -> dict[str, object]:
-        updated["harness_resume"] = harness_resume
         updated["harnessResume"] = harness_resume
         return updated
 
-    def _codex_resume_after_remote_once(
+    def _codex_resume_after_exact_review(
         self,
         *,
         request_id: str,

@@ -57,7 +57,7 @@ def observe_exact_review_execution(
         event="continuation_completed",
         correlation_id=correlation_id,
         occurred_at=occurred_at,
-        details={"localRequestId": request_id, "resumeStatus": str(data.get("resumeStatus") or "unknown")},
+        details={"continuationStatus": str(data.get("continuationStatus") or "unknown"), "localRequestId": request_id},
     )
 
 

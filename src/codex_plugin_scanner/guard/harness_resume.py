@@ -75,16 +75,15 @@ def resume_harness_operation(
         if isinstance(detail, dict):
             return {
                 "action": normalized_action,
-                "completedAt": detail.get("completedAt"),
-                "correlationId": detail.get("correlationId"),
-                "harness": canonical_harness,
-                "operationId": str(operation["operation_id"]),
-                "reason": detail.get("reason"),
-                "status": detail.get("status"),
+                "continuationCompletedAt": continuation.get("continuationCompletedAt"),
+                "continuationReason": continuation.get("continuationReason"),
+                "continuationStatus": continuation.get("continuationStatus"),
+                "harnessResume": detail,
             }
     # Pi/OMP/Grok have no proven original-session continuation transport.  A
     # locally applied allow therefore requires an explicit retry, not a resume.
-    status = "manual_retry_required" if normalized_action == "allow" else "blocked"
+    continuation_status = "manual_retry_required" if normalized_action == "allow" else "blocked_not_resumed"
+    operation_status = "manual_retry_required" if normalized_action == "allow" else "blocked"
     metadata = operation.get("metadata")
     safe_metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
     safe_metadata["resume_action"] = normalized_action
@@ -100,18 +99,25 @@ def resume_harness_operation(
         session_id=str(operation["session_id"]),
         harness=canonical_harness,
         operation_type=str(operation["operation_type"]),
-        status=status,
+        status=operation_status,
         approval_request_ids=safe_approval_request_ids,
         resume_token=str(operation["resume_token"]) if isinstance(operation.get("resume_token"), str) else None,
         metadata=safe_metadata,
         now=now,
     )
     payload: dict[str, object] = {
-        "operationId": str(updated["operation_id"]),
-        "harness": canonical_harness,
-        "status": status,
         "action": normalized_action,
-        "completedAt": now,
+        "continuationCompletedAt": now,
+        "continuationReason": continuation_status,
+        "continuationStatus": continuation_status,
+        "harnessResume": {
+            "completedAt": now,
+            "harness": canonical_harness,
+            "operationId": str(updated["operation_id"]),
+            "reason": continuation_status,
+            "status": continuation_status,
+            "supported": False,
+        },
     }
     with suppress(Exception):
         store.add_event(
@@ -121,7 +127,7 @@ def resume_harness_operation(
                 "harness": canonical_harness,
                 "operation_id": str(updated["operation_id"]),
                 "request_id": request_id,
-                "status": status,
+                "status": operation_status,
             },
             now,
         )
