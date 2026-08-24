@@ -23,7 +23,21 @@ type GapAction = {
   detail: string;
 };
 
-type RepairState = { status: "working" | "success" | "error"; message: string };
+type RepairState = {
+  status: "working" | "success" | "error";
+  message: string;
+  failedHarnesses?: string[];
+};
+
+export class ProtectionRepairFlowError extends Error {
+  readonly failedHarnesses: string[];
+
+  constructor(message: string, failedHarnesses: string[]) {
+    super(message);
+    this.name = "ProtectionRepairFlowError";
+    this.failedHarnesses = failedHarnesses;
+  }
+}
 
 export type CloudPolicyRecoveryInput = {
   cloudState: "local_only" | "paired_waiting" | "paired_active";
@@ -159,6 +173,7 @@ type FleetProtectionRecoveryProps = {
   repairHarness?: string;
   repairHarnesses: string[];
   onRepairProtection: (harnesses: string[]) => Promise<string>;
+  onRepairHarness?: (harness: string) => void;
 };
 
 function recoverySummary(failCount: number, unknownCount: number): string {
@@ -242,7 +257,12 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
         error instanceof Error
           ? error.message
           : "Repair paused before every protection step completed. Retry to continue safely.";
-      setRepairState({ status: "error", message });
+      setRepairState({
+        status: "error",
+        message,
+        failedHarnesses:
+          error instanceof ProtectionRepairFlowError ? error.failedHarnesses : undefined,
+      });
       setDetailsOpen(true);
     }
   }, [props.onRepairProtection, props.repairHarnesses]);
@@ -252,6 +272,10 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const handleDetailsToggle = useCallback(() => {
     setDetailsOpen((open) => !open);
   }, []);
+  const handleTargetedRepair = useCallback(() => {
+    const harness = repairState?.failedHarnesses?.[0];
+    if (harness) props.onRepairHarness?.(harness);
+  }, [props.onRepairHarness, repairState?.failedHarnesses]);
   const handleCloudConnect = useCallback(async () => {
     cloudConnectControllerRef.current?.abort();
     const controller = new AbortController();
@@ -413,6 +437,11 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           ) : null}
           {repairState.message}
         </p>
+      ) : null}
+      {repairState?.status === "error" && repairState.failedHarnesses?.[0] && props.onRepairHarness ? (
+        <ActionButton onClick={handleTargetedRepair} variant="outline" className="mt-3">
+          Open {harnessDisplayName(repairState.failedHarnesses[0])} repair
+        </ActionButton>
       ) : null}
       <button
         type="button"

@@ -1,4 +1,4 @@
-import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import { cloudPolicyRecoveryHint, ProtectionRepairFlowError } from "./fleet-protection-recovery";
 import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
 import type { FleetHeroCopy } from "./fleet-workspace";
 
@@ -7,6 +7,12 @@ function assert(condition: boolean, message: string): void {
     throw new Error(message);
   }
 }
+
+const targetedRepairError = new ProtectionRepairFlowError("Codex hooks need repair.", ["codex"]);
+assert(
+  targetedRepairError.failedHarnesses[0] === "codex",
+  "repair failures retain the app needed for the next action",
+);
 
 const urls = {
   fleet_url: "https://hol.org/guard/protect",

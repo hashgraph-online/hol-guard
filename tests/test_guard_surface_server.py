@@ -131,7 +131,8 @@ class TestGuardSurfaceServer:
             "error": "harness_repair_failed",
             "harness": "opencode",
             "message": (
-                "Guard could not repair opencode protection. Update Guard, then retry from this page. "
+                "Guard could not repair opencode protection. Open this app's repair details and retry that "
+                "protection layer. "
                 "Your existing protection settings were preserved."
             ),
         }
@@ -482,6 +483,7 @@ class TestGuardSurfaceServer:
             "containment_compatibility",
             "sandbox",
         ]
+        assert payload["failed_harnesses"] == []
         assert payload["message"] == (
             "Repair paused before every protection layer could be confirmed. Retry repair here."
         )

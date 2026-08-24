@@ -4835,7 +4835,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "harness": adapter.harness,
                     "message": (
                         f"Guard could not repair {adapter.harness} protection. "
-                        "Update Guard, then retry from this page. Your existing protection settings were preserved."
+                        "Open this app's repair details and retry that protection layer. "
+                        "Your existing protection settings were preserved."
                     ),
                 },
                 status=409,
@@ -5083,6 +5084,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             "repaired": False,
                             "check_ids": repaired_check_ids,
                             "failed_check_ids": failed_check_ids,
+                            "failed_harnesses": hook_failures,
                             "pending_check_ids": pending_check_ids,
                             "message": (
                                 "Repair paused before every protection layer could be confirmed. Retry repair here."
