@@ -8,7 +8,7 @@ import shlex
 from collections.abc import Callable
 from pathlib import Path
 
-from ..action_lattice import is_guard_action, most_restrictive_guard_action
+from ..action_lattice import is_guard_action, most_restrictive_guard_action, normalize_guard_action
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
 from ..config import load_guard_config
@@ -221,14 +221,7 @@ def _protect_approval_action_envelope(
         envelope.pop("observed_policy_action", None)
     action_keys = ("policy_action", "policyAction", "pre_execution_result", "preExecutionResult")
     for key in action_keys:
-        envelope_action = _normalize_protect_policy_action(envelope.get(key))
-        if envelope_action is None:
-            continue
-        strongest_action = most_restrictive_guard_action(envelope_action, policy_action, unknown_action="block")
-        if strongest_action != policy_action:
-            return envelope
-    for key in action_keys:
-        if _normalize_protect_policy_action(envelope.get(key)) is None:
+        if key not in envelope or envelope.get(key) is None:
             continue
         envelope[key] = policy_action
     return envelope
@@ -328,11 +321,20 @@ def _protect_policy_action_candidates(
 
 def _protect_policy_action(response_payload: dict[str, object]) -> GuardAction | None:
     verdict_action, supply_action = _protect_policy_action_candidates(response_payload)
-    if verdict_action is None:
-        return supply_action
-    if supply_action is None:
-        return verdict_action
-    return most_restrictive_guard_action(verdict_action, supply_action, unknown_action="block")
+    candidates: list[GuardAction] = [action for action in (verdict_action, supply_action) if action is not None]
+    receipt = response_payload.get("receipt")
+    envelope = receipt.get("action_envelope_json") if isinstance(receipt, dict) else None
+    if isinstance(envelope, dict):
+        for key in ("policy_action", "policyAction", "pre_execution_result", "preExecutionResult"):
+            if key not in envelope or envelope.get(key) is None:
+                continue
+            candidates.append(normalize_guard_action(envelope.get(key), unknown_action="block"))
+    if not candidates:
+        return None
+    action = candidates[0]
+    for candidate in candidates[1:]:
+        action = most_restrictive_guard_action(action, candidate, unknown_action="block")
+    return action
 
 
 def _protect_policy_actions_disagree(response_payload: dict[str, object]) -> bool:
