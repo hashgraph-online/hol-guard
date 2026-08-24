@@ -137,16 +137,117 @@ def test_frozen_runtime_fingerprint_binds_exact_executable_bytes(
     assert frozen_daemon_runtime._frozen_runtime_fingerprint() == hashlib.sha256(payload).hexdigest()
 
 
+def test_frozen_runtime_accepts_same_release_from_same_macos_publisher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = tmp_path / "desktop-core"
+    peer = tmp_path / "managed-core"
+    current.write_bytes(b"desktop-wrapper")
+    peer.write_bytes(b"managed-wrapper")
+    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(current))
+    monkeypatch.setattr(frozen_daemon_runtime, "_cached_macos_signing_team", lambda _path: "TEAM123")
+    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_state_matcher", lambda _payload: False)
+
+    assert frozen_daemon_runtime._frozen_runtime_state_matches(
+        {
+            "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "package_version": manager.__version__,
+            "source_root": str(peer),
+            "runtime_fingerprint": hashlib.sha256(peer.read_bytes()).hexdigest(),
+        }
+    )
+
+
+def test_frozen_runtime_rejects_same_release_from_different_macos_publisher(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = tmp_path / "desktop-core"
+    peer = tmp_path / "untrusted-core"
+    current.write_bytes(b"desktop-wrapper")
+    peer.write_bytes(b"different-wrapper")
+    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(current))
+    monkeypatch.setattr(
+        frozen_daemon_runtime,
+        "_cached_macos_signing_team",
+        lambda path: "TEAM123" if path == current else "OTHER456",
+    )
+    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_state_matcher", lambda _payload: False)
+
+    assert not frozen_daemon_runtime._frozen_runtime_state_matches(
+        {
+            "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "package_version": manager.__version__,
+            "source_root": str(peer),
+            "runtime_fingerprint": hashlib.sha256(peer.read_bytes()).hexdigest(),
+        }
+    )
+
+
+def test_frozen_runtime_rejects_same_team_peer_with_mismatched_fingerprint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = tmp_path / "desktop-core"
+    peer = tmp_path / "managed-core"
+    current.write_bytes(b"desktop-wrapper")
+    peer.write_bytes(b"managed-wrapper")
+    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(current))
+    monkeypatch.setattr(frozen_daemon_runtime, "_cached_macos_signing_team", lambda _path: "TEAM123")
+    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_state_matcher", lambda _payload: False)
+
+    assert not frozen_daemon_runtime._frozen_runtime_state_matches(
+        {
+            "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "package_version": manager.__version__,
+            "source_root": str(peer),
+            "runtime_fingerprint": hashlib.sha256(b"other-bytes").hexdigest(),
+        }
+    )
+
+
+def test_frozen_runtime_caches_verified_team_until_executable_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / "managed-core"
+    executable.write_bytes(b"first")
+    calls: list[Path] = []
+
+    def verify(path: Path, *, deep: bool = False) -> str:
+        assert deep is True
+        calls.append(path)
+        return "TEAM123"
+
+    frozen_daemon_runtime._signing_team_cache.clear()
+    monkeypatch.setattr(frozen_daemon_runtime, "verified_macos_signing_team", verify)
+
+    assert frozen_daemon_runtime._cached_macos_signing_team(executable) == "TEAM123"
+    assert frozen_daemon_runtime._cached_macos_signing_team(executable) == "TEAM123"
+    executable.write_bytes(b"second-version")
+    assert frozen_daemon_runtime._cached_macos_signing_team(executable) == "TEAM123"
+    assert calls == [executable, executable]
+
+
 def test_frozen_runtime_consumes_pyinstaller_reset_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     inventory = manager._guard_daemon_process_inventory_for_guard_home
+    source_root = manager._current_guard_daemon_source_root
+    fingerprint = manager._current_guard_daemon_runtime_fingerprint
+    state_matcher = manager._guard_daemon_state_matches_current_runtime
     monkeypatch.setattr(frozen_daemon_runtime.sys, "frozen", True, raising=False)
     monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_installed", False)
     monkeypatch.setenv("PYINSTALLER_RESET_ENVIRONMENT", "1")
 
-    frozen_daemon_runtime.install_frozen_daemon_runtime()
+    try:
+        frozen_daemon_runtime.install_frozen_daemon_runtime()
 
-    assert "PYINSTALLER_RESET_ENVIRONMENT" not in frozen_daemon_runtime.os.environ
-    monkeypatch.setattr(manager, "_guard_daemon_process_inventory_for_guard_home", inventory)
+        assert "PYINSTALLER_RESET_ENVIRONMENT" not in frozen_daemon_runtime.os.environ
+    finally:
+        manager._guard_daemon_process_inventory_for_guard_home = inventory
+        manager._current_guard_daemon_source_root = source_root
+        manager._current_guard_daemon_runtime_fingerprint = fingerprint
+        manager._guard_daemon_state_matches_current_runtime = state_matcher
 
 
 def test_frozen_daemon_launcher_preserves_pyinstaller_reset(

@@ -165,6 +165,78 @@ def test_protect_approval_projects_watch_only_envelope_to_observed_action(tmp_pa
     assert authoritative_decision_from_artifact(item).action == "require-reapproval"
 
 
+def test_protect_approval_projects_weaker_cached_envelope_to_supply_chain_action(tmp_path: Path) -> None:
+    response = _response(verdict_action="allow", supply_action="require-reapproval")
+    receipt = response["receipt"]
+    assert isinstance(receipt, dict)
+    receipt["action_envelope_json"] = {
+        "policy_action": "allow",
+        "package_manager": "bun",
+        "package_targets": ["@openai/codex"],
+    }
+
+    item = _protect_approval_item(response, workspace=tmp_path, artifact=_artifact(tmp_path))
+
+    assert item is not None
+    assert item["policy_action"] == "require-reapproval"
+    assert item["action_envelope_json"] == {
+        "policy_action": "require-reapproval",
+        "package_manager": "bun",
+        "package_targets": ["@openai/codex"],
+    }
+    assert authoritative_decision_from_artifact(item).action == "require-reapproval"
+
+
+def test_protect_approval_does_not_weaken_stricter_envelope_action(tmp_path: Path) -> None:
+    response = _response(verdict_action="review", supply_action="review")
+    receipt = response["receipt"]
+    assert isinstance(receipt, dict)
+    receipt["action_envelope_json"] = {"policy_action": "block", "package_manager": "bun"}
+
+    item = _protect_approval_item(response, workspace=tmp_path, artifact=_artifact(tmp_path))
+
+    assert item is not None
+    assert item["policy_action"] == "block"
+    assert item["action_envelope_json"] == {"policy_action": "block", "package_manager": "bun"}
+    assert authoritative_decision_from_artifact(item).action == "block"
+
+
+def test_protect_approval_reconciles_conflicting_action_aliases_to_strongest_action(tmp_path: Path) -> None:
+    response = _response(verdict_action="review", supply_action="review")
+    receipt = response["receipt"]
+    assert isinstance(receipt, dict)
+    receipt["action_envelope_json"] = {
+        "policy_action": "allow",
+        "policyAction": "block",
+        "package_manager": "bun",
+    }
+
+    item = _protect_approval_item(response, workspace=tmp_path, artifact=_artifact(tmp_path))
+
+    assert item is not None
+    assert item["policy_action"] == "block"
+    assert item["action_envelope_json"] == {
+        "policy_action": "block",
+        "policyAction": "block",
+        "package_manager": "bun",
+    }
+    assert authoritative_decision_from_artifact(item).action == "block"
+
+
+def test_protect_approval_normalizes_legacy_envelope_action(tmp_path: Path) -> None:
+    response = _response(verdict_action="allow", supply_action="allow")
+    receipt = response["receipt"]
+    assert isinstance(receipt, dict)
+    receipt["action_envelope_json"] = {"policy_action": "ask", "package_manager": "bun"}
+
+    item = _protect_approval_item(response, workspace=tmp_path, artifact=_artifact(tmp_path))
+
+    assert item is not None
+    assert item["policy_action"] == "review"
+    assert item["action_envelope_json"] == {"policy_action": "review", "package_manager": "bun"}
+    assert authoritative_decision_from_artifact(item).action == "review"
+
+
 def test_strict_decision_parser_still_rejects_the_old_partial_protect_shape() -> None:
     old_partial_payload = {
         "action": "require-reapproval",
