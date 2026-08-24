@@ -186,6 +186,9 @@ def continue_request_after_application(
         timeout_seconds=timeout_seconds,
         cancelled=cancelled,
     )
+    authoritative = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
+    if authoritative is not None:
+        return _payload(offer, authoritative, replayed=authoritative.evidence_id != result.evidence_id)
     return _payload(offer, result, replayed=False)
 
 
@@ -274,12 +277,16 @@ def record_live_hook_completion(
     )
     if offer.capability != "suspended-response":
         return None
+    previous = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
+    if previous is not None and previous.status != "waiting":
+        return _payload(offer, previous, replayed=True)
     if normalized_action == "allow_once":
         result = _result(offer, "resumed", "live_hook_completed", now)
     else:
         result = _result(offer, "blocked_not_resumed", "blocked_not_resumed", now)
     _persist_attempt(store, request_id=request_id, action=normalized_action, offer=offer, result=result, now=now)
-    return _payload(offer, result, replayed=False)
+    authoritative = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
+    return _payload(offer, authoritative or result, replayed=authoritative is not None)
 
 
 def _persist_attempt(
@@ -311,7 +318,7 @@ def _persist_attempt(
         result=result,
     )
     operation_update = _operation_update_payload(operation, result=result, action=action, now=now)
-    store.finalize_continuation_attempt(
+    _ = store.finalize_continuation_attempt(
         request_id=request_id,
         offer_hash=_offer_hash(offer),
         action=action,

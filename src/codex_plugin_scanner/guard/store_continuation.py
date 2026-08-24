@@ -4,8 +4,32 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 # ruff: noqa: F403,F405
 from .store_base import *
+
+
+def _persist_continuation_events(
+    connection: sqlite3.Connection,
+    *,
+    request_id: str,
+    evidence_id: str,
+    events: list[tuple[str, dict[str, object]]],
+    now: str,
+) -> None:
+    for event_name, payload in events:
+        effect_key = sha256(f"{evidence_id}\0{event_name}".encode()).hexdigest()
+        inserted = connection.execute(
+            """insert or ignore into guard_continuation_effects
+               (effect_key, request_id, evidence_id, event_name, created_at) values (?, ?, ?, ?, ?)""",
+            (effect_key, request_id, evidence_id, event_name, now),
+        )
+        if inserted.rowcount:
+            connection.execute(
+                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+                (event_name, json.dumps(payload, sort_keys=True), now),
+            )
 
 
 class StoreContinuationMixin:
@@ -69,8 +93,7 @@ class StoreContinuationMixin:
         operation_update: dict[str, object] | None,
         events: list[tuple[str, dict[str, object]]],
         now: str,
-    ) -> None:
-        """Commit all durable continuation effects under one owner-bound transaction."""
+    ) -> bool:
         with self._connect() as connection:
             connection.execute("begin immediate")
             claim = connection.execute(
@@ -78,14 +101,15 @@ class StoreContinuationMixin:
                    where request_id = ? and offer_hash = ? and action = ?""",
                 (request_id, offer_hash, action),
             ).fetchone()
-            if claim_id is not None and (
-                claim is None or str(claim["state"]) != "claimed" or str(claim["claim_id"]) != claim_id
-            ):
-                raise RuntimeError("continuation claim ownership changed before finalization")
+            if claim_id is not None:
+                if claim is not None and str(claim["state"]) == "completed":
+                    return False
+                if claim is None or str(claim["state"]) != "claimed" or str(claim["claim_id"]) != claim_id:
+                    raise RuntimeError("continuation claim ownership changed before finalization")
             if claim is not None and str(claim["state"]) == "completed":
                 stored_evidence_id = claim["evidence_id"]
                 if stored_evidence_id is not None and str(stored_evidence_id) != evidence_id:
-                    raise RuntimeError("continuation evidence conflicts with completed claim")
+                    return False
             persist_request_resume_seed(
                 connection,
                 request_id=request_id,
@@ -142,15 +166,11 @@ class StoreContinuationMixin:
                 """,
                 (request_id, offer_hash, action, "completed" if terminal else "waiting", now, evidence_id),
             )
-            for event_name, payload in events:
-                effect_key = sha256(f"{evidence_id}\0{event_name}".encode()).hexdigest()
-                inserted = connection.execute(
-                    """insert or ignore into guard_continuation_effects
-                       (effect_key, request_id, evidence_id, event_name, created_at) values (?, ?, ?, ?, ?)""",
-                    (effect_key, request_id, evidence_id, event_name, now),
-                )
-                if inserted.rowcount:
-                    connection.execute(
-                        "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-                        (event_name, json.dumps(payload, sort_keys=True), now),
-                    )
+            _persist_continuation_events(
+                connection,
+                request_id=request_id,
+                evidence_id=evidence_id,
+                events=events,
+                now=now,
+            )
+        return True

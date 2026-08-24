@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-from .codex_resume import defer_request_resume_to_live_hook, retry_request_resume
+from .codex_resume import retry_request_resume
 from .continuation_contract import ContinuationAction, ContinuationOffer, ContinuationResult, ContinuationStatus
 from .store import GuardStore
 
@@ -56,18 +56,14 @@ class StoreContinuationAdapter:
         timeout_seconds: float,
         cancelled: Callable[[], bool],
     ) -> ContinuationResult:
+        _ = action
         if cancelled():
             return _result(offer, "failed", "continuation_cancelled", self._observed_at)
         if offer.capability == "suspended-response":
-            deferred = defer_request_resume_to_live_hook(
-                self._store,
-                request_id=self._request_id,
-                action="allow" if action == "allow_once" else "block",
-                now=self._observed_at,
-            )
-            if deferred is not None:
-                return _result(offer, "waiting", "original_hook_waiting", self._observed_at)
-            return _result(offer, "manual_retry_required", "original_hook_not_available", self._observed_at)
+            # The parent already proved the live-hook deadline. Only the parent
+            # may mutate the claimed resume row, so terminal hook completion
+            # cannot be overwritten by a late child result.
+            return _result(offer, "waiting", "original_hook_waiting", self._observed_at)
         if offer.capability != "session-resume":
             return _result(offer, "manual_retry_required", "manual_retry_required", self._observed_at)
         try:
