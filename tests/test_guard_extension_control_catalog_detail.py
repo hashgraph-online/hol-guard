@@ -175,6 +175,7 @@ def test_catalog_exposes_deterministic_full_extension_permission_and_rule_contra
         "command.git.permission.stash",
         "command.git.permission.rebase",
         "command.git.permission.status",
+        "command.git.permission.unsafe-read",
     } <= git_permission_ids
     assert all(permission["configurable"] is True for permission in git["permissions"])
     assert all(len(permission["rule_ids"]) == 1 for permission in git["permissions"])

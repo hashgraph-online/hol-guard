@@ -151,6 +151,7 @@ def test_shared_action_classes_keep_unique_rule_permissions() -> None:
         "command.git.permission.switch",
         "command.git.permission.checkout",
         "command.git.permission.status",
+        "command.git.permission.unsafe-read",
     } <= git_permission_ids
     assert all(permission.configurable for permission in git.permissions)
     fetch_id = "command.git.permission.unverified-fetch"
@@ -186,7 +187,7 @@ def test_permission_catalog_serialization_and_digest_are_deterministic() -> None
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
 
     assert reversed_registry.catalog_digest == registry.catalog_digest
-    assert registry.catalog_digest == "25d515b04d3c3f202be5ec0ea7d671e9fe5864d8b5dc9628f91bc228c5bd693e"
+    assert registry.catalog_digest == "79afecb6eb6ac667137f4e2131e3af4937f1c2c273d11db895e63fe341ca80b6"
     assert [permission.permission_id for permission in registry.permissions] == sorted(
         permission.permission_id for permission in registry.permissions
     )

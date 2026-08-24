@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "25d515b04d3c3f202be5ec0ea7d671e9fe5864d8b5dc9628f91bc228c5bd693e",
+  "catalog_digest": "79afecb6eb6ac667137f4e2131e3af4937f1c2c273d11db895e63fe341ca80b6",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -86,7 +86,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 156,
+  "permission_count": 157,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -156,6 +156,7 @@
     "command.git.permission.status": "git status",
     "command.git.permission.switch": "git switch",
     "command.git.permission.tag": "git tag",
+    "command.git.permission.unsafe-read": "git diff --output",
     "command.git.permission.unverified-fetch": "git fetch origin",
     "command.git.permission.worktree": "git worktree",
     "command.github.permission.read-local": "gh auth status",
@@ -282,6 +283,7 @@
     "command.git.permission.status": "git-read",
     "command.git.permission.switch": "git-workspace",
     "command.git.permission.tag": "git-workspace",
+    "command.git.permission.unsafe-read": "git-workspace",
     "command.git.permission.unverified-fetch": "git-remote",
     "command.git.permission.worktree": "git-workspace",
     "command.github.permission.routine-merge-remote": "gh-pr-merge",
@@ -385,6 +387,7 @@
     "command.git.permission.status",
     "command.git.permission.switch",
     "command.git.permission.tag",
+    "command.git.permission.unsafe-read",
     "command.git.permission.unverified-fetch",
     "command.git.permission.worktree",
     "command.github.permission.read-local",
@@ -484,7 +487,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 144,
+  "rule_count": 145,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -547,6 +550,7 @@
     "command.git.clone",
     "command.git.fetch",
     "command.git.remote",
+    "command.git.unsafe-read",
     "command.git.status",
     "command.git.log",
     "command.git.diff",

@@ -74,6 +74,18 @@ def test_forced_git_push_still_uses_destructive_rule(tmp_path: Path) -> None:
     )
 
 
+def test_git_helper_and_output_reads_are_reviewed(tmp_path: Path) -> None:
+    assert_reviewed_command_cases(
+        (
+            ("git diff --output=patch", "git workspace command", "command.git.unsafe-read"),
+            ("git show --output patch HEAD", "git workspace command", "command.git.unsafe-read"),
+            ("git diff --ext-diff", "git workspace command", "command.git.unsafe-read"),
+            ("git show --textconv HEAD", "git workspace command", "command.git.unsafe-read"),
+        ),
+        tmp_path,
+    )
+
+
 def test_git_status_allow_floor_does_not_pause_inspection(tmp_path: Path) -> None:
     evaluation = evaluate_command("git status --short", cwd=tmp_path, home_dir=tmp_path)
 
