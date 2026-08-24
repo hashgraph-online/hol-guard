@@ -103,10 +103,10 @@ def test_report_reconciles_every_case_without_lowering_or_widening_gaps() -> Non
     assert groups == {
         "allow|block": 9373,
         "allow|require-reapproval": 16691,
-        "allow|review": 375,
+        "allow|review": 250,
         "block|block": 4167,
         "review|block": 19794,
-        "review|review": 600,
+        "review|review": 725,
     }
 
     reconciliation = cast(dict[str, object], report["oracle_reconciliation"])

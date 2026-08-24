@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .command_rules import (
     AnyMatcher,
+    CommandMatcher,
     CommandRuleMode,
     CommandRuleSeverity,
     CommandSafetyRule,
@@ -26,7 +27,6 @@ _GIT_GLOBAL_OPTIONS = frozenset(
     }
 )
 _GIT_HELP_FLAGS = frozenset({"--help", "--version", "-h"})
-_PUSH_VALUE_OPTIONS = frozenset({"--exec", "--push-option", "--receive-pack", "--repo", "-o"})
 _UNSAFE_READ_FLAGS = frozenset({"--output", "--ext-diff", "--textconv"})
 _NONE: frozenset[str] = frozenset()
 _READ = "Read-only Git inspection does not change repository state."
@@ -69,7 +69,7 @@ def _risk(family: str, mode: CommandRuleMode) -> tuple[str, ...]:
 def _rule(
     suffix: str,
     title: str,
-    matcher: AnyMatcher,
+    matcher: CommandMatcher | None,
     *,
     action: str,
     family: str,
@@ -106,11 +106,11 @@ def _workspace(suffix: str, title: str, matcher: AnyMatcher, *, family: str = "g
     )
 
 
-def _remote(suffix: str, title: str, matcher: AnyMatcher) -> CommandSafetyRule:
+def _remote(suffix: str, title: str) -> CommandSafetyRule:
     return _rule(
         suffix,
         title,
-        matcher,
+        None,
         action=_WORK_ACT,
         family="git-remote",
         safer=_REMOTE,
@@ -119,11 +119,11 @@ def _remote(suffix: str, title: str, matcher: AnyMatcher) -> CommandSafetyRule:
     )
 
 
-def _read(suffix: str, title: str, matcher: AnyMatcher) -> CommandSafetyRule:
+def _read(suffix: str, title: str) -> CommandSafetyRule:
     return _rule(
         suffix,
         title,
-        matcher,
+        None,
         action=_READ_ACT,
         family="git-read",
         safer=_READ,
@@ -135,12 +135,18 @@ def _read(suffix: str, title: str, matcher: AnyMatcher) -> CommandSafetyRule:
 
 def _unsafe_read_matcher() -> AnyMatcher:
     output_values = frozenset({"--output"})
+    cached = frozenset({"--cached", "--staged"})
     return AnyMatcher(
         matchers=tuple(
             matcher
             for subcommand in ("diff", "show", "log")
             for matcher in (
-                *_git(subcommand, required=output_values, options_with_values=output_values).matchers,
+                *_git(
+                    subcommand,
+                    required=output_values,
+                    forbidden=cached if subcommand == "diff" else _NONE,
+                    options_with_values=output_values,
+                ).matchers,
                 *(
                     inner
                     for flag in ("--ext-diff", "--textconv")
@@ -169,19 +175,11 @@ GIT_PORCELAIN_COMMAND_RULES = (
     _workspace("cherry-pick", "Git cherry-pick", _git("cherry-pick"), family="git-history"),
     _workspace("revert", "Git revert", _git("revert"), family="git-history"),
     _workspace("reset", "Git reset", _git("reset", forbidden=frozenset({"--hard"})), family="git-history"),
-    _remote("pull", "Git pull", _git("pull")),
-    _remote(
-        "push",
-        "Git push",
-        _git(
-            "push",
-            forbidden=frozenset({"--force", "-f", "--delete"}),
-            options_with_values=_PUSH_VALUE_OPTIONS,
-        ),
-    ),
-    _remote("clone", "Git clone", _git("clone")),
-    _remote("fetch", "Git fetch", _git("fetch")),
-    _remote("remote", "Git remote", _git("remote")),
+    _remote("pull", "Git pull"),
+    _remote("push", "Git push"),
+    _remote("clone", "Git clone"),
+    _remote("fetch", "Git fetch"),
+    _remote("remote", "Git remote"),
     _rule(
         "unsafe-read",
         "Git helper or output write",
@@ -191,25 +189,13 @@ GIT_PORCELAIN_COMMAND_RULES = (
         safer=_WORK,
         example="git diff --output",
     ),
-    _read("status", "Git status", _git("status")),
-    _read(
-        "log",
-        "Git log",
-        _git("log", forbidden=_UNSAFE_READ_FLAGS, options_with_values=frozenset({"--output"})),
-    ),
-    _read(
-        "diff",
-        "Git diff",
-        _git("diff", forbidden=_UNSAFE_READ_FLAGS, options_with_values=frozenset({"--output"})),
-    ),
-    _read(
-        "show",
-        "Git show",
-        _git("show", forbidden=_UNSAFE_READ_FLAGS, options_with_values=frozenset({"--output"})),
-    ),
-    _read("blame", "Git blame", _git("blame")),
-    _read("grep", "Git grep", _git("grep")),
-    _read("describe", "Git describe", _git("describe")),
-    _read("reflog", "Git reflog", _git("reflog")),
-    _read("ls-files", "Git ls-files", _git("ls-files")),
+    _read("status", "Git status"),
+    _read("log", "Git log"),
+    _read("diff", "Git diff"),
+    _read("show", "Git show"),
+    _read("blame", "Git blame"),
+    _read("grep", "Git grep"),
+    _read("describe", "Git describe"),
+    _read("ls-files", "Git ls-files"),
+    _read("reflog", "Git reflog"),
 )

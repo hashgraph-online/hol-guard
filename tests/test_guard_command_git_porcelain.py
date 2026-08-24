@@ -101,8 +101,7 @@ def test_github_account_switch_is_reviewed(tmp_path: Path) -> None:
     )
 
 
-def test_git_status_allow_floor_does_not_pause_inspection(tmp_path: Path) -> None:
+def test_cataloged_git_reads_do_not_own_runtime_inspection(tmp_path: Path) -> None:
     evaluation = evaluate_command("git status --short", cwd=tmp_path, home_dir=tmp_path)
 
-    assert evaluation.minimum_action == "allow"
-    assert {owned.match.rule.rule_id for owned in evaluation.matches} == {"command.git.status"}
+    assert evaluation.matches == ()
