@@ -583,8 +583,8 @@ def test_desktop_status_does_not_advertise_newer_train(
     )
     monkeypatch.setattr(
         update_commands,
-        "_cached_pypi_alpha_versions",
-        lambda: ["3.1.0a13", "3.1.0a5", "3.0.0a239", "3.0.0a238"],
+        "pypi_alpha_versions",
+        lambda _payload: ["3.1.0a13", "3.1.0a5", "3.0.0a239", "3.0.0a238"],
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_desktop_apply.desktop_core_updates_supported",
@@ -624,9 +624,8 @@ def test_desktop_cli_update_does_not_apply_newer_train(
         },
     )
     monkeypatch.setattr(
-        update_commands,
-        "_cached_pypi_alpha_versions",
-        lambda: ["3.1.0a13", "3.0.0a239"],
+        "codex_plugin_scanner.guard.cli.update_desktop_apply.pypi_alpha_versions",
+        lambda _payload: ["3.1.0a13", "3.0.0a239"],
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_desktop_apply.apply_desktop_core_update",

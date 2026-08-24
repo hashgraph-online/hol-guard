@@ -735,7 +735,7 @@
     "tests/test_policy_bundle_v2.py": 534,
     "tests/test_policy_document_io.py": 679,
     "tests/test_release_train_workflow.py": 568,
-    "tests/test_update_desktop_core.py": 553,
+    "tests/test_update_desktop_core.py": 669,
     "tests/test_verify_release_registry.py": 567
   },
   "schema_version": 2,

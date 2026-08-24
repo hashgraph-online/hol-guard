@@ -93,6 +93,33 @@ def desktop_core_release_series(version: str) -> tuple[int, int] | None:
     return (parsed.major, parsed.minor)
 
 
+def pypi_alpha_versions(payload: object) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    releases = payload.get("releases")
+    if not isinstance(releases, dict):
+        return []
+    versions: list[str] = []
+    for version_text, files in releases.items():
+        if not isinstance(version_text, str) or not version_text.strip():
+            continue
+        try:
+            parsed_version = Version(version_text)
+        except InvalidVersion:
+            continue
+        if parsed_version.pre is None or parsed_version.pre[0] != "a":
+            continue
+        if _release_files_are_available(files):
+            versions.append(version_text.strip())
+    return versions
+
+
+def _release_files_are_available(files: object) -> bool:
+    if not isinstance(files, list):
+        return False
+    return any(isinstance(item, dict) and not item.get("yanked") for item in files)
+
+
 def select_desktop_core_latest(current_version: str, candidates: list[str]) -> str | None:
     series = desktop_core_release_series(current_version)
     if series is None:
@@ -420,5 +447,6 @@ __all__ = [
     "is_desktop_managed_runtime",
     "is_frozen_runtime",
     "platform_target",
+    "pypi_alpha_versions",
     "select_desktop_core_latest",
 ]

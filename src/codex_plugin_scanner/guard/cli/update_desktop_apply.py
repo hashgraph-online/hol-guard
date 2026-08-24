@@ -15,6 +15,7 @@ from .update_desktop_core import (
     apply_desktop_core_update,
     desktop_core_updates_supported,
     desktop_core_uses_alpha_channel,
+    pypi_alpha_versions,
     select_desktop_core_latest,
 )
 
@@ -91,6 +92,29 @@ def desktop_core_apply_failure_message(reason_code: str) -> str:
     return _APPLY_FAILURE_MESSAGES.get(reason_code, _APPLY_FAILURE_FALLBACK)
 
 
+def finalize_desktop_update_status(
+    payload: dict[str, object],
+    *,
+    candidates: list[str],
+) -> dict[str, object]:
+    if payload.get("installer") != "desktop":
+        return payload
+    version_check = payload.get("version_check")
+    if not isinstance(version_check, dict):
+        return payload
+    current_version = str(payload.get("current_version") or "")
+    refined = refine_desktop_version_check(
+        current_version,
+        version_check,
+        candidates=candidates,
+    )
+    latest_version = refined.get("latest_version")
+    payload["version_check"] = refined
+    payload["latest_version"] = latest_version if isinstance(latest_version, str) else None
+    payload["update_available"] = payload.get("auto_updatable") is True and refined.get("update_available") is True
+    return payload
+
+
 def run_desktop_managed_update(
     payload: dict[str, object],
     *,
@@ -125,7 +149,7 @@ def run_desktop_managed_update(
             network_policy=network_policy,
             include_alpha=include_alpha,
         ),
-        candidates=commands._cached_pypi_alpha_versions(),
+        candidates=pypi_alpha_versions(commands._last_pypi_payload),
     )
     payload["version_check"] = version_check
     already_current = (
