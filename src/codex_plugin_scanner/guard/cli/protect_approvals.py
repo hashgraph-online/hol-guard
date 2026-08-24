@@ -213,16 +213,20 @@ def _protect_approval_action_envelope(
     if not isinstance(value, dict):
         return None
     envelope = dict(value)
-    if envelope.get("observe_mode") is not True:
-        return envelope
-    observed_action = _normalize_protect_policy_action(envelope.get("observed_policy_action"))
-    if observed_action != policy_action:
-        return envelope
-    envelope.pop("observe_mode", None)
-    envelope.pop("observed_policy_action", None)
+    if envelope.get("observe_mode") is True:
+        observed_action = _normalize_protect_policy_action(envelope.get("observed_policy_action"))
+        if observed_action != policy_action:
+            return envelope
+        envelope.pop("observe_mode", None)
+        envelope.pop("observed_policy_action", None)
     for key in ("policy_action", "policyAction", "pre_execution_result", "preExecutionResult"):
-        if key in envelope:
-            envelope[key] = policy_action
+        envelope_action = _normalize_protect_policy_action(envelope.get(key))
+        if envelope_action is None:
+            continue
+        strongest_action = most_restrictive_guard_action(envelope_action, policy_action, unknown_action="block")
+        if strongest_action != policy_action:
+            return envelope
+        envelope[key] = policy_action
     return envelope
 
 
