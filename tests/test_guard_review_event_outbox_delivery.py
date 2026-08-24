@@ -151,7 +151,7 @@ def test_projection_uses_frozen_continuation_after_operation_changes(
 ) -> None:
     store = GuardStore(tmp_path / "guard")
     binding = _connect(store)
-    correlation_id = "gcrv2_12345678-1234-1234-1234-123456789abc"
+    correlation_id = "gcr_12345678-1234-1234-1234-123456789abc"
     request = replace(
         _request("request-frozen-continuation"),
         continuation_snapshot={
@@ -171,7 +171,7 @@ def test_projection_uses_frozen_continuation_after_operation_changes(
         "get_guard_operation_for_approval_request",
         lambda *_args, **_kwargs: {
             "status": "resolved",
-            "metadata": {"correlationId": "gcrv2_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},
+            "metadata": {"correlationId": "gcr_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},
         },
     )
     captured: list[dict[str, object]] = []

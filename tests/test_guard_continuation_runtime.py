@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 NOW = "2026-08-24T12:00:00+00:00"
-CORRELATION_ID = "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab"
+CORRELATION_ID = "gcr_018f0a0a-1234-7abc-8def-0123456789ab"
 
 
 def _successful_isolated_plan(
@@ -325,8 +325,8 @@ def test_continuation_derives_valid_correlation_instead_of_using_raw_job_id(tmp_
     replay = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
 
     correlation_id = str(first["correlationId"])
-    assert correlation_id.startswith("gcrv2_")
-    assert len(correlation_id) == len("gcrv2_00000000-0000-0000-0000-000000000000")
+    assert correlation_id.startswith("gcr_")
+    assert len(correlation_id) == len("gcr_00000000-0000-0000-0000-000000000000")
     assert correlation_id != request_id
     assert replay["correlationId"] == correlation_id
 

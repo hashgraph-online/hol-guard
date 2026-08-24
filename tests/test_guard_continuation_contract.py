@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.continuation_contract import (
     capability_offer,
 )
 
-CORRELATION_ID = "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab"
+CORRELATION_ID = "gcr_018f0a0a-1234-7abc-8def-0123456789ab"
 NOW = datetime(2026, 8, 24, tzinfo=timezone.utc)
 
 

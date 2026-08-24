@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hol.org/contracts/guard-cloud-review/v2/contract.json",
-  "title": "HOL Guard Cloud Review v2 exact-result contract",
+  "title": "HOL Guard Cloud Review exact-result contract (protocol v2)",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -27,7 +27,7 @@
   "$defs": {
     "correlationId": {
       "type": "string",
-      "pattern": "^gcrv2_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      "pattern": "^gcr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     },
     "opaqueId": {
       "type": "string",
@@ -200,7 +200,7 @@
     },
     "correlation": {
       "field": "correlationId",
-      "pattern": "^gcrv2_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "pattern": "^gcr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
       "mustAppearOn": ["localRequest", "reviewRequest", "decisionReceipt", "deliveryCommand", "localApplication", "continuationResult"]
     },
     "vocabularyPaths": {
@@ -242,8 +242,8 @@
       "algorithm": "sha256",
       "excludes": ["contract.json"],
       "artifacts": {
-        "fixtures": {"path": "contracts/guard-cloud-review/v2/fixtures.json", "sha256": "59c024aebbe1044055144efccdd4a4920503fd1a2722c448fda01c935e6d474f"},
-        "publicDocumentation": {"path": "docs/guard/contracts/guard-cloud-review-v2.md", "sha256": "d0bb892db98150fed454a53f3fbdcb420e0cd2c6dde0ac5d1c81a94d6c30bf85"}
+        "fixtures": {"path": "contracts/guard-cloud-review/v2/fixtures.json", "sha256": "3f8ae64c2185c6137314f26f44dedf68f54e7b14a9473d80c1783685dabb6909"},
+        "publicDocumentation": {"path": "docs/guard/contracts/guard-cloud-review.md", "sha256": "dedcfd933a8f096b5ee1925e30588cfaafe6a3d02b33a711099d61d724359bff"}
       }
     }
   }

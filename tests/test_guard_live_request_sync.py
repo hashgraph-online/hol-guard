@@ -289,7 +289,7 @@ class TestRedactionLevelNone:
             event_sequence=1,
         )
         assert event is not None
-        assert str(event["correlationId"]).startswith("gcrv2_")
+        assert str(event["correlationId"]).startswith("gcr_")
         assert event["continuationCapability"] in {
             "retry-only",
             "session-resume",

@@ -19,7 +19,8 @@ def enrich_exact_cloud_review_status(store, status: dict[str, object]) -> dict[s
         "oauth": oauth_health,
         "outbox": outbox,
         "worker": {
-            "last_delivery_error": queue_state.get("last_error"),
+            "last_delivery_error": queue_state.get("exact_review_route_error") or queue_state.get("last_error"),
+            "exact_review_route_error": queue_state.get("exact_review_route_error"),
             "last_poll_at": queue_state.get("last_poll_at"),
             "last_result_at": queue_state.get("last_result_at"),
             "state": queue_state.get("state", "idle"),

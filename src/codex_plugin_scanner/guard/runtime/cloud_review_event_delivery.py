@@ -91,7 +91,7 @@ def _normalize_response(
     acknowledged_through = response.get("acknowledgedThrough")
     if not isinstance(results, list) or len(results) != len(events) or type(acknowledged_through) is not int:
         raise CloudReviewEventProtocolError(
-            "Guard Cloud Review returned an invalid v2 acknowledgement. Update HOL Guard before retrying."
+            "Guard Cloud Review returned an invalid protocol 2 acknowledgement. Update HOL Guard before retrying."
         )
     normalized: list[dict[str, object]] = []
     for index, item in enumerate(results):
@@ -122,7 +122,7 @@ def _normalize_response(
     accepted_count = sum(bool(item["accepted"]) for item in normalized)
     if response.get("accepted") != accepted_count or response.get("rejected") != len(events) - accepted_count:
         raise CloudReviewEventProtocolError(
-            "Guard Cloud Review v2 acknowledgement counts are inconsistent. Retry after updating HOL Guard."
+            "Guard Cloud Review acknowledgement counts are inconsistent. Retry after updating HOL Guard."
         )
     return {
         "accepted": accepted_count,

@@ -1,4 +1,4 @@
-"""Versioned, transport-free harness continuation coordination for Cloud Review v2."""
+"""Transport-free harness continuation coordination for Cloud Review."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ ContinuationStatus = Literal[
 ContinuationAction = Literal["allow_once", "block"]
 CAPABILITY_CONTRACT_VERSION = "guard.harness-continuation.v1"
 _OPAQUE_IDENTIFIER_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-_CORRELATION_PATTERN = re.compile(r"^gcrv2_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+_CORRELATION_PATTERN = re.compile(r"^gcr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 def _require_opaque_identifier(value: str | None, label: str) -> None:
@@ -44,7 +44,7 @@ def _require_aware_datetime(value: datetime, label: str) -> None:
 
 def _require_correlation_id(value: str) -> None:
     if _CORRELATION_PATTERN.fullmatch(value) is None:
-        raise ValueError("continuation correlation_id violates the Guard Cloud Review v2 contract")
+        raise ValueError("continuation correlation_id violates the Guard Cloud Review contract")
 
 
 @dataclass(frozen=True, slots=True)

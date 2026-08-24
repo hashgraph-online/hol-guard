@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import urllib.error
+from collections.abc import Callable
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -213,6 +215,8 @@ def command_queue_status(store: GuardStore) -> dict[str, object]:
         "last_empty_poll_at": state.get("last_empty_poll_at"),
         "last_result_at": state.get("last_result_at"),
         "last_error": state.get("last_error"),
+        "exact_review_route_error": state.get("exact_review_route_error"),
+        "exact_review_route_error_at": state.get("exact_review_route_error_at"),
         "last_poll_was_empty": bool(state.get("last_poll_was_empty")),
         "active_job": state.get("active_job"),
         "pending_result": state.get("pending_result"),
@@ -358,8 +362,15 @@ def _post_result(auth_context: dict[str, object], job: dict[str, object], payloa
 def _lease_next_job(
     store: GuardStore,
     auth_context: dict[str, object],
+    *,
+    state: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
     operations = command_queue_operations(store)
+    exact_route_failure: Callable[[urllib.error.HTTPError], None] | None = None
+    exact_route_success: Callable[[], None] | None = None
+    if state is not None:
+        exact_route_failure = partial(_record_exact_route_failure, state)
+        exact_route_success = partial(_clear_exact_route_failure, state)
     return lease_next_job(
         operations=operations,
         wait_ms=_command_queue_lease_wait_ms(),
@@ -383,6 +394,8 @@ def _lease_next_job(
                 wait_ms=options["wait_ms"],  # type: ignore[arg-type]
             ),
         ),
+        exact_route_failure=exact_route_failure,
+        exact_route_success=exact_route_success,
     )
 
 
@@ -449,6 +462,17 @@ def _resolve_command_queue_auth_context(
         return _resolve_guard_sync_auth_context(store)
 
 
+def _record_exact_route_failure(state: dict[str, object], error: urllib.error.HTTPError) -> None:
+    state["exact_review_route_error"] = _redacted_error(error)
+    state["exact_review_route_error_at"] = _now()
+    _LOGGER.warning("Guard Cloud Review exact command route is unavailable; generic queue polling continues.")
+
+
+def _clear_exact_route_failure(state: dict[str, object]) -> None:
+    state.pop("exact_review_route_error", None)
+    state.pop("exact_review_route_error_at", None)
+
+
 def _record_leased_job(
     store: GuardStore, state: dict[str, object], item: dict[str, object], observer: Observer
 ) -> None:
@@ -492,7 +516,7 @@ def poll_command_queue_once(
     _save_state(store, state)
     if _retry_pending_result(store, auth_context, state):
         return command_queue_status(store)
-    item = _lease_next_job(store, auth_context)
+    item = _lease_next_job(store, auth_context, state=state)
     if item is None:
         empty_at = _now()
         state.update(

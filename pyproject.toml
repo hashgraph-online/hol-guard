@@ -131,7 +131,7 @@ packages = ["src/codex_plugin_scanner"]
 [tool.hatch.build.targets.wheel.force-include]
 "contracts/guard-cloud-review/v2/contract.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json"
 "contracts/guard-cloud-review/v2/fixtures.json" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json"
-"docs/guard/contracts/guard-cloud-review-v2.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/guard-cloud-review-v2.md"
+"docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 
 [tool.hatch.build]
 artifacts = [

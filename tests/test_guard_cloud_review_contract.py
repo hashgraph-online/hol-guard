@@ -12,8 +12,8 @@ import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-from codex_plugin_scanner.guard.contracts import guard_cloud_review_v2 as contract_adapter
-from codex_plugin_scanner.guard.contracts.guard_cloud_review_v2 import (
+from codex_plugin_scanner.guard.contracts import guard_cloud_review as contract_adapter
+from codex_plugin_scanner.guard.contracts.guard_cloud_review import (
     CONTRACT_PATH,
     CONTRACT_VERSION,
     FIXTURES_PATH,
@@ -309,7 +309,7 @@ def test_generated_artifacts_match_non_self_referential_contract_digests(tmp_pat
     resource_names = {
         "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/contract.json",
         "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/fixtures.json",
-        "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/v2/guard-cloud-review-v2.md",
+        "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md",
     }
     with zipfile.ZipFile(wheel_path) as archive:
         assert resource_names <= set(archive.namelist())
@@ -323,7 +323,7 @@ def test_generated_artifacts_match_non_self_referential_contract_digests(tmp_pat
             "def is_checkout_import_path(entry: str) -> bool:",
             "    return Path(entry or '.').resolve() in checkout_import_roots",
             "sys.path[:] = [str(unpacked), *(entry for entry in sys.path if not is_checkout_import_path(entry))]",
-            "from codex_plugin_scanner.guard.contracts import guard_cloud_review_v2 as contract",
+            "from codex_plugin_scanner.guard.contracts import guard_cloud_review as contract",
             "resources = (contract.CONTRACT_PATH, contract.FIXTURES_PATH, contract.PUBLIC_DOCUMENTATION_PATH)",
             "assert all(path.is_relative_to(unpacked) for path in resources)",
             "assert contract.load_contract()['x-hol-contract']['contractVersion'] == contract.CONTRACT_VERSION",

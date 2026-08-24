@@ -274,16 +274,79 @@ def test_mixed_capability_polls_exact_nonblocking_then_generic_queue(
     assert generic_capabilities["operations"] == ["guard.packageShims.status"]
 
 
-def test_exact_transport_rejects_cross_queue_operations_and_fails_closed_when_route_is_missing(
+def test_missing_exact_route_preserves_generic_queue_progress_and_exact_health(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store, exact_job = _exact_job(tmp_path)
+    store, _exact_job_payload = _exact_job(tmp_path)
     issue_command_capability(
         store,
         operations=("guard.packageShims.status",),
         supported_operations=SUPPORTED_COMMAND_OPERATIONS,
     )
+    generic_job = {
+        "id": "generic-status-job",
+        "leaseId": "generic-status-lease",
+        "operation": "guard.packageShims.status",
+    }
+    generic_paths: list[str] = []
+
+    def unavailable(*args: object, **kwargs: object) -> dict[str, object]:
+        del args, kwargs
+        raise urllib.error.HTTPError(
+            "https://guard.example/api/guard/review/v2/commands/lease",
+            404,
+            "Not Found",
+            Message(),
+            io.BytesIO(),
+        )
+
+    def generic_request(
+        _auth: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        del method, payload
+        generic_paths.append(path)
+        return {"item": generic_job} if path == "/lease" else {"ok": True}
+
+    monkeypatch.setattr(command_queue, "_exact_json_request", unavailable)
+    monkeypatch.setattr(command_queue, "_json_request", generic_request)
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_command_queue_auth_context",
+        lambda _store, force_refresh=False: {
+            "sync_url": "https://guard.example/api/guard/receipts/sync",
+            "access_token": "token",
+        },
+    )
+    monkeypatch.setattr(
+        command_queue,
+        "_execute_job",
+        lambda _job, _context, _store: {"generatedAt": "2026-08-24T12:00:01+00:00", "data": {"active_managers": []}},
+    )
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert "404" in str(status["exact_review_route_error"])
+    assert generic_paths == [
+        "/lease",
+        "/generic-status-job/heartbeat",
+        "/generic-status-job/heartbeat",
+        "/generic-status-job/result",
+    ]
+    approval = store.get_approval_request("exact-v2-transport")
+    assert approval is not None and approval["status"] == "pending"
+
+
+def test_exact_transport_rejects_cross_queue_operations_and_fails_closed_when_route_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, exact_job = _exact_job(tmp_path)
     generic_job = {
         **exact_job,
         "operation": "guard.packageShims.status",

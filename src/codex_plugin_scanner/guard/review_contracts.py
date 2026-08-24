@@ -29,7 +29,7 @@ from .policy_bundle_trusted_keys import (
     safe_load_policy_bundle_verification_keys,
     signing_key_is_current,
 )
-from .review_correlation import cloud_review_v2_correlation_id
+from .review_correlation import cloud_review_correlation_id
 from .review_exact_capability_advertisement import attach_exact_review_capability
 from .review_oauth_binding import (
     GuardReviewContractError,
@@ -297,7 +297,7 @@ def build_local_review_request_claim(
     assert local_request_id is not None
     claim: dict[str, object] = {
         "contractVersion": _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION,
-        "correlationId": cloud_review_v2_correlation_id(local_request_id),
+        "correlationId": cloud_review_correlation_id(local_request_id),
         "actionEnvelopeHash": _action_envelope_hash(request_row),
         "actionIdentity": _non_empty_string(request_row.get("action_identity")) or local_request_id,
         "approvalId": approval_id,

@@ -422,10 +422,72 @@ def test_migration_quarantines_legacy_row_without_request_snapshot() -> None:
         machine_id=row["machine_id"],
         machine_installation_id=row["machine_installation_id"],
     )
-    old_triggers = connection.execute(
-        "select name from sqlite_master where type = 'trigger' and name like 'guard_live_request_outbox_%'"
+    assert connection.execute(
+        "select 1 from sqlite_master where type = 'table' and name = 'guard_live_request_outbox'"
+    ).fetchone() is None
+    trigger_names = {
+        str(row["name"])
+        for row in connection.execute(
+            "select name from sqlite_master where type = 'trigger' and name like 'guard_%outbox_after_%'"
+        ).fetchall()
+    }
+    assert trigger_names == {"guard_review_outbox_after_insert", "guard_review_outbox_after_update"}
+
+
+def test_migration_is_idempotent_and_keeps_multiple_request_events_distinct() -> None:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.execute(
+        "create table sync_state (state_key text primary key, payload_json text not null, updated_at text not null)"
+    )
+    connection.execute(
+        """
+        create table approval_requests (
+          request_id text primary key, created_at text not null, last_seen_at text,
+          resolved_at text, status text not null, resolution_action text,
+          resolution_scope text, reason text, oauth_source text
+        )
+        """
+    )
+    connection.execute(
+        """
+        create table guard_live_request_outbox (
+          sequence integer primary key autoincrement, local_request_id text not null,
+          changed_at text not null, oauth_source text, oauth_subject_hash text,
+          workspace_id text, machine_id text, machine_installation_id text,
+          attempt_count integer not null default 0, next_attempt_at text, last_error text
+        )
+        """
+    )
+    subject = live_request_oauth_subject_hash("grant-1")
+    for changed_at in (_NOW, _LATER):
+        connection.execute(
+            """
+            insert into guard_live_request_outbox (
+              local_request_id, changed_at, oauth_source, oauth_subject_hash,
+              workspace_id, machine_id, machine_installation_id
+            ) values ('request-1', ?, 'default', ?, 'workspace-1', 'machine-1', 'install-1')
+            """,
+            (changed_at, subject),
+        )
+
+    ensure_review_event_outbox_schema(connection, _LATER)
+    connection.execute("delete from sync_state where state_key = 'guard_review_outbox_events_migrated'")
+    ensure_review_event_outbox_schema(connection, _LATER)
+
+    rows = connection.execute(
+        "select local_request_id, request_sequence from guard_review_outbox_events order by request_sequence"
     ).fetchall()
-    assert old_triggers == []
+    assert [(row["local_request_id"], row["request_sequence"]) for row in rows] == [
+        ("request-1", 1),
+        ("request-1", 2),
+    ]
+    assert connection.execute(
+        "select 1 from sqlite_master where type = 'table' and name = 'guard_live_request_outbox'"
+    ).fetchone() is None
+    assert connection.execute(
+        "select 1 from sync_state where state_key = 'guard_review_outbox_events_migrated'"
+    ).fetchone() is not None
 
 
 def test_migration_prioritizes_missing_source_snapshot_over_incomplete_identity() -> None:
@@ -486,7 +548,7 @@ def test_daemon_managed_store_detects_and_migrates_current_schema(tmp_path) -> N
         connection.execute("drop table guard_review_outbox_events")
         connection.execute("drop table guard_review_outbox_request_sequences")
         connection.execute("delete from schema_migrations where version = 25")
-        connection.execute("delete from sync_state where state_key = 'guard_review_outbox_events_migrated_v2'")
+        connection.execute("delete from sync_state where state_key = 'guard_review_outbox_events_migrated'")
         connection.execute(
             """
             create table guard_review_outbox_request_sequences (

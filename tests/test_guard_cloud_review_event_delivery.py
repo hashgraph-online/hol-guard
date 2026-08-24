@@ -75,7 +75,7 @@ def test_canonical_upload_drains_real_immutable_outbox(monkeypatch: pytest.Monke
         claim = event["reviewClaim"]
         assert isinstance(claim, dict)
         correlation_id = claim["correlationId"]
-        assert isinstance(correlation_id, str) and correlation_id.startswith("gcrv2_")
+        assert isinstance(correlation_id, str) and correlation_id.startswith("gcr_")
         return {
             "protocolVersion": 2,
             "acknowledgedThrough": event["localStreamSequence"],
