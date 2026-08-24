@@ -57,7 +57,11 @@ from .update_artifact import (
     recover_local_wheel_original,
     stage_trusted_wheel,
 )
-from .update_desktop_apply import desktop_update_status_state, finalize_desktop_update_status, run_desktop_managed_update
+from .update_desktop_apply import (
+    desktop_update_status_state,
+    finalize_desktop_update_status,
+    run_desktop_managed_update,
+)
 from .update_desktop_core import is_desktop_managed_runtime, pypi_alpha_versions
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
