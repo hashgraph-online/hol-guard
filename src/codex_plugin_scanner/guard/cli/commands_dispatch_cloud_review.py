@@ -19,7 +19,7 @@ from .commands_support_interaction import _emit
 
 def _refresh_cloud_review_worker(guard_home: Path) -> dict[str, object]:
     try:
-        return {"status": "refreshed", **load_guard_surface_daemon_client(guard_home).refresh_cloud_review_worker()}
+        return {"status": "refreshed", **load_guard_surface_daemon_client(guard_home).refresh_command_queue_worker()}
     except (GuardDaemonRequestError, RuntimeError):
         return {
             "status": "restart_required",
@@ -27,7 +27,7 @@ def _refresh_cloud_review_worker(guard_home: Path) -> dict[str, object]:
         }
 
 
-def provision_connect_time_exact_cloud_review(
+def apply_connect_time_cloud_review_consent(
     *,
     args: argparse.Namespace,
     store: GuardStore,
@@ -35,22 +35,26 @@ def provision_connect_time_exact_cloud_review(
     payload: dict[str, object],
     exit_code: int,
 ) -> dict[str, object]:
-    """Honor explicit connect-time consent only after OAuth succeeds."""
+    """Issue the canonical exact-review capability after explicit successful consent."""
 
-    if not bool(getattr(args, "enable_exact_cloud_review", False)):
+    if not bool(getattr(args, "enable_cloud_review", False)):
         return payload
     if exit_code != 0:
-        return {**payload, "exact_cloud_review": {"enabled": False, "reason": "connect_not_completed"}}
+        return {**payload, "cloud_review": {"enabled": False, "reason": "connect_not_completed"}}
     try:
         capability = enable_exact_cloud_review(store, issuer="connect-consent")
     except ExactCloudReviewError as error:
-        return {**payload, "exact_cloud_review": {"enabled": False, "reason": error.code}}
+        return {**payload, "cloud_review": {"enabled": False, "reason": error.code}}
+    worker = _refresh_cloud_review_worker(guard_home)
+    ready = worker.get("status") == "refreshed"
     return {
         **payload,
-        "exact_cloud_review": {
+        "cloud_review": {
             "capability": capability,
-            "enabled": True,
-            "worker": _refresh_cloud_review_worker(guard_home),
+            "capability_enabled": True,
+            "enabled": ready,
+            "reason": None if ready else "worker_restart_required",
+            "worker": worker,
         },
     }
 
@@ -101,4 +105,4 @@ def _run_guard_cloud_review_command(
     return 0
 
 
-__all__ = ["_run_guard_cloud_review_command", "provision_connect_time_exact_cloud_review"]
+__all__ = ["_run_guard_cloud_review_command", "apply_connect_time_cloud_review_consent"]

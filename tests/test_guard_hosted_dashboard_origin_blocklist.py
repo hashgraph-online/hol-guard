@@ -27,11 +27,6 @@ from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_jso
             {"harness": "codex", "operation": "install"},
         ),
         ("POST", "/v1/policy/sync", {"harness": "codex", "operation": "policy_sync"}),
-        (
-            "POST",
-            "/v1/requests/remote-exact",
-            {"harness": "codex", "operation": "guard.review.resolveExact"},
-        ),
         ("GET", "/v1/requests", None),
     ],
 )

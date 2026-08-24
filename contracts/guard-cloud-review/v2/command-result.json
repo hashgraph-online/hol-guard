@@ -14,6 +14,7 @@
         "contractVersion",
         "correlationId",
         "localRequestId",
+        "protocolVersion",
         "receiptId"
     ],
     "properties": {
@@ -37,6 +38,7 @@
         "contractVersion": {"const": "guard-cloud-review-command-result-v2"},
         "correlationId": {"$ref": "#/$defs/opaqueId"},
         "localRequestId": {"$ref": "#/$defs/opaqueId"},
+        "protocolVersion": {"const": 2},
         "receiptId": {"$ref": "#/$defs/opaqueId"}
     },
     "$defs": {

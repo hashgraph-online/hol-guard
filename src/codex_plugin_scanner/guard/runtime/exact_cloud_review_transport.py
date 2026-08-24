@@ -8,7 +8,7 @@ from typing import TypedDict
 from urllib.error import HTTPError
 
 from ..contracts.guard_cloud_review import COMMAND_RESULT_CONTRACT_VERSION, validate_exact_command_result
-from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
+from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
 
 EXACT_CLOUD_REVIEW_COMMAND_API_BASE = "/api/guard/review/v2/commands"
 EXACT_CLOUD_REVIEW_TRANSPORT = "cloud_review"
@@ -122,10 +122,14 @@ def lease_next_job(
             if exact_route_failure is not None:
                 exact_route_failure(error)
         else:
+            if exact_response.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
+                raise ValueError("cloud_review_protocol_upgrade_required")
             if exact_route_success is not None:
                 exact_route_success()
             item = exact_response.get("item")
             if isinstance(item, dict):
+                if item.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
+                    raise ValueError("cloud_review_protocol_upgrade_required")
                 return exact_transport_job(item)
     if not generic:
         return None
@@ -161,7 +165,7 @@ def _result(
     continuation_reason: str | None,
     updated_at: str,
 ) -> dict[str, object]:
-    result = {
+    result: dict[str, object] = {
         "applicationReason": application_reason,
         "applicationStatus": application_status,
         "applicationUpdatedAt": updated_at,
@@ -171,6 +175,7 @@ def _result(
         "contractVersion": COMMAND_RESULT_CONTRACT_VERSION,
         "correlationId": correlation_id,
         "localRequestId": local_request_id,
+        "protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
         "receiptId": receipt_id,
     }
     validate_exact_command_result(result)

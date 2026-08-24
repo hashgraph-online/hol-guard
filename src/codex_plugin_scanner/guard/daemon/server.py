@@ -238,7 +238,6 @@ from .discovery import (
 )
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
-from .headless_exact_cloud_review import dispatch_cloud_review_post
 from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_cli_api import LocalCliApiError, LocalCliApiService
@@ -265,9 +264,8 @@ _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
 _REMOTE_REVIEW_POST_ROUTES = {
-    "/v1/cloud-review/worker/refresh",
+    "/v1/command-queue/worker/refresh",
     "/v1/requests/bulk-allow-once",
-    "/v1/requests/remote-exact",
 }
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {
     "activate",
@@ -2710,7 +2708,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/policy/cloud-exception-requests":
             self._handle_cloud_exception_request_create(payload)
             return
-        if dispatch_cloud_review_post(self, parsed.path, payload):
+        if parsed.path == "/v1/command-queue/worker/refresh":
+            self._handle_command_queue_worker_refresh()
             return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
@@ -5673,26 +5672,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         updated["harnessResume"] = harness_resume
         return updated
 
-    def _codex_resume_after_exact_review(
-        self,
-        *,
-        request_id: str,
-        action: str,
-    ) -> dict[str, object] | None:
-        request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
-        if not isinstance(request, dict):
-            return None
-        try:
-            continuation = continue_request_after_application(
-                self.server.store,  # type: ignore[attr-defined]
-                request_row=request,
-                action=action,
-                now=_now(),
-            )
-        except ValueError:
-            return None
-        value = continuation.get("codexResume")
-        return value if isinstance(value, dict) else None
+    def _handle_command_queue_worker_refresh(self) -> None:
+        lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]
+        if lifecycle is None:
+            self._write_json({"error": "command_queue_lifecycle_unavailable"}, status=503)
+            return
+        self._write_json(
+            lifecycle.refresh_command_queue_worker(),
+            extra_headers={"Cache-Control": "no-store"},
+        )
 
     def _write_legacy_pairing_disabled(self) -> None:
         self._write_json(

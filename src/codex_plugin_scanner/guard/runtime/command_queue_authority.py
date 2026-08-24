@@ -32,7 +32,7 @@ def authorize_command_queue_job(
     authorize_generic: Callable[..., AuthorizedCommandJob] = authorize_command_job,
 ) -> AuthorizedCommandJob:
     if job.get("operation") == EXACT_CLOUD_REVIEW_OPERATION:
-        return authorize_exact_cloud_review_job(store, job, schema_versions=schema_versions, now=now)
+        return authorize_exact_cloud_review_job(store, job, now=now)
     return authorize_generic(store, job, schema_versions=schema_versions, now=now)
 
 

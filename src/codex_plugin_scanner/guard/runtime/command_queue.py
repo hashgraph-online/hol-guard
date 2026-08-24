@@ -14,7 +14,6 @@ from typing import Any
 from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
-from . import exact_cloud_review_lifecycle
 from .auto_update import maybe_auto_update
 from .command_capability import (
     CommandCapabilityError,
@@ -58,10 +57,10 @@ from .command_queue_protocol import result_payload as _result_payload
 from .command_queue_protocol import retry_wait_seconds as _retry_wait_seconds
 from .exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
+    EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     exact_cloud_review_operations,
     exact_cloud_review_status,
 )
-from .exact_cloud_review_lifecycle import ExactReviewLifecycleObserver as LifecycleObserver
 from .exact_cloud_review_transport import (
     EXACT_CLOUD_REVIEW_COMMAND_API_BASE,
     lease_next_job,
@@ -91,8 +90,6 @@ _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
 _LOGGER = logging.getLogger(__name__)
-Observer = LifecycleObserver | None
-observe_execution = exact_cloud_review_lifecycle.observe_exact_review_execution
 
 
 def _now() -> str:
@@ -254,20 +251,18 @@ def _lease_payload(
     operations = command_queue_operations(store) if operations is None else operations
     if not operations:
         raise CommandCapabilityError("command_capability_required")
-    capabilities: dict[str, object] = {
-        "operations": list(operations),
-        # Schema negotiation is a compatibility registry, not an authority
-        # grant. `operations` remains the complete locally authorized set.
-        "schemaVersions": {
-            operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation]
-            for operation in operations
-            if operation in COMMAND_OPERATION_SCHEMA_VERSIONS
-        },
+    capabilities: dict[str, object] = {"operations": list(operations)}
+    generic_schema_versions = {
+        operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation]
+        for operation in operations
+        if operation != EXACT_CLOUD_REVIEW_OPERATION and operation in COMMAND_OPERATION_SCHEMA_VERSIONS
     }
+    if generic_schema_versions:
+        capabilities["schemaVersions"] = generic_schema_versions
     repair_status = _live_request_sync_repair_status(store)
     if repair_status is not None:
         capabilities["liveRequestSync"] = repair_status
-    return {
+    payload: dict[str, object] = {
         "workspaceId": workspace_id,
         "deviceId": machine_id,
         "daemonVersion": __version__,
@@ -275,6 +270,9 @@ def _lease_payload(
         "maxJobs": 1,
         "waitMs": _command_queue_lease_wait_ms() if wait_ms is None else wait_ms,
     }
+    if operations == (EXACT_CLOUD_REVIEW_OPERATION,):
+        payload["protocolVersion"] = 2
+    return payload
 
 
 def _live_request_sync_repair_status(store: GuardStore) -> dict[str, object] | None:
@@ -319,11 +317,14 @@ def _execute_job(job: dict[str, object], context: HarnessContext, store: GuardSt
 def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
     request = _exact_json_request if uses_exact_transport(job) else _json_request
     path = f"/{_job_id(job)}/ack" if uses_exact_transport(job) else f"/{_job_id(job)}/heartbeat"
+    payload: dict[str, object] = {"leaseId": _lease_id(job)}
+    if uses_exact_transport(job):
+        payload["protocolVersion"] = EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
     request(
         auth_context,
         method="POST",
         path=path,
-        payload={"leaseId": _lease_id(job)},
+        payload=payload,
     )
 
 
@@ -451,9 +452,7 @@ def _clear_exact_route_failure(state: dict[str, object]) -> None:
     state.pop("exact_review_route_error_at", None)
 
 
-def _record_leased_job(
-    store: GuardStore, state: dict[str, object], item: dict[str, object], observer: Observer
-) -> None:
+def _record_leased_job(store: GuardStore, state: dict[str, object], item: dict[str, object]) -> None:
     state.update(
         {
             "state": "leased",
@@ -463,13 +462,9 @@ def _record_leased_job(
         }
     )
     _save_state(store, state)
-    if uses_exact_transport(item):
-        exact_cloud_review_lifecycle.observe_exact_review_lease(observer, item, occurred_at=str(state["last_lease_at"]))
 
 
-def poll_command_queue_once(
-    store: GuardStore, context: HarnessContext, *, observer: Observer = None
-) -> dict[str, object]:
+def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
     if not command_queue_enabled(store):
         state = _load_state(store)
         state.update(
@@ -508,7 +503,7 @@ def poll_command_queue_once(
         _save_state(store, state)
         maybe_auto_update(store, context)
         return command_queue_status(store)
-    _record_leased_job(store, state, item, observer)
+    _record_leased_job(store, state, item)
     try:
         _heartbeat(auth_context, item)
     except urllib.error.HTTPError as error:
@@ -577,7 +572,6 @@ def poll_command_queue_once(
                     command_job_operation(item),
                 )
                 execution = _execute_job(item, context, store)
-                observe_execution(observer, item, execution, occurred_at=_now())
             except Exception as error:
                 _LOGGER.warning(
                     "Guard command execution failed: job_id=%s error=%s",
@@ -641,10 +635,6 @@ def poll_command_queue_once(
         reason=str(payload.get("status") or "unknown"),
     )
     _LOGGER.info("Guard command completed: job_id=%s status=%s", _job_id(item), payload.get("status"))
-    if uses_exact_transport(item):
-        exact_cloud_review_lifecycle.observe_exact_review_result(
-            observer, item, occurred_at=str(state["last_result_at"]), status=payload.get("status")
-        )
     return command_queue_status(store)
 
 

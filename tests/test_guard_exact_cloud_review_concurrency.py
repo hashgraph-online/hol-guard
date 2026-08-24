@@ -61,7 +61,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     enable_exact_cloud_review(store)
     malformed_approval = _remote_approval(store, malformed.request_id, receipt_id="exact-bad-revocation")
     store.set_sync_payload(
-        "guard_exact_cloud_review_revocation_v1",
+        "guard_exact_cloud_review_revocation",
         ["invalid"],
         datetime.now(timezone.utc).isoformat(),
     )
@@ -72,7 +72,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
         )
     assert store.list_events(limit=1, event_name="cloud_review.exact_rejected")
 
-    store.delete_sync_payload("guard_exact_cloud_review_revocation_v1")
+    store.delete_sync_payload("guard_exact_cloud_review_revocation")
     original_resolve: Callable[..., dict[str, object]] = store.resolve_one_request_with_signed_remote_exact_result
     rotating = _request("exact-oauth-rotation")
     _add_request(store, rotating)
@@ -125,7 +125,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     store.set_sync_payload("oauth_local_credentials", rotation_oauth_state, datetime.now(timezone.utc).isoformat())
     monkeypatch.setattr(store, "resolve_one_request_with_signed_remote_exact_result", original_resolve)
 
-    previous_capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
+    previous_capability = store.get_sync_payload("guard_exact_cloud_review_capability")
     assert isinstance(previous_capability, dict)
     original_replace = store.replace_exact_cloud_review_state
     raced_enable = False
@@ -157,10 +157,10 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     monkeypatch.setattr(store, "replace_exact_cloud_review_state", _enable_before_disable)
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_changed"):
         disable_exact_cloud_review(store)
-    replacement_capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
+    replacement_capability = store.get_sync_payload("guard_exact_cloud_review_capability")
     assert isinstance(replacement_capability, dict)
     assert replacement_capability["nonce"] != previous_capability["nonce"]
-    assert store.get_sync_payload("guard_exact_cloud_review_revocation_v1") is None
+    assert store.get_sync_payload("guard_exact_cloud_review_revocation") is None
     monkeypatch.setattr(store, "replace_exact_cloud_review_state", original_replace)
 
     race = _request("exact-disable-race")

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from argparse import Namespace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -11,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard import store_exact_cloud_review as exact_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.cli.commands_dispatch_cloud_review import provision_connect_time_exact_cloud_review
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.runtime import command_executors as command_executor_module
 from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabilityError
@@ -165,7 +163,7 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
     fresh = _request("exact-binding-drift")
     _add_request(store, fresh)
     enable_exact_cloud_review(store)
-    capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
+    capability = store.get_sync_payload("guard_exact_cloud_review_capability")
     assert isinstance(capability, dict)
     original_credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(original_credentials, dict)
@@ -205,7 +203,7 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
         workspace_id="workspace-1",
         now=datetime.now(timezone.utc).isoformat(),
     )
-    store.set_sync_payload("guard_exact_cloud_review_capability_v1", capability, datetime.now(timezone.utc).isoformat())
+    store.set_sync_payload("guard_exact_cloud_review_capability", capability, datetime.now(timezone.utc).isoformat())
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
         apply_exact_cloud_review(
             store,
@@ -299,36 +297,3 @@ def test_exact_cloud_review_reuses_durable_remote_receipt_ledger(tmp_path: Path)
             ("exact-shared-receipt",),
         ).fetchone()
     assert row == (request.request_id,)
-
-
-def test_connect_time_consent_provisions_exact_review_only_after_success(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = _connected_store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_dispatch_cloud_review._refresh_cloud_review_worker",
-        lambda _guard_home: {"running": True, "status": "refreshed"},
-    )
-
-    enabled = provision_connect_time_exact_cloud_review(
-        args=Namespace(enable_exact_cloud_review=True),
-        store=store,
-        guard_home=store.guard_home,
-        payload={"status": "connected"},
-        exit_code=0,
-    )
-    failed = provision_connect_time_exact_cloud_review(
-        args=Namespace(enable_exact_cloud_review=True),
-        store=store,
-        guard_home=store.guard_home,
-        payload={"status": "error"},
-        exit_code=1,
-    )
-
-    enabled_review = enabled.get("exact_cloud_review")
-    assert isinstance(enabled_review, dict)
-    assert enabled_review.get("enabled") is True
-    worker = enabled_review.get("worker")
-    assert isinstance(worker, dict) and worker.get("running") is True
-    assert failed.get("exact_cloud_review") == {"enabled": False, "reason": "connect_not_completed"}

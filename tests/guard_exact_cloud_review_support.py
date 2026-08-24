@@ -12,9 +12,6 @@ from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     payload_hash_for_remote_approval_envelope,
 )
-from codex_plugin_scanner.guard.runtime.command_executors import (
-    COMMAND_OPERATION_SCHEMA_VERSIONS,
-)
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     _oauth_metadata,
@@ -162,7 +159,7 @@ def exact_review_job(
 ) -> dict[str, object]:
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
-    capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
+    capability = store.get_sync_payload("guard_exact_cloud_review_capability")
     assert isinstance(capability, dict)
     device_id = capability.get("deviceId")
     assert isinstance(device_id, str) and device_id
@@ -170,7 +167,7 @@ def exact_review_job(
         "id": "exact-job-1",
         "leaseId": "exact-lease-1",
         "operation": EXACT_CLOUD_REVIEW_OPERATION,
-        "schemaVersion": COMMAND_OPERATION_SCHEMA_VERSIONS[EXACT_CLOUD_REVIEW_OPERATION],
+        "protocolVersion": 2,
         "deviceId": device_id,
         "workspaceId": credentials["workspace_id"],
         "nonce": "exact-job-nonce",

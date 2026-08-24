@@ -140,6 +140,7 @@ def test_command_result_contract_is_runtime_backed_and_maps_cloud_aggregation() 
         "contractVersion": COMMAND_RESULT_CONTRACT_VERSION,
         "correlationId": "command-123",
         "localRequestId": "request-123",
+        "protocolVersion": 2,
         "receiptId": "receipt-123",
     }
     validate_exact_command_result(result)

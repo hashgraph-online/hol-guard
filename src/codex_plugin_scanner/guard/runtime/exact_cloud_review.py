@@ -26,9 +26,9 @@ if TYPE_CHECKING:
     from .command_capability import AuthorizedCommandJob
 
 EXACT_CLOUD_REVIEW_OPERATION = "guard.review.resolveExact"
-EXACT_CLOUD_REVIEW_SCHEMA_VERSION = 1
-EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY = "guard_exact_cloud_review_capability_v1"
-EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY = "guard_exact_cloud_review_revocation_v1"
+EXACT_CLOUD_REVIEW_PROTOCOL_VERSION = 2
+EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY = "guard_exact_cloud_review_capability"
+EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY = "guard_exact_cloud_review_revocation"
 EXACT_CLOUD_REVIEW_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 EXACT_CLOUD_REVIEW_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
 EXACT_CLOUD_REVIEW_REQUEST_TTL_SECONDS = 10 * 60
@@ -146,7 +146,7 @@ def _reject(store: GuardStore, code: str, *, now: datetime) -> ExactCloudReviewE
 
 
 def _exact_action(value: object) -> str | None:
-    """Exact review accepts only the v1 signed decision wire, not aliases."""
+    """Exact review accepts only the signed one-time decision vocabulary."""
 
     if value == "allow_once":
         return "allow"
@@ -190,7 +190,6 @@ def enable_exact_cloud_review(
             "issuer": issuer,
             "nonce": secrets.token_urlsafe(24),
             "operation": EXACT_CLOUD_REVIEW_OPERATION,
-            "version": EXACT_CLOUD_REVIEW_SCHEMA_VERSION,
             **binding,
         },
         create_key=True,
@@ -229,7 +228,6 @@ def disable_exact_cloud_review(
             "capabilityDigest": capability_digest,
             "issuer": issuer,
             "revokedAt": revoked_at.isoformat(),
-            "version": EXACT_CLOUD_REVIEW_SCHEMA_VERSION,
         },
         create_key=True,
     )
@@ -254,8 +252,6 @@ def _verified_capability(
     revoke_binding_drift: bool = True,
 ) -> dict[str, object]:
     capability = _verify(store, store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY))
-    if capability.get("version") != EXACT_CLOUD_REVIEW_SCHEMA_VERSION:
-        raise ExactCloudReviewError("cloud_review_capability_version_unsupported")
     if capability.get("operation") != EXACT_CLOUD_REVIEW_OPERATION:
         raise ExactCloudReviewError("cloud_review_capability_operation_invalid")
     if _text(capability.get("issuer")) is None or _text(capability.get("nonce")) is None:
@@ -280,10 +276,7 @@ def _verified_capability(
         if not isinstance(revocation, dict):
             raise ExactCloudReviewError("cloud_review_capability_revocation_invalid")
         verified_revocation = _verify(store, revocation)
-        if (
-            verified_revocation.get("version") != EXACT_CLOUD_REVIEW_SCHEMA_VERSION
-            or parse_utc_timestamp(verified_revocation.get("revokedAt")) is None
-        ):
+        if parse_utc_timestamp(verified_revocation.get("revokedAt")) is None:
             raise ExactCloudReviewError("cloud_review_capability_revocation_invalid")
         digest = verified_revocation.get("capabilityDigest")
         if digest is not None and not isinstance(digest, str):
@@ -303,7 +296,6 @@ def _revoke_binding_drift(store: GuardStore, capability: dict[str, object], *, n
             "capabilityDigest": _capability_digest(capability),
             "issuer": "binding-drift",
             "revokedAt": now.isoformat(),
-            "version": EXACT_CLOUD_REVIEW_SCHEMA_VERSION,
         },
         create_key=False,
     )
@@ -362,7 +354,6 @@ def authorize_exact_cloud_review_job(
     store: GuardStore,
     job: Mapping[str, object],
     *,
-    schema_versions: Mapping[str, int],
     now: str | None = None,
 ) -> AuthorizedCommandJob:
     """Authorize the dedicated operation without borrowing command permissions."""
@@ -371,15 +362,11 @@ def authorize_exact_cloud_review_job(
         AuthorizedCommandJob,
         CommandCapabilityError,
         _command_job_seen,
-        command_job_identity,
     )
 
     try:
         capability = _verified_capability(store, now=now)
-        identity = command_job_identity(
-            job,
-            schema_versions={EXACT_CLOUD_REVIEW_OPERATION: schema_versions[EXACT_CLOUD_REVIEW_OPERATION]},
-        )
+        identity = _exact_job_identity(job)
         expires_at = parse_utc_timestamp(identity.get("expiresAt"))
         if expires_at is None or expires_at <= _now(now):
             raise ExactCloudReviewError("remote_exact_job_expired")
@@ -407,6 +394,34 @@ def authorize_exact_cloud_review_job(
         operation=EXACT_CLOUD_REVIEW_OPERATION,
         requires_local_approval=False,
     )
+
+
+def _exact_job_identity(job: Mapping[str, object]) -> dict[str, object]:
+    if job.get("operation") != EXACT_CLOUD_REVIEW_OPERATION:
+        raise ExactCloudReviewError("remote_exact_job_operation_invalid")
+    if job.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
+        raise ExactCloudReviewError("cloud_review_protocol_upgrade_required")
+    if "schemaVersion" in job:
+        raise ExactCloudReviewError("remote_exact_job_invalid")
+    required_strings = {
+        "id": "remote_exact_job_id_missing",
+        "deviceId": "remote_exact_job_device_missing",
+        "workspaceId": "remote_exact_job_workspace_missing",
+        "nonce": "remote_exact_job_nonce_missing",
+        "expiresAt": "remote_exact_job_expiry_missing",
+        "idempotencyKey": "remote_exact_job_idempotency_key_missing",
+    }
+    identity: dict[str, object] = {"operation": EXACT_CLOUD_REVIEW_OPERATION}
+    for field, error_code in required_strings.items():
+        value = _text(job.get(field))
+        if value is None:
+            raise ExactCloudReviewError(error_code)
+        identity[field] = value
+    payload = job.get("payload")
+    if not isinstance(payload, Mapping):
+        raise ExactCloudReviewError("remote_exact_job_invalid")
+    identity["payloadDigest"] = hashlib.sha256(_canonical(dict(payload))).hexdigest()
+    return identity
 
 
 from .exact_cloud_review_apply import apply_exact_cloud_review  # noqa: E402, F401

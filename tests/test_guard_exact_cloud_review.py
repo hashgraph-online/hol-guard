@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import threading
 from datetime import datetime, timezone
@@ -11,10 +12,9 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args, main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_review as cloud_review_dispatch
 from codex_plugin_scanner.guard.daemon import command_queue_worker as queue_worker_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.daemon.headless_exact_cloud_review import build_headless_exact_cloud_review_response
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
@@ -53,7 +53,6 @@ from tests.guard_exact_cloud_review_support import (
 from tests.guard_exact_cloud_review_support import (
     exact_review_job as _job,
 )
-from tests.guard_exact_cloud_review_support import post_json
 from tests.guard_exact_cloud_review_support import (
     remote_approval as _remote_approval,
 )
@@ -146,7 +145,7 @@ def test_exact_cloud_review_capability_is_separate_from_generic_commands(tmp_pat
     disabled = disable_exact_cloud_review(store)
     assert disabled["enabled"] is False
     assert exact_cloud_review_operations(store) == ()
-    assert store.get_sync_payload("guard_exact_cloud_review_revocation_v1") is not None
+    assert store.get_sync_payload("guard_exact_cloud_review_revocation") is not None
 
 
 def test_exact_cloud_review_rejects_tampered_or_revoked_capabilities(tmp_path: Path) -> None:
@@ -155,10 +154,10 @@ def test_exact_cloud_review_rejects_tampered_or_revoked_capabilities(tmp_path: P
     _add_request(store, request)
     enable_exact_cloud_review(store)
     remote_approval = _remote_approval(store, request.request_id, receipt_id="exact-tampered")
-    capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
+    capability = store.get_sync_payload("guard_exact_cloud_review_capability")
     assert isinstance(capability, dict)
     tampered = {**capability, "workspaceId": "other-workspace"}
-    store.set_sync_payload("guard_exact_cloud_review_capability_v1", tampered, "2026-08-24T12:00:00+00:00")
+    store.set_sync_payload("guard_exact_cloud_review_capability", tampered, "2026-08-24T12:00:00+00:00")
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_signature_invalid"):
         apply_exact_cloud_review(
             store,
@@ -166,7 +165,7 @@ def test_exact_cloud_review_rejects_tampered_or_revoked_capabilities(tmp_path: P
         )
 
     disable_exact_cloud_review(store)
-    store.set_sync_payload("guard_exact_cloud_review_capability_v1", capability, "2026-08-24T12:00:00+00:00")
+    store.set_sync_payload("guard_exact_cloud_review_capability", capability, "2026-08-24T12:00:00+00:00")
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
         apply_exact_cloud_review(
             store,
@@ -191,8 +190,59 @@ def test_hol_guard_routes_cloud_review_as_a_top_level_command() -> None:
         program_name="hol-guard",
     ) == ["guard", "cloud-review", "status"]
     parser = _build_parser("hol-guard", program_mode="combined")
-    assert parser.parse_args(["guard", "connect", "--enable-exact-cloud-review"]).enable_exact_cloud_review is True
-    assert parser.parse_args(["guard", "connect", "--headless", "--enable-exact-cloud-review"]).headless is True
+    assert parser.parse_args(["guard", "connect", "--enable-cloud-review"]).enable_cloud_review is True
+    assert parser.parse_args(["guard", "connect", "--headless", "--enable-cloud-review"]).headless is True
+    assert parser.parse_args(["guard", "cloud-review", "enable"]).cloud_review_command == "enable"
+
+
+def test_successful_connect_issues_cloud_review_capability_only_after_explicit_consent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_refresh_cloud_review_worker",
+        lambda _guard_home: {"status": "refreshed"},
+    )
+    base_payload: dict[str, object] = {"status": "connected"}
+
+    unchanged = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
+        args=argparse.Namespace(enable_cloud_review=False),
+        store=store,
+        guard_home=store.guard_home,
+        payload=base_payload,
+        exit_code=0,
+    )
+    assert unchanged is base_payload
+    assert exact_cloud_review_operations(store) == ()
+
+    failed_connect = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
+        args=argparse.Namespace(enable_cloud_review=True),
+        store=store,
+        guard_home=store.guard_home,
+        payload=base_payload,
+        exit_code=1,
+    )
+    assert failed_connect["cloud_review"] == {
+        "enabled": False,
+        "reason": "connect_not_completed",
+    }
+    assert exact_cloud_review_operations(store) == ()
+
+    connected = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
+        args=argparse.Namespace(enable_cloud_review=True),
+        store=store,
+        guard_home=store.guard_home,
+        payload=base_payload,
+        exit_code=0,
+    )
+    cloud_review = connected["cloud_review"]
+    assert isinstance(cloud_review, dict)
+    assert cloud_review["enabled"] is True
+    assert cloud_review["worker"] == {"status": "refreshed"}
+    assert isinstance(cloud_review["capability"], dict)
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
 def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_approval(tmp_path: Path) -> None:
@@ -283,81 +333,12 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     assert persisted["dpop_public_jwk_thumbprint"] == oauth_state["dpop_public_jwk_thumbprint"]
 
 
-def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_command_queue_worker_refresh_serializes_with_shutdown(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = _connected_store(tmp_path)
-    request = _request("exact-headless")
-    _add_request(store, request)
     enable_exact_cloud_review(store)
-    monkeypatch.setattr(daemon_server_module, "start_command_queue_worker", lambda *_args: None)
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        token = load_guard_daemon_auth_token(store.guard_home)
-        assert token is not None
-        status, payload = post_json(
-            daemon.port,
-            "/v1/requests/remote-exact",
-            token,
-            {
-                "harness": "codex",
-                "remoteApproval": _remote_approval(store, request.request_id, receipt_id="exact-receipt-headless"),
-            },
-        )
-    finally:
-        daemon.stop()
-
-    assert status == 200
-    assert payload["operation"] == "guard.review.resolveExact"
-    resolved_request = payload.get("resolvedRequest")
-    assert isinstance(resolved_request, dict)
-    assert resolved_request["request_id"] == request.request_id
-
-    side_effect_request = _request("exact-headless-side-effects")
-    _add_request(store, side_effect_request)
-    side_effect_calls: list[str] = []
-
-    def _record_failure(**_kwargs: object) -> dict[str, object]:
-        side_effect_calls.append("receipt")
-        raise RuntimeError("receipt unavailable")
-
-    def _resume_failure(**_kwargs: object) -> dict[str, object]:
-        side_effect_calls.append("resume")
-        raise RuntimeError("resume unavailable")
-
-    failure_status, failure_payload = build_headless_exact_cloud_review_response(
-        store=store,
-        payload={
-            "harness": "codex",
-            "remoteApproval": _remote_approval(
-                store,
-                side_effect_request.request_id,
-                receipt_id="exact-receipt-side-effects",
-            ),
-        },
-        decode_mapping=lambda value: value if isinstance(value, dict) else {},
-        optional_string=lambda value: value if isinstance(value, str) and value else None,
-        record_receipt=_record_failure,
-        resume_codex=_resume_failure,
-        now=lambda: datetime.now(timezone.utc).isoformat(),
-    )
-
-    assert failure_status == 200
-    assert failure_payload["status"] == "completed"
-    assert failure_payload["deliveryStatus"] == "incomplete"
-    assert failure_payload["postCommitErrors"] == ["receipt_record_failed", "harness_resume_failed"]
-    assert side_effect_calls == ["receipt", "resume"]
-    delivery_codes: set[object] = set()
-    for event in store.list_events(limit=10, event_name="cloud_review.exact_delivery_failed"):
-        event_payload = event.get("payload")
-        assert isinstance(event_payload, dict)
-        delivery_codes.add(event_payload.get("code"))
-    assert delivery_codes == {
-        "harness_resume_failed",
-        "receipt_record_failed",
-    }
-    side_effect_row = store.get_approval_request(side_effect_request.request_id)
-    assert side_effect_row is not None and side_effect_row["status"] == "resolved"
-
     starts: list[str] = []
     monkeypatch.setattr(
         daemon_server_module,
@@ -400,30 +381,3 @@ def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypat
     finally:
         old_release.set()
         old_thread.join(timeout=1)
-
-
-@pytest.mark.parametrize("retired_field", ("remote_approval", "remote_exact"))
-def test_headless_exact_endpoint_rejects_retired_signed_decision_fields(
-    tmp_path: Path,
-    retired_field: str,
-) -> None:
-    store = _connected_store(tmp_path)
-    request = _request("exact-retired-field")
-    _add_request(store, request)
-    enable_exact_cloud_review(store)
-
-    status, response = build_headless_exact_cloud_review_response(
-        store=store,
-        payload={
-            "harness": "codex",
-            retired_field: _remote_approval(store, request.request_id, receipt_id="exact-retired-field-receipt"),
-        },
-        decode_mapping=lambda value: value if isinstance(value, dict) else {},
-        optional_string=lambda value: value if isinstance(value, str) and value else None,
-        record_receipt=lambda **_kwargs: {},
-        resume_codex=lambda **_kwargs: None,
-        now=lambda: datetime.now(timezone.utc).isoformat(),
-    )
-
-    assert status == 400
-    assert response == {"error": "missing_remote_approval"}

@@ -72,7 +72,7 @@ def apply_exact_cloud_review(
     envelope_expires_at = parse_utc_timestamp(receipt_expires_at)
     if receipt_expires_at is None or envelope_expires_at is None or envelope_expires_at <= current:
         raise _reject(store, "remote_approval_expired", now=current)
-    request_id = _text(envelope.get("localRequestId")) or _text(envelope.get("requestId"))
+    request_id = _text(envelope.get("localRequestId"))
     receipt_id = _text(envelope.get("receiptId"))
     if request_id is None or receipt_id is None:
         raise _reject(store, "remote_exact_fields_missing", now=current)

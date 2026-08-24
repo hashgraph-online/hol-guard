@@ -14,9 +14,9 @@ from .runtime.time_support import parse_utc_timestamp
 from .store_approvals import get_approval_request as load_approval_request
 from .store_approvals import resolve_one_request_only as persist_one_resolution
 
-_CAPABILITY_KEY = "guard_exact_cloud_review_capability_v1"
+_CAPABILITY_KEY = "guard_exact_cloud_review_capability"
 _OAUTH_KEY = "oauth_local_credentials"
-_REVOCATION_KEY = "guard_exact_cloud_review_revocation_v1"
+_REVOCATION_KEY = "guard_exact_cloud_review_revocation"
 
 
 class _ConnectionOwner(Protocol):

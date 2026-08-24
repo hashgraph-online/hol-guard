@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 
+from .exact_cloud_review import EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
 from .exact_cloud_review_transport import exact_result, uses_exact_transport
 from .time_support import parse_utc_timestamp
 
@@ -59,10 +60,12 @@ def redacted_error(error: BaseException, *, http_formatter, os_formatter) -> str
 
 
 def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict[str, object]:
+    protocol = {"protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION} if uses_exact_transport(job) else {}
     if execution.get("waitingLocalConfirm") is True:
         sanitized = dict(execution)
         sanitized.pop("waitingLocalConfirm", None)
         return {
+            **protocol,
             "leaseId": lease_id(job),
             "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:waiting_local_confirm",
             "status": "waiting_local_confirm",
@@ -71,6 +74,7 @@ def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict
     failure_code = execution.get("failureCode")
     if isinstance(failure_code, str) and failure_code:
         return {
+            **protocol,
             "leaseId": lease_id(job),
             "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:failed",
             "status": "failed",
@@ -78,6 +82,7 @@ def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict
             "failureMessage": str(execution.get("failureMessage") or failure_code),
         }
     return {
+        **protocol,
         "leaseId": lease_id(job),
         "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:succeeded",
         "status": "succeeded",

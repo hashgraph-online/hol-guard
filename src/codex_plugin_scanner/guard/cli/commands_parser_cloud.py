@@ -16,11 +16,15 @@ import argparse
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
-def _add_exact_review_connect_option(parser: argparse.ArgumentParser) -> None:
+def _add_cloud_review_connect_consent(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--enable-exact-cloud-review",
+        "--enable-cloud-review",
         action="store_true",
-        help="After successful sign-in, explicitly enable signed one-request Cloud Review on this device.",
+        help=(
+            "After successful sign-in, allow authorized Guard Cloud reviewers to approve or keep blocked "
+            "one exact request already paused on this device. This cannot create reusable policy or bypass "
+            "an immutable block."
+        ),
     )
 
 def _configure_guard_cloud_parsers(
@@ -84,7 +88,7 @@ def _configure_guard_cloud_parsers(
         default="default",
         help="Named connection profile for multi-environment usage (e.g. 'staging'). Defaults to 'default'.",
     )
-    _add_exact_review_connect_option(connect_parser)
+    _add_cloud_review_connect_consent(connect_parser)
     connect_parser.add_argument(
         "--confirm-source",
         help="With reassign-quarantined, approve the exact destination source name.",
