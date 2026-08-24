@@ -19578,7 +19578,7 @@ function recoveryReinstallHelpCopy(status) {
   }
   return "This install came from a local folder, so automatic updates are off. Reinstall from PyPI to switch it back to a normal package; Guard restarts briefly and saved approvals stay.";
 }
-function updateHelpCopy(status, phase) {
+function updateHelpCopy(status, phase, errorMessage) {
   if (phase === "updating") {
     return "Guard is installing the update. The dashboard will pause briefly and reopen when ready.";
   }
@@ -19586,7 +19586,7 @@ function updateHelpCopy(status, phase) {
     return "Reconnecting to Guard after the update…";
   }
   if (phase === "error") {
-    return "The update did not finish. Try again or run hol-guard update from your terminal.";
+    return errorMessage?.trim() || "The update did not finish. The installed version stays in place. Try again, or run hol-guard update from your terminal.";
   }
   if (status?.update_suppressed) {
     if (status.retry_command) {
@@ -19611,7 +19611,7 @@ function updateHelpCopy(status, phase) {
 function GuardUpdatePanel(props) {
   const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
-  const helpCopy = updateHelpCopy(props.updateStatus, phase);
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError);
   const showUpdateButton = props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
   const showReinstallButton = shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
   const busy = phase === "updating" || phase === "reconnecting";
@@ -19754,6 +19754,7 @@ function useGuardUpdate(options) {
   const enabled = options?.enabled !== false;
   const [updateStatus, setUpdateStatus] = reactExports.useState(null);
   const [updatePhase, setUpdatePhase] = reactExports.useState(enabled ? "checking" : "idle");
+  const [updateError, setUpdateError] = reactExports.useState(null);
   const reconnectStartedAt = reactExports.useRef(null);
   const updatePhaseRef = reactExports.useRef("checking");
   const updateStatusEpoch = reactExports.useRef(0);
@@ -19863,6 +19864,7 @@ function useGuardUpdate(options) {
   const scheduleAndWait = reactExports.useCallback(
     async (params) => {
       setUpdatePhase("updating");
+      setUpdateError(null);
       try {
         const reconnectAuthorization = await prepareGuardDaemonReconnect();
         const scheduleResult = await scheduleGuardUpdate(
@@ -19881,7 +19883,9 @@ function useGuardUpdate(options) {
           return;
         }
         if (scheduleResult.scheduled !== true) {
-          throw new Error(scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled.");
+          throw new Error(
+            scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled. The installed version stays in place."
+          );
         }
         setUpdatePhase("reconnecting");
         const redirected = await waitForReconnect(
@@ -19892,8 +19896,9 @@ function useGuardUpdate(options) {
         if (!redirected) {
           window.location.reload();
         }
-      } catch {
+      } catch (error) {
         setUpdatePhase("error");
+        setUpdateError(error instanceof Error ? error.message : "The update did not finish. The installed version stays in place.");
       }
     },
     [waitForReconnect]
@@ -19940,6 +19945,7 @@ function useGuardUpdate(options) {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
     updatePhase,
+    updateError,
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
@@ -20308,6 +20314,7 @@ function NavigationDrawer(props) {
                       guardVersion: props.guardVersion,
                       updateStatus: props.updateStatus,
                       updatePhase: props.updatePhase,
+                      updateError: props.updateError,
                       onUpdateGuard: props.onUpdateGuard,
                       onReinstallGuard: props.onReinstallGuard,
                       approvalGate: props.approvalGate
@@ -20523,6 +20530,7 @@ function PersistentSidebar(props) {
                   guardVersion: props.guardVersion,
                   updateStatus: props.updateStatus,
                   updatePhase: props.updatePhase,
+                  updateError: props.updateError,
                   onUpdateGuard: props.onUpdateGuard,
                   onReinstallGuard: props.onReinstallGuard,
                   approvalGate: props.approvalGate
@@ -30475,6 +30483,7 @@ function ApprovalCenterLayout(props) {
     guardVersion,
     updateStatus,
     updatePhase,
+    updateError,
     onUpdateGuard,
     onReinstallGuard
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
@@ -30490,6 +30499,7 @@ function ApprovalCenterLayout(props) {
         guardVersion,
         updateStatus,
         updatePhase,
+        updateError,
         onUpdateGuard,
         onReinstallGuard,
         approvalGate: props.approvalGate ?? null,

@@ -57,7 +57,11 @@ from .update_artifact import (
     recover_local_wheel_original,
     stage_trusted_wheel,
 )
-from .update_desktop_apply import desktop_update_status_state, run_desktop_managed_update
+from .update_desktop_apply import (
+    desktop_update_status_state,
+    refine_desktop_version_check,
+    run_desktop_managed_update,
+)
 from .update_desktop_core import is_desktop_managed_runtime
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
@@ -1364,6 +1368,28 @@ def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
     if not candidates:
         return None
     return max(candidates, key=lambda candidate: candidate[0])[1]
+
+
+def _cached_pypi_alpha_versions() -> list[str]:
+    payload = _last_pypi_payload
+    if not isinstance(payload, dict):
+        return []
+    releases = payload.get("releases")
+    if not isinstance(releases, dict):
+        return []
+    versions: list[str] = []
+    for version_text, files in releases.items():
+        if not isinstance(version_text, str) or not version_text.strip():
+            continue
+        try:
+            parsed_version = Version(version_text)
+        except InvalidVersion:
+            continue
+        if parsed_version.pre is None or parsed_version.pre[0] != "a":
+            continue
+        if _release_has_non_yanked_file(files):
+            versions.append(version_text.strip())
+    return versions
 
 
 def already_current_update_message(version_check: Mapping[str, object] | None) -> str:
@@ -2757,6 +2783,12 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             "update_available": None,
         }
     )
+    if installer == "desktop" and installed_distribution is not None:
+        version_check = refine_desktop_version_check(
+            current_version,
+            version_check,
+            candidates=_cached_pypi_alpha_versions(),
+        )
 
     if installer != "desktop" and auto_updatable and _python_runtime_blocks_update(version_check):
         auto_updatable = False

@@ -83,6 +83,39 @@ def desktop_core_uses_alpha_channel(current_version: str, *, requested_alpha: bo
     return requested_alpha or _version_is_prerelease(current_version)
 
 
+def desktop_core_release_series(version: str) -> tuple[int, int] | None:
+    try:
+        parsed = Version(version)
+    except InvalidVersion:
+        return None
+    if parsed.major != 3:
+        return None
+    return (parsed.major, parsed.minor)
+
+
+def select_desktop_core_latest(current_version: str, candidates: list[str]) -> str | None:
+    series = desktop_core_release_series(current_version)
+    if series is None:
+        return None
+    matching: list[tuple[Version, str]] = []
+    for text in candidates:
+        candidate = text.strip()
+        if not candidate:
+            continue
+        try:
+            parsed = Version(candidate)
+        except InvalidVersion:
+            continue
+        if (parsed.major, parsed.minor) != series:
+            continue
+        if parsed.pre is None or parsed.pre[0] != "a":
+            continue
+        matching.append((parsed, candidate))
+    if not matching:
+        return None
+    return max(matching, key=lambda item: item[0])[1]
+
+
 def platform_target() -> str | None:
     system = sys.platform
     machine = platform.machine().lower()
@@ -379,6 +412,7 @@ __all__ = [
     "DesktopCoreApplyResult",
     "DesktopCoreUpdateError",
     "apply_desktop_core_update",
+    "desktop_core_release_series",
     "desktop_core_root",
     "desktop_core_updates_supported",
     "desktop_core_uses_alpha_channel",
@@ -386,4 +420,5 @@ __all__ = [
     "is_desktop_managed_runtime",
     "is_frozen_runtime",
     "platform_target",
+    "select_desktop_core_latest",
 ]

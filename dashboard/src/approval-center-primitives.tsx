@@ -62,6 +62,7 @@ export function ShellHeader(props: {
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
   updatePhase?: GuardUpdatePhase;
+  updateError?: string | null;
 }) {
   function handleMobileNavigationChange(event: ChangeEvent<HTMLSelectElement>) {
     props.onNavigate(event.target.value);
@@ -184,6 +185,7 @@ export function ShellSidebar(props: {
   approvalGate?: GuardApprovalGatePublicConfig | null;
   onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
   updatePhase?: GuardUpdatePhase;
+  updateError?: string | null;
   cloudUserProfile?: GuardCloudUserProfile | null;
   workspaceId?: string | null;
   planId?: string | null;
@@ -303,6 +305,7 @@ export function ShellSidebar(props: {
                   guardVersion={props.guardVersion}
                   updateStatus={props.updateStatus}
                   updatePhase={props.updatePhase}
+                  updateError={props.updateError}
                   onUpdateGuard={props.onUpdateGuard}
                   onReinstallGuard={props.onReinstallGuard}
                   onSetUpdateChannel={props.onSetUpdateChannel}

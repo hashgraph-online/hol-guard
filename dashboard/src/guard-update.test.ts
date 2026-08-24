@@ -326,4 +326,50 @@ const suppressed = normalizeGuardUpdateStatus({
 assert(suppressed.update_suppressed === true, "update_suppressed should normalize");
 assert(suppressed.retry_command === "pipx install --force hol-guard", "retry_command should normalize");
 
+const currentSeriesMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "3.0.0a239",
+      latest_version: "3.0.0a239",
+      installer: "desktop",
+      version_check: {
+        source: "desktop_core",
+        status: "current",
+        current_version: "3.0.0a239",
+        latest_version: "3.0.0a239",
+        update_available: false,
+      },
+      auto_updatable: true,
+      update_available: false,
+      blocked_reason: null,
+      release_channel: "alpha",
+    }),
+    onUpdateGuard: () => undefined,
+  }),
+);
+assert(currentSeriesMarkup.includes("v3.0.0a239"), "desktop current version should stay visible");
+assert(!currentSeriesMarkup.includes("Update Guard"), "desktop should not offer Update Guard when this train is current");
+
+const failedUpdateMarkup = renderToStaticMarkup(
+  createElement(GuardUpdatePanel, {
+    updatePhase: "error",
+    updateError: "This Core build is not available for Desktop yet. The installed version stays in place.",
+    updateStatus: normalizeGuardUpdateStatus({
+      current_version: "3.0.0a239",
+      latest_version: "3.0.0a239",
+      installer: "desktop",
+      auto_updatable: true,
+      update_available: false,
+    }),
+  }),
+);
+assert(
+  failedUpdateMarkup.includes("This Core build is not available for Desktop yet"),
+  "failed desktop updates should show the recovery copy",
+);
+assert(
+  failedUpdateMarkup.includes("The installed version stays in place"),
+  "failed desktop updates should say the current install remains",
+);
+
 console.log("guard-update.test.ts: all tests passed");
