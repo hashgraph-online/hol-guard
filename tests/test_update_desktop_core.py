@@ -261,7 +261,6 @@ def test_frozen_desktop_status_uses_embedded_version_without_package_probe(
     )
 
     payload = build_guard_update_status_payload()
-
     assert payload["installer"] == "desktop"
     assert payload["current_version"] == "3.0.0a138"
     assert payload["latest_version"] == "3.0.0a200"
