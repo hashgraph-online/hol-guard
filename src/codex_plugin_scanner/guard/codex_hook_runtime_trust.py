@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from .codex_hook_compatibility import bridge_argv_sha256
 from .codex_hook_file_integrity import (
     canonical_path,
     verify_executable_file_identity,
@@ -24,7 +25,6 @@ from .codex_hook_launch_runtime import (
     private_hook_runtime_cwd,
     run_isolated_hook_process,
 )
-from .codex_hook_manifest import bridge_argv_sha256
 
 _REQUIRED_PACKAGE_ROLES = frozenset(
     {

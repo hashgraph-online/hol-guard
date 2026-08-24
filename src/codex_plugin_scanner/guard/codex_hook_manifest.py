@@ -7,14 +7,13 @@ construction at the harness boundary and prevents a circular dependency.
 
 from __future__ import annotations
 
-import hashlib
-import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 
+from .codex_hook_compatibility import compatible_bridge_argv_hashes
 from .codex_hook_file_integrity import (
     CodexHookIntegrityError,
     canonical_path,
@@ -46,7 +45,6 @@ _TRANSPORT_PACKAGE_ROLES = (
     "runtime_trust",
     "windows_job",
 )
-_MAX_COMPATIBLE_BRIDGE_GENERATIONS = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,7 +89,7 @@ def build_authenticated_hook_manifest(
     generated_at = datetime.now(timezone.utc).isoformat()
     unsigned_manifest: dict[str, object] = {
         "config": {"scope": "global", "target": canonical_path(spec.config_path)},
-        "compatible_bridge_argv_sha256": _compatible_bridge_argv_hashes(previous_manifest),
+        "compatible_bridge_argv_sha256": compatible_bridge_argv_hashes(previous_manifest),
         "context": _expected_context(spec),
         "daemon_start": {
             "argv": list(spec.daemon_start_argv),
@@ -114,27 +112,6 @@ def build_authenticated_hook_manifest(
         "transport": {**transport, "wrapper": None},
     }
     return sign_hook_manifest(unsigned_manifest, secret)
-
-
-def bridge_argv_sha256(argv: Sequence[object]) -> str:
-    payload = json.dumps(list(argv), ensure_ascii=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
-def _compatible_bridge_argv_hashes(previous_manifest: Mapping[str, object] | None) -> list[str]:
-    if previous_manifest is None:
-        return []
-    candidates: list[str] = []
-    previous_hashes = previous_manifest.get("compatible_bridge_argv_sha256")
-    if isinstance(previous_hashes, list):
-        candidates.extend(value for value in previous_hashes if isinstance(value, str) and len(value) == 64)
-    events = previous_manifest.get("events")
-    if isinstance(events, list):
-        for event in events:
-            argv = event.get("argv") if isinstance(event, Mapping) else None
-            if isinstance(argv, list) and argv and all(isinstance(value, str) for value in argv):
-                candidates.append(bridge_argv_sha256(argv))
-    return list(dict.fromkeys(candidates))[-_MAX_COMPATIBLE_BRIDGE_GENERATIONS:]
 
 
 def load_hook_manifest_baseline(spec: CodexHookManifestSpec) -> dict[str, object] | None:
@@ -507,7 +484,6 @@ __all__ = [
     "CodexHookManifestSpec",
     "assert_package_reauthentication_is_safe",
     "authenticated_manifest_for_ownership",
-    "bridge_argv_sha256",
     "build_authenticated_hook_manifest",
     "load_hook_manifest_baseline",
     "manifest_bindings",
