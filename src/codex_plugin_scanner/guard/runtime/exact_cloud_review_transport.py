@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import TypedDict
@@ -80,29 +79,22 @@ def lease_next_job(
     operations: tuple[str, ...],
     wait_ms: int,
     exact_request: Callable[[LeaseOptions], dict[str, object]],
-    legacy_request: Callable[[LeaseOptions], dict[str, object]],
-    logger: logging.Logger,
+    queue_request: Callable[[LeaseOptions], dict[str, object]],
 ) -> dict[str, object] | None:
     generic = generic_operations(operations)
     if EXACT_CLOUD_REVIEW_OPERATION in operations:
-        try:
-            exact_response = exact_request(
-                {
-                    "operations": (EXACT_CLOUD_REVIEW_OPERATION,),
-                    "wait_ms": wait_ms if exact_operation_only(operations) else 0,
-                }
-            )
-        except Exception as error:
-            if getattr(error, "code", None) != 404 or not generic:
-                raise
-            logger.info("Exact Cloud Review delivery is unavailable; continuing legacy command polling.")
-            exact_response = {"item": None}
+        exact_response = exact_request(
+            {
+                "operations": (EXACT_CLOUD_REVIEW_OPERATION,),
+                "wait_ms": wait_ms if exact_operation_only(operations) else 0,
+            }
+        )
         item = exact_response.get("item")
         if isinstance(item, dict):
             return exact_transport_job(item)
     if not generic:
         return None
-    item = legacy_request({"operations": generic, "wait_ms": wait_ms}).get("item")
+    item = queue_request({"operations": generic, "wait_ms": wait_ms}).get("item")
     return item if isinstance(item, dict) else None
 
 

@@ -192,7 +192,7 @@ def test_poll_exact_v2_leases_acks_applies_and_posts_versioned_result(
     monkeypatch.setattr(
         command_queue,
         "_json_request",
-        lambda *args, **kwargs: pytest.fail("exact-only capability must not poll the legacy queue"),
+        lambda *args, **kwargs: pytest.fail("exact-only capability must not poll the generic queue"),
     )
     monkeypatch.setattr(
         command_queue,
@@ -237,7 +237,7 @@ def test_poll_exact_v2_leases_acks_applies_and_posts_versioned_result(
     assert all(item["operation"] == EXACT_CLOUD_REVIEW_OPERATION for item in lifecycle)
 
 
-def test_mixed_capability_polls_exact_nonblocking_then_legacy(
+def test_mixed_capability_polls_exact_nonblocking_then_generic_queue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -248,7 +248,7 @@ def test_mixed_capability_polls_exact_nonblocking_then_legacy(
         supported_operations=SUPPORTED_COMMAND_OPERATIONS,
     )
     exact_calls: list[dict[str, object]] = []
-    legacy_calls: list[dict[str, object]] = []
+    generic_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         command_queue,
         "_exact_json_request",
@@ -257,7 +257,7 @@ def test_mixed_capability_polls_exact_nonblocking_then_legacy(
     monkeypatch.setattr(
         command_queue,
         "_json_request",
-        lambda _auth, *, method, path, payload: legacy_calls.append(payload) or {"item": None},
+        lambda _auth, *, method, path, payload: generic_calls.append(payload) or {"item": None},
     )
     monkeypatch.setattr(command_queue, "_command_queue_lease_wait_ms", lambda: 17_000)
 
@@ -268,13 +268,13 @@ def test_mixed_capability_polls_exact_nonblocking_then_legacy(
     exact_capabilities = exact_calls[0]["capabilities"]
     assert isinstance(exact_capabilities, dict)
     assert exact_capabilities["operations"] == [EXACT_CLOUD_REVIEW_OPERATION]
-    assert legacy_calls[0]["waitMs"] == 17_000
-    legacy_capabilities = legacy_calls[0]["capabilities"]
-    assert isinstance(legacy_capabilities, dict)
-    assert legacy_capabilities["operations"] == ["guard.packageShims.status"]
+    assert generic_calls[0]["waitMs"] == 17_000
+    generic_capabilities = generic_calls[0]["capabilities"]
+    assert isinstance(generic_capabilities, dict)
+    assert generic_capabilities["operations"] == ["guard.packageShims.status"]
 
 
-def test_exact_transport_rejects_cross_queue_operations_and_preserves_legacy_fallback(
+def test_exact_transport_rejects_cross_queue_operations_and_fails_closed_when_route_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -317,10 +317,10 @@ def test_exact_transport_rejects_cross_queue_operations_and_preserves_legacy_fal
     monkeypatch.setattr(
         command_queue,
         "_json_request",
-        lambda _auth, *, method, path, payload: {"item": generic_job},
+        lambda *_args, **_kwargs: pytest.fail("missing exact route must not reach the generic queue"),
     )
-    leased = command_queue._lease_next_job(store, {"sync_url": "https://guard.example", "access_token": "token"})
-    assert leased == generic_job
+    with pytest.raises(urllib.error.HTTPError, match="Not Found"):
+        command_queue._lease_next_job(store, {"sync_url": "https://guard.example", "access_token": "token"})
 
 
 def test_pending_exact_result_retries_on_v2_result_route(
@@ -350,7 +350,7 @@ def test_pending_exact_result_retries_on_v2_result_route(
     monkeypatch.setattr(
         command_queue,
         "_json_request",
-        lambda *args, **kwargs: pytest.fail("pending exact result must not use legacy transport"),
+        lambda *args, **kwargs: pytest.fail("pending exact result must not use the generic queue"),
     )
 
     assert command_queue._retry_pending_result(

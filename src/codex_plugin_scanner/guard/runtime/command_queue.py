@@ -373,7 +373,7 @@ def _lease_next_job(
                 wait_ms=options["wait_ms"],  # type: ignore[arg-type]
             ),
         ),
-        legacy_request=lambda options: _json_request(
+        queue_request=lambda options: _json_request(
             auth_context,
             method="POST",
             path="/lease",
@@ -383,7 +383,6 @@ def _lease_next_job(
                 wait_ms=options["wait_ms"],  # type: ignore[arg-type]
             ),
         ),
-        logger=_LOGGER,
     )
 
 

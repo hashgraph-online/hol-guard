@@ -127,7 +127,7 @@ def test_create_then_resolve_before_sync_delivers_distinct_immutable_transitions
         resolved_at=_LATER,
     )
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "_post_sync_events", _accepting_transport(captured))
+    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
 
     result = live_request_sync.sync_live_requests_once(store, _auth(binding))
 
@@ -175,7 +175,7 @@ def test_projection_uses_frozen_continuation_after_operation_changes(
         },
     )
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "_post_sync_events", _accepting_transport(captured))
+    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
 
     result = live_request_sync.sync_live_requests_once(store, _auth(binding))
 
@@ -228,7 +228,7 @@ def test_invalid_stored_event_is_dead_lettered_without_send_or_ack(
     with store._connect() as connection:
         connection.execute(mutation)
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "_post_sync_events", _accepting_transport(captured))
+    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
 
     result = live_request_sync.sync_live_requests_once(store, _auth(binding))
 
@@ -263,7 +263,7 @@ def test_missing_canonical_snapshot_is_quarantined_without_fabricated_defaults(
     del payload["requestSnapshot"]
     _replace_event_payload(store, row, payload)
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "_post_sync_events", _accepting_transport(captured))
+    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
 
     result = live_request_sync.sync_live_requests_once(store, _auth(binding))
 
@@ -304,7 +304,7 @@ def test_rehashed_noncanonical_snapshot_is_quarantined_before_projection(
         payload["oauthSource"] = "other"
     _replace_event_payload(store, row, payload)
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "_post_sync_events", _accepting_transport(captured))
+    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
 
     result = live_request_sync.sync_live_requests_once(store, _auth(binding))
 

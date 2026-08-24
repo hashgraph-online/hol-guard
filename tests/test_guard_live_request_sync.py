@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from base64 import urlsafe_b64decode
 from json import dumps as json_dumps
 from json import loads as json_loads
 from pathlib import Path
@@ -10,12 +9,13 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import live_request_sync as live_request_sync_module
-from codex_plugin_scanner.guard.runtime.live_request_sync import (
-    LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
-    _build_live_request_event,
-    _encode_live_request_events,
-    _post_sync_events,
+from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import (
+    CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     _resolve_sync_url,
+    post_review_events,
+)
+from codex_plugin_scanner.guard.runtime.live_request_sync import (
+    _build_live_request_event,
     start_cloud_sync_sync_worker,
     stop_cloud_sync_sync_worker,
 )
@@ -255,7 +255,7 @@ class TestSyncStatus:
 
         status = live_request_sync_status(store)
         assert isinstance(status, dict)
-        assert status["protocolVersion"] == LIVE_REQUEST_SYNC_PROTOCOL_VERSION
+        assert status["protocolVersion"] == CLOUD_REVIEW_EVENT_PROTOCOL_VERSION
 
 
 class TestRedactionLevelNone:
@@ -690,14 +690,7 @@ class TestPendingRequestAgeConnectivity:
         assert event["requestPayload"]["status"] == "pending"
 
 
-def test_event_encoder_keeps_base64url_padding() -> None:
-    encoded = _encode_live_request_events([{}])
-
-    assert encoded.endswith("==")
-    assert json_loads(urlsafe_b64decode(encoded)) == [{}]
-
-
-def test_sync_transport_encodes_waf_sensitive_event_content(
+def test_canonical_transport_posts_structured_event_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from codex_plugin_scanner.guard.runtime import runner
@@ -717,33 +710,33 @@ def test_sync_transport_encodes_waf_sensitive_event_content(
     monkeypatch.setattr(
         runner,
         "_urlopen_json_with_timeout_retry",
-        lambda **_kwargs: {"accepted": 1},
+        lambda **_kwargs: {
+            "protocolVersion": 2,
+            "acknowledgedThrough": 1,
+            "accepted": 1,
+            "rejected": 0,
+            "results": [{"eventId": "event-waf-sensitive", "status": "accepted"}],
+        },
     )
     event = {
+        "eventId": "event-waf-sensitive",
+        "localStreamSequence": 1,
         "localRequestId": "request-waf-sensitive",
         "rawCommand": "gh api graphql --raw-field query=../../runtime/authorization",
     }
 
-    response = _post_sync_events(
+    response = post_review_events(
         {"sync_url": "https://hol.org/api/guard/receipts/sync"},
-        workspace_id="workspace-1",
-        machine_id="machine-1",
-        machine_installation_id="installation-1",
-        cursor=None,
         events=[event],
     )
 
-    encoded = captured_body["eventsBase64Url"]
-    assert isinstance(encoded, str)
-    assert captured_body["protocolVersion"] == "2"
-    assert "events" not in captured_body
-    assert "graphql" not in encoded
-    assert json_loads(urlsafe_b64decode(encoded)) == [event]
-    assert response == {"accepted": 1}
+    assert captured_body["protocolVersion"] == CLOUD_REVIEW_EVENT_PROTOCOL_VERSION
+    assert captured_body["events"] == [event]
+    assert response["accepted"] == 1
 
 
 # ---------------------------------------------------------------------------
-# Contract: _resolve_sync_url derives live-request endpoint from receipt sync URL
+# Contract: _resolve_sync_url derives the Cloud Review endpoint from receipt sync URL
 # ---------------------------------------------------------------------------
 
 
@@ -751,14 +744,14 @@ class TestResolveSyncUrl:
     """_resolve_sync_url replaces the entire path, preserving scheme and host."""
 
     def test_full_receipt_path_replaced_not_appended(self) -> None:
-        """A receipt-sync URL must derive /api/guard/live-requests/sync, not
+        """A receipt-sync URL must derive /api/guard/review/v2/events:batch, not
         append to the existing receipt path.  This is the contract that caused
         the production 404 — the old code appended instead of replacing."""
         auth_context: dict[str, object] = {
             "sync_url": "https://hol.org/api/guard/receipts/sync",
         }
-        result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
-        assert result == "https://hol.org/api/guard/live-requests/sync"
+        result = _resolve_sync_url(auth_context, "/api/guard/review/v2/events:batch")
+        assert result == "https://hol.org/api/guard/review/v2/events:batch"
 
     def test_https_origin_with_explicit_port_preserved(self) -> None:
         """An HTTPS origin carrying an explicit port keeps that port when the
@@ -766,13 +759,13 @@ class TestResolveSyncUrl:
         auth_context: dict[str, object] = {
             "sync_url": "https://hol.org:8443/api/guard/receipts/sync",
         }
-        result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
-        assert result == "https://hol.org:8443/api/guard/live-requests/sync"
+        result = _resolve_sync_url(auth_context, "/api/guard/review/v2/events:batch")
+        assert result == "https://hol.org:8443/api/guard/review/v2/events:batch"
 
     def test_query_string_preserved_when_path_replaced(self) -> None:
         """Replacing the sync URL path preserves query-bound routing."""
         auth_context: dict[str, object] = {
             "sync_url": "https://hol.org/api/guard/receipts/sync?route=tenant-a",
         }
-        result = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
-        assert result == "https://hol.org/api/guard/live-requests/sync?route=tenant-a"
+        result = _resolve_sync_url(auth_context, "/api/guard/review/v2/events:batch")
+        assert result == "https://hol.org/api/guard/review/v2/events:batch?route=tenant-a"

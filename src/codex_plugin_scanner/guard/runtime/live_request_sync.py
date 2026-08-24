@@ -16,21 +16,15 @@ from ..review_contracts import (
 )
 from ..store import GuardStore
 from ..store_live_request_outbox import live_request_oauth_subject_hash
+from .cloud_review_event_delivery import (
+    CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
+    post_review_events,
+)
 from .live_request_event_projection import (
     _build_live_request_event as _build_live_request_event,
 )
 from .live_request_event_projection import (
     project_live_request_outbox_row,
-)
-from .live_request_sync_transport import (
-    LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
-    _post_sync_events,
-)
-from .live_request_sync_transport import (
-    _encode_live_request_events as _encode_live_request_events,
-)
-from .live_request_sync_transport import (
-    _resolve_sync_url as _resolve_sync_url,
 )
 from .local_request_snapshots import (
     _cloud_scrub_text,
@@ -190,12 +184,8 @@ def sync_live_requests_once(
                 continue
 
             try:
-                response = _post_sync_events(
+                response = post_review_events(
                     auth_context,
-                    workspace_id=workspace_id,
-                    machine_id=machine_id,
-                    machine_installation_id=machine_installation_id,
-                    cursor=None,
                     events=events,
                 )
             except Exception as error:
@@ -368,8 +358,8 @@ def live_request_sync_status(store: GuardStore) -> dict[str, object]:
         "rejected_count": state.get("rejected_count", 0),
         "outbox": outbox,
         "oauth_source": store.guard_source,
-        "protocol_version": LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
-        "protocolVersion": LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
+        "protocol_version": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
+        "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     }
 
 

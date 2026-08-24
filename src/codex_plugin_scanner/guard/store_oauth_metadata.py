@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-_OAUTH_BINDING_KEYS = ("grant_id", "machine_id", "device_id", "workspace_id", "runtime_id", "runtime_label")
+_OAUTH_BINDING_KEYS = (
+    "dpop_public_jwk_thumbprint",
+    "grant_id",
+    "machine_id",
+    "device_id",
+    "workspace_id",
+    "runtime_id",
+    "runtime_label",
+)
 
 
 def copy_oauth_binding_metadata(source: dict[str, object], target: dict[str, object]) -> None:

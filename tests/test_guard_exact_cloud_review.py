@@ -379,7 +379,18 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     )
     store.delete_sync_payload("oauth_local_credentials")
     recovered = store._recover_missing_oauth_local_credentials_payload(now=recovery_now)
-    assert isinstance(recovered, dict) and recovered["device_id"] == oauth_state["device_id"]
+    assert isinstance(recovered, dict)
+    assert recovered["device_id"] == oauth_state["device_id"]
+    assert recovered["dpop_public_jwk_thumbprint"] == oauth_state["dpop_public_jwk_thumbprint"]
+    assert "dpop_private_key_pem" not in recovered
+    assert "dpop_public_jwk" not in recovered
+    assert "refresh_token" not in recovered
+
+    assert store.repair_oauth_local_credential_storage_from_primary() is True
+    restarted = GuardStore(store.guard_home)
+    persisted = restarted.get_sync_payload("oauth_local_credentials")
+    assert isinstance(persisted, dict)
+    assert persisted["dpop_public_jwk_thumbprint"] == oauth_state["dpop_public_jwk_thumbprint"]
 
 
 def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
