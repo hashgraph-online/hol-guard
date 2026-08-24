@@ -104,6 +104,8 @@ def test_schema_probe_rejects_store_missing_request_version_columns(tmp_path: Pa
     assert store._schema_is_current() is True  # pyright: ignore[reportPrivateUsage]
 
     with sqlite3.connect(store.path) as connection:
+        connection.execute("drop trigger guard_review_outbox_after_insert")
+        connection.execute("drop trigger guard_review_outbox_after_update")
         connection.execute("alter table approval_requests drop column guard_version")
 
     assert store._schema_is_current() is False  # pyright: ignore[reportPrivateUsage]

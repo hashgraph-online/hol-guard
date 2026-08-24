@@ -48,12 +48,12 @@ def live_request_sync_repair_status(
     )
     identity_mismatch_count = _count(status, "identity_mismatch_depth")
     repairable_legacy_count = _count(status, "repairable_legacy_unbound_depth")
-    legacy_count = _count(status, "legacy_unbound_depth")
+    other_workspace_count = _count(status, "other_workspace_depth")
     if repairable_legacy_count:
         binding_state = "legacy_ambiguous"
     elif identity_mismatch_count:
         binding_state = "identity_mismatch"
-    elif legacy_count:
+    elif other_workspace_count:
         binding_state = "workspace_mismatch"
     else:
         binding_state = str(status.get("binding_state") or "healthy")

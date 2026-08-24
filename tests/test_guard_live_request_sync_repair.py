@@ -8,7 +8,7 @@ from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_c
 from codex_plugin_scanner.guard.runtime.live_request_repair import live_request_sync_repair_status
 from codex_plugin_scanner.guard.store import GuardStore
 
-_OUTBOX_TABLE = "guard" + "_live_request_outbox"
+_OUTBOX_TABLE = "guard_review_outbox_events"
 
 _NOW = "2026-07-23T12:00:00+00:00"
 _INSTALLATION_ID = "22222222-2222-4222-8222-222222222222"
@@ -56,7 +56,8 @@ def _replace_binding_with_stale_identity(store: GuardStore, request_id: str) -> 
             f"""
             update {_OUTBOX_TABLE}
             set oauth_source = ?, oauth_subject_hash = ?, workspace_id = ?,
-                machine_id = ?, machine_installation_id = ?
+                machine_id = ?, machine_installation_id = ?, binding_status = 'quarantined',
+                quarantine_reason = 'identity_changed_requires_confirmation'
             where local_request_id = ?
             """,
             (

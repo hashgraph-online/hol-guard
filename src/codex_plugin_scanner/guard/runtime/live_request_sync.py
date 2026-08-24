@@ -15,16 +15,18 @@ from typing import TYPE_CHECKING, Any
 from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_contracts import (
     GuardReviewContractError,
-    GuardReviewOAuthMetadata,
-    build_local_review_request_claim,
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
 from ..store_live_request_outbox import live_request_oauth_subject_hash
+from .live_request_event_projection import (
+    _build_live_request_event as _build_live_request_event,
+)
+from .live_request_event_projection import (
+    project_live_request_outbox_row,
+)
 from .local_request_snapshots import (
-    _cloud_safe_local_request_payload,
     _cloud_scrub_text,
-    _local_request_command_text,
     _resolve_cloud_receipt_redaction_level,
 )
 
@@ -36,19 +38,9 @@ _LOGGER = logging.getLogger(__name__)
 LIVE_REQUEST_SYNC_BATCH_SIZE = 1
 LIVE_REQUEST_SYNC_MAX_BATCHES = 200
 LIVE_REQUEST_SYNC_PROTOCOL_VERSION = "2"
-_LIVE_REQUEST_COMMAND_MAX_UTF16_UNITS = 65_536
-_LIVE_REQUEST_SUMMARY_MAX_UTF16_UNITS = 512
 LIVE_REQUEST_SYNC_STATE_KEY = "guard_live_request_sync_state"
 DEFAULT_POLL_INTERVAL_SECONDS = 0.1
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
-_DISPLAY_PROVENANCE_RAW = "raw"
-_DISPLAY_PROVENANCE_REDACTED = "redacted"
-_DISPLAY_PROVENANCE_WITHHELD = "withheld"
-_EVENT_TYPE_MAP = {
-    "pending": "request_created",
-    "resolved": "request_resolved",
-    "superseded": "request_superseded",
-}
 
 
 def _now() -> str:
@@ -97,142 +89,6 @@ def _load_sync_state(store: GuardStore) -> dict[str, object]:
 
 def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
     store.set_sync_payload(_live_request_sync_state_key(store), state, _now())
-
-
-def _resolve_display_provenance(
-    *,
-    has_command_details: bool,
-    redaction_level: str,
-) -> str:
-    if redaction_level == "none":
-        return _DISPLAY_PROVENANCE_RAW
-    if redaction_level == "full" and not has_command_details:
-        return _DISPLAY_PROVENANCE_WITHHELD
-    return _DISPLAY_PROVENANCE_REDACTED
-
-
-def _utf16_units(value: str) -> int:
-    return sum(2 if ord(character) > 0xFFFF else 1 for character in value)
-
-
-def _take_utf16_prefix(value: str, max_units: int) -> str:
-    units = 0
-    for index, character in enumerate(value):
-        units += 2 if ord(character) > 0xFFFF else 1
-        if units > max_units:
-            return value[:index]
-    return value
-
-
-def _take_utf16_suffix(value: str, max_units: int) -> str:
-    units = 0
-    for index in range(len(value) - 1, -1, -1):
-        units += 2 if ord(value[index]) > 0xFFFF else 1
-        if units > max_units:
-            return value[index + 1 :]
-    return value
-
-
-def _truncate_utf16(value: str, max_units: int) -> str:
-    if _utf16_units(value) <= max_units:
-        return value
-    marker = " … [truncated] … "
-    available_units = max_units - _utf16_units(marker)
-    prefix_units = available_units * 3 // 4
-    suffix_units = available_units - prefix_units
-    return _take_utf16_prefix(value, prefix_units) + marker + _take_utf16_suffix(value, suffix_units)
-
-
-def _build_display_command(item: dict[str, object], redaction_level: str) -> tuple[str, str, str | None, str | None]:
-    action_identity = str(item.get("action_identity") or item.get("artifact_id") or "unknown")
-    trigger_summary = str(item.get("trigger_summary") or item.get("why_now") or "Guard approval request")
-    risk_headline = str(item.get("risk_headline") or item.get("risk_summary") or "")
-    harness = str(item.get("harness") or "guard-review")
-
-    fallback_display = f"{_cloud_scrub_text(harness)}: {_cloud_scrub_text(action_identity)}"
-    envelope_value = item.get("action_envelope_json")
-    envelope = envelope_value if isinstance(envelope_value, dict) else None
-    command_text = _local_request_command_text(item, envelope)
-    safe_command = _cloud_scrub_text(command_text) if command_text else None
-    display_command = safe_command or fallback_display
-    display_command = _truncate_utf16(
-        display_command,
-        _LIVE_REQUEST_COMMAND_MAX_UTF16_UNITS,
-    )
-    display_summary = f"{trigger_summary}"
-    if risk_headline:
-        display_summary = f"{risk_headline} — {trigger_summary}"
-    display_summary = _truncate_utf16(
-        display_summary,
-        _LIVE_REQUEST_SUMMARY_MAX_UTF16_UNITS,
-    )
-
-    raw_command = display_command if redaction_level == "none" and safe_command else None
-    redacted_command = display_command if redaction_level != "none" and safe_command else None
-    return display_command, display_summary, raw_command, redacted_command
-
-
-def _build_live_request_event(
-    item: dict[str, object],
-    *,
-    oauth: GuardReviewOAuthMetadata | None,
-    redaction_level: str,
-    store: GuardStore,
-    event_sequence: int,
-) -> dict[str, object] | None:
-    request_id = item.get("request_id")
-    if not isinstance(request_id, str) or not request_id:
-        return None
-
-    stored_status = str(item.get("status") or "pending")
-    status = "pending" if stored_status == "expired" else stored_status
-    event_type = _EVENT_TYPE_MAP.get(status, "request_created")
-
-    claim: dict[str, object] | None = None
-    if oauth is not None:
-        try:
-            claim = build_local_review_request_claim(
-                request_row=item,
-                oauth=oauth,
-                store=store,
-            )
-        except GuardReviewContractError:
-            claim = None
-
-    display_command, display_summary, raw_command, redacted_command = _build_display_command(item, redaction_level)
-    request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
-    display_provenance = _resolve_display_provenance(
-        has_command_details=bool(request_payload.get("command_text")),
-        redaction_level=redaction_level,
-    )
-    created_at = str(item.get("created_at") or _now())
-    last_seen_at = str(item.get("last_seen_at") or created_at)
-
-    return {
-        "localRequestId": request_id,
-        "localEventSequence": event_sequence,
-        "eventType": event_type,
-        "harnessId": str(item.get("harness") or "guard-review"),
-        "requestKind": str(item.get("review_kind") or item.get("harness") or "guard-review"),
-        "displayProvenance": display_provenance,
-        "displayCommand": display_command,
-        "displaySummary": display_summary,
-        "rawCommand": raw_command,
-        "redactedCommand": redacted_command,
-        "reviewClaim": claim,
-        "requestPayload": request_payload,
-        "riskCategory": str(item.get("risk_category") or "") or None,
-        "policyAction": str(item.get("policy_action") or "") or None,
-        "recommendedScope": str(item.get("recommended_scope") or "") or None,
-        "localCreatedAt": created_at,
-        "localUpdatedAt": str(item.get("updated_at") or last_seen_at),
-        "localLastSeenAt": last_seen_at,
-        "guardVersion": str(item.get("guard_version") or "") or None,
-        "firstSeenGuardVersion": str(item.get("first_seen_guard_version") or "") or None,
-        "lastSeenGuardVersion": str(item.get("last_seen_guard_version") or "") or None,
-        "localEmittedAt": _now(),
-        "sentAt": _now(),
-    }
 
 
 def _post_sync_events(
@@ -359,50 +215,24 @@ def sync_live_requests_once(
 
             events: list[dict[str, object]] = []
             sequences: list[int] = []
-            missing_sequences: list[int] = []
             redaction_level = _resolve_cloud_receipt_redaction_level(store)
             try:
                 oauth = guard_review_oauth_metadata(store)
             except GuardReviewContractError:
                 oauth = None
             for outbox_row in outbox_rows:
-                sequence_value = outbox_row["sequence"]
-                if not isinstance(sequence_value, int):
-                    raise RuntimeError("Live-request outbox sequence is invalid.")
-                sequence = sequence_value
-                request_id = str(outbox_row["local_request_id"])
-                request = store.get_approval_request(request_id)
-                row_binding = {
-                    key: outbox_row.get(key)
-                    for key in (
-                        "oauth_subject_hash",
-                        "workspace_id",
-                        "machine_id",
-                        "machine_installation_id",
-                    )
-                }
-                if (
-                    request is None
-                    or request.get("oauth_source") != store.guard_source
-                    or row_binding != delivery_binding
-                ):
-                    missing_sequences.append(sequence)
-                    continue
-                event = _build_live_request_event(
-                    request,
+                projected = project_live_request_outbox_row(
+                    store,
+                    outbox_row=outbox_row,
+                    delivery_binding=delivery_binding,
                     redaction_level=redaction_level,
                     oauth=oauth,
-                    store=store,
-                    event_sequence=sequence,
                 )
-                if event is None:
-                    missing_sequences.append(sequence)
+                if projected is None:
                     continue
+                sequence, event = projected
                 sequences.append(sequence)
                 events.append(event)
-
-            if missing_sequences:
-                store.acknowledge_live_request_outbox(missing_sequences, **delivery_binding)
             if not events:
                 continue
 

@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard.runtime.runner import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
-_LIVE_OUTBOX_TABLE = "guard_" + "live_request_outbox"
+_LIVE_OUTBOX_TABLE = "guard_review_outbox_events"
 
 
 def _json_request(
