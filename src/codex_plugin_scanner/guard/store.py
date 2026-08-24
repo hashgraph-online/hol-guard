@@ -32,6 +32,7 @@ from .store_evidence_facade import StoreEvidenceMixin
 from .store_inventory import StoreInventoryMixin
 from .store_policy_document import StorePolicyDocumentMixin
 from .store_live_request_outbox import StoreLiveRequestOutboxMixin
+from .store_review_event_dead_letters import StoreReviewEventDeadLetterMixin
 from .store_oauth import StoreOAuthConnectMixin
 from .store_portable_project_memory import StorePortableProjectMemoryMixin
 from .store_policy import StorePolicyMixin
@@ -78,6 +79,7 @@ class GuardStore(
     StoreApprovalQueriesMixin,
     StoreApprovalsMixin,
     StoreLiveRequestOutboxMixin,
+    StoreReviewEventDeadLetterMixin,
     StoreEventReceiptsMixin,
     StoreOAuthConnectMixin,
     StoreSessionsMixin,

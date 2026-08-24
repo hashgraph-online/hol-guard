@@ -8,6 +8,8 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 
+from .review_event_wake import notify_review_event_outbox_wake
+from .runtime.time_support import parse_utc_timestamp
 from .store_review_event_outbox_binding import (
     explicitly_reassign_quarantined_events,
     load_review_oauth_binding,
@@ -26,10 +28,26 @@ def _retry_at(now: str, attempt_count: int) -> str:
     return (base + timedelta(seconds=delay_seconds)).isoformat()
 
 
+def _event_age_seconds(now: str, occurred_at: object) -> int | None:
+    observed = parse_utc_timestamp(now)
+    occurred = parse_utc_timestamp(occurred_at)
+    if observed is None or occurred is None:
+        return None
+    return max(0, int((observed - occurred).total_seconds()))
+
+
 class StoreReviewEventOutboxMixin:
+    def notify_review_event_outbox_wake(self) -> None:
+        """Wake a local worker after a committed outbox write or retry."""
+
+        notify_review_event_outbox_wake(self)
+
     def requeue_pending_live_requests(self, *, changed_at: str) -> int:
         with self._connect() as connection:
-            return requeue_pending_request_events(connection, source=self._guard_source, changed_at=changed_at)
+            count = requeue_pending_request_events(connection, source=self._guard_source, changed_at=changed_at)
+        if count:
+            self.notify_review_event_outbox_wake()
+        return count
 
     def requeue_pending_live_requests_with_marker(
         self,
@@ -50,7 +68,9 @@ class StoreReviewEventOutboxMixin:
                 """,
                 (marker_key, json.dumps({**marker_payload, "requeued": count}), changed_at),
             )
-            return count
+        if count:
+            self.notify_review_event_outbox_wake()
+        return count
 
     def get_live_request_oauth_binding(self) -> dict[str, str] | None:
         with self._connect() as connection:
@@ -99,12 +119,15 @@ class StoreReviewEventOutboxMixin:
     ) -> int:
         with self._connect() as connection:
             connection.execute("begin immediate")
-            return explicitly_reassign_quarantined_events(
+            count = explicitly_reassign_quarantined_events(
                 connection,
                 source=self._guard_source,
                 approved_source=approved_source,
                 approved_workspace_id=approved_workspace_id,
             )
+        if count:
+            self.notify_review_event_outbox_wake()
+        return count
 
     def list_ready_live_request_outbox(
         self,
@@ -124,13 +147,12 @@ class StoreReviewEventOutboxMixin:
             select stream_sequence, event_id, local_request_id, request_sequence,
                    event_type, event_schema_version, payload_json, payload_hash,
                    occurred_at, oauth_source, oauth_subject_hash, workspace_id,
-                   machine_id, machine_installation_id, attempt_count
+                   machine_id, machine_installation_id, binding_status,
+                   acknowledged_at, attempt_count, next_attempt_at
             from guard_review_outbox_events
-            where oauth_source = ? and binding_status = 'ready'
-              and acknowledged_at is null
-              and (next_attempt_at is null or next_attempt_at <= ?)
+            where oauth_source = ?
         """
-        parameters: list[object] = [self._guard_source, now]
+        parameters: list[object] = [self._guard_source]
         identity = (oauth_subject_hash, workspace_id, machine_id, machine_installation_id)
         if any(value is not None for value in identity):
             if not all(isinstance(value, str) for value in identity):
@@ -150,6 +172,16 @@ class StoreReviewEventOutboxMixin:
         parameters.append(max(1, int(limit)))
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
+        ready_rows = []
+        for row in rows:
+            if row["acknowledged_at"] is not None:
+                continue
+            if row["binding_status"] != "ready":
+                break
+            next_attempt_at = row["next_attempt_at"]
+            if isinstance(next_attempt_at, str) and next_attempt_at > now:
+                break
+            ready_rows.append(row)
         return [
             {
                 "sequence": int(row["stream_sequence"]),
@@ -169,7 +201,7 @@ class StoreReviewEventOutboxMixin:
                 "machine_installation_id": row["machine_installation_id"],
                 "attempt_count": int(row["attempt_count"]),
             }
-            for row in rows
+            for row in ready_rows
         ]
 
     def acknowledge_live_request_outbox(
@@ -208,17 +240,17 @@ class StoreReviewEventOutboxMixin:
             )
             rows = connection.execute(
                 """
-                select stream_sequence, acknowledged_at from guard_review_outbox_events
+                select stream_sequence, binding_status, acknowledged_at
+                from guard_review_outbox_events
                 where oauth_source = ? and oauth_subject_hash = ? and workspace_id = ?
                   and machine_id = ? and machine_installation_id = ?
-                  and binding_status = 'ready'
                 order by stream_sequence
                 """,
                 (self._guard_source, *binding),
             ).fetchall()
             prefix: list[int] = []
             for row in rows:
-                if row["acknowledged_at"] is None:
+                if row["binding_status"] != "ready" or row["acknowledged_at"] is None:
                     break
                 prefix.append(int(row["stream_sequence"]))
             if not prefix:
@@ -337,6 +369,7 @@ class StoreReviewEventOutboxMixin:
     ) -> dict[str, object]:
         query = """
             select count(*) as depth, min(occurred_at) as oldest_changed_at,
+                   min(next_attempt_at) as next_attempt_at,
                    max(attempt_count) as max_attempt_count, max(last_error) as last_error
             from guard_review_outbox_events where oauth_source = ? and binding_status = 'ready'
               and acknowledged_at is null
@@ -404,13 +437,16 @@ class StoreReviewEventOutboxMixin:
         legacy = int(diagnostics["legacy_unbound_depth"] or 0) if diagnostics is not None else 0
         unbound = int(diagnostics["unbound_depth"] or 0) if diagnostics is not None else 0
         other_workspace = int(diagnostics["other_workspace_depth"] or 0) if diagnostics is not None else 0
+        oldest_changed_at = row["oldest_changed_at"] if row is not None else None
         return {
             "oauth_source": self._guard_source,
             "oauth_subject_hash": oauth_subject_hash,
             "binding_state": "quarantined" if quarantined else "healthy",
             "binding_hint": "Review events require explicit identity repair." if quarantined else None,
             "depth": int(row["depth"] if row is not None else 0),
-            "oldest_changed_at": row["oldest_changed_at"] if row is not None else None,
+            "oldest_changed_at": oldest_changed_at,
+            "next_attempt_at": row["next_attempt_at"] if row is not None else None,
+            "oldest_age_seconds": _event_age_seconds(now, oldest_changed_at),
             "max_attempt_count": int(row["max_attempt_count"] or 0) if row is not None else 0,
             "last_error": row["last_error"] if row is not None else None,
             "unbound_depth": unbound,

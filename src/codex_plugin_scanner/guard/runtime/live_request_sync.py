@@ -1,46 +1,53 @@
 """Durable, independent synchronization for local Guard approval requests."""
 
-import base64
-import json
 import logging
-import os
-import threading
+import threading  # noqa: F401 - retained as the worker lifecycle's testable runtime seam.
 import urllib.error
-import urllib.parse
-from contextlib import suppress
-from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
 
-from ..mdm.user_health import run_user_health_cadence, user_health_report_due
-from ..review_contracts import (
-    GuardReviewContractError,
-    guard_review_oauth_metadata,
-)
 from ..store import GuardStore
-from ..store_live_request_outbox import live_request_oauth_subject_hash
 from .live_request_event_projection import (
     _build_live_request_event as _build_live_request_event,
 )
-from .live_request_event_projection import (
-    project_live_request_outbox_row,
+from .local_request_snapshots import _cloud_scrub_text
+from .review_event_batch_delivery import prepare_review_event_batch, reconcile_review_event_batch
+from .review_event_batch_worker import (
+    DEFAULT_REVIEW_EVENT_BATCH_MAX_BYTES,
+    DEFAULT_REVIEW_EVENT_BATCH_SIZE,
+    bounded_batch_size,
+    classify_review_event_sync_error,
+    record_review_event_latency,
 )
-from .local_request_snapshots import (
-    _cloud_scrub_text,
-    _resolve_cloud_receipt_redaction_level,
+from .review_event_transport import encode_live_request_events, resolve_sync_url
+from .review_event_transport import post_sync_events as _post_sync_events
+from .review_event_worker_lifecycle import (
+    LiveRequestSyncWorker as LiveRequestSyncWorker,
+)
+from .review_event_worker_lifecycle import (
+    _cloud_sync_sync_loop as _cloud_sync_sync_loop,
+)
+from .review_event_worker_lifecycle import (
+    _resolve_live_request_sync_auth_context as _resolve_live_request_sync_auth_context,
+)
+from .review_event_worker_lifecycle import (
+    start_cloud_sync_sync_worker as start_cloud_sync_sync_worker,
+)
+from .review_event_worker_lifecycle import (
+    stop_cloud_sync_sync_worker as stop_cloud_sync_sync_worker,
 )
 
-if TYPE_CHECKING:
-    pass
+_encode_live_request_events = encode_live_request_events
+_resolve_sync_url = resolve_sync_url
 
 _LOGGER = logging.getLogger(__name__)
 
-LIVE_REQUEST_SYNC_BATCH_SIZE = 1
+LIVE_REQUEST_SYNC_BATCH_SIZE = DEFAULT_REVIEW_EVENT_BATCH_SIZE
 LIVE_REQUEST_SYNC_MAX_BATCHES = 200
 LIVE_REQUEST_SYNC_PROTOCOL_VERSION = "2"
 LIVE_REQUEST_SYNC_STATE_KEY = "guard_live_request_sync_state"
 DEFAULT_POLL_INTERVAL_SECONDS = 0.1
-DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
+DEFAULT_HEALTH_INTERVAL_SECONDS = 30.0
+DEFAULT_ERROR_BACKOFF_SECONDS = 1.0
 
 
 def _now() -> str:
@@ -55,28 +62,8 @@ def _redacted_error(error: BaseException) -> str:
     return str(error)
 
 
-def _resolve_sync_url(auth_context: dict[str, object], path: str) -> str:
-    sync_url = str(auth_context.get("sync_url") or "")
-    if not sync_url:
-        raise RuntimeError("Guard sync URL is not configured.")
-    parsed = urllib.parse.urlsplit(sync_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError("Guard sync URL must be an absolute HTTP(S) URL.")
-    normalized_path = path if path.startswith("/") else f"/{path}"
-    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, normalized_path, parsed.query, ""))
-
-
-def _encode_live_request_events(events: list[dict[str, object]]) -> str:
-    event_json = json.dumps(
-        events,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return base64.urlsafe_b64encode(event_json).decode("ascii")
-
-
 def _live_request_sync_state_key(store: GuardStore) -> str:
-    source = store.guard_source
+    source = getattr(store, "guard_source", "default")
     if source == "default":
         return LIVE_REQUEST_SYNC_STATE_KEY
     return f"{LIVE_REQUEST_SYNC_STATE_KEY}:{source}"
@@ -91,7 +78,36 @@ def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
     store.set_sync_payload(_live_request_sync_state_key(store), state, _now())
 
 
-def _post_sync_events(
+def _review_event_batch_limits(
+    state: dict[str, object],
+    auth_context: dict[str, object],
+) -> tuple[int, int]:
+    configured_size = auth_context.get("review_event_batch_size", state.get("adaptive_batch_size"))
+    configured_bytes = auth_context.get("review_event_batch_max_bytes", state.get("batch_max_bytes"))
+    batch_size = bounded_batch_size(configured_size, fallback=LIVE_REQUEST_SYNC_BATCH_SIZE)
+    byte_cap = (
+        int(configured_bytes)
+        if isinstance(configured_bytes, int) and not isinstance(configured_bytes, bool)
+        else DEFAULT_REVIEW_EVENT_BATCH_MAX_BYTES
+    )
+    return batch_size, max(1_024, min(byte_cap, DEFAULT_REVIEW_EVENT_BATCH_MAX_BYTES))
+
+
+def _contiguous_acknowledgement(response: dict[str, object]) -> int | None:
+    for key in ("highestContiguousAcknowledgedStreamSequence", "highestContiguousAcknowledgedSequence"):
+        value = response.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+    return None
+
+
+def _state_int(state: dict[str, object], key: str, *, fallback: int = 0) -> int:
+    value = state.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else fallback
+
+
+def _post_sync_events_with_auth_refresh(
+    store: GuardStore,
     auth_context: dict[str, object],
     *,
     workspace_id: str,
@@ -99,29 +115,32 @@ def _post_sync_events(
     machine_installation_id: str,
     cursor: str | None,
     events: list[dict[str, object]],
-) -> dict[str, object]:
-    from .runner import _guard_sync_request, _urlopen_json_with_timeout_retry
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Retry one rejected request with a newly resolved authorization context."""
 
-    request_url = _resolve_sync_url(auth_context, "/api/guard/live-requests/sync")
-    payload: dict[str, object] = {
-        "protocolVersion": LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
-        "deviceId": machine_id,
-        "workspaceId": workspace_id,
-        "machineInstallationId": machine_installation_id,
-        "inboundCursor": cursor,
-        "eventsBase64Url": _encode_live_request_events(events),
-    }
-    request = _guard_sync_request(
-        auth_context,
-        request_url=request_url,
-        method="POST",
-        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+    try:
+        response = _post_sync_events(
+            auth_context,
+            workspace_id=workspace_id,
+            machine_id=machine_id,
+            machine_installation_id=machine_installation_id,
+            cursor=cursor,
+            events=events,
+        )
+        return response, auth_context
+    except Exception as error:
+        if classify_review_event_sync_error(error) != "authorization":
+            raise
+    refreshed = _resolve_auth_context_for_retry(store)
+    response = _post_sync_events(
+        refreshed,
+        workspace_id=workspace_id,
+        machine_id=machine_id,
+        machine_installation_id=machine_installation_id,
+        cursor=cursor,
+        events=events,
     )
-    return _urlopen_json_with_timeout_retry(
-        request=request,
-        timeout_seconds=35,
-        retry_timeout_seconds=60,
-    )
+    return response, refreshed
 
 
 def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
@@ -153,6 +172,16 @@ def _retry_result_message(items: list[dict[str, object]]) -> str:
     if details:
         return f"{message} Cloud reported: {'; '.join(details[:3])}."
     return message
+
+
+def _is_permanently_rejected_result(item: dict[str, object]) -> bool:
+    code = item.get("code")
+    return isinstance(code, str) and code in {
+        "invalid_event_schema",
+        "invalid_payload",
+        "invalid_binding",
+        "permanent_rejection",
+    }
 
 
 def sync_live_requests_once(
@@ -187,11 +216,15 @@ def sync_live_requests_once(
     store.claim_unowned_live_request_outbox(**delivery_binding)
 
     state = _load_sync_state(store)
+    batch_size, batch_max_bytes = _review_event_batch_limits(state, auth_context)
     state.update(
         {
             "state": "syncing",
             "last_sync_attempt_at": _now(),
             "last_error": None,
+            "last_error_category": None,
+            "adaptive_batch_size": batch_size,
+            "batch_max_bytes": batch_max_bytes,
         }
     )
     _save_sync_state(store, state)
@@ -202,42 +235,49 @@ def sync_live_requests_once(
     batches = 0
 
     try:
+        attempted_authenticated_round_trip = False
         while batches < LIVE_REQUEST_SYNC_MAX_BATCHES:
-            newest_first = batches % 10 != 9
             outbox_rows = store.list_ready_live_request_outbox(
                 now=_now(),
-                limit=LIVE_REQUEST_SYNC_BATCH_SIZE,
+                limit=batch_size,
                 **delivery_binding,
-                newest_first=newest_first,
+                newest_first=False,
             )
             if not outbox_rows:
+                if not attempted_authenticated_round_trip:
+                    _, auth_context = _post_sync_events_with_auth_refresh(
+                        store,
+                        auth_context,
+                        workspace_id=workspace_id,
+                        machine_id=machine_id,
+                        machine_installation_id=machine_installation_id,
+                        cursor=None,
+                        events=[],
+                    )
+                    attempted_authenticated_round_trip = True
                 break
 
-            events: list[dict[str, object]] = []
-            sequences: list[int] = []
-            redaction_level = _resolve_cloud_receipt_redaction_level(store)
-            try:
-                oauth = guard_review_oauth_metadata(store)
-            except GuardReviewContractError:
-                oauth = None
-            for outbox_row in outbox_rows:
-                projected = project_live_request_outbox_row(
-                    store,
-                    outbox_row=outbox_row,
-                    delivery_binding=delivery_binding,
-                    redaction_level=redaction_level,
-                    oauth=oauth,
-                )
-                if projected is None:
-                    continue
-                sequence, event = projected
-                sequences.append(sequence)
-                events.append(event)
+            batch = prepare_review_event_batch(
+                store=store,
+                rows=outbox_rows,
+                delivery_binding=delivery_binding,
+                maximum_events=batch_size,
+                maximum_bytes=batch_max_bytes,
+            )
+            events = batch.events
+            sequences = batch.sequences
             if not events:
-                continue
+                break
+
+            state["last_attempted_sequence"] = max(sequences)
+            state["last_batch_bytes"] = batch.byte_size
+            state["in_flight_sequences"] = sequences
+            record_review_event_latency(state, events, metric="enqueue_to_send", now=_now())
+            _save_sync_state(store, state)
 
             try:
-                response = _post_sync_events(
+                response, auth_context = _post_sync_events_with_auth_refresh(
+                    store,
                     auth_context,
                     workspace_id=workspace_id,
                     machine_id=machine_id,
@@ -245,7 +285,10 @@ def sync_live_requests_once(
                     cursor=None,
                     events=events,
                 )
+                attempted_authenticated_round_trip = True
             except Exception as error:
+                category = classify_review_event_sync_error(error)
+                state["last_error_category"] = category
                 store.retry_live_request_outbox(
                     sequences,
                     now=_now(),
@@ -254,75 +297,44 @@ def sync_live_requests_once(
                 )
                 raise
 
-            accepted_value = response.get("accepted")
-            rejected_value = response.get("rejected")
-            accepted = int(accepted_value) if isinstance(accepted_value, (int, float)) else 0
-            rejected = int(rejected_value) if isinstance(rejected_value, (int, float)) else 0
-            total_accepted += accepted
-            total_rejected += rejected
+            server_batch_size = response.get("maxBatchSize", response.get("maxEventCount"))
+            if server_batch_size is not None:
+                batch_size = bounded_batch_size(server_batch_size, fallback=batch_size)
+                state["adaptive_batch_size"] = batch_size
+            contiguous_ack = _contiguous_acknowledgement(response)
+
+            reconciliation = reconcile_review_event_batch(
+                store=store,
+                response=response,
+                events=events,
+                sequences=sequences,
+                delivery_binding=delivery_binding,
+                now=_now(),
+                contiguous_ack=contiguous_ack,
+                is_terminal=_is_terminally_superseded_result,
+                is_permanent=_is_permanently_rejected_result,
+                retry_message=_retry_result_message,
+            )
+            total_accepted += reconciliation.accepted
+            total_rejected += reconciliation.rejected
+            all_errors.extend(reconciliation.errors)
+            if reconciliation.error_category is not None:
+                state["last_error_category"] = reconciliation.error_category
+            if reconciliation.acknowledged_sequences:
+                state["last_acknowledged_sequence"] = max(
+                    _state_int(state, "last_acknowledged_sequence"),
+                    max(reconciliation.acknowledged_sequences),
+                )
+            acknowledged = set(reconciliation.acknowledged_sequences)
+            record_review_event_latency(
+                state,
+                [event for sequence, event in zip(sequences, events, strict=True) if sequence in acknowledged],
+                metric="enqueue_to_ack",
+                now=_now(),
+            )
             batches += 1
-
-            errors = response.get("errors")
-            if isinstance(errors, list):
-                all_errors.extend(str(error) for error in errors[:5])
-            per_event_results = response.get("perEventResults")
-            if isinstance(per_event_results, list) and len(per_event_results) == len(events):
-                acknowledged_sequences: list[int] = []
-                retry_sequences: list[int] = []
-                retry_results: list[dict[str, object]] = []
-                valid_results = True
-                for index, item in enumerate(per_event_results):
-                    if (
-                        not isinstance(item, dict)
-                        or item.get("index") != index
-                        or not isinstance(item.get("accepted"), bool)
-                    ):
-                        valid_results = False
-                        break
-                    if item["accepted"] or _is_terminally_superseded_result(item):
-                        acknowledged_sequences.append(sequences[index])
-                    else:
-                        retry_sequences.append(sequences[index])
-                        retry_results.append(item)
-                if (
-                    valid_results
-                    and sum(bool(item["accepted"]) for item in per_event_results) == accepted
-                    and len(per_event_results) - accepted == rejected
-                ):
-                    store.acknowledge_live_request_outbox(acknowledged_sequences, **delivery_binding)
-                    if retry_sequences:
-                        message = _retry_result_message(retry_results)
-                        all_errors.append(message)
-                        store.retry_live_request_outbox(
-                            retry_sequences,
-                            now=_now(),
-                            error=message,
-                            **delivery_binding,
-                        )
-                    continue
-
-            accounted = accepted + rejected
-            if accounted != len(events):
-                message = "Cloud live request sync acknowledgement count did not match the batch."
-                all_errors.append(message)
-                store.retry_live_request_outbox(
-                    sequences,
-                    now=_now(),
-                    error=message,
-                    **delivery_binding,
-                )
+            if not reconciliation.continue_sync:
                 break
-            if rejected:
-                message = f"{rejected} live request events were rejected."
-                all_errors.append(message)
-                store.retry_live_request_outbox(
-                    sequences,
-                    now=_now(),
-                    error=message,
-                    **delivery_binding,
-                )
-                break
-            store.acknowledge_live_request_outbox(sequences, **delivery_binding)
 
         completed_at = _now()
         outbox_status = store.live_request_outbox_status(
@@ -339,8 +351,12 @@ def sync_live_requests_once(
                 "last_error": all_errors[0] if all_errors else None,
                 "outbox_depth": outbox_status["depth"],
                 "outbox_oldest_changed_at": outbox_status["oldest_changed_at"],
+                "error_streak": 0,
+                "in_flight_sequences": [],
             }
         )
+        if attempted_authenticated_round_trip:
+            state["last_authenticated_round_trip_at"] = completed_at
         _save_sync_state(store, state)
 
         outbox_depth = outbox_status["depth"]
@@ -410,9 +426,32 @@ def live_request_sync_status(store: GuardStore) -> dict[str, object]:
         "state": state.get("state") or "not_configured",
         "last_sync_at": state.get("last_sync_at"),
         "last_success_at": state.get("last_success_at"),
+        "last_authenticated_round_trip_at": state.get("last_authenticated_round_trip_at"),
+        "last_attempted_sequence": state.get("last_attempted_sequence"),
+        "last_acknowledged_sequence": state.get("last_acknowledged_sequence"),
         "last_error": state.get("last_error"),
+        "last_error_category": state.get("last_error_category"),
+        "worker_heartbeat_at": state.get("worker_heartbeat_at"),
+        "watchdog_restart_count": state.get("watchdog_restart_count", 0),
+        "adaptive_batch_size": state.get("adaptive_batch_size", LIVE_REQUEST_SYNC_BATCH_SIZE),
+        "batch_max_bytes": state.get("batch_max_bytes", DEFAULT_REVIEW_EVENT_BATCH_MAX_BYTES),
+        "dead_letter_depth": (
+            len(
+                store.list_live_request_outbox_dead_letters(
+                    oauth_subject_hash=binding["oauth_subject_hash"],
+                    workspace_id=binding["workspace_id"],
+                    machine_id=binding["machine_id"],
+                    machine_installation_id=binding["machine_installation_id"],
+                    limit=1_000,
+                )
+            )
+            if binding is not None
+            else 0
+        ),
         "synced_count": state.get("synced_count", 0),
         "rejected_count": state.get("rejected_count", 0),
+        "enqueue_to_send_latency_ms": state.get("enqueue_to_send_average_ms"),
+        "enqueue_to_ack_latency_ms": state.get("enqueue_to_ack_average_ms"),
         "outbox": outbox,
         "oauth_source": store.guard_source,
         "protocol_version": LIVE_REQUEST_SYNC_PROTOCOL_VERSION,
@@ -420,175 +459,7 @@ def live_request_sync_status(store: GuardStore) -> dict[str, object]:
     }
 
 
-@dataclass
-class LiveRequestSyncWorker:
-    """Background worker for live-request event outbox sync."""
+def _resolve_auth_context_for_retry(store: GuardStore) -> dict[str, object]:
+    from .review_event_worker_lifecycle import _resolve_live_request_sync_auth_context
 
-    thread: threading.Thread
-    stop_event: threading.Event
-
-
-def start_cloud_sync_sync_worker(
-    store: GuardStore,
-    existing: LiveRequestSyncWorker | None = None,
-    *,
-    poll_interval: float | None = None,
-    error_backoff: float | None = None,
-) -> LiveRequestSyncWorker | None:
-    """Start independent live-request sync worker at daemon startup.
-
-    Runs continuously syncing the outbox to cloud regardless of whether the
-    command-queue lease path is active. Offline preservation ensures local
-    enforcement continues while outbox buffers.
-    """
-    if existing is not None and existing.thread.is_alive() and not existing.stop_event.is_set():
-        return existing
-    if existing is not None and existing.thread.is_alive():
-        existing.thread.join(timeout=1.0)
-        if existing.thread.is_alive():
-            raise RuntimeError("Previous live-request sync worker did not stop.")
-
-    if os.environ.get("GUARD_LIVE_REQUEST_ENABLED", "1").strip().lower() in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }:
-        return None
-    profile = store.get_cloud_sync_profile()
-    if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
-        return None
-    stop_event = threading.Event()
-    poll_interval = poll_interval or float(
-        os.environ.get(
-            "GUARD_LIVE_REQUEST_POLL_INTERVAL",
-            str(DEFAULT_POLL_INTERVAL_SECONDS),
-        )
-    )
-    error_backoff = error_backoff or float(
-        os.environ.get(
-            "GUARD_LIVE_REQUEST_ERROR_BACKOFF",
-            str(DEFAULT_ERROR_BACKOFF_SECONDS),
-        )
-    )
-
-    thread = threading.Thread(
-        target=_cloud_sync_sync_loop,
-        kwargs={
-            "store": store,
-            "stop_event": stop_event,
-            "poll_interval": poll_interval,
-            "error_backoff": error_backoff,
-        },
-        daemon=True,
-        name="hol-guard-live-request-sync",
-    )
-    thread.start()
-    return LiveRequestSyncWorker(thread=thread, stop_event=stop_event)
-
-
-def stop_cloud_sync_sync_worker(
-    worker: LiveRequestSyncWorker | None,
-) -> LiveRequestSyncWorker | None:
-    """Signal a live-request sync worker and wait briefly for shutdown."""
-    if worker is None:
-        return None
-    worker.stop_event.set()
-    worker.thread.join(timeout=1.0)
-    return worker if worker.thread.is_alive() else None
-
-
-def _with_live_request_sync_identity(
-    store: GuardStore,
-    auth_context: dict[str, object],
-) -> dict[str, object]:
-    oauth = guard_review_oauth_metadata(store)
-    subject_hash = live_request_oauth_subject_hash(oauth.grant_id)
-    if subject_hash is None:
-        raise GuardReviewContractError("missing_oauth_subject")
-    binding = store.get_live_request_oauth_binding()
-    expected_binding = {
-        "oauth_source": store.guard_source,
-        "oauth_subject_hash": subject_hash,
-        "workspace_id": oauth.workspace_id,
-        "machine_id": oauth.machine_id,
-        "machine_installation_id": oauth.installation_id,
-    }
-    if binding != expected_binding:
-        raise GuardReviewContractError("oauth_binding_mismatch")
-    return {
-        **auth_context,
-        **expected_binding,
-    }
-
-
-def _resolve_live_request_sync_auth_context(store: GuardStore) -> dict[str, Any]:
-    """Resolve cloud sync auth context and repair paired storage when possible."""
-    from .runner import (
-        GuardSyncAuthorizationExpiredError,
-        GuardSyncNotConfiguredError,
-        _resolve_guard_sync_auth_context,
-        repair_guard_cloud_connect_storage,
-    )
-
-    try:
-        return _with_live_request_sync_identity(store, _resolve_guard_sync_auth_context(store))
-    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError):
-        repair = repair_guard_cloud_connect_storage(store)
-        if repair["existing_sign_in_valid"] or repair["repaired_storage"]:
-            return _with_live_request_sync_identity(store, _resolve_guard_sync_auth_context(store))
-        raise
-
-
-def _cloud_sync_sync_loop(
-    store: GuardStore,
-    stop_event: threading.Event,
-    *,
-    poll_interval: float,
-    error_backoff: float,
-) -> None:
-    """Main loop for the independent live-request sync worker."""
-    from .runner import (
-        GuardSyncAuthorizationExpiredError,
-        GuardSyncNotConfiguredError,
-    )
-
-    error_streak = 0
-    while not stop_event.is_set():
-        try:
-            auth_context = _resolve_live_request_sync_auth_context(store)
-            result = sync_live_requests_once(store, auth_context)
-            with suppress(OSError, PermissionError, RuntimeError, ValueError):
-                if user_health_report_due(store.guard_home):
-                    run_user_health_cadence(store.guard_home)
-            synced = result.get("synced", 0)
-            if isinstance(synced, int) and synced > 0:
-                error_streak = 0
-                continue
-        except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
-            error_streak += 1
-            state = _load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": _redacted_error(error),
-                    "last_error_at": _now(),
-                }
-            )
-            _save_sync_state(store, state)
-        except Exception as error:
-            error_streak += 1
-            _LOGGER.exception("Unexpected error in live-request sync loop")
-            state = _load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": _redacted_error(error),
-                    "last_error_at": _now(),
-                }
-            )
-            _save_sync_state(store, state)
-
-        wait = min(error_backoff, poll_interval * (2 ** min(error_streak, 10))) if error_streak else poll_interval
-        if stop_event.wait(wait):
-            return
+    return _resolve_live_request_sync_auth_context(store, force_refresh=True)

@@ -22,7 +22,8 @@ class StoreApprovalsMixin:
                 request_id=request_id,
                 oauth_source=self._guard_source,
             )
-            return request_id
+        self.notify_review_event_outbox_wake()
+        return request_id
 
     def resolve_harness_native_approval_request(
         self,
@@ -70,6 +71,7 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+        self.notify_review_event_outbox_wake()
         return True
 
     def resolve_approval_request(
@@ -102,6 +104,7 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+        self.notify_review_event_outbox_wake()
 
     def resolve_one_request_only(
         self,
@@ -125,7 +128,7 @@ class StoreApprovalsMixin:
             request = load_approval_request(connection, request_id)
             if request is not None:
                 require_resolvable_approval_request(request)
-            return persist_one_resolution(
+            resolved = persist_one_resolution(
                 connection,
                 request_id,
                 resolution_action=resolution_action,
@@ -133,6 +136,8 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+        self.notify_review_event_outbox_wake()
+        return resolved
 
     def resolve_matching_duplicate_requests(
         self,
@@ -153,7 +158,7 @@ class StoreApprovalsMixin:
             now=resolved_at,
         )
         with self._connect() as connection:
-            return persist_duplicate_resolutions(
+            resolved_ids = persist_duplicate_resolutions(
                 connection,
                 queue_group_id=queue_group_id,
                 oauth_source=self._guard_source,
@@ -163,6 +168,8 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+        self.notify_review_event_outbox_wake()
+        return resolved_ids
 
     def resolve_request_with_queue_result(
         self,
@@ -182,7 +189,7 @@ class StoreApprovalsMixin:
             now=resolved_at,
         )
         with self._connect() as connection:
-            return persist_queue_resolution(
+            result = persist_queue_resolution(
                 connection,
                 request_id,
                 resolution_action=resolution_action,
@@ -190,6 +197,8 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+        self.notify_review_event_outbox_wake()
+        return result
 
     def resolve_request_with_signed_remote_result(
         self,
@@ -204,7 +213,7 @@ class StoreApprovalsMixin:
             request = load_approval_request(connection, request_id)
             if request is not None:
                 require_resolvable_approval_request(request)
-            return persist_queue_resolution(
+            result = persist_queue_resolution(
                 connection,
                 request_id,
                 resolution_action=resolution_action,
@@ -212,6 +221,8 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+        self.notify_review_event_outbox_wake()
+        return result
 
     def resolve_matching_approval_requests(
         self,
@@ -237,7 +248,7 @@ class StoreApprovalsMixin:
         if scope == "workspace":
             if harness is None or workspace is None:
                 return []
-            return self._resolve_workspace_matching_approval_requests(
+            matching_ids = self._resolve_workspace_matching_approval_requests(
                 harness=harness,
                 artifact_id=artifact_id,
                 workspace=workspace,
@@ -246,6 +257,8 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+            self.notify_review_event_outbox_wake()
+            return matching_ids
         conditions, params = self._approval_scope_conditions(
             harness=harness,
             scope=scope,
@@ -283,6 +296,7 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+        self.notify_review_event_outbox_wake()
         return matching_ids[:_MAX_RESOLVED_SCOPE_IDS]
 
     @staticmethod
@@ -438,3 +452,4 @@ class StoreApprovalsMixin:
                 reason=reason,
                 resolved_at=resolved_at,
             )
+        self.notify_review_event_outbox_wake()

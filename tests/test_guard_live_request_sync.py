@@ -200,7 +200,7 @@ class TestIndependentWorker:
         monkeypatch.delenv("GUARD_LIVE_REQUEST_POLL_INTERVAL", raising=False)
         assert start_cloud_sync_sync_worker(store) is None
 
-    def test_start_worker_returns_none_without_cloud_profile(
+    def test_start_worker_waits_for_cloud_profile(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -208,7 +208,9 @@ class TestIndependentWorker:
         store = Store(tmp_path)
         monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: {})
 
-        assert start_cloud_sync_sync_worker(store) is None
+        worker = start_cloud_sync_sync_worker(store)
+        assert worker is not None
+        assert stop_cloud_sync_sync_worker(worker) is None
 
     def test_start_worker_with_existing_stopped_thread(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Existing worker with stopped thread → replaced with new worker."""
@@ -237,11 +239,6 @@ class TestIndependentWorker:
 
     def test_stop_worker_none_noop(self, tmp_path: Path) -> None:
         assert stop_cloud_sync_sync_worker(None) is None
-
-
-# ---------------------------------------------------------------------------
-# Contract: live_request_sync_status before dedicated cloud sync
-# ---------------------------------------------------------------------------
 
 
 class TestSyncStatus:

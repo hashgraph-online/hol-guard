@@ -9,13 +9,14 @@ from typing import Final
 from uuid import uuid4
 
 from .review_event_integrity import review_event_payload_digest
+from .store_review_event_dead_letters import review_event_dead_letter_schema_statements
 from .store_review_event_outbox_upgrade import ensure_review_event_outbox_upgrade
 
 # pyright: reportAny=false, reportUnusedCallResult=false
 
 REVIEW_EVENT_SCHEMA_VERSION: Final = 1
 REVIEW_EVENT_SCHEMA_NAME: Final = "guard-cloud-review-event-v2"
-REVIEW_EVENT_OUTBOX_MIGRATION_VERSION: Final = 25
+REVIEW_EVENT_OUTBOX_MIGRATION_VERSION: Final = 26
 _MIGRATION_STATE_KEY: Final = "guard_review_outbox_events_migrated_v2"
 REVIEW_REQUEST_SNAPSHOT_COLUMNS: Final = (
     "request_id",
@@ -435,7 +436,7 @@ def _migrate_latest_row_outbox(connection: sqlite3.Connection, now: str) -> None
 
 
 def ensure_review_event_outbox_schema(connection: sqlite3.Connection, now: str) -> None:
-    for statement in review_event_outbox_schema_statements():
+    for statement in (*review_event_outbox_schema_statements(), *review_event_dead_letter_schema_statements()):
         connection.execute(statement)
     ensure_review_event_outbox_upgrade(connection, migration_version=REVIEW_EVENT_OUTBOX_MIGRATION_VERSION)
     _migrate_latest_row_outbox(connection, now)

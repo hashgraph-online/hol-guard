@@ -184,11 +184,15 @@ def project_live_request_outbox_row(
                 "Stored Review event snapshot has no local request identifier.",
             )
     except StoredReviewEventError as error:
-        _ = store.quarantine_live_request_outbox_event(
+        _ = store.dead_letter_live_request_outbox_event(
             sequence,
             reason=error.reason,
             error=str(error),
-            **delivery_binding,
+            oauth_subject_hash=delivery_binding["oauth_subject_hash"],
+            workspace_id=delivery_binding["workspace_id"],
+            machine_id=delivery_binding["machine_id"],
+            machine_installation_id=delivery_binding["machine_installation_id"],
+            retain_outbox_event=True,
         )
         return None
     event.update(

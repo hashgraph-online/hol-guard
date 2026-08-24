@@ -8,6 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
+from codex_plugin_scanner.guard.review_event_wake import register_review_event_outbox_wake_callback
 from codex_plugin_scanner.guard.runtime.review_event_delivery import decode_stored_review_event
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_live_request_outbox import live_request_oauth_subject_hash
@@ -122,6 +123,8 @@ def test_later_credential_availability_does_not_silently_adopt_quarantine(tmp_pa
 def test_create_refresh_and_resolution_are_append_only_and_versioned(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard")
     binding = _connect(store)
+    wakes: list[bool] = []
+    unregister = register_review_event_outbox_wake_callback(store, lambda: wakes.append(True))
     store.add_approval_request(_request("request-1"), _NOW)
     store.add_approval_request(_request("request-1", summary="updated"), _LATER)
     store.resolve_approval_request(
@@ -131,6 +134,7 @@ def test_create_refresh_and_resolution_are_append_only_and_versioned(tmp_path) -
         reason="approved",
         resolved_at=_LATER,
     )
+    unregister()
 
     rows = store.list_ready_live_request_outbox(now=_LATER, limit=10, **binding)
     assert [row["event_type"] for row in rows] == [
@@ -143,6 +147,10 @@ def test_create_refresh_and_resolution_are_append_only_and_versioned(tmp_path) -
     resolved_payload = json.loads(str(rows[-1]["payload_json"]))
     assert resolved_payload["status"] == "resolved"
     assert resolved_payload["resolutionAction"] == "approve"
+    assert len(wakes) == 3
+    status = store.live_request_outbox_status(now=_LATER, **binding)
+    assert status["oldest_changed_at"] == _NOW
+    assert status["oldest_age_seconds"] == 1
 
 
 def test_global_stream_sequence_is_distinct_from_per_request_sequence(tmp_path) -> None:
@@ -181,7 +189,7 @@ def test_acknowledgement_compacts_only_contiguous_binding_prefix(tmp_path) -> No
 
     assert store.acknowledge_live_request_outbox([third], **binding) == 0
     assert len(store.list_ready_live_request_outbox(now=_NOW, limit=10, **binding)) == 1
-    assert store.acknowledge_live_request_outbox([first], **binding) == 2
+    assert store.acknowledge_live_request_outbox([first], **binding) == 1
 
     with store._connect() as connection:
         cursor = connection.execute("select acknowledged_stream_sequence from guard_review_outbox_cursors").fetchone()
@@ -189,8 +197,11 @@ def test_acknowledgement_compacts_only_contiguous_binding_prefix(tmp_path) -> No
             "select stream_sequence, binding_status from guard_review_outbox_events"
         ).fetchall()
     assert cursor is not None
-    assert cursor["acknowledged_stream_sequence"] == third
-    assert [(row["stream_sequence"], row["binding_status"]) for row in retained] == [(quarantined, "quarantined")]
+    assert cursor["acknowledged_stream_sequence"] == first
+    assert [(row["stream_sequence"], row["binding_status"]) for row in retained] == [
+        (quarantined, "quarantined"),
+        (third, "ready"),
+    ]
 
 
 def test_request_mutations_roll_back_when_event_append_fails(tmp_path) -> None:
@@ -485,7 +496,7 @@ def test_daemon_managed_store_detects_and_migrates_current_schema(tmp_path) -> N
         connection.execute("drop table guard_review_outbox_cursors")
         connection.execute("drop table guard_review_outbox_events")
         connection.execute("drop table guard_review_outbox_request_sequences")
-        connection.execute("delete from schema_migrations where version = 25")
+        connection.execute("delete from schema_migrations where version = 26")
         connection.execute("delete from sync_state where state_key = 'guard_review_outbox_events_migrated_v2'")
         connection.execute(
             """
@@ -535,7 +546,7 @@ def test_daemon_managed_store_detects_and_migrates_current_schema(tmp_path) -> N
     assert snapshot["policy_action"] == "require-reapproval"
     assert snapshot["artifact_id"] == "codex:project:request-1"
     with migrated._connect() as connection:
-        assert connection.execute("select 1 from schema_migrations where version = 25").fetchone() is not None
+        assert connection.execute("select 1 from schema_migrations where version = 26").fetchone() is not None
         sequence_columns = {
             str(row["name"])
             for row in connection.execute("pragma table_info(guard_review_outbox_request_sequences)").fetchall()
@@ -548,7 +559,7 @@ def test_daemon_managed_store_detects_and_migrates_current_schema(tmp_path) -> N
             "machine_installation_id",
         } <= sequence_columns
         connection.execute("update guard_review_outbox_events set payload_hash = 'legacy-digest'")
-        connection.execute("delete from schema_migrations where version = 25")
+        connection.execute("delete from schema_migrations where version = 26")
 
     upgraded = GuardStore(guard_home, daemon_managed_schema=True)
     upgraded_rows = upgraded.list_ready_live_request_outbox(now=_NOW, limit=10, **binding)

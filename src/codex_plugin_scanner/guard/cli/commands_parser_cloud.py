@@ -1,7 +1,7 @@
 """Guard CLI parser cloud and hidden command groups."""
 
 # fmt: off
-# ruff: noqa: F403, F405, I001
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ import argparse
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .commands_review_event_dead_letters import add_review_event_dead_letter_arguments
+
 
 def _configure_guard_cloud_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -37,13 +39,12 @@ def _configure_guard_cloud_parsers(
     login_parser.add_argument("--json", action="store_true")
 
     connect_parser = guard_subparsers.add_parser(
-        "connect",
-        help="Open browser OAuth, pair this runtime to HOL Guard, and send the first sync",
+        "connect", help="Open browser OAuth, pair this runtime to HOL Guard, and send the first sync"
     )
     connect_parser.add_argument(
         "connect_command",
         nargs="?",
-        choices=("status", "repair", "re-pair", "sources", "reassign-quarantined"),
+        choices=("status", "repair", "re-pair", "sources", "reassign-quarantined", "dead-letters"),
     )
     _add_guard_common_args(connect_parser)
     connect_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
@@ -86,6 +87,7 @@ def _configure_guard_cloud_parsers(
         "--confirm-workspace",
         help="With reassign-quarantined, approve the exact destination workspace ID.",
     )
+    add_review_event_dead_letter_arguments(connect_parser)
     connect_parser.add_argument("--json", action="store_true")
 
     remote_pair_parser = guard_subparsers.add_parser(
