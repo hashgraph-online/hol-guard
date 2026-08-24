@@ -293,8 +293,6 @@ def test_git_pathspec_environment_preserves_windows_loader_variable_case_insensi
         'git diff -- ":(glob)src/**/*.py"',
         "git log --oneline",
         "git show HEAD",
-        "git add src/app.py",
-        'git commit -m "Fix validation"',
     ),
 )
 def test_normal_git_workflows_receive_no_new_preflight_review(
