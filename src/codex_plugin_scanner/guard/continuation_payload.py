@@ -128,7 +128,10 @@ def public_message(offer: ContinuationOffer, result: ContinuationResult) -> str 
             "Codex and retry the same request; this approval is now saved."
         )
     if result.status == "blocked_not_resumed":
-        return "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it."
+        return (
+            "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. "
+            "Do not retry that action in Codex. Ask for a safe alternative instead."
+        )
     return None
 
 

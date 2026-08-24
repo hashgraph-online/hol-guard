@@ -158,65 +158,72 @@ def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, obj
             listener.bind(str(socket_path))
             listener.listen(1)
             ready.set()
-            connection, _ = listener.accept()
-            with connection:
-                headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
-                key = ""
-                for line in headers.split("\r\n"):
-                    if line.lower().startswith("sec-websocket-key:"):
-                        key = line.split(":", 1)[1].strip()
-                        break
-                accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode(
-                    "ascii"
-                )
-                connection.sendall(
-                    (
-                        "HTTP/1.1 101 Switching Protocols\r\n"
-                        "Connection: Upgrade\r\n"
-                        "Upgrade: websocket\r\n"
-                        f"Sec-WebSocket-Accept: {accept}\r\n"
-                        "\r\n"
-                    ).encode("ascii")
-                )
-                while True:
-                    opcode, payload = _recv_websocket_frame(connection)
-                    if opcode != 0x1:
+            while True:
+                connection, _ = listener.accept()
+                with connection:
+                    try:
+                        headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
+                    except EOFError:
+                        # Capability verification proves the socket accepts a
+                        # local connection before the isolated resume worker
+                        # opens its own WebSocket session.
                         continue
-                    message = json.loads(payload.decode("utf-8"))
-                    received.append(message)
-                    if message.get("id") == 1:
-                        _send_websocket_text(
-                            connection,
-                            {
-                                "id": 1,
-                                "result": {
-                                    "userAgent": "test",
-                                    "codexHome": "/tmp",
-                                    "platformFamily": "unix",
-                                    "platformOs": "macos",
-                                },
-                            },
-                        )
-                    if message.get("id") == 2:
-                        _send_websocket_text(connection, {"id": 2, "result": {"threadId": "thread-1"}})
-                    if message.get("id") == 3:
-                        _send_websocket_text(connection, {"id": 3, "result": {"turnId": "turn-next"}})
-                        if message.get("method") == "turn/start":
-                            time.sleep(0.05)
+                    key = ""
+                    for line in headers.split("\r\n"):
+                        if line.lower().startswith("sec-websocket-key:"):
+                            key = line.split(":", 1)[1].strip()
+                            break
+                    accept = base64.b64encode(
+                        hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()
+                    ).decode("ascii")
+                    connection.sendall(
+                        (
+                            "HTTP/1.1 101 Switching Protocols\r\n"
+                            "Connection: Upgrade\r\n"
+                            "Upgrade: websocket\r\n"
+                            f"Sec-WebSocket-Accept: {accept}\r\n"
+                            "\r\n"
+                        ).encode("ascii")
+                    )
+                    while True:
+                        opcode, payload = _recv_websocket_frame(connection)
+                        if opcode != 0x1:
+                            continue
+                        message = json.loads(payload.decode("utf-8"))
+                        received.append(message)
+                        if message.get("id") == 1:
                             _send_websocket_text(
                                 connection,
                                 {
-                                    "method": "turn/completed",
-                                    "params": {
-                                        "threadId": "thread-1",
-                                        "turn": {
-                                            "id": "turn-next",
-                                            "status": "completed",
-                                        },
+                                    "id": 1,
+                                    "result": {
+                                        "userAgent": "test",
+                                        "codexHome": "/tmp",
+                                        "platformFamily": "unix",
+                                        "platformOs": "macos",
                                     },
                                 },
                             )
-                        break
+                        if message.get("id") == 2:
+                            _send_websocket_text(connection, {"id": 2, "result": {"threadId": "thread-1"}})
+                        if message.get("id") == 3:
+                            _send_websocket_text(connection, {"id": 3, "result": {"turnId": "turn-next"}})
+                            if message.get("method") == "turn/start":
+                                time.sleep(0.05)
+                                _send_websocket_text(
+                                    connection,
+                                    {
+                                        "method": "turn/completed",
+                                        "params": {
+                                            "threadId": "thread-1",
+                                            "turn": {
+                                                "id": "turn-next",
+                                                "status": "completed",
+                                            },
+                                        },
+                                    },
+                                )
+                            return
 
     thread = threading.Thread(target=server, daemon=True)
     thread.start()
@@ -371,7 +378,10 @@ def _start_fake_pre_ack_streaming_codex_app_server(
 def _recv_until(connection: socket.socket, marker: bytes) -> bytes:
     data = b""
     while marker not in data:
-        data += connection.recv(4096)
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise EOFError("connection closed before marker")
+        data += chunk
     return data
 
 
