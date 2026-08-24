@@ -710,7 +710,6 @@ def test_sync_transport_encodes_waf_sensitive_event_content(
         lambda **_kwargs: {"accepted": 1},
     )
     event: dict[str, object] = {
-        "localRequestId": "request-waf-sensitive",
         "guardVersion": "0.0.0-source-metadata",
         "rawCommand": "gh api graphql --raw-field query=../../runtime/authorization",
     }
@@ -724,17 +723,13 @@ def test_sync_transport_encodes_waf_sensitive_event_content(
         events=[event],
     )
 
+    binding_keys = ["protocolVersion", "deviceId", "workspaceId", "machineInstallationId"]
+    binding_values = ["2", "machine-1", "workspace-1", "installation-1"]
     encoded = captured_body["eventsBase64Url"]
-    assert isinstance(encoded, str)
-    assert captured_body["protocolVersion"] == "2"
-    assert captured_body["deviceId"] == "machine-1"
-    assert captured_body["workspaceId"] == "workspace-1"
-    assert captured_body["machineInstallationId"] == "installation-1"
-    assert "events" not in captured_body
-    assert "source-metadata" not in captured_body
-    assert "graphql" not in encoded
-    assert json_loads(urlsafe_b64decode(encoded)) == [event]
-    assert response == {"accepted": 1}
+    assert isinstance(encoded, str) and "graphql" not in encoded
+    assert [captured_body[key] for key in binding_keys] == binding_values
+    assert "events" not in captured_body and "source-metadata" not in captured_body
+    assert json_loads(urlsafe_b64decode(encoded)) == [event] and response == {"accepted": 1}
 
 
 # ---------------------------------------------------------------------------
