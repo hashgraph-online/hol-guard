@@ -197,6 +197,34 @@ def test_runtime_rejects_a_manifest_changed_after_install(tmp_path: Path) -> Non
         _trusted_launch(bridge_command, config)
 
 
+def test_repaired_manifest_keeps_an_open_codex_session_authenticated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(codex_adapter, "_post_tool_hook_timeout_seconds", lambda _context: 35)
+    context, old_bridge_command, old_config = _installed_launch(tmp_path)
+
+    monkeypatch.setattr(codex_adapter, "_post_tool_hook_timeout_seconds", lambda _context: 65)
+    CodexHarnessAdapter().install(context)
+
+    trusted = _trusted_launch(old_bridge_command, old_config)
+    assert trusted.cwd == Path(str(old_config["manifest_path"])).parent.resolve(strict=True)
+
+    changed_config = dict(old_config)
+    changed_timeouts = dict(changed_config["hook_timeouts"])
+    changed_timeouts["PreToolUse"] = 34
+    changed_config["hook_timeouts"] = changed_timeouts
+    changed_json = json.dumps(changed_config, separators=(",", ":"))
+    with pytest.raises(ValueError, match="bridge config changed after authentication"):
+        validate_codex_hook_launch(
+            manifest_path=str(changed_config["manifest_path"]),
+            state_path=str(changed_config["state_path"]),
+            fallback_command=_config_command(changed_config, "fallback_command"),
+            start_command=_config_command(changed_config, "start_command"),
+            config_json=changed_json,
+        )
+
+
 @pytest.mark.skipif(os.name == "nt", reason="symlink replacement semantics differ on Windows")
 def test_signed_runtime_guard_home_is_canonical_across_directory_aliases(tmp_path: Path) -> None:
     real_root = tmp_path / "real"

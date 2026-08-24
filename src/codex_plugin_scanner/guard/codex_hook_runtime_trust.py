@@ -24,6 +24,7 @@ from .codex_hook_launch_runtime import (
     private_hook_runtime_cwd,
     run_isolated_hook_process,
 )
+from .codex_hook_manifest import bridge_argv_sha256
 
 _REQUIRED_PACKAGE_ROLES = frozenset(
     {
@@ -279,10 +280,18 @@ def _verify_registered_bridge_argv(
     events = manifest.get("events")
     if not isinstance(events, list) or not events:
         raise ValueError("managed Codex hook event identity is invalid")
+    if all(_mapping(event, label="event").get("argv") == expected_argv for event in events):
+        return
+    compatible_hashes = manifest.get("compatible_bridge_argv_sha256")
+    if not isinstance(compatible_hashes, list) or bridge_argv_sha256(expected_argv) not in compatible_hashes:
+        raise ValueError("managed Codex hook bridge config changed after authentication")
+    for value in compatible_hashes:
+        if not isinstance(value, str) or len(value) != 64:
+            raise ValueError("managed Codex hook bridge compatibility identity is invalid")
     for event in events:
         binding = _mapping(event, label="event")
-        if binding.get("argv") != expected_argv:
-            raise ValueError("managed Codex hook bridge config changed after authentication")
+        if not isinstance(binding.get("argv"), list):
+            raise ValueError("managed Codex hook event identity is invalid")
 
 
 def _mapping(value: object, *, label: str) -> dict[str, object]:
