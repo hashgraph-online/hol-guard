@@ -219,13 +219,17 @@ def _protect_approval_action_envelope(
             return envelope
         envelope.pop("observe_mode", None)
         envelope.pop("observed_policy_action", None)
-    for key in ("policy_action", "policyAction", "pre_execution_result", "preExecutionResult"):
+    action_keys = ("policy_action", "policyAction", "pre_execution_result", "preExecutionResult")
+    for key in action_keys:
         envelope_action = _normalize_protect_policy_action(envelope.get(key))
         if envelope_action is None:
             continue
         strongest_action = most_restrictive_guard_action(envelope_action, policy_action, unknown_action="block")
         if strongest_action != policy_action:
             return envelope
+    for key in action_keys:
+        if _normalize_protect_policy_action(envelope.get(key)) is None:
+            continue
         envelope[key] = policy_action
     return envelope
 

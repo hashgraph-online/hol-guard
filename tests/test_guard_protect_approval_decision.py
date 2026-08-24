@@ -202,6 +202,26 @@ def test_protect_approval_does_not_weaken_stricter_envelope_action(tmp_path: Pat
         authoritative_decision_from_artifact(item)
 
 
+def test_protect_approval_does_not_partially_mutate_conflicting_action_aliases(tmp_path: Path) -> None:
+    response = _response(verdict_action="review", supply_action="review")
+    receipt = response["receipt"]
+    assert isinstance(receipt, dict)
+    receipt["action_envelope_json"] = {
+        "policy_action": "allow",
+        "policyAction": "block",
+        "package_manager": "bun",
+    }
+
+    item = _protect_approval_item(response, workspace=tmp_path, artifact=_artifact(tmp_path))
+
+    assert item is not None
+    assert item["action_envelope_json"] == {
+        "policy_action": "allow",
+        "policyAction": "block",
+        "package_manager": "bun",
+    }
+
+
 def test_strict_decision_parser_still_rejects_the_old_partial_protect_shape() -> None:
     old_partial_payload = {
         "action": "require-reapproval",
