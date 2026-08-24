@@ -58,6 +58,7 @@ from ..shims import (
 )
 from ..store import GuardStore
 from . import local_request_snapshots
+from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, ExactCloudReviewError, apply_exact_cloud_review
 from .live_request_repair import execute_live_request_sync_repair
 
 _GUARD_REVIEW_MEMORY_REGISTRY_SYNC_KEY = "guard_review_memory_registry"
@@ -85,11 +86,13 @@ APPROVAL_OPERATIONS: tuple[str, ...] = (
     "guard.approval.resolve",
     "guard.localRequests.snapshot",
 )
+EXACT_CLOUD_REVIEW_OPERATIONS: tuple[str, ...] = (EXACT_CLOUD_REVIEW_OPERATION,)
 LIVE_REQUEST_OPERATIONS: tuple[str, ...] = ("guard.liveRequests.reassignQuarantined",)
 SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (
     *PACKAGE_SHIM_OPERATIONS,
     *APP_OPERATIONS,
     *APPROVAL_OPERATIONS,
+    *EXACT_CLOUD_REVIEW_OPERATIONS,
     *LIVE_REQUEST_OPERATIONS,
 )
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
@@ -128,6 +131,13 @@ def execute_guard_command_job(
         if operation in APPROVAL_OPERATIONS:
             return _execute_approval_operation(
                 operation,
+                job=job,
+                payload=payload,
+                store=store,
+                generated_at=generated_at,
+            )
+        if operation in EXACT_CLOUD_REVIEW_OPERATIONS:
+            return _execute_exact_cloud_review_operation(
                 job=job,
                 payload=payload,
                 store=store,
@@ -457,6 +467,54 @@ def _execute_approval_operation(
         response_data,
         generated_at=generated_at,
     )
+
+
+def _execute_exact_cloud_review_operation(
+    *,
+    job: dict[str, object],
+    payload: dict[str, object],
+    store: GuardStore,
+    generated_at: str,
+) -> dict[str, object]:
+    remote_approval = _payload_mapping(payload.get("remoteApproval") or payload.get("remote_approval"))
+    if not remote_approval:
+        raise ValueError("remote_exact_approval_missing")
+    expected_harness = _optional_string(payload.get("harness"))
+    try:
+        resolution = apply_exact_cloud_review(
+            store,
+            remote_approval=remote_approval,
+            expected_harness=expected_harness,
+            now=generated_at,
+        )
+    except ExactCloudReviewError as error:
+        raise ValueError(error.code) from error
+    request_row = store.get_approval_request(resolution.request_id)
+    if not isinstance(request_row, dict):
+        raise ValueError("remote_exact_request_not_pending")
+    resume_metadata = _resume_after_remote_approval(
+        store=store,
+        request_row=request_row,
+        request_id=resolution.request_id,
+        action=resolution.action,
+        now=generated_at,
+    )
+    response: dict[str, object] = {
+        "action": resolution.action,
+        "daemonAckStatus": (
+            "resolved" if _remote_resume_confirmed(resume_metadata, resolution.action) else "resolved_unconfirmed"
+        ),
+        "localRequestId": resolution.request_id,
+        "receiptId": resolution.receipt_id,
+        "remoteDecision": resolution.action,
+        "resolution": {
+            "resolved_duplicate_ids": [],
+            "resolved_request": resolution.resolved_request,
+        },
+        "status": "completed",
+    }
+    response.update(resume_metadata)
+    return _result(response, generated_at=generated_at)
 
 
 def _remote_resume_confirmed(resume_metadata: dict[str, object], action: str) -> bool:

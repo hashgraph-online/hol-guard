@@ -25,7 +25,10 @@ class _Report:
     duration: float
 
 
-def test_duration_report_writes_sorted_call_phase_nodes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_duration_report_writes_validates_and_sorts_call_phase_nodes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     output = tmp_path / "durations.json"
     monkeypatch.setenv(duration_report.OUTPUT_ENV, str(output))
     duration_report.pytest_sessionstart()
@@ -46,9 +49,6 @@ def test_duration_report_writes_sorted_call_phase_nodes(tmp_path: Path, monkeypa
         "tests/test_a.py::test_a": 1.0,
         "tests/test_b.py::test_b": 2.5,
     }
-
-
-def test_duration_report_rejects_invalid_values(tmp_path: Path) -> None:
     output = tmp_path / "durations.json"
     output.write_text('{"schema_version": 1, "node_durations_seconds": {"node": -1}}', encoding="utf-8")
 

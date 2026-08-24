@@ -47,6 +47,7 @@ from ..runtime.command_capability import (
 from ..runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from ..runtime.command_queue import command_queue_status
 from ._commands_shared import *
+from .commands_dispatch_cloud_review import provision_connect_time_exact_cloud_review
 from .commands_parser_helpers import *
 
 
@@ -194,6 +195,13 @@ def _run_guard_connect_command(
         )
         if payload is None:
             return exit_code
+        payload = provision_connect_time_exact_cloud_review(
+            args=args,
+            store=store,
+            guard_home=guard_home or store.guard_home,
+            payload=payload,
+            exit_code=exit_code,
+        )
         _emit("connect", payload, getattr(args, "json", False))
         return exit_code
     if bool(getattr(args, "headless", False)):
@@ -211,6 +219,13 @@ def _run_guard_connect_command(
         )
         if payload is None:
             return exit_code
+        payload = provision_connect_time_exact_cloud_review(
+            args=args,
+            store=store,
+            guard_home=guard_home or store.guard_home,
+            payload=payload,
+            exit_code=exit_code,
+        )
         _emit("connect", payload, getattr(args, "json", False))
         return exit_code
     return 2

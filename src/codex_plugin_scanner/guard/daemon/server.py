@@ -247,6 +247,7 @@ from .discovery import (
     load_daemon_discovery_key,
 )
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
+from .headless_exact_cloud_review import build_headless_exact_cloud_review_response
 from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_cli_api import LocalCliApiError, LocalCliApiService
@@ -472,6 +473,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     diagnostics: DaemonDiagnostics
     auth_audit_lock: threading.Lock
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
+    command_queue_lifecycle: GuardDaemonServer | None
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """Suppress expected peer disconnects without hiding server defects."""
@@ -525,6 +527,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.diagnostics = diagnostics
         self.auth_audit_lock = threading.Lock()
         self.auth_audit_windows = {}
+        self.command_queue_lifecycle = None
         self.package_firewall_connect_state = None
         self.package_firewall_connect_state_lock = threading.Lock()
         self.guard_cloud_connect_state = None
@@ -2744,6 +2747,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/requests/remote-once":
             self._handle_headless_remote_once(payload)
             return
+        if parsed.path == "/v1/requests/remote-exact":
+            self._handle_headless_remote_exact(payload)
+            return
+        if parsed.path == "/v1/cloud-review/worker/refresh":
+            self._handle_cloud_review_worker_refresh()
+            return
         if parsed.path == "/v1/read-state":
             self._handle_read_state_update(payload)
             return
@@ -3752,6 +3761,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 response_payload["harness_resume"] = harness_resume
                 response_payload["harnessResume"] = harness_resume
         self._write_json(response_payload)
+
+    def _handle_headless_remote_exact(self, payload: dict[str, object]) -> None:
+        status, response = build_headless_exact_cloud_review_response(
+            store=self.server.store,  # type: ignore[attr-defined]
+            payload=payload,
+            decode_mapping=self._policy_memory_payload,
+            optional_string=self._optional_string,
+            record_receipt=self._record_headless_receipt,
+            resume_codex=self._codex_resume_after_remote_once,
+            now=_now,
+        )
+        self._write_json(response, status=status)
+
+    def _handle_cloud_review_worker_refresh(self) -> None:
+        lifecycle = self.server.command_queue_lifecycle
+        if lifecycle is None:
+            self._write_json({"error": "command_queue_lifecycle_unavailable"}, status=503)
+            return
+        self._write_json(lifecycle.refresh_command_queue_worker(), extra_headers={"Cache-Control": "no-store"})
 
     def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
         if action != "package_shim_path":
@@ -6999,6 +7027,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/requests/clear",
             "/v1/requests/bulk-allow-once",
             "/v1/requests/remote-once",
+            "/v1/requests/remote-exact",
+            "/v1/cloud-review/worker/refresh",
             "/v1/settings/import",
             "/v1/settings/reset",
             "/v1/read-state",
@@ -7905,6 +7935,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/requests/clear",
             "/v1/requests/bulk-allow-once",
             "/v1/requests/remote-once",
+            "/v1/requests/remote-exact",
+            "/v1/cloud-review/worker/refresh",
             "/v1/settings",
             "/v1/settings/import",
             "/v1/settings/reset",
@@ -8166,6 +8198,7 @@ class GuardDaemonServer:
                 shutdown_started=self._shutdown_started,
                 diagnostics=self._diagnostics,
             )
+            self._server.command_queue_lifecycle = self
         except BaseException:
             self._diagnostics.record_exception("daemon_initialization_failed")
             self._diagnostics.close(timeout_seconds=0.5)
@@ -8308,6 +8341,16 @@ class GuardDaemonServer:
         self._start_command_activity_maintenance()
         self._record_lifecycle("ready")
         self._diagnostics.record("daemon_ready")
+
+    def refresh_command_queue_worker(self) -> dict[str, object]:
+        """Apply a changed local Cloud Review capability without a daemon restart."""
+
+        self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
+        worker = self._command_queue_worker
+        return {
+            "operation": "guard.review.resolveExact",
+            "running": worker is not None and worker.thread.is_alive() and not worker.stop_event.is_set(),
+        }
 
     def _refresh_stale_harness_shims_best_effort(self) -> None:
         """Regenerate harness shims written by an older Guard generator.

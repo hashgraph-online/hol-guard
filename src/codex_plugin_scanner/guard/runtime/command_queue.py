@@ -33,6 +33,11 @@ from .command_executors import (
     command_job_operation,
     execute_guard_command_job,
 )
+from .exact_cloud_review import (
+    EXACT_CLOUD_REVIEW_OPERATION,
+    exact_cloud_review_operations,
+    exact_cloud_review_status,
+)
 from .live_request_repair import live_request_sync_repair_status
 from .runner import (
     GuardSyncAuthorizationExpiredError,
@@ -93,7 +98,18 @@ def command_queue_enabled(
                 COMMAND_QUEUE_ENABLED_ENV,
             )
         return False
-    return store is not None and bool(command_capability_operations(store))
+    return store is not None and bool(command_queue_operations(store))
+
+
+def command_queue_operations(store: GuardStore) -> tuple[str, ...]:
+    """Return operations enabled by their own local authority boundary."""
+
+    generic_operations = tuple(
+        operation for operation in command_capability_operations(store) if operation != EXACT_CLOUD_REVIEW_OPERATION
+    )
+    return generic_operations + tuple(
+        operation for operation in exact_cloud_review_operations(store) if operation not in generic_operations
+    )
 
 
 def _env_float(name: str, default: float) -> float:
@@ -209,6 +225,7 @@ def command_queue_status(store: GuardStore) -> dict[str, object]:
     state = _load_state(store)
     profile = store.get_cloud_sync_profile()
     capability = command_capability_status(store)
+    cloud_review = exact_cloud_review_status(store)
     return {
         "enabled": command_queue_enabled(store),
         "configured": profile is not None,
@@ -222,7 +239,8 @@ def command_queue_status(store: GuardStore) -> dict[str, object]:
         "active_job": state.get("active_job"),
         "pending_result": state.get("pending_result"),
         "capability": capability,
-        "granted_operations": capability.get("operations", []),
+        "cloud_review": cloud_review,
+        "granted_operations": list(command_queue_operations(store)),
         "supported_operations": list(SUPPORTED_COMMAND_OPERATIONS),
     }
 
@@ -269,12 +287,14 @@ def _oauth_metadata(store: GuardStore) -> tuple[str, str]:
 
 def _lease_payload(store: GuardStore) -> dict[str, object]:
     machine_id, workspace_id = _oauth_metadata(store)
-    operations = command_capability_operations(store)
+    operations = command_queue_operations(store)
     if not operations:
         raise CommandCapabilityError("command_capability_required")
     capabilities: dict[str, object] = {
         "operations": list(operations),
-        "schemaVersions": {operation: COMMAND_OPERATION_SCHEMA_VERSIONS[operation] for operation in operations},
+        # Schema negotiation is a compatibility registry, not an authority
+        # grant. `operations` remains the complete locally authorized set.
+        "schemaVersions": dict(COMMAND_OPERATION_SCHEMA_VERSIONS),
     }
     repair_status = _live_request_sync_repair_status(store)
     if repair_status is not None:

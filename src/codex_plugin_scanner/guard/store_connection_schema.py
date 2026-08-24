@@ -744,6 +744,13 @@ class StoreConnectionSchemaMixin:
             )
             """,
             """
+            create table if not exists guard_exact_cloud_review_receipts (
+              receipt_id text primary key,
+              request_id text not null,
+              claimed_at text not null
+            )
+            """,
+            """
             create table if not exists guard_local_once_approvals (
               approval_id text primary key,
               request_id text not null,
@@ -1146,6 +1153,12 @@ class StoreConnectionSchemaMixin:
                         where type = 'table' and name = 'guard_storage_maintenance'
                         """
                     ).fetchone()
+                    exact_review_receipts_row = connection.execute(
+                        """
+                        select 1 from sqlite_master
+                        where type = 'table' and name = 'guard_exact_cloud_review_receipts'
+                        """
+                    ).fetchone()
                     approval_columns = {
                         str(column[1]) for column in connection.execute("pragma table_info(approval_requests)")
                     }
@@ -1159,6 +1172,7 @@ class StoreConnectionSchemaMixin:
                         row is not None
                         and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
                         and storage_row is not None
+                        and exact_review_receipts_row is not None
                         and required_approval_columns <= approval_columns
                     )
                 finally:

@@ -11,7 +11,7 @@ pytest_shard = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(pytest_shard)
 
 
-def test_ci_shards_cover_every_test_file_once_and_deterministically() -> None:
+def test_ci_shard_planning_and_workflow_contract() -> None:
     expected = pytest_shard.discover_test_files(ROOT)
     shards = pytest_shard.build_test_shards(ROOT, 4)
 
@@ -19,16 +19,6 @@ def test_ci_shards_cover_every_test_file_once_and_deterministically() -> None:
     assert all(shards)
     assert sorted(path for shard in shards for path in shard) == expected
     assert sum(len(shard) for shard in shards) == len(set().union(*map(set, shards)))
-
-
-def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> str:
-    section = workflow.split(f"  {job_name}:\n", maxsplit=1)[1]
-    if next_job_name is not None:
-        section = section.split(f"\n  {next_job_name}:", maxsplit=1)[0]
-    return section
-
-
-def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     plan_job = _workflow_job(workflow, "test-plan", "tests")
     tests_job = _workflow_job(workflow, "tests", "duration-manifest-candidate")
@@ -52,14 +42,18 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert 'test "${#reports[@]}" -eq 96' in workflow
     assert "name: ci (3.12)" in workflow
     assert "needs: [quality, test-plan, tests, compatibility]" in workflow
-
-    cache_consumers = (
+    for job_name, next_job_name, expected_count in (
         ("compatibility", "deep-compatibility", 1),
         ("deep-compatibility", "mutation-baseline", 1),
         ("mutation-baseline", "ci-python-312", 1),
         ("cross-platform", "windows-updater", 2),
         ("windows-updater", None, 2),
-    )
-    for job_name, next_job_name, expected_count in cache_consumers:
-        job = _workflow_job(workflow, job_name, next_job_name)
-        assert job.count("save-cache: false") >= expected_count
+    ):
+        assert _workflow_job(workflow, job_name, next_job_name).count("save-cache: false") >= expected_count
+
+
+def _workflow_job(workflow: str, job_name: str, next_job_name: str | None) -> str:
+    section = workflow.split(f"  {job_name}:\n", maxsplit=1)[1]
+    if next_job_name is not None:
+        section = section.split(f"\n  {next_job_name}:", maxsplit=1)[0]
+    return section

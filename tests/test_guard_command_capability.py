@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.runtime.command_executors import (
     COMMAND_OPERATION_SCHEMA_VERSIONS,
     SUPPORTED_COMMAND_OPERATIONS,
 )
+from codex_plugin_scanner.guard.runtime.exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -154,7 +155,8 @@ def test_every_supported_operation_has_one_local_side_effect_classification() ->
         | set(STATE_CHANGING_COMMAND_OPERATIONS)
     )
 
-    assert classified == set(SUPPORTED_COMMAND_OPERATIONS)
+    assert classified == set(SUPPORTED_COMMAND_OPERATIONS) - {EXACT_CLOUD_REVIEW_OPERATION}
+    assert EXACT_CLOUD_REVIEW_OPERATION not in classified
     assert not (set(READ_ONLY_COMMAND_OPERATIONS) & set(STATE_CHANGING_COMMAND_OPERATIONS))
 
 

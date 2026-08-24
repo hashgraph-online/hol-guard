@@ -29,6 +29,7 @@ from .store_extension_control_authority import StoreExtensionControlAuthorityMix
 from .store_local_cli import StoreLocalCliMixin
 from .store_local_mcp import StoreLocalMcpMixin
 from .store_evidence_facade import StoreEvidenceMixin
+from .store_exact_cloud_review import StoreExactCloudReviewMixin
 from .store_inventory import StoreInventoryMixin
 from .store_policy_document import StorePolicyDocumentMixin
 from .store_live_request_outbox import StoreLiveRequestOutboxMixin
@@ -77,6 +78,7 @@ class GuardStore(
     StoreReceiptsRuntimeMixin,
     StoreApprovalQueriesMixin,
     StoreApprovalsMixin,
+    StoreExactCloudReviewMixin,
     StoreLiveRequestOutboxMixin,
     StoreEventReceiptsMixin,
     StoreOAuthConnectMixin,

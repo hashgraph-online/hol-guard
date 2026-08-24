@@ -184,7 +184,12 @@ def issue_command_capability(
     normalized_operations = tuple(sorted(set(operations)))
     if not normalized_operations:
         raise CommandCapabilityError("capability_operations_required")
-    if any(operation not in supported for operation in normalized_operations):
+    classified_operations = (
+        set(READ_ONLY_COMMAND_OPERATIONS)
+        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
+        | set(STATE_CHANGING_COMMAND_OPERATIONS)
+    )
+    if any(operation not in supported or operation not in classified_operations for operation in normalized_operations):
         raise CommandCapabilityError("unsupported_capability_operation")
     device_id, workspace_id = _oauth_target(store)
     capability = _signed_payload(
@@ -388,6 +393,11 @@ def authorize_command_job(
     now: str | None = None,
 ) -> AuthorizedCommandJob:
     """Validate capability and complete source-to-target lease bindings."""
+
+    if job.get("operation") == "guard.review.resolveExact":
+        from .exact_cloud_review import authorize_exact_cloud_review_job
+
+        return authorize_exact_cloud_review_job(store, job, schema_versions=schema_versions, now=now)
 
     capability = _verified_capability(store, now=now)
     identity = command_job_identity(job, schema_versions=schema_versions)

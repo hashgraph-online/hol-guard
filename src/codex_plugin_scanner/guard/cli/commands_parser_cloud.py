@@ -79,6 +79,11 @@ def _configure_guard_cloud_parsers(
         help="Named connection profile for multi-environment usage (e.g. 'staging'). Defaults to 'default'.",
     )
     connect_parser.add_argument(
+        "--enable-exact-cloud-review",
+        action="store_true",
+        help="After successful sign-in, explicitly enable signed one-request Cloud Review on this device.",
+    )
+    connect_parser.add_argument(
         "--confirm-source",
         help="With reassign-quarantined, approve the exact destination source name.",
     )

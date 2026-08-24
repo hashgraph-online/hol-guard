@@ -237,6 +237,8 @@ _GUARD_CLOUD_COMMAND_STATE_KEYS = (
     "guard_command_pending_approvals_v1",
     "guard_command_local_approvals_v1",
     "guard_command_replay_state_v1",
+    "guard_exact_cloud_review_capability_v1",
+    "guard_exact_cloud_review_revocation_v1",
 )
 _GUARD_CLOUD_RESET_STATE_KEYS = (
     "sync_summary",
