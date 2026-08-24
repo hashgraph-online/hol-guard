@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..action_lattice import guard_action_severity
-from .command_decision_adapter import evaluate_extension_interaction
+from .command_decision_adapter import evaluate_extension_interaction, legacy_rule_floor
 from .command_extensions import CommandSafetyExtensionRegistry
 from .command_model import CanonicalCommand
 
@@ -29,9 +29,15 @@ def classify_command_extension_interaction(
     """Return sanitized legacy interaction projections from the central plane."""
 
     observations = registry.observations(command)
-    has_signal = any(item.effective_evidence or item.uncertainty_reasons for item in observations)
+    reviewable_signal = any(
+        bool(item.uncertainty_reasons)
+        or (bool(item.effective_evidence) and legacy_rule_floor(item.extension, item.rule) not in {"allow", "monitor"})
+        for item in observations
+    )
     decision = evaluate_extension_interaction(command, observations)
-    requires_interaction = has_signal and guard_action_severity(decision.action) >= guard_action_severity("review")
+    requires_interaction = reviewable_signal and guard_action_severity(decision.action) >= guard_action_severity(
+        "review"
+    )
     if not requires_interaction:
         return CommandExtensionInteraction(None, None)
     matcher_failure_controls = any(

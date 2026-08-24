@@ -126,7 +126,7 @@ def test_alpha_only_dispatch_and_pr_version_stamping_contracts() -> None:
     assert 'elif [[ "$CHANNEL" == "stable" ]]' not in compute_run
     assert "VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py" in compute_run
     assert 'VERSION=$(BASE_VERSION="$BASE_VERSION" PR_NUMBER="$PR_NUMBER"' in compute_run
-    assert 'sync_repo_version.py --version "$VERSION"' in stamp_run
+    assert 'sync_repo_version.py --version "$VERSION"' in stamp_run and "3.0.0a0" not in stamp_run
 
 
 def test_release_dispatch_binds_channel_train_version_and_sha() -> None:

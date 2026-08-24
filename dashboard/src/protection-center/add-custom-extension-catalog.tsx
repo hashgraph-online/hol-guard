@@ -55,13 +55,17 @@ export function BulkPolicyPicker(props: {
   value: LocalCliCommandState | "mixed";
   disabled: boolean;
   onChange: (state: LocalCliCommandState) => void;
+  groupLabel?: string;
+  mixedCopy?: string;
 }) {
   const choices: Array<{ value: LocalCliCommandState; label: string }> = [
     { value: "inherit", label: "Recommended" },
     { value: "allow", label: "Allow all" },
     { value: "block", label: "Block all" },
   ];
-  const selected = props.value === "mixed" ? "inherit" : props.value;
+  const mixed = props.value === "mixed";
+  const selected = mixed ? "inherit" : props.value;
+  const groupLabel = props.groupLabel ?? "All tools protection setting";
   const tabStopIndex = extensionPolicyRadioTabStop(choices, selected, props.disabled);
   const chooseAdjacent = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = nextExtensionPolicyRadioIndex(choices, index, event.key, props.disabled);
@@ -71,11 +75,11 @@ export function BulkPolicyPicker(props: {
     event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
   };
   return (
-    <div className="mt-4">
+    <div className="mt-4" data-testid="custom-extension-bulk-policy">
       <div
         role="radiogroup"
-        aria-label="All tools protection setting"
-        aria-describedby={props.value === "mixed" ? "bulk-policy-mixed" : undefined}
+        aria-label={mixed ? `${groupLabel}. Custom mix` : groupLabel}
+        aria-describedby={mixed ? "bulk-policy-mixed" : undefined}
         className="guard-segmented w-fit"
       >
         {choices.map((choice, index) => (
@@ -93,7 +97,7 @@ export function BulkPolicyPicker(props: {
       </div>
       {props.value === "mixed" ? (
         <p id="bulk-policy-mixed" className="mt-2 text-xs leading-5 text-brand-dark/70">
-          Custom mix. Pick Recommended, Allow all, or Block all to reset every tool.
+          {props.mixedCopy ?? "Custom mix. Pick Recommended, Allow all, or Block all to reset every tool."}
         </p>
       ) : null}
     </div>

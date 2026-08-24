@@ -73,7 +73,7 @@ def inspect_command(
             "detail": "Matched versioned command rules against the canonical command model.",
         }
     )
-    if not evaluation.matched:
+    if not evaluation.matched or (evaluation.minimum_action == "allow" and match is None):
         return {
             "schema_version": COMMAND_EXTENSION_SCHEMA_VERSION,
             "status": "no_match",

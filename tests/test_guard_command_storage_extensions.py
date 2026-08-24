@@ -6,6 +6,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
+from codex_plugin_scanner.guard.runtime.command_storage_extensions import STORAGE_COMMAND_RULES
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 
@@ -100,6 +101,51 @@ STORAGE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "MinIO storage destructive command",
         "command.storage.minio.deletion",
     ),
+    (
+        "aws s3 cp ./out s3://archive/private.json",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.cp",
+    ),
+    (
+        "aws s3 mv ./out s3://archive/private.json",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.mv",
+    ),
+    (
+        "aws s3 mb s3://archive",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.mb",
+    ),
+    (
+        "aws s3 sync ./out s3://archive",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.sync",
+    ),
+    (
+        "aws s3 presign s3://archive/private.json",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.presign",
+    ),
+    (
+        "aws s3 website s3://archive --index-document index.html",
+        "AWS storage destructive command",
+        "command.storage.aws-s3.website",
+    ),
+    (
+        "gcloud storage cp ./out gs://archive/private.json",
+        "Google storage destructive command",
+        "command.storage.google-cloud.cp",
+    ),
+    (
+        "az storage blob upload --container-name archive --file private.json --name private.json",
+        "Azure storage destructive command",
+        "command.storage.azure-blob.upload",
+    ),
+    (
+        "mc cp ./out prod/archive/private.json",
+        "MinIO storage destructive command",
+        "command.storage.minio.cp",
+    ),
 )
 
 
@@ -118,6 +164,8 @@ STORAGE_SAFE_COMMANDS: tuple[str, ...] = (
     "gcloud --future-global-option account storage rm gs://archive/private.json --help",
     "az --future-global-option tenant storage blob delete --container-name archive --name private.json --help",
     "mc rm --help",
+    "aws s3 cp ./out s3://archive/private.json --dryrun",
+    "aws s3 sync ./out s3://archive --dryrun",
     "aws s3 ls s3://archive",
     "aws --future-global-option account s3 ls s3://archive",
     "gcloud storage ls gs://archive",
@@ -162,6 +210,68 @@ def test_storage_safe_segment_does_not_hide_later_deletion(tmp_path: Path) -> No
     assert isinstance(rules, list)
     rule_ids = [rule["rule_id"] for rule in rules if isinstance(rule, dict) and "rule_id" in rule]
     assert rule_ids == ["command.storage.minio.deletion"]
+
+
+def test_storage_read_permissions_keep_executable_matchers() -> None:
+    read_rule_ids = {
+        "command.storage.aws-s3.ls",
+        "command.storage.google-cloud.ls",
+        "command.storage.google-cloud.cat",
+        "command.storage.azure-blob.list",
+        "command.storage.minio.ls",
+        "command.storage.minio.cat",
+    }
+    rules = {rule.rule_id: rule for rule in STORAGE_COMMAND_RULES}
+    for rule_id in read_rule_ids:
+        rule = rules[rule_id]
+        assert rule.matcher is not None
+        assert rule.default_mode == "disabled"
+
+
+def test_storage_catalog_lists_supported_terminal_commands() -> None:
+    expected = {
+        "command.storage.aws-s3": {
+            "aws s3 rm",
+            "aws s3 cp",
+            "aws s3 ls",
+            "aws s3 mb",
+            "aws s3 mv",
+            "aws s3 presign",
+            "aws s3 sync",
+            "aws s3 website",
+        },
+        "command.storage.google-cloud": {
+            "gcloud storage rm",
+            "gcloud storage cp",
+            "gcloud storage ls",
+            "gcloud storage mv",
+            "gcloud storage cat",
+            "gcloud storage rsync",
+            "gcloud storage buckets create",
+        },
+        "command.storage.azure-blob": {
+            "az storage blob delete",
+            "az storage blob upload",
+            "az storage blob download",
+            "az storage blob list",
+            "az storage blob copy start",
+            "az storage container create",
+        },
+        "command.storage.minio": {
+            "mc rm",
+            "mc cp",
+            "mc ls",
+            "mc mb",
+            "mc mv",
+            "mc cat",
+            "mc mirror",
+        },
+    }
+    for extension_id, examples in expected.items():
+        extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(extension_id)
+        assert extension is not None
+        actual = {permission.example_command for permission in extension.permissions}
+        assert actual == examples
 
 
 def test_storage_extensions_publish_official_references() -> None:

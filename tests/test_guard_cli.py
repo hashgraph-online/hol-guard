@@ -4195,7 +4195,7 @@ args = ["workspace-skill.js", "--changed"]
         home_dir = tmp_path / "home"
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
 
-        rc = main(["guard", "update", "--home", str(home_dir), "--dry-run", "--json"])
+        rc = main(["guard", "update", "--home", str(home_dir), "--alpha", "--dry-run", "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
@@ -4212,7 +4212,7 @@ args = ["workspace-skill.js", "--changed"]
             lambda _guard_home: (_ for _ in ()).throw(OSError("db unavailable")),
         )
 
-        rc = main(["guard", "update", "--home", str(home_dir), "--dry-run", "--json"])
+        rc = main(["guard", "update", "--home", str(home_dir), "--alpha", "--dry-run", "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
