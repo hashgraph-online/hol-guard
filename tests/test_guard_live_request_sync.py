@@ -728,7 +728,7 @@ def test_sync_transport_encodes_waf_sensitive_event_content(
     encoded = captured_body["eventsBase64Url"]
     assert isinstance(encoded, str) and "graphql" not in encoded
     assert [captured_body[key] for key in binding_keys] == binding_values
-    assert "events" not in captured_body and "source-metadata" not in captured_body
+    assert "events" not in captured_body and "guardVersion" not in captured_body
     assert json_loads(urlsafe_b64decode(encoded)) == [event] and response == {"accepted": 1}
 
 

@@ -1,5 +1,6 @@
 """Tests for package/CLI version consistency."""
 
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
 
@@ -17,7 +18,13 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
 def test_source_distribution_and_package_versions_match():
     pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
     pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
-    assert pyproject["project"]["version"] == distribution_version("hol-guard") == package_version == "3.0.0a0"
+    source_version = pyproject["project"]["version"]
+    assert source_version == package_version == "3.0.0a0"
+    try:
+        installed_version = distribution_version("hol-guard")
+    except PackageNotFoundError:
+        pytest.skip("install the project to validate distribution metadata")
+    assert installed_version == source_version
 
 
 def test_cli_version_matches_package_version(capsys: pytest.CaptureFixture[str]):
