@@ -30,7 +30,7 @@ from ..cli.update_commands import (
 )
 from ..codex_resume import ResumeNotSupportedError, defer_request_resume_to_live_hook, retry_request_resume
 from ..config import load_guard_config
-from ..continuation_runtime import continue_request_after_application
+from ..continuation_runtime import continue_request_after_application, with_continuation_correlation
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
     build_workspace_audit_payload,
@@ -431,7 +431,7 @@ def _execute_approval_operation(
     resume_metadata = (
         _resume_after_remote_approval(
             store=store,
-            request_row=request_row,
+            request_row=with_continuation_correlation(request_row, envelope, payload, job),
             request_id=local_request_id,
             action=resolution_action,
             now=generated_at,

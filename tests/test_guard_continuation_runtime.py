@@ -2,15 +2,41 @@
 
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.continuation_runtime import continue_request_after_application
+from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer, ContinuationResult
+from codex_plugin_scanner.guard.continuation_runtime import (
+    continue_request_after_application,
+    record_live_hook_completion,
+    with_continuation_correlation,
+)
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 NOW = "2026-08-24T12:00:00+00:00"
+CORRELATION_ID = "gcrv2_018f0a0a-1234-7abc-8def-0123456789ab"
+
+
+def _successful_isolated_plan(
+    _plan: object,
+    offer: ContinuationOffer,
+    _action: str,
+    _timeout_seconds: float,
+) -> ContinuationResult:
+    return ContinuationResult(
+        correlation_id=offer.correlation_id,
+        capability=offer.capability,
+        status="resumed",
+        reason="app_server_turn_started",
+        completed_at=datetime.fromisoformat(NOW),
+        evidence_id="evidence-app-server-0001",
+    )
 
 
 def _seed_request(
@@ -81,7 +107,10 @@ def test_retry_only_harnesses_persist_a_manual_retry_once(tmp_path: Path, harnes
     assert resume is not None
     assert resume["continuation_contract_version"] == "guard.harness-continuation.v1"
     assert resume["continuation_offer_hash"]
-    assert resume["continuation_evidence"][0]["evidenceId"] == first["continuationEvidenceId"]
+    evidence = resume["continuation_evidence"]
+    assert isinstance(evidence, list)
+    assert isinstance(evidence[0], Mapping)
+    assert evidence[0]["evidenceId"] == first["continuationEvidenceId"]
     assert len(store.list_events(event_name="review.continuation.attempt")) == 1
     assert len(store.list_events(event_name="review.continuation.manual_retry_required")) == 1
 
@@ -104,8 +133,25 @@ def test_live_codex_hook_reports_waiting_without_starting_a_second_resume(tmp_pa
     assert payload["continuationStatus"] == "waiting"
     assert payload["resumeStatus"] == "pending"
     assert payload["resumeReason"] == "live_hook_waiting"
-    assert payload["codexResume"]["strategy"] == "codex-live-hook"
-    assert store.get_request_resume("request-codex-live")["status"] == "pending"
+    codex_resume = payload["codexResume"]
+    assert isinstance(codex_resume, Mapping)
+    assert codex_resume["strategy"] == "codex-live-hook"
+    persisted = store.get_request_resume("request-codex-live")
+    assert persisted is not None
+    assert persisted["status"] == "pending"
+    replay = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
+    assert replay["continuationEvidenceId"] == payload["continuationEvidenceId"]
+    assert len(store.list_events(event_name="review.continuation.attempt")) == 1
+
+    completed = record_live_hook_completion(
+        store,
+        request_id="request-codex-live",
+        action="allow",
+        now="2026-08-24T12:00:01+00:00",
+    )
+    assert completed is not None
+    assert completed["continuationStatus"] == "resumed"
+    assert len(store.list_events(event_name="review.continuation.terminal")) == 1
 
 
 def test_codex_app_server_result_is_bounded_and_opaque(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,26 +162,29 @@ def test_codex_app_server_result_is_bounded_and_opaque(tmp_path: Path, monkeypat
         request_id="request-codex-session",
         metadata={"codex_thread_id": "thread-safe-0001"},
     )
-    seen: dict[str, object] = {}
-
-    def fake_retry(*_args: object, **kwargs: object) -> dict[str, object]:
-        seen.update(kwargs)
-        return {"status": "sent", "reason": "app_server_turn_started"}
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.continuation_runtime.retry_request_resume", fake_retry)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.continuation_runtime._run_store_continuation_plan",
+        _successful_isolated_plan,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.continuation_runtime.codex_app_server_target_reachable",
+        lambda _metadata: True,
+    )
 
     payload = continue_request_after_application(
         store,
         request_row=request,
         action="allow_once",
         now=NOW,
-        timeout_seconds=0.25,
+        timeout_seconds=2.0,
+        headless=False,
     )
 
-    assert seen["timeout_seconds"] == 0.25
-    assert payload["continuationStatus"] == "resumed"
+    assert payload["continuationStatus"] == "resumed", payload
     assert payload["resumeStatus"] == "sent"
-    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
+    codex_resume = payload["codexResume"]
+    assert isinstance(codex_resume, Mapping)
+    assert codex_resume["strategy"] == "codex-app-server-thread"
     assert "thread-safe-0001" not in str(payload)
 
 
@@ -157,3 +206,163 @@ def test_cancelled_continuation_persists_failure_before_returning(tmp_path: Path
     assert resume is not None
     assert resume["continuation_cancelled_at"] == NOW
     assert len(store.list_events(event_name="review.continuation.attempt")) == 1
+
+
+def test_continuation_preserves_canonical_correlation_in_payload_and_events(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "correlation")
+    request = _seed_request(
+        store,
+        harness="pi",
+        request_id="command-job-is-not-a-correlation-id",
+        metadata={"correlationId": "command-job-must-not-win"},
+    )
+
+    correlated_request = with_continuation_correlation(
+        request,
+        {"correlationId": CORRELATION_ID},
+        {"correlationId": "later-job-id-must-not-win"},
+    )
+    payload = continue_request_after_application(
+        store,
+        request_row=correlated_request,
+        action="allow_once",
+        now=NOW,
+    )
+
+    assert payload["correlationId"] == CORRELATION_ID
+    detail = payload["harnessResume"]
+    assert isinstance(detail, Mapping)
+    assert detail["correlationId"] == CORRELATION_ID
+    events = store.list_events(event_name="review.continuation.attempt")
+    assert len(events) == 1
+    event_payload = events[0]["payload"]
+    assert isinstance(event_payload, Mapping)
+    assert event_payload["correlationId"] == CORRELATION_ID
+
+
+def test_continuation_derives_valid_correlation_instead_of_using_raw_job_id(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "derived-correlation")
+    request_id = "command-job-raw-123"
+    request = _seed_request(store, harness="pi", request_id=request_id, metadata={})
+
+    first = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
+    replay = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
+
+    correlation_id = str(first["correlationId"])
+    assert correlation_id.startswith("gcrv2_")
+    assert len(correlation_id) == len("gcrv2_00000000-0000-0000-0000-000000000000")
+    assert correlation_id != request_id
+    assert replay["correlationId"] == correlation_id
+
+
+def test_cross_worker_race_executes_one_durable_continuation(tmp_path: Path) -> None:
+    guard_home = tmp_path / "race"
+    seed_store = GuardStore(guard_home)
+    _ = _seed_request(seed_store, harness="pi", request_id="request-race", metadata={})
+
+    def continue_from_worker() -> dict[str, object]:
+        worker_store = GuardStore(guard_home)
+        request = worker_store.get_approval_request("request-race")
+        assert request is not None
+        return continue_request_after_application(worker_store, request_row=request, action="allow_once", now=NOW)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _index: continue_from_worker(), range(2)))
+
+    evidence_ids = {str(result["continuationEvidenceId"]) for result in results}
+    assert len(evidence_ids) == 1
+    assert len(seed_store.list_events(event_name="review.continuation.attempt")) == 1
+    assert len(seed_store.list_events(event_name="review.continuation.terminal")) == 1
+
+
+def test_stale_continuation_claim_recovery_is_lease_bounded(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "stale-claim")
+    first = store.claim_continuation_attempt(
+        request_id="request-stale",
+        offer_hash="offer-stale",
+        action="allow_once",
+        now="2026-08-24T12:00:00+00:00",
+        lease_seconds=30,
+    )
+    active = store.claim_continuation_attempt(
+        request_id="request-stale",
+        offer_hash="offer-stale",
+        action="allow_once",
+        now="2026-08-24T12:00:10+00:00",
+        lease_seconds=30,
+    )
+    recovered = store.claim_continuation_attempt(
+        request_id="request-stale",
+        offer_hash="offer-stale",
+        action="allow_once",
+        now="2026-08-24T12:00:31+00:00",
+        lease_seconds=30,
+    )
+
+    assert first is not None
+    assert active is None
+    assert recovered is not None
+    assert recovered != first
+
+
+def test_stale_claimant_cannot_commit_after_lease_recovery(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "claim-owner")
+    first = store.claim_continuation_attempt(
+        request_id="request-owner",
+        offer_hash="offer-owner",
+        action="allow_once",
+        now="2026-08-24T12:00:00+00:00",
+        lease_seconds=1,
+    )
+    recovered = store.claim_continuation_attempt(
+        request_id="request-owner",
+        offer_hash="offer-owner",
+        action="allow_once",
+        now="2026-08-24T12:00:02+00:00",
+        lease_seconds=30,
+    )
+    assert first is not None
+    assert recovered is not None
+
+    with pytest.raises(RuntimeError, match="claim ownership changed"):
+        store.finalize_continuation_attempt(
+            request_id="request-owner",
+            offer_hash="offer-owner",
+            action="allow_once",
+            claim_id=first,
+            evidence_id="evidence-stale-owner-0001",
+            terminal=True,
+            resume_seed={
+                "operation_id": None,
+                "harness": "pi",
+                "strategy": "manual-only",
+                "supported": False,
+                "thread_id": None,
+            },
+            resume_update={"status": "skipped", "attempt_count": 1},
+            operation_update=None,
+            events=[],
+            now="2026-08-24T12:00:02+00:00",
+        )
+
+    assert store.get_request_resume("request-owner") is None
+    assert store.list_events(event_name="review.continuation.attempt") == []
+
+
+def test_replay_repairs_crash_window_side_effects_idempotently(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "repair")
+    request = _seed_request(store, harness="pi", request_id="request-repair", metadata={})
+    first = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
+    evidence_id = str(first["continuationEvidenceId"])
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("delete from guard_continuation_effects where evidence_id = ?", (evidence_id,))
+        connection.execute("delete from guard_events where payload_json like ?", (f'%"{evidence_id}"%',))
+
+    replay = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
+    second_replay = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
+
+    assert replay["continuationEvidenceId"] == evidence_id
+    assert second_replay["continuationEvidenceId"] == evidence_id
+    assert len(store.list_events(event_name="review.continuation.attempt")) == 1
+    assert len(store.list_events(event_name="review.continuation.terminal")) == 1
+    assert len(store.list_events(event_name="review.continuation.manual_retry_required")) == 1

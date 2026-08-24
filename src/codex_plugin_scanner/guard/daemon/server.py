@@ -3090,6 +3090,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 request_row=resolved_request,
                 action=action,
                 now=_now(),
+                headless=False,
             )
             if harness_str == "codex":
                 value = continuation.get("codexResume")

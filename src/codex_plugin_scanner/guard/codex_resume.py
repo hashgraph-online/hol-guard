@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from pathlib import Path
 
 from .codex_app_server import default_codex_app_server_socket_available, resume_codex_thread_for_request
 from .store import GuardStore
@@ -229,26 +228,18 @@ def _pretool_bridge_wait_is_active(
     *,
     now: str,
 ) -> bool:
-    now_at = _parse_timestamp(now)
-    started_at = _parse_timestamp(_first_string(operation, ("updated_at", "created_at")) or "")
-    if now_at is None or started_at is None:
-        return False
     metadata = operation.get("metadata")
-    workspace: Path | None = None
-    if isinstance(metadata, Mapping):
-        raw_workspace = metadata.get("workspace")
-        if isinstance(raw_workspace, str) and raw_workspace.strip():
-            workspace = Path(raw_workspace)
-    try:
-        from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
+    if not isinstance(metadata, Mapping):
+        return False
+    from .codex_live_hook_target import codex_live_hook_wait_deadline
 
-        configured = int(load_guard_config(store.guard_home, workspace).approval_wait_timeout_seconds)
-        configured = 0 if configured < 0 else min(configured, MAX_APPROVAL_WAIT_TIMEOUT_SECONDS)
-    except (OSError, TypeError, ValueError):
-        configured = 120
-    # Match Codex install: hook timeout = C + 5s managed grace; bridge holds C+5-2s.
-    bridge_hold_seconds = max(1, configured + 5 - 2)
-    return (now_at - started_at).total_seconds() <= bridge_hold_seconds
+    deadline = codex_live_hook_wait_deadline(
+        store,
+        operation={**operation, "status": operation.get("status") or "waiting_on_approval"},
+        metadata={**metadata, "hook_event_name": metadata.get("hook_event_name") or "PreToolUse"},
+    )
+    now_at = _parse_timestamp(now)
+    return deadline is not None and now_at is not None and now_at <= deadline
 
 
 def _parse_timestamp(value: str) -> datetime | None:

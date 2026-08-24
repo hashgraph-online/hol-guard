@@ -31,6 +31,7 @@ def safe_resume_metadata(resume: Mapping[str, object]) -> dict[str, object]:
         ("sentAt", "sentAt"),
         ("completedAt", "completedAt"),
         ("completed_at", "completedAt"),
+        ("correlationId", "correlationId"),
         ("resolution_action", "resolutionAction"),
         ("resolutionAction", "resolutionAction"),
         ("strategy", "strategy"),
@@ -75,6 +76,7 @@ def resume_harness_operation(
             return {
                 "action": normalized_action,
                 "completedAt": detail.get("completedAt"),
+                "correlationId": detail.get("correlationId"),
                 "harness": canonical_harness,
                 "operationId": str(operation["operation_id"]),
                 "reason": detail.get("reason"),

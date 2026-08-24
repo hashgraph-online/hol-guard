@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
-import threading
+import multiprocessing
+import queue
+import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
-from typing import Literal, Protocol
+from typing import Generic, Literal, TypeVar
 from uuid import uuid4
 
 ContinuationCapability = Literal["suspended-response", "session-resume", "retry-only", "unsupported"]
@@ -24,6 +27,7 @@ ContinuationStatus = Literal[
 ContinuationAction = Literal["allow_once", "block"]
 CAPABILITY_CONTRACT_VERSION = "guard.harness-continuation.v1"
 _OPAQUE_IDENTIFIER_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+_CORRELATION_PATTERN = re.compile(r"^gcrv2_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 def _require_opaque_identifier(value: str | None, label: str) -> None:
@@ -36,6 +40,11 @@ def _require_opaque_identifier(value: str | None, label: str) -> None:
 def _require_aware_datetime(value: datetime, label: str) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{label} must be timezone-aware")
+
+
+def _require_correlation_id(value: str) -> None:
+    if _CORRELATION_PATTERN.fullmatch(value) is None:
+        raise ValueError("continuation correlation_id violates the Guard Cloud Review v2 contract")
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +60,7 @@ class ContinuationOffer:
     contract_version: str = CAPABILITY_CONTRACT_VERSION
 
     def __post_init__(self) -> None:
+        _require_correlation_id(self.correlation_id)
         _require_opaque_identifier(self.opaque_target_id, "opaque_target_id")
         if self.wait_deadline is not None:
             _require_aware_datetime(self.wait_deadline, "wait_deadline")
@@ -77,43 +87,52 @@ class ContinuationResult:
     evidence_id: str
 
     def __post_init__(self) -> None:
+        _require_correlation_id(self.correlation_id)
         _require_opaque_identifier(self.evidence_id, "evidence_id")
         _require_aware_datetime(self.completed_at, "completed_at")
         if not self.reason or len(self.reason) > 128:
             raise ValueError("continuation result requires a bounded reason")
 
 
-class HarnessContinuationAdapter(Protocol):
-    """Applies a post-application continuation and proves the original target accepted it."""
-
-    def continue_after_application(
-        self,
-        offer: ContinuationOffer,
-        *,
-        action: ContinuationAction,
-        timeout_seconds: float,
-        cancelled: Callable[[], bool],
-    ) -> ContinuationResult: ...
-
-
 AttemptSink = Callable[[ContinuationOffer, ContinuationAction, ContinuationResult], None]
 FallbackNotifier = Callable[[ContinuationOffer, ContinuationResult], None]
+ExecutionPlan = TypeVar("ExecutionPlan")
+IsolatedRunner = Callable[[ExecutionPlan, ContinuationOffer, ContinuationAction, float], ContinuationResult]
 
 
-class ContinuationCoordinator:
+def _subprocess_plan_worker(
+    runner: IsolatedRunner[ExecutionPlan],
+    plan: ExecutionPlan,
+    offer: ContinuationOffer,
+    action: ContinuationAction,
+    timeout_seconds: float,
+    results: multiprocessing.Queue[ContinuationResult | str],
+) -> None:
+    """Run a serializable execution plan without inheriting daemon resources."""
+
+    try:
+        result = runner(plan, offer, action, timeout_seconds)
+        results.put(result)
+    except Exception:
+        results.put("error")
+
+
+class ContinuationCoordinator(Generic[ExecutionPlan]):
     """Idempotently records terminal continuation evidence outside a delivery lease."""
 
     def __init__(
         self,
-        adapter: HarnessContinuationAdapter,
         *,
         record_attempt: AttemptSink,
         notify_manual_retry: FallbackNotifier,
+        isolated_plan: ExecutionPlan | None = None,
+        isolated_runner: IsolatedRunner[ExecutionPlan] | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
-        self._adapter: HarnessContinuationAdapter = adapter
         self._record_attempt: AttemptSink = record_attempt
         self._notify_manual_retry: FallbackNotifier = notify_manual_retry
+        self._isolated_plan: ExecutionPlan | None = isolated_plan
+        self._isolated_runner: IsolatedRunner[ExecutionPlan] | None = isolated_runner
         self._now: Callable[[], datetime] = now
         self._completed: dict[tuple[str, ContinuationAction, str], ContinuationResult] = {}
 
@@ -160,46 +179,49 @@ class ContinuationCoordinator:
     ) -> ContinuationResult:
         """Return promptly when an external harness adapter stops responding.
 
-        The adapter receives a cancellation predicate backed by a private event.  A
-        non-cooperative adapter may keep its daemon worker alive, but it cannot
-        block the review executor or overwrite the recorded terminal timeout.
+        A non-cooperative adapter runs in an isolated process and is terminated
+        at the deadline, so a timeout cannot leak a daemon worker.
         """
 
-        finished = threading.Event()
-        adapter_cancelled = threading.Event()
-        result_box: list[ContinuationResult] = []
-        error_box: list[Exception] = []
+        if self._isolated_plan is None or self._isolated_runner is None:
+            return self._result(offer, "failed", "continuation_adapter_isolation_unavailable")
+        context = multiprocessing.get_context("spawn")
+        result_box: multiprocessing.Queue[ContinuationResult | str] = context.Queue(maxsize=1)
 
-        def effective_cancelled() -> bool:
-            return adapter_cancelled.is_set() or cancelled()
-
-        def invoke() -> None:
+        worker = context.Process(
+            target=_subprocess_plan_worker,
+            args=(self._isolated_runner, self._isolated_plan, offer, action, timeout_seconds, result_box),
+            name="hol-guard-continuation",
+        )
+        try:
             try:
-                result_box.append(
-                    self._adapter.continue_after_application(
-                        offer,
-                        action=action,
-                        timeout_seconds=timeout_seconds,
-                        cancelled=effective_cancelled,
-                    )
+                worker.start()
+            except (AttributeError, OSError, TypeError, ValueError):
+                return self._result(offer, "failed", "continuation_adapter_isolation_unavailable")
+            deadline = time.monotonic() + timeout_seconds
+            while worker.is_alive() and not cancelled() and time.monotonic() < deadline:
+                worker.join(min(0.01, max(0.0, deadline - time.monotonic())))
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(1.0)
+                if worker.is_alive():
+                    worker.kill()
+                    worker.join(1.0)
+                return self._result(
+                    offer, "failed", "continuation_cancelled" if cancelled() else "continuation_adapter_timeout"
                 )
-            except Exception as error:  # The coordinator must persist a failed attempt.
-                error_box.append(error)
-            finally:
-                finished.set()
-
-        worker = threading.Thread(target=invoke, name="hol-guard-continuation", daemon=True)
-        worker.start()
-        if not finished.wait(timeout_seconds):
-            adapter_cancelled.set()
-            return self._result(offer, "failed", "continuation_adapter_timeout")
-        if cancelled():
-            return self._result(offer, "failed", "continuation_cancelled")
-        if error_box:
-            return self._result(offer, "failed", "continuation_adapter_failed")
-        if not result_box:
-            return self._result(offer, "failed", "continuation_adapter_missing_result")
-        return result_box[0]
+            if cancelled():
+                return self._result(offer, "failed", "continuation_cancelled")
+            try:
+                result = result_box.get(timeout=0.2)
+            except queue.Empty:
+                return self._result(offer, "failed", "continuation_adapter_missing_result")
+            if isinstance(result, str):
+                return self._result(offer, "failed", "continuation_adapter_failed")
+            return result
+        finally:
+            result_box.close()
+            result_box.join_thread()
 
     def _terminal_result(
         self, offer: ContinuationOffer, *, action: ContinuationAction, cancelled: Callable[[], bool]

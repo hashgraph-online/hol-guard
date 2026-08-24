@@ -56,6 +56,38 @@ def ensure_resume_schema(connection: sqlite3.Connection) -> None:
     for name, definition in additions.items():
         if name not in columns:
             connection.execute(f"alter table guard_request_resumes add column {name} {definition}")
+    connection.execute(
+        """
+        create table if not exists guard_continuation_claims (
+          request_id text not null,
+          offer_hash text not null,
+          action text not null,
+          state text not null,
+          claimed_at text not null,
+          lease_expires_at text,
+          claim_id text,
+          evidence_id text,
+          primary key (request_id, offer_hash, action)
+        )
+        """
+    )
+    claim_columns = {
+        str(row["name"]) for row in connection.execute("pragma table_info(guard_continuation_claims)").fetchall()
+    }
+    for name in ("lease_expires_at", "claim_id"):
+        if name not in claim_columns:
+            connection.execute(f"alter table guard_continuation_claims add column {name} text")
+    connection.execute(
+        """
+        create table if not exists guard_continuation_effects (
+          effect_key text primary key,
+          request_id text not null,
+          evidence_id text not null,
+          event_name text not null,
+          created_at text not null
+        )
+        """
+    )
 
 
 def seed_request_resume(

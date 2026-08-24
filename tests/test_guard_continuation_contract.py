@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import multiprocessing
 from datetime import datetime, timedelta, timezone
-from threading import Event
 from time import monotonic, sleep
 
 import pytest
@@ -40,7 +40,45 @@ class FakeAdapter:
         )
 
 
+class HangingAdapter:
+    def continue_after_application(
+        self, offer: ContinuationOffer, *, action: str, timeout_seconds: float, cancelled: object
+    ) -> ContinuationResult:
+        assert callable(cancelled)
+        while not cancelled():
+            sleep(0.001)
+        return ContinuationResult(
+            correlation_id=offer.correlation_id,
+            capability=offer.capability,
+            status="failed",
+            reason="worker_cancelled",
+            completed_at=NOW,
+            evidence_id="evidence-hung-worker-0001",
+        )
+
+
+def _run_test_adapter(
+    adapter: FakeAdapter | HangingAdapter,
+    offer: ContinuationOffer,
+    action: str,
+    timeout_seconds: float,
+) -> ContinuationResult:
+    return adapter.continue_after_application(
+        offer,
+        action=action,
+        timeout_seconds=timeout_seconds,
+        cancelled=lambda: False,
+    )
+
+
 def test_codex_live_hook_is_the_only_suspended_response_offer() -> None:
+    with pytest.raises(ValueError, match="correlation_id"):
+        _ = capability_offer(
+            correlation_id="command-job-raw-id",
+            harness="codex",
+            original_hook_attached=False,
+            wait_deadline=None,
+        )
     live = capability_offer(
         correlation_id=CORRELATION_ID,
         harness="codex",
@@ -97,7 +135,6 @@ def test_coordinator_records_terminal_evidence_once_and_notifies_manual_retry() 
     notifications: list[ContinuationResult] = []
     adapter = FakeAdapter()
     coordinator = ContinuationCoordinator(
-        adapter,
         record_attempt=lambda _offer, _action, result: attempts.append(result),
         notify_manual_retry=lambda _offer, result: notifications.append(result),
         now=lambda: NOW,
@@ -117,10 +154,11 @@ def test_coordinator_proves_live_hook_and_rejects_invalid_opaque_target() -> Non
     adapter = FakeAdapter()
     attempts: list[ContinuationResult] = []
     coordinator = ContinuationCoordinator(
-        adapter,
         record_attempt=lambda _offer, _action, result: attempts.append(result),
         notify_manual_retry=lambda _offer, _result: None,
         now=lambda: NOW,
+        isolated_plan=adapter,
+        isolated_runner=_run_test_adapter,
     )
     offer = ContinuationOffer(
         correlation_id=CORRELATION_ID,
@@ -132,7 +170,8 @@ def test_coordinator_proves_live_hook_and_rejects_invalid_opaque_target() -> Non
     result = coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=3)
     assert result.status == "resumed"
     assert attempts == [result]
-    assert adapter.calls == 1
+    # The untrusted adapter runs in a child process, so parent-local counters
+    # cannot be used as execution proof; the returned evidence is authoritative.
 
     with pytest.raises(ValueError, match="safe opaque"):
         _ = ContinuationOffer(
@@ -145,33 +184,14 @@ def test_coordinator_proves_live_hook_and_rejects_invalid_opaque_target() -> Non
 
 
 def test_bounded_adapter_cancels_a_hung_worker_and_records_timeout() -> None:
-    class HangingAdapter:
-        def __init__(self) -> None:
-            self.cancelled = Event()
-
-        def continue_after_application(
-            self, offer: ContinuationOffer, *, action: str, timeout_seconds: float, cancelled: object
-        ) -> ContinuationResult:
-            assert callable(cancelled)
-            while not cancelled():
-                sleep(0.001)
-            self.cancelled.set()
-            return ContinuationResult(
-                correlation_id=offer.correlation_id,
-                capability=offer.capability,
-                status="failed",
-                reason="worker_cancelled",
-                completed_at=NOW,
-                evidence_id="evidence-hung-worker-0001",
-            )
-
     adapter = HangingAdapter()
     attempts: list[ContinuationResult] = []
     coordinator = ContinuationCoordinator(
-        adapter,
         record_attempt=lambda _offer, _action, result: attempts.append(result),
         notify_manual_retry=lambda _offer, _result: None,
         now=lambda: NOW,
+        isolated_plan=adapter,
+        isolated_runner=_run_test_adapter,
     )
     offer = capability_offer(
         correlation_id=CORRELATION_ID,
@@ -189,7 +209,7 @@ def test_bounded_adapter_cancels_a_hung_worker_and_records_timeout() -> None:
     assert result.status == "failed"
     assert result.reason == "continuation_adapter_timeout"
     assert attempts == [result]
-    assert adapter.cancelled.wait(0.2)
+    assert all(child.name != "hol-guard-continuation" for child in multiprocessing.active_children())
 
 
 def test_failed_attempt_persistence_never_populates_the_in_memory_cache() -> None:
@@ -202,18 +222,17 @@ def test_failed_attempt_persistence_never_populates_the_in_memory_cache() -> Non
         wait_deadline=NOW + timedelta(seconds=10),
     )
     coordinator = ContinuationCoordinator(
-        adapter,
         record_attempt=lambda _offer, _action, _result: (_ for _ in ()).throw(RuntimeError("store unavailable")),
         notify_manual_retry=lambda _offer, _result: None,
         now=lambda: NOW,
+        isolated_plan=adapter,
+        isolated_runner=_run_test_adapter,
     )
 
     with pytest.raises(RuntimeError, match="store unavailable"):
         coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=3)
     with pytest.raises(RuntimeError, match="store unavailable"):
         coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=3)
-
-    assert adapter.calls == 2
 
 
 def test_terminal_evidence_identifiers_are_unique() -> None:
@@ -226,7 +245,6 @@ def test_terminal_evidence_identifiers_are_unique() -> None:
     results: list[ContinuationResult] = []
     for _ in range(2):
         coordinator = ContinuationCoordinator(
-            FakeAdapter(),
             record_attempt=lambda _offer, _action, result: results.append(result),
             notify_manual_retry=lambda _offer, _result: None,
             now=lambda: NOW,
