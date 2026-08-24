@@ -63,7 +63,9 @@ export function BulkPolicyPicker(props: {
     { value: "allow", label: "Allow all" },
     { value: "block", label: "Block all" },
   ];
-  const selected = props.value === "mixed" ? "inherit" : props.value;
+  const mixed = props.value === "mixed";
+  const selected = mixed ? "inherit" : props.value;
+  const groupLabel = props.groupLabel ?? "All tools protection setting";
   const tabStopIndex = extensionPolicyRadioTabStop(choices, selected, props.disabled);
   const chooseAdjacent = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = nextExtensionPolicyRadioIndex(choices, index, event.key, props.disabled);
@@ -76,8 +78,8 @@ export function BulkPolicyPicker(props: {
     <div className="mt-4" data-testid="custom-extension-bulk-policy">
       <div
         role="radiogroup"
-        aria-label={props.groupLabel ?? "All tools protection setting"}
-        aria-describedby={props.value === "mixed" ? "bulk-policy-mixed" : undefined}
+        aria-label={mixed ? `${groupLabel}. Custom mix` : groupLabel}
+        aria-describedby={mixed ? "bulk-policy-mixed" : undefined}
         className="guard-segmented w-fit"
       >
         {choices.map((choice, index) => (

@@ -2340,7 +2340,9 @@ function BulkPolicyPicker(props) {
     { value: "allow", label: "Allow all" },
     { value: "block", label: "Block all" }
   ];
-  const selected = props.value === "mixed" ? "inherit" : props.value;
+  const mixed = props.value === "mixed";
+  const selected = mixed ? "inherit" : props.value;
+  const groupLabel = props.groupLabel ?? "All tools protection setting";
   const tabStopIndex = extensionPolicyRadioTabStop(choices, selected, props.disabled);
   const chooseAdjacent = (event, index) => {
     const next = nextExtensionPolicyRadioIndex(choices, index, event.key, props.disabled);
@@ -2354,8 +2356,8 @@ function BulkPolicyPicker(props) {
       "div",
       {
         role: "radiogroup",
-        "aria-label": props.groupLabel ?? "All tools protection setting",
-        "aria-describedby": props.value === "mixed" ? "bulk-policy-mixed" : void 0,
+        "aria-label": mixed ? `${groupLabel}. Custom mix` : groupLabel,
+        "aria-describedby": mixed ? "bulk-policy-mixed" : void 0,
         className: "guard-segmented w-fit",
         children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           BulkPolicyChoice,
@@ -3004,7 +3006,21 @@ function ProtectionStatusHero(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-5 text-brand-dark/70", children: props.status.summary })
       ] })
     ] }),
-    props.status.primaryActionLabel && props.onPrimaryAction ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ProtectionStatusAction,
+      {
+        busy: props.busy === true,
+        safe,
+        primaryActionLabel: props.status.primaryActionLabel,
+        onPrimaryAction: props.onPrimaryAction
+      }
+    ),
+    props.children ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full border-t border-[rgba(63,65,116,0.08)] pt-2", children: props.children }) : null
+  ] });
+}
+function ProtectionStatusAction(props) {
+  if (props.primaryActionLabel && props.onPrimaryAction) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
       {
         type: "button",
@@ -3012,19 +3028,30 @@ function ProtectionStatusHero(props) {
         disabled: props.busy,
         onClick: props.onPrimaryAction,
         className: "min-h-11 shrink-0 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:cursor-wait disabled:opacity-60",
-        children: props.busy ? "Working…" : props.status.primaryActionLabel
+        children: props.busy ? "Working…" : props.primaryActionLabel
       }
-    ) : safe ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-emerald-200 bg-[#e8f7ee] px-3 text-xs font-semibold text-emerald-800", children: [
+    );
+  }
+  if (props.safe) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex min-h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-emerald-200 bg-[#e8f7ee] px-3 text-xs font-semibold text-emerald-800", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "size-3.5" }),
       "No action required"
-    ] }) : null,
-    props.children ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full border-t border-[rgba(63,65,116,0.08)] pt-2", children: props.children }) : null
-  ] });
+    ] });
+  }
+  return null;
 }
 function ProtectionDecisionBadge({ result }) {
-  const label = result === "allowed" ? "Allowed" : result === "ask-first" ? "Ask once" : "Blocked";
-  const classes = result === "allowed" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : result === "ask-first" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-800";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${classes}`, children: label });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${decisionBadgeClasses(result)}`, children: decisionBadgeLabel(result) });
+}
+function decisionBadgeLabel(result) {
+  if (result === "allowed") return "Allowed";
+  if (result === "ask-first") return "Ask once";
+  return "Blocked";
+}
+function decisionBadgeClasses(result) {
+  if (result === "allowed") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (result === "ask-first") return "border-amber-200 bg-amber-50 text-amber-800";
+  return "border-red-200 bg-red-50 text-red-800";
 }
 function ProtectionModuleRow(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onOpen, className: `${EXTENSION_ROW_CLASS} motion-reduce:transition-none`, children: [

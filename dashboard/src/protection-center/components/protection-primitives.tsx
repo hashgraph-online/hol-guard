@@ -32,21 +32,64 @@ export function ProtectionStatusHero(props: {
         <p className="text-sm leading-5 text-brand-dark/70">{props.status.summary}</p>
       </div>
     </div>
-    {props.status.primaryActionLabel && props.onPrimaryAction ? <button
-      type="button"
-      aria-busy={props.busy}
-      disabled={props.busy}
-      onClick={props.onPrimaryAction}
-      className="min-h-11 shrink-0 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:cursor-wait disabled:opacity-60"
-    >{props.busy ? "Working…" : props.status.primaryActionLabel}</button> : safe ? <span className="inline-flex min-h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-emerald-200 bg-[#e8f7ee] px-3 text-xs font-semibold text-emerald-800"><HiMiniCheckCircle className="size-3.5" />No action required</span> : null}
+    <ProtectionStatusAction
+      busy={props.busy === true}
+      safe={safe}
+      primaryActionLabel={props.status.primaryActionLabel}
+      onPrimaryAction={props.onPrimaryAction}
+    />
     {props.children ? <div className="w-full border-t border-[rgba(63,65,116,0.08)] pt-2">{props.children}</div> : null}
   </section>;
 }
 
+function ProtectionStatusAction(props: {
+  busy: boolean;
+  safe: boolean;
+  primaryActionLabel?: string;
+  onPrimaryAction?: () => void;
+}) {
+  if (props.primaryActionLabel && props.onPrimaryAction) {
+    return (
+      <button
+        type="button"
+        aria-busy={props.busy}
+        disabled={props.busy}
+        onClick={props.onPrimaryAction}
+        className="min-h-11 shrink-0 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:cursor-wait disabled:opacity-60"
+      >
+        {props.busy ? "Working…" : props.primaryActionLabel}
+      </button>
+    );
+  }
+  if (props.safe) {
+    return (
+      <span className="inline-flex min-h-9 shrink-0 items-center gap-1.5 self-center rounded-full border border-emerald-200 bg-[#e8f7ee] px-3 text-xs font-semibold text-emerald-800">
+        <HiMiniCheckCircle className="size-3.5" />
+        No action required
+      </span>
+    );
+  }
+  return null;
+}
+
 export function ProtectionDecisionBadge({ result }: { result: "allowed" | "ask-first" | "blocked" }) {
-  const label = result === "allowed" ? "Allowed" : result === "ask-first" ? "Ask once" : "Blocked";
-  const classes = result === "allowed" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : result === "ask-first" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-800";
-  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${classes}`}>{label}</span>;
+  return (
+    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${decisionBadgeClasses(result)}`}>
+      {decisionBadgeLabel(result)}
+    </span>
+  );
+}
+
+function decisionBadgeLabel(result: "allowed" | "ask-first" | "blocked"): string {
+  if (result === "allowed") return "Allowed";
+  if (result === "ask-first") return "Ask once";
+  return "Blocked";
+}
+
+function decisionBadgeClasses(result: "allowed" | "ask-first" | "blocked"): string {
+  if (result === "allowed") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (result === "ask-first") return "border-amber-200 bg-amber-50 text-amber-800";
+  return "border-red-200 bg-red-50 text-red-800";
 }
 
 export function ProtectionModuleRow(props: {
@@ -78,8 +121,18 @@ export function ProtectionModuleRow(props: {
 }
 
 export function SettingSource({ source }: { source: "built-in" | "device" | "organization" }) {
-  const label = source === "organization" ? "Managed by your organization" : source === "device" ? "Set on this device" : "Built in to Guard";
-  return <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-dark/70"><HiMiniInformationCircle className="size-4" aria-hidden="true" />{label}</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-dark/70">
+      <HiMiniInformationCircle className="size-4" aria-hidden="true" />
+      {settingSourceLabel(source)}
+    </span>
+  );
+}
+
+function settingSourceLabel(source: "built-in" | "device" | "organization"): string {
+  if (source === "organization") return "Managed by your organization";
+  if (source === "device") return "Set on this device";
+  return "Built in to Guard";
 }
 
 export function WhyThisHappened(props: { summary: string; children?: React.ReactNode }) {
