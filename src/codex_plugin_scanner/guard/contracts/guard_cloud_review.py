@@ -355,6 +355,9 @@ def validate_exact_command_result(result: Mapping[str, object]) -> None:
         _schema_validator(load_exact_command_result_contract()).validate(dict(result))
     except ValidationError as error:
         raise ValueError(error.message) from error
+    for field in ("applicationUpdatedAt", "continuationUpdatedAt"):
+        if not _is_rfc3339_date_time(result.get(field)):
+            raise ValueError(f"{field} must be an RFC3339 date-time")
 
 
 def expected_artifact_digests() -> dict[str, str]:

@@ -143,6 +143,10 @@ def test_command_result_contract_is_runtime_backed_and_maps_cloud_aggregation() 
         "receiptId": "receipt-123",
     }
     validate_exact_command_result(result)
+    for field in ("applicationUpdatedAt", "continuationUpdatedAt"):
+        invalid_timestamp = {**result, field: "not-a-date"}
+        with pytest.raises(ValueError, match=rf"{field} must be an RFC3339 date-time"):
+            validate_exact_command_result(invalid_timestamp)
     result.pop("receiptId")
     with pytest.raises(ValueError, match="receiptId"):
         validate_exact_command_result(result)
