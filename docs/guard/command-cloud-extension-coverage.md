@@ -7,7 +7,7 @@ Guard evaluates cloud CLI operations from the canonical parsed command model. Ru
 | Extension | Matrix-reviewed operations | Existing focused operations | Safe counterparts |
 | --- | ---: | --- | --- |
 | `command.cloud.aws` | 100 | EC2 instance termination, RDS instance or cluster deletion, and EKS cluster deletion | Help, request skeleton generation, EC2 permission-only dry run, and describe operations |
-| `command.cloud.gcp` | 0 | Compute Engine instance deletion and Cloud SQL instance deletion | Help and describe operations |
+| `command.cloud.gcp` | 100 | Compute Engine instance deletion and Cloud SQL instance deletion | Help and describe operations |
 | `command.cloud.azure` | 0 | Virtual machine deletion | Help and show operations |
 
 The operation matrices are declarative, typed, count-checked, and uniqueness-checked. They preserve the existing provider rule IDs and action classes, so policy, approval, receipt, memory, and synchronization contracts remain stable.
