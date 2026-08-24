@@ -133,7 +133,7 @@ def _ruff_format_target_is_bounded(module_args: list[str], *, cwd: Path | None) 
         _ = resolved.relative_to(workspace)
     except (OSError, RuntimeError, ValueError):
         return False
-    return resolved.is_file() or resolved.is_dir()
+    return resolved.is_file()
 
 
 def _python_module_may_be_shadowed_from_execution_context(

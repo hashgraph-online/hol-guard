@@ -63,6 +63,7 @@ def test_bounded_ruff_format_module_invocation_is_routine(tmp_path: Path) -> Non
         "python3 -m ruff format ../outside.py",
         "python3 -m ruff format /outside.py",
         "python3 -m ruff format missing.py",
+        "python3 -m ruff format .",
         "python3 -m ruff format src/module.py extra.py",
     ),
 )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniChevronDown,
@@ -17,13 +17,18 @@ import type {
   GuardProtectionCheck,
   GuardProtectionHealth,
 } from "./guard-types";
+import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 
 type GapAction = {
   label: string;
   detail: string;
 };
 
-type RepairState = { status: "working" | "success" | "error"; message: string };
+type RepairState = {
+  status: "working" | "success" | "error";
+  message: string;
+  failedHarnesses?: string[];
+};
 
 export type CloudPolicyRecoveryInput = {
   cloudState: "local_only" | "paired_waiting" | "paired_active";
@@ -153,12 +158,28 @@ function ProtectionGapItem({
   );
 }
 
+function TargetedRepairButton({
+  harness,
+  onRepair,
+}: {
+  harness: string;
+  onRepair: (harness: string) => void;
+}) {
+  const handleRepair = useCallback(() => onRepair(harness), [harness, onRepair]);
+  return (
+    <ActionButton onClick={handleRepair} variant="outline">
+      Open {harnessDisplayName(harness)} repair
+    </ActionButton>
+  );
+}
+
 type FleetProtectionRecoveryProps = {
   cloudPolicy: CloudPolicyRecoveryInput;
   health: GuardProtectionHealth;
   repairHarness?: string;
   repairHarnesses: string[];
   onRepairProtection: (harnesses: string[]) => Promise<string>;
+  onRepairHarness?: (harness: string) => void;
 };
 
 function recoverySummary(failCount: number, unknownCount: number): string {
@@ -222,6 +243,11 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
   const failCount = gaps.filter((check) => check.status === "fail").length;
   const unknownCount = gaps.length - failCount;
   const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
+  const repairHarnessKey = props.repairHarnesses.join("\u0000");
+  const repairHarnessList = useMemo(
+    () => repairHarnessKey ? repairHarnessKey.split("\u0000") : [],
+    [repairHarnessKey],
+  );
   const isActiveCloudConnect = useCallback(
     (controller: AbortController) =>
       cloudConnectControllerRef.current === controller && !controller.signal.aborted,
@@ -242,7 +268,12 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
         error instanceof Error
           ? error.message
           : "Repair paused before every protection step completed. Retry to continue safely.";
-      setRepairState({ status: "error", message });
+      setRepairState({
+        status: "error",
+        message,
+        failedHarnesses:
+          error instanceof ProtectionRepairFlowError ? error.failedHarnesses : undefined,
+      });
       setDetailsOpen(true);
     }
   }, [props.onRepairProtection, props.repairHarnesses]);
@@ -337,6 +368,15 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
 
   useEffect(() => () => cloudConnectControllerRef.current?.abort(), []);
 
+  useEffect(() => {
+    setRepairState((state) => {
+      if (state?.status !== "error" || !state.failedHarnesses) return state;
+      const activeFailures = activeFailedHarnesses(state.failedHarnesses, repairHarnessList);
+      if (activeFailures.length === state.failedHarnesses.length) return state;
+      return { ...state, failedHarnesses: activeFailures };
+    });
+  }, [repairHarnessList]);
+
   if (gaps.length === 0) return null;
   const working = repairState?.status === "working";
   const cloudConnectDisabled = ["working", "success"].includes(
@@ -413,6 +453,17 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
           ) : null}
           {repairState.message}
         </p>
+      ) : null}
+      {repairState?.status === "error" && repairState.failedHarnesses?.length && props.onRepairHarness ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {Array.from(new Set(repairState.failedHarnesses)).map((harness) => (
+            <TargetedRepairButton
+              key={harness}
+              harness={harness}
+              onRepair={props.onRepairHarness}
+            />
+          ))}
+        </div>
       ) : null}
       <button
         type="button"
