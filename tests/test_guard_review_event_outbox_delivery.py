@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TypedDict
 
@@ -142,6 +143,50 @@ def test_create_then_resolve_before_sync_delivers_distinct_immutable_transitions
     payloads = [event["requestPayload"] for event in captured]
     assert all(isinstance(payload, dict) for payload in payloads)
     assert [payload.get("status") for payload in payloads if isinstance(payload, dict)] == ["pending", "resolved"]
+
+
+def test_projection_uses_frozen_continuation_after_operation_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    correlation_id = "gcrv2_12345678-1234-1234-1234-123456789abc"
+    request = replace(
+        _request("request-frozen-continuation"),
+        continuation_snapshot={
+            "capability": "suspended-response",
+            "correlationId": correlation_id,
+            "hookAttached": True,
+            "opaqueTargetId": None,
+            "waitDeadline": "2026-08-24T15:00:00+00:00",
+        },
+    )
+    store.add_approval_request(request, _NOW)
+    before = _event_row(store)
+    frozen_payload = str(before["payload_json"])
+
+    monkeypatch.setattr(
+        GuardStore,
+        "get_guard_operation_for_approval_request",
+        lambda *_args, **_kwargs: {
+            "status": "resolved",
+            "metadata": {"correlationId": "gcrv2_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},
+        },
+    )
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(live_request_sync, "_post_sync_events", _accepting_transport(captured))
+
+    result = live_request_sync.sync_live_requests_once(store, _auth(binding))
+
+    assert result["synced"] == 1
+    assert len(captured) == 1
+    event = captured[0]
+    assert event["correlationId"] == correlation_id
+    assert event["continuationCapability"] == "suspended-response"
+    assert event["continuationHookAttached"] is True
+    assert event["continuationWaitDeadline"] == "2026-08-24T15:00:00+00:00"
+    assert event["eventPayloadJson"] == frozen_payload
 
 
 def test_request_sequence_survives_ack_compaction_refresh_and_restart(

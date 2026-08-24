@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
@@ -56,6 +55,7 @@ from .continuation_payload import (
 from .continuation_payload import (
     text_value as _text,
 )
+from .continuation_snapshot import canonical_continuation_correlation_id
 from .continuation_worker import (
     StoreContinuationPlan,
     run_store_continuation_plan,
@@ -73,7 +73,6 @@ _SESSION_KEYS = (
     "sessionId",
 )
 _CLAIM_LEASE_SECONDS: Final = 30.0
-_CORRELATION_PATTERN: Final = re.compile(r"^gcrv2_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _CORRELATION_KEYS: Final = ("correlationId", "correlation_id")
 
 
@@ -199,9 +198,10 @@ def _offer_from_request(
     request_id: str,
     observed_at: datetime,
     headless: bool,
+    operation_override: Mapping[str, object] | None = None,
 ) -> ContinuationOffer:
     harness = _canonical_harness(request_row.get("harness"))
-    operation = store.get_guard_operation_for_approval_request(request_id)
+    operation = operation_override or store.get_guard_operation_for_approval_request(request_id)
     metadata: Mapping[str, object] = _mapping(operation.get("metadata")) if isinstance(operation, Mapping) else {}
     deadline = codex_live_hook_wait_deadline(store, operation=operation, metadata=metadata) if operation else None
     original_hook_attached = harness == "codex" and deadline is not None and deadline > observed_at
@@ -214,7 +214,7 @@ def _offer_from_request(
     )
     opaque_target_id = _opaque_target_id(harness, raw_target)
     return capability_offer(
-        correlation_id=_canonical_correlation_id(
+        correlation_id=canonical_continuation_correlation_id(
             request_id=request_id,
             request_row=request_row,
             operation_metadata=metadata,
@@ -235,6 +235,7 @@ def continuation_offer_payload(
     request_row: Mapping[str, object],
     now: str,
     headless: bool,
+    operation: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Serialize only capability facts that a Cloud reviewer may safely consume."""
 
@@ -245,6 +246,7 @@ def continuation_offer_payload(
         request_id=request_id,
         observed_at=_parse_aware_timestamp(now),
         headless=headless,
+        operation_override=operation,
     )
     return {
         "correlationId": offer.correlation_id,
@@ -414,28 +416,6 @@ def _opaque_target_id(harness: str, raw_target: str | None) -> str | None:
     if raw_target is None:
         return None
     return f"target-{sha256(f'{harness}:{raw_target}'.encode()).hexdigest()[:32]}"
-
-
-def _canonical_correlation_id(
-    *,
-    request_id: str,
-    request_row: Mapping[str, object],
-    operation_metadata: Mapping[str, object],
-) -> str:
-    candidates: list[object] = []
-    for source in (
-        operation_metadata,
-        _mapping(request_row.get("decision_v2_json")),
-        _mapping(request_row.get("action_envelope_json")),
-        request_row,
-    ):
-        candidates.extend(source.get(key) for key in _CORRELATION_KEYS)
-    for candidate in candidates:
-        value = _text(candidate)
-        if value is not None and _CORRELATION_PATTERN.fullmatch(value) is not None:
-            return value
-    digest = sha256(f"guard-cloud-review-v2\0{request_id}".encode()).hexdigest()[:32]
-    return f"gcrv2_{digest[:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:]}"
 
 
 def _required_text(value: object, error: str) -> str:

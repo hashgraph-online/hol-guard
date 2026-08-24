@@ -36,6 +36,7 @@ from .cli.connect_flow import (
     resolve_guard_cloud_state,
 )
 from .config import load_guard_config, maybe_auto_revert_watch
+from .continuation_runtime import continuation_offer_payload
 from .daemon.manager import load_guard_daemon_auth_token
 from .decision_boundaries import canonical_approval_surfaces
 from .desktop_notifications import (
@@ -453,6 +454,7 @@ def queue_blocked_approvals(
     now: str | None = None,
     notify: bool = True,
     redaction_level: str = "full",
+    continuation_operation: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
     timestamp = now or _now()
     artifacts_by_id = {artifact.artifact_id: artifact for artifact in detection.artifacts}
@@ -571,6 +573,16 @@ def queue_blocked_approvals(
             guard_version=guard_version,
             first_seen_guard_version=guard_version,
             last_seen_guard_version=guard_version,
+        )
+        request = replace(
+            request,
+            continuation_snapshot=continuation_offer_payload(
+                store,
+                request_row=request.to_dict(),
+                now=timestamp,
+                headless=True,
+                operation=continuation_operation,
+            ),
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
         created_new_request = persisted_request_id == request.request_id

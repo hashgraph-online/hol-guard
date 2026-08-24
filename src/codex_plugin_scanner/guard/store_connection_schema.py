@@ -1044,6 +1044,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_approval_column(connection, "browser_intent_json", "text")
             self._ensure_approval_column(connection, "desktop_notified_at", "text")
             self._ensure_approval_column(connection, "raw_command_text", "text")
+            self._ensure_approval_column(connection, "continuation_snapshot_json", "text")
             ensure_watch_only_approval_schema(connection, schema=self)
             if not self._schema_version_applied(connection, version=3):
                 _backfill_approval_queue_columns_compat(connection)
@@ -1156,6 +1157,7 @@ class StoreConnectionSchemaMixin:
                         "first_seen_guard_version",
                         "last_seen_guard_version",
                         "watch_only_observation",
+                        "continuation_snapshot_json",
                     }
                     return (
                         row is not None

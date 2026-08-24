@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ..continuation_runtime import continuation_offer_payload
+from ..continuation_snapshot import non_resumable_continuation_snapshot, validated_continuation_snapshot
 from ..review_contracts import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -36,6 +37,7 @@ def _build_live_request_event(
     redaction_level: str,
     store: GuardStore,
     event_sequence: int,
+    frozen_continuation: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
     request_id = item.get("request_id")
     if not isinstance(request_id, str) or not request_id:
@@ -50,7 +52,7 @@ def _build_live_request_event(
             claim = None
     display_command, display_summary, raw_command, redacted_command = build_display_command(item, redaction_level)
     request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
-    continuation = continuation_offer_payload(store, request_row=item, now=_now(), headless=True)
+    continuation = frozen_continuation or continuation_offer_payload(store, request_row=item, now=_now(), headless=True)
     created_at = str(item.get("created_at") or _now())
     last_seen_at = str(item.get("last_seen_at") or created_at)
     return {
@@ -110,12 +112,23 @@ def project_live_request_outbox_row(
                 "Stored Review event identity does not match the active delivery binding.",
             )
         stored_event = decode_stored_review_event(outbox_row)
+        raw_continuation = stored_event.snapshot.get("continuation_snapshot_json")
+        if raw_continuation is None:
+            continuation = non_resumable_continuation_snapshot(stored_event.snapshot)
+        else:
+            continuation = validated_continuation_snapshot(raw_continuation)
+            if continuation is None:
+                raise StoredReviewEventError(
+                    "continuation_snapshot_invalid",
+                    "Stored Review event continuation snapshot is invalid.",
+                )
         event = _build_live_request_event(
             stored_event.snapshot,
             redaction_level=redaction_level,
             oauth=oauth,
             store=store,
             event_sequence=stored_event.request_sequence,
+            frozen_continuation=continuation,
         )
         if event is None:
             raise StoredReviewEventError(

@@ -24,6 +24,7 @@ _WIRE_EVENT_TYPES = {
 _SNAPSHOT_JSON_FIELDS = (
     "action_envelope_json",
     "browser_intent_json",
+    "continuation_snapshot_json",
     "changed_fields_json",
     "decision_v2_json",
     "risk_signals_json",
@@ -98,7 +99,8 @@ def _decode_snapshot(payload: dict[str, object]) -> dict[str, object]:
     )
     expected = set(REVIEW_REQUEST_SNAPSHOT_COLUMNS)
     actual = set(snapshot)
-    if missing := sorted(expected - actual):
+    optional_legacy_fields = {"continuation_snapshot_json"}
+    if missing := sorted(expected - actual - optional_legacy_fields):
         raise StoredReviewEventError(
             "payload_snapshot_incomplete",
             f"Stored Review event snapshot is missing canonical fields: {', '.join(missing)}.",
@@ -108,6 +110,8 @@ def _decode_snapshot(payload: dict[str, object]) -> dict[str, object]:
             "payload_snapshot_unexpected_fields",
             f"Stored Review event snapshot has unexpected fields: {', '.join(unexpected)}.",
         )
+    for field in optional_legacy_fields:
+        snapshot.setdefault(field, None)
     invalid = [
         field
         for field in _REQUIRED_NONEMPTY_SNAPSHOT_FIELDS

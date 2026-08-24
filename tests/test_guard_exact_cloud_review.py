@@ -359,6 +359,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     result_data = result.get("data")
     assert isinstance(result_data, dict)
     assert result_data["status"] == "completed"
+    assert result_data["daemonAckStatus"] == "resolved"
     assert store.get_sync_payload("guard_review_memory_registry") is None
     second = _request("exact-queue-replay-second")
     _add_request(store, second)

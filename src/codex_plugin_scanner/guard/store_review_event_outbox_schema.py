@@ -52,6 +52,7 @@ REVIEW_REQUEST_SNAPSHOT_COLUMNS: Final = (
     "fallback_cli_command",
     "scanner_evidence_json",
     "browser_intent_json",
+    "continuation_snapshot_json",
     "desktop_notified_at",
     "raw_command_text",
     "guard_version",
