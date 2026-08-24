@@ -5,6 +5,10 @@ from __future__ import annotations
 
 def remote_resume_confirmed(resume_metadata: dict[str, object], action: str) -> bool:
     status = _text(resume_metadata.get("resumeStatus"))
+    if status is None:
+        # Applying a signed decision remains authoritative when the request has
+        # no resumable harness surface.
+        return True
     if status in {"already_sent", "blocked", "not_applicable", "resumed", "sent"}:
         return True
     if action != "block" or status != "skipped":

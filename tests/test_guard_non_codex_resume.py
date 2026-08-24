@@ -83,18 +83,18 @@ def test_pi_approval_with_session_id_metadata_does_not_attempt_codex_resume(tmp_
 
     assert payload["resolved"] is True
     assert "codex_resume" not in payload
-    assert payload["harness_resume"]["status"] == "resumed"
+    assert payload["harness_resume"]["status"] == "manual_retry_required"
     assert payload["harnessResume"] == payload["harness_resume"]
     assert "resume_token" not in str(payload["harness_resume"])
     assert payload["copy"]["body"] == "Return to Pi and retry"
     assert store.list_events(event_name="codex/thread_resume") == []
     operation = store.get_guard_operation("pi-operation")
     assert operation is not None
-    assert operation["status"] == "resumed"
+    assert operation["status"] == "manual_retry_required"
     assert store.list_events(event_name="harness/operation_resume")
 
 
-def test_grok_approval_marks_waiting_operation_resumed(tmp_path: Path) -> None:
+def test_grok_approval_marks_waiting_operation_manual_retry_required(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     request = GuardApprovalRequest(
         request_id="req-grok",
@@ -153,11 +153,11 @@ def test_grok_approval_marks_waiting_operation_resumed(tmp_path: Path) -> None:
 
     assert payload["resolved"] is True
     assert "codex_resume" not in payload
-    assert payload["harness_resume"]["status"] == "resumed"
+    assert payload["harness_resume"]["status"] == "manual_retry_required"
     assert payload["harnessResume"] == payload["harness_resume"]
     assert payload["harness_resume"]["harness"] == "grok"
     assert payload["copy"]["body"]
-    assert store.get_guard_operation("grok-operation")["status"] == "resumed"
+    assert store.get_guard_operation("grok-operation")["status"] == "manual_retry_required"
     assert store.list_events(event_name="harness/operation_resume")
 
 

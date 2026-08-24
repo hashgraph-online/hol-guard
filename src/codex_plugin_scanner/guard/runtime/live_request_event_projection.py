@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import cast
 
+from ..continuation_runtime import continuation_offer_payload
 from ..review_contracts import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -12,15 +12,12 @@ from ..review_contracts import (
 )
 from ..store import GuardStore
 from ..store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION
+from .live_request_display import build_display_command, resolve_display_provenance
 from .local_request_snapshots import (
     _cloud_safe_local_request_payload,  # pyright: ignore[reportPrivateUsage]
-    _cloud_scrub_text,  # pyright: ignore[reportPrivateUsage]
-    _local_request_command_text,  # pyright: ignore[reportPrivateUsage]
 )
 from .review_event_delivery import StoredReviewEventError, decode_stored_review_event
 
-_COMMAND_MAX_UTF16_UNITS = 65_536
-_SUMMARY_MAX_UTF16_UNITS = 512
 _EVENT_TYPE_MAP = {
     "pending": "request_created",
     "resolved": "request_resolved",
@@ -30,70 +27,6 @@ _EVENT_TYPE_MAP = {
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _display_provenance(*, has_command_details: bool, redaction_level: str) -> str:
-    if redaction_level == "none":
-        return "raw"
-    if redaction_level == "full" and not has_command_details:
-        return "withheld"
-    return "redacted"
-
-
-def _utf16_units(value: str) -> int:
-    return sum(2 if ord(character) > 0xFFFF else 1 for character in value)
-
-
-def _take_utf16_prefix(value: str, max_units: int) -> str:
-    units = 0
-    for index, character in enumerate(value):
-        units += 2 if ord(character) > 0xFFFF else 1
-        if units > max_units:
-            return value[:index]
-    return value
-
-
-def _take_utf16_suffix(value: str, max_units: int) -> str:
-    units = 0
-    for index in range(len(value) - 1, -1, -1):
-        units += 2 if ord(value[index]) > 0xFFFF else 1
-        if units > max_units:
-            return value[index + 1 :]
-    return value
-
-
-def _truncate_utf16(value: str, max_units: int) -> str:
-    if _utf16_units(value) <= max_units:
-        return value
-    marker = " … [truncated] … "
-    available_units = max_units - _utf16_units(marker)
-    prefix_units = available_units * 3 // 4
-    return (
-        _take_utf16_prefix(value, prefix_units)
-        + marker
-        + _take_utf16_suffix(
-            value,
-            available_units - prefix_units,
-        )
-    )
-
-
-def _build_display_command(item: dict[str, object], redaction_level: str) -> tuple[str, str, str | None, str | None]:
-    action_identity = str(item.get("action_identity") or item.get("artifact_id") or "unknown")
-    trigger_summary = str(item.get("trigger_summary") or item.get("why_now") or "Guard approval request")
-    risk_headline = str(item.get("risk_headline") or item.get("risk_summary") or "")
-    harness = str(item.get("harness") or "guard-review")
-    fallback_display = f"{_cloud_scrub_text(harness)}: {_cloud_scrub_text(action_identity)}"
-    envelope_value = item.get("action_envelope_json")
-    envelope = cast(dict[str, object], envelope_value) if isinstance(envelope_value, dict) else None
-    command_text = _local_request_command_text(item, envelope)
-    safe_command = _cloud_scrub_text(command_text) if command_text else None
-    display_command = _truncate_utf16(safe_command or fallback_display, _COMMAND_MAX_UTF16_UNITS)
-    display_summary = f"{risk_headline} — {trigger_summary}" if risk_headline else trigger_summary
-    display_summary = _truncate_utf16(display_summary, _SUMMARY_MAX_UTF16_UNITS)
-    raw_command = display_command if redaction_level == "none" and safe_command else None
-    redacted_command = display_command if redaction_level != "none" and safe_command else None
-    return display_command, display_summary, raw_command, redacted_command
 
 
 def _build_live_request_event(
@@ -115,17 +48,19 @@ def _build_live_request_event(
             claim = build_local_review_request_claim(request_row=item, oauth=oauth, store=store)
         except GuardReviewContractError:
             claim = None
-    display_command, display_summary, raw_command, redacted_command = _build_display_command(item, redaction_level)
+    display_command, display_summary, raw_command, redacted_command = build_display_command(item, redaction_level)
     request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
+    continuation = continuation_offer_payload(store, request_row=item, now=_now(), headless=True)
     created_at = str(item.get("created_at") or _now())
     last_seen_at = str(item.get("last_seen_at") or created_at)
     return {
         "localRequestId": request_id,
+        "correlationId": continuation["correlationId"],
         "localEventSequence": event_sequence,
         "eventType": _EVENT_TYPE_MAP.get(status, "request_created"),
         "harnessId": str(item.get("harness") or "guard-review"),
         "requestKind": str(item.get("review_kind") or item.get("harness") or "guard-review"),
-        "displayProvenance": _display_provenance(
+        "displayProvenance": resolve_display_provenance(
             has_command_details=bool(request_payload.get("command_text")),
             redaction_level=redaction_level,
         ),
@@ -135,6 +70,10 @@ def _build_live_request_event(
         "redactedCommand": redacted_command,
         "reviewClaim": claim,
         "requestPayload": request_payload,
+        "continuationCapability": continuation["capability"],
+        "continuationHookAttached": continuation["hookAttached"],
+        "continuationOpaqueTargetId": continuation["opaqueTargetId"],
+        "continuationWaitDeadline": continuation["waitDeadline"],
         "riskCategory": str(item.get("risk_category") or "") or None,
         "policyAction": str(item.get("policy_action") or "") or None,
         "recommendedScope": str(item.get("recommended_scope") or "") or None,

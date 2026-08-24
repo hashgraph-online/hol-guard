@@ -289,6 +289,16 @@ class TestRedactionLevelNone:
             event_sequence=1,
         )
         assert event is not None
+        assert str(event["correlationId"]).startswith("gcrv2_")
+        assert event["continuationCapability"] in {
+            "retry-only",
+            "session-resume",
+            "suspended-response",
+            "unsupported",
+        }
+        assert event["continuationHookAttached"] is False
+        assert event["continuationOpaqueTargetId"] is None
+        assert event["continuationWaitDeadline"] is None
         # The command must not contain the raw secret token
         assert "tokensecret123" not in event["rawCommand"]
         assert "tokensecret123" not in event["displayCommand"]

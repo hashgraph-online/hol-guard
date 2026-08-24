@@ -3278,38 +3278,36 @@ def test_command_executor_rejects_all_resolutions_for_current_block(
 
 def test_headless_remote_once_sanitizes_codex_resume_metadata(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1", now="2026-06-13T00:00:00+00:00")
     store.add_approval_request(_remote_once_request("req-remote-resume-safe"), "2026-05-14T11:59:00+00:00")
-
-    def fake_defer_request_resume_to_live_hook(
-        _store: GuardStore,
-        *,
-        request_id: str,
-        action: str,
-        now: str,
-    ) -> dict[str, object]:
-        return {
-            "request_id": request_id,
-            "resolution_action": action,
-            "status": "sent",
-            "reason": "app_server_sent",
-            "message": "Codex was notified.",
-            "strategy": "codex-app-server-thread",
-            "supported": True,
-            "thread_id": "thread-secret",
-            "resume_token": "resume-token-secret",
-            "attempt_count": 1,
-            "sent_at": now,
-        }
-
-    monkeypatch.setattr(daemon_server, "defer_request_resume_to_live_hook", fake_defer_request_resume_to_live_hook)
-    monkeypatch.setattr(
-        daemon_server,
-        "retry_request_resume",
-        lambda *_args, **_kwargs: pytest.fail("retry should not run when live hook returns metadata"),
+    session = store.upsert_guard_session(
+        session_id="session-remote-resume-safe",
+        harness="codex",
+        surface="harness-adapter",
+        status="waiting_on_approval",
+        client_name="codex-hook",
+        client_title="Codex hook",
+        client_version="1.0.0",
+        workspace=str(tmp_path),
+        capabilities=["approval-resolution"],
+        now="2026-05-14T11:59:00+00:00",
+    )
+    store.upsert_guard_operation(
+        operation_id="operation-remote-resume-safe",
+        session_id=str(session["session_id"]),
+        harness="codex",
+        operation_type="tool_call",
+        status="waiting_on_approval",
+        approval_request_ids=["req-remote-resume-safe"],
+        resume_token="resume-token-secret",
+        metadata={
+            "codex_hook_waits_for_browser_approval": True,
+            "codex_browser_wait_deadline_at": "2099-05-14T12:00:00+00:00",
+            "codex_thread_id": "thread-secret",
+        },
+        now="2026-05-14T11:59:00+00:00",
     )
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -3336,9 +3334,9 @@ def test_headless_remote_once_sanitizes_codex_resume_metadata(
         daemon.stop()
 
     assert status == 200
-    assert payload["codex_resume"]["status"] == "sent"
-    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
-    assert payload["codex_resume"]["resolutionAction"] == "allow"
+    assert payload["continuationStatus"] == "waiting"
+    assert payload["codex_resume"]["status"] == "pending"
+    assert payload["codex_resume"]["strategy"] == "codex-live-hook"
     response_text = json.dumps(payload, sort_keys=True)
     assert "thread-secret" not in response_text
     assert "resume-token-secret" not in response_text

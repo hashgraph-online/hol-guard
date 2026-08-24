@@ -97,12 +97,7 @@ from ..cloud_exception_requests import (
     fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
-from ..codex_resume import (
-    ResumeNotSupportedError,
-    defer_request_resume_to_live_hook,
-    get_request_resume_status,
-    retry_request_resume,
-)
+from ..codex_resume import get_request_resume_status, retry_request_resume
 from ..config import (
     VALID_RECEIPT_REDACTION_LEVELS,
     GuardConfig,
@@ -112,12 +107,13 @@ from ..config import (
     update_guard_settings,
     update_guard_update_channel,
 )
+from ..continuation_runtime import continue_request_after_application
 from ..desktop_notifications import (
     desktop_notification_setup_payload,
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..harness_resume import resume_harness_operation, safe_resume_metadata
+from ..harness_resume import safe_resume_metadata
 from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
@@ -3071,19 +3067,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness = str(updated.get("harness", ""))
         copy = _build_resolution_copy(action, harness_str or harness)
         codex_resume = None
-        if harness_str == "codex" and action in {"allow", "block"}:
-            codex_resume = defer_request_resume_to_live_hook(
+        resolved_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
+        if isinstance(resolved_request, dict) and action in {"allow", "block"}:
+            continuation = continue_request_after_application(
                 self.server.store,  # type: ignore[attr-defined]
-                request_id=request_id,
+                request_row=resolved_request,
                 action=action,
                 now=_now(),
+                headless=False,
             )
-            if codex_resume is None:
-                codex_resume = retry_request_resume(
-                    self.server.store,  # type: ignore[attr-defined]
-                    request_id=request_id,
-                    now=_now(),
-                )
+            if harness_str == "codex":
+                value = continuation.get("codexResume")
+                codex_resume = value if isinstance(value, dict) else None
+            else:
+                value = continuation.get("harnessResume")
+                if isinstance(value, dict):
+                    updated = self._apply_harness_resume_result(updated=updated, harness_resume=value)
         if codex_resume is not None:
             updated = self._apply_codex_resume_result(
                 updated=updated,
@@ -3097,18 +3096,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 title = self._optional_string(updated_copy.get("title")) or copy["title"]
                 body = self._optional_string(updated_copy.get("body")) or copy["body"]
                 copy = {"title": title, "body": body}
-        elif action in {"allow", "block"}:
-            harness_resume = resume_harness_operation(
-                self.server.store,  # type: ignore[attr-defined]
-                request_id=request_id,
-                action=action,
-                now=_now(),
-            )
-            if harness_resume is not None:
-                updated = self._apply_harness_resume_result(
-                    updated=updated,
-                    harness_resume=harness_resume,
-                )
         updated["copy"] = copy
         updated["retry_hint"] = copy["body"]
         self._write_json(updated)
@@ -3713,28 +3700,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "resolved_request": resolved_request,
             "status": "completed",
         }
-        if adapter.harness == "codex":
-            codex_resume = self._codex_resume_after_remote_once(
-                request_id=request_id,
-                action=resolution_action,
+        continuation = continue_request_after_application(
+            self.server.store,  # type: ignore[attr-defined]
+            request_row=resolved_request,
+            action=resolution_action,
+            now=_now(),
+        )
+        codex_resume = continuation.get("codexResume")
+        if isinstance(codex_resume, dict):
+            safe_codex_resume = safe_resume_metadata(codex_resume)
+            continuation["codexResume"] = safe_codex_resume
+            continuation["codex_resume"] = safe_codex_resume
+            self.server.store.add_event(  # type: ignore[attr-defined]
+                "codex/thread_resume",
+                {"request_id": request_id, "action": resolution_action, **safe_codex_resume},
+                resolved_at,
             )
-            if codex_resume is not None:
-                response_payload["codex_resume"] = codex_resume
-                self.server.store.add_event(  # type: ignore[attr-defined]
-                    "codex/thread_resume",
-                    {"request_id": request_id, "action": resolution_action, **codex_resume},
-                    _now(),
-                )
-        else:
-            harness_resume = resume_harness_operation(
-                self.server.store,  # type: ignore[attr-defined]
-                request_id=request_id,
-                action=resolution_action,
-                now=_now(),
-            )
-            if harness_resume is not None:
-                response_payload["harness_resume"] = harness_resume
-                response_payload["harnessResume"] = harness_resume
+        response_payload.update(continuation)
         self._write_json(response_payload)
 
     def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
@@ -5859,32 +5841,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         request_id: str,
         action: str,
     ) -> dict[str, object] | None:
+        request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
+        if not isinstance(request, dict):
+            return None
         try:
-            codex_resume = defer_request_resume_to_live_hook(
+            continuation = continue_request_after_application(
                 self.server.store,  # type: ignore[attr-defined]
-                request_id=request_id,
+                request_row=request,
                 action=action,
                 now=_now(),
             )
-            if codex_resume is None:
-                codex_resume = retry_request_resume(
-                    self.server.store,  # type: ignore[attr-defined]
-                    request_id=request_id,
-                    now=_now(),
-                )
-            return safe_resume_metadata(codex_resume)
-        except ResumeNotSupportedError:
-            return {
-                "status": "skipped",
-                "reason": "resume_not_supported",
-                "message": "This Codex request does not expose a supported resume target.",
-            }
-        except ValueError as error:
-            return {
-                "status": "failed",
-                "reason": str(error) or "resume_failed",
-                "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
-            }
+        except ValueError:
+            return None
+        value = continuation.get("codexResume")
+        return value if isinstance(value, dict) else None
 
     def _write_legacy_pairing_disabled(self) -> None:
         self._write_json(

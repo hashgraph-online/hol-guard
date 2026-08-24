@@ -317,6 +317,15 @@ class StoreSessionsMixin:
         last_attempt_at: str | None,
         sent_at: str | None,
         now: str,
+        continuation_contract_version: str | None = None,
+        continuation_capability: str | None = None,
+        continuation_status: str | None = None,
+        continuation_reason: str | None = None,
+        continuation_evidence: list[dict[str, object]] | None = None,
+        continuation_offer_hash: str | None = None,
+        continuation_action: str | None = None,
+        continuation_completed_at: str | None = None,
+        continuation_cancelled_at: str | None = None,
     ) -> None:
         with self._connect() as connection:
             persist_request_resume_update(
@@ -333,6 +342,15 @@ class StoreSessionsMixin:
                 last_attempt_at=last_attempt_at,
                 sent_at=sent_at,
                 now=now,
+                continuation_contract_version=continuation_contract_version,
+                continuation_capability=continuation_capability,
+                continuation_status=continuation_status,
+                continuation_reason=continuation_reason,
+                continuation_evidence=continuation_evidence,
+                continuation_offer_hash=continuation_offer_hash,
+                continuation_action=continuation_action,
+                continuation_completed_at=continuation_completed_at,
+                continuation_cancelled_at=continuation_cancelled_at,
             )
 
     def add_guard_operation_item(
