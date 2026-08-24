@@ -83,10 +83,10 @@ def test_aws_batch_1_unknown_global_options_fail_secure(tmp_path: Path) -> None:
     assert_reviewed_command_cases(cases, tmp_path)
 
 
-def test_aws_batch_1_disabled_safe_forms_remain_reviewable(tmp_path: Path) -> None:
+def test_aws_batch_1_invalid_request_skeleton_forms_remain_reviewable(tmp_path: Path) -> None:
     service, operation = AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1[0]
     for command in (
-        f"aws {service} {operation} --help --help=false",
+        f"aws {service} {operation} --generate-cli-skeleton=bogus",
         f"aws {service} {operation} --generate-cli-skeleton=output --generate-cli-skeleton=bogus",
     ):
         payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
