@@ -61,7 +61,9 @@ def resume_harness_operation(
     normalized_action = _normalize_action(action)
     if normalized_action is None:
         return None
-    status = "resumed" if normalized_action == "allow" else "blocked"
+    # Pi/OMP/Grok have no proven original-session continuation transport.  A
+    # locally applied allow therefore requires an explicit retry, not a resume.
+    status = "manual_retry_required" if normalized_action == "allow" else "blocked"
     metadata = operation.get("metadata")
     safe_metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
     safe_metadata["resume_action"] = normalized_action

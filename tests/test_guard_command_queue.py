@@ -3668,13 +3668,13 @@ def test_executor_attaches_pi_harness_resume_without_token(tmp_path: Path) -> No
     )
 
     data = result["data"]
-    assert data["harnessResume"]["status"] == "resumed"
+    assert data["harnessResume"]["status"] == "manual_retry_required"
     assert data["harness_resume"] == data["harnessResume"]
-    assert data["resumeStatus"] == "resumed"
-    assert data["daemonAckStatus"] == "resolved"
+    assert data["resumeStatus"] == "manual_retry_required"
+    assert data["daemonAckStatus"] == "resolved_unconfirmed"
     assert "codexResume" not in data
     assert "resume-token-secret" not in str(data)
-    assert store.operation["status"] == "resumed"
+    assert store.operation["status"] == "manual_retry_required"
     assert store.events[0]["event_name"] == "harness/operation_resume"
 
 
