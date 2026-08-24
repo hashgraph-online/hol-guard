@@ -50,7 +50,7 @@ def _transport_fixture() -> dict[str, object]:
 
 
 def _exact_job(tmp_path: Path):
-    store = connected_exact_review_store(tmp_path, device_id="cloud-device-1")
+    store = connected_exact_review_store(tmp_path)
     request = _request("exact-v2-transport")
     _add_request(store, request)
     enable_exact_cloud_review(store)
@@ -113,7 +113,7 @@ def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_sig
     assert remote_approval["capabilityId"] == advertisement["capabilityId"]
     assert remote_approval["grantId"] == claim["grantId"] == advertisement["grantId"]
     keys = remote_approval["verificationKeys"]
-    store = connected_exact_review_store(tmp_path, device_id=str(eligibility["deviceId"]))
+    store = connected_exact_review_store(tmp_path)
     store.set_sync_payload("guard_review_verification_keyring", keys, "2026-08-24T00:00:00+00:00")
     assert (
         validated_remote_approval_envelope(
@@ -211,7 +211,7 @@ def test_poll_exact_v2_leases_acks_applies_and_posts_versioned_result(
 
     assert status["state"] == "idle"
     lease_payload = calls[0][2]
-    assert lease_payload["deviceId"] == "cloud-device-1"
+    assert lease_payload["deviceId"] == job["deviceId"]
     capabilities = lease_payload["capabilities"]
     assert isinstance(capabilities, dict)
     assert capabilities["operations"] == [EXACT_CLOUD_REVIEW_OPERATION]

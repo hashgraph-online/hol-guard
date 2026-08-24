@@ -15,14 +15,13 @@ from tests.guard_review_signing_helpers import review_trusted_keyring_payload
 def connected_exact_review_store(
     tmp_path: Path,
     *,
-    device_id: str | None = None,
     missing_device_id: bool = False,
 ) -> GuardStore:
     store = GuardStore(tmp_path / "guard-home")
     dpop = generate_dpop_key_pair()
     machine_id = str(store.get_device_metadata()["installation_id"])
     now = datetime.now(timezone.utc).isoformat()
-    bound_device_id = device_id or "device-default"
+    bound_device_id = dpop.public_jwk_thumbprint
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",

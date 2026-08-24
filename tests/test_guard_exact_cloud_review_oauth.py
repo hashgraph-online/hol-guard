@@ -11,13 +11,16 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli.connect_flow import _parse_guard_token_exchange_payload
+from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.runtime import runner as runner_module
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     ExactCloudReviewError,
+    apply_exact_cloud_review,
     enable_exact_cloud_review,
     exact_cloud_review_status,
 )
 from tests.guard_exact_cloud_review_support import connected_exact_review_store
+from tests.test_guard_exact_cloud_review import _add_request, _remote_approval, _request
 
 _FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review-v2" / "oauth-device-fixtures.json"
 _FIXTURE_SHA256 = "63adcc35f5ebd09c8b18407ccad4241bbf8f1eafb4c4524f4262972877bc9c77"
@@ -64,14 +67,15 @@ def test_oauth_device_fixture_refresh_and_rotation_are_bound_exactly(tmp_path: P
     )
     assert parsed.device_id == active_device["deviceId"]
     assert parsed.machine_id == active_machine["machineId"]
-    store = connected_exact_review_store(tmp_path, device_id=str(active_device["deviceId"]))
+    store = connected_exact_review_store(tmp_path)
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
+    active_bound = {**active, "device": {"deviceId": credentials["dpop_public_jwk_thumbprint"]}}
     runner_module._persist_rotated_oauth_refresh_token(
         store=store,
         credentials=credentials,
         refresh_token="refresh-initial",
-        access_token=_access_token(active),
+        access_token=_access_token(active_bound),
     )
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
@@ -80,11 +84,11 @@ def test_oauth_device_fixture_refresh_and_rotation_are_bound_exactly(tmp_path: P
         store=store,
         credentials=credentials,
         refresh_token="refresh-same-key",
-        access_token=_access_token(active),
+        access_token=_access_token(active_bound),
     )
     refreshed = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(refreshed, dict)
-    assert refreshed["device_id"] == active_device["deviceId"]
+    assert refreshed["device_id"] == credentials["dpop_public_jwk_thumbprint"]
     assert refreshed["machine_id"] == active_machine["machineId"]
     assert exact_cloud_review_status(store)["enabled"] is True
 
@@ -114,14 +118,18 @@ def test_oauth_device_fixture_refresh_and_rotation_are_bound_exactly(tmp_path: P
     )
     assert missing_parsed.machine_id == active_machine["machineId"]
     assert missing_parsed.device_id is None
-    missing_store = connected_exact_review_store(tmp_path / "missing", device_id=str(active_device["deviceId"]))
+    missing_store = connected_exact_review_store(tmp_path / "missing")
     missing_credentials = missing_store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(missing_credentials, dict)
+    missing_active_bound = {
+        **active,
+        "device": {"deviceId": missing_credentials["dpop_public_jwk_thumbprint"]},
+    }
     runner_module._persist_rotated_oauth_refresh_token(
         store=missing_store,
         credentials=missing_credentials,
         refresh_token="refresh-initial",
-        access_token=_access_token(active),
+        access_token=_access_token(missing_active_bound),
     )
     enable_exact_cloud_review(missing_store)
     missing_credentials = missing_store.get_oauth_local_credentials(allow_primary=False)
@@ -161,6 +169,34 @@ def test_exact_review_rejects_device_claim_not_bound_to_local_dpop_key(tmp_path:
 
     with pytest.raises(ExactCloudReviewError, match="cloud_review_oauth_device_binding_mismatch"):
         enable_exact_cloud_review(store)
+
+
+def test_exact_review_rejects_rotated_keypair_with_preserved_old_thumbprint(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    request = _request("exact-stale-dpop-thumbprint")
+    _add_request(store, request)
+    enable_exact_cloud_review(store)
+    old_approval = _remote_approval(store, request.request_id, receipt_id="exact-stale-dpop-thumbprint")
+    credentials = store.get_oauth_local_credentials(allow_primary=False)
+    assert isinstance(credentials, dict)
+    rotated = generate_dpop_key_pair()
+    old_thumbprint = str(credentials["dpop_public_jwk_thumbprint"])
+    store.set_oauth_local_credentials(
+        issuer=str(credentials["issuer"]),
+        client_id=str(credentials["client_id"]),
+        refresh_token=str(credentials["refresh_token"]),
+        dpop_private_key_pem=rotated.private_key_pem,
+        dpop_public_jwk=rotated.public_jwk,
+        dpop_public_jwk_thumbprint=old_thumbprint,
+        grant_id=str(credentials["grant_id"]),
+        machine_id=str(credentials["machine_id"]),
+        device_id=old_thumbprint,
+        workspace_id=str(credentials["workspace_id"]),
+        now=datetime.now(timezone.utc).isoformat(),
+    )
+
+    with pytest.raises(ExactCloudReviewError, match="cloud_review_oauth_device_binding_mismatch"):
+        apply_exact_cloud_review(store, remote_approval=old_approval)
 
 
 def test_malformed_explicit_refresh_clears_stale_exact_authority(tmp_path: Path) -> None:

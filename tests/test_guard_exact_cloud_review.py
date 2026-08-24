@@ -308,7 +308,7 @@ def test_hol_guard_routes_cloud_review_as_a_top_level_command() -> None:
 
 
 def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_approval(tmp_path: Path) -> None:
-    store = _connected_store(tmp_path, device_id="device-1")
+    store = _connected_store(tmp_path)
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
     guard_runner_module._persist_rotated_oauth_refresh_token(
@@ -318,7 +318,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     )
     oauth_state = store.get_sync_payload("oauth_local_credentials")
     assert isinstance(oauth_state, dict)
-    assert oauth_state["device_id"] == "device-1"
+    assert oauth_state["device_id"] == credentials["dpop_public_jwk_thumbprint"]
     request = _request("exact-queue")
     _add_request(store, request)
     enable_exact_cloud_review(store)
@@ -327,9 +327,9 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     assert isinstance(snapshot_requests, list) and snapshot_requests
     snapshot_claim = snapshot_requests[0].get("claim")
     assert isinstance(snapshot_claim, dict)
-    assert snapshot_claim["deviceId"] == "device-1"
+    assert snapshot_claim["deviceId"] == oauth_state["device_id"]
     assert snapshot_claim["machineId"] == oauth_state["machine_id"]
-    assert command_queue_oauth_target(store) == ("device-1", oauth_state["workspace_id"])
+    assert command_queue_oauth_target(store) == (oauth_state["device_id"], oauth_state["workspace_id"])
     job = _job(
         store,
         _remote_approval(
@@ -341,7 +341,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     )
 
     authorized = authorize_command_queue_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-    assert authorized.identity["deviceId"] == "device-1"
+    assert authorized.identity["deviceId"] == oauth_state["device_id"]
     with pytest.raises(CommandCapabilityError, match="remote_exact_job_wrong_target"):
         authorize_command_queue_job(
             store,
@@ -378,7 +378,7 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     )
     store.delete_sync_payload("oauth_local_credentials")
     recovered = store._recover_missing_oauth_local_credentials_payload(now=recovery_now)
-    assert isinstance(recovered, dict) and recovered["device_id"] == "device-1"
+    assert isinstance(recovered, dict) and recovered["device_id"] == oauth_state["device_id"]
 
 
 def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

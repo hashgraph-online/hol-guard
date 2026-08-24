@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from .dpop_key_binding import verified_dpop_jwk_thumbprint
+
 
 class GuardReviewContractError(ValueError):
     """Raised when a Guard Review backend contract is malformed or unsafe."""
@@ -42,8 +44,16 @@ def guard_review_oauth_metadata(
     workspace_id = _text(credentials.get("workspace_id"))
     if installation_id is None or machine_id is None or device_id is None or workspace_id is None:
         raise GuardReviewContractError("missing_oauth_binding")
-    if require_device_dpop_binding and (dpop_thumbprint is None or device_id != dpop_thumbprint):
-        raise GuardReviewContractError("oauth_device_binding_mismatch")
+    if require_device_dpop_binding:
+        try:
+            active_thumbprint = verified_dpop_jwk_thumbprint(
+                private_key_pem=credentials.get("dpop_private_key_pem"),
+                public_jwk=credentials.get("dpop_public_jwk"),
+            )
+        except ValueError as error:
+            raise GuardReviewContractError("oauth_device_binding_mismatch") from error
+        if dpop_thumbprint != active_thumbprint or device_id != active_thumbprint:
+            raise GuardReviewContractError("oauth_device_binding_mismatch")
     return GuardReviewOAuthMetadata(
         device_id=device_id,
         dpop_thumbprint=dpop_thumbprint,

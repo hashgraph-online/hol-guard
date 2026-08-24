@@ -160,6 +160,8 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
     enable_exact_cloud_review(store)
     capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
     assert isinstance(capability, dict)
+    original_credentials = store.get_oauth_local_credentials(allow_primary=False)
+    assert isinstance(original_credentials, dict)
     drift_approval = _remote_approval(store, fresh.request_id, receipt_id="exact-binding-drift")
     restored_approval = _remote_approval(store, fresh.request_id, receipt_id="exact-binding-restore")
     dpop = generate_dpop_key_pair()
@@ -181,17 +183,18 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
             store,
             remote_approval=drift_approval,
         )
-    restored_dpop = generate_dpop_key_pair()
+    original_public_jwk = original_credentials["dpop_public_jwk"]
+    assert isinstance(original_public_jwk, dict)
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="restored-refresh-token",
-        dpop_private_key_pem=restored_dpop.private_key_pem,
-        dpop_public_jwk=restored_dpop.public_jwk,
-        dpop_public_jwk_thumbprint="device-default",
+        dpop_private_key_pem=str(original_credentials["dpop_private_key_pem"]),
+        dpop_public_jwk={str(key): str(value) for key, value in original_public_jwk.items()},
+        dpop_public_jwk_thumbprint=str(original_credentials["dpop_public_jwk_thumbprint"]),
         grant_id="grant-1",
         machine_id=str(store.get_device_metadata()["installation_id"]),
-        device_id="device-default",
+        device_id=str(original_credentials["device_id"]),
         workspace_id="workspace-1",
         now=datetime.now(timezone.utc).isoformat(),
     )
