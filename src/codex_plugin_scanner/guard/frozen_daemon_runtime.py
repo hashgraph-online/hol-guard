@@ -88,7 +88,11 @@ def _trusted_frozen_peer_state(payload: dict[str, object]) -> bool:
         return False
     source_root = payload.get("source_root")
     fingerprint = payload.get("runtime_fingerprint")
-    if not isinstance(source_root, str) or not manager._is_sha256_hex(fingerprint):
+    if (
+        not isinstance(source_root, str)
+        or not isinstance(fingerprint, str)
+        or not manager._is_sha256_hex(fingerprint)
+    ):
         return False
     try:
         peer = Path(source_root).expanduser().resolve(strict=True)
