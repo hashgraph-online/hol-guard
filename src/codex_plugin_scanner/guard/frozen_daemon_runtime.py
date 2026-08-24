@@ -5,16 +5,18 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
-import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
 
 from .daemon import manager
+from .macos_code_signing import verified_macos_signing_team
 
 _frozen_runtime_installed = False
 _frozen_runtime_fingerprint_cache: tuple[Path, str] | None = None
 _frozen_runtime_state_matcher: Callable[[dict[str, object]], bool] | None = None
+_signing_team_cache: dict[tuple[Path, int, int], str] = {}
+_SIGNING_TEAM_CACHE_LIMIT = 8
 
 
 def _trusted_frozen_executable() -> Path:
@@ -58,33 +60,22 @@ def _executable_sha256(executable: Path) -> str:
     return digest.hexdigest()
 
 
-def _macos_signing_team(executable: Path) -> str | None:
-    if sys.platform != "darwin":
-        return None
+def _cached_macos_signing_team(executable: Path) -> str | None:
     try:
-        verified = subprocess.run(
-            ["/usr/bin/codesign", "--verify", "--deep", "--strict", str(executable)],
-            check=False,
-            capture_output=True,
-            timeout=5,
-        )
-        details = subprocess.run(
-            ["/usr/bin/codesign", "--display", "--verbose=4", str(executable)],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
+        stat_result = executable.stat()
+    except OSError:
         return None
-    if verified.returncode != 0 or details.returncode != 0:
+    cache_key = (executable, stat_result.st_mtime_ns, stat_result.st_size)
+    cached = _signing_team_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    team = verified_macos_signing_team(executable, deep=True)
+    if team is None:
         return None
-    for line in details.stderr.splitlines():
-        if not line.startswith("TeamIdentifier="):
-            continue
-        team = line.partition("=")[2].strip()
-        return team if team and team != "not set" else None
-    return None
+    if len(_signing_team_cache) >= _SIGNING_TEAM_CACHE_LIMIT:
+        _signing_team_cache.clear()
+    _signing_team_cache[cache_key] = team
+    return team
 
 
 def _trusted_frozen_peer_state(payload: dict[str, object]) -> bool:
@@ -112,8 +103,8 @@ def _trusted_frozen_peer_state(payload: dict[str, object]) -> bool:
         return False
     if not secrets.compare_digest(peer_fingerprint, fingerprint):
         return False
-    current_team = _macos_signing_team(current)
-    return current_team is not None and _macos_signing_team(peer) == current_team
+    current_team = _cached_macos_signing_team(current)
+    return current_team is not None and _cached_macos_signing_team(peer) == current_team
 
 
 def _frozen_runtime_state_matches(payload: dict[str, object]) -> bool:

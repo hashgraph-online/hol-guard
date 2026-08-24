@@ -9,7 +9,6 @@ import platform
 import re
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import urllib.error
@@ -22,6 +21,7 @@ from typing import TypedDict
 
 from packaging.version import InvalidVersion, Version
 
+from ..macos_code_signing import verified_macos_signing_team
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 
@@ -364,28 +364,14 @@ def _verify_candidate(path: Path, *, expected_team: str | None, expected_sha256:
 
 
 def _macos_codesign_ok(path: Path) -> bool:
-    result = subprocess.run(
-        ["/usr/bin/codesign", "--verify", "--strict", "--verbose=2", str(path)],
-        check=False,
-        capture_output=True,
-    )
-    return result.returncode == 0
+    return verified_macos_signing_team(path) is not None
 
 
 def _macos_signing_team(path: Path) -> str:
-    result = subprocess.run(
-        ["/usr/bin/codesign", "--display", "--verbose=4", str(path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
+    team = verified_macos_signing_team(path)
+    if team is None:
         raise DesktopCoreUpdateError("desktop_core_signature_invalid")
-    for line in result.stderr.splitlines():
-        team = line.strip().removeprefix("TeamIdentifier=").strip()
-        if line.strip().startswith("TeamIdentifier=") and team and team != "not set":
-            return team
-    raise DesktopCoreUpdateError("desktop_core_signature_invalid")
+    return team
 
 
 def _reject_symlink(path: Path) -> None:
