@@ -17,6 +17,7 @@ import type {
   GuardProtectionCheck,
   GuardProtectionHealth,
 } from "./guard-types";
+import { ProtectionRepairFlowError } from "./protection-repair-flow";
 
 type GapAction = {
   label: string;
@@ -28,16 +29,6 @@ type RepairState = {
   message: string;
   failedHarnesses?: string[];
 };
-
-export class ProtectionRepairFlowError extends Error {
-  readonly failedHarnesses: string[];
-
-  constructor(message: string, failedHarnesses: string[]) {
-    super(message);
-    this.name = "ProtectionRepairFlowError";
-    this.failedHarnesses = failedHarnesses;
-  }
-}
 
 export type CloudPolicyRecoveryInput = {
   cloudState: "local_only" | "paired_waiting" | "paired_active";

@@ -30611,95 +30611,6 @@ function clearLabelForScope(scope) {
       return "Clear global decision";
   }
 }
-class CloudRequestTimeoutError extends Error {
-  constructor() {
-    super("Guard Cloud did not respond within 5 seconds. Try again.");
-    this.name = "CloudRequestTimeoutError";
-  }
-}
-async function withCloudRequestTimeout(request, parentSignal) {
-  if (parentSignal?.aborted) {
-    throw new DOMException("Cloud connection request stopped", "AbortError");
-  }
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  parentSignal?.addEventListener("abort", abort, { once: true });
-  let timedOut = false;
-  const timeout = globalThis.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, 5e3);
-  try {
-    return await request(controller.signal);
-  } catch (error) {
-    if (timedOut && !parentSignal?.aborted && error instanceof DOMException && error.name === "AbortError") {
-      throw new CloudRequestTimeoutError();
-    }
-    throw error;
-  } finally {
-    globalThis.clearTimeout(timeout);
-    parentSignal?.removeEventListener("abort", abort);
-  }
-}
-async function startOrRecoverCloudConnect(signal) {
-  try {
-    return await withCloudRequestTimeout(startGuardCloudConnect, signal);
-  } catch (error) {
-    if (!(error instanceof CloudRequestTimeoutError)) throw error;
-    return await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
-  }
-}
-function waitForPoll(delayMs, signal) {
-  if (signal.aborted) {
-    return Promise.reject(new DOMException("Cloud connection polling stopped", "AbortError"));
-  }
-  return new Promise((resolve, reject) => {
-    const finish = () => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    };
-    const timeout = globalThis.setTimeout(finish, delayMs);
-    const abort = () => {
-      globalThis.clearTimeout(timeout);
-      reject(new DOMException("Cloud connection polling stopped", "AbortError"));
-    };
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
-async function waitForAuthorizeUrl(initialStatus, signal) {
-  if (signal.aborted) {
-    throw new DOMException("Cloud connection polling stopped", "AbortError");
-  }
-  let status = initialStatus;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const flow = status.connect_flow;
-    if (!status.connect_required || flow?.authorize_url || !flow || !["starting", "running"].includes(flow.state)) {
-      return status;
-    }
-    const pollDelayMs = Math.max(100, Math.min(5e3, flow.poll_after_ms ?? 1e3));
-    await waitForPoll(pollDelayMs, signal);
-    status = await withCloudRequestTimeout(fetchGuardCloudConnectStatus, signal);
-  }
-  return status;
-}
-async function waitForCloudConnection(initialStatus, {
-  signal,
-  fetchStatus = fetchGuardCloudConnectStatus,
-  wait = waitForPoll,
-  maxAttempts = 300
-}) {
-  if (signal.aborted) {
-    throw new DOMException("Cloud connection polling stopped", "AbortError");
-  }
-  let status = initialStatus;
-  for (let attempt = 0; attempt < maxAttempts && status.connect_required; attempt += 1) {
-    if (status.connect_flow?.state === "failed") return status;
-    const pollDelayMs = Math.max(250, Math.min(5e3, status.connect_flow?.poll_after_ms ?? 1e3));
-    await wait(pollDelayMs, signal);
-    status = await withCloudRequestTimeout(fetchStatus, signal);
-  }
-  return status;
-}
 class ProtectionRepairFlowError extends Error {
   failedHarnesses;
   constructor(message, failedHarnesses) {
@@ -30707,345 +30618,6 @@ class ProtectionRepairFlowError extends Error {
     this.name = "ProtectionRepairFlowError";
     this.failedHarnesses = failedHarnesses;
   }
-}
-const PROTECTION_CHECK_ACTIONS = {
-  harness_hooks: {
-    label: "App hooks",
-    detail: "One or more app hooks need setup or repair."
-  },
-  daemon: {
-    label: "Local runtime",
-    detail: "The local Guard runtime needs attention before protection can finish."
-  },
-  policy_engine: {
-    label: "Local policy engine",
-    detail: "Guard could not confirm the local policy engine is ready."
-  },
-  rule_packs: {
-    label: "Local rule packs",
-    detail: "Guard cannot confirm the active local rule-pack proof yet."
-  },
-  decision_plane_compatibility: {
-    label: "Decision plane",
-    detail: "Guard reruns the decision-plane compatibility probe during repair. Retry here if it remains unproven."
-  },
-  containment_compatibility: {
-    label: "Containment",
-    detail: "Guard reruns the containment compatibility probe during repair. Retry here if it remains unproven."
-  },
-  sandbox: {
-    label: "Sandbox",
-    detail: "Guard reruns the sandbox enforcement probe during repair. Retry here if it remains unproven."
-  },
-  decision_stream: {
-    label: "Command evidence",
-    detail: "Guard attempts evidence-store recovery during repair. Run a protected command only if fresh proof is still needed."
-  },
-  tamper_checks: {
-    label: "Local integrity checks",
-    detail: "Managed Guard files or hooks did not pass integrity checks."
-  }
-};
-function cloudPolicyRecoveryHint(input) {
-  const cloudProofUnavailable = input.cloudState !== "paired_active" || input.cloudSyncState !== "healthy" || Boolean(input.cloudPolicySyncError);
-  if (!cloudProofUnavailable) return null;
-  return {
-    actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
-    detail: "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
-    href: input.connectUrl,
-    startsOAuth: input.cloudState === "local_only",
-    title: "Guard Cloud policy proof"
-  };
-}
-function actionForCheck(check, repairHarness) {
-  if (check.check_id === "harness_hooks" && repairHarness) {
-    return {
-      label: "App hooks",
-      detail: `${harnessDisplayName(repairHarness)} hooks need setup or repair.`
-    };
-  }
-  const action = PROTECTION_CHECK_ACTIONS[check.check_id];
-  return action ? action : {
-    label: check.check_id.replace(/_/g, " "),
-    detail: "Guard could not confirm this protection proof."
-  };
-}
-function ProtectionGapItem({
-  action,
-  check
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "flex items-start gap-2 border-t border-brand-attention/10 py-3 first:border-t-0", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 text-xs text-slate-600", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      HiMiniExclamationCircle,
-      {
-        className: `mt-0.5 h-3.5 w-3.5 shrink-0 ${check.status === "fail" ? "text-brand-attention" : "text-slate-400"}`,
-        "aria-hidden": "true"
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "font-semibold text-brand-dark", children: action.label }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 text-[10px] font-medium uppercase tracking-wide text-slate-400", children: check.status === "fail" ? "Failed" : "Unproven" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block", children: action.detail })
-    ] })
-  ] }) });
-}
-function recoverySummary(failCount, unknownCount) {
-  if (failCount === 0) {
-    return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
-  }
-  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
-  let remainingProofs = "";
-  if (unknownCount > 0) {
-    remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
-  }
-  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
-}
-function repairButtonLabel(repairState) {
-  if (repairState?.status === "working") return "Repairing…";
-  if (repairState?.status === "error") return "Retry repair";
-  return "Repair protection";
-}
-function cloudConnectPendingMessage(hasAuthorizeUrl, opened) {
-  if (!hasAuthorizeUrl) {
-    return "Open the secure sign-in link below. This page will update automatically.";
-  }
-  if (opened) {
-    return "Complete sign-in in the opened window. This page will update automatically.";
-  }
-  return "Your browser blocked the sign-in window. Open the secure sign-in link below.";
-}
-function cloudConnectButtonLabel(state, defaultLabel) {
-  if (state?.status === "working") return "Starting sign-in…";
-  if (state?.status === "success") return "Guard Cloud connected";
-  return defaultLabel;
-}
-function safeCloudConnectUrl(value) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (!url.hostname || url.username || url.password) return null;
-    const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
-    const secureRemote = url.protocol === "https:";
-    const localHttp = url.protocol === "http:" && loopbackHosts.includes(url.hostname);
-    if (!secureRemote && !localHttp) return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-function FleetProtectionRecovery(props) {
-  const [repairState, setRepairState] = reactExports.useState(null);
-  const [cloudConnectState, setCloudConnectState] = reactExports.useState(null);
-  const [detailsOpen, setDetailsOpen] = reactExports.useState(false);
-  const cloudConnectControllerRef = reactExports.useRef(null);
-  const gaps = props.health.checks.filter((check) => check.status !== "pass");
-  const failCount = gaps.filter((check) => check.status === "fail").length;
-  const unknownCount = gaps.length - failCount;
-  const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
-  const isActiveCloudConnect = reactExports.useCallback(
-    (controller) => cloudConnectControllerRef.current === controller && !controller.signal.aborted,
-    []
-  );
-  const handleRepair = reactExports.useCallback(async () => {
-    setRepairState({
-      status: "working",
-      message: "Repairing app hooks, local runtime, local rule packs, and local integrity…"
-    });
-    try {
-      const message = await props.onRepairProtection(props.repairHarnesses);
-      setRepairState({ status: "success", message });
-      setDetailsOpen(true);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Repair paused before every protection step completed. Retry to continue safely.";
-      setRepairState({
-        status: "error",
-        message,
-        failedHarnesses: error instanceof ProtectionRepairFlowError ? error.failedHarnesses : void 0
-      });
-      setDetailsOpen(true);
-    }
-  }, [props.onRepairProtection, props.repairHarnesses]);
-  const handleRepairClick = reactExports.useCallback(() => {
-    void handleRepair();
-  }, [handleRepair]);
-  const handleDetailsToggle = reactExports.useCallback(() => {
-    setDetailsOpen((open) => !open);
-  }, []);
-  const handleTargetedRepair = reactExports.useCallback(() => {
-    const harness = repairState?.failedHarnesses?.[0];
-    if (harness) props.onRepairHarness?.(harness);
-  }, [props.onRepairHarness, repairState?.failedHarnesses]);
-  const handleCloudConnect = reactExports.useCallback(async () => {
-    cloudConnectControllerRef.current?.abort();
-    const controller = new AbortController();
-    cloudConnectControllerRef.current = controller;
-    setCloudConnectState({
-      authorizeUrl: null,
-      message: "Starting secure Guard Cloud sign-in…",
-      status: "working"
-    });
-    try {
-      const status = await waitForAuthorizeUrl(
-        await startOrRecoverCloudConnect(controller.signal),
-        controller.signal
-      );
-      if (!isActiveCloudConnect(controller)) return;
-      if (!status.connect_required) {
-        setCloudConnectState({
-          authorizeUrl: null,
-          message: "Guard Cloud is connected.",
-          status: "success"
-        });
-        return;
-      }
-      const flow = status.connect_flow;
-      const authorizeUrl = safeCloudConnectUrl(flow?.authorize_url);
-      const signInUrl = authorizeUrl ?? safeCloudConnectUrl(flow?.connect_url);
-      if (!flow || !signInUrl) {
-        throw new Error(
-          flow?.detail || "Guard could not generate a secure sign-in link. Try again."
-        );
-      }
-      const opened = authorizeUrl ? openPackageFirewallAuthorizeFallback(authorizeUrl, flow.browser_opened) : false;
-      if (!isActiveCloudConnect(controller)) return;
-      setCloudConnectState({
-        authorizeUrl: signInUrl,
-        message: cloudConnectPendingMessage(Boolean(authorizeUrl), opened),
-        status: "pending"
-      });
-      const connectedStatus = await waitForCloudConnection(status, {
-        signal: controller.signal
-      });
-      if (!isActiveCloudConnect(controller)) return;
-      if (!connectedStatus.connect_required) {
-        setCloudConnectState({
-          authorizeUrl: null,
-          message: "Guard Cloud is connected.",
-          status: "success"
-        });
-        return;
-      }
-      const detail = connectedStatus.connect_flow?.detail;
-      setCloudConnectState({
-        authorizeUrl: safeCloudConnectUrl(connectedStatus.connect_flow?.authorize_url) ?? safeCloudConnectUrl(connectedStatus.connect_flow?.connect_url) ?? signInUrl,
-        message: connectedStatus.connect_flow?.state === "failed" ? detail || "Guard Cloud sign-in could not finish. Try again." : "Automatic checking stopped before sign-in finished. Complete sign-in, then try again.",
-        status: connectedStatus.connect_flow?.state === "failed" ? "error" : "pending"
-      });
-    } catch (error) {
-      if (!isActiveCloudConnect(controller)) return;
-      setCloudConnectState({
-        authorizeUrl: null,
-        message: error instanceof Error ? error.message : "Guard could not start sign-in. Try again.",
-        status: "error"
-      });
-    }
-  }, [isActiveCloudConnect]);
-  const handleCloudConnectClick = reactExports.useCallback(() => {
-    void handleCloudConnect();
-  }, [handleCloudConnect]);
-  reactExports.useEffect(() => {
-    cloudConnectControllerRef.current?.abort();
-    cloudConnectControllerRef.current = null;
-    setCloudConnectState(null);
-  }, [props.cloudPolicy.cloudState, props.cloudPolicy.connectUrl]);
-  reactExports.useEffect(() => () => cloudConnectControllerRef.current?.abort(), []);
-  if (gaps.length === 0) return null;
-  const working = repairState?.status === "working";
-  const cloudConnectDisabled = ["working", "success"].includes(
-    cloudConnectState?.status ?? ""
-  );
-  const cloudConnectMessageClassName = cloudConnectState?.status === "error" ? "text-sm text-red-600" : "text-sm text-slate-600";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "section",
-    {
-      id: "protection-recovery",
-      className: "border-y border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-4 sm:px-5",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                HiMiniWrenchScrewdriver,
-                {
-                  className: "h-4 w-4 shrink-0 text-brand-attention",
-                  "aria-hidden": "true"
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Restore local protection" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: repairButtonLabel(repairState) })
-        ] }),
-        cloudPolicyHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: cloudPolicyHint.title }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1", children: cloudPolicyHint.detail }),
-          cloudPolicyHint.startsOAuth ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap items-center gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              ActionButton,
-              {
-                onClick: handleCloudConnectClick,
-                disabled: cloudConnectDisabled,
-                variant: "outline",
-                children: cloudConnectButtonLabel(cloudConnectState, cloudPolicyHint.actionLabel)
-              }
-            ),
-            cloudConnectState?.authorizeUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: cloudConnectState.authorizeUrl, variant: "quiet", children: "Open secure sign-in" }) : null,
-            cloudConnectState ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: cloudConnectMessageClassName, role: "status", children: cloudConnectState.message }) : null
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: cloudPolicyHint.href, variant: "outline", className: "mt-2", children: cloudPolicyHint.actionLabel })
-        ] }) : null,
-        repairState ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "p",
-          {
-            className: `mt-3 flex items-start gap-2 text-sm ${repairState.status === "error" ? "text-red-600" : "text-slate-600"}`,
-            "aria-live": "polite",
-            children: [
-              repairState.status === "success" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-                HiMiniCheckCircle,
-                {
-                  className: "mt-0.5 h-4 w-4 shrink-0 text-emerald-500",
-                  "aria-hidden": "true"
-                }
-              ) : null,
-              repairState.message
-            ]
-          }
-        ) : null,
-        repairState?.status === "error" && repairState.failedHarnesses?.[0] && props.onRepairHarness ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleTargetedRepair, variant: "outline", className: "mt-3", children: [
-          "Open ",
-          harnessDisplayName(repairState.failedHarnesses[0]),
-          " repair"
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: handleDetailsToggle,
-            "aria-expanded": detailsOpen,
-            className: "mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
-            children: [
-              "View repair details",
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                HiMiniChevronDown,
-                {
-                  className: `h-4 w-4 transition-transform ${detailsOpen ? "rotate-180" : ""}`,
-                  "aria-hidden": "true"
-                }
-              )
-            ]
-          }
-        ),
-        detailsOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 border-t border-brand-attention/10", children: gaps.map((check) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ProtectionGapItem,
-          {
-            action: actionForCheck(check, props.repairHarness),
-            check
-          },
-          check.check_id
-        )) }) : null
-      ]
-    }
-  );
 }
 function useRouteFocus(view, mainSelector = "main#main-content") {
   const prevViewRef = reactExports.useRef(null);
@@ -31899,7 +31471,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  PROTECTION_POSTURE_COPY as $,
+  HiMiniXCircle as $,
   ActionButton as A,
   HiMiniChevronUp as B,
   HiMiniChevronDown as C,
@@ -31917,157 +31489,159 @@ export {
   OperatorHealthCard as O,
   Badge as P,
   HiMiniMinusCircle as Q,
-  ProofStrip as R,
+  startGuardCloudConnect as R,
   SectionLabel as S,
-  FleetProtectionRecovery as T,
-  HiMiniEye as U,
-  HiMiniWrenchScrewdriver as V,
+  fetchGuardCloudConnectStatus as T,
+  ProtectionRepairFlowError as U,
+  openPackageFirewallAuthorizeFallback as V,
   WatchProtectionBanner as W,
-  HiMiniXCircle as X,
+  HiMiniWrenchScrewdriver as X,
   HiMiniExclamationCircle as Y,
-  HiMiniClipboardDocumentCheck as Z,
-  HiMiniClipboard as _,
+  ProofStrip as Z,
+  HiMiniEye as _,
   EvidenceActivityHeatmapMini as a,
-  EvidenceActionDetail as a$,
-  POSTURE_OUTCOME_COLUMNS as a0,
-  getDefaultExportFromCjs as a1,
-  React as a2,
-  HiMiniKey as a3,
-  HiMiniLockClosed as a4,
-  HiMiniBellAlert as a5,
-  HiMiniAdjustmentsHorizontal as a6,
-  HiMiniCircleStack as a7,
-  TabBar as a8,
-  resolveProtectionLevelCopy as a9,
-  isApprovalProofSubmitDisabled as aA,
-  ApprovalProofFieldInputs as aB,
-  buildApprovalProofCredentials as aC,
-  GenIcon as aD,
-  HiMiniGlobeAlt as aE,
-  HiMiniCube as aF,
-  HiMiniServerStack as aG,
-  HiMiniFolder as aH,
-  FaWindows as aI,
-  FaAws as aJ,
-  approvalProofRecentlySatisfied as aK,
-  HiMiniArrowLeft as aL,
-  HiMiniPlus as aM,
-  HiMiniNoSymbol as aN,
-  guardAwareHref as aO,
-  fetchApprovalPage as aP,
-  fetchPolicy as aQ,
-  HiMiniHome as aR,
-  guardActionPresentation as aS,
-  DEFAULT_FILTER_STATE as aT,
-  filterEvidence as aU,
-  sortEvidence as aV,
-  computeMetrics as aW,
-  CommandActivityWorkspace as aX,
-  EvidenceFilterBar as aY,
-  EvidenceInsightStrip as aZ,
-  EvidenceActionList as a_,
-  fetchSettings as aa,
-  fetchRuntimeSnapshot as ab,
-  clearPolicy as ac,
-  clearReviewQueue as ad,
-  revokeApprovalGateCooldown as ae,
-  disableApprovalGateTotp as af,
-  importSettings as ag,
-  resetSettings as ah,
-  enrollApprovalGateTotp as ai,
-  verifyApprovalGateTotp as aj,
-  clearEvidence as ak,
-  exportDiagnostics as al,
-  repairApprovalCenter as am,
-  exportSettings as an,
-  setupDesktopNotifications as ao,
-  WorkspacePageHeader as ap,
-  HiMiniMagnifyingGlass as aq,
-  isProtectionPosture as ar,
-  deriveProtectionPosture as as,
-  Tag as at,
-  approvalGateCooldownLabel as au,
-  fetchLocalCliApi as av,
-  fetchExtensionControlApi as aw,
-  useResolvedApprovalGate as ax,
-  HiMiniArrowPath as ay,
-  HiMiniInformationCircle as az,
+  EvidenceFilterBar as a$,
+  HiMiniClipboardDocumentCheck as a0,
+  HiMiniClipboard as a1,
+  PROTECTION_POSTURE_COPY as a2,
+  POSTURE_OUTCOME_COLUMNS as a3,
+  getDefaultExportFromCjs as a4,
+  React as a5,
+  HiMiniKey as a6,
+  HiMiniLockClosed as a7,
+  HiMiniBellAlert as a8,
+  HiMiniAdjustmentsHorizontal as a9,
+  useResolvedApprovalGate as aA,
+  HiMiniArrowPath as aB,
+  HiMiniInformationCircle as aC,
+  isApprovalProofSubmitDisabled as aD,
+  ApprovalProofFieldInputs as aE,
+  buildApprovalProofCredentials as aF,
+  GenIcon as aG,
+  HiMiniGlobeAlt as aH,
+  HiMiniCube as aI,
+  HiMiniServerStack as aJ,
+  HiMiniFolder as aK,
+  FaWindows as aL,
+  FaAws as aM,
+  approvalProofRecentlySatisfied as aN,
+  HiMiniArrowLeft as aO,
+  HiMiniPlus as aP,
+  HiMiniNoSymbol as aQ,
+  guardAwareHref as aR,
+  fetchApprovalPage as aS,
+  fetchPolicy as aT,
+  HiMiniHome as aU,
+  guardActionPresentation as aV,
+  DEFAULT_FILTER_STATE as aW,
+  filterEvidence as aX,
+  sortEvidence as aY,
+  computeMetrics as aZ,
+  CommandActivityWorkspace as a_,
+  HiMiniCircleStack as aa,
+  TabBar as ab,
+  resolveProtectionLevelCopy as ac,
+  fetchSettings as ad,
+  fetchRuntimeSnapshot as ae,
+  clearPolicy as af,
+  clearReviewQueue as ag,
+  revokeApprovalGateCooldown as ah,
+  disableApprovalGateTotp as ai,
+  importSettings as aj,
+  resetSettings as ak,
+  enrollApprovalGateTotp as al,
+  verifyApprovalGateTotp as am,
+  clearEvidence as an,
+  exportDiagnostics as ao,
+  repairApprovalCenter as ap,
+  exportSettings as aq,
+  setupDesktopNotifications as ar,
+  WorkspacePageHeader as as,
+  HiMiniMagnifyingGlass as at,
+  isProtectionPosture as au,
+  deriveProtectionPosture as av,
+  Tag as aw,
+  approvalGateCooldownLabel as ax,
+  fetchLocalCliApi as ay,
+  fetchExtensionControlApi as az,
   HiMiniCommandLine as b,
-  fetchSupplyChainBundle as b$,
-  policyIdentityKey as b0,
-  HiMiniChartBar as b1,
-  runHarnessAction as b2,
-  GuardHarnessActionError as b3,
-  HiMiniRocketLaunch as b4,
-  HiMiniTrash as b5,
-  clearLabelForScope as b6,
-  formatHarnessCommand as b7,
-  isSupplyChainAuditIncomplete as b8,
-  isSupplyChainAuditEvidence as b9,
-  lazyWorkspace as bA,
-  __vitePreload as bB,
-  scopeLabel as bC,
-  HiMiniDocumentText as bD,
-  HiMiniCloudArrowUp as bE,
-  HiMiniCheck as bF,
-  HiMiniCodeBracket as bG,
-  HiMiniClipboardDocument as bH,
-  HiMiniUsers as bI,
-  HiMiniIdentification as bJ,
-  policyActionLabel as bK,
-  createCloudExceptionRequest as bL,
-  HiMiniArrowRight as bM,
-  HiMiniPuzzlePiece as bN,
-  fetchCloudExceptions as bO,
-  fetchCloudExceptionRequests as bP,
-  downloadBlob as bQ,
-  PolicyStatField as bR,
-  PaginationControls as bS,
-  HiMiniArrowDownTray as bT,
-  HiMiniQueueList as bU,
-  Surface as bV,
-  HiMiniCheckBadge as bW,
-  fetchMcpPolicyRequest as bX,
-  resolveMcpPolicyRequest as bY,
-  HiMiniDocumentPlus as bZ,
-  HiMiniDocumentMagnifyingGlass as b_,
-  readString$1 as ba,
-  isRecord$2 as bb,
-  HiMiniClock as bc,
-  IconActionButton as bd,
-  HiMiniBeaker as be,
-  ActivationSummary as bf,
-  ActionResultPanel as bg,
-  HiMiniBugAnt as bh,
-  GuardModalLayer as bi,
-  ConnectFlowCard as bj,
-  ApprovalProofInline as bk,
-  HiMiniArrowTopRightOnSquare as bl,
-  HiMiniCloudArrowDown as bm,
-  fetchPackageFirewallStatus as bn,
-  runPackageAudit as bo,
-  resolveSupplyChainAuditFailure as bp,
-  runPackageSync as bq,
-  startPackageFirewallConnect as br,
-  openPackageFirewallAuthorizeFallback as bs,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bt,
-  repairSupplyChainProtection as bu,
-  runPackageFirewallAction as bv,
-  parseInterceptProofSnapshot as bw,
-  activatePackageFirewallRuntime as bx,
-  EntitlementNotice as by,
-  fetchReceipts as bz,
+  HiMiniDocumentPlus as b$,
+  EvidenceInsightStrip as b0,
+  EvidenceActionList as b1,
+  EvidenceActionDetail as b2,
+  policyIdentityKey as b3,
+  HiMiniChartBar as b4,
+  runHarnessAction as b5,
+  GuardHarnessActionError as b6,
+  HiMiniRocketLaunch as b7,
+  HiMiniTrash as b8,
+  clearLabelForScope as b9,
+  EntitlementNotice as bA,
+  fetchReceipts as bB,
+  lazyWorkspace as bC,
+  __vitePreload as bD,
+  scopeLabel as bE,
+  HiMiniDocumentText as bF,
+  HiMiniCloudArrowUp as bG,
+  HiMiniCheck as bH,
+  HiMiniCodeBracket as bI,
+  HiMiniClipboardDocument as bJ,
+  HiMiniUsers as bK,
+  HiMiniIdentification as bL,
+  policyActionLabel as bM,
+  createCloudExceptionRequest as bN,
+  HiMiniArrowRight as bO,
+  HiMiniPuzzlePiece as bP,
+  fetchCloudExceptions as bQ,
+  fetchCloudExceptionRequests as bR,
+  downloadBlob as bS,
+  PolicyStatField as bT,
+  PaginationControls as bU,
+  HiMiniArrowDownTray as bV,
+  HiMiniQueueList as bW,
+  Surface as bX,
+  HiMiniCheckBadge as bY,
+  fetchMcpPolicyRequest as bZ,
+  resolveMcpPolicyRequest as b_,
+  formatHarnessCommand as ba,
+  isSupplyChainAuditIncomplete as bb,
+  isSupplyChainAuditEvidence as bc,
+  readString$1 as bd,
+  isRecord$2 as be,
+  HiMiniClock as bf,
+  IconActionButton as bg,
+  HiMiniBeaker as bh,
+  ActivationSummary as bi,
+  ActionResultPanel as bj,
+  HiMiniBugAnt as bk,
+  GuardModalLayer as bl,
+  ConnectFlowCard as bm,
+  ApprovalProofInline as bn,
+  HiMiniArrowTopRightOnSquare as bo,
+  HiMiniCloudArrowDown as bp,
+  fetchPackageFirewallStatus as bq,
+  runPackageAudit as br,
+  resolveSupplyChainAuditFailure as bs,
+  runPackageSync as bt,
+  startPackageFirewallConnect as bu,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bv,
+  repairSupplyChainProtection as bw,
+  runPackageFirewallAction as bx,
+  parseInterceptProofSnapshot as by,
+  activatePackageFirewallRuntime as bz,
   HiMiniChevronRight as c,
-  isSupplyChainScannerEvidence as c0,
-  isBlockedGuardAction as c1,
-  HiMiniShieldExclamation as c2,
-  HiMiniComputerDesktop as c3,
-  HiMiniChevronLeft as c4,
-  HiMiniFunnel as c5,
-  HiMiniArrowDown as c6,
-  HiMiniArrowUp as c7,
-  runAuditRemediation as c8,
-  HiMiniSignal as c9,
+  HiMiniDocumentMagnifyingGlass as c0,
+  fetchSupplyChainBundle as c1,
+  isSupplyChainScannerEvidence as c2,
+  isBlockedGuardAction as c3,
+  HiMiniShieldExclamation as c4,
+  HiMiniComputerDesktop as c5,
+  HiMiniChevronLeft as c6,
+  HiMiniFunnel as c7,
+  HiMiniArrowDown as c8,
+  HiMiniArrowUp as c9,
+  runAuditRemediation as ca,
+  HiMiniSignal as cb,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,

@@ -32,7 +32,7 @@ import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-util
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
 import { protectionHealthFor, remainingProtectionRepairParts } from "./protection-health";
-import { ProtectionRepairFlowError } from "./fleet-protection-recovery";
+import { ProtectionRepairFlowError } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
 

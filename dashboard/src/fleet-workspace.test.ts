@@ -1,4 +1,5 @@
-import { cloudPolicyRecoveryHint, ProtectionRepairFlowError } from "./fleet-protection-recovery";
+import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import { ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
 import type { FleetHeroCopy } from "./fleet-workspace";
 
