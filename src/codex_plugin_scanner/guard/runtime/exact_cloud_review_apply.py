@@ -13,7 +13,6 @@ from ..approval_scope_support import (
 )
 from ..review_contracts import (
     GuardReviewContractError,
-    guard_review_oauth_metadata,
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
 )
@@ -25,6 +24,7 @@ from .exact_cloud_review import (
     _audit,
     _exact_action,
     _now,
+    _oauth_metadata,
     _oauth_state,
     _reject,
     _request_expires_at,
@@ -56,13 +56,13 @@ def apply_exact_cloud_review(
     if not isinstance(raw_capability, dict):
         raise _reject(store, "cloud_review_capability_missing", now=current)
     try:
-        oauth_state = _oauth_state(store)
+        _ = _oauth_state(store)
     except ExactCloudReviewError as error:
         raise _reject(store, error.code, now=current) from error
     try:
         # Queue job timestamps are Cloud-controlled and must never admit an expired receipt.
         envelope = validated_remote_approval_envelope(remote_approval, store=store)
-        oauth = guard_review_oauth_metadata(store)
+        oauth = _oauth_metadata(store)
     except GuardReviewContractError as error:
         raise _reject(store, str(error), now=current) from error
     receipt_expires_at = _text(envelope.get("expiresAt"))
@@ -115,7 +115,14 @@ def apply_exact_cloud_review(
         resolution_scope=scope,
         reason="Guard Cloud signed exact review",
         expected_capability=raw_capability,
-        expected_oauth_state=oauth_state,
+        expected_oauth_binding={
+            "deviceId": oauth.device_id,
+            "grantId": oauth.grant_id,
+            "installationId": oauth.installation_id,
+            "machineId": oauth.machine_id,
+            "runtimeId": oauth.runtime_id,
+            "workspaceId": oauth.workspace_id,
+        },
         expected_request=request,
         receipt_expires_at=receipt_expires_at,
         request_expires_at=request_expires_at.isoformat(),

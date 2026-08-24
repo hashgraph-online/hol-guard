@@ -8345,8 +8345,15 @@ class GuardDaemonServer:
     def refresh_command_queue_worker(self) -> dict[str, object]:
         """Apply a changed local Cloud Review capability without a daemon restart."""
 
-        self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
-        worker = self._command_queue_worker
+        with self._finish_service_lock:
+            if self._shutdown_started.is_set():
+                self._command_queue_worker = stop_command_queue_worker(self._command_queue_worker)
+            else:
+                self._command_queue_worker = start_command_queue_worker(
+                    self._server.store,
+                    self._command_queue_worker,
+                )
+            worker = self._command_queue_worker
         return {
             "operation": "guard.review.resolveExact",
             "running": worker is not None and worker.thread.is_alive() and not worker.stop_event.is_set(),

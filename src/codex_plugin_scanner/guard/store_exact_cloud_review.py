@@ -83,7 +83,7 @@ class StoreExactCloudReviewMixin:
         now: str,
         event_name: str,
         event_payload: dict[str, object],
-        expected_capability: dict[str, object] | None = None,
+        expected_capability: object = None,
         require_expected_capability: bool = False,
     ) -> bool:
         """Atomically persist consent state; an expected capability provides CAS."""
@@ -117,7 +117,7 @@ class StoreExactCloudReviewMixin:
         resolution_scope: str,
         reason: str,
         expected_capability: dict[str, object],
-        expected_oauth_state: dict[str, object],
+        expected_oauth_binding: dict[str, object],
         expected_request: dict[str, object],
         receipt_expires_at: str,
         request_expires_at: str,
@@ -132,9 +132,13 @@ class StoreExactCloudReviewMixin:
                 return _exact_error("remote_exact_capability_changed", now=resolved_at)
             if StoreExactCloudReviewMixin._load_exact_state(connection, _REVOCATION_KEY) is not None:
                 return _exact_error("cloud_review_capability_revoked", now=resolved_at)
-            if StoreExactCloudReviewMixin._load_exact_state(connection, _OAUTH_KEY) != expected_oauth_state:
+            oauth_binding = _oauth_binding_from_state(
+                connection,
+                StoreExactCloudReviewMixin._load_exact_state(connection, _OAUTH_KEY),
+            )
+            if oauth_binding != expected_oauth_binding:
                 return _exact_error("remote_exact_oauth_changed", now=resolved_at)
-            if not _capability_matches_oauth_binding(connection, capability, expected_oauth_state):
+            if not _capability_matches_oauth_binding(capability, oauth_binding):
                 return _exact_error("cloud_review_capability_binding_mismatch", now=resolved_at)
             current = parse_utc_timestamp(resolved_at)
             capability_expires_at = (
@@ -209,26 +213,32 @@ def _exact_error(code: str, *, now: str) -> dict[str, object]:
     return {"checked_at": now, "error": code, "replayed": False, "resolved": False}
 
 
-def _capability_matches_oauth_binding(
+def _oauth_binding_from_state(
     connection: sqlite3.Connection,
-    capability: object,
-    oauth_state: dict[str, object],
-) -> bool:
-    """Recheck the signed capability's local target inside the write transaction."""
-
-    if not isinstance(capability, dict):
-        return False
+    oauth_state: object,
+) -> dict[str, object] | None:
+    if not isinstance(oauth_state, dict):
+        return None
     device = connection.execute(
         "select installation_id from guard_devices where device_key = ?",
         ("local-device",),
     ).fetchone()
     installation_id = str(device["installation_id"]) if device is not None else None
     machine_id = oauth_state.get("machine_id")
-    return (
-        capability.get("deviceId") == machine_id
-        and capability.get("grantId") == oauth_state.get("grant_id")
-        and capability.get("installationId") == installation_id
-        and capability.get("machineId") == machine_id
-        and capability.get("runtimeId") == oauth_state.get("runtime_id")
-        and capability.get("workspaceId") == oauth_state.get("workspace_id")
-    )
+    device_id = oauth_state.get("device_id") or machine_id
+    return {
+        "deviceId": device_id,
+        "grantId": oauth_state.get("grant_id"),
+        "installationId": installation_id,
+        "machineId": machine_id,
+        "runtimeId": oauth_state.get("runtime_id"),
+        "workspaceId": oauth_state.get("workspace_id"),
+    }
+
+
+def _capability_matches_oauth_binding(capability: object, oauth_binding: dict[str, object] | None) -> bool:
+    """Recheck the signed capability's local target inside the write transaction."""
+
+    if not isinstance(capability, dict) or oauth_binding is None:
+        return False
+    return all(capability.get(key) == value for key, value in oauth_binding.items())

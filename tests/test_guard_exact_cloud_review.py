@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -13,13 +14,14 @@ import pytest
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args, main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.daemon import command_queue_worker as queue_worker_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.daemon.headless_exact_cloud_review import build_headless_exact_cloud_review_response
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
-    guard_review_oauth_metadata,
     payload_hash_for_remote_approval_envelope,
 )
 from codex_plugin_scanner.guard.runtime.command_capability import (
@@ -35,6 +37,7 @@ from codex_plugin_scanner.guard.runtime.command_executors import (
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     ExactCloudReviewError,
+    _oauth_metadata,
     apply_exact_cloud_review,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
@@ -116,7 +119,7 @@ def _remote_approval(
     assert isinstance(request, dict)
     claim = build_local_review_request_claim(
         request_row=request,
-        oauth=guard_review_oauth_metadata(store),
+        oauth=_oauth_metadata(store),
         store=store,
     )
     issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0)
@@ -165,12 +168,14 @@ def _job(
 ) -> dict[str, object]:
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
+    capability = store.get_sync_payload("guard_exact_cloud_review_capability_v1")
+    device_id = capability.get("deviceId") if isinstance(capability, dict) else credentials["machine_id"]
     return {
         "id": "exact-job-1",
         "leaseId": "exact-lease-1",
         "operation": EXACT_CLOUD_REVIEW_OPERATION,
         "schemaVersion": COMMAND_OPERATION_SCHEMA_VERSIONS[EXACT_CLOUD_REVIEW_OPERATION],
-        "deviceId": credentials["machine_id"],
+        "deviceId": device_id,
         "workspaceId": credentials["workspace_id"],
         "nonce": "exact-job-nonce",
         "createdAt": (created_at or datetime.now(timezone.utc)).isoformat(),
@@ -311,12 +316,26 @@ def test_hol_guard_routes_cloud_review_as_a_top_level_command() -> None:
 
 def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_approval(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
+    oauth_state = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(oauth_state, dict)
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {**oauth_state, "device_id": "device-1"},
+        datetime.now(timezone.utc).isoformat(),
+    )
     request = _request("exact-queue")
     _add_request(store, request)
     enable_exact_cloud_review(store)
     job = _job(store, _remote_approval(store, request.request_id, receipt_id="exact-receipt-queue"))
 
     authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+    assert authorized.identity["deviceId"] == "device-1"
+    with pytest.raises(CommandCapabilityError, match="remote_exact_job_wrong_target"):
+        authorize_command_job(
+            store,
+            {**job, "deviceId": oauth_state["machine_id"]},
+            schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
+        )
     result = execute_guard_command_job(
         job,
         context=HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=store.guard_home),
@@ -359,3 +378,88 @@ def test_headless_exact_endpoint_uses_the_same_service(tmp_path: Path, monkeypat
     resolved_request = payload.get("resolved_request")
     assert isinstance(resolved_request, dict)
     assert resolved_request["request_id"] == request.request_id
+
+    side_effect_request = _request("exact-headless-side-effects")
+    _add_request(store, side_effect_request)
+    side_effect_calls: list[str] = []
+
+    def _record_failure(**_kwargs: object) -> dict[str, object]:
+        side_effect_calls.append("receipt")
+        raise RuntimeError("receipt unavailable")
+
+    def _resume_failure(**_kwargs: object) -> dict[str, object]:
+        side_effect_calls.append("resume")
+        raise RuntimeError("resume unavailable")
+
+    failure_status, failure_payload = build_headless_exact_cloud_review_response(
+        store=store,
+        payload={
+            "harness": "codex",
+            "remoteApproval": _remote_approval(
+                store,
+                side_effect_request.request_id,
+                receipt_id="exact-receipt-side-effects",
+            ),
+        },
+        decode_mapping=lambda value: value if isinstance(value, dict) else {},
+        optional_string=lambda value: value if isinstance(value, str) and value else None,
+        record_receipt=_record_failure,
+        resume_codex=_resume_failure,
+        now=lambda: datetime.now(timezone.utc).isoformat(),
+    )
+
+    assert failure_status == 200
+    assert failure_payload["status"] == "completed"
+    assert failure_payload["delivery_status"] == "incomplete"
+    assert failure_payload["post_commit_errors"] == ["receipt_record_failed", "harness_resume_failed"]
+    assert side_effect_calls == ["receipt", "resume"]
+    delivery_events = store.list_events(limit=10, event_name="cloud_review.exact_delivery_failed")
+    assert {event["payload"]["code"] for event in delivery_events} == {
+        "harness_resume_failed",
+        "receipt_record_failed",
+    }
+    side_effect_row = store.get_approval_request(side_effect_request.request_id)
+    assert side_effect_row is not None and side_effect_row["status"] == "resolved"
+
+    starts: list[str] = []
+    monkeypatch.setattr(
+        daemon_server_module,
+        "start_command_queue_worker",
+        lambda *_args: starts.append("start") or None,
+    )
+    lifecycle_daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    lifecycle_daemon.start()
+    lifecycle_daemon._finish_service_lock.acquire()
+    entered = threading.Event()
+    refresh_result: dict[str, object] = {}
+
+    def _refresh_during_shutdown() -> None:
+        entered.set()
+        refresh_result.update(lifecycle_daemon.refresh_command_queue_worker())
+
+    refresh_thread = threading.Thread(target=_refresh_during_shutdown)
+    refresh_thread.start()
+    assert entered.wait(timeout=1)
+    lifecycle_daemon._shutdown_started.set()
+    lifecycle_daemon._finish_service_lock.release()
+    refresh_thread.join(timeout=2)
+    try:
+        assert refresh_thread.is_alive() is False
+        assert refresh_result["running"] is False
+        assert starts == ["start"]
+    finally:
+        lifecycle_daemon.stop()
+
+    old_release = threading.Event()
+    old_thread = threading.Thread(target=old_release.wait)
+    old_thread.start()
+    old_stop = threading.Event()
+    old_stop.set()
+    old_worker = queue_worker_module.CommandQueueWorker(thread=old_thread, stop_event=old_stop)
+    monkeypatch.setattr(queue_worker_module, "command_queue_enabled", lambda _store: True)
+    monkeypatch.setattr(queue_worker_module, "_COMMAND_QUEUE_THREAD_JOIN_TIMEOUT_SECONDS", 0.01)
+    try:
+        assert queue_worker_module.start_command_queue_worker(store, old_worker) is old_worker
+    finally:
+        old_release.set()
+        old_thread.join(timeout=1)

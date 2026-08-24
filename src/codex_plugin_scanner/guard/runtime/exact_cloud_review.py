@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
+from ..review_contracts import GuardReviewContractError, GuardReviewOAuthMetadata, guard_review_oauth_metadata
 from ..stable_json import stable_json_serialize
 from .exact_cloud_review_diagnostics import enrich_exact_cloud_review_status
 from .time_support import parse_utc_timestamp
@@ -101,11 +101,27 @@ def _capability_digest(capability: dict[str, object]) -> str:
     return hashlib.sha256(_canonical(capability)).hexdigest()
 
 
-def _oauth_binding(store: GuardStore) -> dict[str, object]:
+def _oauth_metadata(store: GuardStore) -> GuardReviewOAuthMetadata:
     try:
         oauth = guard_review_oauth_metadata(store)
     except GuardReviewContractError as error:
         raise ExactCloudReviewError(f"cloud_review_{error}") from error
+    raw_oauth = store.get_sync_payload("oauth_local_credentials")
+    device_id = _text(raw_oauth.get("device_id")) if isinstance(raw_oauth, dict) else None
+    if device_id is None or device_id == oauth.device_id:
+        return oauth
+    return GuardReviewOAuthMetadata(
+        device_id=device_id,
+        grant_id=oauth.grant_id,
+        installation_id=oauth.installation_id,
+        machine_id=oauth.machine_id,
+        runtime_id=oauth.runtime_id,
+        workspace_id=oauth.workspace_id,
+    )
+
+
+def _oauth_binding(store: GuardStore) -> dict[str, object]:
+    oauth = _oauth_metadata(store)
     return {
         "deviceId": oauth.device_id,
         "grantId": oauth.grant_id,
@@ -222,13 +238,17 @@ def disable_exact_cloud_review(
         },
         create_key=True,
     )
-    store.replace_exact_cloud_review_state(
+    replaced = store.replace_exact_cloud_review_state(
         capability=None,
         revocation=revocation,
         now=revoked_at.isoformat(),
         event_name="cloud_review.exact_capability_revoked",
         event_payload={"operation": EXACT_CLOUD_REVIEW_OPERATION, "reason": "local_disable"},
+        expected_capability=raw,
+        require_expected_capability=True,
     )
+    if not replaced:
+        raise ExactCloudReviewError("cloud_review_capability_changed")
     return exact_cloud_review_status(store, now=revoked_at.isoformat())
 
 
@@ -359,7 +379,7 @@ def authorize_exact_cloud_review_job(
             raise ExactCloudReviewError("remote_exact_job_expired")
         if expires_at > _now(now) + timedelta(hours=24):
             raise ExactCloudReviewError("remote_exact_job_expiry_too_distant")
-        if identity["deviceId"] != capability["machineId"]:
+        if identity["deviceId"] != capability["deviceId"]:
             raise ExactCloudReviewError("remote_exact_job_wrong_target")
         if identity["workspaceId"] != capability["workspaceId"]:
             raise ExactCloudReviewError("remote_exact_job_wrong_workspace")

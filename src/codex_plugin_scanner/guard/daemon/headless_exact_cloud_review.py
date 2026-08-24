@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
+from datetime import datetime, timezone
 
 from ..adapters import get_adapter
 from ..harness_resume import resume_harness_operation
@@ -49,38 +51,65 @@ def build_headless_exact_cloud_review_response(
     except ExactCloudReviewError as error:
         return _exact_error_response(error.code)
     resolved_request = resolution.resolved_request
-    receipt = record_receipt(
-        harness=adapter.harness,
-        operation="remote_exact",
-        payload=payload,
-        result={"request_id": resolution.request_id, "receipt_id": resolution.receipt_id},
-        workspace_id=optional_string(resolved_request.get("workspace")),
-        artifact_name=f"Exact Cloud review for {resolution.request_id}",
-        scanner_evidence_extra={"receipt_id": resolution.receipt_id, "request_id": resolution.request_id},
-    )
     response: dict[str, object] = {
         "harness": adapter.harness,
         "operation": "remote_exact",
-        "receipt": receipt,
         "request_id": resolution.request_id,
         "resolved_request": resolved_request,
         "status": "completed",
     }
+    post_commit_errors: list[str] = []
+    try:
+        response["receipt"] = record_receipt(
+            harness=adapter.harness,
+            operation="remote_exact",
+            payload=payload,
+            result={"request_id": resolution.request_id, "receipt_id": resolution.receipt_id},
+            workspace_id=optional_string(resolved_request.get("workspace")),
+            artifact_name=f"Exact Cloud review for {resolution.request_id}",
+            scanner_evidence_extra={"receipt_id": resolution.receipt_id, "request_id": resolution.request_id},
+        )
+    except Exception:
+        post_commit_errors.append("receipt_record_failed")
+        response["receipt"] = {"reason": "receipt_record_failed", "status": "failed"}
+        _audit_post_commit_failure(store, "receipt_record_failed", request_id=resolution.request_id)
     if adapter.harness == "codex":
-        codex_resume = resume_codex(request_id=resolution.request_id, action=resolution.action)
+        try:
+            codex_resume = resume_codex(request_id=resolution.request_id, action=resolution.action)
+        except Exception:
+            post_commit_errors.append("harness_resume_failed")
+            codex_resume = {"reason": "harness_resume_failed", "status": "failed"}
+            _audit_post_commit_failure(store, "harness_resume_failed", request_id=resolution.request_id)
         if codex_resume is not None:
             response["codex_resume"] = codex_resume
-        return 200, response
-    harness_resume = resume_harness_operation(
-        store,
-        request_id=resolution.request_id,
-        action=resolution.action,
-        now=now(),
-    )
-    if harness_resume is not None:
-        response["harness_resume"] = harness_resume
-        response["harnessResume"] = harness_resume
+    else:
+        try:
+            harness_resume = resume_harness_operation(
+                store,
+                request_id=resolution.request_id,
+                action=resolution.action,
+                now=now(),
+            )
+        except Exception:
+            post_commit_errors.append("harness_resume_failed")
+            harness_resume = {"reason": "harness_resume_failed", "status": "failed"}
+            _audit_post_commit_failure(store, "harness_resume_failed", request_id=resolution.request_id)
+        if harness_resume is not None:
+            response["harness_resume"] = harness_resume
+            response["harnessResume"] = harness_resume
+    response["delivery_status"] = "incomplete" if post_commit_errors else "completed"
+    if post_commit_errors:
+        response["post_commit_errors"] = post_commit_errors
     return 200, response
+
+
+def _audit_post_commit_failure(store: GuardStore, code: str, *, request_id: str) -> None:
+    with suppress(Exception):
+        store.add_event(
+            "cloud_review.exact_delivery_failed",
+            {"code": code, "request_id": request_id},
+            datetime.now(timezone.utc).isoformat(),
+        )
 
 
 def _exact_error_response(code: str) -> tuple[int, dict[str, object]]:
