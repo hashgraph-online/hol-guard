@@ -88,7 +88,165 @@ def _append_terminal_review_event(
     )
 
 
+def _continuation_claim_allows_finalization(
+    connection: sqlite3.Connection,
+    *,
+    request_id: str,
+    offer_hash: str,
+    action: str,
+    claim_id: str | None,
+    evidence_id: str,
+) -> bool:
+    claim = connection.execute(
+        """select state, claim_id, evidence_id from guard_continuation_claims
+           where request_id = ? and offer_hash = ? and action = ?""",
+        (request_id, offer_hash, action),
+    ).fetchone()
+    if claim_id is not None:
+        if claim is not None and str(claim["state"]) == "completed":
+            return False
+        if claim is None or str(claim["state"]) != "claimed" or str(claim["claim_id"]) != claim_id:
+            raise RuntimeError("continuation claim ownership changed before finalization")
+    if claim is None or str(claim["state"]) != "completed":
+        return True
+    stored_evidence_id = claim["evidence_id"]
+    return stored_evidence_id is None or str(stored_evidence_id) == evidence_id
+
+
+def _persist_continuation_resume_state(
+    connection: sqlite3.Connection,
+    *,
+    request_id: str,
+    resume_seed: dict[str, object],
+    resume_update: dict[str, object],
+    operation_update: dict[str, object] | None,
+    now: str,
+) -> None:
+    persist_request_resume_seed(
+        connection,
+        request_id=request_id,
+        operation_id=cast(str | None, resume_seed.get("operation_id")),
+        harness=str(resume_seed["harness"]),
+        strategy=str(resume_seed["strategy"]),
+        supported=bool(resume_seed["supported"]),
+        thread_id=cast(str | None, resume_seed.get("thread_id")),
+        now=now,
+    )
+    persist_request_resume_update(
+        connection,
+        request_id=request_id,
+        resolution_action=cast(str | None, resume_update.get("resolution_action")),
+        strategy=cast(str | None, resume_update.get("strategy")),
+        supported=cast(bool | None, resume_update.get("supported")),
+        status=str(resume_update["status"]),
+        reason=cast(str | None, resume_update.get("reason")),
+        message=cast(str | None, resume_update.get("message")),
+        last_error=cast(str | None, resume_update.get("last_error")),
+        attempt_count=int(cast(int, resume_update["attempt_count"])),
+        last_attempt_at=cast(str | None, resume_update.get("last_attempt_at")),
+        sent_at=cast(str | None, resume_update.get("sent_at")),
+        now=now,
+        continuation_contract_version=cast(str | None, resume_update.get("continuation_contract_version")),
+        continuation_capability=cast(str | None, resume_update.get("continuation_capability")),
+        continuation_status=cast(str | None, resume_update.get("continuation_status")),
+        continuation_reason=cast(str | None, resume_update.get("continuation_reason")),
+        continuation_evidence=cast(list[dict[str, object]] | None, resume_update.get("continuation_evidence")),
+        continuation_offer_hash=cast(str | None, resume_update.get("continuation_offer_hash")),
+        continuation_action=cast(str | None, resume_update.get("continuation_action")),
+        continuation_completed_at=cast(str | None, resume_update.get("continuation_completed_at")),
+        continuation_cancelled_at=cast(str | None, resume_update.get("continuation_cancelled_at")),
+    )
+    if operation_update is not None:
+        connection.execute(
+            """update guard_operations set status = ?, metadata_json = ?, updated_at = ?
+               where operation_id = ?""",
+            (
+                str(operation_update["status"]),
+                json.dumps(operation_update["metadata"], sort_keys=True),
+                now,
+                str(operation_update["operation_id"]),
+            ),
+        )
+
+
+def _persist_continuation_completion(
+    connection: sqlite3.Connection,
+    *,
+    request_id: str,
+    offer_hash: str,
+    action: str,
+    evidence_id: str,
+    terminal: bool,
+    resume_update: dict[str, object],
+    events: list[tuple[str, dict[str, object]]],
+    now: str,
+) -> None:
+    connection.execute(
+        """
+        insert into guard_continuation_claims (
+          request_id, offer_hash, action, state, claimed_at, lease_expires_at, claim_id, evidence_id
+        ) values (?, ?, ?, ?, ?, null, null, ?)
+        on conflict(request_id, offer_hash, action) do update set
+          state = excluded.state, claimed_at = excluded.claimed_at, lease_expires_at = null,
+          claim_id = null, evidence_id = excluded.evidence_id
+        """,
+        (request_id, offer_hash, action, "completed" if terminal else "waiting", now, evidence_id),
+    )
+    _persist_continuation_events(
+        connection,
+        request_id=request_id,
+        evidence_id=evidence_id,
+        events=events,
+        now=now,
+    )
+    if terminal:
+        _append_terminal_review_event(
+            connection,
+            request_id=request_id,
+            action=action,
+            evidence_id=evidence_id,
+            resume_update=resume_update,
+            now=now,
+        )
+
+
 class StoreContinuationMixin:
+    def _claim_continuation_approval_authority(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        approval_decision: Mapping[str, object],
+        now: str,
+    ) -> bool:
+        approval_id = approval_decision.get("approval_id")
+        authority_revision = approval_decision.get("_approval_authority_revision")
+        if (
+            not isinstance(approval_id, str)
+            or not approval_id
+            or not isinstance(authority_revision, int)
+            or isinstance(authority_revision, bool)
+            or authority_revision < 0
+            or approval_decision.get("action") != "allow"
+            or self.approval_reuse_claim_disposition(approval_decision) != "consumed"
+        ):
+            return False
+        integrity_key, integrity_key_id = self._policy_integrity_secret_material(create=False)
+        if integrity_key is None or integrity_key_id is None:
+            return False
+        if _approval_authority_revision(connection) != authority_revision:
+            return False
+        return (
+            self._claim_local_once_approval_by_id_locked(
+                connection,
+                approval_id=approval_id,
+                now=now,
+                expected_decision=approval_decision,
+                integrity_key=integrity_key,
+                integrity_key_id=integrity_key_id,
+            )
+            is not None
+        )
+
     def claim_continuation_attempt(
         self,
         *,
@@ -155,124 +313,40 @@ class StoreContinuationMixin:
 
         with self._connect() as connection:
             connection.execute("begin immediate")
-            if approval_decision is not None:
-                approval_id = approval_decision.get("approval_id")
-                authority_revision = approval_decision.get("_approval_authority_revision")
-                if (
-                    not isinstance(approval_id, str)
-                    or not approval_id
-                    or not isinstance(authority_revision, int)
-                    or isinstance(authority_revision, bool)
-                    or authority_revision < 0
-                    or approval_decision.get("action") != "allow"
-                    or self.approval_reuse_claim_disposition(approval_decision) != "consumed"
-                ):
-                    connection.rollback()
-                    return False
-                integrity_key, integrity_key_id = self._policy_integrity_secret_material(create=False)
-                if integrity_key is None or integrity_key_id is None:
-                    connection.rollback()
-                    return False
-                if _approval_authority_revision(connection) != authority_revision:
-                    connection.rollback()
-                    return False
-                claimed = self._claim_local_once_approval_by_id_locked(
-                    connection,
-                    approval_id=approval_id,
-                    now=now,
-                    expected_decision=approval_decision,
-                    integrity_key=integrity_key,
-                    integrity_key_id=integrity_key_id,
-                )
-                if claimed is None:
-                    connection.rollback()
-                    return False
-            claim = connection.execute(
-                """select state, claim_id, evidence_id from guard_continuation_claims
-                   where request_id = ? and offer_hash = ? and action = ?""",
-                (request_id, offer_hash, action),
-            ).fetchone()
-            if claim_id is not None:
-                if claim is not None and str(claim["state"]) == "completed":
-                    connection.rollback()
-                    return False
-                if claim is None or str(claim["state"]) != "claimed" or str(claim["claim_id"]) != claim_id:
-                    raise RuntimeError("continuation claim ownership changed before finalization")
-            if claim is not None and str(claim["state"]) == "completed":
-                stored_evidence_id = claim["evidence_id"]
-                if stored_evidence_id is not None and str(stored_evidence_id) != evidence_id:
-                    connection.rollback()
-                    return False
-            persist_request_resume_seed(
+            if approval_decision is not None and not self._claim_continuation_approval_authority(
                 connection,
-                request_id=request_id,
-                operation_id=cast(str | None, resume_seed.get("operation_id")),
-                harness=str(resume_seed["harness"]),
-                strategy=str(resume_seed["strategy"]),
-                supported=bool(resume_seed["supported"]),
-                thread_id=cast(str | None, resume_seed.get("thread_id")),
+                approval_decision=approval_decision,
                 now=now,
-            )
-            persist_request_resume_update(
+            ):
+                connection.rollback()
+                return False
+            if not _continuation_claim_allows_finalization(
                 connection,
                 request_id=request_id,
-                resolution_action=cast(str | None, resume_update.get("resolution_action")),
-                strategy=cast(str | None, resume_update.get("strategy")),
-                supported=cast(bool | None, resume_update.get("supported")),
-                status=str(resume_update["status"]),
-                reason=cast(str | None, resume_update.get("reason")),
-                message=cast(str | None, resume_update.get("message")),
-                last_error=cast(str | None, resume_update.get("last_error")),
-                attempt_count=int(cast(int, resume_update["attempt_count"])),
-                last_attempt_at=cast(str | None, resume_update.get("last_attempt_at")),
-                sent_at=cast(str | None, resume_update.get("sent_at")),
-                now=now,
-                continuation_contract_version=cast(str | None, resume_update.get("continuation_contract_version")),
-                continuation_capability=cast(str | None, resume_update.get("continuation_capability")),
-                continuation_status=cast(str | None, resume_update.get("continuation_status")),
-                continuation_reason=cast(str | None, resume_update.get("continuation_reason")),
-                continuation_evidence=cast(list[dict[str, object]] | None, resume_update.get("continuation_evidence")),
-                continuation_offer_hash=cast(str | None, resume_update.get("continuation_offer_hash")),
-                continuation_action=cast(str | None, resume_update.get("continuation_action")),
-                continuation_completed_at=cast(str | None, resume_update.get("continuation_completed_at")),
-                continuation_cancelled_at=cast(str | None, resume_update.get("continuation_cancelled_at")),
-            )
-            if operation_update is not None:
-                connection.execute(
-                    """update guard_operations set status = ?, metadata_json = ?, updated_at = ?
-                       where operation_id = ?""",
-                    (
-                        str(operation_update["status"]),
-                        json.dumps(operation_update["metadata"], sort_keys=True),
-                        now,
-                        str(operation_update["operation_id"]),
-                    ),
-                )
-            connection.execute(
-                """
-                insert into guard_continuation_claims (
-                  request_id, offer_hash, action, state, claimed_at, lease_expires_at, claim_id, evidence_id
-                ) values (?, ?, ?, ?, ?, null, null, ?)
-                on conflict(request_id, offer_hash, action) do update set
-                  state = excluded.state, claimed_at = excluded.claimed_at, lease_expires_at = null,
-                  claim_id = null, evidence_id = excluded.evidence_id
-                """,
-                (request_id, offer_hash, action, "completed" if terminal else "waiting", now, evidence_id),
-            )
-            _persist_continuation_events(
-                connection,
-                request_id=request_id,
+                offer_hash=offer_hash,
+                action=action,
+                claim_id=claim_id,
                 evidence_id=evidence_id,
+            ):
+                connection.rollback()
+                return False
+            _persist_continuation_resume_state(
+                connection,
+                request_id=request_id,
+                resume_seed=resume_seed,
+                resume_update=resume_update,
+                operation_update=operation_update,
+                now=now,
+            )
+            _persist_continuation_completion(
+                connection,
+                request_id=request_id,
+                offer_hash=offer_hash,
+                action=action,
+                evidence_id=evidence_id,
+                terminal=terminal,
+                resume_update=resume_update,
                 events=events,
                 now=now,
             )
-            if terminal:
-                _append_terminal_review_event(
-                    connection,
-                    request_id=request_id,
-                    action=action,
-                    evidence_id=evidence_id,
-                    resume_update=resume_update,
-                    now=now,
-                )
         return True
