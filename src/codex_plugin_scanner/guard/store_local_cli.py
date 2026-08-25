@@ -20,6 +20,7 @@ from .runtime.local_cli_commands import (
     local_cli_command_state,
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
+from .store_custom_extension_continuity import _write_local_cli_grant
 from .store_local_cli_schema import ensure_local_cli_schema
 
 
@@ -197,29 +198,14 @@ class StoreLocalCliMixin:
             current_revision = 0 if current is None else _row_int(current[0])
             if current_revision != expected_revision:
                 raise ValueError("local_cli_revision_conflict")
-            next_revision = current_revision + 1
-            if state == "unset":
-                _ = connection.execute("delete from local_cli_grant where cli_id = ?", (identity.cli_id,))
-                _ = connection.execute("delete from local_cli_command_grant where cli_id = ?", (identity.cli_id,))
-            else:
-                _ = connection.execute(
-                    """
-                    insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at)
-                    values (?, ?, ?, ?, ?)
-                    on conflict(cli_id) do update set
-                        identity_hash = excluded.identity_hash,
-                        state = excluded.state,
-                        revision = excluded.revision,
-                        updated_at = excluded.updated_at
-                    """,
-                    (identity.cli_id, identity.identity_hash, state, next_revision, updated_at),
-                )
-            _ = connection.execute(
-                "update local_cli_authority set revision = ? where singleton = 1",
-                (next_revision,),
+            next_revision = _write_local_cli_grant(
+                connection,
+                identity=identity,
+                state=state,
+                current_revision=current_revision,
+                updated_at=updated_at,
+                command_states=command_states,
             )
-            if state != "unset" and command_states:
-                _write_command_states(connection, identity.cli_id, command_states)
         return next_revision
 
     def replace_local_cli_commands(self, cli_id: str, commands: Sequence[LocalCliCommand]) -> None:

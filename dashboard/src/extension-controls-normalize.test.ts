@@ -128,6 +128,39 @@ assert.equal(normalizedCatalog.extensions[0]?.permissions[0]?.family, "git-destr
 assert.deepEqual(normalizedCatalog.extensions[0]?.reference_urls, ["https://git-scm.com/docs"]);
 assert.equal(normalizeEffectiveExtensionControls(effective()).controls[0]?.state, "disabled");
 assert.equal(normalizeEffectiveExtensionControls(effective()).projection?.revision, 7);
+const managedEffective = normalizeEffectiveExtensionControls({
+  ...effective(),
+  managed_controls: {
+    control_set_id: "managed-git-safety",
+    control_set_name: "Managed Git safety",
+    bundle_version: 7,
+    workspace_id: "workspace-managed-controls",
+    authority_mode: "managed-restrictive",
+    catalog_digest: digest,
+    acknowledgement: {
+      extension_authority_revision: 3,
+      policy_revision: 7,
+      effective_projection_digest: "b".repeat(64),
+      status: "applied",
+    },
+  },
+});
+assert.equal(managedEffective.managed_controls?.control_set_name, "Managed Git safety");
+assert.equal(managedEffective.managed_controls?.authority_mode, "managed-restrictive");
+assert.equal(managedEffective.managed_controls?.acknowledgement.extension_authority_revision, 3);
+const targetOnlyManaged = normalizeEffectiveExtensionControls({
+  ...effective(),
+  managed_controls: {
+    bundle_version: 8,
+    workspace_id: "workspace-target-only",
+    catalog_digest: digest,
+    acknowledgement: {
+      extension_authority_revision: 4,
+      status: "applied",
+    },
+  },
+});
+assert.equal(targetOnlyManaged.managed_controls?.authority_mode, undefined);
 const acknowledged = effective();
 acknowledged.health = "degraded-acknowledged";
 assert.equal(normalizeEffectiveExtensionControls(acknowledged).health, "degraded-acknowledged");

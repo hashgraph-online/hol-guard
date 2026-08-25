@@ -251,6 +251,7 @@ def build_managed_controls_runtime_posture(
     catalog_digest: str,
     extension_authority_revision: int | None = None,
     effective_projection_digest: str | None = None,
+    capabilities: Iterable[str] = MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
 ) -> ManagedControlsRuntimePostureWire:
     """Build bounded runtime posture for the existing runtime-session sync channel."""
 
@@ -260,10 +261,13 @@ def build_managed_controls_runtime_posture(
         raise ValueError("extension_authority_revision cannot be negative")
     if effective_projection_digest is not None and _SHA256.fullmatch(effective_projection_digest) is None:
         raise ValueError("effective_projection_digest must be a lowercase SHA-256 digest")
+    requested = frozenset(capabilities)
     return {
         "extensionCatalogDigest": catalog_digest,
         "extensionControlSchemaVersions": [CONTROL_SCHEMA_VERSION],
         "extensionAuthorityRevision": extension_authority_revision,
         "effectiveProjectionDigest": effective_projection_digest,
-        "managedControlsCapabilities": list(MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
+        "managedControlsCapabilities": [
+            capability for capability in MANAGED_CONTROLS_RUNTIME_CAPABILITIES if capability in requested
+        ],
     }

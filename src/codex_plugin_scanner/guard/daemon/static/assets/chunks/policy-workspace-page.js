@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, z as HiMiniXMark, P as Badge, ax as Tag, b as HiMiniCommandLine, M as HiMiniExclamationTriangle, bF as scopeLabel, i as harnessDisplayName, A as ActionButton, aS as guardAwareHref, w as formatRelativeTime$1, bG as HiMiniDocumentText, o as HiMiniCheckCircle, bH as HiMiniCloudArrowUp, bI as HiMiniCheck, bJ as HiMiniCodeBracket, bK as HiMiniClipboardDocument, bL as HiMiniUsers, bi as HiMiniBeaker, aL as HiMiniFolder, a8 as HiMiniLockClosed, t as HiMiniShieldCheck, aD as HiMiniInformationCircle, bq as HiMiniCloudArrowDown, bp as HiMiniArrowTopRightOnSquare, bM as HiMiniIdentification, bN as policyActionLabel, r as reactExports, bO as createCloudExceptionRequest, bP as HiMiniArrowRight, m as EmptyState, au as HiMiniMagnifyingGlass, B as HiMiniChevronUp, C as HiMiniChevronDown, c as HiMiniChevronRight, bQ as HiMiniPuzzlePiece, aI as HiMiniGlobeAlt, bg as HiMiniClock, bR as fetchCloudExceptions, bS as fetchCloudExceptionRequests, bT as downloadBlob, bU as PolicyStatField, bV as PaginationControls, aR as HiMiniNoSymbol, aJ as HiMiniCube, aC as HiMiniArrowPath, I as HiMiniCloud, aa as HiMiniAdjustmentsHorizontal, bW as HiMiniArrowDownTray, bX as HiMiniQueueList, at as WorkspacePageHeader, bD as lazyWorkspace, bE as __vitePreload } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, z as HiMiniXMark, P as Badge, ax as Tag, b as HiMiniCommandLine, M as HiMiniExclamationTriangle, bF as scopeLabel, i as harnessDisplayName, A as ActionButton, aT as guardAwareHref, w as formatRelativeTime$1, bG as HiMiniDocumentText, o as HiMiniCheckCircle, bH as HiMiniCloudArrowUp, bI as HiMiniCheck, bJ as HiMiniCodeBracket, bK as HiMiniClipboardDocument, bL as HiMiniUsers, bj as HiMiniBeaker, aL as HiMiniFolder, a8 as HiMiniLockClosed, t as HiMiniShieldCheck, aD as HiMiniInformationCircle, bq as HiMiniCloudArrowDown, aS as HiMiniArrowTopRightOnSquare, bM as HiMiniIdentification, bN as policyActionLabel, r as reactExports, bO as createCloudExceptionRequest, bP as HiMiniArrowRight, m as EmptyState, au as HiMiniMagnifyingGlass, B as HiMiniChevronUp, C as HiMiniChevronDown, c as HiMiniChevronRight, bQ as HiMiniPuzzlePiece, aI as HiMiniGlobeAlt, bh as HiMiniClock, bR as fetchCloudExceptions, bS as fetchCloudExceptionRequests, bT as downloadBlob, bU as PolicyStatField, bV as PaginationControls, aR as HiMiniNoSymbol, aJ as HiMiniCube, aC as HiMiniArrowPath, I as HiMiniCloud, aa as HiMiniAdjustmentsHorizontal, bW as HiMiniArrowDownTray, bX as HiMiniQueueList, at as WorkspacePageHeader, bD as lazyWorkspace, bE as __vitePreload } from "../guard-dashboard.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
   if (!value || !value.trim()) {
@@ -1693,6 +1693,31 @@ function CloudExceptionSubmittedStep({
     ] })
   ] });
 }
+const CANONICAL_EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const CANONICAL_PERMISSION_ID = /^(command\.[a-z0-9]+(?:[.-][a-z0-9]+)*)\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const CLOUD_MANAGED_SOURCES = /* @__PURE__ */ new Set(["cloud-sync", "team-policy", "policy-bundle"]);
+function isCloudManagedPolicySource(source) {
+  return CLOUD_MANAGED_SOURCES.has(source);
+}
+function resolvePolicyRowSourceLabel(policy) {
+  if (policy.source === "trusted-local-tool") return "Trusted local tool";
+  if (!isCloudManagedPolicySource(policy.source)) return "Remembered on this device";
+  if (policy.authority_mode === "managed-restrictive") {
+    const workspace = policy.cloud_workspace_label?.trim() || policy.workspace_label?.trim();
+    return workspace ? `Managed by ${workspace}` : "Managed by workspace";
+  }
+  return "Synced contextual rule";
+}
+function resolvePolicyGoverningExtensionId(policy) {
+  const explicit = policy.extension_id?.trim().toLowerCase();
+  if (explicit && CANONICAL_EXTENSION_ID.test(explicit)) return explicit;
+  const permission = policy.permission_id?.trim().toLowerCase();
+  const permissionMatch = permission?.match(CANONICAL_PERMISSION_ID);
+  if (permissionMatch?.[1]) return permissionMatch[1];
+  const artifact = policy.artifact_id?.trim().toLowerCase();
+  if (artifact && CANONICAL_EXTENSION_ID.test(artifact)) return artifact;
+  return artifact?.match(CANONICAL_PERMISSION_ID)?.[1] ?? null;
+}
 const MATCHER_FAMILY_LABELS = {
   "package-request": "Package install",
   "tool-action": "Shell or tool command",
@@ -1738,19 +1763,7 @@ function formatPolicyScopePath(path) {
   return `…/${segments.slice(-2).join("/")}`;
 }
 function isCloudManagedPolicy(source) {
-  return source === "cloud-sync" || source === "team-policy" || source === "policy-bundle";
-}
-function resolvePolicySourceLabel(source) {
-  if (isCloudManagedPolicy(source)) {
-    return "Guard Cloud";
-  }
-  if (source === "trusted-local-tool") {
-    return "Trusted local tool";
-  }
-  if (source === "manual" || source === "local") {
-    return "Local";
-  }
-  return source.replace(/_/g, " ");
+  return isCloudManagedPolicySource(source);
 }
 function policyTargetLabel(policy) {
   return policy.artifact_id ?? policy.publisher ?? policy.workspace ?? "Global";
@@ -1997,9 +2010,6 @@ function resolvePolicyRowTitle(policy, display) {
     return headline.slice(verb.length).trim() || headline;
   }
   return headline;
-}
-function resolvePolicyRowSourceLabel(policy) {
-  return resolvePolicySourceLabel(policy.source);
 }
 function sortPolicyDecisions(policies, sort) {
   if (!sort) {
@@ -3228,6 +3238,17 @@ function EvidenceTableRow({ children, onClick, isSelected }) {
 function EvidenceTableCell({ children, className = "" }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: `px-3 py-2.5 ${className}`, children });
 }
+function GoverningExtensionLink(props) {
+  const extensionId = resolvePolicyGoverningExtensionId(props.policy);
+  if (!extensionId) return null;
+  const href = `/extensions/${encodeURIComponent(extensionId)}`;
+  const handleClick = (event) => {
+    if (!props.onNavigate) return;
+    event.preventDefault();
+    props.onNavigate(href);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: guardAwareHref(href), onClick: handleClick, className: "mt-2 inline-flex text-xs font-semibold text-brand-blue hover:underline", children: "Open governing Extension" });
+}
 const PAGE_SIZE = 10;
 const TABLE_MIN_WIDTH_CLASS = "min-w-[1040px]";
 function PolicyActionBadge({ action }) {
@@ -3358,9 +3379,10 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
           " ",
           harnessDisplayName(policy.harness)
         ] })
-      ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(GoverningExtensionLink, { policy, onNavigate })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[88px] whitespace-nowrap lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark", children: resolvePolicyRowSourceLabel(policy) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[88px] whitespace-nowrap lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudManaged ? "slate" : "blue", children: resolvePolicyRowSourceLabel(policy) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[104px] whitespace-nowrap lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-blue", children: scopeTag }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[96px] whitespace-nowrap lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-blue", children: harnessDisplayName(policy.harness) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableCell, { className: "hidden w-[104px] whitespace-nowrap text-xs text-slate-500 lg:table-cell", children: policy.updated_at ? formatRelativeTime$1(policy.updated_at) : "—" }),
@@ -3604,9 +3626,9 @@ function PolicyRememberedCloudRules({
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     GroupedPolicySection,
     {
-      title: "From Guard Cloud",
-      badge: "Team policy rules",
-      description: "Managed by your team in Guard Cloud. These rules are read-only locally.",
+      title: "Synced contextual rules",
+      badge: "Guard Cloud",
+      description: "Shared contextual rules compose after Extension posture. These rules are read-only locally.",
       policies,
       cloudControlsUrl,
       emptyTitle: "No Guard Cloud rules synced",
@@ -3673,10 +3695,24 @@ const REVIEW_SCOPE_LADDER = [
 ];
 function PolicyRememberedRulesRightRail({
   snapshot,
-  onOpenCloudExceptions
+  onOpenCloudExceptions,
+  decisionOrder
 }) {
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-4 lg:sticky lg:top-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "How Guard decides" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: "Extension posture is evaluated before contextual rules. This page never duplicates the Extension editor." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-3 space-y-2 text-xs leading-5 text-brand-dark/75", children: decisionOrder.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
+          index + 1,
+          "."
+        ] }),
+        " ",
+        step
+      ] }, step)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: "/extensions", className: "mt-3 inline-flex text-sm font-semibold text-brand-blue hover:underline", children: "Open Extensions" })
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Approvals are still fast" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: "When you approve in Inbox, you pick how broadly Guard should remember the decision." }),
@@ -3696,7 +3732,7 @@ function PolicyRememberedRulesRightRail({
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-5 w-5", "aria-hidden": "true" }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Cloud exceptions" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-slate-600", children: "Governed risk acceptances override team policy when approved in Guard Cloud. They sync as signed bundle entries on this device." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-slate-600", children: "Bounded exceptions apply to contextual Cloud rules. They never weaken a managed-restrictive Extension block, and sync as signed bundle entries on this device." })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -3715,6 +3751,28 @@ function PolicyRememberedRulesRightRail({
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: "Local remembered rules are for your machine only. Cloud exceptions and team policy sync from Guard Cloud." })
   ] });
+}
+function buildRulesExceptionsView(items) {
+  const links = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    if (!item.extensionId) continue;
+    links.set(item.extensionId, {
+      label: `Open ${item.extensionId}`,
+      href: `/extensions/${encodeURIComponent(item.extensionId)}`
+    });
+  }
+  return {
+    title: "Rules & exceptions",
+    description: "Review remembered decisions, contextual Cloud rules, and exceptions. Extension permissions stay in Protection Center.",
+    items,
+    decisionOrder: [
+      "Hard safety floors and Emergency Lockdown",
+      "Extension and permission posture",
+      "Contextual rules and remembered decisions"
+    ],
+    governingExtensionLinks: [...links.values()],
+    includesExtensionEditor: false
+  };
 }
 function PolicyRememberedRulesTab({
   policies,
@@ -3802,6 +3860,16 @@ function PolicyRememberedRulesTab({
     [policies]
   );
   const familyCounts = reactExports.useMemo(() => groupPoliciesByFamily(rememberedRules), [rememberedRules]);
+  const rulesView = reactExports.useMemo(() => buildRulesExceptionsView(rememberedRules.map((policy, index) => {
+    const resolvedAuthority = resolvePolicyRowSourceLabel(policy);
+    const authority = resolvedAuthority === "Trusted local tool" ? "Remembered on this device" : resolvedAuthority;
+    return {
+      id: String(policy.decision_id ?? `${policy.source}-${index}`),
+      title: resolvePolicyDisplay(policy).headline,
+      authority,
+      extensionId: resolvePolicyGoverningExtensionId(policy) ?? void 0
+    };
+  })), [rememberedRules]);
   const handleExportCsv = reactExports.useCallback(() => {
     downloadPolicies("csv", rememberedRules);
   }, [rememberedRules]);
@@ -3823,10 +3891,10 @@ function PolicyRememberedRulesTab({
               {
                 ref: searchInputRef,
                 type: "search",
-                placeholder: "Search by app, action, or reason…",
+                placeholder: "Search remembered rules by app, action, or reason…",
                 value: searchQuery,
                 onChange: handleSearchChange,
-                "aria-label": "Search policies",
+                "aria-label": "Search remembered rules",
                 className: "w-full bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
               }
             ),
@@ -3911,7 +3979,14 @@ function PolicyRememberedRulesTab({
         }
       )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRememberedRulesRightRail, { onOpenCloudExceptions, snapshot })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PolicyRememberedRulesRightRail,
+      {
+        onOpenCloudExceptions,
+        snapshot,
+        decisionOrder: rulesView.decisionOrder
+      }
+    )
   ] });
 }
 const POLICY_PANEL_CARD_CLASS = "rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_rgba(15,23,42,0.05)]";
@@ -4105,7 +4180,7 @@ function PolicyUnderlineTabBar({ activeView, onViewChange }) {
     {
       className: "flex flex-nowrap gap-5 overflow-x-auto border-b border-slate-200 sm:gap-6",
       role: "tablist",
-      "aria-label": "Policy sections",
+      "aria-label": "Rules and exceptions sections",
       children: POLICY_VIEWS.map((view) => {
         const selected = activeView === view;
         return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4204,7 +4279,7 @@ function PolicyWorkspacePage(props) {
       {
         eyebrow: "Rules & exceptions",
         title: "Remembered decisions and exceptions",
-        description: "Review decisions remembered on this device, contextual rules synced from Guard Cloud, exceptions, and the order Guard uses to decide. Configure tools and capability posture in Extensions.",
+        description: "Review remembered decisions, contextual rules synced from Guard Cloud, exceptions, and decision order. Configure tools and capability posture in Extensions.",
         actions: activeView === "exceptions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           PolicyExceptionsToolbar,
           {

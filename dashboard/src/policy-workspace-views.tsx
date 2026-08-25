@@ -32,15 +32,14 @@ import {
   resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
   resolvePolicyRowFolder,
-  resolvePolicyRowSourceLabel,
   resolvePolicyRowTitle,
   sortPolicyDecisions,
   type PolicySortKey,
   type PolicySortState,
 } from "./policy-workspace-helpers";
-
+import { resolvePolicyRowSourceLabel } from "./policy-managed-authority";
+import { GoverningExtensionLink } from "./policy-governing-extension-link";
 export type { PolicySortKey, PolicySortState };
-
 const PAGE_SIZE = 10;
 const TABLE_MIN_WIDTH_CLASS = "min-w-[1040px]";
 
@@ -219,10 +218,11 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
             <span className="font-medium text-slate-700">App:</span> {harnessDisplayName(policy.harness)}
           </p>
         </div>
+        <GoverningExtensionLink policy={policy} onNavigate={onNavigate} />
       </EvidenceTableCell>
 
       <EvidenceTableCell className="hidden w-[88px] whitespace-nowrap lg:table-cell">
-        <span className="text-sm text-brand-dark">{resolvePolicyRowSourceLabel(policy)}</span>
+        <Tag tone={cloudManaged ? "slate" : "blue"}>{resolvePolicyRowSourceLabel(policy)}</Tag>
       </EvidenceTableCell>
 
       <EvidenceTableCell className="hidden w-[104px] whitespace-nowrap lg:table-cell">

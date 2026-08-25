@@ -101,12 +101,12 @@ function effective(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function mount(page: Page, options: { malformedCatalog?: boolean; effective?: Record<string, unknown> } = {}) {
+async function mount(page: Page, options: { malformedCatalog?: boolean; effective?: Record<string, unknown>; runtime?: unknown } = {}) {
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = {};
     if (path.endsWith("/initialize")) body = { auth_token: "fixture-session-token" };
-    else if (path.endsWith("/runtime")) body = freeStateSnapshot;
+    else if (path.endsWith("/runtime")) body = options.runtime ?? freeStateSnapshot;
     else if (path.endsWith("/requests")) body = { items: [], next_cursor: null, total_pending_count: 0, total_count: 0, status: "pending" };
     else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
@@ -124,39 +124,229 @@ async function initialize(page: Page) {
   await expect(page.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible();
 }
 
-test("extension cards navigate without nesting or conflating capability policy", async ({ page }) => {
+test("extension cards navigate through one canonical detail action", async ({ page }) => {
   await mount(page);
   await initialize(page);
-  const card = page.getByRole("article").filter({ hasText: "Git" }).first();
-  await expect(card.getByRole("button", { name: "View Git details" })).toBeVisible();
-  await card.getByRole("button", { name: "Review capability policy" }).click();
-  await expect(page.getByRole("dialog", { name: /Git capability/ })).toBeVisible();
-  await expect(page).toHaveURL(/\/extensions(?:\?|$)/);
-  await page.getByRole("button", { name: "Close review" }).click();
-  await card.getByRole("button", { name: "View Git details" }).press("Enter");
+  const card = page.getByRole("button", { name: /^Git/ });
+  await expect(card).toBeVisible();
+  await card.press("Enter");
   await expect(page).toHaveURL(/\/extensions\/command\.git$/);
-  await expect(page.getByTestId("extension-control-center-detail")).toBeVisible();
+  await expect(page.getByTestId("protection-module-detail")).toBeVisible();
   expect(await page.evaluate(() => (window as typeof window & { __ecc_xss?: boolean }).__ecc_xss ?? false)).toBe(false);
 });
 
-test("alias direct loads canonicalize, preserve only safe query state, and deep-link rules", async ({ page }) => {
+test("canonical Extension detail exposes managed authority without gating local safety", async ({ page }) => {
+  await mount(page, {
+    runtime: {
+      ...freeStateSnapshot,
+      latest_receipts: [{
+        receipt_id: "receipt-git-blocked",
+        harness: "codex",
+        artifact_id: "artifact-git",
+        artifact_hash: "c".repeat(64),
+        policy_decision: "block",
+        capabilities_summary: "Git command protection",
+        changed_capabilities: [],
+        provenance_summary: "Guard decision",
+        user_override: null,
+        source_scope: null,
+        timestamp: "2026-08-25T12:00:00Z",
+        action_envelope_json: {
+          schema_version: 1,
+          action_id: "action-git-blocked",
+          harness: "codex",
+          event_name: "tool.execute",
+          action_type: "shell_command",
+          workspace: null,
+          workspace_hash: null,
+          tool_name: "git",
+          command: null,
+          prompt_excerpt: null,
+          target_paths: [],
+          network_hosts: [],
+          mcp_server: null,
+          mcp_tool: null,
+          package_manager: null,
+          package_name: null,
+          script_name: null,
+          raw_payload_redacted: {},
+        },
+      }],
+    },
+    effective: effective({
+      layers: [{
+        schema_version: "1.0.0",
+        kind: "signed-cloud",
+        catalog_digest: DIGEST,
+        global_lockdown: false,
+        controls: [{
+          target_kind: "permission",
+          target_id: "command.git.permission.hard-reset",
+          state: "enabled",
+        }],
+      }, {
+        schema_version: "1.0.0",
+        kind: "local-admin",
+        catalog_digest: DIGEST,
+        global_lockdown: false,
+        controls: [{
+          target_kind: "permission",
+          target_id: "command.git.permission.hard-reset",
+          state: "disabled",
+        }],
+      }],
+      projection: {
+        schema_version: "guard.daemon.extension-control-projection.v1",
+        revision: 7,
+        catalog_digest: DIGEST,
+        health: "protected",
+        extensions: [{
+          extension_id: "command.git",
+          effective_state: "allowed",
+          local_state: "inherited",
+          managed_state: "inherited",
+          required: false,
+          reason_codes: [],
+        }],
+        permissions: [{
+          permission_id: "command.git.permission.hard-reset",
+          extension_id: "command.git",
+          effective_state: "blocked",
+          local_state: "disabled",
+          managed_state: "enabled",
+          configurable: true,
+          fixed_reason: null,
+          reason_codes: ["control.disabled-permission"],
+        }],
+      },
+      managed_controls: {
+        control_set_id: "managed-git-safety",
+        control_set_name: "Managed Git safety",
+        bundle_version: 7,
+        workspace_id: "workspace-managed-controls",
+        authority_mode: "managed-restrictive",
+        catalog_digest: DIGEST,
+        acknowledgement: {
+          extension_authority_revision: 3,
+          effective_projection_digest: "b".repeat(64),
+          status: "applied",
+        },
+      },
+    }),
+  });
+  await initialize(page);
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await expect(page.getByTestId("protection-module-detail")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("protection-module-detail").getByText("Set on this device").first()).toBeVisible();
+  await expect(page.getByText("Blocked", { exact: true })).toBeVisible();
+  await expect(page.getByText("Managed by workspace-managed-controls · Set on this device")).toBeVisible();
+  await page.getByRole("tab", { name: "Overview" }).focus();
+  await page.getByRole("tab", { name: "Overview" }).press("End");
+  await expect(page.getByRole("tab", { name: "Technical details" })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Technical details" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Technical details" }).press("Home");
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Overview" }).press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Permissions" })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Permissions" }).press("ArrowLeft");
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Activity" }).click();
+  await expect(page.getByRole("heading", { name: "Recent Extension decisions" })).toBeVisible();
+  await expect(page.getByText("Blocked · codex")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open receipt" })).toHaveAttribute("href", /selected=receipt-git-blocked/);
+  await page.getByRole("tab", { name: "Managed controls" }).click();
+  await expect(page).toHaveURL(/tab=managed-controls/);
+  await expect(page.getByRole("heading", { name: "Active managed control" })).toBeVisible();
+  await expect(page.getByText("Managed Git safety")).toBeVisible();
+  await expect(page.getByText(/cannot weaken this workspace restriction/)).toBeVisible();
+  await expect(page.getByText(/Local protection and local tightening remain available/)).toBeVisible();
+});
+
+test("dirty permission drafts require confirmation before click or keyboard tab changes", async ({ page }) => {
+  await mount(page);
+  await initialize(page);
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await page.getByRole("radio", { name: "Block" }).click();
+  await expect(page.getByText("1 unsaved setting change.")).toBeVisible();
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe("Discard your unreviewed protection setting changes?");
+    await dialog.dismiss();
+  });
+  await page.getByRole("tab", { name: "Activity" }).click();
+  await expect(page.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("radio", { name: "Block" })).toHaveAttribute("aria-checked", "true");
+
+  await page.getByRole("tab", { name: "Permissions" }).focus();
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toBe("Discard your unreviewed protection setting changes?");
+    await dialog.dismiss();
+  });
+  await page.getByRole("tab", { name: "Permissions" }).press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Permissions" })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("radio", { name: "Block" })).toHaveAttribute("aria-checked", "true");
+
+  page.once("dialog", async (dialog) => {
+    await dialog.accept();
+  });
+  await page.getByRole("tab", { name: "Activity" }).click();
+  await expect(page.getByRole("tab", { name: "Activity" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("managed controls starts the supported Guard Cloud connection flow", async ({ page }) => {
+  let connectStarts = 0;
+  await mount(page, {
+    runtime: { ...freeStateSnapshot, dashboard_url: "", connect_url: "" },
+  });
+  await page.route("**/v1/cloud/connect", async (route) => {
+    connectStarts += 1;
+    expect(route.request().method()).toBe("POST");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        connect_required: true,
+        connect_flow: {
+          state: "running",
+          title: "Connect Guard Cloud",
+          detail: "Complete sign-in.",
+          action_label: "Open sign-in",
+          connect_url: "https://example.test/connect",
+          authorize_url: "https://example.test/authorize",
+          browser_opened: false,
+          request_id: "request-1",
+          poll_after_ms: 1500,
+        },
+      }),
+    });
+  });
+  await initialize(page);
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await page.getByRole("tab", { name: "Managed controls" }).click();
+  await page.getByRole("button", { name: "Connect Guard Cloud" }).click();
+  await expect(page.getByRole("link", { name: "Open Guard Cloud sign-in" })).toHaveAttribute(
+    "href",
+    "https://example.test/authorize",
+  );
+  await expect(page.getByRole("status")).toContainText("Complete sign-in");
+  expect(connectStarts).toBe(1);
+});
+
+test("alias direct loads canonicalize and preserve only supported detail state", async ({ page }) => {
   await mount(page);
   await initialize(page);
   await page.goto("/extensions/command.scm?tab=commands&risk=high&sort=risk&guard-token=should-disappear#private-fragment");
-  await expect(page).toHaveURL(/\/extensions\/command\.git\?tab=commands&risk=high&sort=risk$/);
-  expect(page.url()).not.toContain("guard-token");
+  await expect(page).toHaveURL(/\/extensions\/command\.git\?tab=commands&risk=high&sort=risk#/);
+  expect(new URL(page.url()).searchParams.has("guard-token")).toBe(false);
   expect(page.url()).not.toContain("private-fragment");
-  await expect(page.getByRole("tab", { name: "Commands & rules" })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "Inspect rule Hard reset" }).click();
-  await expect(page.getByRole("dialog", { name: "Hard reset" })).toBeVisible();
-  await expect(page).toHaveURL(/rule=command\.git\.hard-reset/);
-  await page.getByRole("button", { name: "Test this rule" }).click();
-  await expect(page.getByRole("tab", { name: "Test Lab" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("Selected rule:")).toBeVisible();
-  await page.goBack();
-  await expect(page.getByRole("dialog", { name: "Hard reset" })).toBeVisible();
-  await page.getByRole("button", { name: "Close rule details" }).press("Escape");
-  await expect(page.getByRole("dialog", { name: "Hard reset" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("heading", { name: "Protection settings" })).toBeVisible();
 });
 
 test("unknown and encoded invalid extension IDs fail closed", async ({ page }) => {
@@ -172,10 +362,10 @@ test("global lockdown and narrow viewport remain explicit and usable", async ({ 
   await mount(page, { effective: effective({ global_lockdown: true }) });
   await page.setViewportSize({ width: 320, height: 720 });
   await initialize(page);
-  await page.getByRole("button", { name: "View Git details" }).click();
-  await expect(page.getByText("Global lockdown controls this capability.")).toBeVisible();
-  await page.getByRole("tab", { name: "Commands & rules" }).click();
-  await expect(page.getByText("Lockdown").first()).toBeVisible();
+  await page.getByRole("button", { name: /^Git/ }).click();
+  await expect(page.getByText(/Emergency Lockdown currently controls this module/)).toBeVisible();
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await expect(page.getByText(/Emergency Lockdown remains dominant/)).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });

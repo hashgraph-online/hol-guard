@@ -1,4 +1,4 @@
-import { lazy, type ComponentType, type LazyExoticComponent } from "react";
+import { lazy, type FunctionComponent, type LazyExoticComponent } from "react";
 
 export const CHUNK_RELOAD_STORAGE_KEY = "hol-guard-dashboard-chunk-reload";
 export const CHUNK_RELOAD_DELAY_MS = 400;
@@ -98,12 +98,12 @@ export async function loadWorkspaceModule<T>(
   }
 }
 
-export function lazyWorkspace<T extends ComponentType<unknown>>(
+export function lazyWorkspace<T extends FunctionComponent<never>>(
   loader: WorkspaceModuleLoader<{ default: T }>,
-): LazyExoticComponent<T> {
-  return lazy(() =>
-    loadWorkspaceModule(loader, {
-      storage: browserSessionStorage(),
-    }),
-  );
+): LazyExoticComponent<FunctionComponent<Parameters<T>[0]>> {
+  const load = async (): Promise<{ default: FunctionComponent<Parameters<T>[0]> }> => {
+    const module = await loadWorkspaceModule(loader, { storage: browserSessionStorage() });
+    return { default: module.default };
+  };
+  return lazy(load);
 }

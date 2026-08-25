@@ -6,8 +6,8 @@ Each numbered line is one operation task. Completion requires the exact path in 
 
 ## Progress
 
-- Completed batches: 3/4
-- Completed operation tasks: 300/400
+- Completed batches: 4/4
+- Completed operation tasks: 400/400
 
 ## Batch 1: AWS core and high-frequency services
 
@@ -320,103 +320,103 @@ Each numbered line is one operation task. Completion requires the exact path in 
 
 ## Batch 4: AWS long-tail, AI, backup, and account services
 
-- [ ] 301. `aws accessanalyzer delete-analyzer`
-- [ ] 302. `aws accessanalyzer delete-archive-rule`
-- [ ] 303. `aws accessanalyzer delete-service-linked-analyzer`
-- [ ] 304. `aws account delete-alternate-contact`
-- [ ] 305. `aws acm-pca delete-permission`
-- [ ] 306. `aws acm-pca delete-policy`
-- [ ] 307. `aws amp delete-alert-manager-definition`
-- [ ] 308. `aws amp delete-anomaly-detector`
-- [ ] 309. `aws amp delete-logging-configuration`
-- [ ] 310. `aws amp delete-query-logging-configuration`
-- [ ] 311. `aws amp delete-resource-policy`
-- [ ] 312. `aws amp delete-rule-groups-namespace`
-- [ ] 313. `aws amp delete-scraper`
-- [ ] 314. `aws amp delete-scraper-logging-configuration`
-- [ ] 315. `aws amp delete-workspace`
-- [ ] 316. `aws appconfig delete-extension`
-- [ ] 317. `aws appconfig delete-extension-association`
-- [ ] 318. `aws appconfig delete-hosted-configuration-version`
-- [ ] 319. `aws appflow delete-connector-profile`
-- [ ] 320. `aws appflow delete-flow`
-- [ ] 321. `aws apprunner delete-auto-scaling-configuration`
-- [ ] 322. `aws apprunner delete-connection`
-- [ ] 323. `aws apprunner delete-observability-configuration`
-- [ ] 324. `aws apprunner delete-service`
-- [ ] 325. `aws apprunner delete-vpc-connector`
-- [ ] 326. `aws apprunner delete-vpc-ingress-connection`
-- [ ] 327. `aws appstream delete-app-block`
-- [ ] 328. `aws appstream delete-app-block-builder`
-- [ ] 329. `aws appstream delete-application`
-- [ ] 330. `aws appstream delete-directory-config`
-- [ ] 331. `aws appstream delete-entitlement`
-- [ ] 332. `aws appstream delete-fleet`
-- [ ] 333. `aws appstream delete-image`
-- [ ] 334. `aws appstream delete-image-builder`
-- [ ] 335. `aws appstream delete-image-permissions`
-- [ ] 336. `aws appstream delete-stack`
-- [ ] 337. `aws appstream delete-theme-for-stack`
-- [ ] 338. `aws appstream delete-usage-report-subscription`
-- [ ] 339. `aws appstream delete-user`
-- [ ] 340. `aws athena delete-capacity-reservation`
-- [ ] 341. `aws athena delete-data-catalog`
-- [ ] 342. `aws athena delete-named-query`
-- [ ] 343. `aws athena delete-notebook`
-- [ ] 344. `aws athena delete-prepared-statement`
-- [ ] 345. `aws athena delete-work-group`
-- [ ] 346. `aws athena terminate-session`
-- [ ] 347. `aws auditmanager delete-assessment`
-- [ ] 348. `aws auditmanager delete-assessment-framework`
-- [ ] 349. `aws auditmanager delete-assessment-framework-share`
-- [ ] 350. `aws auditmanager delete-assessment-report`
-- [ ] 351. `aws auditmanager delete-control`
-- [ ] 352. `aws autoscaling-plans delete-scaling-plan`
-- [ ] 353. `aws backup-gateway delete-gateway`
-- [ ] 354. `aws backup-gateway delete-hypervisor`
-- [ ] 355. `aws batch delete-consumable-resource`
-- [ ] 356. `aws batch delete-quota-share`
-- [ ] 357. `aws batch delete-service-environment`
-- [ ] 358. `aws batch terminate-job`
-- [ ] 359. `aws batch terminate-service-job`
-- [ ] 360. `aws bedrock delete-custom-model`
-- [ ] 361. `aws bedrock delete-custom-model-deployment`
-- [ ] 362. `aws bedrock delete-enforced-guardrail-configuration`
-- [ ] 363. `aws bedrock delete-foundation-model-agreement`
-- [ ] 364. `aws bedrock delete-guardrail`
-- [ ] 365. `aws bedrock delete-imported-model`
-- [ ] 366. `aws bedrock delete-inference-profile`
-- [ ] 367. `aws bedrock delete-marketplace-model-endpoint`
-- [ ] 368. `aws bedrock delete-model-invocation-logging-configuration`
-- [ ] 369. `aws bedrock delete-prompt-router`
-- [ ] 370. `aws bedrock delete-provisioned-model-throughput`
-- [ ] 371. `aws bedrock delete-resource-policy`
-- [ ] 372. `aws bedrock-agent delete-agent`
-- [ ] 373. `aws bedrock-agent delete-agent-action-group`
-- [ ] 374. `aws bedrock-agent delete-agent-alias`
-- [ ] 375. `aws bedrock-agent delete-agent-version`
-- [ ] 376. `aws bedrock-agent delete-data-source`
-- [ ] 377. `aws bedrock-agent delete-flow`
-- [ ] 378. `aws bedrock-agent delete-flow-alias`
-- [ ] 379. `aws bedrock-agent delete-flow-version`
-- [ ] 380. `aws bedrock-agent delete-knowledge-base`
-- [ ] 381. `aws bedrock-agent delete-knowledge-base-documents`
-- [ ] 382. `aws bedrock-agent delete-prompt`
-- [ ] 383. `aws budgets delete-budget`
-- [ ] 384. `aws budgets delete-budget-action`
-- [ ] 385. `aws budgets delete-notification`
-- [ ] 386. `aws budgets delete-subscriber`
-- [ ] 387. `aws ce delete-anomaly-monitor`
-- [ ] 388. `aws ce delete-anomaly-subscription`
-- [ ] 389. `aws ce delete-cost-category-definition`
-- [ ] 390. `aws chime delete-account`
-- [ ] 391. `aws chime delete-events-configuration`
-- [ ] 392. `aws chime delete-phone-number`
-- [ ] 393. `aws chime delete-room`
-- [ ] 394. `aws chime delete-room-membership`
-- [ ] 395. `aws cloud9 delete-environment`
-- [ ] 396. `aws cloud9 delete-environment-membership`
-- [ ] 397. `aws cloudcontrol delete-resource`
-- [ ] 398. `aws cloudhsmv2 delete-backup`
-- [ ] 399. `aws cloudhsmv2 delete-hsm`
-- [ ] 400. `aws cloudhsmv2 delete-resource-policy`
+- [x] 301. `aws accessanalyzer delete-analyzer`
+- [x] 302. `aws accessanalyzer delete-archive-rule`
+- [x] 303. `aws accessanalyzer delete-service-linked-analyzer`
+- [x] 304. `aws account delete-alternate-contact`
+- [x] 305. `aws acm-pca delete-permission`
+- [x] 306. `aws acm-pca delete-policy`
+- [x] 307. `aws amp delete-alert-manager-definition`
+- [x] 308. `aws amp delete-anomaly-detector`
+- [x] 309. `aws amp delete-logging-configuration`
+- [x] 310. `aws amp delete-query-logging-configuration`
+- [x] 311. `aws amp delete-resource-policy`
+- [x] 312. `aws amp delete-rule-groups-namespace`
+- [x] 313. `aws amp delete-scraper`
+- [x] 314. `aws amp delete-scraper-logging-configuration`
+- [x] 315. `aws amp delete-workspace`
+- [x] 316. `aws appconfig delete-extension`
+- [x] 317. `aws appconfig delete-extension-association`
+- [x] 318. `aws appconfig delete-hosted-configuration-version`
+- [x] 319. `aws appflow delete-connector-profile`
+- [x] 320. `aws appflow delete-flow`
+- [x] 321. `aws apprunner delete-auto-scaling-configuration`
+- [x] 322. `aws apprunner delete-connection`
+- [x] 323. `aws apprunner delete-observability-configuration`
+- [x] 324. `aws apprunner delete-service`
+- [x] 325. `aws apprunner delete-vpc-connector`
+- [x] 326. `aws apprunner delete-vpc-ingress-connection`
+- [x] 327. `aws appstream delete-app-block`
+- [x] 328. `aws appstream delete-app-block-builder`
+- [x] 329. `aws appstream delete-application`
+- [x] 330. `aws appstream delete-directory-config`
+- [x] 331. `aws appstream delete-entitlement`
+- [x] 332. `aws appstream delete-fleet`
+- [x] 333. `aws appstream delete-image`
+- [x] 334. `aws appstream delete-image-builder`
+- [x] 335. `aws appstream delete-image-permissions`
+- [x] 336. `aws appstream delete-stack`
+- [x] 337. `aws appstream delete-theme-for-stack`
+- [x] 338. `aws appstream delete-usage-report-subscription`
+- [x] 339. `aws appstream delete-user`
+- [x] 340. `aws athena delete-capacity-reservation`
+- [x] 341. `aws athena delete-data-catalog`
+- [x] 342. `aws athena delete-named-query`
+- [x] 343. `aws athena delete-notebook`
+- [x] 344. `aws athena delete-prepared-statement`
+- [x] 345. `aws athena delete-work-group`
+- [x] 346. `aws athena terminate-session`
+- [x] 347. `aws auditmanager delete-assessment`
+- [x] 348. `aws auditmanager delete-assessment-framework`
+- [x] 349. `aws auditmanager delete-assessment-framework-share`
+- [x] 350. `aws auditmanager delete-assessment-report`
+- [x] 351. `aws auditmanager delete-control`
+- [x] 352. `aws autoscaling-plans delete-scaling-plan`
+- [x] 353. `aws backup-gateway delete-gateway`
+- [x] 354. `aws backup-gateway delete-hypervisor`
+- [x] 355. `aws batch delete-consumable-resource`
+- [x] 356. `aws batch delete-quota-share`
+- [x] 357. `aws batch delete-service-environment`
+- [x] 358. `aws batch terminate-job`
+- [x] 359. `aws batch terminate-service-job`
+- [x] 360. `aws bedrock delete-custom-model`
+- [x] 361. `aws bedrock delete-custom-model-deployment`
+- [x] 362. `aws bedrock delete-enforced-guardrail-configuration`
+- [x] 363. `aws bedrock delete-foundation-model-agreement`
+- [x] 364. `aws bedrock delete-guardrail`
+- [x] 365. `aws bedrock delete-imported-model`
+- [x] 366. `aws bedrock delete-inference-profile`
+- [x] 367. `aws bedrock delete-marketplace-model-endpoint`
+- [x] 368. `aws bedrock delete-model-invocation-logging-configuration`
+- [x] 369. `aws bedrock delete-prompt-router`
+- [x] 370. `aws bedrock delete-provisioned-model-throughput`
+- [x] 371. `aws bedrock delete-resource-policy`
+- [x] 372. `aws bedrock-agent delete-agent`
+- [x] 373. `aws bedrock-agent delete-agent-action-group`
+- [x] 374. `aws bedrock-agent delete-agent-alias`
+- [x] 375. `aws bedrock-agent delete-agent-version`
+- [x] 376. `aws bedrock-agent delete-data-source`
+- [x] 377. `aws bedrock-agent delete-flow`
+- [x] 378. `aws bedrock-agent delete-flow-alias`
+- [x] 379. `aws bedrock-agent delete-flow-version`
+- [x] 380. `aws bedrock-agent delete-knowledge-base`
+- [x] 381. `aws bedrock-agent delete-knowledge-base-documents`
+- [x] 382. `aws bedrock-agent delete-prompt`
+- [x] 383. `aws budgets delete-budget`
+- [x] 384. `aws budgets delete-budget-action`
+- [x] 385. `aws budgets delete-notification`
+- [x] 386. `aws budgets delete-subscriber`
+- [x] 387. `aws ce delete-anomaly-monitor`
+- [x] 388. `aws ce delete-anomaly-subscription`
+- [x] 389. `aws ce delete-cost-category-definition`
+- [x] 390. `aws chime delete-account`
+- [x] 391. `aws chime delete-events-configuration`
+- [x] 392. `aws chime delete-phone-number`
+- [x] 393. `aws chime delete-room`
+- [x] 394. `aws chime delete-room-membership`
+- [x] 395. `aws cloud9 delete-environment`
+- [x] 396. `aws cloud9 delete-environment-membership`
+- [x] 397. `aws cloudcontrol delete-resource`
+- [x] 398. `aws cloudhsmv2 delete-backup`
+- [x] 399. `aws cloudhsmv2 delete-hsm`
+- [x] 400. `aws cloudhsmv2 delete-resource-policy`

@@ -28,6 +28,7 @@ import { CustomExtensionCommandList, commandStatesPayload, withCommandState } fr
 import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError, ProtectionModuleRow } from "./components/protection-primitives";
+import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
 
 export { AddCustomExtensionWorkspace } from "./add-custom-extension-dialog";
 
@@ -93,7 +94,7 @@ function reviewModalDetail(gate: GuardApprovalGatePublicConfig | null): string {
   if (gate?.totp_enabled === true) {
     return "Enter the current authenticator code to save these settings on this device.";
   }
-  return "This stays on this device. Guard Cloud can keep the same custom extension on your other machines.";
+  return "This custom Extension remains local to this device until portable continuity is enabled.";
 }
 
 function customExtensionUnits(surface: LocalCliItem["surface"]): { unit: string; units: string; source: string } {
@@ -119,6 +120,20 @@ export function customExtensionStateLabel(item: LocalCliItem): string {
     return `${units.charAt(0).toUpperCase()}${units.slice(1)} follow Recommended until you allow or block them.`;
   }
   return item.example_label;
+}
+
+function continuityCopy(item: LocalCliItem): { title: string; description: string } | null {
+  const status = item.continuity?.status;
+  if (status === "applied") {
+    const view = customExtensionContinuityView("identity-matched");
+    return { title: view.title, description: view.description };
+  }
+  if (status === "pending_observation") return customExtensionContinuityView("pending-observation");
+  if (status === "changed_identity") return customExtensionContinuityView("changed-identity");
+  if (status === "locally_overridden") return customExtensionContinuityView("locally-overridden");
+  if (status === "removed") return customExtensionContinuityView("removed");
+  if (status === "stale") return customExtensionContinuityView("stale");
+  return null;
 }
 
 export function CustomExtensionsSection(props: {
@@ -165,12 +180,13 @@ function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string)
   const handleOpen = useCallback(() => {
     props.onOpen(props.item.cli_id);
   }, [props]);
+  const continuity = continuityCopy(props.item);
   return (
     <ProtectionModuleRow
       extensionId={props.item.cli_id}
       name={props.item.name}
       description={props.item.source_label ? `${props.item.example_label} · ${props.item.source_label}` : props.item.example_label}
-      behavior={customExtensionStateLabel(props.item)}
+      behavior={continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item)}
       custom
       executables={[props.item.name]}
       onOpen={handleOpen}
@@ -181,6 +197,7 @@ function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string)
 export function LocalCliDetail(props: {
   item: LocalCliItem;
   revision: number;
+  continuity: LocalCliListResponse["cloud"];
   onBack: () => void;
   onRefresh: () => Promise<void>;
 }) {
@@ -220,6 +237,7 @@ export function LocalCliDetail(props: {
     : commands;
   const bulkState = bulkCommandState(bulkTargets);
   const bulkCopy = bulkPolicyCopy(props.item.surface);
+  const continuity = customExtensionContinuityView("local-only");
   const clearPending = useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -269,6 +287,12 @@ export function LocalCliDetail(props: {
         <p className="font-mono text-xs font-semibold tracking-[0.14em] text-slate-400">{props.item.example_label}</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.item.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
+        {continuityCopy(props.item) ? (
+          <div className="mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="custom-extension-continuity">
+            <p className="text-sm font-semibold text-brand-dark">{continuityCopy(props.item)?.title}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{continuityCopy(props.item)?.description}</p>
+          </div>
+        ) : null}
         <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
           {detailPolicyCopy(props.item.surface)}
         </p>
@@ -304,6 +328,11 @@ export function LocalCliDetail(props: {
           )}
         </div>
       </header>
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-labelledby="custom-extension-continuity-heading">
+        <h2 id="custom-extension-continuity-heading" className="text-sm font-semibold text-brand-dark">{continuity.title}</h2>
+        <p className="mt-2 text-sm leading-6 text-brand-dark/75">{props.continuity.summary || continuity.description}</p>
+        <p className="mt-2 text-xs leading-5 text-brand-dark/60">{continuity.privacyDisclosure}</p>
+      </section>
       {added ? (
         <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
           <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">

@@ -1,7 +1,8 @@
 export type RuleAuthority =
   | 'Remembered on this device'
   | 'Synced contextual rule'
-  | 'Cloud exception';
+  | 'Cloud exception'
+  | `Managed by ${string}`;
 
 export interface RuleExceptionItem {
   id: string;

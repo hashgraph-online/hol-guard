@@ -1140,6 +1140,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   const mcpTool = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
+  const commandCategory = raw["command_category"];
   const packageIntentKind = raw["package_intent_kind"];
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
@@ -1166,6 +1167,8 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     !isStringOrNull(mcpTool) ||
     !isStringOrNull(packageManager) ||
     !isStringOrNull(packageName) ||
+    (commandCategory !== undefined
+      && (!isStringOrNull(commandCategory) || (typeof commandCategory === "string" && commandCategory.length > 160))) ||
     (packageIntentKind !== undefined && !isStringOrNull(packageIntentKind)) ||
     (preExecutionResult !== undefined && preExecutionResult !== null && !isGuardAction(preExecutionResult)) ||
     (policyAction !== undefined && policyAction !== null && !isGuardAction(policyAction)) ||
@@ -1201,6 +1204,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     mcp_tool: mcpTool,
     package_manager: packageManager,
     package_name: packageName,
+    command_category: isStringOrNull(commandCategory) ? commandCategory : null,
     package_intent_kind: isStringOrNull(packageIntentKind) ? packageIntentKind : null,
     package_targets: isStringArray(packageTargets) ? packageTargets : [],
     pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,

@@ -13,6 +13,7 @@ import {
   resolvePolicyMatcherFamily,
   type PolicySortState,
 } from "./policy-workspace-helpers";
+import { resolvePolicyGoverningExtensionId, resolvePolicyRowSourceLabel } from "./policy-managed-authority";
 import {
   groupPoliciesByFamily,
   resolveFamilyFilterLabel,
@@ -20,6 +21,7 @@ import {
 import { PolicyRememberedCloudRules } from "./policy-remembered-cloud-rules";
 import { PolicyRememberedLocalRules } from "./policy-remembered-local-rules";
 import { PolicyRememberedRulesRightRail } from "./policy-remembered-rules-right-rail";
+import { buildRulesExceptionsView } from "./managed-controls/rules-exceptions-model";
 
 type PolicyRememberedRulesTabProps = {
   policies: GuardPolicyDecision[];
@@ -127,6 +129,18 @@ export function PolicyRememberedRulesTab({
     [policies],
   );
   const familyCounts = useMemo(() => groupPoliciesByFamily(rememberedRules), [rememberedRules]);
+  const rulesView = useMemo(() => buildRulesExceptionsView(rememberedRules.map((policy, index) => {
+    const resolvedAuthority = resolvePolicyRowSourceLabel(policy);
+    const authority = resolvedAuthority === "Trusted local tool"
+      ? "Remembered on this device"
+      : resolvedAuthority;
+    return {
+      id: String(policy.decision_id ?? `${policy.source}-${index}`),
+      title: resolvePolicyDisplay(policy).headline,
+      authority,
+      extensionId: resolvePolicyGoverningExtensionId(policy) ?? undefined,
+    };
+  })), [rememberedRules]);
 
   const handleExportCsv = useCallback(() => {
     downloadPolicies("csv", rememberedRules);
@@ -151,10 +165,10 @@ export function PolicyRememberedRulesTab({
               <input
                 ref={searchInputRef}
                 type="search"
-                placeholder="Search by app, action, or reason…"
+                placeholder="Search remembered rules by app, action, or reason…"
                 value={searchQuery}
                 onChange={handleSearchChange}
-                aria-label="Search policies"
+                aria-label="Search remembered rules"
                 className="w-full bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
               />
               <kbd className="hidden shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 sm:inline">
@@ -234,7 +248,11 @@ export function PolicyRememberedRulesTab({
         />
       </div>
 
-      <PolicyRememberedRulesRightRail onOpenCloudExceptions={onOpenCloudExceptions} snapshot={snapshot} />
+      <PolicyRememberedRulesRightRail
+        onOpenCloudExceptions={onOpenCloudExceptions}
+        snapshot={snapshot}
+        decisionOrder={rulesView.decisionOrder}
+      />
     </div>
   );
 }

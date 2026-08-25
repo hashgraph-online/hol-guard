@@ -16535,6 +16535,7 @@ function parseActionEnvelope(raw) {
   const mcpTool = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
+  const commandCategory = raw["command_category"];
   const packageIntentKind = raw["package_intent_kind"];
   const packageTargets = raw["package_targets"];
   const preExecutionResult = aliasedPreExecutionResult.value;
@@ -16544,7 +16545,7 @@ function parseActionEnvelope(raw) {
   if (typeof schemaVersion !== "number" || typeof actionId !== "string" || typeof harness !== "string" || typeof eventName !== "string" || !isGuardActionType(actionType)) {
     return null;
   }
-  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
+  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || commandCategory !== void 0 && (!isStringOrNull(commandCategory) || typeof commandCategory === "string" && commandCategory.length > 160) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
     return null;
   }
   if (!isStringArray(targetPaths) || !isStringArray(networkHosts) || packageTargets !== void 0 && !isStringArray(packageTargets)) {
@@ -16571,6 +16572,7 @@ function parseActionEnvelope(raw) {
     mcp_tool: mcpTool,
     package_manager: packageManager,
     package_name: packageName,
+    command_category: isStringOrNull(commandCategory) ? commandCategory : null,
     package_intent_kind: isStringOrNull(packageIntentKind) ? packageIntentKind : null,
     package_targets: isStringArray(packageTargets) ? packageTargets : [],
     pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,
@@ -20033,13 +20035,13 @@ const SHELL_NAV_ITEMS = [
     icon: HiMiniDocumentText
   },
   {
-    href: "/supply-chain",
-    label: "Supply chain",
-    shortLabel: "Supply",
-    description: "Packages, audits, and feed health",
-    view: "supply-chain",
+    href: "/extensions",
+    label: "Extensions",
+    shortLabel: "Extensions",
+    description: "Tools and capabilities protected on this device",
+    view: "extensions",
     group: "manage",
-    icon: HiMiniSquares2X2
+    icon: HiMiniPuzzlePiece
   },
   {
     href: "/policy",
@@ -20051,13 +20053,13 @@ const SHELL_NAV_ITEMS = [
     icon: HiMiniClipboardDocumentList
   },
   {
-    href: "/extensions",
-    label: "Extensions",
-    shortLabel: "Extensions",
-    description: "Tools and capabilities protected on this device",
-    view: "extensions",
+    href: "/supply-chain",
+    label: "Supply chain",
+    shortLabel: "Supply",
+    description: "Packages, audits, and feed health",
+    view: "supply-chain",
     group: "manage",
-    icon: HiMiniPuzzlePiece
+    icon: HiMiniSquares2X2
   },
   {
     href: "/settings",
@@ -30189,11 +30191,11 @@ async function loadWorkspaceModule(loader, options = {}) {
   }
 }
 function lazyWorkspace(loader) {
-  return reactExports.lazy(
-    () => loadWorkspaceModule(loader, {
-      storage: browserSessionStorage()
-    })
-  );
+  const load = async () => {
+    const module = await loadWorkspaceModule(loader, { storage: browserSessionStorage() });
+    return { default: module.default };
+  };
+  return reactExports.lazy(load);
 }
 const CHUNK_LOAD_ERROR_HEADLINE = "This screen couldn't load";
 const CHUNK_LOAD_ERROR_BODY = "Guard lost its connection while opening this page. Reload once Guard is running on this device.";
@@ -31426,7 +31428,9 @@ function App() {
             onOpenInsights: handleOpenInsights,
             onOpenCommands: handleOpenCommands,
             onOpenSettings: handleOpenSettings,
-            onRefreshRuntime: refreshStateAfterAction,
+            onRefreshRuntime: async () => {
+              await refreshStateAfterAction();
+            },
             onOpenSupplyChain: handleOpenSupplyChain,
             onClearPolicies: handleClearPolicies,
             onOpenAppDetail: handleOpenAppDetail,
@@ -31461,7 +31465,7 @@ function App() {
           }
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
-        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, {}) }) }),
+        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, { runtime: runtime.kind === "ready" ? runtime.snapshot : null }) }) }),
         settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) }),
         supplyChainHubContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           SupplyChainHubWorkspace,
@@ -31532,7 +31536,7 @@ export {
   HiMiniExclamationCircle as Z,
   ProofStrip as _,
   EvidenceActivityHeatmapMini as a,
-  CommandActivityWorkspace as a$,
+  computeMetrics as a$,
   HiMiniXCircle as a0,
   HiMiniClipboardDocumentCheck as a1,
   HiMiniClipboard as a2,
@@ -31561,15 +31565,15 @@ export {
   HiMiniArrowLeft as aP,
   HiMiniPlus as aQ,
   HiMiniNoSymbol as aR,
-  guardAwareHref as aS,
-  fetchApprovalPage as aT,
-  fetchPolicy as aU,
-  HiMiniHome as aV,
-  guardActionPresentation as aW,
-  DEFAULT_FILTER_STATE as aX,
-  filterEvidence as aY,
-  sortEvidence as aZ,
-  computeMetrics as a_,
+  HiMiniArrowTopRightOnSquare as aS,
+  guardAwareHref as aT,
+  fetchApprovalPage as aU,
+  fetchPolicy as aV,
+  HiMiniHome as aW,
+  guardActionPresentation as aX,
+  DEFAULT_FILTER_STATE as aY,
+  filterEvidence as aZ,
+  sortEvidence as a_,
   HiMiniAdjustmentsHorizontal as aa,
   HiMiniCircleStack as ab,
   TabBar as ac,
@@ -31598,16 +31602,16 @@ export {
   fetchLocalCliApi as az,
   HiMiniCommandLine as b,
   resolveMcpPolicyRequest as b$,
-  EvidenceFilterBar as b0,
-  EvidenceInsightStrip as b1,
-  EvidenceActionList as b2,
-  EvidenceActionDetail as b3,
-  policyIdentityKey as b4,
-  HiMiniChartBar as b5,
-  runHarnessAction as b6,
-  GuardHarnessActionError as b7,
-  HiMiniRocketLaunch as b8,
-  HiMiniTrash as b9,
+  CommandActivityWorkspace as b0,
+  EvidenceFilterBar as b1,
+  EvidenceInsightStrip as b2,
+  EvidenceActionList as b3,
+  EvidenceActionDetail as b4,
+  policyIdentityKey as b5,
+  HiMiniChartBar as b6,
+  runHarnessAction as b7,
+  GuardHarnessActionError as b8,
+  HiMiniRocketLaunch as b9,
   activatePackageFirewallRuntime as bA,
   EntitlementNotice as bB,
   fetchReceipts as bC,
@@ -31635,22 +31639,22 @@ export {
   Surface as bY,
   HiMiniCheckBadge as bZ,
   fetchMcpPolicyRequest as b_,
-  clearLabelForScope as ba,
-  formatHarnessCommand as bb,
-  isSupplyChainAuditIncomplete as bc,
-  isSupplyChainAuditEvidence as bd,
-  readString$1 as be,
-  isRecord$2 as bf,
-  HiMiniClock as bg,
-  IconActionButton as bh,
-  HiMiniBeaker as bi,
-  ActivationSummary as bj,
-  ActionResultPanel as bk,
-  HiMiniBugAnt as bl,
-  GuardModalLayer as bm,
-  ConnectFlowCard as bn,
-  ApprovalProofInline as bo,
-  HiMiniArrowTopRightOnSquare as bp,
+  HiMiniTrash as ba,
+  clearLabelForScope as bb,
+  formatHarnessCommand as bc,
+  isSupplyChainAuditIncomplete as bd,
+  isSupplyChainAuditEvidence as be,
+  readString$1 as bf,
+  isRecord$2 as bg,
+  HiMiniClock as bh,
+  IconActionButton as bi,
+  HiMiniBeaker as bj,
+  ActivationSummary as bk,
+  ActionResultPanel as bl,
+  HiMiniBugAnt as bm,
+  GuardModalLayer as bn,
+  ConnectFlowCard as bo,
+  ApprovalProofInline as bp,
   HiMiniCloudArrowDown as bq,
   fetchPackageFirewallStatus as br,
   runPackageAudit as bs,

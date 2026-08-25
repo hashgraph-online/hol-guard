@@ -150,6 +150,28 @@ def parsed_managed_controls_from_validated_policy_bundle(
     )
 
 
+def _activation_metadata(
+    payload: dict[str, object],
+    bundle_version: int,
+) -> tuple[object, str | None, str | None]:
+    metadata = payload.get("metadata")
+    if not is_mapping(metadata):
+        return bundle_version, None, None
+    candidate_revision = metadata.get("revision")
+    revision = (
+        candidate_revision
+        if isinstance(candidate_revision, (str, int)) and not isinstance(candidate_revision, bool)
+        else bundle_version
+    )
+    candidate_id = metadata.get("id")
+    control_set_id = candidate_id.strip()[:160] if isinstance(candidate_id, str) and candidate_id.strip() else None
+    candidate_name = metadata.get("name")
+    control_set_name = (
+        candidate_name.strip()[:160] if isinstance(candidate_name, str) and candidate_name.strip() else None
+    )
+    return revision, control_set_id, control_set_name
+
+
 def build_managed_controls_activation_state(
     policy_bundle: dict[str, object],
     parsed: ParsedManagedControlsPolicy,
@@ -176,12 +198,7 @@ def build_managed_controls_activation_state(
         raise ValueError("managed workspace binding is required")
     if not is_mapping(payload):
         raise ValueError("managed policy payload is required")
-    metadata = payload.get("metadata")
-    policy_revision: object = bundle_version
-    if is_mapping(metadata):
-        candidate_revision = metadata.get("revision")
-        if isinstance(candidate_revision, (str, int)) and not isinstance(candidate_revision, bool):
-            policy_revision = candidate_revision
+    policy_revision, control_set_id, control_set_name = _activation_metadata(payload, bundle_version)
 
     signed_layers = () if parsed.signed_cloud_layer is None else (parsed.signed_cloud_layer,)
     rule_targets = [
@@ -209,7 +226,6 @@ def build_managed_controls_activation_state(
         "catalogDigest": base_authority.catalog_digest,
         "baseAuthorityRevision": base_authority.revision,
         "baseAuthoritySnapshotDigest": base_snapshot_digest,
-        "authorityMode": parsed.authority_mode,
         "extensionAuthorityRevision": managed_revision,
         "signedCloudLayersJson": layers_to_json(signed_layers),
         "ruleTargets": rule_targets,
@@ -223,6 +239,16 @@ def build_managed_controls_activation_state(
         },
         "negotiatedCapabilities": sorted(negotiated_capabilities),
     }
+    if parsed.authority_mode is not None:
+        activation["authorityMode"] = parsed.authority_mode
+    if control_set_id is not None:
+        activation["controlSetId"] = control_set_id
+    if control_set_name is not None:
+        activation["controlSetName"] = control_set_name
+    for field in ("issuedAt", "expiresAt"):
+        candidate = policy_bundle.get(field)
+        if isinstance(candidate, str) and candidate.strip():
+            activation[field] = candidate.strip()[:80]
     acknowledgement = {
         "bundleHash": bundle_hash,
         "bundleVersion": bundle_version,
