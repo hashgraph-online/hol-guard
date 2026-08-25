@@ -7,24 +7,29 @@ from pathlib import Path
 from codex_plugin_scanner.guard.runtime.command_cloud_gcp_operation_matrix import (
     GCP_DESTRUCTIVE_COMMAND_PATHS,
 )
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
+from tests.command_extension_contracts import (
+    assert_review_required_cases,
+    assert_reviewed_command_cases,
+    assert_safe_command_cases,
+)
 
 _ACTION = "Google Cloud destructive command"
 _RULE = "command.cloud.gcp.resource-deletion"
 
 GCP_REVIEW_CASES: tuple[tuple[str, str, str], ...] = tuple(
-    (f"gcloud {' '.join(path)} fixture --quiet", _ACTION, _RULE)
-    for path in GCP_DESTRUCTIVE_COMMAND_PATHS
+    (f"gcloud {' '.join(path)} fixture --quiet", _ACTION, _RULE) for path in GCP_DESTRUCTIVE_COMMAND_PATHS
 )
-GCP_SAFE_CASES: tuple[str, ...] = tuple(
-    f"gcloud {' '.join(path)} --help" for path in GCP_DESTRUCTIVE_COMMAND_PATHS
-)
+GCP_SAFE_CASES: tuple[str, ...] = tuple(f"gcloud {' '.join(path)} --help" for path in GCP_DESTRUCTIVE_COMMAND_PATHS)
 
 
 def test_gcp_matrix_is_exactly_one_hundred_unique_operations() -> None:
     assert len(GCP_DESTRUCTIVE_COMMAND_PATHS) == 100
     assert len(set(GCP_DESTRUCTIVE_COMMAND_PATHS)) == 100
+    assert all(
+        token and token == token.strip() and not token.startswith("-")
+        for path in GCP_DESTRUCTIVE_COMMAND_PATHS
+        for token in path
+    )
 
 
 def test_gcp_matrix_feeds_inspection_and_runtime_hooks(tmp_path: Path) -> None:
@@ -63,27 +68,16 @@ def test_gcp_unknown_global_options_fail_secure(tmp_path: Path) -> None:
 
 def test_gcp_disabled_help_form_remains_reviewable(tmp_path: Path) -> None:
     command = " ".join(GCP_DESTRUCTIVE_COMMAND_PATHS[0])
-    payload = inspect_command(
-        f"gcloud {command} fixture --help --help=false",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-    assert payload["status"] == "review"
-    assert _RULE in {rule["rule_id"] for rule in payload["rules"]}
+    assert_review_required_cases((f"gcloud {command} fixture --help --help=false",), tmp_path)
 
 
 def test_gcp_safe_segment_cannot_hide_later_destructive_segment(tmp_path: Path) -> None:
     first = " ".join(GCP_DESTRUCTIVE_COMMAND_PATHS[0])
     second = " ".join(GCP_DESTRUCTIVE_COMMAND_PATHS[1])
-    payload = inspect_command(
-        f"gcloud {first} --help && gcloud {second} fixture --quiet",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+    assert_review_required_cases(
+        (f"gcloud {first} --help && gcloud {second} fixture --quiet",),
+        tmp_path,
     )
-
-    assert payload["status"] == "review"
-    assert payload["controlling_rule_id"] == _RULE
 
 
 def test_gcp_quoted_examples_remain_data(tmp_path: Path) -> None:
