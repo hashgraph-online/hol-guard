@@ -81,8 +81,10 @@ def test_path_set_matcher_rejects_duplicate_required_option_names() -> None:
         )
 
 
-def test_path_set_matcher_rejects_empty_required_option_values() -> None:
-    with pytest.raises(ValueError, match="cannot be empty"):
+def test_path_set_matcher_rejects_empty_required_option_names_and_values() -> None:
+    with pytest.raises(ValueError, match="names cannot be empty"):
+        _matcher(required_option_values=((" ", frozenset({"value"})),))
+    with pytest.raises(ValueError, match="values cannot be empty"):
         _matcher(required_option_values=(("--mode", frozenset({" "})),))
 
 
