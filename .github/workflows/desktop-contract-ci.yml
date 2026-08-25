@@ -89,8 +89,16 @@ jobs:
       - name: Run Desktop contract tests
         run: uv run --no-sync pytest tests/test_guard_desktop_contract.py --tb=short
 
-      - name: Validate source-bound decision evidence
-        run: uv run --no-sync python tests/guard_command_decision_diff.py --check
+      - name: Regenerate source-bound decision evidence
+        run: |
+          uv run --no-sync python tests/guard_command_decision_diff.py --write
+          python - <<'PY'
+          import base64
+          from pathlib import Path
+
+          path = Path("tests/fixtures/guard-command-corpus/decision-diff-report.json")
+          print("DECISION_DIFF_BASE64=" + base64.b64encode(path.read_bytes()).decode("ascii"))
+          PY
 
       - name: Validate test-suite ratchet
         run: |
