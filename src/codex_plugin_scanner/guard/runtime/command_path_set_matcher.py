@@ -17,11 +17,17 @@ from .command_rules import _after_leading_options, _segment_matches_executable, 
 RequiredOptionValues = tuple[tuple[str, frozenset[str]], ...]
 
 
-def _normalized_strings(values: frozenset[str]) -> frozenset[str]:
-    return frozenset(value.strip().lower() for value in values if value.strip())
+def _normalized_strings(values: frozenset[str], *, label: str) -> frozenset[str]:
+    """Normalize one string collection without silently erasing malformed entries."""
+
+    if any(not value.strip() for value in values):
+        raise ValueError(f"{label} cannot contain blank values")
+    return frozenset(value.strip().lower() for value in values)
 
 
 def _normalized_paths(paths: frozenset[tuple[str, ...]]) -> frozenset[tuple[str, ...]]:
+    """Normalize command paths while preserving a strict non-empty contract."""
+
     if not paths:
         raise ValueError("ExecutablePathSetMatcher requires at least one path")
     normalized: set[tuple[str, ...]] = set()
@@ -38,23 +44,32 @@ def _normalized_paths(paths: frozenset[tuple[str, ...]]) -> frozenset[tuple[str,
 def _normalized_inverse_pairs(
     pairs: frozenset[tuple[str, str]],
 ) -> frozenset[tuple[str, str]]:
-    return frozenset(
-        (positive.strip().lower(), negative.strip().lower())
-        for positive, negative in pairs
-        if positive.strip() and negative.strip()
-    )
+    """Normalize inverse aliases and reject either side when it is blank."""
+
+    normalized: set[tuple[str, str]] = set()
+    for positive, negative in pairs:
+        if not positive.strip() or not negative.strip():
+            raise ValueError("Inverse flag pairs cannot contain blank option names")
+        normalized.add((positive.strip().lower(), negative.strip().lower()))
+    return frozenset(normalized)
 
 
 def _normalized_required_option_values(values: RequiredOptionValues) -> RequiredOptionValues:
+    """Normalize required options without weakening malformed constraints."""
+
     normalized: list[tuple[str, frozenset[str]]] = []
     for option, allowed in values:
         normalized_option = option.strip().lower()
         if not normalized_option:
             raise ValueError("Required option names cannot be empty")
+        if not allowed:
+            raise ValueError("Required option values cannot be empty")
+        if any(not value.strip() for value in allowed):
+            raise ValueError("Required option values cannot contain blank values")
         normalized.append(
             (
                 normalized_option,
-                frozenset(value.strip().lower() for value in allowed if value.strip()),
+                frozenset(value.strip().lower() for value in allowed),
             )
         )
     return tuple(sorted(normalized, key=lambda item: item[0]))
@@ -65,6 +80,8 @@ def _validate_flag_constraints(
     forbidden_flags: frozenset[str],
     inverse_flag_pairs: frozenset[tuple[str, str]],
 ) -> None:
+    """Reject normalized flag contracts that conflict or reuse aliases."""
+
     if required_flags & forbidden_flags:
         raise ValueError("A matcher flag cannot be both required and forbidden")
     inverse_names = [name for pair in inverse_flag_pairs for name in pair]
@@ -73,11 +90,11 @@ def _validate_flag_constraints(
 
 
 def _validate_required_option_values(values: RequiredOptionValues) -> None:
+    """Reject normalized required-option declarations with duplicate names."""
+
     option_names = [option for option, _allowed in values]
     if len(option_names) != len(set(option_names)):
         raise ValueError("Required option values cannot declare an option more than once")
-    if any(not allowed for _option, allowed in values):
-        raise ValueError("Required option values cannot be empty")
 
 
 @final
@@ -102,12 +119,12 @@ class ExecutablePathSetMatcher:
     _paths_desc: tuple[tuple[str, ...], ...] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        executables = _normalized_strings(self.executables)
+        executables = _normalized_strings(self.executables, label="Executable names")
         if not executables:
             raise ValueError("ExecutablePathSetMatcher requires at least one executable")
         paths = _normalized_paths(self.paths)
-        required_flags = _normalized_strings(self.required_flags)
-        forbidden_flags = _normalized_strings(self.forbidden_flags)
+        required_flags = _normalized_strings(self.required_flags, label="Required flags")
+        forbidden_flags = _normalized_strings(self.forbidden_flags, label="Forbidden flags")
         inverse_flag_pairs = _normalized_inverse_pairs(self.inverse_flag_pairs)
         required_option_values = _normalized_required_option_values(self.required_option_values)
         _validate_flag_constraints(required_flags, forbidden_flags, inverse_flag_pairs)
@@ -120,15 +137,29 @@ class ExecutablePathSetMatcher:
         object.__setattr__(
             self,
             "leading_options_with_values",
-            _normalized_strings(self.leading_options_with_values),
+            _normalized_strings(
+                self.leading_options_with_values,
+                label="Leading value options",
+            ),
         )
         object.__setattr__(
             self,
             "interspersed_options_with_values",
-            _normalized_strings(self.interspersed_options_with_values),
+            _normalized_strings(
+                self.interspersed_options_with_values,
+                label="Interspersed value options",
+            ),
         )
-        object.__setattr__(self, "interspersed_flags", _normalized_strings(self.interspersed_flags))
-        object.__setattr__(self, "options_with_values", _normalized_strings(self.options_with_values))
+        object.__setattr__(
+            self,
+            "interspersed_flags",
+            _normalized_strings(self.interspersed_flags, label="Interspersed flags"),
+        )
+        object.__setattr__(
+            self,
+            "options_with_values",
+            _normalized_strings(self.options_with_values, label="Value options"),
+        )
         object.__setattr__(self, "inverse_flag_pairs", inverse_flag_pairs)
         object.__setattr__(self, "required_option_values", required_option_values)
         object.__setattr__(
