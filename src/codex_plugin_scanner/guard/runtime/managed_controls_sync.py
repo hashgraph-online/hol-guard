@@ -7,6 +7,10 @@ from typing import TYPE_CHECKING
 
 from ...version import __version__
 from ..managed_controls.feature_flags import ManagedControlsFeatureFlags
+from ..managed_controls_policy_bundle import parsed_managed_controls_from_validated_policy_bundle
+from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
+from ..policy_bundle_delivery import validated_managed_policy_delivery
+from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .custom_extension_continuity import (
     CustomExtensionContinuityError,
@@ -21,6 +25,47 @@ from .extension_control_runtime import ExtensionControlRuntimeSnapshot
 
 if TYPE_CHECKING:
     from ..store import GuardStore
+
+
+def validated_managed_controls_candidate(
+    policy_bundle: dict[str, object] | None,
+    *,
+    negotiated_capabilities: frozenset[str],
+    delivery_field_provided: bool,
+    delivery_payload: object,
+    workspace_id: str | None,
+    device_id: str,
+    runtime_summary: object,
+) -> tuple[
+    dict[str, object] | None,
+    ParsedManagedControlsPolicy | None,
+    dict[str, object] | None,
+    str | None,
+    bool,
+]:
+    """Parse V2 Extension semantics and bind any required delivery metadata."""
+
+    is_v2 = policy_bundle is not None and policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+    if not is_v2 or policy_bundle is None:
+        return policy_bundle, None, None, None, False
+    try:
+        parsed = parsed_managed_controls_from_validated_policy_bundle(
+            policy_bundle,
+            registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+            negotiated_capabilities=negotiated_capabilities,
+        )
+    except ManagedControlsPolicyError as error:
+        return None, None, None, error.code, True
+    candidate = parsed if parsed.has_extension_semantics else None
+    delivery, error = validated_managed_policy_delivery(
+        policy_bundle=policy_bundle,
+        delivery_field_provided=delivery_field_provided,
+        delivery_payload=delivery_payload,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        runtime_summary=runtime_summary,
+    )
+    return (None if error is not None else policy_bundle), candidate, delivery, error, True
 
 
 def managed_controls_runtime_sync_posture(

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
+
+from .policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT, validated_policy_bundle_v2_acknowledgement
 
 _DELIVERY_KEYS = frozenset(
     {
@@ -131,3 +135,136 @@ def validate_policy_bundle_delivery(
     if runtime_summary.get("extensionAuthorityRevision") != value.get("extensionAuthorityRevision"):
         return None, "policy_bundle_delivery_mismatch"
     return dict(value), None
+
+
+def validated_managed_policy_delivery(
+    *,
+    policy_bundle: dict[str, object],
+    delivery_field_provided: bool,
+    delivery_payload: object,
+    workspace_id: str | None,
+    device_id: str,
+    runtime_summary: object,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Validate delivery metadata only when a V2 bundle carries Extension semantics."""
+
+    if policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
+        return None, None
+    if not policy_bundle_has_extension_semantics(policy_bundle):
+        return None, None
+    if not delivery_field_provided:
+        return None, "missing_policy_bundle_delivery"
+    return validate_policy_bundle_delivery(
+        delivery_payload,
+        policy_bundle=policy_bundle,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        runtime_summary=runtime_summary,
+    )
+
+
+def policy_bundle_acknowledgement_payload(
+    *,
+    device_id: str,
+    device_name: str,
+    policy_bundle: dict[str, object],
+    synced_at: str,
+    status: Literal["validated", "applied"] = "applied",
+    previous: dict[str, object] | None = None,
+    delivery: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Build a legacy acknowledgement or an exact delivery-bound V2 acknowledgement."""
+
+    if policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
+        return {
+            "appliedAt": synced_at,
+            "bundleHash": policy_bundle["bundleHash"],
+            "bundleVersion": policy_bundle["bundleVersion"],
+            "deviceId": device_id,
+            "deviceName": device_name,
+            "status": "synced",
+        }
+    if delivery is None:
+        return {}
+    identity_fields = (
+        "workspaceId",
+        "deviceId",
+        "deliveryId",
+        "runtimeSessionId",
+        "bundleId",
+        "bundleVersion",
+        "bundleHash",
+        "policyRevision",
+        "extensionAuthorityRevision",
+        "catalogDigest",
+        "effectiveProjectionDigest",
+        "lastKnownGoodBundleHash",
+    )
+    candidate_identity = {field: delivery[field] for field in identity_fields}
+    matching_previous = (
+        previous
+        if previous is not None and all(previous.get(field) == candidate_identity[field] for field in identity_fields)
+        else None
+    )
+    previous_sequence = matching_previous.get("sequence") if matching_previous is not None else None
+    resolved_status = (
+        "applied"
+        if status == "applied" or (matching_previous is not None and matching_previous.get("status") == "applied")
+        else "validated"
+    )
+    acknowledgement = {
+        "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
+        **candidate_identity,
+        "sequence": previous_sequence + 1 if isinstance(previous_sequence, int) else 1,
+        "status": resolved_status,
+        "observedAt": _normalized_observed_at(synced_at),
+    }
+    validated, error = validated_policy_bundle_v2_acknowledgement(acknowledgement, previous=matching_previous)
+    if validated is None:
+        raise ValueError(error or "invalid_policy_bundle_acknowledgement")
+    return validated
+
+
+def _normalized_observed_at(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def effective_policy_bundle_acknowledgement(
+    *,
+    device_id: str,
+    device_name: str,
+    effective_policy_bundle: dict[str, object],
+    validated_policy_bundle: dict[str, object] | None,
+    validated_delivery: dict[str, object] | None,
+    stored_acknowledgement: object,
+    synced_at: str,
+) -> dict[str, object]:
+    """Select the exact acknowledgement for a newly activated or retained bundle."""
+
+    if effective_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
+        return policy_bundle_acknowledgement_payload(
+            device_id=device_id,
+            device_name=device_name,
+            policy_bundle=effective_policy_bundle,
+            synced_at=synced_at,
+        )
+    activating_new_bundle = validated_policy_bundle is not None and effective_policy_bundle.get(
+        "bundleHash"
+    ) == validated_policy_bundle.get("bundleHash")
+    previous = stored_acknowledgement if isinstance(stored_acknowledgement, dict) else None
+    if not activating_new_bundle:
+        return dict(previous) if previous is not None else {}
+    return policy_bundle_acknowledgement_payload(
+        device_id=device_id,
+        device_name=device_name,
+        policy_bundle=effective_policy_bundle,
+        synced_at=synced_at,
+        previous=previous,
+        delivery=validated_delivery,
+    )
