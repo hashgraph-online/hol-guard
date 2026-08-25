@@ -1,6 +1,9 @@
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardReceipt, PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore, _runtime_scoped_exact_match_key
-from codex_plugin_scanner.guard.store_policy_list import collapse_duplicate_artifact_policy_rows
+from codex_plugin_scanner.guard.store_policy_list import (
+    collapse_duplicate_artifact_policy_rows,
+    list_remembered_policy_decisions,
+)
 
 
 def _store(tmp_path) -> GuardStore:
@@ -478,7 +481,9 @@ def test_list_policy_decisions_collapses_duplicate_npx_once_rules(tmp_path) -> N
             f"2026-08-24T21:0{index}:00+00:00",
         )
 
-    items = store.list_policy_decisions("guard-cli")
+    stored = store.list_policy_decisions("guard-cli")
+    assert len(stored) == 5
+    items = list_remembered_policy_decisions(store, "guard-cli")
     assert len(items) == 1
     assert items[0]["remembered_command"] == command
     assert items[0]["artifact_id"] == "guard-cli:runtime:npx:4"

@@ -3,6 +3,15 @@
 from __future__ import annotations
 
 
+def list_remembered_policy_decisions(
+    store: object,
+    harness: str | None = None,
+) -> list[dict[str, object]]:
+    list_fn = getattr(store, "list_policy_decisions")
+    items = list_fn(harness)
+    return collapse_duplicate_artifact_policy_rows(items)
+
+
 def collapse_duplicate_artifact_policy_rows(
     items: list[dict[str, object]],
 ) -> list[dict[str, object]]:

@@ -2233,9 +2233,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             query = parse_qs(parsed.query)
             harness = query.get("harness", [None])[-1]
             harness_filter = harness if isinstance(harness, str) else None
+            from ..store_policy_list import list_remembered_policy_decisions
+
             self._write_json(
                 {
-                    "items": store.list_policy_decisions(harness=harness_filter),
+                    "items": list_remembered_policy_decisions(store, harness_filter),
                     "cloud_exceptions": store.list_cloud_exceptions(harness=harness_filter),
                 }
             )

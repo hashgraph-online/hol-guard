@@ -6,7 +6,6 @@ from __future__ import annotations
 
 # ruff: noqa: F403,F405
 from .store_base import *
-from .store_policy_list import collapse_duplicate_artifact_policy_rows
 
 
 def _set_private_mode_compat(path: Path, mode: int) -> None:
@@ -98,7 +97,7 @@ class StorePolicyIntegrityAdminMixin:
                     payload["integrity_mode"] = state.get("mode")
                     payload["integrity_enforcement"] = state.get("enforcement")
                 items.append(payload)
-            return collapse_duplicate_artifact_policy_rows(items)
+            return items
 
     def get_policy_decision(self, decision_id: int) -> dict[str, object] | None:
         from .store_policy_decision import get_policy_decision_payload
