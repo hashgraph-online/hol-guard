@@ -4,18 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from ..live_process_identity import MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS
-
-
-def bounded_inline_wait_seconds(value: int | None, *, bound: bool) -> int | None:
-    """Keep an authenticated inline wait within the daemon worker budget."""
-
-    if not bound:
-        return None
-    if not isinstance(value, int) or isinstance(value, bool):
-        return MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS
-    return min(MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS, max(1, value))
-
 
 def browser_wait_request_ids(
     response_payload: Mapping[str, object],

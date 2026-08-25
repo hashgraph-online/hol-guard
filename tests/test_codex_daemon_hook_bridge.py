@@ -106,7 +106,11 @@ def test_bridge_keeps_inline_browser_wait_within_daemon_worker_budget(
     )
 
     assert payload[bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] == 607
-    assert payload[bridge.CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY] == 2
+    assert set(payload) == {
+        "hook_event_name",
+        bridge.CODEX_BROWSER_WAIT_PROCESS_KEY,
+        bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
+    }
 
 
 def test_unavailable_prompt_warns_without_stopping_conversation() -> None:

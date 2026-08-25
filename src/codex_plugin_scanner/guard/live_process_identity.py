@@ -14,8 +14,6 @@ from .windows_paths import windows_process_creation_time
 _TRUSTED_POSIX_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 CODEX_BROWSER_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY = "guard_codex_browser_wait_timeout_seconds"
-CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY = "guard_codex_browser_inline_wait_timeout_seconds"
-MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS = 2
 
 
 def bound_wait_timeout_seconds(
@@ -28,21 +26,6 @@ def bound_wait_timeout_seconds(
     if not isinstance(payload, Mapping):
         return None
     value = payload.get(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY)
-    if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= maximum:
-        return None
-    return value
-
-
-def bound_inline_wait_timeout_seconds(
-    payload: Mapping[str, object] | None,
-    *,
-    maximum: int,
-) -> int | None:
-    """Return the authenticated bridge's bounded daemon-worker wait budget."""
-
-    if not isinstance(payload, Mapping):
-        return None
-    value = payload.get(CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY)
     if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= maximum:
         return None
     return value
@@ -129,11 +112,8 @@ def _linux_proc_stat(pid: int) -> str | None:
 
 
 __all__ = [
-    "CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY",
     "CODEX_BROWSER_WAIT_PROCESS_KEY",
     "CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY",
-    "MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS",
-    "bound_inline_wait_timeout_seconds",
     "bound_wait_timeout_seconds",
     "current_process_identity",
     "process_identity_matches",

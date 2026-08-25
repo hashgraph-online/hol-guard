@@ -52,10 +52,6 @@ if TYPE_CHECKING:
 from ..action_lattice import is_guard_action, most_restrictive_guard_action
 from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
 from ..daemon.client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
-from ..live_process_identity import (
-    MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS,
-    bound_inline_wait_timeout_seconds,
-)
 from ..models import GuardAction
 from ._commands_shared import *
 from .commands_hook_runtime_state import (
@@ -117,14 +113,12 @@ def _bind_review_state(
     action_envelope: GuardActionEnvelope | None,
     browser_approval_daemon_client: GuardSurfaceDaemonClient | None,
     browser_approval_wait_bound: bool | None,
-    browser_approval_inline_wait_timeout_seconds: int | None,
     policy_action: GuardAction,
     response_payload: dict[str, object],
 ) -> None:
     state.action_envelope = action_envelope
     state.browser_approval_daemon_client = browser_approval_daemon_client
     state.browser_approval_wait_bound = browser_approval_wait_bound
-    state.browser_approval_inline_wait_timeout_seconds = browser_approval_inline_wait_timeout_seconds
     state.policy_action = policy_action
     state.response_payload = response_payload
 
@@ -191,7 +185,6 @@ def _review_runtime_artifact_hook(
     stored_policy_action = state.stored_policy_action
     browser_approval_daemon_client: GuardSurfaceDaemonClient | None = None
     browser_approval_wait_bound: bool | None = None
-    browser_approval_inline_wait_timeout_seconds: int | None = None
     cursor_native_queue = _canonical_harness_name(
         args.harness
     ) == "cursor" and cursor_hook_requires_approval_center_queue(
@@ -353,11 +346,6 @@ def _review_runtime_artifact_hook(
                 config=config,
                 payload=payload_map,
             )
-            if browser_approval_wait_bound:
-                browser_approval_inline_wait_timeout_seconds = bound_inline_wait_timeout_seconds(
-                    payload_map,
-                    maximum=MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS,
-                )
             try:
                 daemon_client = load_guard_surface_daemon_client(guard_home)
                 session = daemon_client.start_session(
@@ -457,7 +445,6 @@ def _review_runtime_artifact_hook(
         action_envelope=action_envelope,
         browser_approval_daemon_client=browser_approval_daemon_client,
         browser_approval_wait_bound=browser_approval_wait_bound,
-        browser_approval_inline_wait_timeout_seconds=browser_approval_inline_wait_timeout_seconds,
         policy_action=policy_action,
         response_payload=response_payload,
     )

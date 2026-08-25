@@ -347,7 +347,6 @@ def _codex_browser_approval_decision(
     store: GuardStore,
     config: GuardConfig,
     browser_wait_bound: bool | None = None,
-    inline_wait_seconds: int | None = None,
     daemon_client: object | None = None,
     expected_artifact_hash: str | None = None,
     fresh_context_provider: Callable[[], Mapping[str, object] | None] | None = None,
@@ -359,13 +358,13 @@ def _codex_browser_approval_decision(
     request_ids = browser_wait.browser_wait_request_ids(response_payload, browser_wait_bound=browser_wait_bound)
     if not request_ids:
         return None
+    if browser_wait_bound is True:
+        # The authenticated outer bridge owns the approval wait. Returning the
+        # pending response here keeps the isolated daemon worker available.
+        return None
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
         event_name=event_name,
         configured_timeout=config.approval_wait_timeout_seconds,
-        outer_wait_timeout_seconds=browser_wait.bounded_inline_wait_seconds(
-            inline_wait_seconds,
-            bound=browser_wait_bound is True,
-        ),
     )
     if wait_timeout_seconds <= 0:
         return None

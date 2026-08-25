@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resu
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.live_process_identity import (
-    CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY,
     CODEX_BROWSER_WAIT_PROCESS_KEY,
     CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
 )
@@ -125,24 +124,20 @@ def test_codex_bridge_wait_uses_the_outer_hook_budget(tmp_path: Path, monkeypatc
     assert metadata["codex_browser_wait_timeout_seconds"] == 7
 
 
-def test_codex_bridge_budget_bounds_the_actual_approval_wait(
+def test_codex_bridge_never_waits_inside_daemon_worker(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured_timeout: list[int] = []
+    def unexpected_wait(**_kwargs: object) -> dict[str, object]:
+        raise AssertionError("the authenticated outer bridge owns the approval wait")
 
-    def capture_wait(**kwargs: object) -> dict[str, object]:
-        captured_timeout.append(int(kwargs["timeout_seconds"]))
-        return {"resolved": False, "items": []}
-
-    monkeypatch.setattr(interaction, "wait_for_approval_requests", capture_wait)
+    monkeypatch.setattr(interaction, "wait_for_approval_requests", unexpected_wait)
     monkeypatch.setattr(interaction, "_open_codex_live_approval", lambda *_args, **_kwargs: None)
     process_identity = {"pid": 4102, "startToken": "fixture-start"}
     monkeypatch.setattr(interaction, "process_identity_matches", lambda value: value == process_identity)
     payload = {
         CODEX_BROWSER_WAIT_PROCESS_KEY: process_identity,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY: 7,
-        CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY: 600,
     }
     metadata = interaction._codex_browser_wait_metadata(
         args=argparse.Namespace(harness="codex", json=True),
@@ -159,11 +154,9 @@ def test_codex_bridge_budget_bounds_the_actual_approval_wait(
         store=GuardStore(tmp_path / "guard-home"),
         config=GuardConfig(tmp_path, None, approval_wait_timeout_seconds=600),
         browser_wait_bound=metadata["codex_hook_waits_for_browser_approval"] is True,
-        inline_wait_seconds=payload[CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY],
     )
 
     assert decision is None
-    assert captured_timeout == [2]
 
 
 def test_codex_unbound_browser_wait_retains_the_worker_budget() -> None:
