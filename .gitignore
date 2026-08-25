@@ -33,6 +33,7 @@ dashboard/.vite/
 dashboard/dist/
 dashboard/.artifacts/
 .artifacts/
+artifacts/mdm-cloud-lab/
 output/playwright/
 .guard-*/
 .guard-ui-review/

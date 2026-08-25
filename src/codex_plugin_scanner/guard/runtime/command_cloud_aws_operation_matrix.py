@@ -110,18 +110,138 @@ AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1: tuple[CommandPath, ...] = (
     ("cognito-idp", "delete-identity-provider"),
 )
 
+AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4: tuple[CommandPath, ...] = (
+    ("accessanalyzer", "delete-analyzer"),
+    ("accessanalyzer", "delete-archive-rule"),
+    ("accessanalyzer", "delete-service-linked-analyzer"),
+    ("account", "delete-alternate-contact"),
+    ("acm-pca", "delete-permission"),
+    ("acm-pca", "delete-policy"),
+    ("amp", "delete-alert-manager-definition"),
+    ("amp", "delete-anomaly-detector"),
+    ("amp", "delete-logging-configuration"),
+    ("amp", "delete-query-logging-configuration"),
+    ("amp", "delete-resource-policy"),
+    ("amp", "delete-rule-groups-namespace"),
+    ("amp", "delete-scraper"),
+    ("amp", "delete-scraper-logging-configuration"),
+    ("amp", "delete-workspace"),
+    ("appconfig", "delete-extension"),
+    ("appconfig", "delete-extension-association"),
+    ("appconfig", "delete-hosted-configuration-version"),
+    ("appflow", "delete-connector-profile"),
+    ("appflow", "delete-flow"),
+    ("apprunner", "delete-auto-scaling-configuration"),
+    ("apprunner", "delete-connection"),
+    ("apprunner", "delete-observability-configuration"),
+    ("apprunner", "delete-service"),
+    ("apprunner", "delete-vpc-connector"),
+    ("apprunner", "delete-vpc-ingress-connection"),
+    ("appstream", "delete-app-block"),
+    ("appstream", "delete-app-block-builder"),
+    ("appstream", "delete-application"),
+    ("appstream", "delete-directory-config"),
+    ("appstream", "delete-entitlement"),
+    ("appstream", "delete-fleet"),
+    ("appstream", "delete-image"),
+    ("appstream", "delete-image-builder"),
+    ("appstream", "delete-image-permissions"),
+    ("appstream", "delete-stack"),
+    ("appstream", "delete-theme-for-stack"),
+    ("appstream", "delete-usage-report-subscription"),
+    ("appstream", "delete-user"),
+    ("athena", "delete-capacity-reservation"),
+    ("athena", "delete-data-catalog"),
+    ("athena", "delete-named-query"),
+    ("athena", "delete-notebook"),
+    ("athena", "delete-prepared-statement"),
+    ("athena", "delete-work-group"),
+    ("athena", "terminate-session"),
+    ("auditmanager", "delete-assessment"),
+    ("auditmanager", "delete-assessment-framework"),
+    ("auditmanager", "delete-assessment-framework-share"),
+    ("auditmanager", "delete-assessment-report"),
+    ("auditmanager", "delete-control"),
+    ("autoscaling-plans", "delete-scaling-plan"),
+    ("backup-gateway", "delete-gateway"),
+    ("backup-gateway", "delete-hypervisor"),
+    ("batch", "delete-consumable-resource"),
+    ("batch", "delete-quota-share"),
+    ("batch", "delete-service-environment"),
+    ("batch", "terminate-job"),
+    ("batch", "terminate-service-job"),
+    ("bedrock", "delete-custom-model"),
+    ("bedrock", "delete-custom-model-deployment"),
+    ("bedrock", "delete-enforced-guardrail-configuration"),
+    ("bedrock", "delete-foundation-model-agreement"),
+    ("bedrock", "delete-guardrail"),
+    ("bedrock", "delete-imported-model"),
+    ("bedrock", "delete-inference-profile"),
+    ("bedrock", "delete-marketplace-model-endpoint"),
+    ("bedrock", "delete-model-invocation-logging-configuration"),
+    ("bedrock", "delete-prompt-router"),
+    ("bedrock", "delete-provisioned-model-throughput"),
+    ("bedrock", "delete-resource-policy"),
+    ("bedrock-agent", "delete-agent"),
+    ("bedrock-agent", "delete-agent-action-group"),
+    ("bedrock-agent", "delete-agent-alias"),
+    ("bedrock-agent", "delete-agent-version"),
+    ("bedrock-agent", "delete-data-source"),
+    ("bedrock-agent", "delete-flow"),
+    ("bedrock-agent", "delete-flow-alias"),
+    ("bedrock-agent", "delete-flow-version"),
+    ("bedrock-agent", "delete-knowledge-base"),
+    ("bedrock-agent", "delete-knowledge-base-documents"),
+    ("bedrock-agent", "delete-prompt"),
+    ("budgets", "delete-budget"),
+    ("budgets", "delete-budget-action"),
+    ("budgets", "delete-notification"),
+    ("budgets", "delete-subscriber"),
+    ("ce", "delete-anomaly-monitor"),
+    ("ce", "delete-anomaly-subscription"),
+    ("ce", "delete-cost-category-definition"),
+    ("chime", "delete-account"),
+    ("chime", "delete-events-configuration"),
+    ("chime", "delete-phone-number"),
+    ("chime", "delete-room"),
+    ("chime", "delete-room-membership"),
+    ("cloud9", "delete-environment"),
+    ("cloud9", "delete-environment-membership"),
+    ("cloudcontrol", "delete-resource"),
+    ("cloudhsmv2", "delete-backup"),
+    ("cloudhsmv2", "delete-hsm"),
+    ("cloudhsmv2", "delete-resource-policy"),
+)
+
+AWS_DESTRUCTIVE_COMMAND_PATHS: tuple[CommandPath, ...] = (
+    AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1 + AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4
+)
+
+if len(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1) != 100:
+    raise AssertionError("AWS batch 1 operation matrix must contain exactly 100 paths")
+if len(set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1)) != 100:
+    raise AssertionError("AWS batch 1 operation matrix paths must be unique")
+if len(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4) != 100:
+    raise AssertionError("AWS batch 4 operation matrix must contain exactly 100 paths")
+if len(set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4)) != 100:
+    raise AssertionError("AWS batch 4 operation matrix paths must be unique")
+if set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1) & set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4):
+    raise AssertionError("AWS operation matrix batches must not overlap")
+if len(AWS_DESTRUCTIVE_COMMAND_PATHS) != 200 or len(set(AWS_DESTRUCTIVE_COMMAND_PATHS)) != 200:
+    raise AssertionError("combined AWS operation matrix must contain exactly 200 unique paths")
+
 
 def aws_destructive_command_matchers(
     *,
     global_options_with_values: frozenset[str],
     global_flags: frozenset[str],
 ) -> tuple[ExecutablePathSetMatcher, ...]:
-    """Build fail-secure matchers for the validated AWS operation matrix."""
+    """Build one fail-secure matcher for the validated AWS operation matrix."""
 
     return (
         executable_path_set_matcher(
             "aws",
-            AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
+            AWS_DESTRUCTIVE_COMMAND_PATHS,
             global_options_with_values=global_options_with_values,
             global_flags=global_flags,
             fail_secure_unknown_options=True,

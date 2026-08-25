@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_cloud_aws_operation_matrix import (
+    AWS_DESTRUCTIVE_COMMAND_PATHS,
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
+    AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4,
     aws_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
@@ -42,13 +44,15 @@ def test_aws_batch_1_matrix_is_exactly_one_hundred_unique_operations() -> None:
     )
 
 
-def test_aws_batch_1_compiles_to_one_path_set_matcher() -> None:
+def test_aws_batches_compile_to_one_combined_path_set_matcher() -> None:
     matchers = aws_destructive_command_matchers(
         global_options_with_values=frozenset({"--region"}),
         global_flags=frozenset({"--debug"}),
     )
     assert len(matchers) == 1
-    assert len(matchers[0].paths) == 100
+    assert len(matchers[0].paths) == 200
+    assert matchers[0].paths == frozenset(AWS_DESTRUCTIVE_COMMAND_PATHS)
+    assert set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1).isdisjoint(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_4)
 
 
 def test_aws_batch_1_operations_feed_inspection_and_runtime_hooks(tmp_path: Path) -> None:
