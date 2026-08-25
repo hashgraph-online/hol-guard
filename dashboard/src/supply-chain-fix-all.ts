@@ -1,4 +1,5 @@
 import type { PackageFirewallStatusResponse } from "./guard-types";
+import type { SupplyChainRepairResult } from "./supply-chain-repair-types";
 
 export type SupplyChainFixAllPhase =
   | "idle"
@@ -25,12 +26,48 @@ export const IDLE_SUPPLY_CHAIN_FIX_ALL_STATE: SupplyChainFixAllState = {
   message: null,
   completedSteps: [],
   failedSteps: [],
-  remainingAction: null,
-  remainingSteps: [],
 };
+
+export function supplyChainFixAllWorkingState(): SupplyChainFixAllState {
+  return {
+    phase: "working",
+    message: "Repairing package tools and turning on routing…",
+    completedSteps: [],
+    failedSteps: [],
+  };
+}
 
 export function supplyChainFixAllNeedsCloudConnect(state: SupplyChainFixAllState): boolean {
   return state.remainingAction === "connect" && state.failedSteps.length === 0;
+}
+
+export function supplyChainFixAllStateFromRepair(result: SupplyChainRepairResult): SupplyChainFixAllState {
+  const remainingAction = result.remaining_steps.some((step) => step.action === "connect")
+    ? "connect"
+    : null;
+  return {
+    phase: result.repaired ? "success" : "incomplete",
+    message: result.message,
+    completedSteps: result.completed_steps,
+    failedSteps: result.failed_steps.map((failure) => failure.message),
+    remainingAction,
+    remainingSteps: result.remaining_steps.map((step) => step.message),
+  };
+}
+
+export function supplyChainFixAllConnectState(
+  phase: "connecting" | "error" | "incomplete",
+  message: string,
+  remainingSteps: string[] = [],
+): SupplyChainFixAllState {
+  return {
+    phase,
+    message,
+    completedSteps: [],
+    failedSteps: [],
+    remainingAction: "connect",
+    remainingSteps,
+  };
 }
 
 export function supplyChainFixAllButtonLabel(

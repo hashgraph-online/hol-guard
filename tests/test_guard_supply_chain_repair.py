@@ -7,13 +7,14 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.daemon.server import _repair_detected_package_shims, _repair_sync_intelligence
+from codex_plugin_scanner.guard.daemon.server import _repair_detected_package_shims
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncNotConfiguredError
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.supply_chain_repair import (
     SupplyChainRepairDeferredError,
     coordinate_supply_chain_repair,
 )
+from codex_plugin_scanner.guard.supply_chain_repair_sync import repair_sync_intelligence
 
 
 def test_supply_chain_repair_runs_every_step() -> None:
@@ -117,7 +118,7 @@ def test_repair_sync_intelligence_defers_unconfigured_cloud(
     )
 
     with pytest.raises(SupplyChainRepairDeferredError) as caught:
-        _repair_sync_intelligence(GuardStore(tmp_path / "guard"), workspace_dir=None)
+        repair_sync_intelligence(GuardStore(tmp_path / "guard"), workspace_dir=None)
 
     assert caught.value.action == "connect"
     assert caught.value.code == "guard_cloud_connect_required"

@@ -56,8 +56,9 @@ import {
   type AuditRecoveryModalPhase,
 } from "./supply-chain-audit-recovery-modal";
 import {
-  supplyChainFixAllRequiresConnection,
-  type SupplyChainFixAllState,
+  supplyChainFixAllConnectState, supplyChainFixAllNeedsCloudConnect,
+  supplyChainFixAllRequiresConnection, supplyChainFixAllStateFromRepair,
+  supplyChainFixAllWorkingState, type SupplyChainFixAllState,
 } from "./supply-chain-fix-all";
 
 type PanelLoadState =
@@ -477,26 +478,23 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
 
   const beginFixAllConnectRecovery = useCallback(async () => {
     setResumeFixAllAfterConnect(true);
-    onFixAllStateChange?.({
-      phase: "connecting",
-      message: "Finish Guard Cloud sign-in. Repair will resume here automatically.",
-      completedSteps: [],
-      failedSteps: [],
-      remainingAction: "connect",
-      remainingSteps: [],
-    });
+    onFixAllStateChange?.(
+      supplyChainFixAllConnectState(
+        "connecting",
+        "Finish Guard Cloud sign-in. Repair will resume here automatically.",
+      ),
+    );
     const started = await handleStartConnect();
     if (started) return;
     setResumeFixAllAfterConnect(false);
     repairNeedsCloudConnectRef.current = true;
-    onFixAllStateChange?.({
-      phase: "error",
-      message: "Guard Cloud sign-in could not start. Connect again to continue.",
-      completedSteps: [],
-      failedSteps: [],
-      remainingAction: "connect",
-      remainingSteps: ["Guard Cloud sign-in could not start."],
-    });
+    onFixAllStateChange?.(
+      supplyChainFixAllConnectState(
+        "error",
+        "Guard Cloud sign-in could not start. Connect again to continue.",
+        ["Guard Cloud sign-in could not start."],
+      ),
+    );
   }, [handleStartConnect, onFixAllStateChange]);
 
   const handleFixAll = useCallback(
@@ -507,32 +505,15 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         await beginFixAllConnectRecovery();
         return;
       }
-      onFixAllStateChange?.({
-        phase: "working",
-        message: "Repairing package tools and turning on routing…",
-        completedSteps: [],
-        failedSteps: [],
-        remainingAction: null,
-        remainingSteps: [],
-      });
+      onFixAllStateChange?.(supplyChainFixAllWorkingState());
       setPendingOp({ op: "fix_all", manager: null });
       try {
         const result = await repairSupplyChainProtection(credentials);
         await refreshAfterOp();
         await onStateChanged?.();
-        const remainingAction = result.remaining_steps.some((step) => step.action === "connect")
-          ? "connect"
-          : null;
-        repairNeedsCloudConnectRef.current =
-          remainingAction === "connect" && result.failed_steps.length === 0;
-        onFixAllStateChange?.({
-          phase: result.repaired ? "success" : "incomplete",
-          message: result.message,
-          completedSteps: result.completed_steps,
-          failedSteps: result.failed_steps.map((failure) => failure.message),
-          remainingAction,
-          remainingSteps: result.remaining_steps.map((step) => step.message),
-        });
+        const nextState = supplyChainFixAllStateFromRepair(result);
+        repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
+        onFixAllStateChange?.(nextState);
       } catch (error) {
         if (credentials === undefined && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
@@ -587,20 +568,19 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       const connectFailed = panelLoad.data.connect_flow?.state === "failed";
       setResumeFixAllAfterConnect(false);
       repairNeedsCloudConnectRef.current = true;
-      onFixAllStateChange?.({
-        phase: "error",
-        message: connectFailed
-          ? panelLoad.data.connect_flow?.detail || "Guard Cloud sign-in did not finish. Connect again to continue."
-          : "Guard Cloud sign-in did not grant package protection access. Connect again or review plan access.",
-        completedSteps: [],
-        failedSteps: [],
-        remainingAction: "connect",
-        remainingSteps: [
+      onFixAllStateChange?.(
+        supplyChainFixAllConnectState(
+          "error",
           connectFailed
-            ? "Guard Cloud sign-in did not finish."
-            : "Package protection access is still unavailable.",
-        ],
-      });
+            ? panelLoad.data.connect_flow?.detail || "Guard Cloud sign-in did not finish. Connect again to continue."
+            : "Guard Cloud sign-in did not grant package protection access. Connect again or review plan access.",
+          [
+            connectFailed
+              ? "Guard Cloud sign-in did not finish."
+              : "Package protection access is still unavailable.",
+          ],
+        ),
+      );
       return;
     }
     if (!panelLoad.data.entitlement.allowed) return;

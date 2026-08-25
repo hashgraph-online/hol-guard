@@ -287,19 +287,27 @@ def _resolve_legacy_args(
     return ["scan", *argv]
 
 
-def main(argv: list[str] | None = None) -> int:
-    program_name = Path(sys.argv[0]).name or "plugin-scanner"
-    requested_argv = sys.argv[1:] if argv is None else argv
-    if bool(getattr(sys, "frozen", False)) and requested_argv[:1] == ["__guard-bounded-hook"]:
+def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
+    if not bool(getattr(sys, "frozen", False)):
+        return None
+    if requested_argv[:1] == ["__guard-bounded-hook"]:
         from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
-    if bool(getattr(sys, "frozen", False)):
-        from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
+    from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
 
-        frozen_shim_path = resolve_frozen_package_shim_path(requested_argv)
-        if frozen_shim_path is not None:
-            return run_frozen_package_shim(frozen_shim_path, requested_argv[1:])
+    frozen_shim_path = resolve_frozen_package_shim_path(requested_argv)
+    if frozen_shim_path is None:
+        return None
+    return run_frozen_package_shim(frozen_shim_path, requested_argv[1:])
+
+
+def main(argv: list[str] | None = None) -> int:
+    program_name = Path(sys.argv[0]).name or "plugin-scanner"
+    requested_argv = sys.argv[1:] if argv is None else argv
+    frozen_exit = _run_frozen_early_dispatch(requested_argv)
+    if frozen_exit is not None:
+        return frozen_exit
     requested_argv = _resolve_hol_guard_help_alias(program_name, requested_argv)
     if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "secrets":
         from .guard.secrets.cli import main as secrets_main

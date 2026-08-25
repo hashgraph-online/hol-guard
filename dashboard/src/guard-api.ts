@@ -11,6 +11,7 @@ import { computeTrendBuckets } from "./evidence/evidence-metrics";
 import { normalizeOperatorHealth } from "./operator-health";
 import { canonicalizeGuardDaemonOrigin, standardGuardDaemonOrigin } from "./guard-daemon-origin";
 import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
+import { normalizeSupplyChainRepairResult } from "./supply-chain-repair-result";
 export { normalizeOperatorHealth } from "./operator-health";
 import {
   AUTHORITATIVE_DECISION_INCONSISTENT,
@@ -66,9 +67,7 @@ import type {
   GuardRuntimeSnapshot,
   GuardCloudConnectStatusResponse,
   SupplyChainBundle,
-  SupplyChainRepairRemainingStep,
   SupplyChainRepairResult,
-  SupplyChainRepairStepFailure,
   SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
@@ -3998,50 +3997,7 @@ export async function repairSupplyChainProtection(credentials?: {
     throw new Error("Guard returned an invalid supply-chain repair result.");
   }
   const result = payloadBody.result;
-  const failures: SupplyChainRepairStepFailure[] = [];
-  if (Array.isArray(result.failed_steps)) {
-    for (const candidate of result.failed_steps) {
-      if (!isRecord(candidate)) continue;
-      const step = stringValue(candidate.step);
-      const message = stringValue(candidate.message);
-      if (
-        (step === "package_shims" ||
-          step === "runtime_activation" ||
-          step === "intelligence_sync") &&
-        message !== null
-      ) {
-        failures.push({ step, message });
-      }
-    }
-  }
-  const remaining: SupplyChainRepairRemainingStep[] = [];
-  if (Array.isArray(result.remaining_steps)) {
-    for (const candidate of result.remaining_steps) {
-      if (!isRecord(candidate)) continue;
-      const step = stringValue(candidate.step);
-      const message = stringValue(candidate.message);
-      const action = stringValue(candidate.action);
-      if (step === "intelligence_sync" && action === "connect" && message !== null) {
-        remaining.push({ step, message, action });
-      }
-    }
-  }
-  const completedSteps = Array.isArray(result.completed_steps)
-    ? result.completed_steps.filter((value): value is string => typeof value === "string")
-    : [];
-  const requiredSteps = ["package_shims", "runtime_activation", "intelligence_sync"];
-  const completedWithoutFailures =
-    Array.isArray(result.failed_steps) &&
-    result.failed_steps.length === 0 &&
-    remaining.length === 0 &&
-    requiredSteps.every((step) => completedSteps.includes(step));
-  return {
-    repaired: result.repaired === true || (!("repaired" in result) && completedWithoutFailures),
-    completed_steps: completedSteps,
-    failed_steps: failures,
-    remaining_steps: remaining,
-    message: stringValue(result.message) ?? "Supply-chain repair finished.",
-  };
+  return normalizeSupplyChainRepairResult(result);
 }
 
 export type EvidencePageData = {
