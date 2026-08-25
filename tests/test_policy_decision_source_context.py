@@ -493,15 +493,7 @@ def test_collapse_duplicate_artifact_policy_rows_keeps_newest() -> None:
     collapsed = collapse_duplicate_artifact_policy_rows(
         [
             {
-                "harness": "guard-cli",
-                "scope": "artifact",
-                "action": "allow",
-                "source": "approval-gate",
-                "remembered_command": "npx execute @modelcontextprotocol/server-memory",
-                "artifact_id": "new",
-                "updated_at": "2026-08-24T22:00:00+00:00",
-            },
-            {
+                "decision_id": 1,
                 "harness": "guard-cli",
                 "scope": "artifact",
                 "action": "allow",
@@ -511,6 +503,17 @@ def test_collapse_duplicate_artifact_policy_rows_keeps_newest() -> None:
                 "updated_at": "2026-08-24T21:00:00+00:00",
             },
             {
+                "decision_id": 2,
+                "harness": "guard-cli",
+                "scope": "artifact",
+                "action": "allow",
+                "source": "approval-gate",
+                "remembered_command": "npx execute @modelcontextprotocol/server-memory",
+                "artifact_id": "new",
+                "updated_at": "2026-08-24T22:00:00+00:00",
+            },
+            {
+                "decision_id": 3,
                 "harness": "guard-cli",
                 "scope": "workspace",
                 "action": "allow",
