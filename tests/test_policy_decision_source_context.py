@@ -489,6 +489,50 @@ def test_list_policy_decisions_collapses_duplicate_npx_once_rules(tmp_path) -> N
     assert items[0]["artifact_id"] == "guard-cli:runtime:npx:4"
 
 
+def test_clear_displayed_artifact_rule_removes_collapsed_siblings(tmp_path) -> None:
+    store = _store(tmp_path)
+    command = "npx execute @modelcontextprotocol/server-memory"
+    for index in range(3):
+        artifact_id = f"guard-cli:runtime:npx:{index}"
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-clear-{index}",
+                timestamp=f"2026-08-24T21:1{index}:00+00:00",
+                harness="guard-cli",
+                artifact_id=artifact_id,
+                artifact_hash=f"clearhash{index}abcdef1234567890abcdef1234567890abcdef12",
+                policy_decision="allow",
+                capabilities_summary="Launch MCP server",
+                changed_capabilities=("runtime",),
+                provenance_summary="approval-gate once",
+                artifact_name=command,
+                source_scope="/srv/projects/sample-guard",
+            )
+        )
+        store.upsert_policy(
+            PolicyDecision(
+                harness="guard-cli",
+                scope="artifact",
+                action="allow",
+                artifact_id=artifact_id,
+                artifact_hash=f"clearhash{index}abcdef1234567890abcdef1234567890abcdef12",
+                reason="approved in review",
+                source="local",
+            ),
+            f"2026-08-24T21:1{index}:00+00:00",
+        )
+
+    displayed = list_remembered_policy_decisions(store, "guard-cli")
+    assert len(displayed) == 1
+    cleared = store.clear_policy_decisions(
+        "guard-cli",
+        scope="artifact",
+        artifact_id=str(displayed[0]["artifact_id"]),
+    )
+    assert cleared == 3
+    assert store.list_policy_decisions("guard-cli") == []
+
+
 def test_collapse_duplicate_artifact_policy_rows_keeps_newest() -> None:
     collapsed = collapse_duplicate_artifact_policy_rows(
         [
