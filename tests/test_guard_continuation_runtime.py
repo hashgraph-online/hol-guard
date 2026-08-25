@@ -15,14 +15,12 @@ from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer, 
 from codex_plugin_scanner.guard.continuation_runtime import (
     continue_request_after_application,
     record_live_hook_completion,
-    with_continuation_correlation,
 )
 from codex_plugin_scanner.guard.continuation_worker import StoreContinuationPlan
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 NOW = "2026-08-24T12:00:00+00:00"
-CORRELATION_ID = "gcr_018f0a0a-1234-7abc-8def-0123456789ab"
 
 
 def _successful_isolated_plan(
@@ -129,7 +127,7 @@ def test_retry_only_harnesses_persist_a_manual_retry_once(tmp_path: Path, harnes
     assert "localManualRetryNotification" not in second
     resume = store.get_request_resume(f"request-{harness}")
     assert resume is not None
-    assert resume["continuation_contract_version"] == "guard.harness-continuation.v1"
+    assert resume["continuation_contract_version"] == "guard.harness-continuation.v2"
     assert resume["continuation_offer_hash"]
     evidence = resume["continuation_evidence"]
     assert isinstance(evidence, list)
@@ -282,38 +280,6 @@ def test_cancelled_continuation_persists_failure_before_returning(tmp_path: Path
     assert resume is not None
     assert resume["continuation_cancelled_at"] == NOW
     assert len(store.list_events(event_name="review.continuation.attempt")) == 1
-
-
-def test_continuation_preserves_canonical_correlation_in_payload_and_events(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "correlation")
-    request = _seed_request(
-        store,
-        harness="pi",
-        request_id="command-job-is-not-a-correlation-id",
-        metadata={"correlationId": "command-job-must-not-win"},
-    )
-
-    correlated_request = with_continuation_correlation(
-        request,
-        {"correlationId": CORRELATION_ID},
-        {"correlationId": "later-job-id-must-not-win"},
-    )
-    payload = continue_request_after_application(
-        store,
-        request_row=correlated_request,
-        action="allow_once",
-        now=NOW,
-    )
-
-    assert payload["correlationId"] == CORRELATION_ID
-    detail = payload["harnessResume"]
-    assert isinstance(detail, Mapping)
-    assert detail["correlationId"] == CORRELATION_ID
-    events = store.list_events(event_name="review.continuation.attempt")
-    assert len(events) == 1
-    event_payload = events[0]["payload"]
-    assert isinstance(event_payload, Mapping)
-    assert event_payload["correlationId"] == CORRELATION_ID
 
 
 def test_continuation_derives_valid_correlation_instead_of_using_raw_job_id(tmp_path: Path) -> None:

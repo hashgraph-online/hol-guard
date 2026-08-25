@@ -25,7 +25,7 @@ ContinuationStatus = Literal[
     "waiting",
 ]
 ContinuationAction = Literal["allow_once", "block"]
-CAPABILITY_CONTRACT_VERSION = "guard.harness-continuation.v1"
+CAPABILITY_CONTRACT_VERSION = "guard.harness-continuation.v2"
 _OPAQUE_IDENTIFIER_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
 _CORRELATION_PATTERN = re.compile(r"^gcr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 

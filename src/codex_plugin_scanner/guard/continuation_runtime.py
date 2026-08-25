@@ -73,24 +73,7 @@ _SESSION_KEYS = (
     "sessionId",
 )
 _CLAIM_LEASE_SECONDS: Final = 30.0
-_CORRELATION_KEYS: Final = ("correlationId", "correlation_id")
-
-
 _run_store_continuation_plan = run_store_continuation_plan
-
-
-def with_continuation_correlation(
-    request_row: Mapping[str, object], *sources: Mapping[str, object]
-) -> dict[str, object]:
-    """Attach an upstream lifecycle correlation without trusting an invalid value."""
-
-    correlated = dict(request_row)
-    for source in sources:
-        value = _first_text(source, _CORRELATION_KEYS)
-        if value is not None:
-            correlated["correlationId"] = value
-            break
-    return correlated
 
 
 def continue_request_after_application(
