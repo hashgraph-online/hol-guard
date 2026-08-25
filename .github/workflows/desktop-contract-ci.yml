@@ -37,7 +37,7 @@ on:
       - .github/workflows/desktop-contract-ci.yml
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: desktop-contract-${{ github.ref }}
@@ -51,8 +51,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ github.head_ref }}
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -90,18 +89,8 @@ jobs:
       - name: Run Desktop contract tests
         run: uv run --no-sync pytest tests/test_guard_desktop_contract.py --tb=short
 
-      - name: Refresh source-bound decision evidence
-        run: |
-          uv run --no-sync python tests/guard_command_decision_diff.py --write
-          if git diff --quiet -- tests/fixtures/guard-command-corpus/decision-diff-report.json; then
-            echo "decision evidence already current"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/fixtures/guard-command-corpus/decision-diff-report.json
-          git commit --signoff -m "test(ci): refresh path-set decision evidence"
-          git push origin "HEAD:${GITHUB_HEAD_REF}"
+      - name: Validate source-bound decision evidence
+        run: uv run --no-sync python tests/guard_command_decision_diff.py --check
 
       - name: Validate test-suite ratchet
         run: |
