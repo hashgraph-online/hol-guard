@@ -9,6 +9,7 @@ import pytest
 from codex_plugin_scanner.guard import codex_resume as resume
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
+from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_codex_resume_endpoints import _post_json, _request, _seed_codex_operation
 
@@ -18,7 +19,17 @@ _FROZEN_NOW = "2026-05-19T10:00:00+00:00"
 def test_pretool_bridge_wait_matches_codex_hook_hold_formula(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     (store.guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 1\n", encoding="utf-8")
-    operation = {"created_at": _FROZEN_NOW, "updated_at": _FROZEN_NOW, "metadata": {}}
+    process_identity = current_process_identity()
+    assert process_identity is not None
+    operation = {
+        "created_at": _FROZEN_NOW,
+        "status": "waiting_on_approval",
+        "updated_at": _FROZEN_NOW,
+        "metadata": {
+            "codex_browser_wait_process": process_identity,
+            "hook_event_name": "PreToolUse",
+        },
+    }
     assert resume._pretool_bridge_wait_is_active(store, operation, now="2026-05-19T10:00:04+00:00")
     assert not resume._pretool_bridge_wait_is_active(store, operation, now="2026-05-19T10:00:05+00:00")
 
@@ -42,7 +53,8 @@ def test_codex_approve_pretooluse_defers_within_bridge_wait(
         codex_home=str(codex_home),
         command_text="npm install minimist@1.2.8",
         hook_event_name="PreToolUse",
-        waits_for_browser_approval=False,
+        waits_for_browser_approval=True,
+        browser_wait_deadline_at="2026-05-19T10:00:05+00:00",
         status="waiting_on_approval",
     )
     monkeypatch.setattr(daemon_server, "_now", lambda: _FROZEN_NOW)

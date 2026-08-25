@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.codex_live_decision import complete_codex_live_decision
 from codex_plugin_scanner.guard.codex_resume import seed_request_resume_record
+from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -27,6 +28,8 @@ def _seed_resolved_request(
     artifact_id = f"codex:project:{request_id}"
     artifact_hash = f"hash-{request_id}"
     workspace = "/workspace/project"
+    process_identity = current_process_identity()
+    assert process_identity is not None
     store.add_approval_request(
         GuardApprovalRequest(
             request_id=request_id,
@@ -73,7 +76,13 @@ def _seed_resolved_request(
         status="waiting_on_approval",
         approval_request_ids=[request_id],
         resume_token=None,
-        metadata={"hook_event_name": "PreToolUse", "workspace": workspace},
+        metadata={
+            "codex_browser_wait_deadline_at": (observed + timedelta(minutes=5)).isoformat(),
+            "codex_browser_wait_process": process_identity,
+            "codex_hook_waits_for_browser_approval": True,
+            "hook_event_name": "PreToolUse",
+            "workspace": workspace,
+        },
         now=now,
     )
     assert seed_request_resume_record(store, request_id=request_id, now=now) is not None

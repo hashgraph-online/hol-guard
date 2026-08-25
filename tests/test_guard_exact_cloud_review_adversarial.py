@@ -82,7 +82,9 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
     for request in (accepted, rejected, invalid_decision, transaction_expired, capability_expired):
         _add_request(store, request)
     enable_exact_cloud_review(store, now=current.isoformat(), ttl_seconds=600)
-    expires_at = current + timedelta(minutes=5)
+    # Stay well inside the local request lifetime so this assertion isolates
+    # the remote receipt's exact expiry boundary.
+    expires_at = current + timedelta(minutes=1)
 
     apply_exact_cloud_review(
         store,
@@ -134,6 +136,12 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
             ),
             now=(current + timedelta(seconds=1)).isoformat(),
         )
+    capability_expires_at = current + timedelta(minutes=5)
+    monkeypatch.setattr(
+        exact_store_module.StoreExactCloudReviewMixin,
+        "_exact_transaction_now",
+        staticmethod(lambda: capability_expires_at.isoformat()),
+    )
     enable_exact_cloud_review(store, now=current.isoformat(), ttl_seconds=300)
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_expired"):
         apply_exact_cloud_review(

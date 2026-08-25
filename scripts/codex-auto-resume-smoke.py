@@ -123,21 +123,6 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
     workspace_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=workspace_dir, check=True, capture_output=True, text=True)
 
-    _run_guard_cli(
-        [
-            "guard",
-            "install",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ],
-        home_dir=home_dir,
-        codex_home=args.codex_home,
-    )
-
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     captured_payloads: list[dict[str, object]] = []
@@ -499,6 +484,7 @@ def _queue_pending_request(
     operation_status: str = "waiting_on_approval",
 ) -> None:
     from codex_plugin_scanner.guard.consumer import artifact_hash
+    from codex_plugin_scanner.guard.live_process_identity import current_process_identity
     from codex_plugin_scanner.guard.models import GuardApprovalRequest
     from codex_plugin_scanner.guard.runtime.secret_file_requests import (
         build_tool_action_request_artifact,
@@ -506,6 +492,9 @@ def _queue_pending_request(
     )
 
     now = datetime.now(timezone.utc).isoformat()
+    process_identity = current_process_identity()
+    if process_identity is None:
+        raise RuntimeError("current process identity is unavailable")
     config_path = workspace_dir / ".codex" / "config.toml"
     request_match = extract_sensitive_tool_action_request(
         "Bash",
@@ -552,6 +541,7 @@ def _queue_pending_request(
             "event": "PostToolUse",
             "hook_event_name": "PostToolUse",
             "codex_hook_waits_for_browser_approval": True,
+            "codex_browser_wait_process": process_identity,
             "codex_browser_wait_deadline_at": "2000-01-01T00:00:00+00:00",
         },
         now=now,
