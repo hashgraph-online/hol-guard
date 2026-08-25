@@ -214,6 +214,73 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(
     assert "exactReviewCapability" not in refreshed_claim
 
 
+def test_exact_claim_is_stable_when_continuation_operation_appears(tmp_path: Path) -> None:
+    store, _job_payload = _exact_job(tmp_path)
+    request = store.get_approval_request("exact-transport")
+    assert isinstance(request, dict)
+    oauth = _oauth_metadata(store)
+    original_claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
+
+    now = datetime.now(timezone.utc).isoformat()
+    store.upsert_guard_session(
+        session_id="continuation-session",
+        harness="codex",
+        surface="cli",
+        status="active",
+        client_name="codex",
+        client_title=None,
+        client_version="test",
+        workspace="/workspace/repo",
+        capabilities=[],
+        now=now,
+    )
+    store.upsert_guard_operation(
+        operation_id="continuation-operation",
+        session_id="continuation-session",
+        harness="codex",
+        operation_type="tool_action",
+        status="pending",
+        approval_request_ids=["exact-transport"],
+        resume_token=None,
+        metadata={"project_id": "mutable-operation-project"},
+        now=now,
+    )
+
+    refreshed_claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
+
+    assert original_claim["projectIdentity"] is None
+    assert refreshed_claim["projectIdentity"] is None
+    assert refreshed_claim["claimHash"] == original_claim["claimHash"]
+
+
+def test_exact_claim_treats_scope_recommendation_as_non_authoritative(tmp_path: Path) -> None:
+    store, _job_payload = _exact_job(tmp_path)
+    request = store.get_approval_request("exact-transport")
+    assert isinstance(request, dict)
+    oauth = _oauth_metadata(store)
+    original_claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
+
+    changed_recommendation = {
+        **request,
+        "recommended_scope": "workspace",
+        "recommended_scope_by_action": {"allow": "workspace", "block": "artifact"},
+    }
+    recommendation_claim = build_local_review_request_claim(
+        request_row=changed_recommendation,
+        oauth=oauth,
+        store=store,
+    )
+    changed_action = {
+        **request,
+        "action_envelope_json": {"action_type": "shell_command", "command": "different-command"},
+    }
+    action_claim = build_local_review_request_claim(request_row=changed_action, oauth=oauth, store=store)
+
+    assert recommendation_claim["recommendedScope"] != original_claim["recommendedScope"]
+    assert recommendation_claim["claimHash"] == original_claim["claimHash"]
+    assert action_claim["claimHash"] != original_claim["claimHash"]
+
+
 def test_poll_exact_leases_acks_applies_and_posts_versioned_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -30,6 +30,7 @@ from .policy_bundle_trusted_keys import (
     safe_load_policy_bundle_verification_keys,
     signing_key_is_current,
 )
+from .project_identity import resolve_portable_project_identity
 from .review_exact_capability_advertisement import attach_exact_review_capability
 from .review_oauth_binding import (
     GuardReviewContractError,
@@ -46,7 +47,7 @@ _REMOTE_APPROVAL_RESOLVER_ROLES = frozenset({"owner", "workspace-owner", "admin"
 _REMOTE_APPROVAL_KEY_PURPOSE = "remote_approval"
 _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
-_CLAIM_HASH_KEYS = ("claimHash", "exactReviewCapability")
+_CLAIM_HASH_EXCLUDED_KEYS = ("claimHash", "exactReviewCapability", "recommendedScope")
 _SIGNED_PAYLOAD_STRIP_KEYS = ("payloadHash", "signature", "signatureAlgorithm", "verificationKeys", "bundleHash")
 _GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY = "guard_review_verification_keyring"
 
@@ -236,17 +237,8 @@ def _action_envelope_hash(request_row: dict[str, object]) -> str:
     return _sha256_hex(_stable_serialize(envelope))
 
 
-def _project_identity(request_row: dict[str, object], store) -> str | None:
-    operation = store.get_guard_operation_for_approval_request(str(request_row["request_id"]))
-    if not isinstance(operation, dict):
-        return None
-    metadata = operation.get("metadata")
-    if isinstance(metadata, dict):
-        for key in ("project_id", "projectId", "workspace_path", "workspacePath"):
-            value = _non_empty_string(metadata.get(key))
-            if value is not None:
-                return value
-    return _non_empty_string(operation.get("operation_id"))
+def _project_identity(request_row: dict[str, object]) -> str | None:
+    return resolve_portable_project_identity(_non_empty_string(request_row.get("workspace")))
 
 
 def _capability_category(request_row: dict[str, object]) -> str:
@@ -346,7 +338,7 @@ def build_local_review_request_claim(
         "nonce": _non_empty_string(request_row.get("queue_group_id")) or local_request_id,
         "policyAction": policy_action,
         "policyVersion": _policy_version(request_row),
-        "projectIdentity": _project_identity(request_row, store),
+        "projectIdentity": _project_identity(request_row),
         "queueGroupId": _non_empty_string(request_row.get("queue_group_id")),
         "recommendedScope": recommended_scope,
         "riskCategory": _risk_category(request_row),
@@ -358,7 +350,7 @@ def build_local_review_request_claim(
 
 
 def compute_local_review_request_claim_hash(claim: dict[str, object]) -> str:
-    return _sha256_hex(_stable_serialize(_strip_keys(claim, _CLAIM_HASH_KEYS)))
+    return _sha256_hex(_stable_serialize(_strip_keys(claim, _CLAIM_HASH_EXCLUDED_KEYS)))
 
 
 def validate_local_review_request_claim(claim: dict[str, object]) -> dict[str, object]:
