@@ -81,12 +81,26 @@ def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict
             "failureCode": failure_code,
             "failureMessage": str(execution.get("failureMessage") or failure_code),
         }
+    if uses_exact_transport(job):
+        try:
+            result = exact_result(job, execution)
+        except ValueError:
+            return {
+                **protocol,
+                "leaseId": lease_id(job),
+                "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:failed",
+                "status": "failed",
+                "failureCode": "exact_result_contract_invalid",
+                "failureMessage": "The exact Guard Review result did not satisfy the canonical contract.",
+            }
+    else:
+        result = execution
     return {
         **protocol,
         "leaseId": lease_id(job),
         "idempotencyKey": f"{job_id(job)}:{lease_id(job)}:succeeded",
         "status": "succeeded",
-        "result": exact_result(job, execution) if uses_exact_transport(job) else execution,
+        "result": result,
     }
 
 

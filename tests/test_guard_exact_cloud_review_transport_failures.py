@@ -174,3 +174,45 @@ def test_exact_result_validates_unsupported_continuation_status(tmp_path: Path) 
 
     assert result["continuationStatus"] == "unsupported"
     validate_exact_command_result(result)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    (
+        ("applicationStatus", "unknown_application_status"),
+        ("continuationStatus", "unknown_continuation_status"),
+    ),
+)
+def test_exact_result_contract_failure_becomes_terminal_queue_failure(
+    tmp_path: Path,
+    field: str,
+    invalid_value: str,
+) -> None:
+    _store, job = _exact_job(tmp_path)
+    execution: dict[str, object] = {
+        "generatedAt": "2026-08-24T00:03:00+00:00",
+        "data": {
+            "applicationReason": None,
+            "applicationStatus": "applied",
+            "applicationUpdatedAt": "2026-08-24T00:03:00+00:00",
+            "localRequestId": "exact-transport",
+            "receiptId": "exact-transport-receipt",
+            "continuationReason": None,
+            "continuationStatus": "resumed",
+            "continuationUpdatedAt": "2026-08-24T00:03:00+00:00",
+        },
+    }
+    data = execution["data"]
+    assert isinstance(data, dict)
+    data[field] = invalid_value
+
+    result = command_queue._result_payload(exact_transport_job(job), execution)
+
+    assert result == {
+        "protocolVersion": 2,
+        "leaseId": job["leaseId"],
+        "idempotencyKey": f"{job['id']}:{job['leaseId']}:failed",
+        "status": "failed",
+        "failureCode": "exact_result_contract_invalid",
+        "failureMessage": "The exact Guard Review result did not satisfy the canonical contract.",
+    }
