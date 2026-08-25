@@ -525,7 +525,7 @@ def activate_package_shims(
 
 
 def package_shim_status(context: HarnessContext, *, path_env: str | None = None) -> dict[str, object]:
-    manifest = _load_package_shim_manifest(context)
+    manifest, manifest_state = _load_package_shim_manifest_with_state(context)
     installed_managers = [
         manager for manager in _string_items(manifest.get("installed_managers")) if manager in _PACKAGE_SHIM_COMMANDS
     ]
@@ -612,6 +612,7 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
             "path_status": activation_path_status,
             "bypasses": bypasses,
             "manager_details": manager_details,
+            "manifest_state": manifest_state,
             "manifest_path": str(_package_shim_manifest_path(context)),
             "missing_managers": missing_managers,
             "restart_shell_required": activation_path_status == "restart_required",
@@ -1361,14 +1362,28 @@ def _detect_system_package_managers(
 
 
 def _load_package_shim_manifest(context: HarnessContext) -> dict[str, object]:
+    manifest, _state = _load_package_shim_manifest_with_state(context)
+    return manifest
+
+
+def _load_package_shim_manifest_with_state(
+    context: HarnessContext,
+) -> tuple[dict[str, object], str]:
     manifest_path = _package_shim_manifest_path(context)
     if not manifest_path.exists():
-        return {}
+        return {}, "absent"
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
+        return {}, "unreadable"
+    if not isinstance(payload, dict):
+        return {}, "invalid"
+    installed_managers = payload.get("installed_managers")
+    if not isinstance(installed_managers, list) or not installed_managers:
+        return {}, "invalid"
+    if any(not isinstance(manager, str) or manager not in _PACKAGE_SHIM_COMMANDS for manager in installed_managers):
+        return {}, "invalid"
+    return payload, "valid"
 
 
 def _dict_items(value: object) -> tuple[dict[str, object], ...]:

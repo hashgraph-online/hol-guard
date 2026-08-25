@@ -464,7 +464,7 @@ class TestGuardSurfaceServer:
         )
         monkeypatch.setattr(
             daemon_server_module,
-            "_repair_failing_managed_harness_hooks",
+            "repair_failing_managed_harness_hooks",
             lambda _store: (_ for _ in ()).throw(RuntimeError("hook discovery failed")),
         )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

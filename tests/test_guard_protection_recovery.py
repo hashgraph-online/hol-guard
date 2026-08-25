@@ -16,12 +16,15 @@ from codex_plugin_scanner.guard.cli.install_commands import (
 )
 from codex_plugin_scanner.guard.daemon.server import (
     _PROTECTION_REPAIR_PROBE_COMMAND,
+    GuardDaemonServer,
     _repair_command_activity_persistence_health,
-    _repair_failing_managed_harness_hooks,
 )
 from codex_plugin_scanner.guard.managed_install_proof import (
     bind_managed_install_proof,
     verify_managed_install_proof,
+)
+from codex_plugin_scanner.guard.runtime_artifact_reconciliation import (
+    repair_failing_managed_harness_hooks,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -189,13 +192,35 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
     assert grok_hooks_protection_ready(ctx) is False
     assert store.get_command_activity_persistence_health().active_error_count == 3
 
-    failed_hooks = _repair_failing_managed_harness_hooks(store)
+    _, failed_hooks = repair_failing_managed_harness_hooks(store)
     _repair_command_activity_persistence_health(store)
     store.maintain_command_activity(now=_NOW, detail_retain_days=30)
 
-    assert failed_hooks == []
+    assert failed_hooks == ()
     assert grok_hooks_protection_ready(ctx) is True
     assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": True}
     assert store.get_command_activity_persistence_health().active_error_count == 0
     assert (ctx.home_dir / ".grok" / "managed_config.toml").is_file()
     assert "matcher" not in json.loads(pretool.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]
+
+
+def test_daemon_ownership_change_repairs_stale_managed_grok_hooks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
+    apply_managed_install("install", "grok", False, ctx, store, None, "2026-08-17T12:00:00+00:00")
+    pretool = ctx.home_dir / ".grok" / "hooks" / "hol-guard-pretooluse.json"
+    pretool.write_text(json.dumps(_stale_pretool_payload()), encoding="utf-8")
+    (ctx.home_dir / ".grok" / "managed_config.toml").unlink()
+    assert grok_hooks_protection_ready(ctx) is False
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        assert grok_hooks_protection_ready(ctx) is True
+        assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": True}
+    finally:
+        daemon.stop()
