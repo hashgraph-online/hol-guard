@@ -218,7 +218,7 @@ from ..store_evidence import (
     list_evidence,
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
-from ..supply_chain_repair import coordinate_supply_chain_repair
+from ..supply_chain_repair import SupplyChainRepairDeferredError, coordinate_supply_chain_repair
 from .bounded_http import BoundedThreadingHTTPServer
 from .command_activity_api import (
     handle_command_activity_analytics,
@@ -1787,6 +1787,53 @@ def _sync_supply_chain_cloud_state_with_optional_auth_context(
     if workspace_dir is not None and "workspace_dir" in parameters:
         kwargs["workspace_dir"] = workspace_dir
     return sync_supply_chain_cloud_state(store, **kwargs)
+
+
+def _repair_sync_intelligence(
+    store: GuardStore,
+    *,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
+    try:
+        try:
+            auth_context = _resolve_guard_sync_auth_context(store)
+        except GuardSyncAuthorizationExpiredError as error:
+            raise SupplyChainRepairDeferredError(
+                code="guard_cloud_reconnect_required",
+                message="Guard Cloud sign-in expired. Reconnect to refresh safety intelligence.",
+                action="connect",
+            ) from error
+        except GuardSyncNotConfiguredError as error:
+            raise SupplyChainRepairDeferredError(
+                code="guard_cloud_connect_required",
+                message=(
+                    "Connect Guard Cloud to refresh safety intelligence. "
+                    "Package protection on this device can stay on without it."
+                ),
+                action="connect",
+            ) from error
+        return _sync_supply_chain_cloud_state_with_optional_auth_context(
+            store,
+            auth_context,
+            workspace_dir=workspace_dir,
+        )
+    except SupplyChainRepairDeferredError:
+        raise
+    except GuardSyncAuthorizationExpiredError as error:
+        raise SupplyChainRepairDeferredError(
+            code="guard_cloud_reconnect_required",
+            message="Guard Cloud sign-in expired. Reconnect to refresh safety intelligence.",
+            action="connect",
+        ) from error
+    except GuardSyncNotConfiguredError as error:
+        raise SupplyChainRepairDeferredError(
+            code="guard_cloud_connect_required",
+            message=(
+                "Connect Guard Cloud to refresh safety intelligence. "
+                "Package protection on this device can stay on without it."
+            ),
+            action="connect",
+        ) from error
 
 
 def _sync_local_guard_cloud_proof_with_optional_auth_context(
@@ -3892,9 +3939,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         result = coordinate_supply_chain_repair(
             repair_package_shims=lambda: _repair_detected_package_shims(context),
             activate_runtime=lambda: _activate_package_firewall_runtime(context),
-            sync_intelligence=lambda: _sync_supply_chain_cloud_state_with_optional_auth_context(
+            sync_intelligence=lambda: _repair_sync_intelligence(
                 self.server.store,  # type: ignore[attr-defined]
-                None,
                 workspace_dir=context.workspace_dir,
             ),
         )

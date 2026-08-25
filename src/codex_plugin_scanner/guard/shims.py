@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import os
+import runpy
 import shlex
 import shutil
 import subprocess
@@ -107,6 +108,7 @@ _TRUSTED_CLI_LAUNCHER = (
     "sys.argv[0] = module_path; "
     "raise SystemExit(module.main(sys.argv[1:]))"
 )
+FROZEN_PACKAGE_SHIM_SENTINEL = "HOL_GUARD_PACKAGE_SHIM_SENTINEL"
 
 
 def install_guard_shim(
@@ -219,6 +221,48 @@ def _build_windows_script(posix_path: Path) -> str:
     return "\r\n".join(("@echo off", f'"{sys.executable}" "{posix_path}" %*', ""))
 
 
+def _package_shim_needs_shell_wrapper() -> bool:
+    return _is_frozen_runtime() or (" " in sys.executable)
+
+
+def _frozen_package_shim_python_path(shim_dir: Path, command: str) -> Path:
+    return shim_dir / f".{command}.py"
+
+
+def _package_shim_shell_wrapper(python_path: Path) -> str:
+    return "\n".join(
+        (
+            "#!/bin/sh",
+            f"exec {shlex.quote(sys.executable)} {shlex.quote(str(python_path))} \"$@\"",
+            "",
+        )
+    )
+
+
+def _expected_package_shim_executable_bytes(context: HarnessContext, command: str) -> bytes:
+    python_source = _build_package_manager_python_shim(context, command)
+    if not _package_shim_needs_shell_wrapper():
+        return python_source.encode("utf-8")
+    python_path = _frozen_package_shim_python_path(context.guard_home / "package-shims" / "bin", command)
+    return _package_shim_shell_wrapper(python_path).encode("utf-8")
+
+
+def _write_package_manager_shim_files(context: HarnessContext, command: str, shim_dir: Path) -> Path:
+    posix_path = shim_dir / command
+    windows_path = shim_dir / f"{command}.cmd"
+    python_source = _build_package_manager_python_shim(context, command)
+    if _package_shim_needs_shell_wrapper():
+        python_path = _frozen_package_shim_python_path(shim_dir, command)
+        python_path.write_text(python_source, encoding="utf-8")
+        posix_path.write_text(_package_shim_shell_wrapper(python_path), encoding="utf-8")
+        windows_path.write_text(_build_windows_script(python_path), encoding="utf-8")
+    else:
+        posix_path.write_text(python_source, encoding="utf-8")
+        windows_path.write_text(_build_windows_script(posix_path), encoding="utf-8")
+    posix_path.chmod(posix_path.stat().st_mode | 0o755)
+    return posix_path
+
+
 def _home_override_args(context: HarnessContextLike) -> list[str]:
     if not context.home_dir:
         return []
@@ -243,7 +287,10 @@ def _normalized_package_shim_content(content: bytes) -> str:
     normalized_lines: list[str] = []
     for line in text.splitlines():
         if line.startswith("#!"):
-            normalized_lines.append("#!<python>")
+            normalized_lines.append("#!<interpreter>")
+            continue
+        if line.startswith("exec "):
+            normalized_lines.append('exec <python> <shim-python> "$@"')
             continue
         if line.startswith("base_command = "):
             normalized_lines.append(f"base_command = {_normalized_base_command_repr(line)}")
@@ -323,6 +370,54 @@ def _has_package_shim_layout(candidate: Path) -> bool:
     parent = candidate.parent
     grandparent = parent.parent
     return parent.name == "bin" and grandparent.name == "package-shims"
+
+
+def resolve_frozen_package_shim_path(argv: list[str]) -> Path | None:
+    """Return a trusted generated package shim when frozen Core is the shebang interpreter."""
+
+    if not bool(getattr(sys, "frozen", False)) or not argv:
+        return None
+    try:
+        resolved = Path(argv[0]).expanduser().resolve(strict=True)
+    except OSError:
+        return None
+    if resolved.name not in set(_PACKAGE_SHIM_COMMANDS.values()):
+        if not (resolved.name.startswith(".") and resolved.name.endswith(".py")):
+            return None
+        command_name = resolved.name[1:-3]
+        if command_name not in set(_PACKAGE_SHIM_COMMANDS.values()):
+            return None
+    if not _has_package_shim_layout(resolved):
+        return None
+    try:
+        text = resolved.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    first_line = text.splitlines()[0] if text else ""
+    if first_line != f"#!{sys.executable}":
+        return None
+    if f"{FROZEN_PACKAGE_SHIM_SENTINEL} = True" not in text:
+        return None
+    return resolved
+
+
+def run_frozen_package_shim(shim_path: Path, shim_args: list[str]) -> int:
+    """Execute a trusted generated package shim inside frozen Core."""
+
+    original_argv = sys.argv
+    try:
+        sys.argv = [str(shim_path), *shim_args]
+        runpy.run_path(str(shim_path), run_name="__main__")
+    except SystemExit as error:
+        code = error.code
+        if code is None:
+            return 0
+        if isinstance(code, int):
+            return code
+        return 1
+    finally:
+        sys.argv = original_argv
+    return 0
 
 
 def _is_trusted_package_shim_binary(candidate: Path, trusted_shim_dir: Path) -> bool:
@@ -505,12 +600,7 @@ def install_package_shims(
     content_hashes: dict[str, str] = dict(existing_hashes)
     for manager in normalized_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
-        posix_path = shim_dir / command
-        windows_path = shim_dir / f"{command}.cmd"
-        content = _build_package_manager_python_shim(context, command)
-        posix_path.write_text(content, encoding="utf-8")
-        posix_path.chmod(posix_path.stat().st_mode | 0o755)
-        windows_path.write_text(_build_windows_script(posix_path), encoding="utf-8")
+        posix_path = _write_package_manager_shim_files(context, command, shim_dir)
         content_hashes[manager] = build_shim_content_hash(posix_path.read_bytes())
         installed.append(manager)
     manifest_payload: dict[str, object] = {
@@ -595,7 +685,7 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
             current_content = shim_path.read_bytes()
             current_hash = build_shim_content_hash(current_content)
             stored_hash = stored_hashes.get(manager)
-            expected_content = _build_package_manager_python_shim(context, command).encode("utf-8")
+            expected_content = _expected_package_shim_executable_bytes(context, command)
             expected_hash = build_shim_content_hash(expected_content)
             if current_hash == expected_hash or _normalized_package_shim_content(
                 current_content
@@ -779,6 +869,10 @@ def uninstall_package_shims(
             if candidate.exists():
                 candidate.unlink()
                 removed_paths.append(str(candidate))
+        sidecar = _frozen_package_shim_python_path(shim_dir, command)
+        if sidecar.exists():
+            sidecar.unlink()
+            removed_paths.append(str(sidecar))
     remaining = [manager for manager in manifest_managers if manager not in requested_managers]
     manifest_path = _package_shim_manifest_path(context)
     if remaining:
@@ -1134,19 +1228,12 @@ def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
     )
 
 
-def _build_package_manager_python_shim(context: HarnessContext, command: str) -> str:
-    workspace_args: list[str] = []
-    if context.workspace_dir is not None:
-        workspace_args = ["--workspace", str(context.workspace_dir)]
-    shim_dir = context.guard_home / "package-shims" / "bin"
-    command_args = [
-        sys.executable,
-        *_trusted_python_flags(),
-        "-c",
-        _TRUSTED_CLI_LAUNCHER,
-        str(_trusted_import_root()),
-        "codex_plugin_scanner.cli",
-        "guard",
+def _is_frozen_runtime() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
+def _package_protect_command_args(context: HarnessContextLike, workspace_args: list[str]) -> list[str]:
+    protect_args = [
         "protect",
         "--package-shim-ui",
         "--guard-home",
@@ -1154,6 +1241,26 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
         *_home_override_args(context),
         *workspace_args,
     ]
+    if _is_frozen_runtime():
+        return [sys.executable, *protect_args]
+    return [
+        sys.executable,
+        *_trusted_python_flags(),
+        "-c",
+        _TRUSTED_CLI_LAUNCHER,
+        str(_trusted_import_root()),
+        "codex_plugin_scanner.cli",
+        "guard",
+        *protect_args,
+    ]
+
+
+def _build_package_manager_python_shim(context: HarnessContext, command: str) -> str:
+    workspace_args: list[str] = []
+    if context.workspace_dir is not None:
+        workspace_args = ["--workspace", str(context.workspace_dir)]
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    command_args = _package_protect_command_args(context, workspace_args)
     return "\n".join(
         (
             f"#!{sys.executable}",
@@ -1164,6 +1271,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "import sys",
             "import time",
             "from pathlib import Path",
+            f"{FROZEN_PACKAGE_SHIM_SENTINEL} = True",
             f"base_command = {command_args!r}",
             f"command_name = {command!r}",
             f"guard_cli_cwd = {str(_trusted_import_root())!r}",
@@ -1589,6 +1697,7 @@ def probe_package_shim_intercepts(
 
 
 __all__ = [
+    "FROZEN_PACKAGE_SHIM_SENTINEL",
     "activate_package_shims",
     "ensure_guard_shim_path_in_shell_profile",
     "ensure_package_shim_path_in_shell_profile",
@@ -1601,5 +1710,7 @@ __all__ = [
     "probe_package_shim_intercepts",
     "remove_guard_profile_blocks",
     "remove_guard_shim",
+    "resolve_frozen_package_shim_path",
+    "run_frozen_package_shim",
     "uninstall_package_shims",
 ]

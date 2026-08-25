@@ -66,6 +66,7 @@ import type {
   GuardRuntimeSnapshot,
   GuardCloudConnectStatusResponse,
   SupplyChainBundle,
+  SupplyChainRepairRemainingStep,
   SupplyChainRepairResult,
   SupplyChainRepairStepFailure,
   SupplyChainSnapshot,
@@ -3967,6 +3968,7 @@ export async function repairSupplyChainProtection(credentials?: {
       repaired: true,
       completed_steps: ["package_shims", "runtime_activation", "intelligence_sync"],
       failed_steps: [],
+      remaining_steps: [],
       message: "Supply-chain protection restored and refreshed.",
     };
   }
@@ -4012,6 +4014,18 @@ export async function repairSupplyChainProtection(credentials?: {
       }
     }
   }
+  const remaining: SupplyChainRepairRemainingStep[] = [];
+  if (Array.isArray(result.remaining_steps)) {
+    for (const candidate of result.remaining_steps) {
+      if (!isRecord(candidate)) continue;
+      const step = stringValue(candidate.step);
+      const message = stringValue(candidate.message);
+      const action = stringValue(candidate.action);
+      if (step === "intelligence_sync" && action === "connect" && message !== null) {
+        remaining.push({ step, message, action });
+      }
+    }
+  }
   const completedSteps = Array.isArray(result.completed_steps)
     ? result.completed_steps.filter((value): value is string => typeof value === "string")
     : [];
@@ -4019,11 +4033,13 @@ export async function repairSupplyChainProtection(credentials?: {
   const completedWithoutFailures =
     Array.isArray(result.failed_steps) &&
     result.failed_steps.length === 0 &&
+    remaining.length === 0 &&
     requiredSteps.every((step) => completedSteps.includes(step));
   return {
     repaired: result.repaired === true || (!("repaired" in result) && completedWithoutFailures),
     completed_steps: completedSteps,
     failed_steps: failures,
+    remaining_steps: remaining,
     message: stringValue(result.message) ?? "Supply-chain repair finished.",
   };
 }

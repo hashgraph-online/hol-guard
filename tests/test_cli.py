@@ -43,6 +43,43 @@ def test_internal_bounded_hook_is_not_available_from_python_install(
         main(["__guard-bounded-hook", "{}"])
 
 
+def test_frozen_package_shim_script_runs_before_argument_parser(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_exe = tmp_path / "hol-guard"
+    fake_exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    shim_dir = tmp_path / "package-shims" / "bin"
+    shim_dir.mkdir(parents=True)
+    shim_path = shim_dir / "npm"
+    shim_path.write_text(
+        "\n".join(
+            (
+                f"#!{fake_exe}",
+                "HOL_GUARD_PACKAGE_SHIM_SENTINEL = True",
+                "raise SystemExit(17)",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert main([str(shim_path)]) == 17
+
+
+def test_frozen_package_shim_script_is_not_available_from_python_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delattr("sys.frozen", raising=False)
+    shim_dir = tmp_path / "package-shims" / "bin"
+    shim_dir.mkdir(parents=True)
+    shim_path = shim_dir / "npm"
+    shim_path.write_text("raise SystemExit(17)\n", encoding="utf-8")
+
+    assert main([str(shim_path)]) != 17
+
+
 class TestFormatJson:
     def test_good_plugin_json_output_has_expected_schema_and_category_structure(self):
         result = scan_plugin(FIXTURES / "good-plugin")

@@ -18565,6 +18565,7 @@ async function repairSupplyChainProtection(credentials) {
       repaired: true,
       completed_steps: ["package_shims", "runtime_activation", "intelligence_sync"],
       failed_steps: [],
+      remaining_steps: [],
       message: "Supply-chain protection restored and refreshed."
     };
   }
@@ -18601,13 +18602,26 @@ async function repairSupplyChainProtection(credentials) {
       }
     }
   }
+  const remaining = [];
+  if (Array.isArray(result.remaining_steps)) {
+    for (const candidate of result.remaining_steps) {
+      if (!isRecord$1(candidate)) continue;
+      const step = stringValue$1(candidate.step);
+      const message = stringValue$1(candidate.message);
+      const action = stringValue$1(candidate.action);
+      if (step === "intelligence_sync" && action === "connect" && message !== null) {
+        remaining.push({ step, message, action });
+      }
+    }
+  }
   const completedSteps = Array.isArray(result.completed_steps) ? result.completed_steps.filter((value) => typeof value === "string") : [];
   const requiredSteps = ["package_shims", "runtime_activation", "intelligence_sync"];
-  const completedWithoutFailures = Array.isArray(result.failed_steps) && result.failed_steps.length === 0 && requiredSteps.every((step) => completedSteps.includes(step));
+  const completedWithoutFailures = Array.isArray(result.failed_steps) && result.failed_steps.length === 0 && remaining.length === 0 && requiredSteps.every((step) => completedSteps.includes(step));
   return {
     repaired: result.repaired === true || !("repaired" in result) && completedWithoutFailures,
     completed_steps: completedSteps,
     failed_steps: failures,
+    remaining_steps: remaining,
     message: stringValue$1(result.message) ?? "Supply-chain repair finished."
   };
 }
@@ -30649,7 +30663,7 @@ const ExtensionsWorkspace = lazyWorkspace(
 const AppDetailWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))

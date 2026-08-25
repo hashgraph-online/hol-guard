@@ -294,6 +294,12 @@ def main(argv: list[str] | None = None) -> int:
         from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
 
         return main_from_argv(requested_argv[1:])
+    if bool(getattr(sys, "frozen", False)):
+        from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
+
+        frozen_shim_path = resolve_frozen_package_shim_path(requested_argv)
+        if frozen_shim_path is not None:
+            return run_frozen_package_shim(frozen_shim_path, requested_argv[1:])
     requested_argv = _resolve_hol_guard_help_alias(program_name, requested_argv)
     if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "secrets":
         from .guard.secrets.cli import main as secrets_main

@@ -9,11 +9,15 @@ export type SupplyChainFixAllPhase =
   | "incomplete"
   | "error";
 
+export type SupplyChainFixAllRemainingAction = "connect";
+
 export type SupplyChainFixAllState = {
   phase: SupplyChainFixAllPhase;
   message: string | null;
   completedSteps: string[];
   failedSteps: string[];
+  remainingAction?: SupplyChainFixAllRemainingAction | null;
+  remainingSteps?: string[];
 };
 
 export const IDLE_SUPPLY_CHAIN_FIX_ALL_STATE: SupplyChainFixAllState = {
@@ -21,13 +25,30 @@ export const IDLE_SUPPLY_CHAIN_FIX_ALL_STATE: SupplyChainFixAllState = {
   message: null,
   completedSteps: [],
   failedSteps: [],
+  remainingAction: null,
+  remainingSteps: [],
 };
 
-export function supplyChainFixAllButtonLabel(phase: SupplyChainFixAllPhase): string {
+export function supplyChainFixAllNeedsCloudConnect(state: SupplyChainFixAllState): boolean {
+  return state.remainingAction === "connect" && state.failedSteps.length === 0;
+}
+
+export function supplyChainFixAllButtonLabel(
+  phase: SupplyChainFixAllPhase,
+  remainingAction: SupplyChainFixAllRemainingAction | null = null,
+  failedCount = 0,
+): string {
   if (phase === "working") return "Fixing…";
   if (phase === "approval") return "Approval required";
   if (phase === "connecting") return "Connecting…";
-  if (phase === "incomplete" || phase === "error") return "Retry fixes";
+  if (
+    (phase === "incomplete" || phase === "error") &&
+    remainingAction === "connect" &&
+    failedCount === 0
+  ) {
+    return "Connect Guard Cloud";
+  }
+  if (phase === "incomplete" || phase === "error") return "Retry remaining";
   return "Fix all";
 }
 

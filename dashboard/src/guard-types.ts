@@ -1049,10 +1049,17 @@ export type SupplyChainRepairStepFailure = {
   message: string;
 };
 
+export type SupplyChainRepairRemainingStep = {
+  step: "intelligence_sync";
+  message: string;
+  action: "connect";
+};
+
 export type SupplyChainRepairResult = {
   repaired: boolean;
   completed_steps: string[];
   failed_steps: SupplyChainRepairStepFailure[];
+  remaining_steps: SupplyChainRepairRemainingStep[];
   message: string;
 };
 
