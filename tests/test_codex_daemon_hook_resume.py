@@ -33,6 +33,8 @@ class _ResumeDaemonHandler(_DaemonHandler):
     approve_after: ClassVar[float] = 0.0
     started_at: ClassVar[float] = 0.0
     get_count: ClassVar[int] = 0
+    finalize_count: ClassVar[int] = 0
+    finalize_completed: ClassVar[bool] = True
 
     def _write_json(self, payload: dict[str, object], *, status: int = 200, keep_alive: bool = False) -> None:
         body = json.dumps(payload).encode("utf-8")
@@ -46,6 +48,21 @@ class _ResumeDaemonHandler(_DaemonHandler):
     def do_POST(self) -> None:  # noqa: N802
         if self.path == "/v1/daemon/identity-challenge":
             super().do_POST()
+            return
+        if self.path == f"/v1/requests/{type(self).request_id}/live-decision":
+            length = int(self.headers.get("Content-Length", "0"))
+            _ = self.rfile.read(length)
+            type(self).finalize_count += 1
+            if self.headers.get("X-Guard-Token") != type(self).auth_token:
+                self._write_json({"error": "unauthorized"}, status=401)
+                return
+            self._write_json(
+                {
+                    "action": type(self).resolution,
+                    "completed": type(self).finalize_completed
+                    and type(self).policy_action in {"review", "require-reapproval"},
+                }
+            )
             return
         length = int(self.headers.get("Content-Length", "0"))
         _ = self.rfile.read(length)
@@ -230,6 +247,8 @@ def test_bridge_converts_denied_pretool_to_allow_after_browser_approval(
     _ResumeDaemonHandler.approve_after = 0.15
     _ResumeDaemonHandler.started_at = time.monotonic()
     _ResumeDaemonHandler.get_count = 0
+    _ResumeDaemonHandler.finalize_count = 0
+    _ResumeDaemonHandler.finalize_completed = True
     monkeypatch.setattr(
         "sys.stdin",
         io.StringIO(
@@ -255,6 +274,7 @@ def test_bridge_converts_denied_pretool_to_allow_after_browser_approval(
     assert payload == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
     assert "permissionDecision" not in payload.get("hookSpecificOutput", {})
     assert _ResumeDaemonHandler.get_count >= 1
+    assert _ResumeDaemonHandler.finalize_count == 1
     assert "guardApprovalRequestId" not in payload
 
 
@@ -274,6 +294,8 @@ def test_bridge_keeps_deny_when_browser_blocks(
     _ResumeDaemonHandler.policy_action = "require-reapproval"
     _ResumeDaemonHandler.approve_after = 0.05
     _ResumeDaemonHandler.started_at = time.monotonic()
+    _ResumeDaemonHandler.finalize_count = 0
+    _ResumeDaemonHandler.finalize_completed = True
     monkeypatch.setattr(
         "sys.stdin",
         io.StringIO(
@@ -297,6 +319,7 @@ def test_bridge_keeps_deny_when_browser_blocks(
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert _ResumeDaemonHandler.finalize_count == 1
     assert "guardApprovalRequestId" not in payload
 
 

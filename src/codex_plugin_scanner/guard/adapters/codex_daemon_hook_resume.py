@@ -18,12 +18,13 @@ from pathlib import Path
 from urllib.parse import quote
 
 from ..browser_opener import open_browser_url
-from .codex_daemon_hook_transport import _daemon_json_get
+from .codex_daemon_hook_transport import _daemon_json_get, _daemon_json_post
 
 GUARD_APPROVAL_REQUEST_ID_KEY = "guardApprovalRequestId"
 GUARD_APPROVAL_URL_KEY = "guardApprovalUrl"
 _POLL_INTERVAL_SECONDS = 0.2
 _GET_TIMEOUT_CAP_SECONDS = 1.5
+_FINALIZE_TIMEOUT_CAP_SECONDS = 1.5
 _REQUEST_URL_RE = re.compile(r"(https?://[^\s]+/requests/([A-Za-z0-9_-]{8,128}))", re.IGNORECASE)
 
 
@@ -46,7 +47,13 @@ def apply_browser_approval_wait(
         state_path=state_path,
         deadline=deadline,
     )
-    if action == "allow":
+    completed_action = _complete_resolution(
+        request_id=request_id,
+        action=action,
+        state_path=state_path,
+        deadline=deadline,
+    )
+    if completed_action == "allow":
         return allow_pretool_response()
     return response
 
@@ -103,6 +110,34 @@ def _poll_resolution(
         if action in {"allow", "block"}:
             return action
         time.sleep(min(_POLL_INTERVAL_SECONDS, max(0.0, deadline - time.monotonic())))
+
+
+def _complete_resolution(
+    *,
+    request_id: str,
+    action: str | None,
+    state_path: str | Path,
+    deadline: float,
+) -> str | None:
+    if action not in {"allow", "block"}:
+        return None
+    remaining = deadline - time.monotonic()
+    if remaining < _POLL_INTERVAL_SECONDS:
+        return None
+    path = f"/v1/requests/{quote(request_id, safe='')}/live-decision"
+    try:
+        payload = _daemon_json_post(
+            state_path=state_path,
+            path=path,
+            payload={},
+            timeout_seconds=min(remaining, _FINALIZE_TIMEOUT_CAP_SECONDS),
+        )
+    except (OSError, TimeoutError, ValueError, http.client.HTTPException, urllib.error.URLError):
+        return None
+    if not isinstance(payload, Mapping) or payload.get("completed") is not True:
+        return None
+    completed_action = payload.get("action")
+    return action if completed_action == action else None
 
 
 def _open_pending_approval(approval_url: str | None, *, state_path: str | Path) -> None:

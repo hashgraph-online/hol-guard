@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import secrets
 import time
 from collections.abc import Mapping
@@ -102,6 +103,50 @@ def _daemon_json_get(
         if error.status == 404:
             return None
         raise
+    finally:
+        connection.close()
+
+
+def _daemon_json_post(
+    *,
+    state_path: str | Path,
+    path: str,
+    payload: Mapping[str, object],
+    timeout_seconds: float,
+) -> dict[str, object] | None:
+    if not re.fullmatch(r"/v1/requests/[A-Za-z0-9_-]{8,128}/live-decision", path):
+        raise ValueError("daemon POST path is not a live approval decision")
+    if timeout_seconds < _MINIMUM_OPERATION_SECONDS:
+        return None
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    state, _discovery_key = _authenticated_state(state_path)
+    host = str(state["host"])
+    port_value = state["port"]
+    if not isinstance(port_value, int):
+        raise ValueError("daemon state port is invalid")
+    endpoint = f"{_daemon_url(state_path)}{path}"
+    _assert_loopback_http_url(endpoint)
+    auth_token = _daemon_auth_token(state_path, state)
+    body = json.dumps(dict(payload), ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    connection = http.client.HTTPConnection(host, port_value, timeout=timeout_seconds)
+    try:
+        connection.request(
+            "POST",
+            path,
+            body=body,
+            headers={
+                "Connection": "close",
+                "Content-Type": "application/json",
+                "X-Guard-Token": auth_token,
+            },
+        )
+        return _http_json_response(
+            connection.getresponse(),
+            label="daemon live approval decision",
+            connection=connection,
+            deadline=deadline,
+            authenticated=True,
+        )
     finally:
         connection.close()
 

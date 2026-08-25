@@ -94,6 +94,7 @@ from ..cloud_exception_requests import (
     fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
+from ..codex_live_decision import complete_codex_live_decision
 from ..codex_resume import defer_request_resume_to_live_hook, get_request_resume_status, retry_request_resume
 from ..config import (
     VALID_RECEIPT_REDACTION_LEVELS,
@@ -2845,6 +2846,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
             self._handle_request_resume_retry(path_parts[2])
+            return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "live-decision":
+            self._handle_codex_live_decision(path_parts[2])
             return
         if len(path_parts) == 5 and path_parts[:3] == ["v1", "mcp-policy", "requests"] and path_parts[4] == "decision":
             self._handle_mcp_policy_decision(path_parts[3], payload)
@@ -5612,6 +5616,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         self._write_json(payload)
 
+    def _handle_codex_live_decision(self, request_id: str) -> None:
+        payload = complete_codex_live_decision(self.server.store, request_id=request_id, now=_now())  # type: ignore[attr-defined]
+        self._write_json(payload, status=200 if payload.get("completed") is True else 409)
+
     def _apply_codex_resume_result(
         self,
         *,
@@ -7714,7 +7722,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if (
             len(path_parts) == 4
             and path_parts[:2] == ["v1", "requests"]
-            and path_parts[3] in {"approve", "block", "resume"}
+            and path_parts[3] in {"approve", "block", "resume", "live-decision"}
         ):
             return True
         if (
