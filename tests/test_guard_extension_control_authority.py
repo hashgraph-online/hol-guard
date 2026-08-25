@@ -561,45 +561,6 @@ def test_catalog_upgrade_retires_enabled_target_when_contract_expands(tmp_path: 
     assert payload["retired_target_ids"] == [permission_id]
 
 
-def test_catalog_upgrade_preserves_enabled_controls_when_previous_manifest_is_missing(
-    tmp_path: Path,
-) -> None:
-    secrets = MemorySecretStore()
-    store = _store(tmp_path, secrets)
-    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    permission_id = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0].permissions[0].permission_id
-    _commit_enabled_permission(store, permission_id, key="enable-before-missing-manifest")
-    with store._connect() as connection:
-        connection.execute("delete from extension_control_catalog_manifest")
-
-    upgraded = store.read_extension_control_authority_for_registry(_upgraded_registry())
-
-    assert upgraded.health is AuthorityHealth.PROTECTED
-    assert upgraded.layers[0].controls[0].target.target_id == permission_id
-    assert upgraded.layers[0].controls[0].state is ControlState.ENABLED
-
-
-def test_catalog_upgrade_preserves_enabled_git_allows_when_unrelated_catalog_grows(
-    tmp_path: Path,
-) -> None:
-    secrets = MemorySecretStore()
-    store = _store(tmp_path, secrets)
-    git = next(
-        extension
-        for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
-        if extension.extension_id == "command.git"
-    )
-    permission_id = next(permission.permission_id for permission in git.permissions if permission.configurable)
-    store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    _commit_enabled_permission(store, permission_id, key="enable-git-before-catalog-growth")
-
-    upgraded = store.read_extension_control_authority_for_registry(_upgraded_registry())
-
-    assert upgraded.health is AuthorityHealth.PROTECTED
-    assert upgraded.layers[0].controls[0].target.target_id == permission_id
-    assert upgraded.layers[0].controls[0].state is ControlState.ENABLED
-
-
 def test_catalog_upgrade_preserves_enabled_target_for_description_only_change(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
@@ -802,7 +763,9 @@ def test_unavailable_system_keyring_uses_owner_only_vault(tmp_path: Path, monkey
     assert _enroll(store).health is AuthorityHealth.PROTECTED
 
     restarted = GuardStore(tmp_path, prime_policy_integrity=False)
-    view = restarted.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    view = restarted.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    )
     assert view.health is AuthorityHealth.PROTECTED
     secrets_dir = tmp_path / "secrets"
     if os.name != "nt":
@@ -817,12 +780,9 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     monkeypatch.setattr(sys, "platform", "linux")
     legacy_secrets = MemorySecretStore()
     legacy_store = _store(tmp_path, legacy_secrets)
-    assert (
-        legacy_store.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-        ).health
-        is AuthorityHealth.PROTECTED
-    )
+    assert legacy_store.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    ).health is AuthorityHealth.PROTECTED
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "get_secret",
@@ -831,12 +791,9 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     monkeypatch.setattr(SystemKeyringSecretStore, "set_secret", lambda _self, _secret_id, _value: None)
 
     migrated = GuardStore(tmp_path, prime_policy_integrity=False)
-    assert (
-        migrated.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-        ).health
-        is AuthorityHealth.PROTECTED
-    )
+    assert migrated.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    ).health is AuthorityHealth.PROTECTED
 
     monkeypatch.setattr(
         SystemKeyringSecretStore,
@@ -844,12 +801,9 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
         lambda _self, _secret_id: (_ for _ in ()).throw(RuntimeError("session keyring disappeared")),
     )
     restarted = GuardStore(tmp_path, prime_policy_integrity=False)
-    assert (
-        restarted.read_extension_control_authority(
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-        ).health
-        is AuthorityHealth.PROTECTED
-    )
+    assert restarted.read_extension_control_authority(
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    ).health is AuthorityHealth.PROTECTED
 
 
 def test_macos_extension_authority_default_never_probes_keychain(

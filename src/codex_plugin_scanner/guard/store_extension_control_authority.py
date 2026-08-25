@@ -34,13 +34,7 @@ from .runtime.extension_control_authority import (
     layers_to_json,
     verify_authenticated_record,
 )
-from .runtime.extension_control_contract import (
-    ControlLayerKind,
-    ControlState,
-    ControlTargetKind,
-    ExtensionControl,
-    ExtensionControlLayer,
-)
+from .runtime.extension_control_contract import ControlLayerKind, ExtensionControl, ExtensionControlLayer
 from .runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlEnrollmentProof,
@@ -58,6 +52,7 @@ from .store_extension_control_authority_support import (
     _private_hash,
     _row_int,
     _row_str,
+    preserve_migrated_extension_control,
 )
 from .store_extension_control_authority_transitions import _ExtensionControlAuthorityTransitionMixin
 
@@ -913,33 +908,21 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         previous_manifest = self._load_catalog_manifest(previous.catalog_digest, key=key) or {}
         current_manifest = self._catalog_target_manifest(registry)
 
-        def target_key(kind: ControlTargetKind, target_id: str) -> str:
-            return f"{kind.value}:{target_id}"
-
-        def preserve_control(control: ExtensionControl) -> bool:
-            key_name = target_key(control.target.kind, control.target.target_id)
-            if key_name not in current_manifest:
-                return False
-            if control.state is ControlState.DISABLED:
-                return True
-            previous_fingerprint = previous_manifest.get(key_name)
-            if previous_fingerprint is None:
-                return True
-            return previous_fingerprint == current_manifest[key_name]
+        def keep(control: ExtensionControl) -> bool:
+            return preserve_migrated_extension_control(
+                control, previous_manifest=previous_manifest, current_manifest=current_manifest
+            )
 
         retired_targets = tuple(
             sorted(
-                control.target.target_id
-                for layer in previous.layers
-                for control in layer.controls
-                if not preserve_control(control)
+                control.target.target_id for layer in previous.layers for control in layer.controls if not keep(control)
             )
         )
         layers = tuple(
             replace(
                 layer,
                 catalog_digest=catalog_digest,
-                controls=tuple(control for control in layer.controls if preserve_control(control)),
+                controls=tuple(control for control in layer.controls if keep(control)),
             )
             for layer in previous.layers
         )
