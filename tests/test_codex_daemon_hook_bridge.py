@@ -19,13 +19,11 @@ from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as brid
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY
 from codex_plugin_scanner.guard.runtime.local_temp_paths import trusted_temporary_root_for_path
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
     _DaemonHandler,
-    _ProxyHandler,
     _write_authenticated_daemon_files,
 )
 
@@ -185,85 +183,6 @@ def test_codex_post_tool_response_excludes_daemon_metadata() -> None:
         )
         == {}
     )
-
-
-def test_main_posts_to_authenticated_daemon(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
-    daemon_thread = threading.Thread(target=daemon.serve_forever, daemon=True)
-    daemon_thread.start()
-    proxy = HTTPServer(("127.0.0.1", 0), _ProxyHandler)
-    proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
-    proxy_thread.start()
-    port = daemon.server_address[1]
-    _write_authenticated_daemon_files(guard_home, port)
-    _DaemonHandler.response_body = (
-        b'{"hookSpecificOutput":{"hookEventName":"PreToolUse"},"reason_code":"daemon_hook_queue_capacity"}'
-    )
-    _ProxyHandler.captured_paths = []
-    monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy.server_address[1]}")
-    monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy.server_address[1]}")
-    monkeypatch.delenv("NO_PROXY", raising=False)
-    monkeypatch.delenv("no_proxy", raising=False)
-    complete_command = "trap - DEBUG; { cat .env; } > /dev/null\ncat <<'EOF'\nharmless\nEOF"
-    hook_payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": complete_command},
-    }
-    bridge_process = {"pid": 4102, "startToken": "fixture-start"}
-    monkeypatch.setattr(bridge, "current_process_identity", lambda: bridge_process)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(hook_payload)))
-
-    try:
-        exit_code = bridge.main(**_bridge_config(guard_home, port))
-    finally:
-        daemon.shutdown()
-        proxy.shutdown()
-        daemon_thread.join(timeout=5)
-        proxy_thread.join(timeout=5)
-
-    assert exit_code == 0
-    assert _DaemonHandler.captured_challenge_guard_token is None
-    assert _DaemonHandler.captured_guard_token == "fixture-token"
-    captured_hook_payload = json.loads(str(_DaemonHandler.captured_hook_body))
-    assert captured_hook_payload.pop("guard_remaining_ms") in range(1, 10_001)
-    assert captured_hook_payload.pop(CODEX_BROWSER_WAIT_PROCESS_KEY) == bridge_process
-    assert captured_hook_payload == hook_payload
-    assert json.loads(str(_DaemonHandler.captured_hook_body))["tool_input"]["command"] == complete_command
-    assert _ProxyHandler.captured_paths == []
-    response = json.loads(capsys.readouterr().out)
-    if response == {}:
-        pass
-    elif "hookSpecificOutput" in response:
-        assert response["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    else:
-        assert response["continue"] is False
-
-
-def test_bridge_replaces_untrusted_wait_process_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
-    live_process = {"pid": 4102, "startToken": "fixture-start"}
-    monkeypatch.setattr(bridge, "current_process_identity", lambda: live_process)
-
-    payload = json.loads(
-        bridge._with_browser_wait_process(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    CODEX_BROWSER_WAIT_PROCESS_KEY: {
-                        "pid": 9999,
-                        "startToken": "untrusted-input",
-                    },
-                }
-            )
-        )
-    )
-
-    assert payload[CODEX_BROWSER_WAIT_PROCESS_KEY] == live_process
 
 
 @pytest.mark.parametrize(

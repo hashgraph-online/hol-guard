@@ -69,6 +69,29 @@ def _embedded_script_remediation(state: RuntimeArtifactHookState) -> str | None:
         return EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE
     return None
 
+
+def _browser_approval_decision(
+    state: RuntimeArtifactHookState,
+    args: argparse.Namespace,
+    *,
+    config: GuardConfig,
+    store: GuardStore,
+    fresh_context_provider: Callable[[], Mapping[str, object] | None],
+) -> str | None:
+    return _codex_browser_approval_decision(
+        args=args,
+        event_name=state.event_name,
+        policy_action=state.policy_action,
+        response_payload=state.response_payload,
+        store=store,
+        config=config,
+        browser_wait_bound=state.browser_approval_wait_bound,
+        daemon_client=state.browser_approval_daemon_client,
+        expected_artifact_hash=state.runtime_artifact_hash,
+        fresh_context_provider=fresh_context_provider,
+    )
+
+
 def _finalize_runtime_artifact_hook(
     state: RuntimeArtifactHookState,
     args: argparse.Namespace,
@@ -124,16 +147,11 @@ def _finalize_runtime_artifact_hook(
             "authoritative_action": fresh_state.policy_action,
         }
 
-    codex_browser_decision = _codex_browser_approval_decision(
-        args=args,
-        event_name=event_name,
-        policy_action=policy_action,
-        response_payload=response_payload,
-        store=store,
+    codex_browser_decision = _browser_approval_decision(
+        state,
+        args,
         config=config,
-        browser_wait_bound=state.browser_approval_wait_bound,
-        daemon_client=state.browser_approval_daemon_client,
-        expected_artifact_hash=state.runtime_artifact_hash,
+        store=store,
         fresh_context_provider=fresh_browser_context,
     )
 

@@ -472,6 +472,18 @@ def _proof_command() -> str:
     )
 
 
+def _browser_wait_operation_metadata() -> dict[str, object]:
+    from codex_plugin_scanner.guard.live_process_identity import current_process_identity
+
+    process_identity = current_process_identity()
+    if process_identity is None:
+        raise RuntimeError("current process identity is unavailable")
+    return {
+        "codex_hook_waits_for_browser_approval": True,
+        "codex_browser_wait_process": process_identity,
+    }
+
+
 def _queue_pending_request(
     *,
     store,
@@ -484,7 +496,6 @@ def _queue_pending_request(
     operation_status: str = "waiting_on_approval",
 ) -> None:
     from codex_plugin_scanner.guard.consumer import artifact_hash
-    from codex_plugin_scanner.guard.live_process_identity import current_process_identity
     from codex_plugin_scanner.guard.models import GuardApprovalRequest
     from codex_plugin_scanner.guard.runtime.secret_file_requests import (
         build_tool_action_request_artifact,
@@ -492,9 +503,6 @@ def _queue_pending_request(
     )
 
     now = datetime.now(timezone.utc).isoformat()
-    process_identity = current_process_identity()
-    if process_identity is None:
-        raise RuntimeError("current process identity is unavailable")
     config_path = workspace_dir / ".codex" / "config.toml"
     request_match = extract_sensitive_tool_action_request(
         "Bash",
@@ -540,8 +548,7 @@ def _queue_pending_request(
             "tool_name": "Bash",
             "event": "PostToolUse",
             "hook_event_name": "PostToolUse",
-            "codex_hook_waits_for_browser_approval": True,
-            "codex_browser_wait_process": process_identity,
+            **_browser_wait_operation_metadata(),
             "codex_browser_wait_deadline_at": "2000-01-01T00:00:00+00:00",
         },
         now=now,

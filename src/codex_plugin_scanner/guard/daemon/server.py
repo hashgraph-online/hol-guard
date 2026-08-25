@@ -97,6 +97,7 @@ from ..cloud_exception_requests import (
 from ..codex_live_decision import complete_codex_live_decision
 from ..codex_live_hook_target import codex_live_hook_process_is_unavailable
 from ..codex_resume import defer_request_resume_to_live_hook, get_request_resume_status, retry_request_resume
+from ..codex_resume_response import project_codex_resume_response
 from ..config import (
     VALID_RECEIPT_REDACTION_LEVELS,
     GuardConfig,
@@ -5653,41 +5654,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             {"request_id": request_id, "action": action, **codex_resume},
             _now(),
         )
-        status = str(codex_resume.get("status") or "")
-        message = str(codex_resume.get("message") or "")
-        if status == "sent":
-            updated["resolution_summary"] = (
-                "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
-            )
-            copy = {
-                "title": "Decision saved. Codex chat was notified.",
-                "body": message,
-            }
-        elif status in {"pending", "in_progress"}:
-            updated["resolution_summary"] = message or "Decision saved. Codex is still waiting for HOL Guard."
-            copy = {
-                "title": "Decision saved. Codex is continuing.",
-                "body": message or "Return to Codex; the original action should continue automatically.",
-            }
-        elif status == "already_sent":
-            updated["resolution_summary"] = "Decision saved. Codex was already notified for this request."
-            copy = {
-                "title": "Decision saved. Codex already notified.",
-                "body": message,
-            }
-        else:
-            updated["resolution_summary"] = message or str(updated.get("resolution_summary") or "Decision saved.")
-            copy = {
-                "title": (
-                    "Decision saved. Return to Codex."
-                    if status == "skipped"
-                    else "Decision saved. Codex chat could not be notified."
-                ),
-                "body": message or copy["body"],
-            }
-        updated["copy"] = copy
-        updated["retry_hint"] = copy["body"]
-        return updated
+        return project_codex_resume_response(
+            updated=updated,
+            copy=copy,
+            codex_resume=codex_resume,
+        )
 
     def _apply_harness_resume_result(
         self,

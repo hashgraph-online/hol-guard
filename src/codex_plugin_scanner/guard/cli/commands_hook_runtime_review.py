@@ -50,6 +50,7 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import is_guard_action, most_restrictive_guard_action
+from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
 from ..models import GuardAction
 from ._commands_shared import *
 from .commands_hook_runtime_state import (
@@ -87,6 +88,70 @@ def _observe_mode_executable_action(state: RuntimeArtifactHookState) -> GuardAct
     return most_restrictive_guard_action(*candidates)
 
 
+def _browser_wait_binding(
+    *,
+    args: argparse.Namespace,
+    event_name: str,
+    policy_action: str,
+    config: GuardConfig,
+    payload: Mapping[str, object],
+) -> tuple[dict[str, object], bool]:
+    metadata = _codex_browser_wait_metadata(
+        args=args,
+        event_name=event_name,
+        policy_action=policy_action,
+        config=config,
+        payload=payload,
+    )
+    return metadata, metadata.get("codex_hook_waits_for_browser_approval") is True
+
+
+def _bind_review_state(
+    state: RuntimeArtifactHookState,
+    *,
+    action_envelope: GuardActionEnvelope | None,
+    browser_approval_daemon_client: object | None,
+    browser_approval_wait_bound: bool | None,
+    policy_action: GuardAction,
+    response_payload: dict[str, object],
+) -> None:
+    state.action_envelope = action_envelope
+    state.browser_approval_daemon_client = browser_approval_daemon_client
+    state.browser_approval_wait_bound = browser_approval_wait_bound
+    state.policy_action = policy_action
+    state.response_payload = response_payload
+
+
+def _attach_cursor_approval_request_ids(
+    *,
+    args: argparse.Namespace,
+    event_name: str,
+    policy_action: GuardAction,
+    runtime_artifact: GuardArtifact,
+    response_payload: dict[str, object],
+    store: GuardStore,
+    payload: Mapping[str, object],
+) -> None:
+    if not (
+        _canonical_harness_name(args.harness) == "cursor"
+        and event_name == "PreToolUse"
+        and runtime_artifact.artifact_type == "tool_action_request"
+        and cursor_hook_requires_approval_center_queue(
+            policy_action=policy_action,
+            guard_payload=response_payload,
+        )
+    ):
+        return
+    from ..adapters.cursor_hooks import cursor_hook_would_prompt_user
+
+    if cursor_hook_would_prompt_user(policy_action=policy_action, guard_payload=response_payload):
+        _attach_cursor_pending_approval_request_ids(
+            store=store,
+            payload=payload,
+            response_payload=response_payload,
+        )
+
+
 def _review_runtime_artifact_hook(
     state: RuntimeArtifactHookState,
     args: argparse.Namespace,
@@ -117,8 +182,8 @@ def _review_runtime_artifact_hook(
     runtime_artifact_hash = state.runtime_artifact_hash
     scanner_evidence_payload = state.scanner_evidence_payload
     stored_policy_action = state.stored_policy_action
-    from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
-
+    browser_approval_daemon_client: object | None = None
+    browser_approval_wait_bound: bool | None = None
     cursor_native_queue = _canonical_harness_name(
         args.harness
     ) == "cursor" and cursor_hook_requires_approval_center_queue(
@@ -126,7 +191,6 @@ def _review_runtime_artifact_hook(
         guard_payload=response_payload,
     )
     observe_mode = config.mode == "observe"
-    observe_request_queued = False
     terminal_action = policy_action in {
         "block",
         "sandbox-required",
@@ -159,7 +223,6 @@ def _review_runtime_artifact_hook(
                 scanner_evidence=scanner_evidence_payload,
                 store=store,
             )
-            observe_request_queued = True
             set_runtime_artifact_hook_final_action(
                 state,
                 _observe_mode_executable_action(state),
@@ -275,15 +338,13 @@ def _review_runtime_artifact_hook(
                     }
                 ]
             }
-            browser_wait_metadata = _codex_browser_wait_metadata(
+            browser_wait_metadata, browser_approval_wait_bound = _browser_wait_binding(
                 args=args,
                 event_name=event_name,
                 policy_action=policy_action,
                 config=config,
                 payload=payload_map,
             )
-            browser_approval_wait_bound = browser_wait_metadata.get("codex_hook_waits_for_browser_approval") is True
-            browser_approval_daemon_client = None
             try:
                 browser_approval_daemon_client = load_guard_surface_daemon_client(guard_home)
                 session = browser_approval_daemon_client.start_session(
@@ -352,26 +413,15 @@ def _review_runtime_artifact_hook(
                 harness=_optional_string(args.harness) or args.harness,
                 approval_center_url=approval_center_url,
             )
-            if (
-                _canonical_harness_name(args.harness) == "cursor"
-                and event_name == "PreToolUse"
-                and runtime_artifact.artifact_type == "tool_action_request"
-                and cursor_hook_requires_approval_center_queue(
-                    policy_action=policy_action,
-                    guard_payload=response_payload,
-                )
-            ):
-                from ..adapters.cursor_hooks import cursor_hook_would_prompt_user
-
-                if cursor_hook_would_prompt_user(
-                    policy_action=policy_action,
-                    guard_payload=response_payload,
-                ):
-                    _attach_cursor_pending_approval_request_ids(
-                        store=store,
-                        payload=payload_map,
-                        response_payload=response_payload,
-                    )
+            _attach_cursor_approval_request_ids(
+                args=args,
+                event_name=event_name,
+                policy_action=policy_action,
+                runtime_artifact=runtime_artifact,
+                response_payload=response_payload,
+                store=store,
+                payload=payload_map,
+            )
             response_payload["approval_center_url"] = approval_center_url
             response_payload["review_hint"] = approval_center_hint(
                 context=context,
@@ -388,11 +438,14 @@ def _review_runtime_artifact_hook(
                 managed_install=managed_install,
             )
             _localize_pending_approval_copy(response_payload, harness=args.harness)
-    state.action_envelope = action_envelope
-    state.browser_approval_daemon_client = locals().get("browser_approval_daemon_client")
-    state.browser_approval_wait_bound = locals().get("browser_approval_wait_bound")
-    state.policy_action = policy_action
-    state.response_payload = response_payload
+    _bind_review_state(
+        state,
+        action_envelope=action_envelope,
+        browser_approval_daemon_client=browser_approval_daemon_client,
+        browser_approval_wait_bound=browser_approval_wait_bound,
+        policy_action=policy_action,
+        response_payload=response_payload,
+    )
     return None
 
 

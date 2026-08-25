@@ -280,6 +280,15 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
     return filtered
 
 
+def _bound_hook_input() -> tuple[str, str] | None:
+    raw_data = _hook_input(_MAX_HOOK_INPUT_BYTES)
+    if raw_data is None:
+        return None
+    event_name = _event_name(raw_data)
+    data = _with_browser_wait_process(raw_data) if event_name == "PreToolUse" else raw_data
+    return event_name, data
+
+
 def main(
     *,
     state_path: str | Path,
@@ -292,12 +301,11 @@ def main(
 ) -> int:
     """Review one Codex hook through the resident daemon or a fail-safe fallback."""
 
-    raw_data = _hook_input(_MAX_HOOK_INPUT_BYTES)
-    if raw_data is None:
+    hook_input = _bound_hook_input()
+    if hook_input is None:
         sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
         return 0
-    event_name = _event_name(raw_data)
-    data = _with_browser_wait_process(raw_data) if event_name == "PreToolUse" else raw_data
+    event_name, data = hook_input
     timeout_seconds = _request_timeout(event_name, hook_timeouts)
     deadline = time.monotonic() + timeout_seconds
     response: dict[str, object] | None = None

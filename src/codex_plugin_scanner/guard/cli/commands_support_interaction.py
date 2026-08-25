@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from ..browser_opener import open_browser_url
 from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, process_identity_matches
 from ..runtime.approval_context import approval_context_tokens_validation_reason
+from .commands_support_browser_wait import browser_wait_request_ids
 
 if TYPE_CHECKING:
     from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _now
@@ -336,6 +337,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
+
 def _codex_browser_approval_decision(
     *,
     args: argparse.Namespace,
@@ -351,23 +353,10 @@ def _codex_browser_approval_decision(
 ) -> str | None:
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return None
-    if browser_wait_bound is False:
-        return None
-    operation = response_payload.get("operation")
-    operation_metadata = operation.get("metadata") if isinstance(operation, Mapping) else None
-    if (
-        isinstance(operation_metadata, Mapping)
-        and operation_metadata.get("codex_hook_waits_for_browser_approval") is not True
-    ):
-        return None
-    approval_requests = response_payload.get("approval_requests")
-    if not isinstance(approval_requests, list):
-        return None
-    request_ids = [
-        item["request_id"]
-        for item in approval_requests
-        if isinstance(item, dict) and isinstance(item.get("request_id"), str)
-    ]
+    request_ids = browser_wait_request_ids(
+        response_payload,
+        browser_wait_bound=browser_wait_bound,
+    )
     if not request_ids:
         return None
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(

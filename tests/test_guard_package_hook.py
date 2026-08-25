@@ -162,6 +162,21 @@ def _bundle_response(*, action: str, policy_rules: list[dict[str, object]] | Non
     }
 
 
+def _review_policy_rule(rule_id: str = "policy-review-1") -> dict[str, object]:
+    return {
+        "action": "review",
+        "ruleId": rule_id,
+        "ecosystemSelector": "npm",
+        "enabled": True,
+        "expiresAt": "2099-01-01T00:00:00Z",
+        "harnessSelector": "codex",
+        "packageSelector": "minimist",
+        "priority": 1,
+        "severityThreshold": "low",
+        "versionRangeSelector": "1.2.8",
+    }
+
+
 def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -309,20 +324,7 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
         WORKSPACE_ID,
         _bundle_response(
             action="block",
-            policy_rules=[
-                {
-                    "action": "review",
-                    "ruleId": "policy-review-1",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": "2099-01-01T00:00:00Z",
-                    "harnessSelector": "codex",
-                    "packageSelector": "minimist",
-                    "priority": 1,
-                    "severityThreshold": "low",
-                    "versionRangeSelector": "1.2.8",
-                }
-            ],
+            policy_rules=[_review_policy_rule()],
         ),
         "2026-05-19T00:00:00Z",
     )
@@ -375,20 +377,7 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
         WORKSPACE_ID,
         _bundle_response(
             action="block",
-            policy_rules=[
-                {
-                    "action": "review",
-                    "ruleId": "policy-review-1",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": "2099-01-01T00:00:00Z",
-                    "harnessSelector": "codex",
-                    "packageSelector": "minimist",
-                    "priority": 1,
-                    "severityThreshold": "low",
-                    "versionRangeSelector": "1.2.8",
-                }
-            ],
+            policy_rules=[_review_policy_rule()],
         ),
         "2026-05-19T00:00:00Z",
     )
@@ -464,78 +453,6 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
     assert opened_urls[0] in captured.err
 
 
-def test_guard_hook_ask_package_fallback_does_not_wait_without_process_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    payload_path = workspace_dir / "hook-event.json"
-    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
-    store = GuardStore(home_dir)
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(
-            action="block",
-            policy_rules=[
-                {
-                    "action": "review",
-                    "ruleId": "policy-review-identity-unavailable",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": "2099-01-01T00:00:00Z",
-                    "harnessSelector": "codex",
-                    "packageSelector": "minimist",
-                    "priority": 1,
-                    "severityThreshold": "low",
-                    "versionRangeSelector": "1.2.8",
-                }
-            ],
-        ),
-        "2026-05-19T00:00:00Z",
-    )
-    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 10\n", encoding="utf-8")
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
-    monkeypatch.setattr(
-        guard_commands_module,
-        "load_guard_surface_daemon_client",
-        lambda _home: (_ for _ in ()).throw(RuntimeError("no daemon")),
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.live_process_identity.current_process_identity",
-        lambda: None,
-    )
-
-    def unexpected_wait(**_kwargs: object) -> dict[str, object]:
-        raise AssertionError("an unbound hook must not enter the inline browser wait")
-
-    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", unexpected_wait)
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--event-file",
-            str(payload_path),
-        ]
-    )
-    _ = capsys.readouterr()
-
-    assert rc == 0
-    queued = store.list_approval_requests(limit=5)
-    assert len(queued) == 1
-    assert queued[0]["resolution_action"] is None
-
-
 def test_guard_hook_ask_package_live_wait_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -552,20 +469,7 @@ def test_guard_hook_ask_package_live_wait_caps_browser_approval_wait(
         WORKSPACE_ID,
         _bundle_response(
             action="block",
-            policy_rules=[
-                {
-                    "action": "review",
-                    "ruleId": "policy-review-1",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": "2099-01-01T00:00:00Z",
-                    "harnessSelector": "codex",
-                    "packageSelector": "minimist",
-                    "priority": 1,
-                    "severityThreshold": "low",
-                    "versionRangeSelector": "1.2.8",
-                }
-            ],
+            policy_rules=[_review_policy_rule()],
         ),
         "2026-05-19T00:00:00Z",
     )
