@@ -45,6 +45,7 @@ class RuntimeArtifactHookState:
     runtime_artifact_hash: str
     scanner_evidence_payload: list[dict[str, object]]
     stored_policy_action: str | None
+    browser_approval_wait_bound: bool | None = None
     guard_home: Path | None = None
     hook_payload: dict[str, object] = field(default_factory=dict)
     receipt_recorded: bool = False

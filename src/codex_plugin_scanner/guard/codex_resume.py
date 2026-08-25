@@ -212,6 +212,10 @@ def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
 def _live_hook_wait_is_active(*, metadata: Mapping[str, object], now: str) -> bool:
     if metadata.get("codex_hook_waits_for_browser_approval") is not True:
         return False
+    from .live_process_identity import process_identity_matches
+
+    if not process_identity_matches(metadata.get("codex_browser_wait_process")):
+        return False
     deadline = _first_string(metadata, ("codex_browser_wait_deadline_at", "browser_wait_deadline_at"))
     if deadline is None:
         return False

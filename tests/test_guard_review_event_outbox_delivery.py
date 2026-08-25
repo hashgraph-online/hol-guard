@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.continuation_runtime import (
     continue_request_after_application,
     record_live_hook_completion,
 )
+from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
@@ -223,6 +224,8 @@ def test_terminal_continuation_projects_as_a_distinct_authenticated_event(
         capabilities=["approval-resolution"],
         now=_NOW,
     )
+    process_identity = current_process_identity()
+    assert process_identity is not None
     store.upsert_guard_operation(
         operation_id="operation-terminal-continuation",
         session_id=str(session["session_id"]),
@@ -234,6 +237,7 @@ def test_terminal_continuation_projects_as_a_distinct_authenticated_event(
         metadata={
             "codex_hook_waits_for_browser_approval": True,
             "codex_browser_wait_deadline_at": "2026-08-24T15:00:00+00:00",
+            "codex_browser_wait_process": process_identity,
             "correlationId": correlation_id,
         },
         now=_NOW,

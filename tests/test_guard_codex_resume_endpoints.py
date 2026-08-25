@@ -11,7 +11,9 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
 from codex_plugin_scanner.guard import codex_resume as codex_resume_module
+from codex_plugin_scanner.guard import continuation_runtime as continuation_runtime_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -126,6 +128,10 @@ def _seed_codex_operation(
         metadata["hook_event_name"] = hook_event_name
     if waits_for_browser_approval is not None:
         metadata["codex_hook_waits_for_browser_approval"] = waits_for_browser_approval
+        if waits_for_browser_approval:
+            process_identity = current_process_identity()
+            assert process_identity is not None
+            metadata["codex_browser_wait_process"] = process_identity
     if browser_wait_deadline_at is not None:
         metadata["codex_browser_wait_deadline_at"] = browser_wait_deadline_at
     store.upsert_guard_operation(
@@ -326,6 +332,76 @@ def test_codex_approve_stale_live_hook_wait_requires_app_server_socket(
     assert payload["codexResume"]["reason"] == "socket_not_available"
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
     assert "original chat" in payload["codexResume"]["message"]
+
+
+@pytest.mark.parametrize("process_state", ["missing", "reused"])
+def test_codex_approve_unproven_live_hook_terminalizes_through_daemon_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    process_state: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-dead-live"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-dead-live",
+        socket_path=None,
+        thread_id="dead-live-session-1",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
+        status="waiting_on_approval",
+    )
+    operation = store.get_guard_operation_for_approval_request("req-dead-live")
+    assert isinstance(operation, dict)
+    metadata = operation.get("metadata")
+    assert isinstance(metadata, dict)
+    process_identity = metadata.get("codex_browser_wait_process")
+    assert isinstance(process_identity, dict)
+    if process_state == "missing":
+        del metadata["codex_browser_wait_process"]
+    else:
+        metadata["codex_browser_wait_process"] = {
+            **process_identity,
+            "startToken": "reused-process",
+        }
+    store.upsert_guard_operation(
+        operation_id=str(operation["operation_id"]),
+        session_id=str(operation["session_id"]),
+        harness=str(operation["harness"]),
+        operation_type=str(operation["operation_type"]),
+        status=str(operation["status"]),
+        approval_request_ids=list(operation["approval_request_ids"]),
+        resume_token=str(operation["resume_token"]),
+        metadata=metadata,
+        now="2026-05-19T10:00:01+00:00",
+    )
+    monkeypatch.setattr(
+        continuation_runtime_module,
+        "codex_app_server_target_reachable",
+        lambda _metadata: True,
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-dead-live/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codexResume"]["status"] == "skipped"
+    assert payload["codexResume"]["reason"] == "manual_retry_required"
+    recovered = store.get_guard_operation_for_approval_request("req-dead-live")
+    assert isinstance(recovered, dict)
+    assert recovered["status"] == "manual_retry_required"
+    events = store.list_events(event_name="review.continuation.manual_retry_required")
+    assert len(events) == 1
 
 
 def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(

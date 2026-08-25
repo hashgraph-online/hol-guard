@@ -10,7 +10,7 @@ from typing import Final
 
 from .adapters.contracts import contract_for
 from .codex_app_server_target import codex_app_server_target_reachable
-from .codex_live_hook_target import codex_live_hook_wait_deadline
+from .codex_live_hook_target import codex_live_hook_process_is_unavailable, codex_live_hook_wait_deadline
 from .continuation_contract import (
     CAPABILITY_CONTRACT_VERSION,
     ContinuationAction,
@@ -192,6 +192,7 @@ def _offer_from_request(
     session_target_verified = (
         harness == "codex"
         and not original_hook_attached
+        and not codex_live_hook_process_is_unavailable(metadata)
         and raw_target is not None
         and codex_app_server_target_reachable(metadata)
     )

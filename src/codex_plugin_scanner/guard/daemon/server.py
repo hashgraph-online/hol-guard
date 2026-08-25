@@ -95,6 +95,7 @@ from ..cloud_exception_requests import (
     submit_cloud_exception_request,
 )
 from ..codex_live_decision import complete_codex_live_decision
+from ..codex_live_hook_target import codex_live_hook_process_is_unavailable
 from ..codex_resume import defer_request_resume_to_live_hook, get_request_resume_status, retry_request_resume
 from ..config import (
     VALID_RECEIPT_REDACTION_LEVELS,
@@ -3103,11 +3104,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             now=now,
         )
         if codex_resume is None:
-            codex_resume = retry_request_resume(
-                self.server.store,  # type: ignore[attr-defined]
-                request_id=request_id,
-                now=now,
-            )
+            operation = self.server.store.get_guard_operation_for_approval_request(request_id)  # type: ignore[attr-defined]
+            metadata = operation.get("metadata") if isinstance(operation, dict) else None
+            if isinstance(metadata, Mapping) and codex_live_hook_process_is_unavailable(metadata):
+                continuation = continue_request_after_application(
+                    self.server.store,  # type: ignore[attr-defined]
+                    request_row=resolved_request,
+                    action=action,
+                    now=now,
+                    headless=False,
+                )
+                codex_resume = continuation.get("codexResume")
+                if not isinstance(codex_resume, dict):
+                    return updated, copy
+            else:
+                codex_resume = retry_request_resume(
+                    self.server.store,  # type: ignore[attr-defined]
+                    request_id=request_id,
+                    now=now,
+                )
         updated = self._apply_codex_resume_result(
             updated=updated,
             request_id=request_id,

@@ -7,7 +7,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
+from .live_process_identity import process_identity_matches
 from .store import GuardStore
+
+
+def codex_live_hook_process_is_unavailable(metadata: Mapping[str, object]) -> bool:
+    """Return true when a declared browser waiter cannot be proven live."""
+
+    return metadata.get("codex_hook_waits_for_browser_approval") is True and not process_identity_matches(
+        metadata.get("codex_browser_wait_process")
+    )
 
 
 def codex_live_hook_wait_deadline(
@@ -19,6 +28,8 @@ def codex_live_hook_wait_deadline(
     """Return a proven live-hook deadline, including the legacy PreToolUse bridge."""
 
     if str(operation.get("status") or "") != "waiting_on_approval":
+        return None
+    if not process_identity_matches(metadata.get("codex_browser_wait_process")):
         return None
     if metadata.get("codex_hook_waits_for_browser_approval") is True:
         explicit = _parse_timestamp(

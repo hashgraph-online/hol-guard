@@ -18,6 +18,8 @@ import pytest
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
     _DaemonHandler,
@@ -146,6 +148,42 @@ def test_codex_json_pretool_does_not_hold_inside_daemon_worker() -> None:
         policy_action="require-reapproval",
         payload={"tool_input": {"command": "cat ~/.npmrc"}},
     )
+
+
+def test_codex_browser_wait_disables_inline_wait_when_process_identity_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.live_process_identity.current_process_identity",
+        lambda: None,
+    )
+    args = argparse.Namespace(harness="codex", json=False)
+    config = GuardConfig(tmp_path, None, approval_wait_timeout_seconds=30)
+
+    metadata = interaction._codex_browser_wait_metadata(
+        args=args,
+        event_name="PostToolUse",
+        policy_action="review",
+        config=config,
+    )
+    assert metadata == {
+        "codex_hook_waits_for_browser_approval": False,
+        "codex_browser_wait_unavailable_reason": "process_identity_unavailable",
+    }
+
+    decision = interaction._codex_browser_approval_decision(
+        args=args,
+        event_name="PostToolUse",
+        policy_action="review",
+        response_payload={
+            "approval_requests": [{"request_id": "request-unbound"}],
+        },
+        store=GuardStore(tmp_path / "guard-home"),
+        config=config,
+        browser_wait_bound=False,
+    )
+    assert decision is None
 
 
 def test_resolution_action_rejects_terminal_or_unknown_policy() -> None:

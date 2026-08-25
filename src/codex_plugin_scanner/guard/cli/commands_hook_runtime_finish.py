@@ -131,6 +131,7 @@ def _finalize_runtime_artifact_hook(
         response_payload=response_payload,
         store=store,
         config=config,
+        browser_wait_bound=state.browser_approval_wait_bound,
         daemon_client=state.browser_approval_daemon_client,
         expected_artifact_hash=state.runtime_artifact_hash,
         fresh_context_provider=fresh_browser_context,

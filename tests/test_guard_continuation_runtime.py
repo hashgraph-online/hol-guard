@@ -18,10 +18,22 @@ from codex_plugin_scanner.guard.continuation_runtime import (
     record_live_hook_completion,
 )
 from codex_plugin_scanner.guard.continuation_worker import StoreContinuationPlan
+from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 NOW = "2026-08-24T12:00:00+00:00"
+
+
+def _live_codex_wait_metadata() -> dict[str, object]:
+    identity = current_process_identity()
+    assert identity is not None
+    return {
+        "codex_hook_waits_for_browser_approval": True,
+        "codex_browser_wait_deadline_at": "2026-08-24T12:01:00+00:00",
+        "codex_browser_wait_process": identity,
+        "hook_event_name": "PreToolUse",
+    }
 
 
 def _successful_isolated_plan(
@@ -144,11 +156,7 @@ def test_live_codex_hook_reports_waiting_without_starting_a_second_resume(tmp_pa
         store,
         harness="codex",
         request_id="request-codex-live",
-        metadata={
-            "codex_hook_waits_for_browser_approval": True,
-            "codex_browser_wait_deadline_at": "2026-08-24T12:01:00+00:00",
-            "hook_event_name": "PreToolUse",
-        },
+        metadata=_live_codex_wait_metadata(),
     )
 
     payload = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
@@ -199,6 +207,31 @@ def test_live_codex_hook_reports_waiting_without_starting_a_second_resume(tmp_pa
     }
 
 
+def test_dead_codex_hook_terminalizes_to_manual_retry_after_daemon_recovery(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "codex-dead")
+    metadata = _live_codex_wait_metadata()
+    process_identity = metadata["codex_browser_wait_process"]
+    assert isinstance(process_identity, dict)
+    metadata["codex_browser_wait_process"] = {
+        **process_identity,
+        "startToken": "reused-process",
+    }
+    request = _seed_request(
+        store,
+        harness="codex",
+        request_id="request-codex-dead",
+        metadata=metadata,
+    )
+
+    payload = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
+    replay = continue_request_after_application(store, request_row=request, action="allow_once", now=NOW)
+
+    assert payload["continuationStatus"] == "manual_retry_required"
+    assert payload["continuationReason"] == "manual_retry_required"
+    assert replay["continuationEvidenceId"] == payload["continuationEvidenceId"]
+    assert len(store.list_events(event_name="review.continuation.manual_retry_required")) == 1
+
+
 def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     guard_home = tmp_path / "live-completion-race"
     store = GuardStore(guard_home)
@@ -206,11 +239,7 @@ def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, m
         store,
         harness="codex",
         request_id="request-live-completion-race",
-        metadata={
-            "codex_hook_waits_for_browser_approval": True,
-            "codex_browser_wait_deadline_at": "2026-08-24T12:01:00+00:00",
-            "hook_event_name": "PreToolUse",
-        },
+        metadata=_live_codex_wait_metadata(),
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.continuation_runtime._run_store_continuation_plan",

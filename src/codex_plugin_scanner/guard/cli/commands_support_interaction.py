@@ -343,6 +343,7 @@ def _codex_browser_approval_decision(
     response_payload: dict[str, object],
     store: GuardStore,
     config: GuardConfig,
+    browser_wait_bound: bool | None = None,
     daemon_client: object | None = None,
     expected_artifact_hash: str | None = None,
     fresh_context_provider: Callable[[], Mapping[str, object] | None] | None = None,
@@ -350,6 +351,15 @@ def _codex_browser_approval_decision(
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return None
     if event_name == "PreToolUse" and not _codex_pretooluse_live_wait_candidate(response_payload):
+        return None
+    if browser_wait_bound is False:
+        return None
+    operation = response_payload.get("operation")
+    operation_metadata = operation.get("metadata") if isinstance(operation, Mapping) else None
+    if (
+        isinstance(operation_metadata, Mapping)
+        and operation_metadata.get("codex_hook_waits_for_browser_approval") is not True
+    ):
         return None
     approval_requests = response_payload.get("approval_requests")
     if not isinstance(approval_requests, list):
@@ -575,17 +585,26 @@ def _codex_browser_wait_metadata(
     )
     if not waits_for_browser:
         return {"codex_hook_waits_for_browser_approval": False}
+    from ..live_process_identity import current_process_identity
+
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
         event_name=event_name,
         configured_timeout=config.approval_wait_timeout_seconds,
     )
     started_at = datetime.now(timezone.utc)
     deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
+    process_identity = current_process_identity()
+    if process_identity is None:
+        return {
+            "codex_hook_waits_for_browser_approval": False,
+            "codex_browser_wait_unavailable_reason": "process_identity_unavailable",
+        }
     return {
         "codex_hook_waits_for_browser_approval": True,
         "codex_browser_wait_started_at": started_at.isoformat(),
         "codex_browser_wait_deadline_at": deadline_at.isoformat(),
         "codex_browser_wait_timeout_seconds": wait_timeout_seconds,
+        "codex_browser_wait_process": process_identity,
     }
 
 def _codex_browser_wait_timeout_seconds(*, event_name: str, configured_timeout: int) -> int:

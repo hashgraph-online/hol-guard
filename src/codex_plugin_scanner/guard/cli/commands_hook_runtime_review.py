@@ -275,6 +275,14 @@ def _review_runtime_artifact_hook(
                     }
                 ]
             }
+            browser_wait_metadata = _codex_browser_wait_metadata(
+                args=args,
+                event_name=event_name,
+                policy_action=policy_action,
+                config=config,
+                payload=payload_map,
+            )
+            browser_approval_wait_bound = browser_wait_metadata.get("codex_hook_waits_for_browser_approval") is True
             browser_approval_daemon_client = None
             try:
                 browser_approval_daemon_client = load_guard_surface_daemon_client(guard_home)
@@ -296,13 +304,7 @@ def _review_runtime_artifact_hook(
                         "tool_name": str(payload.get("tool_name", "")),
                         "event": str(payload.get("event", "")),
                         "hook_event_name": event_name,
-                        **_codex_browser_wait_metadata(
-                            args=args,
-                            event_name=event_name,
-                            policy_action=policy_action,
-                            config=config,
-                            payload=payload_map,
-                        ),
+                        **browser_wait_metadata,
                         "command_text": _hook_command_text(payload_map),
                         "workspace": str(workspace) if workspace else None,
                         **(
@@ -388,6 +390,7 @@ def _review_runtime_artifact_hook(
             _localize_pending_approval_copy(response_payload, harness=args.harness)
     state.action_envelope = action_envelope
     state.browser_approval_daemon_client = locals().get("browser_approval_daemon_client")
+    state.browser_approval_wait_bound = locals().get("browser_approval_wait_bound")
     state.policy_action = policy_action
     state.response_payload = response_payload
     return None
