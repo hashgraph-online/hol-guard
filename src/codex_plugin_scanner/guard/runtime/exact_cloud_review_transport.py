@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from typing import TypedDict
+from typing import TypedDict, cast
 from urllib.error import HTTPError
 
 from ..contracts.guard_cloud_review import COMMAND_RESULT_CONTRACT_VERSION, validate_exact_command_result
@@ -46,9 +46,9 @@ def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[s
     receipt_id = _required_text(signed_decision.get("receiptId"), "exact_result_receipt_missing")
     if bound_request_id != decision_request_id:
         raise ValueError("exact_result_local_request_binding_mismatch")
-    data = execution.get("data")
+    data = _mapping(execution.get("data"))
     generated_at = _text(execution.get("generatedAt")) or datetime.now(timezone.utc).isoformat()
-    if not isinstance(data, dict):
+    if not data:
         return _result(
             correlation_id=correlation_id,
             local_request_id=bound_request_id,
@@ -59,21 +59,15 @@ def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[s
             continuation_reason="exact_result_invalid",
             updated_at=generated_at,
         )
-    application_status = (
-        "applied"
-        if _text(data.get("daemonAckStatus"))
-        in {
-            "resolved",
-            "resolved_unconfirmed",
-        }
-        else "failed_terminal"
-    )
-    application_reason = (
-        None
-        if application_status == "applied"
-        else (_text(data.get("daemonAckStatus")) or "exact_application_unconfirmed")
-    )
+    application_status = _application_status(data)
+    application_reason = _text(data.get("applicationReason"))
     continuation_status, continuation_reason = _continuation_result(data)
+    application_updated_at = _required_text(
+        data.get("applicationUpdatedAt"), "exact_result_application_timestamp_missing"
+    )
+    continuation_updated_at = _required_text(
+        data.get("continuationUpdatedAt"), "exact_result_continuation_timestamp_missing"
+    )
     data_request_id = _required_text(data.get("localRequestId"), "exact_result_local_request_missing")
     data_receipt_id = _required_text(data.get("receiptId"), "exact_result_receipt_missing")
     if data_request_id != bound_request_id or data_receipt_id != receipt_id:
@@ -86,7 +80,8 @@ def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[s
         application_reason=application_reason,
         continuation_status=continuation_status,
         continuation_reason=continuation_reason,
-        updated_at=generated_at,
+        application_updated_at=application_updated_at,
+        continuation_updated_at=continuation_updated_at,
     )
 
 
@@ -126,15 +121,15 @@ def lease_next_job(
                 raise ValueError("cloud_review_protocol_upgrade_required")
             if exact_route_success is not None:
                 exact_route_success()
-            item = exact_response.get("item")
-            if isinstance(item, dict):
+            item = _mapping(exact_response.get("item"))
+            if item:
                 if item.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
                     raise ValueError("cloud_review_protocol_upgrade_required")
                 return exact_transport_job(item)
     if not generic:
         return None
-    item = queue_request({"operations": generic, "wait_ms": wait_ms}).get("item")
-    return item if isinstance(item, dict) else None
+    item = _mapping(queue_request({"operations": generic, "wait_ms": wait_ms}).get("item"))
+    return item or None
 
 
 def _continuation_result(data: dict[str, object]) -> tuple[str, str | None]:
@@ -151,7 +146,21 @@ def _continuation_result(data: dict[str, object]) -> tuple[str, str | None]:
         "waiting",
     }:
         return status, reason
-    return "failed", reason or "continuation_status_missing"
+    raise ValueError("exact_result_continuation_status_invalid")
+
+
+def _application_status(data: dict[str, object]) -> str:
+    status = _text(data.get("applicationStatus"))
+    if status in {
+        "applied",
+        "failed_retryable",
+        "failed_terminal",
+        "not_applicable",
+        "rejected_binding",
+        "rejected_stale",
+    }:
+        return status
+    raise ValueError("exact_result_application_status_invalid")
 
 
 def _result(
@@ -163,15 +172,21 @@ def _result(
     application_reason: str | None,
     continuation_status: str,
     continuation_reason: str | None,
-    updated_at: str,
+    application_updated_at: str | None = None,
+    continuation_updated_at: str | None = None,
+    updated_at: str | None = None,
 ) -> dict[str, object]:
+    application_observed_at = application_updated_at or updated_at
+    continuation_observed_at = continuation_updated_at or updated_at
+    if application_observed_at is None or continuation_observed_at is None:
+        raise ValueError("exact_result_timestamp_missing")
     result: dict[str, object] = {
         "applicationReason": application_reason,
         "applicationStatus": application_status,
-        "applicationUpdatedAt": updated_at,
+        "applicationUpdatedAt": application_observed_at,
         "continuationReason": continuation_reason,
         "continuationStatus": continuation_status,
-        "continuationUpdatedAt": updated_at,
+        "continuationUpdatedAt": continuation_observed_at,
         "contractVersion": COMMAND_RESULT_CONTRACT_VERSION,
         "correlationId": correlation_id,
         "localRequestId": local_request_id,
@@ -187,7 +202,12 @@ def _text(value: object) -> str | None:
 
 
 def _mapping(value: object) -> dict[str, object]:
-    return dict(value) if isinstance(value, dict) else {}
+    if not isinstance(value, Mapping):
+        return {}
+    raw = cast(Mapping[object, object], value)
+    if any(not isinstance(key, str) for key in raw):
+        return {}
+    return {cast(str, key): nested for key, nested in raw.items()}
 
 
 def _required_text(value: object, error: str) -> str:

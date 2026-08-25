@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from typing import cast
 
 from ..store import GuardStore
-from .exact_cloud_review import ExactCloudReviewError, apply_exact_cloud_review
-from .remote_approval_execution import remote_resume_confirmed
+from .exact_cloud_review import ExactCloudReviewError
+from .exact_cloud_review_apply import apply_exact_cloud_review
 
 ResumeAfterApproval = Callable[..., dict[str, object]]
 
@@ -40,23 +41,40 @@ def execute_exact_cloud_review_operation(
         action=resolution.action,
         now=generated_at,
     )
+    continuation_status = _text(resume_metadata.get("continuationStatus"))
+    continuation_reason = _text(resume_metadata.get("continuationReason"))
+    if continuation_status is None:
+        continuation_status = "blocked_not_resumed" if resolution.action == "block" else "manual_retry_required"
+        continuation_reason = (
+            "remote_block_applied" if resolution.action == "block" else "continuation_transport_unavailable"
+        )
     response: dict[str, object] = {
         "action": resolution.action,
-        "daemonAckStatus": "resolved"
-        if remote_resume_confirmed(resume_metadata, resolution.action)
-        else "resolved_unconfirmed",
+        "applicationReason": None,
+        "applicationStatus": "applied",
+        "applicationUpdatedAt": generated_at,
+        "continuationReason": continuation_reason,
+        "continuationStatus": continuation_status,
+        "continuationUpdatedAt": _text(resume_metadata.get("continuationCompletedAt")) or generated_at,
         "localRequestId": resolution.request_id,
         "receiptId": resolution.receipt_id,
         "remoteDecision": resolution.action,
         "resolution": {"resolvedDuplicateIds": [], "resolvedRequest": resolution.resolved_request},
         "status": "completed",
     }
-    response.update(resume_metadata)
+    for key in ("codexResume", "harnessResume"):
+        if key in resume_metadata:
+            response[key] = resume_metadata[key]
     return {"data": response, "generatedAt": generated_at}
 
 
 def _mapping(value: object) -> dict[str, object]:
-    return dict(value) if isinstance(value, dict) else {}
+    if not isinstance(value, Mapping):
+        return {}
+    raw = cast(Mapping[object, object], value)
+    if any(not isinstance(key, str) for key in raw):
+        return {}
+    return {cast(str, key): nested for key, nested in raw.items()}
 
 
 def _text(value: object) -> str | None:

@@ -158,10 +158,14 @@ def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_sig
             {
                 "generatedAt": "2026-08-24T00:03:00+00:00",
                 "data": {
-                    "daemonAckStatus": "resolved",
+                    "applicationReason": None,
+                    "applicationStatus": "applied",
+                    "applicationUpdatedAt": "2026-08-24T00:03:00+00:00",
                     "localRequestId": "fixture-request",
                     "receiptId": "fixture-receipt",
+                    "continuationReason": None,
                     "continuationStatus": "resumed",
+                    "continuationUpdatedAt": "2026-08-24T00:03:00+00:00",
                 },
             },
         )
@@ -459,10 +463,14 @@ def test_pending_exact_result_retries_on_versioned_result_route(
             {
                 "generatedAt": "2026-08-24T00:03:00+00:00",
                 "data": {
-                    "daemonAckStatus": "resolved",
+                    "applicationReason": None,
+                    "applicationStatus": "applied",
+                    "applicationUpdatedAt": "2026-08-24T00:03:00+00:00",
                     "localRequestId": "exact-transport",
                     "receiptId": "exact-transport-receipt",
+                    "continuationReason": None,
                     "continuationStatus": "resumed",
+                    "continuationUpdatedAt": "2026-08-24T00:03:00+00:00",
                 },
             },
         ),
@@ -501,11 +509,14 @@ def test_exact_result_validates_unsupported_continuation_status(tmp_path: Path) 
         {
             "generatedAt": "2026-08-24T00:03:00+00:00",
             "data": {
-                "daemonAckStatus": "resolved_unconfirmed",
+                "applicationReason": None,
+                "applicationStatus": "applied",
+                "applicationUpdatedAt": "2026-08-24T00:03:00+00:00",
                 "localRequestId": "exact-transport",
                 "receiptId": "exact-transport-receipt",
                 "continuationReason": "no_resume_transport",
                 "continuationStatus": "unsupported",
+                "continuationUpdatedAt": "2026-08-24T00:03:00+00:00",
             },
         },
     )
