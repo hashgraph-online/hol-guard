@@ -127,6 +127,9 @@ def reconcile_runtime_artifacts(
     repaired_managers: tuple[str, ...] = ()
     try:
         shim_status = package_shim_status(context)
+        manifest_state = shim_status.get("manifest_state")
+        if manifest_state not in (None, "absent", "valid"):
+            errors.append(f"package:manifest:{manifest_state}")
         installed_values = shim_status.get("installed_managers")
         installed_managers = (
             tuple(str(manager) for manager in installed_values if isinstance(manager, str))

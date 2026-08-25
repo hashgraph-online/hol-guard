@@ -215,3 +215,39 @@ def test_reconcile_reports_inactive_package_shim(
 
     assert result.healthy is False
     assert result.errors == ("package:npm:path_inactive",)
+
+
+def test_reconcile_reports_unreadable_existing_package_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _Store(tmp_path / "guard")
+    monkeypatch.setattr(
+        reconciliation,
+        "refresh_stale_harness_shims",
+        lambda **_kwargs: ShimRefreshResult(refreshed=(), unchanged=(), errors=()),
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "repair_failing_managed_harness_hooks",
+        lambda *_args, **_kwargs: ((), ()),
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "package_shim_status",
+        lambda _context: {
+            "manifest_state": "unreadable",
+            "installed_managers": [],
+        },
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "repair_package_shims",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not infer managers")),
+    )
+
+    result = reconciliation.reconcile_runtime_artifacts(store, home_dir=tmp_path / "home")
+
+    assert result.healthy is False
+    assert result.changed is False
+    assert result.errors == ("package:manifest:unreadable",)
