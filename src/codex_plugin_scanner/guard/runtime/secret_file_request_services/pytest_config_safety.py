@@ -112,12 +112,28 @@ def _python_module_args_are_safe(module: str, module_args: list[str], *, cwd: Pa
     if module_root == "pytest" and not _pytest_module_args_are_safe(module_args):
         return False
     mutating_subcommands = _PYTHON_MODULE_MUTATING_SUBCOMMANDS.get(module_root, frozenset())
-    if _python_module_subcommand(module_root, module_args) in mutating_subcommands:
-        return False
+    subcommand = _python_module_subcommand(module_root, module_args)
+    if subcommand in mutating_subcommands:
+        return module_root == "ruff" and _ruff_format_target_is_bounded(module_args, cwd=cwd)
     mutating_flags = _PYTHON_MODULE_MUTATING_FLAGS.get(module_root, frozenset())
     return not any(
         arg in mutating_flags or any(arg.startswith(f"{flag}=") for flag in mutating_flags) for arg in module_args
     )
+
+
+def _ruff_format_target_is_bounded(module_args: list[str], *, cwd: Path | None) -> bool:
+    if cwd is None or len(module_args) != 2 or module_args[0] != "format":
+        return False
+    target = Path(module_args[1])
+    if target.is_absolute() or ".." in target.parts or any(marker in module_args[1] for marker in ("$", "`")):
+        return False
+    try:
+        workspace = cwd.resolve(strict=True)
+        resolved = (workspace / target).resolve(strict=True)
+        _ = resolved.relative_to(workspace)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return resolved.is_file()
 
 
 def _python_module_may_be_shadowed_from_execution_context(

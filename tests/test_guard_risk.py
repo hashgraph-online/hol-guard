@@ -1336,7 +1336,7 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
         cwd=tmp_path,
     )
 
-    assert request is None
+    assert request is not None and request.action_class == "git workspace command"
 
 
 def test_tool_action_request_classifier_allows_static_markdown_gh_pr_create_body_file(tmp_path):

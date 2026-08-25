@@ -468,10 +468,6 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
     )
 
 
-def _build_authenticated_hook_manifest(context: HarnessContext) -> dict[str, object]:
-    return build_authenticated_hook_manifest(_hook_manifest_spec(context))
-
-
 def _current_install_legacy_bindings(context: HarnessContext, hooks: dict[str, object]) -> list[dict[str, object]]:
     """Select exact current bridge entries for explicit legacy re-adoption only."""
 
@@ -1705,7 +1701,9 @@ class CodexHarnessAdapter(HarnessAdapter):
         original_manifest = snapshot_regular_file(manifest_path)
         original_secret = snapshot_regular_file(secret_path)
         try:
-            manifest = _build_authenticated_hook_manifest(context)
+            manifest = build_authenticated_hook_manifest(
+                _hook_manifest_spec(context), previous_manifest=previous_manifest
+            )
             _assert_package_reauthentication_is_safe(previous_manifest, manifest)
             write_hook_manifest(context.guard_home, config_path, manifest)
             atomic_write_text(config_path, dump_toml(payload), mode=0o600)

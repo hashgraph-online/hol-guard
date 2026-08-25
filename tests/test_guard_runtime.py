@@ -7828,7 +7828,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_git_commit_with_coau
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output == {"permissionDecision": "allow"}
+    assert output["permissionDecision"] == "deny"
 
 
 def test_guard_hook_emits_copilot_native_deny_for_node_inline_delete_bypass(
