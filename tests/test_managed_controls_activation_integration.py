@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import copy
-import json
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -12,12 +10,6 @@ from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
     MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
     MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY,
-    parsed_managed_controls_from_validated_policy_bundle,
-)
-from codex_plugin_scanner.guard.managed_controls_policy_fields import (
-    EXTENSION_CONTROL_LAYER_CAPABILITY,
-    MANAGED_CONTROLS_ATOMIC_APPLY_CAPABILITY,
-    POLICY_EXTENSION_TARGETS_CAPABILITY,
 )
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -42,58 +34,10 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _managed_controls_negotiated_capabilities,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-
-_ROOT = Path(__file__).resolve().parents[1]
-_VECTOR = json.loads(
-    (_ROOT / "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json").read_text()
-)
-_CAPABILITIES = frozenset(
-    {
-        EXTENSION_CONTROL_LAYER_CAPABILITY,
-        POLICY_EXTENSION_TARGETS_CAPABILITY,
-        MANAGED_CONTROLS_ATOMIC_APPLY_CAPABILITY,
-    }
-)
-
-
-def _bundle() -> dict[str, object]:
-    return copy.deepcopy(_VECTOR["bundle"])
-
-
-def _parsed(bundle: dict[str, object]):
-    return parsed_managed_controls_from_validated_policy_bundle(
-        bundle,
-        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-        negotiated_capabilities=_CAPABILITIES,
-    )
-
-
-def _activate(
-    store: GuardStore,
-    bundle: dict[str, object],
-    *,
-    managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
-) -> bool:
-    base = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-    if base.health is AuthorityHealth.UNENROLLED:
-        store._bootstrap_extension_control_authority(  # pyright: ignore[reportPrivateUsage]
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            key=None,
-        )
-    return store.apply_policy_bundle_authority(
-        [],
-        "2026-08-23T12:00:00Z",
-        policy_bundle=bundle,
-        policy_bundle_keyring={"keys": []},
-        cloud_exceptions=[],
-        policy_bundle_ack={"bundleHash": bundle["bundleHash"], "status": "applied"},
-        policy_bundle_checkpoint=policy_bundle_acceptance_checkpoint(bundle),
-        update_last_good=True,
-        managed_controls_policy=_parsed(bundle),
-        managed_controls_negotiated_capabilities=_CAPABILITIES,
-        managed_controls_publish=managed_controls_publish,
-        remote_write_authorized=True,
-    )
+from tests.managed_controls_activation_support import CAPABILITIES as _CAPABILITIES
+from tests.managed_controls_activation_support import activate_managed_bundle as _activate
+from tests.managed_controls_activation_support import managed_bundle as _bundle
+from tests.managed_controls_activation_support import parse_managed_bundle as _parsed
 
 
 def test_atomic_activation_persists_complete_projection_and_runtime_composes_it(

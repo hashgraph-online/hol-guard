@@ -23,6 +23,7 @@ import { useExtensionPolicyDraft } from "./use-extension-policy-draft";
 import { controlProvenance, groupPermissionsByFamily, treatmentLabel } from "./extension-control-center-model";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { ProtectionSettingsHistory } from "./protection-center/protection-settings-history";
+import { AppliedPolicyToast, appliedPolicyCloudHref } from "./extension-policy-applied-toast";
 
 export const RISK_TONE: Record<string, string> = {
   critical: "border-red-200 bg-red-50 text-red-950",
@@ -308,26 +309,13 @@ export function PolicyReviewSheet(props: {
   </div>;
 }
 
-export function AppliedPolicyToast(props: {
-  revision: number;
-  onUndo: () => void;
-  onViewHistory: () => void;
-}) {
-  return <div role="status" data-testid="extension-policy-applied-toast" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-    <p className="text-sm font-medium text-emerald-950">Applied · revision {props.revision}</p>
-    <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={props.onViewHistory} className="min-h-11 rounded-xl border border-emerald-300 bg-white/70 px-3 text-sm font-semibold text-emerald-950">View history</button>
-      <button type="button" onClick={props.onUndo} className="min-h-11 rounded-xl bg-emerald-800 px-3 text-sm font-semibold text-white">Undo</button>
-    </div>
-  </div>;
-}
-
 export function ExtensionPolicyPanel(props: {
   extension: ExtensionCatalogItem;
   effective: EffectiveExtensionControls;
   catalogDigest: string;
   onRefresh: () => Promise<void> | void;
   onDirtyChange?: (dirty: boolean) => void;
+  cloudControlsUrl?: string;
 }) {
   const [policyExtension, setPolicyExtension] = useState(props.extension);
   const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
@@ -363,6 +351,12 @@ export function ExtensionPolicyPanel(props: {
 
   const managedCount = policyExtension.permissions.filter((permission) => managedPermissionState(baseEffective, permission.permission_id) !== null).length;
   const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission) => permission.permission_id));
+  const applyAcrossHref = appliedPolicyCloudHref({
+    extensionName: policyExtension.name,
+    extensionId: policyExtension.extension_id,
+    changedPermissionIds: lastApplied?.changedPermissionIds ?? [],
+    cloudControlsUrl: props.cloudControlsUrl,
+  });
   return (
     <section id="extension-policy-editor" aria-labelledby="extension-policy-heading">
       <h2 id="extension-policy-heading" className="text-lg font-semibold text-brand-dark">Protection settings</h2>
@@ -396,6 +390,7 @@ export function ExtensionPolicyPanel(props: {
       {lastApplied ? (
         <AppliedPolicyToast
           revision={lastApplied.revision}
+          applyAcrossHref={applyAcrossHref}
           onUndo={() => { undoLastApplied(); }}
           onViewHistory={() => { document.getElementById("extension-settings-history")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
         />

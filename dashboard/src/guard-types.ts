@@ -739,6 +739,10 @@ export type GuardPolicyDecision = {
   remembered_context?: string | null;
   workspace_label?: string | null;
   source_scope_path?: string | null;
+  extension_id?: string | null;
+  permission_id?: string | null;
+  authority_mode?: "personal-shared" | "workspace-shared" | "managed-restrictive" | null;
+  cloud_workspace_label?: string | null;
 };
 
 export const GUARD_CLOUD_EXCEPTION_ACK_STATUSES = [

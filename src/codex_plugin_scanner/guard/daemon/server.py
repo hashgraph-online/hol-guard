@@ -244,6 +244,7 @@ from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_opti
 from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_cli_api import LocalCliApiError, LocalCliApiService
+from .managed_controls_api import managed_policy_rows
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     acquire_guard_daemon_owner_lock,
@@ -2384,7 +2385,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             harness_filter = harness if isinstance(harness, str) else None
             self._write_json(
                 {
-                    "items": store.list_policy_decisions(harness=harness_filter),
+                    "items": managed_policy_rows(store, harness_filter),
                     "cloud_exceptions": store.list_cloud_exceptions(harness=harness_filter),
                 }
             )

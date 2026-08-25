@@ -954,7 +954,7 @@ export function App() {
             onOpenInsights={handleOpenInsights}
             onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}
-            onRefreshRuntime={refreshStateAfterAction}
+            onRefreshRuntime={async () => { await refreshStateAfterAction(); }}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}
@@ -1002,7 +1002,7 @@ export function App() {
       extensionsContent={
         <ErrorBoundary onReset={handleGoHome}>
           <Suspense fallback={<LazyFallback />}>
-            <ExtensionsWorkspace />
+            <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} />
           </Suspense>
         </ErrorBoundary>
       }

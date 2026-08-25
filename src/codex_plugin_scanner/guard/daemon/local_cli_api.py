@@ -86,10 +86,7 @@ class LocalCliApiService:
             "items": items,
             "cloud": {
                 "sync_local_only": True,
-                "summary": (
-                    "Custom extensions stay on this device. "
-                    "Guard Cloud can keep the same extension on your other machines."
-                ),
+                "summary": ("Custom Extensions remain local to this device until portable continuity is enabled."),
             },
         }
 

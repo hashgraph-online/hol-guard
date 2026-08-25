@@ -290,6 +290,60 @@ export function normalizeEffectiveExtensionControls(value: unknown): EffectiveEx
       layer_kind: raw.layer_kind === undefined ? undefined : string(raw.layer_kind, `effective.failures[${index}].layer_kind`),
     };
   });
+  const managedControls = root.managed_controls === undefined
+    ? undefined
+    : (() => {
+        const managed = record(root.managed_controls, "effective.managed_controls");
+        const acknowledgement = record(
+          managed.acknowledgement,
+          "effective.managed_controls.acknowledgement",
+        );
+        const bundleVersion = managed.bundle_version;
+        if (
+          !(typeof bundleVersion === "string" && bundleVersion.length > 0 && bundleVersion.length <= 160)
+          && !(typeof bundleVersion === "number" && Number.isSafeInteger(bundleVersion) && bundleVersion >= 0)
+        ) {
+          throw new ExtensionControlProtocolError("effective.managed_controls.bundle_version is invalid");
+        }
+        const policyRevision = acknowledgement.policy_revision;
+        if (
+          policyRevision !== undefined
+          && !(typeof policyRevision === "string" && policyRevision.length > 0 && policyRevision.length <= 160)
+          && !(typeof policyRevision === "number" && Number.isSafeInteger(policyRevision) && policyRevision >= 0)
+        ) {
+          throw new ExtensionControlProtocolError("effective.managed_controls.acknowledgement.policy_revision is invalid");
+        }
+        return {
+          control_set_id: managed.control_set_id === undefined ? undefined : string(managed.control_set_id, "effective.managed_controls.control_set_id"),
+          control_set_name: managed.control_set_name === undefined ? undefined : string(managed.control_set_name, "effective.managed_controls.control_set_name"),
+          bundle_version: bundleVersion as number | string,
+          workspace_id: string(managed.workspace_id, "effective.managed_controls.workspace_id"),
+          authority_mode: managed.authority_mode === undefined
+            ? undefined
+            : enumValue(
+                managed.authority_mode,
+                "effective.managed_controls.authority_mode",
+                ["personal-shared", "workspace-shared", "managed-restrictive"] as const,
+              ),
+          catalog_digest: digest(managed.catalog_digest, "effective.managed_controls.catalog_digest"),
+          issued_at: managed.issued_at === undefined ? undefined : string(managed.issued_at, "effective.managed_controls.issued_at"),
+          expires_at: managed.expires_at === undefined ? undefined : string(managed.expires_at, "effective.managed_controls.expires_at"),
+          acknowledgement: {
+            extension_authority_revision: integer(
+              acknowledgement.extension_authority_revision,
+              "effective.managed_controls.acknowledgement.extension_authority_revision",
+            ),
+            policy_revision: policyRevision as number | string | undefined,
+            effective_projection_digest: acknowledgement.effective_projection_digest === undefined
+              ? undefined
+              : digest(
+                  acknowledgement.effective_projection_digest,
+                  "effective.managed_controls.acknowledgement.effective_projection_digest",
+                ),
+            status: string(acknowledgement.status, "effective.managed_controls.acknowledgement.status"),
+          },
+        };
+      })();
   return {
     schema_version: string(root.schema_version, "effective.schema_version"),
     health: enumValue(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"] as const),
@@ -300,5 +354,6 @@ export function normalizeEffectiveExtensionControls(value: unknown): EffectiveEx
     layers,
     failures,
     projection: root.projection === undefined ? undefined : normalizeEffectiveExtensionControlProjection(root.projection),
+    managed_controls: managedControls,
   };
 }
