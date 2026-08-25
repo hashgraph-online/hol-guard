@@ -52,7 +52,10 @@ if TYPE_CHECKING:
 from ..action_lattice import is_guard_action, most_restrictive_guard_action
 from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
 from ..daemon.client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
-from ..live_process_identity import bound_inline_wait_timeout_seconds
+from ..live_process_identity import (
+    MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS,
+    bound_inline_wait_timeout_seconds,
+)
 from ..models import GuardAction
 from ._commands_shared import *
 from .commands_hook_runtime_state import (
@@ -353,7 +356,7 @@ def _review_runtime_artifact_hook(
             if browser_approval_wait_bound:
                 browser_approval_inline_wait_timeout_seconds = bound_inline_wait_timeout_seconds(
                     payload_map,
-                    maximum=MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+                    maximum=MAX_CODEX_BROWSER_INLINE_WAIT_SECONDS,
                 )
             try:
                 daemon_client = load_guard_surface_daemon_client(guard_home)

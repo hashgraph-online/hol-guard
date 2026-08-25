@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resu
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.live_process_identity import (
+    CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY,
     CODEX_BROWSER_WAIT_PROCESS_KEY,
     CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
 )
@@ -136,6 +137,20 @@ def test_codex_bridge_budget_bounds_the_actual_approval_wait(
 
     monkeypatch.setattr(interaction, "wait_for_approval_requests", capture_wait)
     monkeypatch.setattr(interaction, "_open_codex_live_approval", lambda *_args, **_kwargs: None)
+    process_identity = {"pid": 4102, "startToken": "fixture-start"}
+    monkeypatch.setattr(interaction, "process_identity_matches", lambda value: value == process_identity)
+    payload = {
+        CODEX_BROWSER_WAIT_PROCESS_KEY: process_identity,
+        CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY: 7,
+        CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY: 600,
+    }
+    metadata = interaction._codex_browser_wait_metadata(
+        args=argparse.Namespace(harness="codex", json=True),
+        event_name="PreToolUse",
+        policy_action="require-reapproval",
+        config=GuardConfig(tmp_path, None, approval_wait_timeout_seconds=600),
+        payload=payload,
+    )
     decision = interaction._codex_browser_approval_decision(
         args=argparse.Namespace(harness="codex", json=True),
         event_name="PreToolUse",
@@ -143,12 +158,12 @@ def test_codex_bridge_budget_bounds_the_actual_approval_wait(
         response_payload={"approval_requests": [{"request_id": "request-bound"}]},
         store=GuardStore(tmp_path / "guard-home"),
         config=GuardConfig(tmp_path, None, approval_wait_timeout_seconds=600),
-        browser_wait_bound=True,
-        inline_wait_seconds=7,
+        browser_wait_bound=metadata["codex_hook_waits_for_browser_approval"] is True,
+        inline_wait_seconds=payload[CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY],
     )
 
     assert decision is None
-    assert captured_timeout == [7]
+    assert captured_timeout == [2]
 
 
 def test_codex_unbound_browser_wait_retains_the_worker_budget() -> None:

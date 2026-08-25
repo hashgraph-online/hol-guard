@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from ..browser_opener import open_browser_url
 from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, bound_wait_timeout_seconds, process_identity_matches
 from ..runtime.approval_context import approval_context_tokens_validation_reason
-from .commands_support_browser_wait import browser_wait_request_ids
+from . import commands_support_browser_wait as browser_wait
 
 if TYPE_CHECKING:
     from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _now
@@ -356,23 +356,22 @@ def _codex_browser_approval_decision(
         args, event_name=event_name, policy_action=policy_action
     ):
         return None
-    request_ids = browser_wait_request_ids(response_payload, browser_wait_bound=browser_wait_bound)
+    request_ids = browser_wait.browser_wait_request_ids(response_payload, browser_wait_bound=browser_wait_bound)
     if not request_ids:
         return None
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
         event_name=event_name,
         configured_timeout=config.approval_wait_timeout_seconds,
-        outer_wait_timeout_seconds=inline_wait_seconds if browser_wait_bound else None,
+        outer_wait_timeout_seconds=browser_wait.bounded_inline_wait_seconds(
+            inline_wait_seconds,
+            bound=browser_wait_bound is True,
+        ),
     )
     if wait_timeout_seconds <= 0:
         return None
     if event_name == "PreToolUse":
         _open_codex_live_approval(response_payload, guard_home=store.guard_home)
-    wait_result = wait_for_approval_requests(
-        store=store,
-        request_ids=request_ids,
-        timeout_seconds=wait_timeout_seconds,
-    )
+    wait_result = wait_for_approval_requests(store=store, request_ids=request_ids, timeout_seconds=wait_timeout_seconds)
     response_payload["approval_wait"] = wait_result
     if not bool(wait_result.get("resolved")):
         _set_codex_browser_operation_status(response_payload, daemon_client, "approval_wait_timeout")
