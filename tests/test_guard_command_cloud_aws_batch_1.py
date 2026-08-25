@@ -6,6 +6,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_cloud_aws_operation_matrix import (
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
+    aws_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
     assert_review_required_cases,
@@ -17,8 +18,7 @@ _ACTION = "AWS destructive command"
 _RULE = "command.cloud.aws.resource-deletion"
 
 AWS_BATCH_1_REVIEW_CASES: tuple[tuple[str, str, str], ...] = tuple(
-    (f"aws {' '.join(path)} --cli-input-json '{{}}'", _ACTION, _RULE)
-    for path in AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
+    (f"aws {' '.join(path)} --cli-input-json '{{}}'", _ACTION, _RULE) for path in AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
 )
 AWS_BATCH_1_SAFE_CASES: tuple[str, ...] = tuple(
     command
@@ -40,6 +40,15 @@ def test_aws_batch_1_matrix_is_exactly_one_hundred_unique_operations() -> None:
         for path in AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
         for token in path
     )
+
+
+def test_aws_batch_1_compiles_to_one_path_set_matcher() -> None:
+    matchers = aws_destructive_command_matchers(
+        global_options_with_values=frozenset({"--region"}),
+        global_flags=frozenset({"--debug"}),
+    )
+    assert len(matchers) == 1
+    assert len(matchers[0].paths) == 100
 
 
 def test_aws_batch_1_operations_feed_inspection_and_runtime_hooks(tmp_path: Path) -> None:

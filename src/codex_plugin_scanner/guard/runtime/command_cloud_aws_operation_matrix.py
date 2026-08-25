@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher
-from .command_rules import ExecutableMatcher
+from .command_extension_matchers import executable_path_set_matcher
+from .command_path_set_matcher import ExecutablePathSetMatcher
 
 CommandPath = tuple[str, ...]
 
@@ -115,16 +115,15 @@ def aws_destructive_command_matchers(
     *,
     global_options_with_values: frozenset[str],
     global_flags: frozenset[str],
-) -> tuple[ExecutableMatcher, ...]:
+) -> tuple[ExecutablePathSetMatcher, ...]:
     """Build fail-secure matchers for the validated AWS operation matrix."""
 
-    return tuple(
-        executable_matcher(
+    return (
+        executable_path_set_matcher(
             "aws",
-            *path,
+            AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
             global_options_with_values=global_options_with_values,
             global_flags=global_flags,
             fail_secure_unknown_options=True,
-        )
-        for path in AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
+        ),
     )

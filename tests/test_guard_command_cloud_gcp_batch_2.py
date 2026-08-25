@@ -6,6 +6,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_cloud_gcp_operation_matrix import (
     GCP_DESTRUCTIVE_COMMAND_PATHS,
+    gcp_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
     assert_review_required_cases,
@@ -30,6 +31,15 @@ def test_gcp_matrix_is_exactly_one_hundred_unique_operations() -> None:
         for path in GCP_DESTRUCTIVE_COMMAND_PATHS
         for token in path
     )
+
+
+def test_gcp_matrix_compiles_to_one_path_set_matcher() -> None:
+    matchers = gcp_destructive_command_matchers(
+        global_options_with_values=frozenset({"--project"}),
+        global_flags=frozenset({"--quiet"}),
+    )
+    assert len(matchers) == 1
+    assert len(matchers[0].paths) == 300
 
 
 def test_gcp_matrix_feeds_inspection_and_runtime_hooks(tmp_path: Path) -> None:

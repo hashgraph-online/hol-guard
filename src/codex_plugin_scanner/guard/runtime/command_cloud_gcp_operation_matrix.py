@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_matcher
-from .command_rules import ExecutableMatcher
+from .command_extension_matchers import executable_path_set_matcher
+from .command_path_set_matcher import ExecutablePathSetMatcher
 
 CommandPath = tuple[str, ...]
 _GCLOUD_TRACKS: tuple[CommandPath, ...] = ((), ("alpha",), ("beta",))
@@ -116,18 +116,15 @@ def gcp_destructive_command_matchers(
     *,
     global_options_with_values: frozenset[str],
     global_flags: frozenset[str],
-) -> tuple[ExecutableMatcher, ...]:
+) -> tuple[ExecutablePathSetMatcher, ...]:
     """Build fail-secure matchers for stable, alpha, and beta gcloud tracks."""
 
-    return tuple(
-        executable_matcher(
+    return (
+        executable_path_set_matcher(
             "gcloud",
-            *track,
-            *path,
+            tuple((*track, *path) for track in _GCLOUD_TRACKS for path in GCP_DESTRUCTIVE_COMMAND_PATHS),
             global_options_with_values=global_options_with_values,
             global_flags=global_flags,
             fail_secure_unknown_options=True,
-        )
-        for track in _GCLOUD_TRACKS
-        for path in GCP_DESTRUCTIVE_COMMAND_PATHS
+        ),
     )
