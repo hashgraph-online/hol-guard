@@ -37,7 +37,7 @@ export function PolicyUnderlineTabBar({ activeView, onViewChange }: PolicyUnderl
     <div
       className="flex flex-nowrap gap-5 overflow-x-auto border-b border-slate-200 sm:gap-6"
       role="tablist"
-      aria-label="Policy sections"
+      aria-label="Rules and exceptions sections"
     >
       {POLICY_VIEWS.map((view) => {
         const selected = activeView === view;

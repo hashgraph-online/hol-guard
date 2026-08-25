@@ -4,70 +4,154 @@ import importlib.util
 import sys
 import threading
 from pathlib import Path
+from types import ModuleType
 
 ROOT = Path(__file__).parents[1]
-LAB = ROOT / "scripts/mdm/cloud-lab"
+LAB = ROOT / "scripts" / "mdm" / "cloud-lab"
 sys.path.insert(0, str(LAB))
-from device_runtime import Device, DeviceServer
-from lab_common import CloudServer, Store
-from orchestrator import orchestrate
+
+from device_runtime import Device, DeviceServer  # noqa: E402
+from lab_common import CloudServer, Store  # noqa: E402
+from orchestrator import orchestrate  # noqa: E402
 
 
-def proxy_module():
-    spec = importlib.util.spec_from_file_location("mdm_fault_proxy", LAB / "fault_proxy.py")
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
+def _proxy_module() -> ModuleType:
+    specification = importlib.util.spec_from_file_location(
+        "mdm_fault_proxy",
+        LAB / "fault_proxy.py",
+    )
+    assert specification and specification.loader
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
     return module
 
 
-def serve(server):
+def _serve(server):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
 
-def test_real_http_multi_device_cloud_control_loop(tmp_path: Path):
-    seeds = [
+def _seeds() -> list[dict[str, str]]:
+    return [
         {
-            "workspaceId": "workspace-mdm-cloud-lab",
-            "deviceId": f"device-{c}",
-            "installationGeneration": c * 32,
-            "token": f"enrollment-token-device-{c}",
-        }
-        for c in "abc"
+            "workspaceId": "workspace-mdm-alpha",
+            "deviceId": "device-a",
+            "installationGeneration": "a" * 32,
+            "token": "enrollment-token-device-a",
+        },
+        {
+            "workspaceId": "workspace-mdm-alpha",
+            "deviceId": "device-b",
+            "installationGeneration": "b" * 32,
+            "token": "enrollment-token-device-b",
+        },
+        {
+            "workspaceId": "workspace-mdm-alpha",
+            "deviceId": "device-c",
+            "installationGeneration": "c" * 32,
+            "token": "enrollment-token-device-c",
+        },
+        {
+            "workspaceId": "workspace-mdm-beta",
+            "deviceId": "device-d",
+            "installationGeneration": "d" * 32,
+            "token": "enrollment-token-device-d",
+        },
+        {
+            "workspaceId": "workspace-mdm-alpha",
+            "deviceId": "device-clone-probe",
+            "installationGeneration": "e" * 32,
+            "token": "enrollment-token-clone-probe",
+        },
     ]
-    cloud = serve(
-        CloudServer(("127.0.0.1", 0), Store(tmp_path / "cloud.sqlite3", tmp_path / "cloud-key.pem", seeds), "admin")
+
+
+def _start_stack(tmp_path: Path):
+    proxy_module = _proxy_module()
+    cloud = _serve(
+        CloudServer(
+            ("127.0.0.1", 0),
+            Store(tmp_path / "cloud.sqlite3", tmp_path / "cloud-key.pem", _seeds()),
+            "admin",
+        )
     )
     cloud_url = f"http://127.0.0.1:{cloud.server_port}"
-    proxy = proxy_module()
-    faults = proxy.FaultState("admin")
-    gateway = serve(proxy.FaultProxyServer(("127.0.0.1", 0), upstream=cloud_url, state=faults, verbose=False))
+    gateway = _serve(
+        proxy_module.FaultProxyServer(
+            ("127.0.0.1", 0),
+            upstream=cloud_url,
+            state=proxy_module.FaultState("admin"),
+            verbose=False,
+        )
+    )
     proxy_url = f"http://127.0.0.1:{gateway.server_port}"
     servers = [cloud, gateway]
-    urls = {}
+    urls: dict[str, str] = {}
+    definitions = (
+        ("device-a", "workspace-mdm-alpha", "a" * 32, "enrollment-token-device-a"),
+        ("device-b", "workspace-mdm-alpha", "b" * 32, "enrollment-token-device-b"),
+        ("device-c", "workspace-mdm-alpha", "c" * 32, "enrollment-token-device-c"),
+        ("device-d", "workspace-mdm-beta", "d" * 32, "enrollment-token-device-d"),
+    )
+    for name, workspace, generation, token in definitions:
+        root = tmp_path / name
+        device = Device(
+            root,
+            proxy_url,
+            workspace,
+            name,
+            generation,
+            token,
+            root / "managed-policy.json",
+        )
+        server = _serve(DeviceServer(("127.0.0.1", 0), device))
+        servers.append(server)
+        urls[name] = f"http://127.0.0.1:{server.server_port}"
+    return servers, cloud_url, proxy_url, urls
+
+
+def _stop(servers) -> None:
+    for server in reversed(servers):
+        server.shutdown()
+        server.server_close()
+
+
+def test_real_http_multi_device_cloud_control_loop_survives_process_restart(
+    tmp_path: Path,
+) -> None:
+    initial_report = tmp_path / "initial.json"
+    servers, cloud_url, proxy_url, urls = _start_stack(tmp_path)
     try:
-        for c in "abc":
-            root = tmp_path / f"device-{c}"
-            device = Device(
-                root,
-                proxy_url,
-                "workspace-mdm-cloud-lab",
-                f"device-{c}",
-                c * 32,
-                f"enrollment-token-device-{c}",
-                root / "policy.json",
-            )
-            server = serve(DeviceServer(("127.0.0.1", 0), device))
-            servers.append(server)
-            urls[f"device-{c}"] = f"http://127.0.0.1:{server.server_port}"
-        report = orchestrate(cloud_url, proxy_url, urls, "admin", tmp_path / "report.json")
-        assert report["healthy"] is True
-        assert report["stepCount"] >= 25
-        assert all(x["passed"] for x in report["steps"])
-        assert report["nativeCertification"]["outcome"] == "not-evaluated"
-        assert (tmp_path / "report.json").exists()
+        initial = orchestrate(
+            cloud_url,
+            proxy_url,
+            urls,
+            "admin",
+            initial_report,
+            phase="initial",
+        )
+        assert initial["healthy"] is True
+        assert initial["stepCount"] >= 45
+        assert all(step["passed"] is True for step in initial["steps"])
     finally:
-        for server in reversed(servers):
-            server.shutdown()
-            server.server_close()
+        _stop(servers)
+
+    servers, cloud_url, proxy_url, urls = _start_stack(tmp_path)
+    try:
+        report_path = tmp_path / "report.json"
+        final = orchestrate(
+            cloud_url,
+            proxy_url,
+            urls,
+            "admin",
+            report_path,
+            phase="restart",
+            input_report=initial_report,
+        )
+        assert final["healthy"] is True
+        assert final["stepCount"] >= 50
+        assert all(step["passed"] is True for step in final["steps"])
+        assert final["nativeCertification"]["outcome"] == "not-evaluated"
+        assert report_path.exists()
+    finally:
+        _stop(servers)

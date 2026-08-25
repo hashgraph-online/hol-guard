@@ -761,8 +761,6 @@
     "src/codex_plugin_scanner/guard/runtime/command_capability.py::_audit::Exception::622",
     "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py::issue_github_workflow_capability_for_resolution::Exception::202",
     "src/codex_plugin_scanner/guard/runtime/local_request_snapshots.py::_resolve_cloud_receipt_redaction_level::Exception::360",
-    "src/codex_plugin_scanner/guard/runtime/runner.py::_local_receipt_redaction_level::Exception::5964",
-    "src/codex_plugin_scanner/guard/runtime/runner.py::_resolve_hermes_guard_access_token::Exception::1088",
     "src/codex_plugin_scanner/guard/runtime/safe_decode.py::_try_url_percent::Exception::233",
     "src/codex_plugin_scanner/guard/runtime/trust_attestation.py::_resolve_persistent_trust_attestation_signing_config::Exception::205",
     "src/codex_plugin_scanner/guard/store_base.py::FallbackSecretStore.get_secret::Exception::1063",

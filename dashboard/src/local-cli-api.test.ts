@@ -97,6 +97,34 @@ const list = normalizeLocalCliList({
 });
 assert.equal(list.items.length, 1);
 assert.equal(list.cloud.sync_local_only, true);
+assert.equal(list.cloud.continuity_enabled, false);
+
+const continuityItem = normalizeLocalCliItem({
+  ...item,
+  continuity: {
+    status: "changed_identity",
+    reason: "identity_mismatch",
+    cloud_revision: 7,
+    surface: "cli",
+  },
+});
+assert.equal(continuityItem.continuity?.status, "changed_identity");
+assert.equal(continuityItem.continuity?.cloud_revision, 7);
+assert.equal(
+  normalizeLocalCliItem({
+    ...item,
+    continuity: { status: "locally_overridden", reason: "local_authority_preserved" },
+  }).continuity?.status,
+  "locally_overridden",
+);
+const continuityList = normalizeLocalCliList({
+  schema_version: "guard.daemon.local-clis.v1",
+  revision: 1,
+  items: [continuityItem],
+  cloud: { sync_local_only: false, continuity_enabled: true, summary: "Signed continuity is active." },
+});
+assert.equal(continuityList.cloud.continuity_enabled, true);
+assert.equal(continuityList.cloud.sync_local_only, false);
 
 assert.deepEqual(parseProtectionRoute("/extensions/local-cli/local-cli.cwv-py-abcdef12"), {
   kind: "local-cli",
@@ -285,5 +313,5 @@ const fallbackCloud = normalizeLocalCliList({
 });
 assert.equal(
   fallbackCloud.cloud.summary,
-  "Custom extensions stay on this device. Guard Cloud can keep the same extension on your other machines.",
+  "Custom Extensions remain local to this device until portable continuity is enabled.",
 );

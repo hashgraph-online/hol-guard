@@ -1,10 +1,15 @@
 import { fetchLocalCliApi } from "./guard-api";
+import type { LocalCliContinuity } from "./custom-extension-continuity-api";
+
+export type {
+  LocalCliContinuity,
+  LocalCliContinuityStatus,
+} from "./custom-extension-continuity-api";
 
 export type LocalCliKind = "executable" | "script";
 export type LocalCliState = "unset" | "allowed" | "blocked";
 export type LocalCliCommandState = "inherit" | "allow" | "block";
 export type LocalCliSurface = "cli" | "mcp" | "package-scripts";
-
 export type LocalCliCommand = {
   command_id: string;
   name: string;
@@ -35,6 +40,7 @@ export type LocalCliItem = {
   suggestable: boolean;
   suggestion_score: number;
   commands: LocalCliCommand[];
+  continuity?: LocalCliContinuity | null;
 };
 
 export type LocalCliListResponse = {
@@ -43,6 +49,7 @@ export type LocalCliListResponse = {
   items: LocalCliItem[];
   cloud: {
     sync_local_only: boolean;
+    continuity_enabled?: boolean;
     summary: string;
   };
 };
@@ -326,6 +333,30 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
     suggestable: value.suggestable === true,
     suggestion_score: optionalScore(value.suggestion_score),
     commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
+    continuity: normalizeContinuity(value.continuity),
+  };
+}
+
+function normalizeContinuity(value: unknown): LocalCliContinuity | null {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  if (
+    status !== "applied" &&
+    status !== "pending_observation" &&
+    status !== "changed_identity" &&
+    status !== "locally_overridden" &&
+    status !== "removed" &&
+    status !== "stale"
+  ) return null;
+  return {
+    status,
+    reason: typeof value.reason === "string" ? value.reason : "",
+    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision)
+      ? value.cloud_revision
+      : null,
+    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts"
+      ? value.surface
+      : null,
   };
 }
 
@@ -390,9 +421,10 @@ export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
     items,
     cloud: {
       sync_local_only: cloud.sync_local_only !== false,
+      continuity_enabled: cloud.continuity_enabled === true,
       summary: typeof cloud.summary === "string"
         ? cloud.summary
-        : "Custom extensions stay on this device. Guard Cloud can keep the same extension on your other machines.",
+        : "Custom Extensions remain local to this device until portable continuity is enabled.",
     },
   };
 }

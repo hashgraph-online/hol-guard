@@ -173,6 +173,9 @@ Local tightening remains valid.
 
 - [Extension-First Managed Controls ADR](./adr/0011-extension-first-managed-controls.md)
 - [Managed Controls Product Glossary](./managed-controls-glossary.md)
+- [Local Extensions and protection settings](./managed-controls-local-extensions.md)
+- [Managed Controls release notes](./managed-controls-release-notes.md)
+- [Managed Controls support runbook](./managed-controls-support-runbook.md)
 - [Get started](./get-started.md)
 - [Harness support](./harness-support.md)
 - [Remediation](./remediation.md)

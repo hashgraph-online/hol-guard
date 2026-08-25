@@ -31,13 +31,13 @@ const viewsSource = readFileSync(join(here, "policy-workspace-views.tsx"), "utf8
 assert(localSource.includes("No local remembered rules yet"), "local rules empty state title");
 assert(localSource.includes("Approve or block in Inbox"), "local rules empty state body");
 assert(localSource.includes("Local rules"), "local rules section badge");
-assert(localSource.includes("View all local rules"), "local rules view-all link");
 assert(localSource.includes("onClearPolicy"), "local rules support remove action");
 assert(cloudSource.includes("No Guard Cloud rules synced"), "cloud rules empty state title");
 assert(cloudSource.includes("cloudVariant"), "cloud rules use cloud table variant");
 assert(!cloudSource.includes("onClearPolicy"), "cloud rules are read-only without remove");
 
-assert(tabSource.includes('placeholder="Search by app, action, or reason…"'), "tab preserves search");
+assert(tabSource.includes('placeholder="Search remembered rules by app, action, or reason…"'), "tab uses rules-specific search");
+assert(tabSource.includes('aria-label="Search remembered rules"'), "tab labels rules search");
 assert(tabSource.includes('aria-label="Filter by app"'), "tab preserves app filter");
 assert(tabSource.includes("All assets"), "tab uses mockup asset filter label");
 assert(tabSource.includes('aria-label="Filter by action type"'), "tab preserves family filter");
@@ -46,7 +46,8 @@ assert(tabSource.includes("PolicyRememberedLocalRules"), "tab mounts local rules
 assert(tabSource.includes("PolicyRememberedCloudRules"), "tab mounts cloud rules section");
 assert(tabSource.includes("PolicyRememberedRulesRightRail"), "tab mounts right rail helper");
 
-assert(railSource.includes("Protection"), "right rail shows protection card");
+assert(railSource.includes("How Guard decides"), "right rail shows decision composition");
+assert(railSource.includes('href="/extensions"'), "right rail links to canonical Extensions");
 assert(railSource.includes("Approvals are still fast"), "right rail explains fast approvals");
 assert(railSource.includes("Once"), "scope ladder includes Once");
 assert(railSource.includes("Team policy"), "scope ladder includes Team policy");
@@ -59,16 +60,14 @@ assert(pageSource.includes("PolicyUnderlineTabBar"), "page hosts underline polic
 assert(pageSource.includes("PolicyPageToolbar"), "page hosts policy toolbar");
 assert(chromeSource.includes("Reload policy"), "policy toolbar exposes reload policy");
 
-assert(viewsSource.includes("Description"), "rules list uses description column");
 assert(viewsSource.includes("Source"), "rules list shows source column");
 assert(viewsSource.includes('scopeLabel(policy.scope, "policy")'), "rules list uses policy scope labels");
-assert(viewsSource.includes("display.pathLine"), "rules list shows approval path");
 assert(viewsSource.includes("resolvePolicyRowTitle"), "rules list uses mockup row titles");
 assert(viewsSource.includes("resolvePolicyApprovalRecordLabel"), "rules list links approval record by receipt id");
+assert(viewsSource.includes("GoverningExtensionLink"), "rules link to their governing Extension when known");
 assert(!viewsSource.includes("display.rememberSentence"), "rules list omits verbose remember sentence");
 assert(viewsSource.includes("View on cloud"), "cloud rules link to Guard Cloud");
 assert(viewsSource.includes("Remove rule"), "local rules expose remove action");
 assert(viewsSource.includes("!cloudManaged"), "remove action gated to non-cloud rules");
-assert(viewsSource.includes("HiMiniLockClosed"), "cloud rules show read-only policy lock");
 
 console.log("policy-remembered-rules.test.tsx: all assertions passed");

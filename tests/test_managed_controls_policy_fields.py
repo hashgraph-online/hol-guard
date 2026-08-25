@@ -290,6 +290,53 @@ def test_shared_enable_respects_configurability_and_required_floors() -> None:
     assert _code(document) == "immutable_floor"
 
 
+def test_every_builtin_immutable_floor_rejects_shared_cloud_weakening() -> None:
+    immutable_permissions = tuple(
+        permission
+        for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+        if extension.delegated_protection is None
+        for permission in extension.permissions
+        if not permission.configurable
+    )
+    required_extensions = tuple(
+        extension for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions if extension.required
+    )
+    assert immutable_permissions
+    assert required_extensions
+
+    for permission in immutable_permissions:
+        document = _document()
+        document["spec"]["rules"][0].pop("x-hol-extension-targets")
+        document["x-hol-extension-controls"] = {
+            "schemaVersion": "guard.extension-controls.v1",
+            "authorityMode": "workspace-shared",
+            "controls": [
+                {
+                    "targetKind": "permission",
+                    "targetId": permission.permission_id,
+                    "state": "enabled",
+                }
+            ],
+        }
+        assert _code(document) == "immutable_floor"
+
+    for extension in required_extensions:
+        document = _document()
+        document["spec"]["rules"][0].pop("x-hol-extension-targets")
+        document["x-hol-extension-controls"] = {
+            "schemaVersion": "guard.extension-controls.v1",
+            "authorityMode": "workspace-shared",
+            "controls": [
+                {
+                    "targetKind": "extension",
+                    "targetId": extension.extension_id,
+                    "state": "disabled",
+                }
+            ],
+        }
+        assert _code(document) == "immutable_floor"
+
+
 @pytest.mark.parametrize(
     "bad",
     [
@@ -314,6 +361,53 @@ def test_malformed_field_fuzz_matrix_is_bounded(bad: object) -> None:
         "unsupported_control_schema",
         "invalid_authority",
     }
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    (
+        ("x-hol-extension-controls\x00", {}, "unknown_field"),
+        ("x-hol-extension-controls.regex", "(a+)+$", "unknown_field"),
+        ("x-hol-extension-controls-unicode-\N{ZERO WIDTH JOINER}", [], "unknown_field"),
+    ),
+)
+def test_namespaced_control_field_fuzz_rejects_near_matches(
+    field: str,
+    value: object,
+    expected: str,
+) -> None:
+    document = _document()
+    document["x-hol-extension-controls"][field] = value
+    assert _code(document) == expected
+
+
+def test_oversized_target_and_advanced_regex_are_not_evaluated_by_extension_parser() -> None:
+    document = _document()
+    document["x-hol-extension-controls"]["controls"][0]["targetId"] = "command." + ("a" * 100_000)
+    assert _code(document) == "invalid_permission_id"
+
+    matcher_accesses: list[str] = []
+
+    class ObservableRule(dict[str, Any]):
+        def __getitem__(self, key: str) -> Any:
+            if key == "matcher":
+                matcher_accesses.append(key)
+                raise AssertionError("managed-controls parser accessed the advanced matcher")
+            return super().__getitem__(key)
+
+        def get(self, key: str, default: Any = None) -> Any:
+            if key == "matcher":
+                matcher_accesses.append(key)
+                raise AssertionError("managed-controls parser accessed the advanced matcher")
+            return super().get(key, default)
+
+    document = _document()
+    original_rule = document["spec"]["rules"][0]
+    original_rule["matcher"] = {"regex": "(a+)+$"}
+    document["spec"]["rules"][0] = ObservableRule(original_rule)
+    parsed = _parse(document)
+    assert matcher_accesses == []
+    assert parsed.rule_targets[0].permission_ids == ("command.git.permission.force-push",)
 
 
 def test_shared_signature_vector_validates_before_projection() -> None:

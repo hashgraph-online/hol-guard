@@ -8,7 +8,7 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from ..approval_gate import (
     ApprovalGateError,
@@ -21,7 +21,6 @@ from ..runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
     layers_from_json,
-    layers_to_json,
 )
 from ..runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
@@ -46,8 +45,8 @@ from ..runtime.extension_control_proof import (
 from ..runtime.extension_control_resolver import compose_control_layers
 from ..runtime.extension_control_runtime import ExtensionControlRuntime
 from .extension_control_errors import ExtensionControlApiError
-from .extension_control_projection import build_effective_extension_control_projection
 from .extension_control_semantic_preview import build_extension_control_semantic_preview
+from .managed_controls_api import effective_controls_payload
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -109,33 +108,7 @@ class ExtensionControlApiService:
 
     def effective(self) -> dict[str, object]:
         snapshot = self._runtime.current()
-        composed = compose_control_layers(snapshot.layers)
-        return {
-            "schema_version": _EXTENSION_CONTROL_API_SCHEMA,
-            "health": snapshot.health.value,
-            "revision": snapshot.revision,
-            "catalog_digest": snapshot.catalog_digest,
-            "global_lockdown": composed.global_lockdown,
-            "controls": [
-                {
-                    "target": {
-                        "kind": control.target.kind.value,
-                        "target_id": control.target.target_id,
-                    },
-                    "state": control.state.value,
-                }
-                for control in composed.controls
-            ],
-            "layers": cast(list[object], json.loads(layers_to_json(snapshot.layers))),
-            "failures": [
-                {
-                    "code": failure.code.value,
-                    **({"layer_kind": failure.layer_kind.value} if failure.layer_kind is not None else {}),
-                }
-                for failure in composed.failures
-            ],
-            "projection": build_effective_extension_control_projection(self._registry, snapshot),
-        }
+        return effective_controls_payload(self._registry, snapshot, self._store)
 
     def refresh(self) -> dict[str, object]:
         view = self._store.read_extension_control_authority_for_registry(self._registry)

@@ -17,9 +17,9 @@ export function PolicyRememberedCloudRules({
 }: PolicyRememberedCloudRulesProps) {
   return (
     <GroupedPolicySection
-      title="From Guard Cloud"
-      badge="Team policy rules"
-      description="Managed by your team in Guard Cloud. These rules are read-only locally."
+      title="Synced contextual rules"
+      badge="Guard Cloud"
+      description="Shared contextual rules compose after Extension posture. These rules are read-only locally."
       policies={policies}
       cloudControlsUrl={cloudControlsUrl}
       emptyTitle="No Guard Cloud rules synced"

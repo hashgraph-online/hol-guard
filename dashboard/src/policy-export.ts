@@ -4,9 +4,9 @@ import { downloadBlob } from "./history-export";
 import {
   resolvePolicyApprovalRecordLabel,
   resolvePolicyDisplay,
-  resolvePolicyRowSourceLabel,
   resolvePolicyRowTitle,
 } from "./policy-workspace-helpers";
+import { resolvePolicyRowSourceLabel } from "./policy-managed-authority";
 
 function escapeCsvCell(value: string | null | undefined): string {
   const str = value ?? "";

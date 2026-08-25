@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { ProtectionModuleDetail } from "./protection-module-detail";
+import { DEFAULT_EXTENSION_DETAIL_URL_STATE } from "../extension-control-center-model";
 import {
   FIXED_PROTECTION_MODULE,
   FIXED_PROTECTION_PERMISSION,
@@ -49,19 +50,107 @@ const simple = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
 assert.match(simple, />Git</);
 assert.match(simple, /font-mono[^"]*">git</);
 assert.match(simple, /data-extension-brand="git"/);
-assert.match(simple, /Protection settings/);
-assert.match(simple, /Forced Git push/);
-assert.match(simple, /git push --force/);
-assert.match(simple, /Recommended/);
-assert.match(simple, />Allow</);
-assert.match(simple, />Block</);
+assert.match(simple, />Overview</);
+assert.match(simple, />Permissions</);
+assert.match(simple, />Managed controls</);
+assert.match(simple, />Activity</);
+assert.match(simple, />Technical details</);
+assert.match(simple, /What this Extension protects/);
+assert.doesNotMatch(simple, /Protection settings/);
+
+const permissions = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
+  extension: git,
+  effective: PROTECTION_AUTHORITY_FIXTURES.protected,
+  catalogDigest: "a".repeat(64),
+  urlState: { ...DEFAULT_EXTENSION_DETAIL_URL_STATE, tab: "permissions" },
+  onBack: () => undefined,
+  onRefresh: () => undefined,
+}));
+assert.match(permissions, /Protection settings/);
+assert.match(permissions, /Forced Git push/);
+assert.match(permissions, /git push --force/);
+assert.match(permissions, /Recommended/);
+assert.match(permissions, />Allow</);
+assert.match(permissions, />Block</);
 assert.match(simple, /Required by Guard/);
-assert.match(simple, /Test Lab/);
-assert.match(simple, /Developer details/);
-assert.doesNotMatch(simple, /data-testid="protection-more-detail"[^>]* open/, "developer details stay collapsed by default");
-assert.doesNotMatch(simple, /What this protects/);
+const activity = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
+  extension: git,
+  effective: PROTECTION_AUTHORITY_FIXTURES.protected,
+  catalogDigest: "a".repeat(64),
+  urlState: { ...DEFAULT_EXTENSION_DETAIL_URL_STATE, tab: "activity" },
+  onBack: () => undefined,
+  onRefresh: () => undefined,
+}));
+assert.match(activity, /Test Lab/);
+assert.match(activity, /View matching Evidence/);
+const technical = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
+  extension: git,
+  effective: PROTECTION_AUTHORITY_FIXTURES.protected,
+  catalogDigest: "a".repeat(64),
+  urlState: { ...DEFAULT_EXTENSION_DETAIL_URL_STATE, tab: "technical" },
+  onBack: () => undefined,
+  onRefresh: () => undefined,
+}));
+assert.match(technical, /Developer details/);
+assert.doesNotMatch(technical, /data-testid="protection-more-detail"[^>]* open/, "developer details stay collapsed by default");
 assert.doesNotMatch(simple, /Change settings/);
 assert.doesNotMatch(simple, />Extension</);
+
+const partial = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
+  extension: git,
+  effective: {
+    ...PROTECTION_AUTHORITY_FIXTURES.protected,
+    layers: [{
+      schema_version: "1.0.0",
+      kind: "local-admin",
+      catalog_digest: "a".repeat(64),
+      global_lockdown: false,
+      controls: [{
+        target_kind: "permission",
+        target_id: "command.git.permission.force-push",
+        state: "disabled",
+      }],
+    }],
+    projection: {
+      schema_version: "guard.daemon.extension-control-projection.v1",
+      revision: 1,
+      catalog_digest: "a".repeat(64),
+      health: "protected",
+      extensions: [{
+        extension_id: "command.git",
+        effective_state: "allowed",
+        local_state: "inherited",
+        managed_state: "inherited",
+        required: false,
+        reason_codes: [],
+      }],
+      permissions: [{
+        permission_id: "command.git.permission.force-push",
+        extension_id: "command.git",
+        effective_state: "blocked",
+        local_state: "disabled",
+        managed_state: "inherited",
+        configurable: true,
+        fixed_reason: null,
+        reason_codes: ["control.disabled-permission"],
+      }, {
+        permission_id: "command.git.permission.hard-reset",
+        extension_id: "command.git",
+        effective_state: "allowed",
+        local_state: "inherited",
+        managed_state: "inherited",
+        configurable: true,
+        fixed_reason: null,
+        reason_codes: [],
+      }],
+    },
+  },
+  catalogDigest: "a".repeat(64),
+  onBack: () => undefined,
+  onRefresh: () => undefined,
+}));
+assert.match(partial, />Partial</);
+assert.doesNotMatch(partial, />Blocked<\/dd>/, "one blocked permission does not label the entire Extension blocked");
 
 const requiredExtension = { ...FIXED_PROTECTION_MODULE, required: true };
 const required = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
@@ -72,12 +161,14 @@ const required = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   onRefresh: () => undefined,
 }));
 assert.match(required, /Required by Guard/);
+assert.match(required, />Required</);
 assert.doesNotMatch(required, />Change settings</);
 
 const fixedSettingSimple = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   extension: FIXED_PROTECTION_MODULE,
   effective: PROTECTION_AUTHORITY_FIXTURES.protected,
   catalogDigest: "a".repeat(64),
+  urlState: { ...DEFAULT_EXTENSION_DETAIL_URL_STATE, tab: "permissions" },
   onBack: () => undefined,
   onRefresh: () => undefined,
 }));
@@ -88,11 +179,22 @@ const managed = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   extension: git,
   effective: PROTECTION_AUTHORITY_FIXTURES.managedBlock,
   catalogDigest: "a".repeat(64),
+  urlState: { ...DEFAULT_EXTENSION_DETAIL_URL_STATE, tab: "permissions" },
   onBack: () => undefined,
   onRefresh: () => undefined,
 }));
 assert.match(managed, /Your organization controls part of this protection/);
 assert.match(managed, /Recommended/);
+
+const managedOverview = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
+  extension: git,
+  effective: PROTECTION_AUTHORITY_FIXTURES.managedBlock,
+  catalogDigest: "a".repeat(64),
+  onBack: () => undefined,
+  onRefresh: () => undefined,
+}));
+assert.match(managedOverview, />Blocked</);
+assert.doesNotMatch(managedOverview, />Managed<\/dd>/, "state reports the effective behavior, not authority presentation");
 
 const lockdown = renderToStaticMarkup(createElement(ProtectionModuleDetail, {
   extension: git,
