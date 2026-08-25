@@ -169,7 +169,17 @@ class StoreExactCloudReviewMixin:
             request = load_approval_request(connection, request_id)
             if request is None or request.get("status") != "pending":
                 return _exact_error("remote_exact_request_not_pending", now=resolved_at)
-            if _request_snapshot(request) != _request_snapshot(expected_request):
+            changed_request_fields = _changed_request_fields(request, expected_request)
+            if changed_request_fields:
+                StoreExactCloudReviewMixin._record_exact_event(
+                    connection,
+                    "cloud_review.exact_request_stale",
+                    {
+                        "changed_fields": changed_request_fields,
+                        "request_id": request_id,
+                    },
+                    now=resolved_at,
+                )
                 return _exact_error("remote_exact_request_stale", now=resolved_at)
             try:
                 connection.execute(
@@ -221,6 +231,18 @@ def _request_snapshot(request: dict[str, object]) -> str:
     """Compare every persisted request input with canonical JSON semantics."""
 
     return json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _changed_request_fields(
+    current: dict[str, object],
+    expected: dict[str, object],
+) -> list[str]:
+    """Return field names only so stale-request diagnostics cannot leak values."""
+
+    keys = sorted(set(current) | set(expected))
+    return [
+        key for key in keys if _request_snapshot({key: current.get(key)}) != _request_snapshot({key: expected.get(key)})
+    ]
 
 
 def _exact_error(code: str, *, now: str) -> dict[str, object]:
