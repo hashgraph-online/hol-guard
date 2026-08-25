@@ -20,6 +20,9 @@ from ..approval_gate import (
     require_local_cli_trust,
 )
 from ..local_cli_trust import utc_now
+from ..runtime.custom_extension_continuity import (
+    record_local_custom_extension_mutation,
+)
 from ..runtime.local_cli_commands import (
     MAX_LOCAL_CLI_COMMANDS,
     LocalCliCommand,
@@ -52,6 +55,7 @@ from ..runtime.package_json_script_memory import (
     refresh_package_script_catalogs,
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
+from .local_cli_continuity_api import decorate_local_cli_continuity
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -84,10 +88,7 @@ class LocalCliApiService:
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "revision": revision,
             "items": items,
-            "cloud": {
-                "sync_local_only": True,
-                "summary": ("Custom Extensions remain local to this device until portable continuity is enabled."),
-            },
+            "cloud": decorate_local_cli_continuity(self._store, items),
         }
 
     def recognize(self, payload: dict[str, object]) -> dict[str, object]:
@@ -285,12 +286,13 @@ class LocalCliApiService:
             raise LocalCliApiError(exc.status, exc.code, str(exc)) from exc
         command_states = self._command_states_from_payload(payload)
         try:
-            revision = self._store.upsert_local_cli_grant(
+            revision = record_local_custom_extension_mutation(
+                self._store,
                 identity=identity,
                 state=state,
                 expected_revision=expected,
-                updated_at=utc_now(),
                 command_states=command_states,
+                now=utc_now(),
             )
         except ValueError as exc:
             if str(exc) == "local_cli_revision_conflict":

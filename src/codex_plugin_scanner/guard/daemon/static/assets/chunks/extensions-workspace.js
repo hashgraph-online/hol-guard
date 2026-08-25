@@ -411,7 +411,19 @@ function normalizeLocalCliItem(value) {
     authority_revision: requiredInt(value.authority_revision, "revision"),
     suggestable: value.suggestable === true,
     suggestion_score: optionalScore(value.suggestion_score),
-    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : []
+    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
+    continuity: normalizeContinuity(value.continuity)
+  };
+}
+function normalizeContinuity(value) {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  if (status !== "applied" && status !== "pending_observation" && status !== "changed_identity" && status !== "locally_overridden" && status !== "removed" && status !== "stale") return null;
+  return {
+    status,
+    reason: typeof value.reason === "string" ? value.reason : "",
+    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision) ? value.cloud_revision : null,
+    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts" ? value.surface : null
   };
 }
 function normalizeSurface(value) {
@@ -469,6 +481,7 @@ function normalizeLocalCliList(value) {
     items,
     cloud: {
       sync_local_only: cloud.sync_local_only !== false,
+      continuity_enabled: cloud.continuity_enabled === true,
       summary: typeof cloud.summary === "string" ? cloud.summary : "Custom Extensions remain local to this device until portable continuity is enabled."
     }
   };
@@ -3289,6 +3302,46 @@ function customExtensionContinuityView(state) {
         canApplyAcrossDevices: false,
         privacyDisclosure
       };
+    case "pending-observation":
+      return {
+        state,
+        title: "Waiting for this device",
+        description: "Cloud settings stay pending until Guard observes the same extension identity locally.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "changed-identity":
+      return {
+        state,
+        title: "Identity changed",
+        description: "Guard refused the Cloud settings because this device observed a different identity.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "locally-overridden":
+      return {
+        state,
+        title: "Changed on this device",
+        description: "Guard kept this device's local setting until a newer Cloud revision is available.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "removed":
+      return {
+        state,
+        title: "Removed on this device",
+        description: "The local setting was removed. Guard did not delete the script, executable, or MCP configuration.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "stale":
+      return {
+        state,
+        title: "Cloud observation is stale",
+        description: "Guard kept the last-known-good local setting and did not apply expired Cloud state.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
   }
 }
 function randomToken$2() {
@@ -3693,6 +3746,19 @@ function customExtensionStateLabel(item) {
   }
   return item.example_label;
 }
+function continuityCopy(item) {
+  const status = item.continuity?.status;
+  if (status === "applied") {
+    const view = customExtensionContinuityView("identity-matched");
+    return { title: view.title, description: view.description };
+  }
+  if (status === "pending_observation") return customExtensionContinuityView("pending-observation");
+  if (status === "changed_identity") return customExtensionContinuityView("changed-identity");
+  if (status === "locally_overridden") return customExtensionContinuityView("locally-overridden");
+  if (status === "removed") return customExtensionContinuityView("removed");
+  if (status === "stale") return customExtensionContinuityView("stale");
+  return null;
+}
 function CustomExtensionsSection(props) {
   const added = addedCustomExtensions(props.items);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "custom-extensions-heading", children: [
@@ -3719,13 +3785,14 @@ function CustomExtensionRow(props) {
   const handleOpen = reactExports.useCallback(() => {
     props.onOpen(props.item.cli_id);
   }, [props]);
+  const continuity = continuityCopy(props.item);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ProtectionModuleRow,
     {
       extensionId: props.item.cli_id,
       name: props.item.name,
       description: props.item.source_label ? `${props.item.example_label} · ${props.item.source_label}` : props.item.example_label,
-      behavior: customExtensionStateLabel(props.item),
+      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item),
       custom: true,
       executables: [props.item.name],
       onOpen: handleOpen
@@ -3814,6 +3881,10 @@ function LocalCliDetail(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.item.example_label }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: props.item.name }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: customExtensionStateLabel(props.item) }),
+      continuityCopy(props.item) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3", "data-testid": "custom-extension-continuity", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: continuityCopy(props.item)?.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-slate-600", children: continuityCopy(props.item)?.description })
+      ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75", children: detailPolicyCopy(props.item.surface) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-3", children: added ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         props.item.state === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Allowed on this device" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: "Allow this extension's commands" }),

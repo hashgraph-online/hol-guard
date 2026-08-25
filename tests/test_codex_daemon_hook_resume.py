@@ -10,8 +10,6 @@ import threading
 import time
 from http.server import HTTPServer
 from pathlib import Path
-from typing import ClassVar
-from urllib.parse import urlparse
 
 import pytest
 
@@ -19,95 +17,17 @@ from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as brid
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY
+from codex_plugin_scanner.guard.live_process_identity import (
+    CODEX_BROWSER_WAIT_PROCESS_KEY,
+    CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
-    _DaemonHandler,
+    _ResumeDaemonHandler,
     _write_authenticated_daemon_files,
 )
 from tests.test_guard_phase04_harness_ux import _json_line, _run_hook
-
-
-class _ResumeDaemonHandler(_DaemonHandler):
-    request_id: ClassVar[str] = "abcd1234ef567890"
-    resolution: ClassVar[str | None] = None
-    policy_action: ClassVar[str] = "require-reapproval"
-    approve_after: ClassVar[float] = 0.0
-    started_at: ClassVar[float] = 0.0
-    get_count: ClassVar[int] = 0
-    finalize_count: ClassVar[int] = 0
-    finalize_completed: ClassVar[bool] = True
-
-    def _write_json(self, payload: dict[str, object], *, status: int = 200, keep_alive: bool = False) -> None:
-        body = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Connection", "keep-alive" if keep_alive else "close")
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_POST(self) -> None:  # noqa: N802
-        if self.path == "/v1/daemon/identity-challenge":
-            super().do_POST()
-            return
-        if self.path == f"/v1/requests/{type(self).request_id}/live-decision":
-            length = int(self.headers.get("Content-Length", "0"))
-            _ = self.rfile.read(length)
-            type(self).finalize_count += 1
-            if self.headers.get("X-Guard-Token") != type(self).auth_token:
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
-            self._write_json(
-                {
-                    "action": type(self).resolution,
-                    "completed": type(self).finalize_completed
-                    and type(self).policy_action in {"review", "require-reapproval"},
-                }
-            )
-            return
-        length = int(self.headers.get("Content-Length", "0"))
-        _ = self.rfile.read(length)
-        type(self).captured_guard_token = self.headers.get("X-Guard-Token")
-        request_url = f"http://127.0.0.1:{self.server.server_address[1]}/requests/{type(self).request_id}"
-        self._write_json(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        "HOL Guard paused this command for review. "
-                        f"Open HOL Guard to approve or keep this blocked: {request_url}"
-                    ),
-                }
-            }
-        )
-
-    def do_GET(self) -> None:  # noqa: N802
-        parsed = urlparse(self.path)
-        type(self).get_count += 1
-        if parsed.path != f"/v1/requests/{type(self).request_id}":
-            self._write_json({"error": "not_found"}, status=404)
-            return
-        if self.headers.get("X-Guard-Token") != type(self).auth_token:
-            self._write_json({"error": "unauthorized"}, status=401)
-            return
-        elapsed = time.monotonic() - type(self).started_at
-        if type(self).resolution is None or elapsed < type(self).approve_after:
-            self._write_json({"status": "pending", "request_id": type(self).request_id})
-            return
-        self._write_json(
-            {
-                "status": "resolved",
-                "request_id": type(self).request_id,
-                "resolution_action": type(self).resolution,
-                "policy_action": type(self).policy_action,
-            }
-        )
-
-    def log_message(self, fmt: str, *args: object) -> None:
-        return
 
 
 def test_pending_pretool_approval_requires_safe_request_id() -> None:
@@ -167,6 +87,7 @@ def test_codex_bridge_pretool_advertises_the_live_outer_waiter(
         "tool_name": "Read",
         "tool_input": {"path": "/workspace/project/.env"},
         CODEX_BROWSER_WAIT_PROCESS_KEY: process_identity,
+        CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY: 30,
     }
     assert interaction._codex_hook_waits_for_browser_approval(
         args,
@@ -184,6 +105,23 @@ def test_codex_bridge_pretool_advertises_the_live_outer_waiter(
     assert metadata["codex_hook_waits_for_browser_approval"] is True
     assert metadata["codex_browser_wait_process"] == process_identity
     assert metadata["codex_browser_wait_timeout_seconds"] == 30
+
+
+def test_codex_bridge_wait_uses_the_outer_hook_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    process_identity = {"pid": 4102, "startToken": "fixture-start"}
+    monkeypatch.setattr(interaction, "process_identity_matches", lambda value: value == process_identity)
+    metadata = interaction._codex_browser_wait_metadata(
+        args=argparse.Namespace(harness="codex", json=True),
+        event_name="PreToolUse",
+        policy_action="require-reapproval",
+        config=GuardConfig(tmp_path, None, approval_wait_timeout_seconds=600),
+        payload={
+            CODEX_BROWSER_WAIT_PROCESS_KEY: process_identity,
+            CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY: 7,
+        },
+    )
+
+    assert metadata["codex_browser_wait_timeout_seconds"] == 7
 
 
 def test_codex_unbound_browser_wait_retains_the_worker_budget() -> None:

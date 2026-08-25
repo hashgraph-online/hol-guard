@@ -9,6 +9,7 @@ import time
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import ClassVar
+from urllib.parse import urlparse
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon.discovery import (
@@ -107,6 +108,75 @@ class _DaemonHandler(BaseHTTPRequestHandler):
         return
 
 
+class _ResumeDaemonHandler(_DaemonHandler):
+    request_id: ClassVar[str] = "abcd1234ef567890"
+    resolution: ClassVar[str | None] = None
+    policy_action: ClassVar[str] = "require-reapproval"
+    approve_after: ClassVar[float] = 0.0
+    started_at: ClassVar[float] = 0.0
+    get_count: ClassVar[int] = 0
+    finalize_count: ClassVar[int] = 0
+    finalize_completed: ClassVar[bool] = True
+
+    def do_POST(self) -> None:
+        if self.path == "/v1/daemon/identity-challenge":
+            super().do_POST()
+            return
+        if self.path == f"/v1/requests/{type(self).request_id}/live-decision":
+            length = int(self.headers.get("Content-Length", "0"))
+            _ = self.rfile.read(length)
+            type(self).finalize_count += 1
+            if self.headers.get("X-Guard-Token") != type(self).auth_token:
+                self._write_json({"error": "unauthorized"}, status=401)
+                return
+            self._write_json(
+                {
+                    "action": type(self).resolution,
+                    "completed": type(self).finalize_completed
+                    and type(self).policy_action in {"review", "require-reapproval"},
+                }
+            )
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        _ = self.rfile.read(length)
+        type(self).captured_guard_token = self.headers.get("X-Guard-Token")
+        request_url = f"http://127.0.0.1:{self.server.server_address[1]}/requests/{type(self).request_id}"
+        self._write_json(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "HOL Guard paused this command for review. "
+                        f"Open HOL Guard to approve or keep this blocked: {request_url}"
+                    ),
+                }
+            }
+        )
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        type(self).get_count += 1
+        if parsed.path != f"/v1/requests/{type(self).request_id}":
+            self._write_json({"error": "not_found"}, status=404)
+            return
+        if self.headers.get("X-Guard-Token") != type(self).auth_token:
+            self._write_json({"error": "unauthorized"}, status=401)
+            return
+        elapsed = time.monotonic() - type(self).started_at
+        if type(self).resolution is None or elapsed < type(self).approve_after:
+            self._write_json({"status": "pending", "request_id": type(self).request_id})
+            return
+        self._write_json(
+            {
+                "status": "resolved",
+                "request_id": type(self).request_id,
+                "resolution_action": type(self).resolution,
+                "policy_action": type(self).policy_action,
+            }
+        )
+
+
 class _ProxyHandler(BaseHTTPRequestHandler):
     captured_paths: ClassVar[list[str]] = []
 
@@ -126,10 +196,10 @@ def _bridge_config(guard_home: Path, port: int) -> dict[str, object]:
         "start_command": [sys.executable, "-c", "raise SystemExit(1)"],
         "query": f"guard-home={guard_home}",
         "hook_timeouts": {
-            "PreToolUse": 10,
-            "PermissionRequest": 10,
-            "UserPromptSubmit": 10,
-            "PostToolUse": 10,
+            "PreToolUse": 4,
+            "PermissionRequest": 4,
+            "UserPromptSubmit": 4,
+            "PostToolUse": 4,
         },
     }
 

@@ -122,6 +122,20 @@ export function customExtensionStateLabel(item: LocalCliItem): string {
   return item.example_label;
 }
 
+function continuityCopy(item: LocalCliItem): { title: string; description: string } | null {
+  const status = item.continuity?.status;
+  if (status === "applied") {
+    const view = customExtensionContinuityView("identity-matched");
+    return { title: view.title, description: view.description };
+  }
+  if (status === "pending_observation") return customExtensionContinuityView("pending-observation");
+  if (status === "changed_identity") return customExtensionContinuityView("changed-identity");
+  if (status === "locally_overridden") return customExtensionContinuityView("locally-overridden");
+  if (status === "removed") return customExtensionContinuityView("removed");
+  if (status === "stale") return customExtensionContinuityView("stale");
+  return null;
+}
+
 export function CustomExtensionsSection(props: {
   items: LocalCliItem[];
   onOpen: (cliId: string) => void;
@@ -166,12 +180,13 @@ function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string)
   const handleOpen = useCallback(() => {
     props.onOpen(props.item.cli_id);
   }, [props]);
+  const continuity = continuityCopy(props.item);
   return (
     <ProtectionModuleRow
       extensionId={props.item.cli_id}
       name={props.item.name}
       description={props.item.source_label ? `${props.item.example_label} · ${props.item.source_label}` : props.item.example_label}
-      behavior={customExtensionStateLabel(props.item)}
+      behavior={continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item)}
       custom
       executables={[props.item.name]}
       onOpen={handleOpen}
@@ -272,6 +287,12 @@ export function LocalCliDetail(props: {
         <p className="font-mono text-xs font-semibold tracking-[0.14em] text-slate-400">{props.item.example_label}</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.item.name}</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
+        {continuityCopy(props.item) ? (
+          <div className="mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="custom-extension-continuity">
+            <p className="text-sm font-semibold text-brand-dark">{continuityCopy(props.item)?.title}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{continuityCopy(props.item)?.description}</p>
+          </div>
+        ) : null}
         <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
           {detailPolicyCopy(props.item.surface)}
         </p>

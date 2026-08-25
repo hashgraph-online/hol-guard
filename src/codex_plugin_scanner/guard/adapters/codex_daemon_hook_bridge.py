@@ -19,7 +19,11 @@ if __package__:
     from ..codex_hook_bridge_runtime import trusted_hook_launch as _trusted_hook_launch
     from ..codex_hook_launch_runtime import isolated_hook_environment as _isolated_hook_environment
     from ..codex_hook_launch_runtime import run_isolated_hook_process as _run_isolated_hook_process
-    from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, current_process_identity
+    from ..live_process_identity import (
+        CODEX_BROWSER_WAIT_PROCESS_KEY,
+        CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
+        current_process_identity,
+    )
     from .codex_daemon_hook_auth import _DaemonResponseError
     from .codex_daemon_hook_resume import apply_browser_approval_wait
     from .codex_daemon_hook_transport import _daemon_response_once, _DaemonGenerationChangedError
@@ -60,6 +64,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
     )
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
+        CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
     )
 
@@ -127,15 +132,17 @@ def _event_name(data: str) -> str:
     return value.strip() if isinstance(value, str) and value.strip() else "PreToolUse"
 
 
-def _with_browser_wait_process(data: str) -> str:
+def _with_browser_wait_process(data: str, *, wait_timeout_seconds: float) -> str:
     payload = _json_object(data)
     if payload is None:
         return data
     process_identity = current_process_identity()
     if process_identity is None:
         payload.pop(CODEX_BROWSER_WAIT_PROCESS_KEY, None)
+        payload.pop(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY, None)
     else:
         payload[CODEX_BROWSER_WAIT_PROCESS_KEY] = process_identity
+        payload[CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] = max(1, int(wait_timeout_seconds))
     return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
@@ -280,13 +287,18 @@ def _codex_hook_response(response: Mapping[str, object], *, event_name: str) -> 
     return filtered
 
 
-def _bound_hook_input() -> tuple[str, str] | None:
+def _bound_hook_input(hook_timeouts: Mapping[str, int]) -> tuple[str, str, float] | None:
     raw_data = _hook_input(_MAX_HOOK_INPUT_BYTES)
     if raw_data is None:
         return None
     event_name = _event_name(raw_data)
-    data = _with_browser_wait_process(raw_data) if event_name == "PreToolUse" else raw_data
-    return event_name, data
+    timeout_seconds = _request_timeout(event_name, hook_timeouts)
+    data = (
+        _with_browser_wait_process(raw_data, wait_timeout_seconds=max(1.0, timeout_seconds - 1.0))
+        if event_name == "PreToolUse"
+        else raw_data
+    )
+    return event_name, data, timeout_seconds
 
 
 def main(
@@ -301,12 +313,11 @@ def main(
 ) -> int:
     """Review one Codex hook through the resident daemon or a fail-safe fallback."""
 
-    hook_input = _bound_hook_input()
+    hook_input = _bound_hook_input(hook_timeouts)
     if hook_input is None:
         sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
         return 0
-    event_name, data = hook_input
-    timeout_seconds = _request_timeout(event_name, hook_timeouts)
+    event_name, data, timeout_seconds = hook_input
     deadline = time.monotonic() + timeout_seconds
     response: dict[str, object] | None = None
     trusted_launch: _TrustedHookLaunch | None = None

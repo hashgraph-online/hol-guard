@@ -9,7 +9,7 @@ import importlib
 from typing import TYPE_CHECKING
 
 from ..browser_opener import open_browser_url
-from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, process_identity_matches
+from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, bound_wait_timeout_seconds, process_identity_matches
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 from .commands_support_browser_wait import browser_wait_request_ids
 
@@ -582,7 +582,11 @@ def _codex_browser_wait_metadata(
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
         event_name=event_name,
         configured_timeout=config.approval_wait_timeout_seconds,
-        outer_wait_bound=bridge_wait_process is not None,
+        outer_wait_timeout_seconds=(
+            bound_wait_timeout_seconds(payload, maximum=MAX_APPROVAL_WAIT_TIMEOUT_SECONDS)
+            if bridge_wait_process is not None
+            else None
+        ),
     )
     started_at = datetime.now(timezone.utc)
     deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
@@ -604,14 +608,14 @@ def _codex_browser_wait_timeout_seconds(
     *,
     event_name: str,
     configured_timeout: int,
-    outer_wait_bound: bool = False,
+    outer_wait_timeout_seconds: int | None = None,
 ) -> int:
     wait_timeout_seconds = min(
         max(configured_timeout, 0),
         MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
     )
-    if outer_wait_bound:
-        return wait_timeout_seconds
+    if outer_wait_timeout_seconds is not None:
+        return min(wait_timeout_seconds, outer_wait_timeout_seconds)
     if event_name in {"UserPromptSubmit", "PreToolUse", "PostToolUse"}:
         wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS)
     return wait_timeout_seconds
@@ -624,6 +628,7 @@ def _codex_bridge_wait_process(payload: Mapping[str, object] | None) -> dict[str
     if isinstance(process_identity, dict) and process_identity_matches(process_identity):
         return process_identity
     return None
+
 
 def _attach_primary_approval_link(
     response_payload: dict[str, object],

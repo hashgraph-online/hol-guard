@@ -15,7 +15,10 @@ from codex_plugin_scanner.guard import continuation_runtime as continuation_runt
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY
+from codex_plugin_scanner.guard.live_process_identity import (
+    CODEX_BROWSER_WAIT_PROCESS_KEY,
+    CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
@@ -93,8 +96,9 @@ def test_main_binds_authenticated_daemon_request_to_bridge_process(
     assert _DaemonHandler.captured_challenge_guard_token is None
     assert _DaemonHandler.captured_guard_token == "fixture-token"
     captured_hook_payload = json.loads(str(_DaemonHandler.captured_hook_body))
-    assert captured_hook_payload.pop("guard_remaining_ms") in range(1, 10_001)
+    assert captured_hook_payload.pop("guard_remaining_ms") in range(1, 4_001)
     assert captured_hook_payload.pop(CODEX_BROWSER_WAIT_PROCESS_KEY) == bridge_process
+    assert captured_hook_payload.pop(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY) == 1
     assert captured_hook_payload == hook_payload
     assert json.loads(str(_DaemonHandler.captured_hook_body))["tool_input"]["command"] == complete_command
     assert _ProxyHandler.captured_paths == []
@@ -119,12 +123,15 @@ def test_bridge_replaces_untrusted_wait_process_metadata(monkeypatch: pytest.Mon
                         "pid": 9999,
                         "startToken": "untrusted-input",
                     },
+                    CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY: 9999,
                 }
-            )
+            ),
+            wait_timeout_seconds=7,
         )
     )
 
     assert payload[CODEX_BROWSER_WAIT_PROCESS_KEY] == live_process
+    assert payload[CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] == 7
 
 
 def test_codex_approve_without_resume_binding_returns_honest_manual_fallback(tmp_path: Path) -> None:
