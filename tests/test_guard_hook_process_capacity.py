@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from codex_plugin_scanner.guard.daemon import hook_process_capacity as capacity_module
 from codex_plugin_scanner.guard.daemon.hook_process_capacity import (
     HookProcessCapacityPolicy,
     HookProcessLoad,
+    cgroup_cpu_count,
+    cgroup_memory_limit_bytes,
     default_hook_worker_memory_ceiling,
     initial_hook_worker_target,
+    physical_memory_bytes,
     process_tree_rss_bytes,
     validate_hook_worker_limit,
 )
@@ -15,7 +20,7 @@ from codex_plugin_scanner.guard.daemon.hook_process_capacity import (
 
 class _Clock:
     def __init__(self) -> None:
-        self.now = 0.0
+        self.now: float = 0.0
 
     def __call__(self) -> float:
         return self.now
@@ -40,10 +45,55 @@ def _load(
 
 @pytest.mark.parametrize(
     ("cpu_count", "expected"),
-    [(1, 4), (4, 4), (8, 8), (64, 8)],
+    [(1, 2), (2, 2), (4, 4), (8, 8), (64, 8)],
 )
 def test_initial_target_follows_cpu_budget(cpu_count: int, expected: int) -> None:
     assert initial_hook_worker_target(cpu_count) == expected
+
+
+def test_initial_target_uses_effective_cgroup_cpu_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(capacity_module.os, "cpu_count", lambda: 12)
+    monkeypatch.setattr(capacity_module, "cgroup_cpu_count", lambda: 1)
+
+    assert initial_hook_worker_target() == 2
+
+
+def test_cgroup_v2_cpu_quota_caps_worker_budget(tmp_path: Path) -> None:
+    cpu_max = tmp_path / "cpu.max"
+    _ = cpu_max.write_text("150000 100000\n", encoding="utf-8")
+
+    assert cgroup_cpu_count(cpu_max_path=cpu_max) == 2
+
+
+def test_cgroup_v1_cpu_quota_caps_worker_budget(tmp_path: Path) -> None:
+    quota = tmp_path / "cpu.cfs_quota_us"
+    period = tmp_path / "cpu.cfs_period_us"
+    _ = quota.write_text("100000\n", encoding="utf-8")
+    _ = period.write_text("100000\n", encoding="utf-8")
+
+    assert (
+        cgroup_cpu_count(
+            cpu_max_path=tmp_path / "missing",
+            cpu_quota_path=quota,
+            cpu_period_path=period,
+        )
+        == 1
+    )
+
+
+def test_cgroup_memory_limit_uses_finite_v2_value(tmp_path: Path) -> None:
+    memory_max = tmp_path / "memory.max"
+    _ = memory_max.write_text(str(1024**3), encoding="utf-8")
+
+    assert cgroup_memory_limit_bytes(memory_max_path=memory_max) == 1024**3
+
+
+def test_physical_memory_uses_lower_cgroup_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    values = {"SC_PAGE_SIZE": 4096, "SC_PHYS_PAGES": 4 * 1024**2}
+    monkeypatch.setattr(capacity_module.os, "sysconf", values.__getitem__)
+    monkeypatch.setattr(capacity_module, "cgroup_memory_limit_bytes", lambda: 1024**3)
+
+    assert physical_memory_bytes() == 1024**3
 
 
 def test_worker_limit_accepts_only_two_through_sixteen() -> None:
@@ -88,11 +138,11 @@ def test_process_tree_rss_includes_nested_worker_descendants(
 
 
 def test_process_tree_rss_rejects_path_shadowed_ps(
-    tmp_path,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     shadowed_ps = tmp_path / "ps"
-    shadowed_ps.write_text("#!/bin/sh\n", encoding="utf-8")
+    _ = shadowed_ps.write_text("#!/bin/sh\n", encoding="utf-8")
     shadowed_ps.chmod(0o755)
     monkeypatch.setattr(capacity_module.shutil, "which", lambda _name: str(shadowed_ps))
     monkeypatch.setattr(

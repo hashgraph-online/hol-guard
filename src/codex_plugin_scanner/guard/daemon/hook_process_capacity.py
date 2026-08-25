@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
 from typing import TypedDict, final
 
@@ -15,7 +16,6 @@ from ..runtime.shell_command_wrappers import is_trusted_absolute_command_path
 _MIN_WORKERS = 2
 _MAX_WORKERS = 16
 _MAX_INITIAL_WORKERS = 8
-_MIN_INITIAL_WORKERS = 4
 _PRESSURE_SECONDS = 10.0
 _IDLE_SECONDS = 300.0
 _SPAWN_INTERVAL_SECONDS = 1.0
@@ -26,9 +26,59 @@ _MEMORY_FLOOR_BYTES = 512 * 1024 * 1024
 _MEMORY_CAP_BYTES = 1536 * 1024 * 1024
 
 
+_CGROUP_V2_CPU_MAX = Path("/sys/fs/cgroup/cpu.max")
+_CGROUP_V1_CPU_QUOTA = Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+_CGROUP_V1_CPU_PERIOD = Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+_CGROUP_V2_MEMORY_MAX = Path("/sys/fs/cgroup/memory.max")
+_CGROUP_V1_MEMORY_MAX = Path("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
+    return value or None
+
+
+def _positive_int(value: str | None) -> int | None:
+    try:
+        parsed = int(value or "")
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def cgroup_cpu_count(
+    *,
+    cpu_max_path: Path = _CGROUP_V2_CPU_MAX,
+    cpu_quota_path: Path = _CGROUP_V1_CPU_QUOTA,
+    cpu_period_path: Path = _CGROUP_V1_CPU_PERIOD,
+) -> int | None:
+    cpu_max = _read_text(cpu_max_path)
+    if cpu_max is not None:
+        fields = cpu_max.split()
+        if len(fields) == 2 and fields[0] != "max":
+            quota = _positive_int(fields[0])
+            period = _positive_int(fields[1])
+            if quota is not None and period is not None:
+                return max(1, ceil(quota / period))
+    quota = _positive_int(_read_text(cpu_quota_path))
+    period = _positive_int(_read_text(cpu_period_path))
+    if quota is None or period is None:
+        return None
+    return max(1, ceil(quota / period))
+
+
+def effective_cpu_count(cpu_count: int | None = None) -> int:
+    host_count = cpu_count if cpu_count is not None else (os.cpu_count() or _MIN_WORKERS)
+    host_count = max(1, host_count)
+    constrained_count = cgroup_cpu_count() if cpu_count is None else None
+    return min(host_count, constrained_count) if constrained_count is not None else host_count
+
+
 def initial_hook_worker_target(cpu_count: int | None = None) -> int:
-    available = cpu_count if cpu_count is not None else (os.cpu_count() or _MIN_INITIAL_WORKERS)
-    return min(_MAX_INITIAL_WORKERS, max(_MIN_INITIAL_WORKERS, available))
+    return min(_MAX_INITIAL_WORKERS, max(_MIN_WORKERS, effective_cpu_count(cpu_count)))
 
 
 def default_hook_worker_memory_ceiling(physical_memory_bytes: int) -> int:
@@ -37,14 +87,33 @@ def default_hook_worker_memory_ceiling(physical_memory_bytes: int) -> int:
     return min(_MEMORY_CAP_BYTES, max(_MEMORY_FLOOR_BYTES, physical_memory_bytes // 5))
 
 
+def cgroup_memory_limit_bytes(
+    *,
+    memory_max_path: Path = _CGROUP_V2_MEMORY_MAX,
+    memory_v1_path: Path = _CGROUP_V1_MEMORY_MAX,
+) -> int | None:
+    for path in (memory_max_path, memory_v1_path):
+        value = _read_text(path)
+        if value == "max":
+            continue
+        parsed = _positive_int(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def physical_memory_bytes() -> int | None:
     try:
         page_size = os.sysconf("SC_PAGE_SIZE")
         page_count = os.sysconf("SC_PHYS_PAGES")
     except (AttributeError, OSError, ValueError):
-        return None
+        return cgroup_memory_limit_bytes()
     total = page_size * page_count
-    return total if total > 0 else None
+    host_total = total if total > 0 else None
+    cgroup_limit = cgroup_memory_limit_bytes()
+    if host_total is None:
+        return cgroup_limit
+    return min(host_total, cgroup_limit) if cgroup_limit is not None else host_total
 
 
 def process_cpu_ratio() -> float | None:
@@ -52,7 +121,7 @@ def process_cpu_ratio() -> float | None:
         load = os.getloadavg()[0]
     except (AttributeError, OSError):
         return None
-    processors = os.cpu_count() or 1
+    processors = effective_cpu_count()
     return max(0.0, load / processors)
 
 
@@ -248,7 +317,10 @@ __all__ = [
     "HookProcessCapacityPolicy",
     "HookProcessLoad",
     "HookProcessStats",
+    "cgroup_cpu_count",
+    "cgroup_memory_limit_bytes",
     "default_hook_worker_memory_ceiling",
+    "effective_cpu_count",
     "initial_hook_worker_target",
     "physical_memory_bytes",
     "process_cpu_ratio",
