@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,26 @@ POLICY_BUNDLE_PATH = (
     / "assets"
     / "chunks"
     / "policy-workspace-page.js"
+)
+MANAGED_CONTROLS_DOCS = (
+    ROOT / "docs" / "guard" / "managed-controls-local-extensions.md",
+    ROOT / "docs" / "guard" / "managed-controls-cloud-operator-guide.md",
+    ROOT / "docs" / "guard" / "managed-controls-catalog-mismatch-recovery.md",
+    ROOT / "docs" / "guard" / "managed-controls-policy-migration.md",
+    ROOT / "docs" / "guard" / "managed-controls-support-runbook.md",
+    ROOT / "docs" / "guard" / "managed-controls-invalid-bundle-incident-runbook.md",
+    ROOT / "docs" / "guard" / "managed-controls-rollback-runbook.md",
+    ROOT / "docs" / "guard" / "managed-controls-release-notes.md",
+)
+MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+EXTENSION_CONTROL_API_PATH = (
+    ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
+)
+MANAGED_CONTROLS_API_PATH = (
+    ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "managed_controls_api.py"
+)
+POLICY_COMMAND_PATH = (
+    ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_dispatch_policy_document.py"
 )
 
 EXPECTED_PRODUCT_DECISION: dict[str, object] = {
@@ -190,3 +211,103 @@ def test_packaged_dashboard_matches_the_reviewed_product_vocabulary() -> None:
     ):
         assert stale_copy not in dashboard_bundle
         assert stale_copy not in policy_bundle
+
+
+def test_managed_controls_user_and_operator_documentation_is_complete() -> None:
+    documents = {path.name: path.read_text(encoding="utf-8") for path in MANAGED_CONTROLS_DOCS}
+
+    local_guide = documents["managed-controls-local-extensions.md"]
+    assert "hol-guard command controls status" in local_guide
+    assert "hol-guard command controls preview" in local_guide
+    assert "command-activity-privacy.md" in local_guide
+
+    operator_guide = documents["managed-controls-cloud-operator-guide.md"]
+    assert "does not provide or verify an executable Cloud Managed Controls" in operator_guide
+    assert "release-3-0-cloud-control-inventory.md" not in operator_guide
+    assert "historical branch pin" in operator_guide
+    assert "These projections do not prove Cloud negotiation" in operator_guide
+
+    mismatch = documents["managed-controls-catalog-mismatch-recovery.md"]
+    assert "digest-only observation" in mismatch
+    assert "does not advertise negotiated capabilities" in mismatch
+    assert "`connect status` also does not prove them" in mismatch
+    assert "A matching local digest alone is insufficient" in mismatch
+
+    migration = documents["managed-controls-policy-migration.md"]
+    assert "hol-guard policy export" in migration
+    assert "policy export --include-provenance" in migration
+    assert "provenance-redacted export cannot represent workspace-scoped rows" in migration
+    assert "hol-guard policy validate" in migration
+    assert "hol-guard policy diff" in migration
+    assert "Unmapped legacy rules remain" in migration
+    assert "no supported operator command that validates a proposed Cloud Control Set" in migration
+    assert "Stop after Local backup" in migration
+
+    support = documents["managed-controls-support-runbook.md"]
+    assert "set -o pipefail" in support
+    assert "jq -e '{revision, catalog_digest, health}'" in support
+    assert "cannot become an empty successful evidence file" in support
+    assert "Do not attach unfiltered" in support
+    assert "hol-guard doctor --json" in support
+    assert "scope_rule_counts: ([.scopes | to_entries[] | .value])" in support
+    assert "deliberately discards every scope identifier key" in support
+
+    invalid_bundle = documents["managed-controls-invalid-bundle-incident-runbook.md"]
+    assert "does not provide a Cloud Managed Controls author/sign/deploy repair API" in invalid_bundle
+    assert "keep Managed Controls Cloud delivery disabled" in invalid_bundle
+
+    rollback = documents["managed-controls-rollback-runbook.md"]
+    assert "does not provide or verify an executable Cloud Managed Controls rollback UI/API" in rollback
+    assert "Available Local device-settings restore" in rollback
+
+    release_notes = documents["managed-controls-release-notes.md"]
+    for path in MANAGED_CONTROLS_DOCS[:-1]:
+        assert path.name in release_notes
+
+
+def test_managed_controls_documentation_uses_only_resolvable_local_links() -> None:
+    for document_path in MANAGED_CONTROLS_DOCS:
+        text = document_path.read_text(encoding="utf-8")
+        assert "http://" not in text
+        assert "https://" not in text
+        assert "Authorization:" not in text
+        assert "Bearer " not in text
+        for raw_target in MARKDOWN_LINK.findall(text):
+            target = raw_target.split("#", 1)[0]
+            if not target:
+                continue
+            relative_target = Path(target)
+            assert not relative_target.is_absolute(), f"absolute link in {document_path}: {target}"
+            assert ".." not in relative_target.parts, f"escaping link in {document_path}: {target}"
+            resolved = document_path.parent / relative_target
+            assert resolved.is_file(), f"broken link in {document_path}: {target}"
+
+        if "| jq " in text:
+            assert "set -o pipefail" in text
+            assert "| jq -e " in text
+
+
+def test_support_projection_fields_exist_in_current_local_apis() -> None:
+    extension_api = "\n".join(
+        (
+            EXTENSION_CONTROL_API_PATH.read_text(encoding="utf-8"),
+            MANAGED_CONTROLS_API_PATH.read_text(encoding="utf-8"),
+        )
+    )
+    policy_command = POLICY_COMMAND_PATH.read_text(encoding="utf-8")
+
+    for field in ("schema_version", "control_schema_version", "catalog_digest", "revision", "health"):
+        assert f'"{field}"' in extension_api
+    for field in ("digest", "rules", "compiled_rows", "actions", "scopes"):
+        assert f'"{field}"' in policy_command
+
+
+def test_managed_controls_release_runbook_uses_repository_tooling() -> None:
+    release_runbook = (ROOT / "docs" / "guard" / "managed-controls-release-runbook.md").read_text(
+        encoding="utf-8"
+    )
+    assert "uv run python scripts/ci/managed_controls_release_gate.py" in release_runbook
+    assert "uv run pytest tests/managed_controls" in release_runbook
+    assert "uv run pytest tests/test_managed_controls_contract_docs.py" in release_runbook
+    assert "\npython scripts/ci/managed_controls_release_gate.py" not in release_runbook
+    assert "\npytest tests/" not in release_runbook
