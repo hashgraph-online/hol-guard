@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/approval-proof-modal.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { ba as isSupplyChainAuditIncomplete, bb as isSupplyChainAuditEvidence, b5 as GuardHarnessActionError, bc as readString$1, bd as isRecord$1, r as reactExports, j as jsxRuntimeExports, o as HiMiniCheckCircle, aA as HiMiniArrowPath, M as HiMiniExclamationTriangle, av as Tag, w as formatRelativeTime, be as HiMiniClock, bf as IconActionButton, _ as HiMiniXCircle, b7 as HiMiniTrash, t as HiMiniShieldCheck, V as HiMiniWrenchScrewdriver, bg as HiMiniBeaker, bh as ActivationSummary, bi as ActionResultPanel, as as HiMiniMagnifyingGlass, m as EmptyState, A as ActionButton, bj as HiMiniBugAnt, z as HiMiniXMark, aE as buildApprovalProofCredentials, bk as GuardModalLayer, bl as ConnectFlowCard, bm as ApprovalProofInline, bn as HiMiniArrowTopRightOnSquare, bo as HiMiniCloudArrowDown, az as useResolvedApprovalGate, bp as fetchPackageFirewallStatus, bq as runPackageAudit, br as resolveSupplyChainAuditFailure, bs as runPackageSync, bt as startPackageFirewallConnect, U as openPackageFirewallAuthorizeFallback, bu as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bv as repairSupplyChainProtection, bw as runPackageFirewallAction, bx as parseInterceptProofSnapshot, by as activatePackageFirewallRuntime, S as SectionLabel, bz as EntitlementNotice, bA as fetchReceipts, ar as WorkspacePageHeader, bB as lazyWorkspace, bC as __vitePreload } from "../guard-dashboard.js";
+import { bc as isSupplyChainAuditIncomplete, bd as isSupplyChainAuditEvidence, b7 as GuardHarnessActionError, be as readString$1, bf as isRecord$1, r as reactExports, j as jsxRuntimeExports, o as HiMiniCheckCircle, aC as HiMiniArrowPath, M as HiMiniExclamationTriangle, ax as Tag, w as formatRelativeTime, bg as HiMiniClock, bh as IconActionButton, a0 as HiMiniXCircle, b9 as HiMiniTrash, t as HiMiniShieldCheck, Y as HiMiniWrenchScrewdriver, bi as HiMiniBeaker, bj as ActivationSummary, bk as ActionResultPanel, au as HiMiniMagnifyingGlass, m as EmptyState, A as ActionButton, bl as HiMiniBugAnt, z as HiMiniXMark, aG as buildApprovalProofCredentials, bm as GuardModalLayer, bn as ConnectFlowCard, bo as ApprovalProofInline, bp as HiMiniArrowTopRightOnSquare, bq as HiMiniCloudArrowDown, aB as useResolvedApprovalGate, br as fetchPackageFirewallStatus, bs as runPackageAudit, bt as resolveSupplyChainAuditFailure, bu as runPackageSync, bv as startPackageFirewallConnect, V as openPackageFirewallAuthorizeFallback, bw as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bx as repairSupplyChainProtection, by as runPackageFirewallAction, bz as parseInterceptProofSnapshot, bA as activatePackageFirewallRuntime, S as SectionLabel, bB as EntitlementNotice, bC as fetchReceipts, at as WorkspacePageHeader, bD as lazyWorkspace, bE as __vitePreload } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const SEVERITY_RANK = {
   critical: 4,
@@ -1475,11 +1475,46 @@ const IDLE_SUPPLY_CHAIN_FIX_ALL_STATE = {
   completedSteps: [],
   failedSteps: []
 };
-function supplyChainFixAllButtonLabel(phase) {
+function supplyChainFixAllWorkingState() {
+  return {
+    phase: "working",
+    message: "Repairing package tools and turning on routing…",
+    completedSteps: [],
+    failedSteps: []
+  };
+}
+function supplyChainFixAllNeedsCloudConnect(state) {
+  return state.remainingAction === "connect" && state.failedSteps.length === 0;
+}
+function supplyChainFixAllStateFromRepair(result) {
+  const remainingAction = result.remaining_steps.some((step) => step.action === "connect") ? "connect" : null;
+  return {
+    phase: result.repaired ? "success" : "incomplete",
+    message: result.message,
+    completedSteps: result.completed_steps,
+    failedSteps: result.failed_steps.map((failure) => failure.message),
+    remainingAction,
+    remainingSteps: result.remaining_steps.map((step) => step.message)
+  };
+}
+function supplyChainFixAllConnectState(phase, message, remainingSteps = []) {
+  return {
+    phase,
+    message,
+    completedSteps: [],
+    failedSteps: [],
+    remainingAction: "connect",
+    remainingSteps
+  };
+}
+function supplyChainFixAllButtonLabel(phase, remainingAction = null, failedCount = 0) {
   if (phase === "working") return "Fixing…";
   if (phase === "approval") return "Approval required";
   if (phase === "connecting") return "Connecting…";
-  if (phase === "incomplete" || phase === "error") return "Retry fixes";
+  if ((phase === "incomplete" || phase === "error") && remainingAction === "connect" && failedCount === 0) {
+    return "Connect Guard Cloud";
+  }
+  if (phase === "incomplete" || phase === "error") return "Retry remaining";
   return "Fix all";
 }
 function supplyChainFixAllIsPending(phase) {
@@ -1560,6 +1595,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   } = props;
   const rootRef = reactExports.useRef(null);
   const recoveryConnectHandledRef = reactExports.useRef(false);
+  const repairNeedsCloudConnectRef = reactExports.useRef(false);
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
@@ -1824,46 +1860,40 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   }, [onStateChanged, refreshAfterOp]);
   const beginFixAllConnectRecovery = reactExports.useCallback(async () => {
     setResumeFixAllAfterConnect(true);
-    onFixAllStateChange?.({
-      phase: "connecting",
-      message: "Finish Guard Cloud sign-in. Repair will resume here automatically.",
-      completedSteps: [],
-      failedSteps: []
-    });
+    onFixAllStateChange?.(
+      supplyChainFixAllConnectState(
+        "connecting",
+        "Finish Guard Cloud sign-in. Repair will resume here automatically."
+      )
+    );
     const started = await handleStartConnect();
     if (started) return;
     setResumeFixAllAfterConnect(false);
-    onFixAllStateChange?.({
-      phase: "error",
-      message: "Guard Cloud sign-in could not start. Retry fixes to try again.",
-      completedSteps: [],
-      failedSteps: ["Guard Cloud sign-in could not start."]
-    });
+    repairNeedsCloudConnectRef.current = true;
+    onFixAllStateChange?.(
+      supplyChainFixAllConnectState(
+        "error",
+        "Guard Cloud sign-in could not start. Connect again to continue.",
+        ["Guard Cloud sign-in could not start."]
+      )
+    );
   }, [handleStartConnect, onFixAllStateChange]);
   const handleFixAll = reactExports.useCallback(
     async (credentials) => {
       const requiresConnection = panelLoad.phase === "loaded" && supplyChainFixAllRequiresConnection(panelLoad.data);
-      if (requiresConnection) {
+      if (requiresConnection || repairNeedsCloudConnectRef.current) {
         await beginFixAllConnectRecovery();
         return;
       }
-      onFixAllStateChange?.({
-        phase: "working",
-        message: "Repairing package tools, activation, and safety intelligence…",
-        completedSteps: [],
-        failedSteps: []
-      });
+      onFixAllStateChange?.(supplyChainFixAllWorkingState());
       setPendingOp({ op: "fix_all", manager: null });
       try {
         const result = await repairSupplyChainProtection(credentials);
         await refreshAfterOp();
         await onStateChanged?.();
-        onFixAllStateChange?.({
-          phase: result.repaired ? "success" : "incomplete",
-          message: result.message,
-          completedSteps: result.completed_steps,
-          failedSteps: result.failed_steps.map((failure) => failure.message)
-        });
+        const nextState = supplyChainFixAllStateFromRepair(result);
+        repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
+        onFixAllStateChange?.(nextState);
       } catch (error) {
         if (credentials === void 0 && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
@@ -1882,7 +1912,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         }
         const message = readHarnessActionUserMessage(
           error,
-          "Guard could not complete supply-chain repair. Retry here to continue safely."
+          "Guard could not complete supply-chain repair. Retry remaining steps to continue safely."
         );
         onFixAllStateChange?.({
           phase: "error",
@@ -1910,18 +1940,21 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     if (!startingConnect && !panelLoad.data.entitlement.allowed && (panelLoad.data.connect_flow === null || panelLoad.data.connect_flow.state === "idle" || panelLoad.data.connect_flow.state === "failed")) {
       const connectFailed = panelLoad.data.connect_flow?.state === "failed";
       setResumeFixAllAfterConnect(false);
-      onFixAllStateChange?.({
-        phase: "error",
-        message: connectFailed ? panelLoad.data.connect_flow?.detail || "Guard Cloud sign-in did not finish. Retry fixes." : "Guard Cloud sign-in did not grant package protection access. Retry or review plan access.",
-        completedSteps: [],
-        failedSteps: [
-          connectFailed ? "Guard Cloud sign-in did not finish." : "Package protection access is still unavailable."
-        ]
-      });
+      repairNeedsCloudConnectRef.current = true;
+      onFixAllStateChange?.(
+        supplyChainFixAllConnectState(
+          "error",
+          connectFailed ? panelLoad.data.connect_flow?.detail || "Guard Cloud sign-in did not finish. Connect again to continue." : "Guard Cloud sign-in did not grant package protection access. Connect again or review plan access.",
+          [
+            connectFailed ? "Guard Cloud sign-in did not finish." : "Package protection access is still unavailable."
+          ]
+        )
+      );
       return;
     }
     if (!panelLoad.data.entitlement.allowed) return;
     setResumeFixAllAfterConnect(false);
+    repairNeedsCloudConnectRef.current = false;
     void handleFixAll();
   }, [
     handleFixAll,
@@ -2552,9 +2585,10 @@ const supplyChainHubWorkspace = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Ob
 }, Symbol.toStringTag, { value: "Module" }));
 export {
   SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS as S,
-  supplyChainFixAllButtonLabel as a,
-  sortPackageWorkbenchFindings as b,
-  supplyChainHubWorkspace as c,
+  supplyChainFixAllNeedsCloudConnect as a,
+  supplyChainFixAllButtonLabel as b,
+  sortPackageWorkbenchFindings as c,
+  supplyChainHubWorkspace as d,
   filterPackageWorkbenchFindings as f,
   isApprovalGateRequiredError as i,
   packageWorkbenchEcosystems as p,

@@ -1,0 +1,422 @@
+# TODO: Command Extension Operation Matrix Expansion
+
+Target branch: `release/3.0`
+
+Each numbered line is one operation task. Completion requires the exact path in the typed provider matrix plus batch-level positive, runtime, safe-form, global-option, Windows-launcher, compound-command, and quoted-data regression coverage.
+
+## Progress
+
+- Completed batches: 3/4
+- Completed operation tasks: 300/400
+
+## Batch 1: AWS core and high-frequency services
+
+- [x] 001. `aws acm delete-certificate`
+- [x] 002. `aws acm-pca delete-certificate-authority`
+- [x] 003. `aws amplify delete-app`
+- [x] 004. `aws amplify delete-backend-environment`
+- [x] 005. `aws amplify delete-branch`
+- [x] 006. `aws amplify delete-domain-association`
+- [x] 007. `aws apigateway delete-api-key`
+- [x] 008. `aws apigateway delete-authorizer`
+- [x] 009. `aws apigateway delete-base-path-mapping`
+- [x] 010. `aws apigateway delete-client-certificate`
+- [x] 011. `aws apigateway delete-deployment`
+- [x] 012. `aws apigateway delete-documentation-part`
+- [x] 013. `aws apigateway delete-documentation-version`
+- [x] 014. `aws apigateway delete-domain-name`
+- [x] 015. `aws apigateway delete-gateway-response`
+- [x] 016. `aws apigateway delete-integration`
+- [x] 017. `aws apigateway delete-integration-response`
+- [x] 018. `aws apigateway delete-method`
+- [x] 019. `aws apigateway delete-method-response`
+- [x] 020. `aws apigateway delete-model`
+- [x] 021. `aws apigateway delete-request-validator`
+- [x] 022. `aws apigateway delete-resource`
+- [x] 023. `aws apigateway delete-stage`
+- [x] 024. `aws apigateway delete-usage-plan`
+- [x] 025. `aws apigateway delete-usage-plan-key`
+- [x] 026. `aws apigateway delete-vpc-link`
+- [x] 027. `aws apigatewayv2 delete-api-mapping`
+- [x] 028. `aws apigatewayv2 delete-authorizer`
+- [x] 029. `aws apigatewayv2 delete-deployment`
+- [x] 030. `aws apigatewayv2 delete-domain-name`
+- [x] 031. `aws apigatewayv2 delete-integration`
+- [x] 032. `aws apigatewayv2 delete-integration-response`
+- [x] 033. `aws apigatewayv2 delete-model`
+- [x] 034. `aws apigatewayv2 delete-route`
+- [x] 035. `aws apigatewayv2 delete-route-response`
+- [x] 036. `aws apigatewayv2 delete-stage`
+- [x] 037. `aws apigatewayv2 delete-vpc-link`
+- [x] 038. `aws appconfig delete-application`
+- [x] 039. `aws appconfig delete-configuration-profile`
+- [x] 040. `aws appconfig delete-deployment-strategy`
+- [x] 041. `aws appconfig delete-environment`
+- [x] 042. `aws appsync delete-api-cache`
+- [x] 043. `aws appsync delete-api-key`
+- [x] 044. `aws appsync delete-data-source`
+- [x] 045. `aws appsync delete-domain-name`
+- [x] 046. `aws appsync delete-function`
+- [x] 047. `aws appsync delete-graphql-api`
+- [x] 048. `aws appsync delete-resolver`
+- [x] 049. `aws appsync delete-type`
+- [x] 050. `aws autoscaling delete-auto-scaling-group`
+- [x] 051. `aws autoscaling delete-launch-configuration`
+- [x] 052. `aws autoscaling delete-lifecycle-hook`
+- [x] 053. `aws autoscaling delete-notification-configuration`
+- [x] 054. `aws autoscaling delete-policy`
+- [x] 055. `aws autoscaling delete-scheduled-action`
+- [x] 056. `aws autoscaling delete-warm-pool`
+- [x] 057. `aws backup delete-backup-plan`
+- [x] 058. `aws backup delete-backup-selection`
+- [x] 059. `aws backup delete-backup-vault`
+- [x] 060. `aws backup delete-framework`
+- [x] 061. `aws backup delete-recovery-point`
+- [x] 062. `aws backup delete-report-plan`
+- [x] 063. `aws backup delete-restore-testing-plan`
+- [x] 064. `aws batch delete-compute-environment`
+- [x] 065. `aws batch delete-job-queue`
+- [x] 066. `aws batch delete-scheduling-policy`
+- [x] 067. `aws cloudformation delete-change-set`
+- [x] 068. `aws cloudformation delete-generated-template`
+- [x] 069. `aws cloudformation delete-stack`
+- [x] 070. `aws cloudformation delete-stack-instances`
+- [x] 071. `aws cloudformation delete-stack-set`
+- [x] 072. `aws cloudfront delete-cache-policy`
+- [x] 073. `aws cloudfront delete-cloud-front-origin-access-identity`
+- [x] 074. `aws cloudfront delete-continuous-deployment-policy`
+- [x] 075. `aws cloudfront delete-field-level-encryption-config`
+- [x] 076. `aws cloudfront delete-field-level-encryption-profile`
+- [x] 077. `aws cloudfront delete-function`
+- [x] 078. `aws cloudfront delete-key-group`
+- [x] 079. `aws cloudfront delete-origin-access-control`
+- [x] 080. `aws cloudfront delete-origin-request-policy`
+- [x] 081. `aws cloudfront delete-public-key`
+- [x] 082. `aws cloudfront delete-realtime-log-config`
+- [x] 083. `aws cloudfront delete-response-headers-policy`
+- [x] 084. `aws cloudfront delete-streaming-distribution`
+- [x] 085. `aws codebuild delete-fleet`
+- [x] 086. `aws codebuild delete-project`
+- [x] 087. `aws codebuild delete-report-group`
+- [x] 088. `aws codebuild delete-source-credentials`
+- [x] 089. `aws codecommit delete-approval-rule-template`
+- [x] 090. `aws codecommit delete-branch`
+- [x] 091. `aws codecommit delete-repository`
+- [x] 092. `aws codedeploy delete-application`
+- [x] 093. `aws codedeploy delete-deployment-config`
+- [x] 094. `aws codedeploy delete-deployment-group`
+- [x] 095. `aws codepipeline delete-custom-action-type`
+- [x] 096. `aws codepipeline delete-pipeline`
+- [x] 097. `aws codepipeline delete-webhook`
+- [x] 098. `aws cognito-identity delete-identity-pool`
+- [x] 099. `aws cognito-idp delete-group`
+- [x] 100. `aws cognito-idp delete-identity-provider`
+
+## Batch 2: Google Cloud resource deletion
+
+- [x] 101. `gcloud projects delete`
+- [x] 102. `gcloud resource-manager folders delete`
+- [x] 103. `gcloud resource-manager tags keys delete`
+- [x] 104. `gcloud resource-manager tags values delete`
+- [x] 105. `gcloud iam service-accounts delete`
+- [x] 106. `gcloud iam service-accounts keys delete`
+- [x] 107. `gcloud iam roles delete`
+- [x] 108. `gcloud compute disks delete`
+- [x] 109. `gcloud compute snapshots delete`
+- [x] 110. `gcloud compute images delete`
+- [x] 111. `gcloud compute networks delete`
+- [x] 112. `gcloud compute networks subnets delete`
+- [x] 113. `gcloud compute firewall-rules delete`
+- [x] 114. `gcloud compute routes delete`
+- [x] 115. `gcloud compute addresses delete`
+- [x] 116. `gcloud compute backend-services delete`
+- [x] 117. `gcloud compute backend-buckets delete`
+- [x] 118. `gcloud compute target-http-proxies delete`
+- [x] 119. `gcloud compute target-https-proxies delete`
+- [x] 120. `gcloud compute target-pools delete`
+- [x] 121. `gcloud compute target-ssl-proxies delete`
+- [x] 122. `gcloud compute target-tcp-proxies delete`
+- [x] 123. `gcloud compute url-maps delete`
+- [x] 124. `gcloud compute health-checks delete`
+- [x] 125. `gcloud compute http-health-checks delete`
+- [x] 126. `gcloud compute https-health-checks delete`
+- [x] 127. `gcloud compute instance-templates delete`
+- [x] 128. `gcloud compute instance-groups managed delete`
+- [x] 129. `gcloud compute routers delete`
+- [x] 130. `gcloud compute vpn-gateways delete`
+- [x] 131. `gcloud compute vpn-tunnels delete`
+- [x] 132. `gcloud compute interconnects delete`
+- [x] 133. `gcloud compute ssl-certificates delete`
+- [x] 134. `gcloud compute security-policies delete`
+- [x] 135. `gcloud compute network-endpoint-groups delete`
+- [x] 136. `gcloud compute reservations delete`
+- [x] 137. `gcloud compute resource-policies delete`
+- [x] 138. `gcloud compute sole-tenancy node-groups delete`
+- [x] 139. `gcloud compute sole-tenancy node-templates delete`
+- [x] 140. `gcloud compute interconnects attachments delete`
+- [x] 141. `gcloud compute machine-images delete`
+- [x] 142. `gcloud compute packet-mirrorings delete`
+- [x] 143. `gcloud compute service-attachments delete`
+- [x] 144. `gcloud compute instant-snapshots delete`
+- [x] 145. `gcloud compute composite-health-checks delete`
+- [x] 146. `gcloud container clusters delete`
+- [x] 147. `gcloud container node-pools delete`
+- [x] 148. `gcloud run services delete`
+- [x] 149. `gcloud run jobs delete`
+- [x] 150. `gcloud functions delete`
+- [x] 151. `gcloud app services delete`
+- [x] 152. `gcloud app versions delete`
+- [x] 153. `gcloud artifacts repositories delete`
+- [x] 154. `gcloud artifacts docker images delete`
+- [x] 155. `gcloud artifacts files delete`
+- [x] 156. `gcloud artifacts packages delete`
+- [x] 157. `gcloud artifacts versions delete`
+- [x] 158. `gcloud pubsub topics delete`
+- [x] 159. `gcloud pubsub subscriptions delete`
+- [x] 160. `gcloud pubsub schemas delete`
+- [x] 161. `gcloud pubsub snapshots delete`
+- [x] 162. `gcloud secrets delete`
+- [x] 163. `gcloud secrets versions destroy`
+- [x] 164. `gcloud scheduler jobs delete`
+- [x] 165. `gcloud tasks queues delete`
+- [x] 166. `gcloud tasks delete`
+- [x] 167. `gcloud workflows delete`
+- [x] 168. `gcloud deployment-manager deployments delete`
+- [x] 169. `gcloud dataproc clusters delete`
+- [x] 170. `gcloud bigtable instances delete`
+- [x] 171. `gcloud bigtable clusters delete`
+- [x] 172. `gcloud bigtable app-profiles delete`
+- [x] 173. `gcloud bigtable backups delete`
+- [x] 174. `gcloud bigtable tables delete`
+- [x] 175. `gcloud spanner instances delete`
+- [x] 176. `gcloud spanner databases delete`
+- [x] 177. `gcloud spanner backups delete`
+- [x] 178. `gcloud spanner instance-configs delete`
+- [x] 179. `gcloud redis instances delete`
+- [x] 180. `gcloud memcache instances delete`
+- [x] 181. `gcloud alloydb clusters delete`
+- [x] 182. `gcloud alloydb instances delete`
+- [x] 183. `gcloud alloydb backups delete`
+- [x] 184. `gcloud composer environments delete`
+- [x] 185. `gcloud service-directory namespaces delete`
+- [x] 186. `gcloud service-directory services delete`
+- [x] 187. `gcloud service-directory endpoints delete`
+- [x] 188. `gcloud network-services gateways delete`
+- [x] 189. `gcloud network-services meshes delete`
+- [x] 190. `gcloud network-services service-bindings delete`
+- [x] 191. `gcloud network-services endpoint-policies delete`
+- [x] 192. `gcloud network-services grpc-routes delete`
+- [x] 193. `gcloud network-services http-routes delete`
+- [x] 194. `gcloud network-services tcp-routes delete`
+- [x] 195. `gcloud network-services tls-routes delete`
+- [x] 196. `gcloud network-connectivity hubs delete`
+- [x] 197. `gcloud network-connectivity spokes delete`
+- [x] 198. `gcloud builds triggers delete`
+- [x] 199. `gcloud builds worker-pools delete`
+- [x] 200. `gcloud source repos delete`
+
+## Batch 3: Azure resource deletion
+
+- [x] 201. `az group delete`
+- [x] 202. `az deployment group delete`
+- [x] 203. `az deployment sub delete`
+- [x] 204. `az deployment tenant delete`
+- [x] 205. `az deployment mg delete`
+- [x] 206. `az deployment-scripts delete`
+- [x] 207. `az resource delete`
+- [x] 208. `az lock delete`
+- [x] 209. `az role assignment delete`
+- [x] 210. `az role definition delete`
+- [x] 211. `az policy assignment delete`
+- [x] 212. `az policy definition delete`
+- [x] 213. `az policy exemption delete`
+- [x] 214. `az identity delete`
+- [x] 215. `az ad app delete`
+- [x] 216. `az ad sp delete`
+- [x] 217. `az ad user delete`
+- [x] 218. `az ad group delete`
+- [x] 219. `az network vnet delete`
+- [x] 220. `az network vnet subnet delete`
+- [x] 221. `az network nsg delete`
+- [x] 222. `az network public-ip delete`
+- [x] 223. `az network nic delete`
+- [x] 224. `az network route-table delete`
+- [x] 225. `az network vnet-gateway delete`
+- [x] 226. `az network vpn-connection delete`
+- [x] 227. `az network application-gateway delete`
+- [x] 228. `az network bastion delete`
+- [x] 229. `az network firewall delete`
+- [x] 230. `az network private-endpoint delete`
+- [x] 231. `az network private-link-service delete`
+- [x] 232. `az network traffic-manager profile delete`
+- [x] 233. `az network front-door delete`
+- [x] 234. `az network private-dns zone delete`
+- [x] 235. `az network watcher connection-monitor delete`
+- [x] 236. `az network watcher flow-log delete`
+- [x] 237. `az network watcher packet-capture delete`
+- [x] 238. `az network cross-region-lb delete`
+- [x] 239. `az network nat gateway delete`
+- [x] 240. `az network local-gateway delete`
+- [x] 241. `az network express-route delete`
+- [x] 242. `az network express-route port delete`
+- [x] 243. `az dns-resolver delete`
+- [x] 244. `az aks delete`
+- [x] 245. `az container delete`
+- [x] 246. `az containerapp delete`
+- [x] 247. `az acr delete`
+- [x] 248. `az vmss delete`
+- [x] 249. `az disk delete`
+- [x] 250. `az disk-access delete`
+- [x] 251. `az disk-encryption-set delete`
+- [x] 252. `az snapshot delete`
+- [x] 253. `az image delete`
+- [x] 254. `az sig delete`
+- [x] 255. `az sig image-definition delete`
+- [x] 256. `az sig image-version delete`
+- [x] 257. `az capacity reservation group delete`
+- [x] 258. `az vm host group delete`
+- [x] 259. `az vm host delete`
+- [x] 260. `az ppg delete`
+- [x] 261. `az webapp delete`
+- [x] 262. `az functionapp delete`
+- [x] 263. `az appservice plan delete`
+- [x] 264. `az staticwebapp delete`
+- [x] 265. `az spring app delete`
+- [x] 266. `az spring delete`
+- [x] 267. `az postgres flexible-server delete`
+- [x] 268. `az mysql flexible-server delete`
+- [x] 269. `az sql server delete`
+- [x] 270. `az sql db delete`
+- [x] 271. `az sql mi delete`
+- [x] 272. `az cosmosdb delete`
+- [x] 273. `az redis delete`
+- [x] 274. `az managed-cassandra cluster delete`
+- [x] 275. `az storage account delete`
+- [x] 276. `az storage share delete`
+- [x] 277. `az storage queue delete`
+- [x] 278. `az storage table delete`
+- [x] 279. `az servicebus namespace delete`
+- [x] 280. `az servicebus queue delete`
+- [x] 281. `az servicebus topic delete`
+- [x] 282. `az eventhubs namespace delete`
+- [x] 283. `az eventhubs eventhub delete`
+- [x] 284. `az keyvault delete`
+- [x] 285. `az keyvault key delete`
+- [x] 286. `az keyvault secret delete`
+- [x] 287. `az keyvault certificate delete`
+- [x] 288. `az monitor log-analytics workspace delete`
+- [x] 289. `az monitor diagnostic-settings delete`
+- [x] 290. `az monitor action-group delete`
+- [x] 291. `az monitor autoscale delete`
+- [x] 292. `az apim api delete`
+- [x] 293. `az apim product delete`
+- [x] 294. `az apim subscription delete`
+- [x] 295. `az datafactory delete`
+- [x] 296. `az synapse workspace delete`
+- [x] 297. `az databricks workspace delete`
+- [x] 298. `az search service delete`
+- [x] 299. `az cognitiveservices account delete`
+- [x] 300. `az bot delete`
+
+## Batch 4: AWS long-tail, AI, backup, and account services
+
+- [ ] 301. `aws accessanalyzer delete-analyzer`
+- [ ] 302. `aws accessanalyzer delete-archive-rule`
+- [ ] 303. `aws accessanalyzer delete-service-linked-analyzer`
+- [ ] 304. `aws account delete-alternate-contact`
+- [ ] 305. `aws acm-pca delete-permission`
+- [ ] 306. `aws acm-pca delete-policy`
+- [ ] 307. `aws amp delete-alert-manager-definition`
+- [ ] 308. `aws amp delete-anomaly-detector`
+- [ ] 309. `aws amp delete-logging-configuration`
+- [ ] 310. `aws amp delete-query-logging-configuration`
+- [ ] 311. `aws amp delete-resource-policy`
+- [ ] 312. `aws amp delete-rule-groups-namespace`
+- [ ] 313. `aws amp delete-scraper`
+- [ ] 314. `aws amp delete-scraper-logging-configuration`
+- [ ] 315. `aws amp delete-workspace`
+- [ ] 316. `aws appconfig delete-extension`
+- [ ] 317. `aws appconfig delete-extension-association`
+- [ ] 318. `aws appconfig delete-hosted-configuration-version`
+- [ ] 319. `aws appflow delete-connector-profile`
+- [ ] 320. `aws appflow delete-flow`
+- [ ] 321. `aws apprunner delete-auto-scaling-configuration`
+- [ ] 322. `aws apprunner delete-connection`
+- [ ] 323. `aws apprunner delete-observability-configuration`
+- [ ] 324. `aws apprunner delete-service`
+- [ ] 325. `aws apprunner delete-vpc-connector`
+- [ ] 326. `aws apprunner delete-vpc-ingress-connection`
+- [ ] 327. `aws appstream delete-app-block`
+- [ ] 328. `aws appstream delete-app-block-builder`
+- [ ] 329. `aws appstream delete-application`
+- [ ] 330. `aws appstream delete-directory-config`
+- [ ] 331. `aws appstream delete-entitlement`
+- [ ] 332. `aws appstream delete-fleet`
+- [ ] 333. `aws appstream delete-image`
+- [ ] 334. `aws appstream delete-image-builder`
+- [ ] 335. `aws appstream delete-image-permissions`
+- [ ] 336. `aws appstream delete-stack`
+- [ ] 337. `aws appstream delete-theme-for-stack`
+- [ ] 338. `aws appstream delete-usage-report-subscription`
+- [ ] 339. `aws appstream delete-user`
+- [ ] 340. `aws athena delete-capacity-reservation`
+- [ ] 341. `aws athena delete-data-catalog`
+- [ ] 342. `aws athena delete-named-query`
+- [ ] 343. `aws athena delete-notebook`
+- [ ] 344. `aws athena delete-prepared-statement`
+- [ ] 345. `aws athena delete-work-group`
+- [ ] 346. `aws athena terminate-session`
+- [ ] 347. `aws auditmanager delete-assessment`
+- [ ] 348. `aws auditmanager delete-assessment-framework`
+- [ ] 349. `aws auditmanager delete-assessment-framework-share`
+- [ ] 350. `aws auditmanager delete-assessment-report`
+- [ ] 351. `aws auditmanager delete-control`
+- [ ] 352. `aws autoscaling-plans delete-scaling-plan`
+- [ ] 353. `aws backup-gateway delete-gateway`
+- [ ] 354. `aws backup-gateway delete-hypervisor`
+- [ ] 355. `aws batch delete-consumable-resource`
+- [ ] 356. `aws batch delete-quota-share`
+- [ ] 357. `aws batch delete-service-environment`
+- [ ] 358. `aws batch terminate-job`
+- [ ] 359. `aws batch terminate-service-job`
+- [ ] 360. `aws bedrock delete-custom-model`
+- [ ] 361. `aws bedrock delete-custom-model-deployment`
+- [ ] 362. `aws bedrock delete-enforced-guardrail-configuration`
+- [ ] 363. `aws bedrock delete-foundation-model-agreement`
+- [ ] 364. `aws bedrock delete-guardrail`
+- [ ] 365. `aws bedrock delete-imported-model`
+- [ ] 366. `aws bedrock delete-inference-profile`
+- [ ] 367. `aws bedrock delete-marketplace-model-endpoint`
+- [ ] 368. `aws bedrock delete-model-invocation-logging-configuration`
+- [ ] 369. `aws bedrock delete-prompt-router`
+- [ ] 370. `aws bedrock delete-provisioned-model-throughput`
+- [ ] 371. `aws bedrock delete-resource-policy`
+- [ ] 372. `aws bedrock-agent delete-agent`
+- [ ] 373. `aws bedrock-agent delete-agent-action-group`
+- [ ] 374. `aws bedrock-agent delete-agent-alias`
+- [ ] 375. `aws bedrock-agent delete-agent-version`
+- [ ] 376. `aws bedrock-agent delete-data-source`
+- [ ] 377. `aws bedrock-agent delete-flow`
+- [ ] 378. `aws bedrock-agent delete-flow-alias`
+- [ ] 379. `aws bedrock-agent delete-flow-version`
+- [ ] 380. `aws bedrock-agent delete-knowledge-base`
+- [ ] 381. `aws bedrock-agent delete-knowledge-base-documents`
+- [ ] 382. `aws bedrock-agent delete-prompt`
+- [ ] 383. `aws budgets delete-budget`
+- [ ] 384. `aws budgets delete-budget-action`
+- [ ] 385. `aws budgets delete-notification`
+- [ ] 386. `aws budgets delete-subscriber`
+- [ ] 387. `aws ce delete-anomaly-monitor`
+- [ ] 388. `aws ce delete-anomaly-subscription`
+- [ ] 389. `aws ce delete-cost-category-definition`
+- [ ] 390. `aws chime delete-account`
+- [ ] 391. `aws chime delete-events-configuration`
+- [ ] 392. `aws chime delete-phone-number`
+- [ ] 393. `aws chime delete-room`
+- [ ] 394. `aws chime delete-room-membership`
+- [ ] 395. `aws cloud9 delete-environment`
+- [ ] 396. `aws cloud9 delete-environment-membership`
+- [ ] 397. `aws cloudcontrol delete-resource`
+- [ ] 398. `aws cloudhsmv2 delete-backup`
+- [ ] 399. `aws cloudhsmv2 delete-hsm`
+- [ ] 400. `aws cloudhsmv2 delete-resource-policy`

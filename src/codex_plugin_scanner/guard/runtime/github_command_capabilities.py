@@ -1,9 +1,4 @@
-"""Classify GitHub CLI commands by their observable security capability.
-
-The classifier uses reviewed command sets for prompt-free reads and routine
-mutations. A new or aliased ``gh`` command therefore cannot inherit trusted
-status merely because it is followed by an output formatter in a shell pipeline.
-"""
+"""Classify GitHub CLI commands without trusting unknown commands through output filters."""
 
 from __future__ import annotations
 
@@ -11,10 +6,12 @@ import re
 from collections.abc import Sequence
 from typing import Literal
 
+from .github_auth_capabilities import classify_github_auth
 from .github_capability_contract import (
     GitHubCommandAssessment,
     GitHubCommandCapability,
     github_assessment,
+    github_cli_invocation_is_help,
 )
 from .github_rest_capabilities import classify_github_api
 from .github_routine_merge import ROUTINE_SQUASH_MERGE_DETAIL, is_routine_squash_merge
@@ -135,28 +132,15 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
     top_level = normalized[0].lower()
     if top_level in {"--version", "-v"}:
         return _assessment("read_local", "github.command.local-metadata", "The command reads local CLI metadata.")
-    if top_level in {"--help", "-h"}:
+    if github_cli_invocation_is_help(normalized):
         return _assessment("read_local", "github.command.local-help", "The command displays local CLI help.")
     if top_level == "api":
         return classify_github_api(normalized[1:])
     if top_level in _LOCAL_TOP_LEVEL:
         return _assessment("read_local", "github.command.local-metadata", "The command reads local CLI metadata.")
-    if top_level == "auth" and len(normalized) > 1:
-        auth_subcommand = normalized[1].lower()
-        if auth_subcommand == "token" or (
-            auth_subcommand == "status" and _has_any_option(normalized[2:], "--show-token", "-t")
-        ):
-            return _assessment(
-                "secret_remote",
-                "github.command.auth-token-read",
-                "The command reads a GitHub authentication token.",
-            )
-        if auth_subcommand == "status":
-            return _assessment(
-                "read_local",
-                "github.command.local-auth-read",
-                "The command reads local CLI auth state.",
-            )
+    auth_assessment = classify_github_auth(normalized)
+    if auth_assessment is not None:
+        return auth_assessment
     if top_level in _READ_ONLY_TOP_LEVEL:
         return _assessment(
             "read_remote",

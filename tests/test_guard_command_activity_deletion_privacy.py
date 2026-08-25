@@ -204,7 +204,7 @@ def test_diagnostics_has_an_exact_bounded_allowlist(tmp_path: Path) -> None:
     assert diagnostics["stable_ids"] == {
         "harnesses": ["codex"],
         "extensions": ["command.git"],
-        "rules": [],
+        "rules": ["command.git.push"],
     }
     assert diagnostics["error_classes"] == [{"error_class": "pre_record_failed", "count": 1}]
     serialized = json.dumps(diagnostics, sort_keys=True)

@@ -11,6 +11,7 @@ import { computeTrendBuckets } from "./evidence/evidence-metrics";
 import { normalizeOperatorHealth } from "./operator-health";
 import { canonicalizeGuardDaemonOrigin, standardGuardDaemonOrigin } from "./guard-daemon-origin";
 import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
+import { normalizeSupplyChainRepairResult } from "./supply-chain-repair-result";
 export { normalizeOperatorHealth } from "./operator-health";
 import {
   AUTHORITATIVE_DECISION_INCONSISTENT,
@@ -67,7 +68,6 @@ import type {
   GuardCloudConnectStatusResponse,
   SupplyChainBundle,
   SupplyChainRepairResult,
-  SupplyChainRepairStepFailure,
   SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
@@ -3121,6 +3121,9 @@ export class GuardProtectionRepairError extends Error {
   readonly status: number;
   readonly code: string | null;
   readonly repairScope: "local_integrity" | null;
+  readonly failedCheckIds: string[];
+  readonly failedHarnesses: string[];
+  readonly pendingCheckIds: string[];
 
   constructor(status: number, payload: Record<string, unknown> | null) {
     const message = payload === null ? null : stringValue(payload.message);
@@ -3129,7 +3132,15 @@ export class GuardProtectionRepairError extends Error {
     this.status = status;
     this.code = payload === null ? null : stringValue(payload.error);
     this.repairScope = payload?.repair_scope === "local_integrity" ? "local_integrity" : null;
+    this.failedCheckIds = stringArrayValue(payload?.failed_check_ids);
+    this.failedHarnesses = stringArrayValue(payload?.failed_harnesses);
+    this.pendingCheckIds = stringArrayValue(payload?.pending_check_ids);
   }
+}
+
+function stringArrayValue(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
 export async function repairProtectionCheck(checkId: string): Promise<GuardProtectionRepairResult> {
@@ -3956,6 +3967,7 @@ export async function repairSupplyChainProtection(credentials?: {
       repaired: true,
       completed_steps: ["package_shims", "runtime_activation", "intelligence_sync"],
       failed_steps: [],
+      remaining_steps: [],
       message: "Supply-chain protection restored and refreshed.",
     };
   }
@@ -3985,36 +3997,7 @@ export async function repairSupplyChainProtection(credentials?: {
     throw new Error("Guard returned an invalid supply-chain repair result.");
   }
   const result = payloadBody.result;
-  const failures: SupplyChainRepairStepFailure[] = [];
-  if (Array.isArray(result.failed_steps)) {
-    for (const candidate of result.failed_steps) {
-      if (!isRecord(candidate)) continue;
-      const step = stringValue(candidate.step);
-      const message = stringValue(candidate.message);
-      if (
-        (step === "package_shims" ||
-          step === "runtime_activation" ||
-          step === "intelligence_sync") &&
-        message !== null
-      ) {
-        failures.push({ step, message });
-      }
-    }
-  }
-  const completedSteps = Array.isArray(result.completed_steps)
-    ? result.completed_steps.filter((value): value is string => typeof value === "string")
-    : [];
-  const requiredSteps = ["package_shims", "runtime_activation", "intelligence_sync"];
-  const completedWithoutFailures =
-    Array.isArray(result.failed_steps) &&
-    result.failed_steps.length === 0 &&
-    requiredSteps.every((step) => completedSteps.includes(step));
-  return {
-    repaired: result.repaired === true || (!("repaired" in result) && completedWithoutFailures),
-    completed_steps: completedSteps,
-    failed_steps: failures,
-    message: stringValue(result.message) ?? "Supply-chain repair finished.",
-  };
+  return normalizeSupplyChainRepairResult(result);
 }
 
 export type EvidencePageData = {

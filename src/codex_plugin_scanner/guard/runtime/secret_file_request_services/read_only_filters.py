@@ -38,11 +38,24 @@ def _read_only_lookup_filter_segment_is_safe(
     return False
 
 
-def _github_output_filter_segment_is_safe(command: str, args: list[str], *, home_dir: Path | None = None) -> bool:
+def _github_output_filter_segment_is_safe(
+    command: str,
+    args: list[str],
+    *,
+    home_dir: Path | None = None,
+    command_text: str | None = None,
+) -> bool:
     """Require explicit config isolation for filters over remote output."""
+    require_no_config = command == "rg" and not _ripgrep_configuration_is_absent(command_text)
     return _read_only_lookup_filter_segment_is_safe(
-        command, args, home_dir=home_dir, require_explicit_rg_no_config=True
+        command, args, home_dir=home_dir, require_explicit_rg_no_config=require_no_config
     )
+
+
+def _ripgrep_configuration_is_absent(command_text: str | None) -> bool:
+    if os.environ.get("RIPGREP_CONFIG_PATH") or command_text is None:
+        return False
+    return re.search(r"(?:^|[\s;&|])(?:export\s+)?RIPGREP_CONFIG_PATH\s*=", command_text) is None
 
 
 def _read_only_lookup_may_be_primary(

@@ -218,7 +218,7 @@ from ..store_evidence import (
     list_evidence,
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
-from ..supply_chain_repair import coordinate_supply_chain_repair
+from ..supply_chain_repair import coordinate_supply_chain_repair, repair_sync_intelligence
 from .bounded_http import BoundedThreadingHTTPServer
 from .command_activity_api import (
     handle_command_activity_analytics,
@@ -3892,9 +3892,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         result = coordinate_supply_chain_repair(
             repair_package_shims=lambda: _repair_detected_package_shims(context),
             activate_runtime=lambda: _activate_package_firewall_runtime(context),
-            sync_intelligence=lambda: _sync_supply_chain_cloud_state_with_optional_auth_context(
+            sync_intelligence=lambda: repair_sync_intelligence(
                 self.server.store,  # type: ignore[attr-defined]
-                None,
                 workspace_dir=context.workspace_dir,
             ),
         )
@@ -4835,7 +4834,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "harness": adapter.harness,
                     "message": (
                         f"Guard could not repair {adapter.harness} protection. "
-                        "Update Guard, then retry from this page. Your existing protection settings were preserved."
+                        "Open this app's repair details and retry that protection layer. "
+                        "Your existing protection settings were preserved."
                     ),
                 },
                 status=409,
@@ -5044,15 +5044,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             pending_check_ids: list[str] = []
             failed_check_ids: list[str] = []
             if check_id == "all":
+                hook_repair_unknown = False
                 try:
                     hook_failures = _repair_failing_managed_harness_hooks(store)
                 except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                    hook_failures = ["harness_hooks"]
+                    hook_failures = []
+                    hook_repair_unknown = True
                 has_active_hooks = any(
                     isinstance(install.get("harness"), str) and install.get("active") is True
                     for install in store.list_managed_installs()
                 )
-                if hook_failures:
+                if hook_failures or hook_repair_unknown:
                     failed_check_ids.append("harness_hooks")
                 elif has_active_hooks:
                     repaired_check_ids.append("harness_hooks")
@@ -5083,6 +5085,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             "repaired": False,
                             "check_ids": repaired_check_ids,
                             "failed_check_ids": failed_check_ids,
+                            "failed_harnesses": hook_failures,
                             "pending_check_ids": pending_check_ids,
                             "message": (
                                 "Repair paused before every protection layer could be confirmed. Retry repair here."

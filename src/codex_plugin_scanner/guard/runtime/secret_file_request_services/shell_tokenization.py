@@ -26,6 +26,8 @@ from .request_artifacts import (
     _normalized_shell_command_name,
 )
 
+_SHELL_NOCLOBBER_SENTINEL = "__HOL_GUARD_NOCLOBBER_REDIRECT__"
+
 
 def _stdin_redirect_target_from_token(token: str, *, next_token: str | None) -> tuple[str | None, int]:
     if _token_is_heredoc_operator(token):
@@ -221,16 +223,49 @@ def _shell_command_token_without_attached_redirection(token: str) -> str:
 
 def _split_shell_parts(command_text: str) -> list[str]:
     try:
+        protected_command = _protect_unquoted_noclobber_redirects(
+            _replace_unquoted_newlines_with_separators(command_text)
+        )
         lexer = shlex.shlex(
-            _replace_unquoted_newlines_with_separators(command_text),
+            protected_command,
             posix=True,
             punctuation_chars=";&|",
         )
         lexer.whitespace_split = True
-        parts = list(lexer)
+        parts = [token.replace(_SHELL_NOCLOBBER_SENTINEL, ">|") for token in lexer]
     except ValueError:
         parts = command_text.split()
     return _merge_shell_fd_redirect_parts(parts)
+
+
+def _protect_unquoted_noclobber_redirects(command_text: str) -> str:
+    result: list[str] = []
+    quote_char: str | None = None
+    escape_next = False
+    index = 0
+    while index < len(command_text):
+        character = command_text[index]
+        if escape_next:
+            result.append(character)
+            escape_next = False
+            index += 1
+            continue
+        if character == "\\":
+            result.append(character)
+            escape_next = True
+            index += 1
+            continue
+        if quote_char is None and character in {"'", '"', "`"}:
+            quote_char = character
+        elif quote_char == character:
+            quote_char = None
+        if quote_char is None and command_text.startswith(">|", index):
+            result.append(_SHELL_NOCLOBBER_SENTINEL)
+            index += 2
+            continue
+        result.append(character)
+        index += 1
+    return "".join(result)
 
 
 def _merge_shell_fd_redirect_parts(parts: list[str]) -> list[str]:

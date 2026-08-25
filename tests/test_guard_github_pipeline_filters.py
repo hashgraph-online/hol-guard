@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     "command",
     (
         "gh run view 123 --repo example/project --log-failed | rg --no-config -n 'FAILURES|FAILED' | tail -120",
+        "gh run view 123 --repo example/project --log-failed | rg -n FAILURES",
         (
             "gh api graphql -f 'query=query { viewer { login name } }' | "
             "jq '[.data.viewer | {login, name}] | map(select(.login != null))'"
@@ -93,7 +94,6 @@ def test_static_github_content_read_with_safe_jq_filter_is_explicitly_benign(tmp
     "command",
     (
         "gh run view 123 --repo example/project --log-failed | rg --pre ./payload FAILURES",
-        "gh run view 123 --repo example/project --log-failed | rg -n FAILURES",
         "gh run view 123 --repo example/project --log-failed | rg 'FAILURES>result.log'",
         "gh run view 123 --repo example/project --log-failed | rg FAILURES workspace.log",
         "gh api graphql -f 'query=query { viewer { login } }' | jq --slurpfile secrets private.json '.'",

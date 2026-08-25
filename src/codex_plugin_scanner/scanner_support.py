@@ -32,11 +32,7 @@ def build_skill_integration_results(
     skill_security_context,
     package_label: str = "",
 ) -> tuple[IntegrationResult, ...]:
-    integration_name = (
-        "cisco-skill-scanner"
-        if not package_label
-        else f"cisco-skill-scanner[{package_label}]"
-    )
+    integration_name = "cisco-skill-scanner" if not package_label else f"cisco-skill-scanner[{package_label}]"
     if skill_security_context.skip_message:
         return (
             IntegrationResult(
@@ -74,11 +70,7 @@ def build_mcp_integration_results(
     mcp_security_context,
     package_label: str = "",
 ) -> tuple[IntegrationResult, ...]:
-    integration_name = (
-        "cisco-mcp-scanner"
-        if not package_label
-        else f"cisco-mcp-scanner[{package_label}]"
-    )
+    integration_name = "cisco-mcp-scanner" if not package_label else f"cisco-mcp-scanner[{package_label}]"
     if mcp_security_context.skip_message:
         return (
             IntegrationResult(
@@ -130,12 +122,8 @@ def build_integration_results(
 
 
 def score_categories(categories: tuple[CategoryResult, ...]) -> int:
-    earned_points = sum(
-        check.points for category in categories for check in category.checks
-    )
-    max_points = sum(
-        check.max_points for category in categories for check in category.checks
-    )
+    earned_points = sum(check.points for category in categories for check in category.checks)
+    max_points = sum(check.max_points for category in categories for check in category.checks)
     return 100 if max_points == 0 else round((earned_points / max_points) * 100)
 
 
@@ -173,12 +161,7 @@ def scan_generic_target(target_dir: Path, options: ScanOptions) -> ScanResult:
             checks=run_code_quality_checks(target_dir),
         ),
     )
-    findings = tuple(
-        finding
-        for category in categories
-        for check in category.checks
-        for finding in check.findings
-    )
+    findings = tuple(finding for category in categories for check in category.checks for finding in check.findings)
     score = score_categories(categories)
     return ScanResult(
         score=score,

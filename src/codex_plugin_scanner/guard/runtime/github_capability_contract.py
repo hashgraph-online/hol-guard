@@ -378,6 +378,12 @@ def github_assessment(
     )
 
 
+def github_cli_invocation_is_help(normalized: list[str]) -> bool:
+    """Recognize local help without treating option values named ``--help`` as help."""
+
+    return normalized[:1] in (["--help"], ["-h"]) or normalized == ["auth", "switch", "--help"]
+
+
 def combine_github_assessments(
     assessments: Iterable[GitHubCommandAssessment],
 ) -> GitHubCommandAssessment | None:

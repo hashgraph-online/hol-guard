@@ -46,8 +46,29 @@ assert(markup.includes("Fix 2 open issues"), "summary reports the bounded repair
 assert(markup.includes("View issue details"), "issues remain available through progressive disclosure");
 assert(!markup.includes("Package installs are not protected yet"), "details start collapsed");
 assert(markup.includes('aria-live="polite"'), "the result live region exists before repair starts");
-assert(supplyChainFixAllButtonLabel("incomplete") === "Retry fixes", "partial repair remains actionable");
+assert(supplyChainFixAllButtonLabel("incomplete") === "Retry remaining", "partial repair remains actionable");
+assert(
+  supplyChainFixAllButtonLabel("incomplete", "connect", 0) === "Connect Guard Cloud",
+  "cloud remaining work uses a connect action instead of retry",
+);
 assert(supplyChainFixAllIsPending("approval"), "approval phase prevents duplicate submissions");
+
+const cloudRemainingMarkup = renderToStaticMarkup(
+  <SupplyChainRecovery
+    issues={issues}
+    state={{
+      phase: "incomplete",
+      message: "Package protection is on. Connect Guard Cloud to refresh safety intelligence.",
+      completedSteps: ["package_shims", "runtime_activation"],
+      failedSteps: [],
+      remainingAction: "connect",
+      remainingSteps: ["Connect Guard Cloud to refresh safety intelligence."],
+    }}
+    onFixAll={() => undefined}
+  />,
+);
+assert(cloudRemainingMarkup.includes("Connect Guard Cloud"), "connect remaining work is the primary action");
+assert(!cloudRemainingMarkup.includes("Retry remaining"), "connect remaining work does not look like a failed retry loop");
 
 const duplicateFailureMarkup = renderToStaticMarkup(
   <SupplyChainRecovery

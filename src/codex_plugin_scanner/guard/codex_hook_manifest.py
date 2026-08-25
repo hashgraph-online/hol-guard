@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 
+from .codex_hook_compatibility import compatible_bridge_argv_hashes
 from .codex_hook_file_integrity import (
     CodexHookIntegrityError,
     canonical_path,
@@ -64,7 +65,11 @@ class CodexHookManifestSpec:
     workspace_rebinding_allowed: bool = False
 
 
-def build_authenticated_hook_manifest(spec: CodexHookManifestSpec) -> dict[str, object]:
+def build_authenticated_hook_manifest(
+    spec: CodexHookManifestSpec,
+    *,
+    previous_manifest: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     secret = load_or_create_hook_secret(spec.guard_home)
     interpreter = describe_executable_file(spec.interpreter_path, role="interpreter")
     packaged_files = [
@@ -84,6 +89,7 @@ def build_authenticated_hook_manifest(spec: CodexHookManifestSpec) -> dict[str, 
     generated_at = datetime.now(timezone.utc).isoformat()
     unsigned_manifest: dict[str, object] = {
         "config": {"scope": "global", "target": canonical_path(spec.config_path)},
+        "compatible_bridge_argv_sha256": compatible_bridge_argv_hashes(previous_manifest),
         "context": _expected_context(spec),
         "daemon_start": {
             "argv": list(spec.daemon_start_argv),
