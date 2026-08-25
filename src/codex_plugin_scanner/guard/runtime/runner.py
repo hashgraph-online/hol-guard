@@ -56,6 +56,7 @@ from ..package_firewall_entitlement import (
     reconcile_connect_state_with_oauth_entitlement,
 )
 from ..policy_bundle_decisions import build_policy_bundle_decisions as _materialize_policy_bundle_decisions
+from ..policy_bundle_delivery import policy_bundle_has_extension_semantics, validate_policy_bundle_delivery
 from ..policy_bundle_parser import (
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
     computed_policy_bundle_hash,
@@ -2339,6 +2340,7 @@ def _policy_bundle_acknowledgement_payload(
     synced_at: str,
     status: Literal["validated", "applied"] = "applied",
     previous: dict[str, object] | None = None,
+    delivery: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
         return {
@@ -2350,12 +2352,24 @@ def _policy_bundle_acknowledgement_payload(
             "status": "synced",
         }
 
-    identity_fields = ("workspaceId", "deviceId", "bundleVersion", "bundleHash")
+    if delivery is None:
+        return {}
+    identity_fields = (
+        "workspaceId",
+        "deviceId",
+        "deliveryId",
+        "runtimeSessionId",
+        "bundleId",
+        "bundleVersion",
+        "bundleHash",
+        "policyRevision",
+        "extensionAuthorityRevision",
+        "catalogDigest",
+        "effectiveProjectionDigest",
+        "lastKnownGoodBundleHash",
+    )
     candidate_identity = {
-        "workspaceId": policy_bundle["workspaceId"],
-        "deviceId": device_id,
-        "bundleVersion": policy_bundle["bundleVersion"],
-        "bundleHash": policy_bundle["bundleHash"],
+        field: delivery[field] for field in identity_fields
     }
     matching_previous = (
         previous
@@ -2550,6 +2564,12 @@ def _build_canonical_policy_bundle_decisions(
     local_rules: list[object] = []
     for raw_rule in rules:
         if not isinstance(raw_rule, dict):
+            continue
+        # Extension-targeted rules are compiled by the Managed Controls
+        # authority path. Materializing them again as generic policy rows can
+        # reject valid Extension outcomes (for example ``review``) or apply a
+        # second, semantically different enforcement decision.
+        if "x-hol-extension-targets" in raw_rule:
             continue
         match = raw_rule.get("match")
         if not isinstance(match, dict):
@@ -2773,6 +2793,8 @@ def sync_receipts(
     advisories_payload: list[dict[str, object]] = []
     policy_bundle_payload: dict[str, object] | None = None
     policy_bundle_sync_payload: dict[str, object] | None = None
+    policy_bundle_delivery_payload: object = None
+    policy_bundle_delivery_field_provided = False
     policy_bundle_field_provided = False
     policy_bundle_field_malformed = False
     alert_preferences_payload: dict[str, object] | None = None
@@ -2896,6 +2918,8 @@ def sync_receipts(
                 if policy_bundle or policy_bundle_payload is None:
                     policy_bundle_payload = policy_bundle
                     policy_bundle_sync_payload = payload
+                    policy_bundle_delivery_field_provided = "policyBundleDelivery" in payload
+                    policy_bundle_delivery_payload = payload.get("policyBundleDelivery")
             else:
                 policy_bundle_field_malformed = True
         alert_preferences = payload.get("alertPreferences")
@@ -2943,6 +2967,7 @@ def sync_receipts(
     validated_policy_bundle: dict[str, object] | None = None
     candidate_managed_controls: ParsedManagedControlsPolicy | None = None
     candidate_managed_capabilities = frozenset[str]()
+    validated_policy_bundle_delivery: dict[str, object] | None = None
     effective_managed_controls: ParsedManagedControlsPolicy | None = None
     effective_managed_capabilities = frozenset[str]()
     effective_policy_bundle: dict[str, object] | None = None
@@ -3005,6 +3030,25 @@ def sync_receipts(
             except ManagedControlsPolicyError as error:
                 validated_policy_bundle = None
                 policy_bundle_rejection_reason = error.code
+        if (
+            validated_policy_bundle is not None
+            and validated_bundle_is_v2
+            and policy_bundle_has_extension_semantics(validated_policy_bundle)
+        ):
+            if not policy_bundle_delivery_field_provided:
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = "missing_policy_bundle_delivery"
+            else:
+                validated_policy_bundle_delivery, delivery_error = validate_policy_bundle_delivery(
+                    policy_bundle_delivery_payload,
+                    policy_bundle=validated_policy_bundle,
+                    workspace_id=cloud_workspace_id,
+                    device_id=device_id,
+                    runtime_summary=store.get_sync_payload("runtime_session_summary"),
+                )
+                if validated_policy_bundle_delivery is None:
+                    validated_policy_bundle = None
+                    policy_bundle_rejection_reason = delivery_error or "invalid_policy_bundle_delivery"
         if validated_policy_bundle is not None:
             try:
                 if validated_bundle_is_v2:
@@ -3200,12 +3244,31 @@ def sync_receipts(
             )
         )
         remote_decisions.update(selected_policy_decisions)
-        policy_bundle_ack = _policy_bundle_acknowledgement_payload(
-            device_id=device_id,
-            device_name=device_name,
-            policy_bundle=effective_policy_bundle,
-            synced_at=now,
+        stored_policy_bundle_ack = store.get_sync_payload("policy_bundle_ack")
+        activating_new_bundle = (
+            validated_policy_bundle is not None
+            and effective_policy_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
         )
+        if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
+            policy_bundle_ack = (
+                _policy_bundle_acknowledgement_payload(
+                    device_id=device_id,
+                    device_name=device_name,
+                    policy_bundle=effective_policy_bundle,
+                    synced_at=now,
+                    previous=stored_policy_bundle_ack if isinstance(stored_policy_bundle_ack, dict) else None,
+                    delivery=validated_policy_bundle_delivery,
+                )
+                if activating_new_bundle
+                else (dict(stored_policy_bundle_ack) if isinstance(stored_policy_bundle_ack, dict) else {})
+            )
+        else:
+            policy_bundle_ack = _policy_bundle_acknowledgement_payload(
+                device_id=device_id,
+                device_name=device_name,
+                policy_bundle=effective_policy_bundle,
+                synced_at=now,
+            )
         cloud_exception_items = _policy_bundle_cloud_exception_items(
             store,
             device_id=device_id,
