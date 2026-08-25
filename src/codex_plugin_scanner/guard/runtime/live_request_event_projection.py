@@ -154,4 +154,7 @@ def project_live_request_outbox_row(
             "payloadHash": stored_event.payload_hash,
         }
     )
+    if stored_event.continuation_result is not None:
+        event["continuationResult"] = stored_event.continuation_result
+        event["localUpdatedAt"] = stored_event.continuation_result["completedAt"]
     return sequence, event

@@ -121,6 +121,7 @@ def review_event_payload_json(
     *,
     event_type: str,
     occurred_at: str,
+    continuation_result: Mapping[str, object] | None = None,
 ) -> str:
     """Build the canonical immutable event payload from a complete request row."""
 
@@ -140,6 +141,8 @@ def review_event_payload_json(
         "oauthSource": request["oauth_source"],
         "requestSnapshot": snapshot,
     }
+    if continuation_result is not None:
+        payload["continuationResult"] = dict(continuation_result)
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 

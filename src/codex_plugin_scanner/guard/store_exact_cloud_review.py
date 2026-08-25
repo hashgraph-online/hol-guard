@@ -13,6 +13,7 @@ from .dpop_key_binding import verified_dpop_jwk_thumbprint
 from .runtime.time_support import parse_utc_timestamp
 from .store_approvals import get_approval_request as load_approval_request
 from .store_approvals import resolve_one_request_only as persist_one_resolution
+from .store_local_once_authority import persist_local_once_approval
 
 _CAPABILITY_KEY = "guard_exact_cloud_review_capability"
 _OAUTH_KEY = "oauth_local_credentials"
@@ -23,6 +24,8 @@ class _ConnectionOwner(Protocol):
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
     def hold_oauth_credential_lock(self) -> AbstractContextManager[None]: ...
+
+    def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]: ...
 
     def _load_oauth_secret_payload(
         self,
@@ -135,6 +138,15 @@ class StoreExactCloudReviewMixin:
     ) -> dict[str, object]:
         """Claim and apply an exact receipt after rechecking all mutable state."""
 
+        local_integrity_key: bytes | None = None
+        local_integrity_key_id: str | None = None
+        if resolution_action == "allow":
+            local_integrity_key, local_integrity_key_id = self._policy_integrity_secret_material(create=True)
+            if local_integrity_key is None or local_integrity_key_id is None:
+                return _exact_error(
+                    "remote_exact_local_authority_unavailable",
+                    now=StoreExactCloudReviewMixin._exact_transaction_now(),
+                )
         with self.hold_oauth_credential_lock(), self._connect() as connection:
             connection.execute("begin immediate")
             resolved_at = StoreExactCloudReviewMixin._exact_transaction_now()
@@ -206,6 +218,25 @@ class StoreExactCloudReviewMixin:
                     (receipt_id,),
                 )
                 return _exact_error("remote_exact_apply_failed", now=resolved_at)
+            if resolution_action == "allow":
+                assert local_integrity_key is not None
+                assert local_integrity_key_id is not None
+                authority_id = persist_local_once_approval(
+                    connection,
+                    request_id=request_id,
+                    harness=str(request["harness"]),
+                    artifact_id=_optional_text(request.get("artifact_id")),
+                    artifact_hash=_optional_text(request.get("artifact_hash")),
+                    workspace=_optional_text(request.get("workspace")),
+                    publisher=_optional_text(request.get("publisher")),
+                    action="allow",
+                    created_at=resolved_at,
+                    expires_at=min(capability_expires_at, expires_at, request_expires).isoformat(),
+                    integrity_key=local_integrity_key,
+                    integrity_key_id=local_integrity_key_id,
+                )
+                if authority_id is None:
+                    raise RuntimeError("exact Cloud Review request has no exact local authority target")
             resolved_request = load_approval_request(connection, request_id)
             StoreExactCloudReviewMixin._record_exact_event(
                 connection,
@@ -247,6 +278,10 @@ def _changed_request_fields(
 
 def _exact_error(code: str, *, now: str) -> dict[str, object]:
     return {"checked_at": now, "error": code, "replayed": False, "resolved": False}
+
+
+def _optional_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _oauth_binding_from_state(

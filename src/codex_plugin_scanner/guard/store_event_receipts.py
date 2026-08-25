@@ -9,8 +9,7 @@ from .policy_integrity import PolicyIntegrityVerificationResult
 
 # ruff: noqa: F403,F405
 from .store_base import *
-
-_LOCAL_ONCE_INTEGRITY_PURPOSE = "guard-local-once-approval"
+from .store_local_once_authority import LOCAL_ONCE_INTEGRITY_PURPOSE, persist_local_once_approval
 
 
 def _list_events_query(limit: int, event_name: str | None) -> tuple[str, tuple[object, ...]]:
@@ -44,66 +43,24 @@ class StoreEventReceiptsMixin:
         created_at: str,
         expires_at: str,
     ) -> str | None:
-        if not artifact_id or not artifact_hash:
-            return None
-        created_at = _canonical_utc_timestamp(created_at)
-        expires_at = _canonical_utc_timestamp(expires_at)
-        if _timestamp_has_expired(expires_at, now=created_at):
-            raise ValueError("local approval expiry must be after its creation time")
-        approval_id = uuid4().hex
-        workspace_key = _workspace_policy_key(workspace)
         key, key_id = self._policy_integrity_secret_material(create=True)
         if key is None or key_id is None:
             return None
-        signing_row: dict[str, object] = {
-            "approval_id": approval_id,
-            "request_id": request_id,
-            "harness": harness,
-            "artifact_id": artifact_id,
-            "artifact_hash": artifact_hash,
-            "workspace": workspace_key,
-            "publisher": publisher,
-            "action": action,
-            "created_at": created_at,
-            "expires_at": expires_at,
-            "claimed_at": None,
-        }
-        integrity = sign_local_authority_payload(
-            signing_row,
-            key=key,
-            key_id=key_id,
-            purpose=_LOCAL_ONCE_INTEGRITY_PURPOSE,
-            signed_at=created_at,
-        )
         with self._connect() as connection:
-            connection.execute(
-                """
-                insert into guard_local_once_approvals (
-                  approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher, action,
-                  created_at, expires_at, claimed_at, integrity_version, payload_hash, payload_mac,
-                  integrity_key_id, signed_at
-                )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?)
-                """,
-                (
-                    approval_id,
-                    request_id,
-                    harness,
-                    artifact_id,
-                    artifact_hash,
-                    workspace_key,
-                    publisher,
-                    action,
-                    created_at,
-                    expires_at,
-                    integrity["integrity_version"],
-                    integrity["payload_hash"],
-                    integrity["payload_mac"],
-                    integrity["integrity_key_id"],
-                    integrity["signed_at"],
-                ),
+            return persist_local_once_approval(
+                connection,
+                request_id=request_id,
+                harness=harness,
+                artifact_id=artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=publisher,
+                action=action,
+                created_at=created_at,
+                expires_at=expires_at,
+                integrity_key=key,
+                integrity_key_id=key_id,
             )
-        return approval_id
 
     @staticmethod
     def _peek_local_once_approval_lookup_locked(
@@ -237,7 +194,7 @@ class StoreEventReceiptsMixin:
             claimed_row,
             key=integrity_key,
             key_id=integrity_key_id,
-            purpose=_LOCAL_ONCE_INTEGRITY_PURPOSE,
+            purpose=LOCAL_ONCE_INTEGRITY_PURPOSE,
             signed_at=now,
         )
         claim_cursor = connection.execute(
@@ -462,7 +419,7 @@ def _verify_local_once_approval(
         _local_once_approval_integrity(row),
         key=key,
         key_id=key_id,
-        purpose=_LOCAL_ONCE_INTEGRITY_PURPOSE,
+        purpose=LOCAL_ONCE_INTEGRITY_PURPOSE,
     )
 
 

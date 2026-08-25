@@ -8,6 +8,7 @@ import sqlite3
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_review_event_outbox_writes import append_request_snapshot_event
 
 
 def _persist_continuation_events(
@@ -30,6 +31,59 @@ def _persist_continuation_events(
                 "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
                 (event_name, json.dumps(payload, sort_keys=True), now),
             )
+
+
+def _append_terminal_review_event(
+    connection: sqlite3.Connection,
+    *,
+    request_id: str,
+    action: str,
+    evidence_id: str,
+    resume_update: dict[str, object],
+    now: str,
+) -> None:
+    status = resume_update.get("continuation_status")
+    capability = resume_update.get("continuation_capability")
+    reason = resume_update.get("continuation_reason")
+    completed_at = resume_update.get("continuation_completed_at")
+    evidence = resume_update.get("continuation_evidence")
+    first_evidence = evidence[0] if isinstance(evidence, list) and evidence else None
+    correlation_id = first_evidence.get("correlationId") if isinstance(first_evidence, dict) else None
+    if not all(
+        isinstance(value, str) and value for value in (status, capability, reason, completed_at, correlation_id)
+    ):
+        raise ValueError("terminal continuation result is incomplete")
+    if status not in {
+        "resumed",
+        "already_resumed",
+        "manual_retry_required",
+        "blocked_not_resumed",
+        "unsupported",
+        "failed",
+    }:
+        raise ValueError("terminal continuation status is invalid")
+    request = connection.execute(
+        "select oauth_source from approval_requests where request_id = ?",
+        (request_id,),
+    ).fetchone()
+    if request is None:
+        raise ValueError("terminal continuation request is missing")
+    append_request_snapshot_event(
+        connection,
+        request_id=request_id,
+        source=str(request["oauth_source"]),
+        event_type=f"review.continuation.{status}",
+        occurred_at=now,
+        continuation_result={
+            "action": action,
+            "capability": capability,
+            "completedAt": completed_at,
+            "correlationId": correlation_id,
+            "evidenceId": evidence_id,
+            "reason": reason,
+            "status": status,
+        },
+    )
 
 
 class StoreContinuationMixin:
@@ -173,4 +227,13 @@ class StoreContinuationMixin:
                 events=events,
                 now=now,
             )
+            if terminal:
+                _append_terminal_review_event(
+                    connection,
+                    request_id=request_id,
+                    action=action,
+                    evidence_id=evidence_id,
+                    resume_update=resume_update,
+                    now=now,
+                )
         return True

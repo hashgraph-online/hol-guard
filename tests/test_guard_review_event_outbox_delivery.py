@@ -9,6 +9,10 @@ from typing import TypedDict
 
 import pytest
 
+from codex_plugin_scanner.guard.continuation_runtime import (
+    continue_request_after_application,
+    record_live_hook_completion,
+)
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
 from codex_plugin_scanner.guard.runtime import live_request_sync
@@ -187,6 +191,79 @@ def test_projection_uses_frozen_continuation_after_operation_changes(
     assert event["continuationHookAttached"] is True
     assert event["continuationWaitDeadline"] == "2026-08-24T15:00:00+00:00"
     assert event["eventPayloadJson"] == frozen_payload
+
+
+def test_terminal_continuation_projects_as_a_distinct_authenticated_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    correlation_id = "gcr_12345678-1234-1234-1234-123456789abc"
+    request = replace(
+        _request("request-terminal-continuation"),
+        continuation_snapshot={
+            "capability": "suspended-response",
+            "correlationId": correlation_id,
+            "hookAttached": True,
+            "opaqueTargetId": None,
+            "waitDeadline": "2026-08-24T15:00:00+00:00",
+        },
+    )
+    store.add_approval_request(request, _NOW)
+    session = store.upsert_guard_session(
+        session_id="session-terminal-continuation",
+        harness="codex",
+        surface="harness-adapter",
+        status="waiting_on_approval",
+        client_name="codex-hook",
+        client_title="Codex hook",
+        client_version="1.0.0",
+        workspace="/workspace",
+        capabilities=["approval-resolution"],
+        now=_NOW,
+    )
+    store.upsert_guard_operation(
+        operation_id="operation-terminal-continuation",
+        session_id=str(session["session_id"]),
+        harness="codex",
+        operation_type="tool_call",
+        status="waiting_on_approval",
+        approval_request_ids=[request.request_id],
+        resume_token=None,
+        metadata={
+            "codex_hook_waits_for_browser_approval": True,
+            "codex_browser_wait_deadline_at": "2026-08-24T15:00:00+00:00",
+            "correlationId": correlation_id,
+        },
+        now=_NOW,
+    )
+    request_row = store.get_approval_request(request.request_id)
+    assert request_row is not None
+    waiting = continue_request_after_application(store, request_row=request_row, action="allow_once", now=_NOW)
+    assert waiting["continuationStatus"] == "waiting"
+    completed = record_live_hook_completion(store, request_id=request.request_id, action="allow", now=_LATER)
+    assert completed is not None and completed["continuationStatus"] == "resumed"
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
+
+    result = live_request_sync.sync_live_requests_once(store, _auth(binding))
+
+    assert result["synced"] == 2
+    terminal = captured[-1]
+    assert terminal["eventType"] == "continuation_resumed"
+    assert terminal["localEventSequence"] == 2
+    assert terminal["continuationResult"] == {
+        "action": "allow_once",
+        "capability": "suspended-response",
+        "completedAt": _LATER,
+        "correlationId": correlation_id,
+        "evidenceId": completed["continuationEvidenceId"],
+        "reason": "live_hook_completed",
+        "status": "resumed",
+    }
+    envelope = json.loads(str(terminal["eventPayloadJson"]))
+    assert envelope["continuationResult"] == terminal["continuationResult"]
 
 
 def test_request_sequence_survives_ack_compaction_refresh_and_restart(

@@ -124,6 +124,33 @@ def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_pa
     assert other_row is not None and other_row["status"] == "pending"
     assert store.list_policy_decisions() == policies_before
     assert store.get_sync_payload("guard_review_memory_registry") is None
+    resolved_at = resolution.resolved_request["resolved_at"]
+    assert isinstance(resolved_at, str)
+    authority_lookup = store.resolve_policy_decision_lookup(
+        harness=target.harness,
+        artifact_id=target.artifact_id,
+        artifact_hash=target.artifact_hash,
+        workspace=target.workspace,
+        publisher=target.publisher,
+        now=resolved_at,
+        consume_one_shot=False,
+    )
+    authority = authority_lookup["decision"]
+    assert authority is not None
+    assert authority["request_id"] == target.request_id
+    assert authority["source"] == "approval-gate-once"
+    assert store.claim_approval_reuse_decision(authority, now=resolved_at) is True
+    assert (
+        store.peek_local_once_approval(
+            harness=target.harness,
+            artifact_id=target.artifact_id,
+            artifact_hash=target.artifact_hash,
+            workspace=target.workspace,
+            publisher=target.publisher,
+            now=resolved_at,
+        )
+        is None
+    )
     audit = store.list_events(limit=1, event_name="cloud_review.exact_applied")
     assert audit
     audit_payload = audit[0].get("payload")

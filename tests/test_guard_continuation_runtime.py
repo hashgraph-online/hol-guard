@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from collections.abc import Mapping
@@ -174,6 +175,28 @@ def test_live_codex_hook_reports_waiting_without_starting_a_second_resume(tmp_pa
     assert completed is not None
     assert completed["continuationStatus"] == "resumed"
     assert len(store.list_events(event_name="review.continuation.terminal")) == 1
+    with store._connect() as connection:
+        outbox = connection.execute(
+            """select event_type, request_sequence, payload_json
+               from guard_review_outbox_events
+               where local_request_id = ? order by request_sequence""",
+            ("request-codex-live",),
+        ).fetchall()
+    assert [row["event_type"] for row in outbox] == [
+        "review.request.created",
+        "review.continuation.resumed",
+    ]
+    assert [row["request_sequence"] for row in outbox] == [1, 2]
+    terminal_payload = json.loads(str(outbox[1]["payload_json"]))
+    assert terminal_payload["continuationResult"] == {
+        "action": "allow_once",
+        "capability": "suspended-response",
+        "completedAt": "2026-08-24T12:00:01+00:00",
+        "correlationId": completed["correlationId"],
+        "evidenceId": completed["continuationEvidenceId"],
+        "reason": "live_hook_completed",
+        "status": "resumed",
+    }
 
 
 def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
