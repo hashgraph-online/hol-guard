@@ -3199,7 +3199,7 @@ def sync_receipts(
                 managed_controls_publish=managed_controls_publish,
                 remote_write_authorized=True,
             )
-            if not activated:
+            if activated is None:
                 cloud_exception_items = []
                 activation_last_error = _policy_bundle_rejection_payload("bundle_version_downgrade")
                 store.add_event(

@@ -3524,7 +3524,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             except (ExtensionControlAuthorityError, ValueError):
                 self._write_json({"error": "managed_runtime_publish_failed"}, status=503)
                 return
-            if not activated:
+            if activated is None:
                 self._write_json({"error": "bundle_version_downgrade"}, status=400)
                 return
             receipt_redaction_level = validated_policy_bundle.get("receiptRedactionLevel")
