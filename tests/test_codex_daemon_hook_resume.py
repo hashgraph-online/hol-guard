@@ -144,7 +144,7 @@ def test_codex_bridge_budget_bounds_the_actual_approval_wait(
         store=GuardStore(tmp_path / "guard-home"),
         config=GuardConfig(tmp_path, None, approval_wait_timeout_seconds=600),
         browser_wait_bound=True,
-        browser_wait_timeout_seconds=7,
+        inline_wait_seconds=7,
     )
 
     assert decision is None

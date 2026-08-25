@@ -20,6 +20,7 @@ if __package__:
     from ..codex_hook_launch_runtime import isolated_hook_environment as _isolated_hook_environment
     from ..codex_hook_launch_runtime import run_isolated_hook_process as _run_isolated_hook_process
     from ..live_process_identity import (
+        CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY,
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
@@ -63,6 +64,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         run_isolated_hook_process as _run_isolated_hook_process,
     )
     from codex_plugin_scanner.guard.live_process_identity import (
+        CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY,
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
@@ -143,7 +145,8 @@ def _with_browser_wait_process(data: str, *, wait_timeout_seconds: float) -> str
         payload.pop(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY, None)
     else:
         payload[CODEX_BROWSER_WAIT_PROCESS_KEY] = process_identity
-        payload[CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] = min(
+        payload[CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] = max(1, int(wait_timeout_seconds))
+        payload[CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY] = min(
             _DAEMON_INLINE_BROWSER_WAIT_SECONDS,
             max(1, int(wait_timeout_seconds)),
         )

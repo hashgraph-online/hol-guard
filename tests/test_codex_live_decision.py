@@ -137,6 +137,26 @@ def test_allow_consumes_exact_authority_and_records_terminal_continuation(tmp_pa
     assert resume["status"] == "sent"
 
 
+def test_allow_completes_after_inline_wait_but_before_outer_deadline(tmp_path: Path) -> None:
+    request_id = "request-live-delayed-allow"
+    store, observed_at = _seed_resolved_request(
+        tmp_path,
+        request_id=request_id,
+        action="allow",
+        with_exact_allow=True,
+    )
+    completed_at = (datetime.fromisoformat(observed_at) + timedelta(seconds=3)).isoformat()
+
+    result = complete_codex_live_decision(
+        store,
+        request_id=request_id,
+        now=completed_at,
+    )
+
+    assert result["completed"] is True
+    assert result["action"] == "allow"
+
+
 def test_allow_without_matching_exact_authority_stays_closed(tmp_path: Path) -> None:
     request_id = "request-live-missing"
     store, now = _seed_resolved_request(

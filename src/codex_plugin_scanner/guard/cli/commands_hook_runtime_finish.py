@@ -86,7 +86,7 @@ def _browser_approval_decision(
         store=store,
         config=config,
         browser_wait_bound=state.browser_approval_wait_bound,
-        browser_wait_timeout_seconds=state.browser_approval_wait_timeout_seconds,
+        inline_wait_seconds=state.browser_approval_inline_wait_timeout_seconds,
         daemon_client=state.browser_approval_daemon_client,
         expected_artifact_hash=state.runtime_artifact_hash,
         fresh_context_provider=fresh_context_provider,
