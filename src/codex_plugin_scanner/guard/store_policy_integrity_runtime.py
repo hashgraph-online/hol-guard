@@ -626,6 +626,9 @@ class StorePolicyIntegrityAdminMixin:
             if sibling_ids:
                 decision_ids = sibling_ids
                 artifact_id = None
+                artifact_hash = None
+                artifact_id_is_null = False
+                artifact_hash_is_null = False
         if decision_ids is not None:
             if not decision_ids:
                 return 0

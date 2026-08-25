@@ -528,6 +528,7 @@ def test_clear_displayed_artifact_rule_removes_collapsed_siblings(tmp_path) -> N
         "guard-cli",
         scope="artifact",
         artifact_id=str(displayed[0]["artifact_id"]),
+        artifact_hash=str(displayed[0].get("artifact_hash") or ""),
     )
     assert cleared == 3
     assert store.list_policy_decisions("guard-cli") == []
