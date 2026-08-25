@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import final
 
 from .command_matcher_contracts import MatcherEvidence
@@ -13,6 +13,64 @@ from .command_option_parsing import (
     matches_subcommands_conservatively,
 )
 from .command_rules import _after_leading_options, _segment_matches_executable, _without_options
+
+
+def _normalized_string_set(values: frozenset[str], *, field_name: str) -> frozenset[str]:
+    """Normalize one set of security-relevant names without dropping blanks."""
+
+    if any(not value.strip() for value in values):
+        raise ValueError(f"{field_name} cannot contain blank values")
+    return frozenset(value.strip().lower() for value in values)
+
+
+def _normalized_paths(paths: frozenset[tuple[str, ...]]) -> frozenset[tuple[str, ...]]:
+    """Normalize path tokens while rejecting paths that would collapse."""
+
+    if not paths:
+        raise ValueError("ExecutablePathSetMatcher requires at least one path")
+    if any(not path or any(not token.strip() for token in path) for path in paths):
+        raise ValueError("ExecutablePathSetMatcher paths require non-empty path tokens")
+    return frozenset(tuple(token.strip().lower() for token in path) for path in paths)
+
+
+def _normalized_inverse_pairs(
+    pairs: frozenset[tuple[str, str]],
+) -> frozenset[tuple[str, str]]:
+    """Normalize inverse aliases and reject blank or reused option names."""
+
+    if any(not positive.strip() or not negative.strip() for positive, negative in pairs):
+        raise ValueError("Inverse flag pairs cannot contain blank option names")
+    normalized_pairs = tuple(
+        (positive.strip().lower(), negative.strip().lower())
+        for positive, negative in pairs
+    )
+    inverse_names = [name for pair in normalized_pairs for name in pair]
+    if len(inverse_names) != len(set(inverse_names)):
+        raise ValueError("Inverse flag pairs cannot reuse an option name")
+    return frozenset(normalized_pairs)
+
+
+def _normalized_required_option_values(
+    entries: tuple[tuple[str, frozenset[str]], ...],
+) -> tuple[tuple[str, frozenset[str]], ...]:
+    """Normalize required options without allowing a constraint to disappear."""
+
+    normalized_entries: list[tuple[str, frozenset[str]]] = []
+    for option, values in entries:
+        if not option.strip():
+            raise ValueError("Required option names cannot be blank")
+        if not values or any(not value.strip() for value in values):
+            raise ValueError("Required option values cannot be empty or blank")
+        normalized_entries.append(
+            (
+                option.strip().lower(),
+                frozenset(value.strip().lower() for value in values),
+            )
+        )
+    required_option_names = [option for option, _values in normalized_entries]
+    if len(required_option_names) != len(set(required_option_names)):
+        raise ValueError("Required option values cannot declare an option more than once")
+    return tuple(sorted(normalized_entries, key=lambda item: item[0]))
 
 
 @final
@@ -33,16 +91,74 @@ class ExecutablePathSetMatcher:
     required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
     required_flags_in_all_arguments: bool = False
     fail_secure_unknown_options: bool = False
+    _path_lengths_desc: tuple[int, ...] = field(init=False, repr=False, compare=False)
+    _paths_desc: tuple[tuple[str, ...], ...] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        normalized = frozenset(value.strip().lower() for value in self.executables if value.strip())
-        paths = frozenset(tuple(token.strip().lower() for token in path if token.strip()) for path in self.paths)
-        if not normalized or not paths or any(not path for path in paths):
-            raise ValueError("ExecutablePathSetMatcher requires executables and non-empty paths")
-        object.__setattr__(self, "executables", normalized)
-        object.__setattr__(self, "paths", paths)
+        """Normalize and validate every matcher contract field."""
+
+        normalized_executables = _normalized_string_set(
+            self.executables,
+            field_name="Executable names",
+        )
+        if not normalized_executables:
+            raise ValueError("ExecutablePathSetMatcher requires at least one executable")
+        normalized_paths = _normalized_paths(self.paths)
+        normalized_required_flags = _normalized_string_set(
+            self.required_flags,
+            field_name="Required flags",
+        )
+        normalized_forbidden_flags = _normalized_string_set(
+            self.forbidden_flags,
+            field_name="Forbidden flags",
+        )
+        normalized_leading_options = _normalized_string_set(
+            self.leading_options_with_values,
+            field_name="Leading options",
+        )
+        normalized_interspersed_options = _normalized_string_set(
+            self.interspersed_options_with_values,
+            field_name="Interspersed options",
+        )
+        normalized_interspersed_flags = _normalized_string_set(
+            self.interspersed_flags,
+            field_name="Interspersed flags",
+        )
+        normalized_options = _normalized_string_set(
+            self.options_with_values,
+            field_name="Options with values",
+        )
+        normalized_inverse_pairs = _normalized_inverse_pairs(self.inverse_flag_pairs)
+        normalized_required_option_values = _normalized_required_option_values(
+            self.required_option_values
+        )
+        if normalized_required_flags & normalized_forbidden_flags:
+            raise ValueError("A matcher flag cannot be both required and forbidden")
+
+        object.__setattr__(self, "executables", normalized_executables)
+        object.__setattr__(self, "paths", normalized_paths)
+        object.__setattr__(self, "required_flags", normalized_required_flags)
+        object.__setattr__(self, "forbidden_flags", normalized_forbidden_flags)
+        object.__setattr__(self, "leading_options_with_values", normalized_leading_options)
+        object.__setattr__(self, "interspersed_options_with_values", normalized_interspersed_options)
+        object.__setattr__(self, "interspersed_flags", normalized_interspersed_flags)
+        object.__setattr__(self, "options_with_values", normalized_options)
+        object.__setattr__(self, "inverse_flag_pairs", normalized_inverse_pairs)
+        object.__setattr__(self, "required_option_values", normalized_required_option_values)
+        object.__setattr__(
+            self,
+            "_path_lengths_desc",
+            tuple(sorted({len(path) for path in normalized_paths}, reverse=True)),
+        )
+        object.__setattr__(
+            self,
+            "_paths_desc",
+            tuple(sorted(normalized_paths, key=lambda item: (-len(item), item))),
+        )
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
+        """Return evidence for every command segment satisfying this matcher."""
+
         evidence: list[MatcherEvidence] = []
         for index, segment in enumerate(command.segments):
             if not _segment_matches_executable(segment, self.executables):
@@ -59,6 +175,8 @@ class ExecutablePathSetMatcher:
         return tuple(evidence)
 
     def _segment_matches(self, lowered_arguments: tuple[str, ...]) -> tuple[str, ...] | None:
+        """Evaluate path, option, and flag constraints for one segment."""
+
         remaining = _without_options(
             lowered_arguments,
             self.interspersed_options_with_values,
@@ -95,19 +213,23 @@ class ExecutablePathSetMatcher:
         return matched
 
     def _exact_path(self, remaining: tuple[str, ...]) -> tuple[str, ...] | None:
-        prefix: list[str] = []
-        for token in remaining:
-            prefix.append(token)
-            candidate = tuple(prefix)
+        """Return the longest exact destructive path prefix."""
+
+        for length in self._path_lengths_desc:
+            if len(remaining) < length:
+                continue
+            candidate = remaining[:length]
             if candidate in self.paths:
                 return candidate
         return None
 
     def _conservative_path(self, lowered_arguments: tuple[str, ...]) -> tuple[str, ...] | None:
+        """Return the longest path surviving fail-secure option parsing."""
+
         options_with_values = (
             self.options_with_values | self.leading_options_with_values | self.interspersed_options_with_values
         )
-        for path in sorted(self.paths, key=lambda item: (len(item), item)):
+        for path in self._paths_desc:
             if matches_subcommands_conservatively(
                 lowered_arguments,
                 path,
@@ -118,6 +240,8 @@ class ExecutablePathSetMatcher:
         return None
 
     def _required_flags_survive_unknown_options(self, lowered_arguments: tuple[str, ...]) -> bool:
+        """Require safe-variant constraints in every bounded option parse."""
+
         conservative_requirements = set(self.required_flags)
         semantics = argument_semantics(
             lowered_arguments,
