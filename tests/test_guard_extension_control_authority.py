@@ -505,8 +505,20 @@ def test_extension_control_schema_rejects_future_or_gapped_versions(tmp_path: Pa
     store = _store(tmp_path, secrets)
     with store._connect() as connection:
         connection.execute("update extension_control_schema_migration set version = 99 where singleton = 1")
+    view = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    assert view.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
     with pytest.raises(ExtensionControlAuthorityError, match="schema"):
-        store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+        _commit(store)
+
+
+def test_incompatible_extension_schema_does_not_brick_store_open(tmp_path: Path) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    with store._connect() as connection:
+        connection.execute("update extension_control_schema_migration set version = 99 where singleton = 1")
+    opened = GuardStore(tmp_path, prime_policy_integrity=False)
+    opened._extension_control_authority_secret_store = secrets
+    assert opened.list_policy_decisions() == []
 
 
 def test_non_protected_authority_requires_exact_trusted_surface_enum() -> None:

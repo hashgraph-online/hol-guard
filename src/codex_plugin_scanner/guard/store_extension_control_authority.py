@@ -86,6 +86,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         layers_json = layers_to_json(layers)
         self._validate_serialized_layers(layers_json)
         with self._extension_control_authority_lock():
+            with self._connect() as connection:
+                ensure_extension_control_authority_schema(connection)
             current = self._read_extension_control_authority_locked(catalog_digest, bootstrap=True)
             key = self._authority_key(required=True)
             assert key is not None
@@ -388,7 +390,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         self, catalog_digest: str, *, bootstrap: bool
     ) -> ExtensionControlAuthorityView:
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            if not ensure_extension_control_authority_schema(connection, require_compatible=False):
+                return self._degraded_view(catalog_digest)
             row = connection.execute(
                 "select * from extension_control_authority_snapshot where singleton = 1"
             ).fetchone()
