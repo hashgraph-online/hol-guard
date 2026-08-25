@@ -36,11 +36,18 @@ class RuntimeArtifactReconciliation:
         return not self.failed_harnesses and not self.errors
 
 
-def _runtime_context(store: GuardStore, *, home_dir: Path | None = None) -> HarnessContext:
+def _runtime_context(
+    store: GuardStore,
+    *,
+    home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
+) -> HarnessContext:
     return HarnessContext(
         home_dir=(home_dir or Path.home()).resolve(),
-        workspace_dir=None,
+        workspace_dir=workspace_dir.resolve() if workspace_dir is not None else None,
         guard_home=store.guard_home.resolve(),
+        home_override_explicit=home_dir is not None,
+        workspace_override_explicit=workspace_dir is not None,
     )
 
 
@@ -52,7 +59,6 @@ def repair_failing_managed_harness_hooks(
     """Repair only active managed installs that fail live verification."""
 
     installs: list[Mapping[str, object]] = list(store.list_managed_installs())
-    context = _runtime_context(store, home_dir=home_dir)
     verified = _live_hook_verification(installs, store)
     repaired: list[str] = []
     failed: list[str] = []
@@ -62,6 +68,13 @@ def repair_failing_managed_harness_hooks(
             continue
         if verified.get(harness) is True:
             continue
+        stored_workspace = install.get("workspace")
+        workspace = stored_workspace if isinstance(stored_workspace, str) and stored_workspace else None
+        context = _runtime_context(
+            store,
+            home_dir=home_dir,
+            workspace_dir=Path(workspace).expanduser() if workspace is not None else None,
+        )
         try:
             apply_managed_install(
                 "install",
@@ -69,7 +82,7 @@ def repair_failing_managed_harness_hooks(
                 False,
                 context,
                 store,
-                None,
+                workspace,
                 datetime.now(timezone.utc).isoformat(),
             )
         except (OSError, RuntimeError, TypeError, ValueError, json.JSONDecodeError, sqlite3.Error):
@@ -130,18 +143,17 @@ def reconcile_runtime_artifacts(
             )
             verified = package_shim_status(context)
             manager_details = verified.get("manager_details")
-            invalid_managers = (
-                [
-                    str(detail.get("manager"))
-                    for detail in manager_details
-                    if isinstance(detail, dict)
-                    and detail.get("manager") in installed_managers
-                    and detail.get("integrity") != "ok"
-                ]
-                if isinstance(manager_details, list)
-                else list(installed_managers)
-            )
-            errors.extend(f"package:{manager}:integrity" for manager in invalid_managers)
+            if isinstance(manager_details, list):
+                for detail in manager_details:
+                    if not isinstance(detail, dict) or detail.get("manager") not in installed_managers:
+                        continue
+                    manager = str(detail.get("manager"))
+                    if detail.get("integrity") != "ok":
+                        errors.append(f"package:{manager}:integrity")
+                    if detail.get("path_active") is not True:
+                        errors.append(f"package:{manager}:path_inactive")
+            else:
+                errors.extend(f"package:{manager}:status_missing" for manager in installed_managers)
     except (OSError, RuntimeError, TypeError, ValueError, json.JSONDecodeError):
         errors.append("package:reconciliation_failed")
 

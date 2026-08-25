@@ -103,10 +103,16 @@ def test_daemon_reconciles_managed_artifacts_before_reporting_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    configured_home = tmp_path / "configured-home"
     observed: list[str] = []
 
-    def reconcile(_store: GuardStore) -> RuntimeArtifactReconciliation:
+    def reconcile(
+        _store: GuardStore,
+        *,
+        home_dir: Path | None = None,
+    ) -> RuntimeArtifactReconciliation:
         observed.append("reconciled")
+        assert home_dir == configured_home
         return RuntimeArtifactReconciliation(
             refreshed_launchers=("codex",),
             repaired_harnesses=("codex",),
@@ -116,7 +122,7 @@ def test_daemon_reconciles_managed_artifacts_before_reporting_ready(
         )
 
     monkeypatch.setattr(daemon_server_module, "reconcile_runtime_artifacts", reconcile)
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=configured_home)
 
     daemon.start()
     observed.append("started")

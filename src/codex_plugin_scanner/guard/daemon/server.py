@@ -8291,7 +8291,10 @@ class GuardDaemonServer:
     def _reconcile_runtime_artifacts_best_effort(self) -> None:
         """Align existing Guard-owned artifacts before publishing readiness."""
         try:
-            result = reconcile_runtime_artifacts(self._server.store)
+            result = reconcile_runtime_artifacts(
+                self._server.store,
+                home_dir=self._aibom_home_dir,
+            )
         except Exception as error:
             self._diagnostics.record("runtime_artifact_reconciliation_failed", detail=str(error))
             return

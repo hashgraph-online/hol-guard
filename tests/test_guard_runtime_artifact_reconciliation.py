@@ -17,6 +17,9 @@ class _Store:
     def list_managed_installs(self) -> list[dict[str, object]]:
         return [{"harness": "codex", "active": True}]
 
+    def get_managed_install(self, _harness: str) -> dict[str, object] | None:
+        return {"harness": "codex", "active": True}
+
 
 def test_reconcile_repairs_existing_artifacts_without_enrolling_new_managers(
     tmp_path: Path,
@@ -43,7 +46,7 @@ def test_reconcile_repairs_existing_artifacts_without_enrolling_new_managers(
             return {"installed_managers": ["npm"], "manager_details": []}
         return {
             "installed_managers": ["npm"],
-            "manager_details": [{"manager": "npm", "integrity": "ok"}],
+            "manager_details": [{"manager": "npm", "integrity": "ok", "path_active": True}],
         }
 
     monkeypatch.setattr(reconciliation, "package_shim_status", package_status)
@@ -119,7 +122,7 @@ def test_reconcile_reports_failed_readback_instead_of_claiming_ready(
         "package_shim_status",
         lambda _context: {
             "installed_managers": ["npm"],
-            "manager_details": [{"manager": "npm", "integrity": "tampered"}],
+            "manager_details": [{"manager": "npm", "integrity": "tampered", "path_active": True}],
         },
     )
     monkeypatch.setattr(
@@ -134,3 +137,81 @@ def test_reconcile_reports_failed_readback_instead_of_claiming_ready(
     assert result.failed_harnesses == ("codex",)
     assert "launcher:codex: write failed" in result.errors
     assert "package:npm:integrity" in result.errors
+
+
+def test_harness_repair_preserves_stored_workspace_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "workspace"
+    store = _Store(tmp_path / "guard")
+    store.list_managed_installs = lambda: [{"harness": "codex", "active": True, "workspace": str(workspace)}]
+    store.get_managed_install = lambda _harness: {
+        "harness": "codex",
+        "active": True,
+        "workspace": str(workspace),
+    }
+    observed: list[tuple[Path | None, str | None]] = []
+    verification_calls = {"count": 0}
+
+    def verify(_installs: object, _store: object) -> dict[str, bool]:
+        verification_calls["count"] += 1
+        return {"codex": verification_calls["count"] > 1}
+
+    def apply(
+        _command: str,
+        _harness: str,
+        _install_all: bool,
+        context: object,
+        _store: object,
+        stored_workspace: str | None,
+        _now: str,
+    ) -> None:
+        observed.append((context.workspace_dir, stored_workspace))
+
+    monkeypatch.setattr(reconciliation, "_live_hook_verification", verify)
+    monkeypatch.setattr(reconciliation, "apply_managed_install", apply)
+
+    repaired, failed = reconciliation.repair_failing_managed_harness_hooks(
+        store,
+        home_dir=tmp_path / "home",
+    )
+
+    assert repaired == ("codex",)
+    assert failed == ()
+    assert observed == [(workspace.resolve(), str(workspace))]
+
+
+def test_reconcile_reports_inactive_package_shim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _Store(tmp_path / "guard")
+    monkeypatch.setattr(
+        reconciliation,
+        "refresh_stale_harness_shims",
+        lambda **_kwargs: ShimRefreshResult(refreshed=(), unchanged=(), errors=()),
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "repair_failing_managed_harness_hooks",
+        lambda *_args, **_kwargs: ((), ()),
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "package_shim_status",
+        lambda _context: {
+            "installed_managers": ["npm"],
+            "manager_details": [{"manager": "npm", "integrity": "ok", "path_active": False}],
+        },
+    )
+    monkeypatch.setattr(
+        reconciliation,
+        "repair_package_shims",
+        lambda *_args, **_kwargs: {"repaired": [], "path_repair_required": ["npm"]},
+    )
+
+    result = reconciliation.reconcile_runtime_artifacts(store, home_dir=tmp_path / "home")
+
+    assert result.healthy is False
+    assert result.errors == ("package:npm:path_inactive",)
