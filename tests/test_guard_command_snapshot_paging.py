@@ -4,24 +4,48 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TypedDict, TypeGuard
 
-from codex_plugin_scanner.guard.runtime import command_executors, local_request_snapshots
+from codex_plugin_scanner.guard.runtime import local_request_snapshots
+from codex_plugin_scanner.guard.store import GuardStore
 
 
-class PagingStore:
+class SnapshotPayload(TypedDict):
+    requests: list[dict[str, object]]
+    pendingComplete: bool
+    pendingCount: int
+
+
+def _is_snapshot_payload(payload: dict[str, object]) -> TypeGuard[SnapshotPayload]:
+    return (
+        isinstance(payload.get("requests"), list)
+        and isinstance(payload.get("pendingComplete"), bool)
+        and isinstance(payload.get("pendingCount"), int)
+    )
+
+
+def _snapshot(store: GuardStore) -> SnapshotPayload:
+    payload = local_request_snapshots.local_request_snapshot_payload(store)
+    assert _is_snapshot_payload(payload)
+    return payload
+
+
+class PagingStore(GuardStore):
     def __init__(self, guard_home: Path) -> None:
+        super().__init__(guard_home)
         self.guard_home = guard_home
-        self.payloads: dict[str, object] = {}
+        self.payloads: dict[str, dict[str, object] | list[object]] = {}
 
-    def get_sync_payload(self, key: str) -> object | None:
-        return self.payloads.get(key)
+    def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
+        return self.payloads.get(state_key)
 
-    def set_sync_payload(self, key: str, payload: object, now: str) -> None:
+    def set_sync_payload(self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str) -> None:
         del now
-        self.payloads[key] = payload
+        self.payloads[state_key] = dict(payload) if isinstance(payload, Mapping) else list(payload)
 
-    def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> object | None:
+    def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object] | None:
         del allow_primary
         return None
 
@@ -102,12 +126,12 @@ def test_local_request_snapshot_payload_stays_under_cloud_byte_budget(tmp_path: 
 
     store = HugePayloadStore(tmp_path / "guard-home")
     store.payloads["cloud_receipt_redaction_level"] = {"level": "none"}
-    payload = command_executors._local_request_snapshot_payload(store)
+    payload = _snapshot(store)
 
     payload_size = len(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
     assert payload_size <= local_request_snapshots.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
     assert payload["pendingComplete"] is False
-    assert payload["pendingCount"] == command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
+    assert payload["pendingCount"] == local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
     first_request = payload["requests"][0]
     assert isinstance(first_request, dict)
     request_payload = first_request["requestPayload"]
@@ -127,9 +151,9 @@ def test_local_request_snapshot_pending_is_cursorless(tmp_path: Path) -> None:
     store = PagingStore(tmp_path / "guard-home")
 
     # First snapshot: rows 0-124 (limit = 125).
-    first_payload = command_executors._local_request_snapshot_payload(store)
+    first_payload = _snapshot(store)
     assert first_payload["pendingComplete"] is False
-    assert first_payload["pendingCount"] == command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
+    assert first_payload["pendingCount"] == local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
     assert first_payload["requests"][0]["localRequestId"] == "req-pending-000"
     assert first_payload["requests"][-1]["localRequestId"] == "req-pending-124"
 
@@ -137,16 +161,16 @@ def test_local_request_snapshot_pending_is_cursorless(tmp_path: Path) -> None:
     # so every call returns the same first batch (rows 0-124).
     # Each canonical local-request lease covers
     # the newest pending rows without advancing a store cursor.
-    second_payload = command_executors._local_request_snapshot_payload(store)
+    second_payload = _snapshot(store)
     assert second_payload["pendingComplete"] is False
-    assert second_payload["pendingCount"] == command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
+    assert second_payload["pendingCount"] == local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
     assert second_payload["requests"][0]["localRequestId"] == "req-pending-000"
     assert second_payload["requests"][-1]["localRequestId"] == "req-pending-124"
 
     # Third snapshot confirms the invariant holds across repeated calls.
-    third_payload = command_executors._local_request_snapshot_payload(store)
+    third_payload = _snapshot(store)
     assert third_payload["pendingComplete"] is False
-    assert third_payload["pendingCount"] == command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
+    assert third_payload["pendingCount"] == local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
     assert third_payload["requests"][0]["localRequestId"] == "req-pending-000"
     assert third_payload["requests"][-1]["localRequestId"] == "req-pending-124"
 
@@ -179,13 +203,13 @@ def test_local_request_snapshot_includes_newest_pending_after_truncation(tmp_pat
     store = FreshRowStore(tmp_path / "guard-home")
 
     # Initial snapshot: truncated at 125, so rows 125-129 are hidden.
-    first_payload = command_executors._local_request_snapshot_payload(store)
-    assert len(first_payload["requests"]) == command_executors.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
+    first_payload = _snapshot(store)
+    assert len(first_payload["requests"]) == local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
     assert first_payload["requests"][-1]["localRequestId"] == "req-pending-124"
 
     # Insert a brand-new request whose created_at is later than all backlog rows.
     now_iso = "2026-07-04T12:00:00.000Z"
-    new_request = {
+    new_request: dict[str, object] = {
         "request_id": "req-pending-fresh",
         "status": "pending",
         "harness": "codex",
@@ -207,13 +231,13 @@ def test_local_request_snapshot_includes_newest_pending_after_truncation(tmp_pat
     # Second snapshot: the newly inserted request must be visible in the
     # returned batch because pending snapshots never store a cursor that
     # would hide it.
-    second_payload = command_executors._local_request_snapshot_payload(store)
+    second_payload = _snapshot(store)
     request_ids = {r["localRequestId"] for r in second_payload["requests"]}
     assert "req-pending-fresh" in request_ids
 
     # Third snapshot: the fresh request persists across repeated calls,
     # proving the cursorless invariant holds for injected rows too.
-    third_payload = command_executors._local_request_snapshot_payload(store)
+    third_payload = _snapshot(store)
     third_ids = {r["localRequestId"] for r in third_payload["requests"]}
     assert "req-pending-fresh" in third_ids
     # The persisted snapshot cursor key must NOT contain a pending cursor,

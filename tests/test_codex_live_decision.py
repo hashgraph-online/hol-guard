@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.codex_live_decision import complete_codex_live_decision
 from codex_plugin_scanner.guard.codex_resume import seed_request_resume_record
@@ -140,6 +143,58 @@ def test_allow_without_matching_exact_authority_stays_closed(tmp_path: Path) -> 
     resume = store.get_request_resume(request_id)
     assert resume is not None
     assert resume["status"] == "pending"
+
+
+def test_allow_claim_rolls_back_when_continuation_finalization_fails(tmp_path: Path) -> None:
+    request_id = "request-live-atomic-allow"
+    store, now = _seed_resolved_request(
+        tmp_path,
+        request_id=request_id,
+        action="allow",
+        with_exact_allow=True,
+    )
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            create trigger fail_continuation_effect_insert
+            before insert on guard_continuation_effects
+            begin
+              select raise(abort, 'injected finalization failure');
+            end
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="injected finalization failure"):
+        complete_codex_live_decision(store, request_id=request_id, now=now)
+
+    assert (
+        store.peek_local_once_approval(
+            harness="codex",
+            artifact_id=f"codex:project:{request_id}",
+            artifact_hash=f"hash-{request_id}",
+            workspace="/workspace/project",
+            publisher=None,
+            now=now,
+        )
+        is not None
+    )
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("drop trigger fail_continuation_effect_insert")
+
+    result = complete_codex_live_decision(store, request_id=request_id, now=now)
+
+    assert result["completed"] is True
+    assert (
+        store.peek_local_once_approval(
+            harness="codex",
+            artifact_id=f"codex:project:{request_id}",
+            artifact_hash=f"hash-{request_id}",
+            workspace="/workspace/project",
+            publisher=None,
+            now=now,
+        )
+        is None
+    )
 
 
 def test_block_records_terminal_continuation_without_allow_authority(tmp_path: Path) -> None:

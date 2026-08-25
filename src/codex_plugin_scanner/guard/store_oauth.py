@@ -223,7 +223,6 @@ class StoreOAuthConnectMixin:
         payload: dict[str, object] = {
             "issuer": normalized_issuer,
             "client_id": client_id,
-            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
             _OAUTH_LOCAL_CREDENTIALS_REF_KEY: self._oauth_local_credentials_ref,
             _OAUTH_LOCAL_CREDENTIALS_HASH_KEY: secret_hash,
         }
@@ -516,10 +515,6 @@ class StoreOAuthConnectMixin:
             _OAUTH_LOCAL_CREDENTIALS_REF_KEY: secret_ref,
             _OAUTH_LOCAL_CREDENTIALS_HASH_KEY: _secret_fingerprint(secret_json),
         }
-        thumbprint = _string_value(secret_payload.get("dpop_public_jwk_thumbprint"))
-        if thumbprint is None:
-            return None
-        recovered_payload["dpop_public_jwk_thumbprint"] = thumbprint
         if access_token := _string_value(secret_payload.get("access_token")):
             recovered_payload.update(oauth_binding_metadata(access_token, issuer=oauth_client.issuer))
         for key in ("workspace_id", "supply_chain_plan_id", "supply_chain_entitlement_expires_at"):

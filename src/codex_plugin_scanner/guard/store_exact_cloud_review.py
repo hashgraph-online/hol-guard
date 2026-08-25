@@ -309,7 +309,6 @@ def _oauth_binding_from_state(
         not isinstance(device_id, str)
         or not device_id.strip()
         or device_id != dpop_thumbprint
-        or oauth_state.get("dpop_public_jwk_thumbprint") != dpop_thumbprint
         or oauth_secret.get("dpop_public_jwk_thumbprint") != dpop_thumbprint
     ):
         return None

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 _OAUTH_BINDING_KEYS = (
-    "dpop_public_jwk_thumbprint",
     "grant_id",
     "machine_id",
     "device_id",

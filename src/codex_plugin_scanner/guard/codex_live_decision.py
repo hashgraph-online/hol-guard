@@ -34,6 +34,7 @@ def complete_codex_live_decision(
     if isinstance(previous, dict) and _terminal_resume_matches(previous, action=action):
         return {"action": action, "completed": True, "continuation": previous, "replayed": True}
 
+    approval_decision: Mapping[str, object] | None = None
     if action == "allow":
         lookup = store.resolve_policy_decision_lookup(
             str(request["harness"]),
@@ -45,13 +46,17 @@ def complete_codex_live_decision(
             consume_one_shot=False,
         )
         decision = lookup.get("decision")
-        if not _exact_request_authority(decision, request_id=request_id):
+        if not isinstance(decision, Mapping) or not _exact_request_authority(decision, request_id=request_id):
             return _failure("exact_approval_unavailable")
-        assert isinstance(decision, Mapping)
-        if not store.claim_approval_reuse_decision(decision, now=now):
-            return _failure("exact_approval_claim_failed")
+        approval_decision = {str(key): value for key, value in decision.items()}
 
-    completion = record_live_hook_completion(store, request_id=request_id, action=action, now=now)
+    completion = record_live_hook_completion(
+        store,
+        request_id=request_id,
+        action=action,
+        now=now,
+        approval_decision=approval_decision,
+    )
     expected_status = "resumed" if action == "allow" else "blocked_not_resumed"
     if not isinstance(completion, Mapping) or completion.get("continuationStatus") != expected_status:
         return _failure("continuation_not_recorded")

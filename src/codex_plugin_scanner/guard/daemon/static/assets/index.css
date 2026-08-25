@@ -1,4 +1,4 @@
-/*! tailwindcss v4.2.2 | MIT License | https://tailwindcss.com */
+/*! tailwindcss v4.3.1 | MIT License | https://tailwindcss.com */
 @layer properties {
   @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
     *, :before, :after, ::backdrop {
@@ -523,11 +523,11 @@
   }
 
   .inset-0 {
-    inset: calc(var(--spacing) * 0);
+    inset: 0;
   }
 
   .inset-x-0 {
-    inset-inline: calc(var(--spacing) * 0);
+    inset-inline: 0;
   }
 
   .inset-x-2 {
@@ -535,15 +535,7 @@
   }
 
   .inset-y-0 {
-    inset-block: calc(var(--spacing) * 0);
-  }
-
-  .start {
-    inset-inline-start: var(--spacing);
-  }
-
-  .end {
-    inset-inline-end: var(--spacing);
+    inset-block: 0;
   }
 
   .-top-6 {
@@ -551,7 +543,7 @@
   }
 
   .top-0 {
-    top: calc(var(--spacing) * 0);
+    top: 0;
   }
 
   .top-0\.5 {
@@ -587,7 +579,7 @@
   }
 
   .right-0 {
-    right: calc(var(--spacing) * 0);
+    right: 0;
   }
 
   .right-2 {
@@ -603,7 +595,7 @@
   }
 
   .bottom-0 {
-    bottom: calc(var(--spacing) * 0);
+    bottom: 0;
   }
 
   .bottom-2 {
@@ -635,7 +627,7 @@
   }
 
   .left-0 {
-    left: calc(var(--spacing) * 0);
+    left: 0;
   }
 
   .left-0\.5 {
@@ -757,7 +749,7 @@
   }
 
   .mt-1 {
-    margin-top: calc(var(--spacing) * 1);
+    margin-top: var(--spacing);
   }
 
   .mt-1\.5 {
@@ -809,7 +801,7 @@
   }
 
   .mr-1 {
-    margin-right: calc(var(--spacing) * 1);
+    margin-right: var(--spacing);
   }
 
   .mr-1\.5 {
@@ -825,7 +817,7 @@
   }
 
   .mb-1 {
-    margin-bottom: calc(var(--spacing) * 1);
+    margin-bottom: var(--spacing);
   }
 
   .mb-1\.5 {
@@ -861,7 +853,7 @@
   }
 
   .ml-1 {
-    margin-left: calc(var(--spacing) * 1);
+    margin-left: var(--spacing);
   }
 
   .ml-1\.5 {
@@ -986,7 +978,7 @@
   }
 
   .h-1 {
-    height: calc(var(--spacing) * 1);
+    height: var(--spacing);
   }
 
   .h-1\.5 {
@@ -1154,7 +1146,7 @@
   }
 
   .min-h-0 {
-    min-height: calc(var(--spacing) * 0);
+    min-height: 0;
   }
 
   .min-h-5 {
@@ -1242,7 +1234,7 @@
   }
 
   .w-1 {
-    width: calc(var(--spacing) * 1);
+    width: var(--spacing);
   }
 
   .w-1\.5 {
@@ -1458,7 +1450,7 @@
   }
 
   .min-w-0 {
-    min-width: calc(var(--spacing) * 0);
+    min-width: 0;
   }
 
   .min-w-5 {
@@ -1531,7 +1523,7 @@
   }
 
   .translate-x-0 {
-    --tw-translate-x: calc(var(--spacing) * 0);
+    --tw-translate-x: 0;
     translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
@@ -1546,7 +1538,7 @@
   }
 
   .translate-y-0 {
-    --tw-translate-y: calc(var(--spacing) * 0);
+    --tw-translate-y: 0;
     translate: var(--tw-translate-x) var(--tw-translate-y);
   }
 
@@ -1588,6 +1580,10 @@
 
   .resize {
     resize: both;
+  }
+
+  .\[scrollbar-gutter\:stable\] {
+    scrollbar-gutter: stable;
   }
 
   .list-disc {
@@ -1687,7 +1683,7 @@
   }
 
   .gap-0 {
-    gap: calc(var(--spacing) * 0);
+    gap: 0;
   }
 
   .gap-0\.5 {
@@ -1695,7 +1691,7 @@
   }
 
   .gap-1 {
-    gap: calc(var(--spacing) * 1);
+    gap: var(--spacing);
   }
 
   .gap-1\.5 {
@@ -1736,8 +1732,7 @@
 
   :where(.space-y-0 > :not(:last-child)) {
     --tw-space-y-reverse: 0;
-    margin-block-start: calc(calc(var(--spacing) * 0) * var(--tw-space-y-reverse));
-    margin-block-end: calc(calc(var(--spacing) * 0) * calc(1 - var(--tw-space-y-reverse)));
+    margin-block: 0;
   }
 
   :where(.space-y-0\.5 > :not(:last-child)) {
@@ -1748,8 +1743,8 @@
 
   :where(.space-y-1 > :not(:last-child)) {
     --tw-space-y-reverse: 0;
-    margin-block-start: calc(calc(var(--spacing) * 1) * var(--tw-space-y-reverse));
-    margin-block-end: calc(calc(var(--spacing) * 1) * calc(1 - var(--tw-space-y-reverse)));
+    margin-block-start: calc(var(--spacing) * var(--tw-space-y-reverse));
+    margin-block-end: calc(var(--spacing) * calc(1 - var(--tw-space-y-reverse)));
   }
 
   :where(.space-y-1\.5 > :not(:last-child)) {
@@ -1827,7 +1822,7 @@
   }
 
   .gap-y-1 {
-    row-gap: calc(var(--spacing) * 1);
+    row-gap: var(--spacing);
   }
 
   .gap-y-2 {
@@ -3940,7 +3935,7 @@
   }
 
   .p-0 {
-    padding: calc(var(--spacing) * 0);
+    padding: 0;
   }
 
   .p-0\.5 {
@@ -3948,7 +3943,7 @@
   }
 
   .p-1 {
-    padding: calc(var(--spacing) * 1);
+    padding: var(--spacing);
   }
 
   .p-1\.5 {
@@ -3980,7 +3975,7 @@
   }
 
   .px-1 {
-    padding-inline: calc(var(--spacing) * 1);
+    padding-inline: var(--spacing);
   }
 
   .px-1\.5 {
@@ -4020,7 +4015,7 @@
   }
 
   .py-1 {
-    padding-block: calc(var(--spacing) * 1);
+    padding-block: var(--spacing);
   }
 
   .py-1\.5 {
@@ -4076,7 +4071,7 @@
   }
 
   .pt-1 {
-    padding-top: calc(var(--spacing) * 1);
+    padding-top: var(--spacing);
   }
 
   .pt-2 {
@@ -4120,7 +4115,7 @@
   }
 
   .pb-1 {
-    padding-bottom: calc(var(--spacing) * 1);
+    padding-bottom: var(--spacing);
   }
 
   .pb-1\.5 {
@@ -5236,10 +5231,6 @@
     user-select: none;
   }
 
-  .\[scrollbar-gutter\:stable\] {
-    scrollbar-gutter: stable;
-  }
-
   .ring-inset {
     --tw-ring-inset: inset;
   }
@@ -5288,11 +5279,11 @@
   }
 
   .first\:pt-0:first-child {
-    padding-top: calc(var(--spacing) * 0);
+    padding-top: 0;
   }
 
   .last\:mb-0:last-child {
-    margin-bottom: calc(var(--spacing) * 0);
+    margin-bottom: 0;
   }
 
   .last\:border-0:last-child {
@@ -5306,7 +5297,7 @@
   }
 
   .last\:pb-0:last-child {
-    padding-bottom: calc(var(--spacing) * 0);
+    padding-bottom: 0;
   }
 
   .open\:bg-white:is([open], :popover-open, :open) {
@@ -6104,7 +6095,7 @@
     }
 
     .sm\:mt-0 {
-      margin-top: calc(var(--spacing) * 0);
+      margin-top: 0;
     }
 
     .sm\:block {
@@ -6334,11 +6325,11 @@
     }
 
     .sm\:pt-1 {
-      padding-top: calc(var(--spacing) * 1);
+      padding-top: var(--spacing);
     }
 
     .sm\:pl-0 {
-      padding-left: calc(var(--spacing) * 0);
+      padding-left: 0;
     }
 
     .sm\:pl-6 {
@@ -6490,7 +6481,7 @@
     }
 
     .md\:gap-1 {
-      gap: calc(var(--spacing) * 1);
+      gap: var(--spacing);
     }
 
     .md\:gap-x-2 {
@@ -6504,7 +6495,7 @@
     }
 
     .lg\:top-0 {
-      top: calc(var(--spacing) * 0);
+      top: 0;
     }
 
     .lg\:top-4 {

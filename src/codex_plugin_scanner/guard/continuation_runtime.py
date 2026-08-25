@@ -246,6 +246,7 @@ def record_live_hook_completion(
     request_id: str,
     action: str,
     now: str,
+    approval_decision: Mapping[str, object] | None = None,
 ) -> dict[str, object] | None:
     """Record proof that the original browser-waiting Codex hook consumed a decision."""
 
@@ -269,12 +270,22 @@ def record_live_hook_completion(
         result = _result(offer, "resumed", "live_hook_completed", now)
     else:
         result = _result(offer, "blocked_not_resumed", "blocked_not_resumed", now)
-    _persist_attempt(store, request_id=request_id, action=normalized_action, offer=offer, result=result, now=now)
+    persisted = _finalize_persist_attempt(
+        store,
+        request_id=request_id,
+        action=normalized_action,
+        offer=offer,
+        result=result,
+        now=now,
+        approval_decision=approval_decision,
+    )
+    if not persisted:
+        return None
     authoritative = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
     return _payload(offer, authoritative or result, replayed=authoritative is not None)
 
 
-def _persist_attempt(
+def _finalize_persist_attempt(
     store: GuardStore,
     *,
     request_id: str,
@@ -283,7 +294,8 @@ def _persist_attempt(
     result: ContinuationResult,
     now: str,
     claim_id: str | None = None,
-) -> None:
+    approval_decision: Mapping[str, object] | None = None,
+) -> bool:
     operation = store.get_guard_operation_for_approval_request(request_id)
     operation_id = _text(operation.get("operation_id")) if isinstance(operation, Mapping) else None
     raw_session_id = _operation_session_id(operation)
@@ -303,7 +315,7 @@ def _persist_attempt(
         result=result,
     )
     operation_update = _operation_update_payload(operation, result=result, action=action, now=now)
-    _ = store.finalize_continuation_attempt(
+    return store.finalize_continuation_attempt(
         request_id=request_id,
         offer_hash=_offer_hash(offer),
         action=action,
@@ -347,6 +359,28 @@ def _persist_attempt(
         operation_update=operation_update,
         events=events,
         now=now,
+        approval_decision=approval_decision,
+    )
+
+
+def _persist_attempt(
+    store: GuardStore,
+    *,
+    request_id: str,
+    action: ContinuationAction,
+    offer: ContinuationOffer,
+    result: ContinuationResult,
+    now: str,
+    claim_id: str | None = None,
+) -> None:
+    _ = _finalize_persist_attempt(
+        store,
+        request_id=request_id,
+        action=action,
+        offer=offer,
+        result=result,
+        now=now,
+        claim_id=claim_id,
     )
 
 

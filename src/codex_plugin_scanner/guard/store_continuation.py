@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Mapping
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_policy import _approval_authority_revision
 from .store_review_event_outbox_writes import append_request_snapshot_event
 
 
@@ -147,9 +149,44 @@ class StoreContinuationMixin:
         operation_update: dict[str, object] | None,
         events: list[tuple[str, dict[str, object]]],
         now: str,
+        approval_decision: Mapping[str, object] | None = None,
     ) -> bool:
+        """Finalize continuation evidence and optionally consume exact allow authority atomically."""
+
         with self._connect() as connection:
             connection.execute("begin immediate")
+            if approval_decision is not None:
+                approval_id = approval_decision.get("approval_id")
+                authority_revision = approval_decision.get("_approval_authority_revision")
+                if (
+                    not isinstance(approval_id, str)
+                    or not approval_id
+                    or not isinstance(authority_revision, int)
+                    or isinstance(authority_revision, bool)
+                    or authority_revision < 0
+                    or approval_decision.get("action") != "allow"
+                    or self.approval_reuse_claim_disposition(approval_decision) != "consumed"
+                ):
+                    connection.rollback()
+                    return False
+                integrity_key, integrity_key_id = self._policy_integrity_secret_material(create=False)
+                if integrity_key is None or integrity_key_id is None:
+                    connection.rollback()
+                    return False
+                if _approval_authority_revision(connection) != authority_revision:
+                    connection.rollback()
+                    return False
+                claimed = self._claim_local_once_approval_by_id_locked(
+                    connection,
+                    approval_id=approval_id,
+                    now=now,
+                    expected_decision=approval_decision,
+                    integrity_key=integrity_key,
+                    integrity_key_id=integrity_key_id,
+                )
+                if claimed is None:
+                    connection.rollback()
+                    return False
             claim = connection.execute(
                 """select state, claim_id, evidence_id from guard_continuation_claims
                    where request_id = ? and offer_hash = ? and action = ?""",
@@ -157,12 +194,14 @@ class StoreContinuationMixin:
             ).fetchone()
             if claim_id is not None:
                 if claim is not None and str(claim["state"]) == "completed":
+                    connection.rollback()
                     return False
                 if claim is None or str(claim["state"]) != "claimed" or str(claim["claim_id"]) != claim_id:
                     raise RuntimeError("continuation claim ownership changed before finalization")
             if claim is not None and str(claim["state"]) == "completed":
                 stored_evidence_id = claim["evidence_id"]
                 if stored_evidence_id is not None and str(stored_evidence_id) != evidence_id:
+                    connection.rollback()
                     return False
             persist_request_resume_seed(
                 connection,
