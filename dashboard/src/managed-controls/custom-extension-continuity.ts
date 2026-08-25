@@ -2,7 +2,12 @@ export type CustomExtensionContinuityState =
   | 'local-only'
   | 'identity-matched'
   | 'portable'
-  | 'incompatible';
+  | 'incompatible'
+  | 'pending-observation'
+  | 'changed-identity'
+  | 'locally-overridden'
+  | 'removed'
+  | 'stale';
 
 export interface CustomExtensionContinuityView {
   state: CustomExtensionContinuityState;
@@ -51,6 +56,46 @@ export function customExtensionContinuityView(
         title: 'Needs a compatible definition',
         description:
           'This device cannot apply the shared custom protection safely.',
+        canApplyAcrossDevices: false,
+        privacyDisclosure,
+      };
+    case 'pending-observation':
+      return {
+        state,
+        title: 'Waiting for this device',
+        description: 'Cloud settings stay pending until Guard observes the same extension identity locally.',
+        canApplyAcrossDevices: false,
+        privacyDisclosure,
+      };
+    case 'changed-identity':
+      return {
+        state,
+        title: 'Identity changed',
+        description: 'Guard refused the Cloud settings because this device observed a different identity.',
+        canApplyAcrossDevices: false,
+        privacyDisclosure,
+      };
+    case 'locally-overridden':
+      return {
+        state,
+        title: 'Changed on this device',
+        description: 'Guard kept this device\'s local setting until a newer Cloud revision is available.',
+        canApplyAcrossDevices: false,
+        privacyDisclosure,
+      };
+    case 'removed':
+      return {
+        state,
+        title: 'Removed on this device',
+        description: 'The local setting was removed. Guard did not delete the script, executable, or MCP configuration.',
+        canApplyAcrossDevices: false,
+        privacyDisclosure,
+      };
+    case 'stale':
+      return {
+        state,
+        title: 'Cloud observation is stale',
+        description: 'Guard kept the last-known-good local setting and did not apply expired Cloud state.',
         canApplyAcrossDevices: false,
         privacyDisclosure,
       };

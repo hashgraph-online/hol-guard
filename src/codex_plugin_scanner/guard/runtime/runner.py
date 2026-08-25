@@ -43,8 +43,9 @@ from ..cloud_exceptions import (
     cloud_exception_to_dict,
     dedupe_cloud_exceptions,
 )
-from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig, load_guard_config
+from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig
 from ..edge_events import build_runtime_session_event
+from ..managed_controls.feature_flags import ManagedControlsFeatureFlags
 from ..managed_controls_policy_bundle import parsed_managed_controls_from_validated_policy_bundle
 from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
@@ -107,6 +108,14 @@ from .decisions import (
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 from .extension_catalog_sync import MANAGED_CONTROLS_RUNTIME_CAPABILITIES
 from .extension_control_authority import ExtensionControlAuthorityView
+from .local_runtime_fallbacks import best_effort_access_token, local_receipt_redaction_level
+from .managed_controls_sync import (
+    apply_custom_extension_continuity_from_sync,
+    extension_authority_is_protected,
+)
+from .managed_controls_sync import (
+    managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
+)
 from .prompt_injection import detect_prompt_injection_requests
 from .signals import RiskSignalV2
 from .supply_chain_bundle import (
@@ -1077,20 +1086,7 @@ def _iter_hint_occurrences(text: str, hint: str) -> list[tuple[int, int]]:
 
 
 def _resolve_hermes_guard_access_token(store: GuardStore) -> str | None:
-    """Best-effort retrieval of the current Guard OAuth access token for Hermes runtime.
-
-    Returns ``None`` if credentials are not configured or the token cannot be resolved.
-    Hermes's ``guard_runtime_policy.py`` defaults to ``fail_open=True`` when no token
-    is available, so this is non-fatal.
-    """
-    try:
-        auth_context = _resolve_guard_sync_auth_context(store)
-    except Exception:
-        return None
-    token = auth_context.get("access_token")
-    if isinstance(token, str) and token:
-        return token
-    return None
+    return best_effort_access_token(lambda: _resolve_guard_sync_auth_context(store))
 
 
 def guard_run(
@@ -2512,7 +2508,9 @@ def _managed_controls_negotiated_capabilities(
             raw = sync_payload.get("negotiatedManagedControlsCapabilities")
     if not isinstance(raw, list) or any(not isinstance(item, str) for item in raw):
         return frozenset()
-    return frozenset(cast(list[str], raw)).intersection(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
+    flags = ManagedControlsFeatureFlags.from_environment()
+    enabled = frozenset(flags.runtime_capabilities(protected_authority=extension_authority_is_protected(store)))
+    return frozenset(cast(list[str], raw)).intersection(MANAGED_CONTROLS_RUNTIME_CAPABILITIES).intersection(enabled)
 
 
 def _managed_controls_lkg_capabilities(
@@ -2521,7 +2519,13 @@ def _managed_controls_lkg_capabilities(
 ) -> frozenset[str]:
     """Use cached negotiation only for the exact authenticated LKG activation."""
 
-    return store.managed_controls_lkg_capabilities(policy_bundle).intersection(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
+    flags = ManagedControlsFeatureFlags.from_environment()
+    enabled = frozenset(flags.runtime_capabilities(protected_authority=extension_authority_is_protected(store)))
+    return (
+        store.managed_controls_lkg_capabilities(policy_bundle)
+        .intersection(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
+        .intersection(enabled)
+    )
 
 
 def _build_canonical_policy_bundle_decisions(
@@ -2987,10 +2991,13 @@ def sync_receipts(
                 policy_bundle_sync_payload,
             )
             try:
-                candidate_managed_controls = parsed_managed_controls_from_validated_policy_bundle(
+                parsed_managed_controls = parsed_managed_controls_from_validated_policy_bundle(
                     validated_policy_bundle,
                     registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
                     negotiated_capabilities=candidate_managed_capabilities,
+                )
+                candidate_managed_controls = (
+                    parsed_managed_controls if parsed_managed_controls.has_extension_semantics else None
                 )
             except ManagedControlsPolicyError as error:
                 validated_policy_bundle = None
@@ -3156,10 +3163,13 @@ def sync_receipts(
                 else:
                     effective_managed_capabilities = _managed_controls_lkg_capabilities(store, activation_bundle)
                     try:
-                        effective_managed_controls = parsed_managed_controls_from_validated_policy_bundle(
+                        parsed_managed_controls = parsed_managed_controls_from_validated_policy_bundle(
                             activation_bundle,
                             registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
                             negotiated_capabilities=effective_managed_capabilities,
+                        )
+                        effective_managed_controls = (
+                            parsed_managed_controls if parsed_managed_controls.has_extension_semantics else None
                         )
                     except ManagedControlsPolicyError as error:
                         activation_last_error = _policy_bundle_rejection_payload(error.code)
@@ -3200,9 +3210,6 @@ def sync_receipts(
             policy_bundle=effective_policy_bundle,
             policy_bundle_ack=policy_bundle_ack,
         )
-        checkpoint = _policy_bundle_downgrade_reference(store, effective_policy_bundle)
-        if validated_policy_bundle is not None:
-            checkpoint = _policy_bundle_acceptance_checkpoint(validated_policy_bundle)
         try:
             activated = store.apply_policy_bundle_authority(
                 list(remote_decisions),
@@ -3214,11 +3221,7 @@ def sync_receipts(
                 ),
                 cloud_exceptions=cloud_exception_items,
                 policy_bundle_ack=policy_bundle_ack,
-                policy_bundle_checkpoint=(
-                    _policy_bundle_acceptance_checkpoint(checkpoint)
-                    if isinstance(checkpoint, dict)
-                    else _policy_bundle_acceptance_checkpoint(effective_policy_bundle)
-                ),
+                policy_bundle_checkpoint=_policy_bundle_acceptance_checkpoint(effective_policy_bundle),
                 update_last_good=update_last_good,
                 policy_bundle_last_error=activation_last_error,
                 managed_controls_policy=effective_managed_controls,
@@ -3236,6 +3239,7 @@ def sync_receipts(
                 )
             else:
                 remote_policies_stored = len(remote_decisions)
+                apply_custom_extension_continuity_from_sync(store, effective_policy_bundle, now=now)
                 if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
                     canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
                     if isinstance(canonical_last_good, dict) and canonical_last_good.get(
@@ -5956,18 +5960,8 @@ def _stored_cloud_receipt_redaction_level(store: GuardStore) -> str | None:
     return level if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS else None
 
 
-def _local_receipt_redaction_level(store: GuardStore) -> str:
-    try:
-        config = load_guard_config(store.guard_home)
-        if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-            return config.receipt_redaction_level
-    except Exception:
-        pass
-    return "full"
-
-
 def _persist_cloud_receipt_redaction_level(store: GuardStore, *, level: str, synced_at: str) -> None:
-    previous_level = _stored_cloud_receipt_redaction_level(store) or _local_receipt_redaction_level(store)
+    previous_level = _stored_cloud_receipt_redaction_level(store) or local_receipt_redaction_level(store.guard_home)
     if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank(previous_level):
         store.set_sync_payload(
             "receipt_sync_cursor",
@@ -5998,7 +5992,7 @@ def _reset_cloud_receipt_redaction_authority(store: GuardStore, *, synced_at: st
     """Reset relaxation bookkeeping when no signed override is effective."""
 
     previous_level = _stored_cloud_receipt_redaction_level(store)
-    local_level = _local_receipt_redaction_level(store)
+    local_level = local_receipt_redaction_level(store.guard_home)
     store.set_sync_payload(
         "cloud_receipt_redaction_level",
         {"level": local_level, "updated_at": synced_at},
@@ -6075,7 +6069,7 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
         level = policy_bundle.get("receiptRedactionLevel")
         if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
             return level
-    return _local_receipt_redaction_level(store)
+    return local_receipt_redaction_level(store.guard_home)
 
 
 def _cloud_sync_command_display_part(value: str) -> str:
@@ -6248,6 +6242,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     payload["yamlImport"] = yaml_import
     if canonical_policy_enforcement:
         payload["canonicalPolicyEnforcement"] = True
+    payload.update(_managed_controls_runtime_sync_posture(store, generated_at=updated_at))
     return payload
 
 

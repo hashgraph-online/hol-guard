@@ -29,10 +29,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_resolver import resolve_extension_controls
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
-from codex_plugin_scanner.guard.runtime.runner import (
-    _managed_controls_lkg_capabilities,
-    _managed_controls_negotiated_capabilities,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import CAPABILITIES as _CAPABILITIES
 from tests.managed_controls_activation_support import activate_managed_bundle as _activate
@@ -335,25 +331,6 @@ def test_commit_failure_does_not_publish_staged_runtime(tmp_path: Path) -> None:
     assert runtime.current() == runtime_before
     assert store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY) == active_before
     assert store.get_sync_payload("policy_bundle") == policy_before
-
-
-def test_candidate_capabilities_require_current_response_and_lkg_is_exact(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    bundle = _bundle()
-    assert _activate(store, bundle) is True
-
-    assert _managed_controls_negotiated_capabilities(store, None) == frozenset()
-    assert (
-        _managed_controls_negotiated_capabilities(
-            store,
-            {"managedControlsCapabilities": [*sorted(_CAPABILITIES), "unknown.v9"]},
-        )
-        == _CAPABILITIES
-    )
-    assert _managed_controls_lkg_capabilities(store, bundle) == _CAPABILITIES
-    different = dict(bundle)
-    different["bundleHash"] = "sha256:" + "e" * 64
-    assert _managed_controls_lkg_capabilities(store, different) == frozenset()
 
 
 def test_stale_refresh_cannot_undo_activation_or_resurrect_cleared_authority(

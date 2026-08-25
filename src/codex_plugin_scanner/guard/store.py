@@ -24,6 +24,7 @@ from .store_command_activity_maintenance import StoreCommandActivityMaintenanceM
 from .store_command_activity_privacy import StoreCommandActivityPrivacyMixin
 from .store_command_shadow import StoreCommandShadowMixin
 from .store_connection_schema import StoreConnectionSchemaMixin
+from .store_custom_extension_continuity import StoreCustomExtensionContinuityMixin
 from .store_event_receipts import StoreEventReceiptsMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
 from .store_managed_controls_status import StoreManagedControlsStatusMixin
@@ -62,6 +63,7 @@ class GuardStore(
     StoreConnectionSchemaMixin,
     StoreManagedControlsStatusMixin,
     StoreExtensionControlAuthorityMixin,
+    StoreCustomExtensionContinuityMixin,
     StoreLocalCliMixin,
     StoreLocalMcpMixin,
     StoreCommandActivityMixin,
