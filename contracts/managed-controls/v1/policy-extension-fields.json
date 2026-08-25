@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "guard.managed-controls.policy-extension-fields.v1",
+  "capabilities": [
+    "extension-control-layer.v1",
+    "managed-controls-atomic-apply.v1",
+    "policy-extension-targets.v1"
+  ],
+  "documentField": {
+    "field": "x-hol-extension-controls",
+    "schemaVersion": "guard.extension-controls.v1",
+    "authorityModes": [
+      "personal-shared",
+      "workspace-shared",
+      "managed-restrictive"
+    ],
+    "targetKinds": [
+      "extension",
+      "permission"
+    ],
+    "states": [
+      "enabled",
+      "disabled"
+    ],
+    "example": {
+      "schemaVersion": "guard.extension-controls.v1",
+      "authorityMode": "managed-restrictive",
+      "controls": [
+        {
+          "targetKind": "permission",
+          "targetId": "command.git.permission.force-push",
+          "state": "disabled"
+        }
+      ]
+    }
+  },
+  "ruleField": {
+    "field": "x-hol-extension-targets",
+    "schemaVersion": "guard.policy-extension-targets.v1",
+    "example": {
+      "schemaVersion": "guard.policy-extension-targets.v1",
+      "extensionIds": [
+        "command.git"
+      ],
+      "permissionIds": [
+        "command.git.permission.force-push"
+      ]
+    }
+  },
+  "invariants": {
+    "canonicalLocalRegistryIsAuthoritative": true,
+    "legacyFallbackMayNotDropSemantics": true,
+    "managedRestrictiveMayEnable": false,
+    "policyAndExtensionProjectionMustApplyAtomically": true,
+    "rawDetectorMatchersAreNotSynchronized": true
+  }
+}

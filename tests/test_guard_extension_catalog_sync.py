@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator, FormatChecker
 
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -14,12 +16,24 @@ from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
     MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
     build_extension_catalog_wire,
     build_managed_controls_runtime_posture,
+    canonical_extension_catalog_json,
+    catalog_digest_for_extensions,
+    validate_extension_catalog_wire,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+ROOT = Path(__file__).resolve().parents[1]
+CONTRACT_ROOT = ROOT / "contracts" / "managed-controls" / "v1"
+
+
+def _shared_catalog_fixture() -> dict[str, object]:
+    payload = json.loads((CONTRACT_ROOT / "extension-catalog.fixtures.json").read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
 
 
 @dataclass(frozen=True)
@@ -192,26 +206,149 @@ def test_runtime_posture_rejects_invalid_evidence(
         )
 
 
-def test_production_runtime_sync_path_defaults_off_without_touching_local_authority(monkeypatch) -> None:
+def test_shared_catalog_fixture_is_schema_valid_and_canonically_executable() -> None:
+    fixtures = _shared_catalog_fixture()
+    schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
+    valid = fixtures["valid"]
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(valid)
+    parsed = validate_extension_catalog_wire(valid)
+    canonical = json.dumps(
+        parsed["extensions"],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    assert hashlib.sha256(canonical).hexdigest() == parsed["catalogDigest"]
+
+
+def test_shared_catalog_unicode_uses_utf8_canonical_bytes() -> None:
+    fixtures = _shared_catalog_fixture()
+    valid = deepcopy(fixtures["valid"])
+    assert isinstance(valid, dict)
+    extensions = valid["extensions"]
+    assert isinstance(extensions, list)
+    extension = extensions[0]
+    assert isinstance(extension, dict)
+    extension["name"] = "Git protection — café"
+    valid["catalogDigest"] = catalog_digest_for_extensions(extensions)
+    parsed = validate_extension_catalog_wire(valid)
+    assert "café" in json.dumps(parsed, ensure_ascii=False)
+
+
+def test_shared_cross_language_canonicalization_vector_is_exact() -> None:
+    vector = _shared_catalog_fixture()["canonicalizationVectors"][0]
+    extensions = vector["extensions"]
+    assert canonical_extension_catalog_json(extensions) == vector["canonicalJson"]
+    assert catalog_digest_for_extensions(extensions) == vector["catalogDigest"]
+
+
+def test_shared_invalid_generated_at_mutation_fails() -> None:
+    fixture = _shared_catalog_fixture()
+    mutation = fixture["invalidMutations"][0]
+    payload = deepcopy(fixture["valid"])
+    payload[mutation["field"]] = mutation["value"]
+    with pytest.raises(ValueError, match="generatedAt"):
+        validate_extension_catalog_wire(payload)
+
+
+@pytest.mark.parametrize(
+    "case",
+    ("duplicateExtension", "duplicatePermission", "unknownField", "oversized", "privateField"),
+)
+def test_shared_invalid_catalog_cases_fail_behaviorally(case: str) -> None:
+    fixtures = _shared_catalog_fixture()
+    invalid = fixtures["invalid"]
+    assert isinstance(invalid, dict)
+    assert case in invalid
+    payload = deepcopy(fixtures["valid"])
+    assert isinstance(payload, dict)
+    extensions = payload["extensions"]
+    assert isinstance(extensions, list)
+    extension = extensions[0]
+    assert isinstance(extension, dict)
+    permissions = extension["permissions"]
+    assert isinstance(permissions, list)
+    if case == "duplicateExtension":
+        extensions.append(deepcopy(extension))
+        payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
+    elif case == "duplicatePermission":
+        permissions.append(deepcopy(permissions[0]))
+        payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
+    elif case == "unknownField":
+        payload["unexpected"] = True
+    elif case == "oversized":
+        payload["unexpected"] = "x" * 1_000_001
+    else:
+        payload["sourcePath"] = "/private/workspace"
+    with pytest.raises(ValueError):
+        validate_extension_catalog_wire(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "oversized_id"),
+    (
+        ("extension", "command." + ("a" * 300)),
+        ("permission", "command.git.permission." + ("a" * 300)),
+    ),
+)
+def test_catalog_validator_rejects_ids_over_shared_schema_limit(
+    field: str,
+    oversized_id: str,
+) -> None:
+    payload = deepcopy(_shared_catalog_fixture()["valid"])
+    extensions = payload["extensions"]
+    extension = extensions[0]
+    if field == "extension":
+        extension["id"] = oversized_id
+        extension["permissions"][0]["id"] = f"{oversized_id}.permission.push"
+    else:
+        extension["permissions"][0]["id"] = oversized_id
+    payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
+    with pytest.raises(ValueError, match="identity"):
+        validate_extension_catalog_wire(payload)
+
+
+def test_production_runtime_session_defaults_to_legacy_without_touching_local_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
-        "GUARD_EXTENSION_FIRST_CONTROLS_UI",
     ):
         monkeypatch.delenv(name, raising=False)
     store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
-    assert guard_runner_module._managed_controls_runtime_sync_posture(
-        store,
-        generated_at="2026-08-25T16:00:00Z",
-    ) == {}
+    assert (
+        guard_runner_module._managed_controls_runtime_sync_posture(
+            store,
+            generated_at="2026-08-25T00:00:00Z",
+        )
+        == {}
+    )
     assert store.reads == 0
 
 
-def test_real_cloud_runtime_payload_advertises_only_enabled_protected_capabilities(
+def test_cloud_runtime_session_payload_carries_catalog_posture_on_real_sync_path(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    monkeypatch,
+) -> None:
+    monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "true")
+    payload = guard_runner_module._cloud_runtime_session_payload(
+        GuardStore(tmp_path / "guard-home"),
+        {
+            "session_id": "runtime-session-1",
+            "updated_at": "2026-08-25T00:00:00Z",
+            "workspace": "local-machine",
+        },
+    )
+    assert payload["extensionCatalogDigest"]
+    assert payload["extensionControlSchemaVersions"] == ["guard.extension-controls.v1"]
+    assert payload["managedControlsCapabilities"] == ["extension-catalog.v1"]
+
+
+def test_production_runtime_session_advertises_only_enabled_protected_capabilities(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -220,47 +357,220 @@ def test_real_cloud_runtime_payload_advertises_only_enabled_protected_capabiliti
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
     ):
         monkeypatch.setenv(name, "true")
-    payload = guard_runner_module._cloud_runtime_session_payload(
-        GuardStore(tmp_path / "guard-home"),
-        {
-            "session_id": "runtime-session-1",
-            "updated_at": "2026-08-25T16:00:00Z",
-            "workspace": "local-machine",
-        },
+    store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
+    posture = guard_runner_module._managed_controls_runtime_sync_posture(
+        store,
+        generated_at="2026-08-25T00:00:00Z",
     )
-    assert payload["extensionCatalogDigest"]
-    assert payload["managedControlsCapabilities"] == ["extension-catalog.v1"]
+    assert posture["extensionAuthorityRevision"] == 7
+    assert posture["effectiveProjectionDigest"] is not None
+    assert posture["managedControlsCapabilities"] == list(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
+    assert store.reads == 1
 
 
-def test_each_runtime_flag_removes_its_capability_without_touching_local_authority(monkeypatch) -> None:
-    names = (
+@pytest.mark.parametrize(
+    ("disabled_flag", "missing_capabilities"),
+    (
+        (
+            "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
+            {
+                "extension-control-layer.v1",
+                "policy-extension-targets.v1",
+                "managed-controls-atomic-apply.v1",
+            },
+        ),
+        (
+            "GUARD_POLICY_EXTENSION_TARGETS_V1",
+            {"policy-extension-targets.v1", "managed-controls-atomic-apply.v1"},
+        ),
+        ("GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1", {"managed-controls-atomic-apply.v1"}),
+    ),
+)
+def test_production_runtime_session_downgrades_each_capability_independently(
+    monkeypatch: pytest.MonkeyPatch,
+    disabled_flag: str,
+    missing_capabilities: set[str],
+) -> None:
+    for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
-    )
-    for name in names:
+    ):
         monkeypatch.setenv(name, "true")
+    monkeypatch.setenv(disabled_flag, "false")
     store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
-    full = guard_runner_module._managed_controls_runtime_sync_posture(
+    posture = guard_runner_module._managed_controls_runtime_sync_posture(
         store,
-        generated_at="2026-08-25T16:00:00Z",
+        generated_at="2026-08-25T00:00:00Z",
     )
-    assert set(full["managedControlsCapabilities"]) == set(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
-    for disabled in names:
-        monkeypatch.setenv(disabled, "false")
-        posture = guard_runner_module._managed_controls_runtime_sync_posture(
-            store,
-            generated_at="2026-08-25T16:00:00Z",
+    advertised = set(posture["managedControlsCapabilities"])
+    assert advertised == set(MANAGED_CONTROLS_RUNTIME_CAPABILITIES) - missing_capabilities
+
+
+def test_production_runtime_session_downgrades_degraded_authority_to_catalog_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "GUARD_EXTENSION_CATALOG_SYNC_V1",
+        "GUARD_POLICY_EXTENSION_TARGETS_V1",
+        "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
+        "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
+    ):
+        monkeypatch.setenv(name, "true")
+    store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.TAMPERED, 7, "a" * 64, ()))
+    posture = guard_runner_module._managed_controls_runtime_sync_posture(
+        store,
+        generated_at="2026-08-25T00:00:00Z",
+    )
+    assert posture["extensionAuthorityRevision"] is None
+    assert posture["effectiveProjectionDigest"] is None
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v1"]
+
+
+def _catalog_handshake(digest: str, *, known: bool) -> dict[str, object]:
+    return {
+        "extensionCatalogSync": {
+            "catalogDigest": digest,
+            "catalogKnown": known,
+            "uploadRequired": not known,
+            "uploadPath": "/api/guard/runtime/extension-catalog/sync",
+        }
+    }
+
+
+def test_runtime_catalog_handshake_skips_known_catalog_without_upload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = build_extension_catalog_wire(
+        registry(),
+        guard_version="3.0.0a1",
+        generated_at="2026-08-25T00:00:00Z",
+    )
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_urlopen_json_with_timeout_retry",
+        lambda **_kwargs: pytest.fail("known catalog must not be uploaded"),
+    )
+    summary = guard_runner_module._sync_extension_catalog_from_runtime_handshake(
+        auth_context={},
+        runtime_sync_url="https://hol.org/api/guard/runtime/sessions/sync",
+        runtime_response=_catalog_handshake(catalog["catalogDigest"], known=True),
+        session_payload={"extensionCatalogDigest": catalog["catalogDigest"]},
+    )
+    assert summary["extension_catalog_sync_status"] == "already_known"
+
+
+def test_runtime_catalog_handshake_uploads_unknown_builtin_catalog_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog = build_extension_catalog_wire(
+        registry(),
+        guard_version="3.0.0a1",
+        generated_at="2026-08-25T00:00:00Z",
+    )
+    builtin = guard_runner_module.build_builtin_extension_catalog_wire(
+        guard_version=guard_runner_module.__version__,
+        generated_at="2026-08-25T00:00:00Z",
+    )
+    requests: list[dict[str, object]] = []
+
+    def fake_request(
+        _auth_context: object,
+        *,
+        request_url: str,
+        method: str,
+        data: bytes,
+        extra_headers: object,
+    ) -> dict[str, object]:
+        request = {"url": request_url, "method": method, "data": data, "headers": extra_headers}
+        requests.append(request)
+        return request
+
+    monkeypatch.setattr(guard_runner_module, "_guard_sync_request", fake_request)
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_urlopen_json_with_timeout_retry",
+        lambda **_kwargs: {
+            "schemaVersion": "guard.extension-catalog-sync.v1",
+            "accepted": True,
+            "catalogDigest": builtin["catalogDigest"],
+            "alreadyKnown": False,
+            "deviceCount": 1,
+            "firstSeenAt": "2026-08-25T00:00:00Z",
+            "lastSeenAt": "2026-08-25T00:00:00Z",
+        },
+    )
+    summary = guard_runner_module._sync_extension_catalog_from_runtime_handshake(
+        auth_context={},
+        runtime_sync_url="https://hol.org/api/guard/runtime/sessions/sync?tenant=guard",
+        runtime_response=_catalog_handshake(builtin["catalogDigest"], known=False),
+        session_payload={
+            "extensionCatalogDigest": builtin["catalogDigest"],
+            "updatedAt": "2026-08-25T00:00:00Z",
+        },
+    )
+    assert catalog["catalogDigest"] != builtin["catalogDigest"]
+    assert summary["extension_catalog_sync_status"] == "uploaded"
+    assert len(requests) == 1
+    assert requests[0]["url"] == "https://hol.org/api/guard/runtime/extension-catalog/sync?tenant=guard"
+    body = json.loads(requests[0]["data"])
+    assert body == {"idempotencyKey": f"catalog:{builtin['catalogDigest']}", "catalog": builtin}
+
+
+@pytest.mark.parametrize(
+    "handshake",
+    (
+        {
+            "catalogDigest": "a" * 64,
+            "catalogKnown": False,
+            "uploadRequired": False,
+            "uploadPath": "/api/guard/runtime/extension-catalog/sync",
+        },
+        {
+            "catalogDigest": "b" * 64,
+            "catalogKnown": True,
+            "uploadRequired": False,
+            "uploadPath": "/api/guard/runtime/extension-catalog/sync",
+        },
+        {"catalogDigest": "a" * 64, "catalogKnown": False, "uploadRequired": True, "uploadPath": "/attacker/upload"},
+    ),
+)
+def test_runtime_catalog_handshake_rejects_malformed_or_unbound_signal(handshake: dict[str, object]) -> None:
+    with pytest.raises(RuntimeError, match="handshake"):
+        guard_runner_module._sync_extension_catalog_from_runtime_handshake(
+            auth_context={},
+            runtime_sync_url="https://hol.org/api/guard/runtime/sessions/sync",
+            runtime_response={"extensionCatalogSync": handshake},
+            session_payload={"extensionCatalogDigest": "a" * 64},
         )
-        capabilities = set(posture.get("managedControlsCapabilities", []))
-        if disabled == "GUARD_EXTENSION_CATALOG_SYNC_V1":
-            assert posture == {}
-        elif disabled == "GUARD_MANAGED_EXTENSION_CONTROLS_V1":
-            assert capabilities == {"extension-catalog.v1"}
-        elif disabled == "GUARD_POLICY_EXTENSION_TARGETS_V1":
-            assert "policy-extension-targets.v1" not in capabilities
-            assert "managed-controls-atomic-apply.v1" not in capabilities
-        else:
-            assert "managed-controls-atomic-apply.v1" not in capabilities
-        monkeypatch.setenv(disabled, "true")
+
+
+def test_runtime_catalog_handshake_downgrades_when_cloud_has_no_signal() -> None:
+    summary = guard_runner_module._sync_extension_catalog_from_runtime_handshake(
+        auth_context={},
+        runtime_sync_url="https://hol.org/api/guard/runtime/sessions/sync",
+        runtime_response={},
+        session_payload={"extensionCatalogDigest": "a" * 64},
+    )
+    assert summary == {
+        "managedControlsCapabilities": [],
+        "extension_catalog_sync_status": "downgraded",
+        "extension_catalog_sync_reason": "catalog_handshake_unavailable",
+    }
+
+
+def test_catalog_upload_response_validation_fails_closed() -> None:
+    with pytest.raises(RuntimeError, match="catalog sync response"):
+        guard_runner_module._validate_extension_catalog_sync_response(
+            {
+                "schemaVersion": "guard.extension-catalog-sync.v1",
+                "accepted": True,
+                "catalogDigest": "b" * 64,
+                "alreadyKnown": False,
+                "deviceCount": 1,
+                "firstSeenAt": "2026-08-25T00:00:00Z",
+                "lastSeenAt": "2026-08-25T00:00:00Z",
+            },
+            expected_digest="a" * 64,
+        )

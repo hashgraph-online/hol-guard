@@ -6,16 +6,18 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping
-from typing import Protocol, TypedDict
+from datetime import datetime
+from typing import Protocol, TypedDict, cast
 
-from .extension_control_contract import CONTROL_SCHEMA_VERSION
 from .extension_control_limits import (
     MAX_CATALOG_EXTENSIONS,
     MAX_CATALOG_PAYLOAD_BYTES,
+    MAX_INPUT_TEXT_LENGTH,
     MAX_PERMISSIONS_PER_EXTENSION,
 )
 
 EXTENSION_CATALOG_SCHEMA_VERSION = "guard.extension-catalog.v1"
+EXTENSION_CONTROL_WIRE_SCHEMA_VERSION = "guard.extension-controls.v1"
 MANAGED_CONTROLS_RUNTIME_CAPABILITIES = (
     "extension-catalog.v1",
     "extension-control-layer.v1",
@@ -24,22 +26,27 @@ MANAGED_CONTROLS_RUNTIME_CAPABILITIES = (
 )
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
+_EXTENSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
+_PERMISSION_ID_PATTERN = re.compile(
+    r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+)
 _FORBIDDEN_WIRE_KEYS = frozenset(
     {
-        "action_classes",
-        "command_history",
+        "actionclasses",
+        "commandhistory",
         "description",
         "environment",
-        "example_command",
-        "file_contents",
-        "project_markers",
-        "reference_urls",
-        "rule_ids",
+        "examplecommand",
+        "filecontents",
+        "projectmarkers",
+        "referenceurls",
+        "ruleids",
         "rules",
-        "safer_alternatives",
+        "saferalternatives",
         "secrets",
-        "source_path",
-        "working_directory",
+        "sourcepath",
+        "workingdirectory",
     }
 )
 
@@ -141,7 +148,7 @@ def _code_unit_sorted(values: Iterable[str]) -> list[str]:
 
 
 def _canonical_json(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def _permission_wire(permission: PermissionLike) -> ExtensionCatalogPermissionWire:
@@ -177,16 +184,191 @@ def _extension_wire(extension: ExtensionLike) -> ExtensionCatalogEntryWire:
     }
 
 
+def canonical_extension_catalog_json(extensions: list[ExtensionCatalogEntryWire]) -> str:
+    """Return the shared canonical JSON for an Extension projection."""
+
+    canonical_extensions = sorted(
+        (
+            {
+                **extension,
+                "permissions": sorted(
+                    extension["permissions"],
+                    key=lambda permission: permission["id"],
+                ),
+            }
+            for extension in extensions
+        ),
+        key=lambda extension: extension["id"],
+    )
+    return _canonical_json(canonical_extensions)
+
+
 def catalog_digest_for_extensions(extensions: list[ExtensionCatalogEntryWire]) -> str:
     """Return the cross-language SHA-256 digest over canonical projected Extensions."""
 
-    return hashlib.sha256(_canonical_json(extensions).encode("utf-8")).hexdigest()
+    return hashlib.sha256(canonical_extension_catalog_json(extensions).encode("utf-8")).hexdigest()
+
+
+def _is_rfc3339_datetime(value: str) -> bool:
+    if _RFC3339.fullmatch(value) is None:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.removesuffix("Z") + ("+00:00" if value.endswith("Z") else ""))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
+    """Execute the shared catalog's bounded shape, privacy, identity, and digest contract."""
+
+    encoded = _canonical_json(payload).encode("utf-8")
+    if len(encoded) > MAX_CATALOG_PAYLOAD_BYTES:
+        raise ValueError("Extension catalog payload limit exceeded")
+    if not isinstance(payload, dict):
+        raise ValueError("Extension catalog must be an object")
+    expected_top_level = {
+        "schemaVersion",
+        "catalogDigest",
+        "guardVersion",
+        "controlSchemaVersion",
+        "generatedAt",
+        "limits",
+        "extensions",
+    }
+    if set(payload) != expected_top_level:
+        _reject_private_wire_keys(payload)
+        raise ValueError("Extension catalog contains unknown fields")
+    _reject_private_wire_keys(payload)
+    if payload.get("schemaVersion") != EXTENSION_CATALOG_SCHEMA_VERSION:
+        raise ValueError("Unsupported Extension catalog schema")
+    catalog_digest = payload.get("catalogDigest")
+    if not isinstance(catalog_digest, str) or _SHA256.fullmatch(catalog_digest) is None:
+        raise ValueError("Invalid Extension catalog digest")
+    for field in ("guardVersion", "controlSchemaVersion", "generatedAt"):
+        value = payload.get(field)
+        maximum = 128
+        if not isinstance(value, str) or not value or len(value) > maximum:
+            raise ValueError(f"Invalid Extension catalog {field}")
+    generated_at = cast(str, payload["generatedAt"])
+    if not _is_rfc3339_datetime(generated_at):
+        raise ValueError("Invalid Extension catalog generatedAt")
+    expected_limits = {
+        "maxExtensions": MAX_CATALOG_EXTENSIONS,
+        "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
+        "maxPayloadBytes": MAX_CATALOG_PAYLOAD_BYTES,
+        "maxStringLength": 8_192,
+    }
+    if payload.get("limits") != expected_limits:
+        raise ValueError("Extension catalog limits do not match runtime limits")
+    raw_extensions = payload.get("extensions")
+    if not isinstance(raw_extensions, list) or len(raw_extensions) > MAX_CATALOG_EXTENSIONS:
+        raise ValueError("Extension catalog limit exceeded")
+    extension_ids: set[str] = set()
+    permission_ids: set[str] = set()
+    parsed_extensions: list[ExtensionCatalogEntryWire] = []
+    extension_fields = {
+        "id",
+        "version",
+        "name",
+        "source",
+        "executables",
+        "ecosystemIds",
+        "riskClasses",
+        "delegatedProtection",
+        "deprecated",
+        "replacementId",
+        "permissions",
+    }
+    permission_fields = {"id", "name", "configurable", "required", "riskClasses", "typedCapabilities"}
+    for raw_extension in raw_extensions:
+        if not isinstance(raw_extension, dict) or set(raw_extension) != extension_fields:
+            _reject_private_wire_keys(raw_extension)
+            raise ValueError("Extension catalog entry contains unknown fields")
+        extension_id = raw_extension.get("id")
+        if (
+            not isinstance(extension_id, str)
+            or len(extension_id) > MAX_INPUT_TEXT_LENGTH
+            or _EXTENSION_ID_PATTERN.fullmatch(extension_id) is None
+        ):
+            raise ValueError("Invalid Extension catalog identity")
+        if extension_id in extension_ids:
+            raise ValueError("Duplicate Extension catalog identity")
+        extension_ids.add(extension_id)
+        source = raw_extension.get("source")
+        if not isinstance(source, str) or source not in {"built-in", "local-admin", "signed-cloud", "custom"}:
+            raise ValueError("Invalid Extension catalog source")
+        delegated_protection = raw_extension.get("delegatedProtection")
+        if delegated_protection is not None and delegated_protection != "package-firewall":
+            raise ValueError("Invalid Extension delegated protection")
+        if type(raw_extension.get("deprecated")) is not bool:
+            raise ValueError("Invalid Extension deprecation state")
+        for field, maximum in (("version", 128), ("name", 8_192)):
+            value = raw_extension.get(field)
+            if not isinstance(value, str) or not value or len(value) > maximum:
+                raise ValueError(f"Invalid Extension {field}")
+        replacement_id = raw_extension.get("replacementId")
+        if replacement_id is not None and (
+            not isinstance(replacement_id, str)
+            or _EXTENSION_ID_PATTERN.fullmatch(replacement_id) is None
+            or replacement_id == extension_id
+            or raw_extension.get("deprecated") is not True
+        ):
+            raise ValueError("Invalid Extension replacement")
+        for field in ("executables", "ecosystemIds", "riskClasses"):
+            _validate_bounded_string_array(raw_extension.get(field), label=field)
+        raw_permissions = raw_extension.get("permissions")
+        if not isinstance(raw_permissions, list) or len(raw_permissions) > MAX_PERMISSIONS_PER_EXTENSION:
+            raise ValueError("Extension catalog permission limit exceeded")
+        for raw_permission in raw_permissions:
+            if not isinstance(raw_permission, dict) or set(raw_permission) != permission_fields:
+                _reject_private_wire_keys(raw_permission)
+                raise ValueError("Extension catalog permission contains unknown fields")
+            permission_id = raw_permission.get("id")
+            if (
+                not isinstance(permission_id, str)
+                or len(permission_id) > MAX_INPUT_TEXT_LENGTH
+                or _PERMISSION_ID_PATTERN.fullmatch(permission_id) is None
+                or not permission_id.startswith(f"{extension_id}.permission.")
+            ):
+                raise ValueError("Invalid Extension permission identity")
+            if permission_id in permission_ids:
+                raise ValueError("Duplicate Extension permission identity")
+            permission_ids.add(permission_id)
+            name = raw_permission.get("name")
+            if not isinstance(name, str) or not name or len(name) > 8_192:
+                raise ValueError("Invalid Extension permission name")
+            if type(raw_permission.get("configurable")) is not bool or type(raw_permission.get("required")) is not bool:
+                raise ValueError("Invalid Extension permission state")
+            _validate_bounded_string_array(raw_permission.get("riskClasses"), label="permission riskClasses")
+            _validate_bounded_string_array(
+                raw_permission.get("typedCapabilities"),
+                label="permission typedCapabilities",
+            )
+        parsed_extensions.append(cast(ExtensionCatalogEntryWire, raw_extension))
+    for extension in parsed_extensions:
+        replacement_id = extension["replacementId"]
+        if replacement_id is not None and replacement_id not in extension_ids:
+            raise ValueError("Extension replacement is not present in the catalog")
+    if catalog_digest_for_extensions(parsed_extensions) != catalog_digest:
+        raise ValueError("Extension catalog digest does not match canonical bytes")
+    return cast(ExtensionCatalogWire, payload)
+
+
+def _validate_bounded_string_array(value: object, *, label: str) -> None:
+    if not isinstance(value, list) or len(value) > 128:
+        raise ValueError(f"Invalid Extension catalog {label}")
+    if any(not isinstance(item, str) or not item or len(item) > 8_192 for item in value):
+        raise ValueError(f"Invalid Extension catalog {label}")
+    if len(value) != len(set(value)):
+        raise ValueError(f"Duplicate Extension catalog {label}")
 
 
 def _reject_private_wire_keys(value: object) -> None:
     if isinstance(value, Mapping):
         for key, child in value.items():
-            if str(key).lower() in _FORBIDDEN_WIRE_KEYS:
+            normalized_key = str(key).replace("_", "").replace("-", "").lower()
+            if normalized_key in _FORBIDDEN_WIRE_KEYS:
                 raise ValueError(f"private Extension catalog field: {key}")
             _reject_private_wire_keys(child)
     elif isinstance(value, list):
@@ -214,7 +396,7 @@ def build_extension_catalog_wire(
         "schemaVersion": EXTENSION_CATALOG_SCHEMA_VERSION,
         "catalogDigest": catalog_digest_for_extensions(extensions),
         "guardVersion": guard_version,
-        "controlSchemaVersion": CONTROL_SCHEMA_VERSION,
+        "controlSchemaVersion": EXTENSION_CONTROL_WIRE_SCHEMA_VERSION,
         "generatedAt": generated_at,
         "limits": {
             "maxExtensions": MAX_CATALOG_EXTENSIONS,
@@ -227,7 +409,7 @@ def build_extension_catalog_wire(
     _reject_private_wire_keys(payload)
     if len(_canonical_json(payload).encode("utf-8")) > MAX_CATALOG_PAYLOAD_BYTES:
         raise ValueError("Extension catalog payload limit exceeded")
-    return payload
+    return validate_extension_catalog_wire(payload)
 
 
 def build_builtin_extension_catalog_wire(
@@ -264,7 +446,7 @@ def build_managed_controls_runtime_posture(
     requested = frozenset(capabilities)
     return {
         "extensionCatalogDigest": catalog_digest,
-        "extensionControlSchemaVersions": [CONTROL_SCHEMA_VERSION],
+        "extensionControlSchemaVersions": [EXTENSION_CONTROL_WIRE_SCHEMA_VERSION],
         "extensionAuthorityRevision": extension_authority_revision,
         "effectiveProjectionDigest": effective_projection_digest,
         "managedControlsCapabilities": [

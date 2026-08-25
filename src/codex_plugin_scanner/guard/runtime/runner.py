@@ -106,7 +106,10 @@ from .decisions import (
     rebuild_artifact_authority,
 )
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
-from .extension_catalog_sync import MANAGED_CONTROLS_RUNTIME_CAPABILITIES
+from .extension_catalog_sync import (
+    MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
+    build_builtin_extension_catalog_wire,
+)
 from .extension_control_authority import ExtensionControlAuthorityView
 from .local_runtime_fallbacks import best_effort_access_token, local_receipt_redaction_level
 from .managed_controls_sync import (
@@ -3922,6 +3925,12 @@ def sync_runtime_session(
         raise RuntimeError(_sync_url_error_message(error)) from error
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
+    catalog_sync = _sync_extension_catalog_from_runtime_handshake(
+        auth_context=resolved_auth_context,
+        runtime_sync_url=sync_url,
+        runtime_response=payload,
+        session_payload=session_payload,
+    )
     synced_at = _sync_timestamp(payload)
     synced_items = payload.get("items")
     summary: dict[str, object] = {
@@ -3935,6 +3944,16 @@ def sync_runtime_session(
         "runtime_workspace": session_payload["workspace"],
         "runtime_device_id": session_payload["deviceId"],
     }
+    for field in (
+        "extensionCatalogDigest",
+        "extensionControlSchemaVersions",
+        "extensionAuthorityRevision",
+        "effectiveProjectionDigest",
+        "managedControlsCapabilities",
+    ):
+        if field in session_payload:
+            summary[field] = session_payload[field]
+    summary.update(catalog_sync)
     store.set_sync_payload("runtime_session_summary", summary, synced_at)
     workspace_id = store.get_cloud_workspace_id()
     device_id = store.get_or_create_installation_id()
@@ -6244,6 +6263,119 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         payload["canonicalPolicyEnforcement"] = True
     payload.update(_managed_controls_runtime_sync_posture(store, generated_at=updated_at))
     return payload
+
+
+def _sync_extension_catalog_from_runtime_handshake(
+    *,
+    auth_context: dict[str, object],
+    runtime_sync_url: str,
+    runtime_response: dict[str, object],
+    session_payload: dict[str, object],
+) -> dict[str, object]:
+    """Upload the canonical catalog only after a digest-bound Cloud request."""
+
+    digest = session_payload.get("extensionCatalogDigest")
+    if not isinstance(digest, str):
+        return {}
+    handshake = runtime_response.get("extensionCatalogSync")
+    if handshake is None:
+        return {
+            "managedControlsCapabilities": [],
+            "extension_catalog_sync_status": "downgraded",
+            "extension_catalog_sync_reason": "catalog_handshake_unavailable",
+        }
+    expected_handshake_fields = {"catalogDigest", "catalogKnown", "uploadRequired", "uploadPath"}
+    if not isinstance(handshake, dict) or set(handshake) != expected_handshake_fields:
+        raise RuntimeError("Invalid Extension catalog handshake response")
+    known = handshake.get("catalogKnown")
+    upload_required = handshake.get("uploadRequired")
+    upload_path = handshake.get("uploadPath")
+    if (
+        handshake.get("catalogDigest") != digest
+        or type(known) is not bool
+        or type(upload_required) is not bool
+        or known is upload_required
+        or upload_path != "/api/guard/runtime/extension-catalog/sync"
+    ):
+        raise RuntimeError("Invalid Extension catalog handshake response")
+    if known:
+        return {
+            "extension_catalog_sync_status": "already_known",
+            "extension_catalog_sync_digest": digest,
+        }
+
+    generated_at = _optional_string(session_payload.get("updatedAt")) or _now()
+    catalog = build_builtin_extension_catalog_wire(
+        guard_version=__version__,
+        generated_at=generated_at,
+    )
+    if catalog["catalogDigest"] != digest:
+        raise RuntimeError("Extension catalog changed during runtime synchronization")
+    catalog_url = _normalized_extension_catalog_sync_url(runtime_sync_url, upload_path=cast(str, upload_path))
+    body = json.dumps(
+        {
+            "idempotencyKey": f"catalog:{digest}",
+            "catalog": catalog,
+        }
+    ).encode("utf-8")
+    request = _guard_sync_request(
+        auth_context,
+        request_url=catalog_url,
+        method="POST",
+        data=body,
+        extra_headers=None,
+    )
+    try:
+        response = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
+        )
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(_sync_http_error_message(error)) from error
+    except OSError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
+    _validate_extension_catalog_sync_response(response, expected_digest=digest)
+    return {
+        "extension_catalog_sync_status": "uploaded",
+        "extension_catalog_sync_digest": digest,
+    }
+
+
+def _validate_extension_catalog_sync_response(payload: object, *, expected_digest: str) -> None:
+    if not isinstance(payload, dict):
+        raise RuntimeError("Invalid Extension catalog sync response")
+    expected_fields = {
+        "schemaVersion",
+        "accepted",
+        "catalogDigest",
+        "alreadyKnown",
+        "deviceCount",
+        "firstSeenAt",
+        "lastSeenAt",
+    }
+    if set(payload) != expected_fields:
+        raise RuntimeError("Invalid Extension catalog sync response")
+    if (
+        payload.get("schemaVersion") != "guard.extension-catalog-sync.v1"
+        or payload.get("accepted") is not True
+        or payload.get("catalogDigest") != expected_digest
+        or type(payload.get("alreadyKnown")) is not bool
+        or type(payload.get("deviceCount")) is not int
+        or cast(int, payload["deviceCount"]) < 1
+        or not isinstance(payload.get("firstSeenAt"), str)
+        or not payload.get("firstSeenAt")
+        or not isinstance(payload.get("lastSeenAt"), str)
+        or not payload.get("lastSeenAt")
+    ):
+        raise RuntimeError("Invalid Extension catalog sync response")
+
+
+def _normalized_extension_catalog_sync_url(runtime_sync_url: str, *, upload_path: str) -> str:
+    parsed = urllib.parse.urlsplit(runtime_sync_url)
+    if upload_path != "/api/guard/runtime/extension-catalog/sync":
+        raise RuntimeError("Invalid Extension catalog upload path")
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, upload_path, parsed.query, ""))
 
 
 def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:

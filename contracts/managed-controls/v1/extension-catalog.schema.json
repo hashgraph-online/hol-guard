@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/extension-catalog.v1.json",
+  "title": "HOL Guard Extension Catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "catalogDigest", "guardVersion", "controlSchemaVersion", "generatedAt", "limits", "extensions"],
+  "properties": {
+    "schemaVersion": { "const": "guard.extension-catalog.v1" },
+    "catalogDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "guardVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "controlSchemaVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxExtensions", "maxPermissionsPerExtension", "maxPayloadBytes", "maxStringLength"],
+      "properties": {
+        "maxExtensions": { "const": 512 },
+        "maxPermissionsPerExtension": { "const": 512 },
+        "maxPayloadBytes": { "const": 1000000 },
+        "maxStringLength": { "const": 8192 }
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "version", "name", "source", "executables", "ecosystemIds", "riskClasses", "delegatedProtection", "deprecated", "replacementId", "permissions"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$", "maxLength": 256 },
+          "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 8192 },
+          "source": { "enum": ["built-in", "local-admin", "signed-cloud", "custom"] },
+          "executables": { "type": "array", "maxItems": 128, "items": { "type": "string", "minLength": 1, "maxLength": 8192 }, "uniqueItems": true },
+          "ecosystemIds": { "type": "array", "maxItems": 128, "items": { "type": "string", "minLength": 1, "maxLength": 8192 }, "uniqueItems": true },
+          "riskClasses": { "type": "array", "maxItems": 128, "items": { "type": "string", "minLength": 1, "maxLength": 8192 }, "uniqueItems": true },
+          "delegatedProtection": { "enum": ["package-firewall", null] },
+          "deprecated": { "type": "boolean" },
+          "replacementId": { "anyOf": [{ "type": "string", "pattern": "^command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$", "maxLength": 256 }, { "type": "null" }] },
+          "permissions": {
+            "type": "array",
+            "maxItems": 512,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "name", "configurable", "required", "riskClasses", "typedCapabilities"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*\\.permission\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$", "maxLength": 256 },
+                "name": { "type": "string", "minLength": 1, "maxLength": 8192 },
+                "configurable": { "type": "boolean" },
+                "required": { "type": "boolean" },
+                "riskClasses": { "type": "array", "maxItems": 128, "items": { "type": "string", "maxLength": 8192 }, "uniqueItems": true },
+                "typedCapabilities": { "type": "array", "maxItems": 128, "items": { "type": "string", "maxLength": 8192 }, "uniqueItems": true }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
