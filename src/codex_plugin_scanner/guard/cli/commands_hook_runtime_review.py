@@ -51,6 +51,7 @@ if TYPE_CHECKING:
 
 from ..action_lattice import is_guard_action, most_restrictive_guard_action
 from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
+from ..daemon.client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
 from ..models import GuardAction
 from ._commands_shared import *
 from .commands_hook_runtime_state import (
@@ -110,7 +111,7 @@ def _bind_review_state(
     state: RuntimeArtifactHookState,
     *,
     action_envelope: GuardActionEnvelope | None,
-    browser_approval_daemon_client: object | None,
+    browser_approval_daemon_client: GuardSurfaceDaemonClient | None,
     browser_approval_wait_bound: bool | None,
     policy_action: GuardAction,
     response_payload: dict[str, object],
@@ -130,7 +131,7 @@ def _attach_cursor_approval_request_ids(
     runtime_artifact: GuardArtifact,
     response_payload: dict[str, object],
     store: GuardStore,
-    payload: Mapping[str, object],
+    payload: dict[str, object],
 ) -> None:
     if not (
         _canonical_harness_name(args.harness) == "cursor"
@@ -182,7 +183,7 @@ def _review_runtime_artifact_hook(
     runtime_artifact_hash = state.runtime_artifact_hash
     scanner_evidence_payload = state.scanner_evidence_payload
     stored_policy_action = state.stored_policy_action
-    browser_approval_daemon_client: object | None = None
+    browser_approval_daemon_client: GuardSurfaceDaemonClient | None = None
     browser_approval_wait_bound: bool | None = None
     cursor_native_queue = _canonical_harness_name(
         args.harness
@@ -346,8 +347,8 @@ def _review_runtime_artifact_hook(
                 payload=payload_map,
             )
             try:
-                browser_approval_daemon_client = load_guard_surface_daemon_client(guard_home)
-                session = browser_approval_daemon_client.start_session(
+                daemon_client = load_guard_surface_daemon_client(guard_home)
+                session = daemon_client.start_session(
                     harness=args.harness,
                     surface="harness-adapter",
                     workspace=str(workspace) if workspace else None,
@@ -357,7 +358,7 @@ def _review_runtime_artifact_hook(
                     capabilities=["approval-resolution", "receipt-view"],
                 )
                 response_payload["session_id"] = str(session["session_id"])
-                blocked_operation = browser_approval_daemon_client.queue_blocked_operation(
+                blocked_operation = daemon_client.queue_blocked_operation(
                     session_id=str(session["session_id"]),
                     operation_type="tool_call",
                     harness=args.harness,
@@ -384,6 +385,7 @@ def _review_runtime_artifact_hook(
                     open_key=artifact_id,
                     redaction_level=config.receipt_redaction_level,
                 )
+                browser_approval_daemon_client = daemon_client
             except RuntimeError:
                 queued = queue_blocked_approvals(
                     redaction_level=config.receipt_redaction_level,
