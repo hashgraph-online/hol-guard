@@ -6,8 +6,8 @@ Each numbered line is one operation task. Completion requires the exact path in 
 
 ## Progress
 
-- Completed batches: 2/4
-- Completed operation tasks: 200/400
+- Completed batches: 3/4
+- Completed operation tasks: 300/400
 
 ## Batch 1: AWS core and high-frequency services
 
@@ -217,106 +217,106 @@ Each numbered line is one operation task. Completion requires the exact path in 
 
 ## Batch 3: Azure resource deletion
 
-- [ ] 201. `az group delete`
-- [ ] 202. `az deployment group delete`
-- [ ] 203. `az deployment sub delete`
-- [ ] 204. `az deployment tenant delete`
-- [ ] 205. `az deployment mg delete`
-- [ ] 206. `az deployment-scripts delete`
-- [ ] 207. `az resource delete`
-- [ ] 208. `az lock delete`
-- [ ] 209. `az role assignment delete`
-- [ ] 210. `az role definition delete`
-- [ ] 211. `az policy assignment delete`
-- [ ] 212. `az policy definition delete`
-- [ ] 213. `az policy exemption delete`
-- [ ] 214. `az identity delete`
-- [ ] 215. `az ad app delete`
-- [ ] 216. `az ad sp delete`
-- [ ] 217. `az ad user delete`
-- [ ] 218. `az ad group delete`
-- [ ] 219. `az network vnet delete`
-- [ ] 220. `az network vnet subnet delete`
-- [ ] 221. `az network nsg delete`
-- [ ] 222. `az network public-ip delete`
-- [ ] 223. `az network nic delete`
-- [ ] 224. `az network route-table delete`
-- [ ] 225. `az network vnet-gateway delete`
-- [ ] 226. `az network vpn-connection delete`
-- [ ] 227. `az network application-gateway delete`
-- [ ] 228. `az network bastion delete`
-- [ ] 229. `az network firewall delete`
-- [ ] 230. `az network private-endpoint delete`
-- [ ] 231. `az network private-link-service delete`
-- [ ] 232. `az network traffic-manager profile delete`
-- [ ] 233. `az network front-door delete`
-- [ ] 234. `az network private-dns zone delete`
-- [ ] 235. `az network watcher connection-monitor delete`
-- [ ] 236. `az network watcher flow-log delete`
-- [ ] 237. `az network watcher packet-capture delete`
-- [ ] 238. `az network cross-region-lb delete`
-- [ ] 239. `az network nat gateway delete`
-- [ ] 240. `az network local-gateway delete`
-- [ ] 241. `az network express-route delete`
-- [ ] 242. `az network express-route port delete`
-- [ ] 243. `az dns-resolver delete`
-- [ ] 244. `az aks delete`
-- [ ] 245. `az container delete`
-- [ ] 246. `az containerapp delete`
-- [ ] 247. `az acr delete`
-- [ ] 248. `az vmss delete`
-- [ ] 249. `az disk delete`
-- [ ] 250. `az disk-access delete`
-- [ ] 251. `az disk-encryption-set delete`
-- [ ] 252. `az snapshot delete`
-- [ ] 253. `az image delete`
-- [ ] 254. `az sig delete`
-- [ ] 255. `az sig image-definition delete`
-- [ ] 256. `az sig image-version delete`
-- [ ] 257. `az capacity reservation group delete`
-- [ ] 258. `az vm host group delete`
-- [ ] 259. `az vm host delete`
-- [ ] 260. `az ppg delete`
-- [ ] 261. `az webapp delete`
-- [ ] 262. `az functionapp delete`
-- [ ] 263. `az appservice plan delete`
-- [ ] 264. `az staticwebapp delete`
-- [ ] 265. `az spring app delete`
-- [ ] 266. `az spring delete`
-- [ ] 267. `az postgres flexible-server delete`
-- [ ] 268. `az mysql flexible-server delete`
-- [ ] 269. `az sql server delete`
-- [ ] 270. `az sql db delete`
-- [ ] 271. `az sql mi delete`
-- [ ] 272. `az cosmosdb delete`
-- [ ] 273. `az redis delete`
-- [ ] 274. `az managed-cassandra cluster delete`
-- [ ] 275. `az storage account delete`
-- [ ] 276. `az storage share delete`
-- [ ] 277. `az storage queue delete`
-- [ ] 278. `az storage table delete`
-- [ ] 279. `az servicebus namespace delete`
-- [ ] 280. `az servicebus queue delete`
-- [ ] 281. `az servicebus topic delete`
-- [ ] 282. `az eventhubs namespace delete`
-- [ ] 283. `az eventhubs eventhub delete`
-- [ ] 284. `az keyvault delete`
-- [ ] 285. `az keyvault key delete`
-- [ ] 286. `az keyvault secret delete`
-- [ ] 287. `az keyvault certificate delete`
-- [ ] 288. `az monitor log-analytics workspace delete`
-- [ ] 289. `az monitor diagnostic-settings delete`
-- [ ] 290. `az monitor action-group delete`
-- [ ] 291. `az monitor autoscale delete`
-- [ ] 292. `az apim api delete`
-- [ ] 293. `az apim product delete`
-- [ ] 294. `az apim subscription delete`
-- [ ] 295. `az datafactory delete`
-- [ ] 296. `az synapse workspace delete`
-- [ ] 297. `az databricks workspace delete`
-- [ ] 298. `az search service delete`
-- [ ] 299. `az cognitiveservices account delete`
-- [ ] 300. `az bot delete`
+- [x] 201. `az group delete`
+- [x] 202. `az deployment group delete`
+- [x] 203. `az deployment sub delete`
+- [x] 204. `az deployment tenant delete`
+- [x] 205. `az deployment mg delete`
+- [x] 206. `az deployment-scripts delete`
+- [x] 207. `az resource delete`
+- [x] 208. `az lock delete`
+- [x] 209. `az role assignment delete`
+- [x] 210. `az role definition delete`
+- [x] 211. `az policy assignment delete`
+- [x] 212. `az policy definition delete`
+- [x] 213. `az policy exemption delete`
+- [x] 214. `az identity delete`
+- [x] 215. `az ad app delete`
+- [x] 216. `az ad sp delete`
+- [x] 217. `az ad user delete`
+- [x] 218. `az ad group delete`
+- [x] 219. `az network vnet delete`
+- [x] 220. `az network vnet subnet delete`
+- [x] 221. `az network nsg delete`
+- [x] 222. `az network public-ip delete`
+- [x] 223. `az network nic delete`
+- [x] 224. `az network route-table delete`
+- [x] 225. `az network vnet-gateway delete`
+- [x] 226. `az network vpn-connection delete`
+- [x] 227. `az network application-gateway delete`
+- [x] 228. `az network bastion delete`
+- [x] 229. `az network firewall delete`
+- [x] 230. `az network private-endpoint delete`
+- [x] 231. `az network private-link-service delete`
+- [x] 232. `az network traffic-manager profile delete`
+- [x] 233. `az network front-door delete`
+- [x] 234. `az network private-dns zone delete`
+- [x] 235. `az network watcher connection-monitor delete`
+- [x] 236. `az network watcher flow-log delete`
+- [x] 237. `az network watcher packet-capture delete`
+- [x] 238. `az network cross-region-lb delete`
+- [x] 239. `az network nat gateway delete`
+- [x] 240. `az network local-gateway delete`
+- [x] 241. `az network express-route delete`
+- [x] 242. `az network express-route port delete`
+- [x] 243. `az dns-resolver delete`
+- [x] 244. `az aks delete`
+- [x] 245. `az container delete`
+- [x] 246. `az containerapp delete`
+- [x] 247. `az acr delete`
+- [x] 248. `az vmss delete`
+- [x] 249. `az disk delete`
+- [x] 250. `az disk-access delete`
+- [x] 251. `az disk-encryption-set delete`
+- [x] 252. `az snapshot delete`
+- [x] 253. `az image delete`
+- [x] 254. `az sig delete`
+- [x] 255. `az sig image-definition delete`
+- [x] 256. `az sig image-version delete`
+- [x] 257. `az capacity reservation group delete`
+- [x] 258. `az vm host group delete`
+- [x] 259. `az vm host delete`
+- [x] 260. `az ppg delete`
+- [x] 261. `az webapp delete`
+- [x] 262. `az functionapp delete`
+- [x] 263. `az appservice plan delete`
+- [x] 264. `az staticwebapp delete`
+- [x] 265. `az spring app delete`
+- [x] 266. `az spring delete`
+- [x] 267. `az postgres flexible-server delete`
+- [x] 268. `az mysql flexible-server delete`
+- [x] 269. `az sql server delete`
+- [x] 270. `az sql db delete`
+- [x] 271. `az sql mi delete`
+- [x] 272. `az cosmosdb delete`
+- [x] 273. `az redis delete`
+- [x] 274. `az managed-cassandra cluster delete`
+- [x] 275. `az storage account delete`
+- [x] 276. `az storage share delete`
+- [x] 277. `az storage queue delete`
+- [x] 278. `az storage table delete`
+- [x] 279. `az servicebus namespace delete`
+- [x] 280. `az servicebus queue delete`
+- [x] 281. `az servicebus topic delete`
+- [x] 282. `az eventhubs namespace delete`
+- [x] 283. `az eventhubs eventhub delete`
+- [x] 284. `az keyvault delete`
+- [x] 285. `az keyvault key delete`
+- [x] 286. `az keyvault secret delete`
+- [x] 287. `az keyvault certificate delete`
+- [x] 288. `az monitor log-analytics workspace delete`
+- [x] 289. `az monitor diagnostic-settings delete`
+- [x] 290. `az monitor action-group delete`
+- [x] 291. `az monitor autoscale delete`
+- [x] 292. `az apim api delete`
+- [x] 293. `az apim product delete`
+- [x] 294. `az apim subscription delete`
+- [x] 295. `az datafactory delete`
+- [x] 296. `az synapse workspace delete`
+- [x] 297. `az databricks workspace delete`
+- [x] 298. `az search service delete`
+- [x] 299. `az cognitiveservices account delete`
+- [x] 300. `az bot delete`
 
 ## Batch 4: AWS long-tail, AI, backup, and account services
 

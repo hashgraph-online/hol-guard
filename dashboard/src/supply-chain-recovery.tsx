@@ -10,6 +10,7 @@ import type { SupplyChainFixAllState } from "./supply-chain-fix-all";
 import {
   supplyChainFixAllButtonLabel,
   supplyChainFixAllIsPending,
+  supplyChainFixAllNeedsCloudConnect,
 } from "./supply-chain-fix-all";
 import type { SupplyChainIssue } from "./supply-chain-issues";
 
@@ -21,7 +22,7 @@ type SupplyChainRecoveryProps = {
 };
 
 function recoverySummary(issueCount: number): string {
-  return `Fix ${issueCount} open issue${issueCount === 1 ? "" : "s"} in one guided pass. Guard repairs package tools, activates routing, refreshes safety intelligence, and rechecks status.`;
+  return `Fix ${issueCount} open issue${issueCount === 1 ? "" : "s"} in one guided pass. Guard repairs package tools and turns on routing. Safety intelligence refreshes when Guard Cloud is connected.`;
 }
 
 export function SupplyChainRecovery({
@@ -36,6 +37,15 @@ export function SupplyChainRecovery({
   }, []);
   const pending = supplyChainFixAllIsPending(state.phase);
   const showResult = state.message !== null;
+  const remainingSteps = state.remainingSteps ?? [];
+  const needsCloudConnect = supplyChainFixAllNeedsCloudConnect(state);
+  const isHardFailure =
+    state.phase === "error" || (state.phase === "incomplete" && state.failedSteps.length > 0);
+  const buttonLabel = supplyChainFixAllButtonLabel(
+    state.phase,
+    state.remainingAction ?? null,
+    state.failedSteps.length,
+  );
 
   return (
     <section
@@ -67,7 +77,7 @@ export function SupplyChainRecovery({
           ) : null}
         </div>
         <ActionButton onClick={onFixAll} disabled={pending} aria-busy={pending}>
-          {supplyChainFixAllButtonLabel(state.phase)}
+          {buttonLabel}
         </ActionButton>
       </div>
 
@@ -76,12 +86,10 @@ export function SupplyChainRecovery({
           <>
             <p
               className={`flex items-start gap-2 text-sm ${
-                state.phase === "error" || state.phase === "incomplete"
-                  ? "text-red-600"
-                  : "text-slate-600"
+                isHardFailure ? "text-red-600" : "text-slate-600"
               }`}
             >
-              {state.phase === "success" ? (
+              {state.phase === "success" || needsCloudConnect ? (
                 <HiMiniCheckCircle
                   className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500"
                   aria-hidden="true"
@@ -92,7 +100,14 @@ export function SupplyChainRecovery({
             {state.failedSteps.length > 0 ? (
               <ul className="mt-2 space-y-1 text-xs text-red-600">
                 {state.failedSteps.map((failure, index) => (
-                  <li key={`${index}:${failure}`}>{failure}</li>
+                  <li key={`failed:${index}:${failure}`}>{failure}</li>
+                ))}
+              </ul>
+            ) : null}
+            {remainingSteps.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-xs font-medium text-brand-primary">
+                {remainingSteps.map((remaining, index) => (
+                  <li key={`remaining:${index}:${remaining}`}>{remaining}</li>
                 ))}
               </ul>
             ) : null}

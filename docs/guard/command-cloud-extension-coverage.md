@@ -8,7 +8,7 @@ Guard evaluates cloud CLI operations from the canonical parsed command model. Ru
 | --- | ---: | --- | --- |
 | `command.cloud.aws` | 100 | EC2 instance termination, RDS instance or cluster deletion, and EKS cluster deletion | Help, request skeleton generation, EC2 permission-only dry run, and describe operations |
 | `command.cloud.gcp` | 100 | Compute Engine instance deletion and Cloud SQL instance deletion | Help and describe operations |
-| `command.cloud.azure` | 0 | Virtual machine deletion | Help and show operations |
+| `command.cloud.azure` | 100 | Resource management, identity, network, compute, application, data, messaging, observability, AI, and virtual machine deletion | Long and short help forms plus show operations |
 
 The operation matrices are declarative, typed, count-checked, and uniqueness-checked. They preserve the existing provider rule IDs and action classes, so policy, approval, receipt, memory, and synchronization contracts remain stable.
 
@@ -21,6 +21,7 @@ Global account, project, subscription, profile, region, output, query, configura
 - A help or preview form suppresses only its owning rule and command segment.
 - AWS request skeletons remain safe only for documented values.
 - EC2 dry-run safety remains scoped to EC2 termination.
+- Azure `--help` and `-h` forms remain safe.
 - Compound commands retain later destructive matches even when an earlier segment is safe.
 - Every matrix entry is exercised through command inspection and runtime tool-action extraction.
 

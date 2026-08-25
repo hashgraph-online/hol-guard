@@ -15319,11 +15319,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$4(value) {
+function isRecord$5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$4(raw)) {
+  if (!isRecord$5(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -15385,7 +15385,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$3(value) {
+function isRecord$4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -15404,7 +15404,7 @@ function deriveState(checks) {
   return byId.get("decision_stream") === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$3(value)) return null;
+  if (!isRecord$4(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -15495,7 +15495,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$3(value)) return null;
+  if (!isRecord$4(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -15503,7 +15503,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$3(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$4(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -15553,6 +15553,57 @@ function remainingProtectionRepairParts(health) {
   return {
     failedHookHarnesses: health.apps.filter((app) => app.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail")).map((app) => app.harness),
     evidenceFailed: health.checks.some((check) => check.check_id === "decision_stream" && check.status !== "pass")
+  };
+}
+function isRecord$3(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function stringValue$2(value) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+function remainingStep(candidate) {
+  const step = stringValue$2(candidate.step);
+  const message = stringValue$2(candidate.message);
+  const action = stringValue$2(candidate.action);
+  if (step === "intelligence_sync" && action === "connect" && message !== null) {
+    return { step, message, action };
+  }
+  return null;
+}
+function failedStep(candidate) {
+  const step = stringValue$2(candidate.step);
+  const message = stringValue$2(candidate.message);
+  if ((step === "package_shims" || step === "runtime_activation" || step === "intelligence_sync") && message !== null) {
+    return { step, message };
+  }
+  return null;
+}
+function normalizeSupplyChainRepairResult(result) {
+  const failures = [];
+  if (Array.isArray(result.failed_steps)) {
+    for (const candidate of result.failed_steps) {
+      if (!isRecord$3(candidate)) continue;
+      const parsed = failedStep(candidate);
+      if (parsed !== null) failures.push(parsed);
+    }
+  }
+  const remaining = [];
+  if (Array.isArray(result.remaining_steps)) {
+    for (const candidate of result.remaining_steps) {
+      if (!isRecord$3(candidate)) continue;
+      const parsed = remainingStep(candidate);
+      if (parsed !== null) remaining.push(parsed);
+    }
+  }
+  const completedSteps = Array.isArray(result.completed_steps) ? result.completed_steps.filter((value) => typeof value === "string") : [];
+  const requiredSteps = ["package_shims", "runtime_activation", "intelligence_sync"];
+  const completedWithoutFailures = Array.isArray(result.failed_steps) && result.failed_steps.length === 0 && remaining.length === 0 && requiredSteps.every((step) => completedSteps.includes(step));
+  return {
+    repaired: result.repaired === true || !("repaired" in result) && completedWithoutFailures,
+    completed_steps: completedSteps,
+    failed_steps: failures,
+    remaining_steps: remaining,
+    message: stringValue$2(result.message) ?? "Supply-chain repair finished."
   };
 }
 const now = "2026-04-11T12:00:00Z";
@@ -18565,6 +18616,7 @@ async function repairSupplyChainProtection(credentials) {
       repaired: true,
       completed_steps: ["package_shims", "runtime_activation", "intelligence_sync"],
       failed_steps: [],
+      remaining_steps: [],
       message: "Supply-chain protection restored and refreshed."
     };
   }
@@ -18590,26 +18642,7 @@ async function repairSupplyChainProtection(credentials) {
     throw new Error("Guard returned an invalid supply-chain repair result.");
   }
   const result = payloadBody.result;
-  const failures = [];
-  if (Array.isArray(result.failed_steps)) {
-    for (const candidate of result.failed_steps) {
-      if (!isRecord$1(candidate)) continue;
-      const step = stringValue$1(candidate.step);
-      const message = stringValue$1(candidate.message);
-      if ((step === "package_shims" || step === "runtime_activation" || step === "intelligence_sync") && message !== null) {
-        failures.push({ step, message });
-      }
-    }
-  }
-  const completedSteps = Array.isArray(result.completed_steps) ? result.completed_steps.filter((value) => typeof value === "string") : [];
-  const requiredSteps = ["package_shims", "runtime_activation", "intelligence_sync"];
-  const completedWithoutFailures = Array.isArray(result.failed_steps) && result.failed_steps.length === 0 && requiredSteps.every((step) => completedSteps.includes(step));
-  return {
-    repaired: result.repaired === true || !("repaired" in result) && completedWithoutFailures,
-    completed_steps: completedSteps,
-    failed_steps: failures,
-    message: stringValue$1(result.message) ?? "Supply-chain repair finished."
-  };
+  return normalizeSupplyChainRepairResult(result);
 }
 const MCP_POLICY_TERMINAL_STATUSES = {
   applied: true,
@@ -30649,7 +30682,7 @@ const ExtensionsWorkspace = lazyWorkspace(
 const AppDetailWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.c), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
