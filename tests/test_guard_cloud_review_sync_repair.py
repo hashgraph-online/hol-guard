@@ -4,8 +4,8 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.runtime.cloud_review_repair import cloud_review_sync_repair_status
 from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
-from codex_plugin_scanner.guard.runtime.live_request_repair import live_request_sync_repair_status
 from codex_plugin_scanner.guard.store import GuardStore
 
 _OUTBOX_TABLE = "guard_review_outbox_events"
@@ -76,7 +76,7 @@ def test_repair_status_exposes_only_actionable_binding_metadata(tmp_path: Path) 
     store.add_approval_request(_request("request-1"), _NOW)
     _replace_binding_with_stale_identity(store, "request-1")
 
-    status = live_request_sync_repair_status(store, now=_NOW)
+    status = cloud_review_sync_repair_status(store, now=_NOW)
 
     assert status == {
         "bindingState": "identity_mismatch",

@@ -18,7 +18,6 @@ _WIRE_EVENT_TYPES = {
     "review.request.created": "request_created",
     "review.request.refreshed": "request_created",
     "review.request.resolved": "request_resolved",
-    "review.request.snapshot_migrated": "request_created",
     "review.request.snapshot_requeued": "request_created",
     "review.continuation.resumed": "continuation_resumed",
     "review.continuation.already_resumed": "continuation_already_resumed",

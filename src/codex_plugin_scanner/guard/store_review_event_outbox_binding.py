@@ -12,7 +12,7 @@ from .review_event_integrity import review_event_payload_digest
 # pyright: reportAny=false, reportUnusedCallResult=false
 
 
-def live_request_oauth_subject_hash(grant_id: str | None) -> str | None:
+def review_event_oauth_subject_hash(grant_id: str | None) -> str | None:
     """Return a non-reversible account binding for an OAuth grant subject."""
 
     normalized = grant_id.strip() if isinstance(grant_id, str) else ""
@@ -41,7 +41,7 @@ def load_review_oauth_binding(connection: sqlite3.Connection, source: str) -> di
         return None
     payload = cast(dict[str, object], raw_payload)
     grant_id = payload.get("grant_id")
-    subject_hash = live_request_oauth_subject_hash(grant_id if isinstance(grant_id, str) else None)
+    subject_hash = review_event_oauth_subject_hash(grant_id if isinstance(grant_id, str) else None)
     workspace_id = payload.get("workspace_id")
     machine_id = payload.get("machine_id")
     device = connection.execute(
@@ -149,7 +149,7 @@ def normalized_delivery_binding(
         machine_installation_id.strip(),
     )
     if not all(values):
-        raise ValueError("complete live-request OAuth binding is required")
+        raise ValueError("complete Cloud Review OAuth binding is required")
     return values
 
 
@@ -239,7 +239,7 @@ def explicitly_reassign_quarantined_events(
         raise ValueError("approved source does not match the active Guard connection source")
     binding = load_review_oauth_binding(connection, source)
     if binding is None:
-        raise ValueError("active OAuth source does not have a complete live-request binding")
+        raise ValueError("active OAuth source does not have a complete Review event binding")
     if approved_workspace_id.strip() != binding["workspace_id"]:
         raise ValueError("approved workspace does not match the active OAuth workspace")
     candidates = connection.execute(
@@ -248,7 +248,6 @@ def explicitly_reassign_quarantined_events(
         where binding_status = 'quarantined'
           and quarantine_reason in (
             'identity_incomplete',
-            'legacy_identity_incomplete',
             'identity_changed_requires_confirmation'
           )
           and (

@@ -36,9 +36,9 @@ from ..shims import (
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
+from .cloud_review_repair import execute_cloud_review_sync_repair
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 from .exact_cloud_review_executor import execute_exact_cloud_review_operation
-from .live_request_repair import execute_live_request_sync_repair
 from .review_policy_memory_executor import (
     REVIEW_POLICY_MEMORY_OPERATION,
     execute_review_policy_memory,
@@ -114,7 +114,7 @@ def execute_guard_command_job(
                 generated_at=generated_at,
             )
         if operation in LIVE_REQUEST_OPERATIONS:
-            return execute_live_request_sync_repair(
+            return execute_cloud_review_sync_repair(
                 payload,
                 store=store,
                 generated_at=generated_at,

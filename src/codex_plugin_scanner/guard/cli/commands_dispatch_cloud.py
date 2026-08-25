@@ -150,7 +150,7 @@ def _run_guard_connect_command(
             )
             return 2
         try:
-            reassigned = store.reassign_quarantined_live_request_outbox(
+            reassigned = store.reassign_quarantined_review_events(
                 approved_source=approved_source,
                 approved_workspace_id=approved_workspace,
             )

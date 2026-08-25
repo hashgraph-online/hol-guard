@@ -1288,12 +1288,12 @@ def build_connect_status_payload(
     connect_url: str,
     action: str = "status",
 ) -> dict[str, object]:
-    live_request_binding = store.get_live_request_oauth_binding()
-    live_request_status = store.live_request_outbox_status(
+    review_event_binding = store.get_review_event_oauth_binding()
+    review_event_status = store.review_event_outbox_status(
         now=datetime.now(timezone.utc).isoformat(),
         **(
-            {key: value for key, value in live_request_binding.items() if key != "oauth_source"}
-            if live_request_binding is not None
+            {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
+            if review_event_binding is not None
             else {}
         ),
     )
@@ -1346,12 +1346,12 @@ def build_connect_status_payload(
         "recovery_command": recovery_command,
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
-        "live_request_outbox": live_request_status,
+        "review_event_outbox": review_event_status,
     }
-    if live_request_status.get("binding_state") == "legacy_ambiguous" and live_request_binding is not None:
-        source = live_request_binding["oauth_source"]
-        workspace_id = live_request_binding["workspace_id"]
-        payload["live_request_recovery_command"] = (
+    if review_event_status.get("binding_state") == "quarantined" and review_event_binding is not None:
+        source = review_event_binding["oauth_source"]
+        workspace_id = review_event_binding["workspace_id"]
+        payload["review_event_recovery_command"] = (
             f"hol-guard connect reassign-quarantined --confirm-source {source} --confirm-workspace {workspace_id}"
         )
     if action in {"repair", "re-pair"}:

@@ -7,7 +7,7 @@ import urllib.error
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_contracts import (
@@ -15,32 +15,33 @@ from ..review_contracts import (
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
-from ..store_live_request_outbox import live_request_oauth_subject_hash
+from ..store_review_event_outbox_binding import review_event_oauth_subject_hash
 from .cloud_review_event_delivery import (
     CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     post_review_events,
 )
-from .live_request_event_projection import (
-    _build_live_request_event as _build_live_request_event,
-)
-from .live_request_event_projection import (
-    project_live_request_outbox_row,
-)
+from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
 from .local_request_snapshots import (
     _cloud_scrub_text,
     _resolve_cloud_receipt_redaction_level,
 )
 
-if TYPE_CHECKING:
-    pass
-
 _LOGGER = logging.getLogger(__name__)
 
-LIVE_REQUEST_SYNC_BATCH_SIZE = 1
-LIVE_REQUEST_SYNC_MAX_BATCHES = 200
-LIVE_REQUEST_SYNC_STATE_KEY = "guard_live_request_sync_state"
+CLOUD_REVIEW_SYNC_BATCH_SIZE = 1
+CLOUD_REVIEW_SYNC_MAX_BATCHES = 200
+CLOUD_REVIEW_SYNC_STATE_KEY = "guard_cloud_review_sync_state"
 DEFAULT_POLL_INTERVAL_SECONDS = 0.1
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
+
+__all__ = [
+    "CloudReviewSyncWorker",
+    "build_cloud_review_event",
+    "cloud_review_sync_status",
+    "start_cloud_sync_sync_worker",
+    "stop_cloud_sync_sync_worker",
+    "sync_cloud_review_events_once",
+]
 
 
 def _now() -> str:
@@ -55,20 +56,20 @@ def _redacted_error(error: BaseException) -> str:
     return str(error)
 
 
-def _live_request_sync_state_key(store: GuardStore) -> str:
+def _cloud_review_sync_state_key(store: GuardStore) -> str:
     source = store.guard_source
     if source == "default":
-        return LIVE_REQUEST_SYNC_STATE_KEY
-    return f"{LIVE_REQUEST_SYNC_STATE_KEY}:{source}"
+        return CLOUD_REVIEW_SYNC_STATE_KEY
+    return f"{CLOUD_REVIEW_SYNC_STATE_KEY}:{source}"
 
 
 def _load_sync_state(store: GuardStore) -> dict[str, object]:
-    payload = store.get_sync_payload(_live_request_sync_state_key(store))
+    payload = store.get_sync_payload(_cloud_review_sync_state_key(store))
     return dict(payload) if isinstance(payload, dict) else {}
 
 
 def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
-    store.set_sync_payload(_live_request_sync_state_key(store), state, _now())
+    store.set_sync_payload(_cloud_review_sync_state_key(store), state, _now())
 
 
 def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
@@ -96,13 +97,13 @@ def _retry_result_message(items: list[dict[str, object]]) -> str:
         )
         if detail and detail not in details:
             details.append(detail)
-    message = f"{len(items)} live request events require retry."
+    message = f"{len(items)} Cloud Review events require retry."
     if details:
         return f"{message} Cloud reported: {'; '.join(details[:3])}."
     return message
 
 
-def sync_live_requests_once(
+def sync_cloud_review_events_once(
     store: GuardStore,
     auth_context: dict[str, object],
 ) -> dict[str, object]:
@@ -120,10 +121,9 @@ def sync_live_requests_once(
         "machine_installation_id": machine_installation_id,
     }
 
-    if not all(supplied_binding.values()) or supplied_binding != store.get_live_request_oauth_binding():
+    if not all(supplied_binding.values()) or supplied_binding != store.get_review_event_oauth_binding():
         raise RuntimeError(
-            "Guard live request sync requires a matching source, OAuth subject, machine, workspace, "
-            "and installation binding."
+            "Cloud Review sync requires a matching source, OAuth subject, machine, workspace, and installation binding."
         )
     delivery_binding = {
         "oauth_subject_hash": oauth_subject_hash,
@@ -131,7 +131,7 @@ def sync_live_requests_once(
         "machine_id": machine_id,
         "machine_installation_id": machine_installation_id,
     }
-    store.claim_unowned_live_request_outbox(**delivery_binding)
+    store.refresh_review_event_outbox_binding_for_identity(**delivery_binding)
 
     state = _load_sync_state(store)
     state.update(
@@ -149,11 +149,11 @@ def sync_live_requests_once(
     batches = 0
 
     try:
-        while batches < LIVE_REQUEST_SYNC_MAX_BATCHES:
+        while batches < CLOUD_REVIEW_SYNC_MAX_BATCHES:
             newest_first = batches % 10 != 9
-            outbox_rows = store.list_ready_live_request_outbox(
+            outbox_rows = store.list_ready_review_events(
                 now=_now(),
-                limit=LIVE_REQUEST_SYNC_BATCH_SIZE,
+                limit=CLOUD_REVIEW_SYNC_BATCH_SIZE,
                 **delivery_binding,
                 newest_first=newest_first,
             )
@@ -168,7 +168,7 @@ def sync_live_requests_once(
             except GuardReviewContractError:
                 oauth = None
             for outbox_row in outbox_rows:
-                projected = project_live_request_outbox_row(
+                projected = project_cloud_review_event(
                     store,
                     outbox_row=outbox_row,
                     delivery_binding=delivery_binding,
@@ -189,7 +189,7 @@ def sync_live_requests_once(
                     events=events,
                 )
             except Exception as error:
-                store.retry_live_request_outbox(
+                store.retry_review_events(
                     sequences,
                     now=_now(),
                     error=_redacted_error(error),
@@ -232,11 +232,11 @@ def sync_live_requests_once(
                     and sum(bool(item["accepted"]) for item in per_event_results) == accepted
                     and len(per_event_results) - accepted == rejected
                 ):
-                    store.acknowledge_live_request_outbox(acknowledged_sequences, **delivery_binding)
+                    store.acknowledge_review_events(acknowledged_sequences, **delivery_binding)
                     if retry_sequences:
                         message = _retry_result_message(retry_results)
                         all_errors.append(message)
-                        store.retry_live_request_outbox(
+                        store.retry_review_events(
                             retry_sequences,
                             now=_now(),
                             error=message,
@@ -246,9 +246,9 @@ def sync_live_requests_once(
 
             accounted = accepted + rejected
             if accounted != len(events):
-                message = "Cloud live request sync acknowledgement count did not match the batch."
+                message = "Cloud Review sync acknowledgement count did not match the batch."
                 all_errors.append(message)
-                store.retry_live_request_outbox(
+                store.retry_review_events(
                     sequences,
                     now=_now(),
                     error=message,
@@ -256,19 +256,19 @@ def sync_live_requests_once(
                 )
                 break
             if rejected:
-                message = f"{rejected} live request events were rejected."
+                message = f"{rejected} Cloud Review events were rejected."
                 all_errors.append(message)
-                store.retry_live_request_outbox(
+                store.retry_review_events(
                     sequences,
                     now=_now(),
                     error=message,
                     **delivery_binding,
                 )
                 break
-            store.acknowledge_live_request_outbox(sequences, **delivery_binding)
+            store.acknowledge_review_events(sequences, **delivery_binding)
 
         completed_at = _now()
-        outbox_status = store.live_request_outbox_status(
+        outbox_status = store.review_event_outbox_status(
             now=completed_at,
             **delivery_binding,
         )
@@ -288,9 +288,9 @@ def sync_live_requests_once(
 
         outbox_depth = outbox_status["depth"]
         if not isinstance(outbox_depth, int):
-            raise RuntimeError("Live-request outbox depth is invalid.")
+            raise RuntimeError("Cloud Review event outbox depth is invalid.")
         _LOGGER.info(
-            "Guard live request sync complete: accepted=%d rejected=%d batches=%d outbox_depth=%d",
+            "Cloud Review sync complete: accepted=%d rejected=%d batches=%d outbox_depth=%d",
             total_accepted,
             total_rejected,
             batches,
@@ -314,7 +314,7 @@ def sync_live_requests_once(
             }
         )
         _save_sync_state(store, state)
-        _LOGGER.warning("Guard live request sync failed: %s", error_message)
+        _LOGGER.warning("Cloud Review sync failed: %s", error_message)
         raise
     except Exception as error:
         error_message = _redacted_error(error)
@@ -326,18 +326,18 @@ def sync_live_requests_once(
             }
         )
         _save_sync_state(store, state)
-        _LOGGER.warning("Guard live request sync failed: %s", error_message)
+        _LOGGER.warning("Cloud Review sync failed: %s", error_message)
         raise
 
 
-def live_request_sync_status(store: GuardStore) -> dict[str, object]:
-    """Return live request outbox and delivery health."""
+def cloud_review_sync_status(store: GuardStore) -> dict[str, object]:
+    """Return Cloud Review outbox and delivery health."""
     state = _load_sync_state(store)
     profile = store.get_cloud_sync_profile()
     workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
-    binding = store.get_live_request_oauth_binding()
+    binding = store.get_review_event_oauth_binding()
     if binding is not None:
-        outbox = store.live_request_outbox_status(
+        outbox = store.review_event_outbox_status(
             now=_now(),
             oauth_subject_hash=binding["oauth_subject_hash"],
             workspace_id=binding["workspace_id"],
@@ -345,7 +345,7 @@ def live_request_sync_status(store: GuardStore) -> dict[str, object]:
             machine_installation_id=binding["machine_installation_id"],
         )
     else:
-        outbox = store.live_request_outbox_status(
+        outbox = store.review_event_outbox_status(
             now=_now(),
             workspace_id=workspace_id,
         )
@@ -364,8 +364,8 @@ def live_request_sync_status(store: GuardStore) -> dict[str, object]:
 
 
 @dataclass
-class LiveRequestSyncWorker:
-    """Background worker for live-request event outbox sync."""
+class CloudReviewSyncWorker:
+    """Background worker for Cloud Review event outbox sync."""
 
     thread: threading.Thread
     stop_event: threading.Event
@@ -373,12 +373,12 @@ class LiveRequestSyncWorker:
 
 def start_cloud_sync_sync_worker(
     store: GuardStore,
-    existing: LiveRequestSyncWorker | None = None,
+    existing: CloudReviewSyncWorker | None = None,
     *,
     poll_interval: float | None = None,
     error_backoff: float | None = None,
-) -> LiveRequestSyncWorker | None:
-    """Start independent live-request sync worker at daemon startup.
+) -> CloudReviewSyncWorker | None:
+    """Start the independent Cloud Review event worker at daemon startup.
 
     Runs continuously syncing the outbox to cloud regardless of whether the
     command-queue lease path is active. Offline preservation ensures local
@@ -389,28 +389,21 @@ def start_cloud_sync_sync_worker(
     if existing is not None and existing.thread.is_alive():
         existing.thread.join(timeout=1.0)
         if existing.thread.is_alive():
-            raise RuntimeError("Previous live-request sync worker did not stop.")
+            raise RuntimeError("Previous Cloud Review sync worker did not stop.")
 
-    if os.environ.get("GUARD_LIVE_REQUEST_ENABLED", "1").strip().lower() in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }:
-        return None
     profile = store.get_cloud_sync_profile()
     if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
         return None
     stop_event = threading.Event()
     poll_interval = poll_interval or float(
         os.environ.get(
-            "GUARD_LIVE_REQUEST_POLL_INTERVAL",
+            "GUARD_CLOUD_REVIEW_POLL_INTERVAL",
             str(DEFAULT_POLL_INTERVAL_SECONDS),
         )
     )
     error_backoff = error_backoff or float(
         os.environ.get(
-            "GUARD_LIVE_REQUEST_ERROR_BACKOFF",
+            "GUARD_CLOUD_REVIEW_ERROR_BACKOFF",
             str(DEFAULT_ERROR_BACKOFF_SECONDS),
         )
     )
@@ -424,16 +417,16 @@ def start_cloud_sync_sync_worker(
             "error_backoff": error_backoff,
         },
         daemon=True,
-        name="hol-guard-live-request-sync",
+        name="hol-guard-cloud-review-sync",
     )
     thread.start()
-    return LiveRequestSyncWorker(thread=thread, stop_event=stop_event)
+    return CloudReviewSyncWorker(thread=thread, stop_event=stop_event)
 
 
 def stop_cloud_sync_sync_worker(
-    worker: LiveRequestSyncWorker | None,
-) -> LiveRequestSyncWorker | None:
-    """Signal a live-request sync worker and wait briefly for shutdown."""
+    worker: CloudReviewSyncWorker | None,
+) -> CloudReviewSyncWorker | None:
+    """Signal a Cloud Review sync worker and wait briefly for shutdown."""
     if worker is None:
         return None
     worker.stop_event.set()
@@ -441,15 +434,15 @@ def stop_cloud_sync_sync_worker(
     return worker if worker.thread.is_alive() else None
 
 
-def _with_live_request_sync_identity(
+def _with_cloud_review_sync_identity(
     store: GuardStore,
     auth_context: dict[str, object],
 ) -> dict[str, object]:
     oauth = guard_review_oauth_metadata(store)
-    subject_hash = live_request_oauth_subject_hash(oauth.grant_id)
+    subject_hash = review_event_oauth_subject_hash(oauth.grant_id)
     if subject_hash is None:
         raise GuardReviewContractError("missing_oauth_subject")
-    binding = store.get_live_request_oauth_binding()
+    binding = store.get_review_event_oauth_binding()
     expected_binding = {
         "oauth_source": store.guard_source,
         "oauth_subject_hash": subject_hash,
@@ -465,7 +458,7 @@ def _with_live_request_sync_identity(
     }
 
 
-def _resolve_live_request_sync_auth_context(store: GuardStore) -> dict[str, Any]:
+def _resolve_cloud_review_sync_auth_context(store: GuardStore) -> dict[str, Any]:
     """Resolve cloud sync auth context and repair paired storage when possible."""
     from .runner import (
         GuardSyncAuthorizationExpiredError,
@@ -475,11 +468,11 @@ def _resolve_live_request_sync_auth_context(store: GuardStore) -> dict[str, Any]
     )
 
     try:
-        return _with_live_request_sync_identity(store, _resolve_guard_sync_auth_context(store))
+        return _with_cloud_review_sync_identity(store, _resolve_guard_sync_auth_context(store))
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError):
         repair = repair_guard_cloud_connect_storage(store)
         if repair["existing_sign_in_valid"] or repair["repaired_storage"]:
-            return _with_live_request_sync_identity(store, _resolve_guard_sync_auth_context(store))
+            return _with_cloud_review_sync_identity(store, _resolve_guard_sync_auth_context(store))
         raise
 
 
@@ -490,7 +483,7 @@ def _cloud_sync_sync_loop(
     poll_interval: float,
     error_backoff: float,
 ) -> None:
-    """Main loop for the independent live-request sync worker."""
+    """Main loop for the independent Cloud Review sync worker."""
     from .runner import (
         GuardSyncAuthorizationExpiredError,
         GuardSyncNotConfiguredError,
@@ -499,8 +492,8 @@ def _cloud_sync_sync_loop(
     error_streak = 0
     while not stop_event.is_set():
         try:
-            auth_context = _resolve_live_request_sync_auth_context(store)
-            result = sync_live_requests_once(store, auth_context)
+            auth_context = _resolve_cloud_review_sync_auth_context(store)
+            result = sync_cloud_review_events_once(store, auth_context)
             with suppress(OSError, PermissionError, RuntimeError, ValueError):
                 if user_health_report_due(store.guard_home):
                     run_user_health_cadence(store.guard_home)
@@ -521,7 +514,7 @@ def _cloud_sync_sync_loop(
             _save_sync_state(store, state)
         except Exception as error:
             error_streak += 1
-            _LOGGER.exception("Unexpected error in live-request sync loop")
+            _LOGGER.exception("Unexpected error in Cloud Review sync loop")
             state = _load_sync_state(store)
             state.update(
                 {

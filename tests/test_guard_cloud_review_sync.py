@@ -1,4 +1,4 @@
-"""Behavioral coverage for durable live-request cloud sync."""
+"""Behavioral coverage for durable Cloud Review event synchronization."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import live_request_sync as live_request_sync_module
+from codex_plugin_scanner.guard.runtime import cloud_review_sync as cloud_review_sync_module
 from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import (
     CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     _resolve_sync_url,
     post_review_events,
 )
-from codex_plugin_scanner.guard.runtime.live_request_sync import (
-    _build_live_request_event,
+from codex_plugin_scanner.guard.runtime.cloud_review_sync import (
+    build_cloud_review_event,
     start_cloud_sync_sync_worker,
     stop_cloud_sync_sync_worker,
 )
@@ -75,17 +75,17 @@ class TestIndependentWorker:
                 return True
 
         monkeypatch.setattr(
-            live_request_sync_module,
-            "_resolve_live_request_sync_auth_context",
+            cloud_review_sync_module,
+            "_resolve_cloud_review_sync_auth_context",
             lambda _store: {"access_token": "token-1", "workspace_id": "workspace-1"},
         )
         monkeypatch.setattr(
-            live_request_sync_module,
-            "sync_live_requests_once",
-            lambda _store, auth: calls.append(("live", auth)) or {"synced": 0},
+            cloud_review_sync_module,
+            "sync_cloud_review_events_once",
+            lambda _store, auth: calls.append(("review", auth)) or {"synced": 0},
         )
 
-        live_request_sync_module._cloud_sync_sync_loop(
+        cloud_review_sync_module._cloud_sync_sync_loop(
             store,
             StopAfterOneIteration(),
             poll_interval=1,
@@ -93,10 +93,14 @@ class TestIndependentWorker:
         )
 
         assert calls == [
-            ("live", {"access_token": "token-1", "workspace_id": "workspace-1"}),
+            ("review", {"access_token": "token-1", "workspace_id": "workspace-1"}),
         ]
 
-    def test_start_worker_creates_thread(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_connected_daemon_starts_cloud_review_worker(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         store = Store(tmp_path)
 
         class FakeThread:
@@ -114,7 +118,7 @@ class TestIndependentWorker:
         def fake_thread(*args: object, **kwargs: object) -> FakeThread:
             return created_thread
 
-        monkeypatch.setattr("codex_plugin_scanner.guard.runtime.live_request_sync.threading.Thread", fake_thread)
+        monkeypatch.setattr("codex_plugin_scanner.guard.runtime.cloud_review_sync.threading.Thread", fake_thread)
         worker = start_cloud_sync_sync_worker(store)
         assert worker is not None
         assert worker.thread is created_thread
@@ -156,11 +160,11 @@ class TestIndependentWorker:
             return created_thread
 
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.runtime.live_request_sync.threading.Thread",
+            "codex_plugin_scanner.guard.runtime.cloud_review_sync.threading.Thread",
             fake_thread,
         )
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.runtime.live_request_sync.threading.Event",
+            "codex_plugin_scanner.guard.runtime.cloud_review_sync.threading.Event",
             lambda: created_event,
         )
 
@@ -188,17 +192,10 @@ class TestIndependentWorker:
                 return False
 
         existing = type("Worker", (), {"thread": FakeThread(), "stop_event": FakeEvent()})()
-        monkeypatch.delenv("GUARD_LIVE_REQUEST_POLL_INTERVAL", raising=False)
+        monkeypatch.delenv("GUARD_CLOUD_REVIEW_POLL_INTERVAL", raising=False)
 
         new_worker = start_cloud_sync_sync_worker(store, existing=existing)  # type: ignore[arg-type]
         assert new_worker is existing
-
-    def test_start_worker_returns_none_when_opted_out(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """GUARD_LIVE_REQUEST_ENABLED=0 disables the worker."""
-        store = Store(tmp_path)
-        monkeypatch.setenv("GUARD_LIVE_REQUEST_ENABLED", "0")
-        monkeypatch.delenv("GUARD_LIVE_REQUEST_POLL_INTERVAL", raising=False)
-        assert start_cloud_sync_sync_worker(store) is None
 
     def test_start_worker_returns_none_without_cloud_profile(
         self,
@@ -229,8 +226,8 @@ class TestIndependentWorker:
                 return True
 
         existing = type("Worker", (), {"thread": FakeThread(), "stop_event": FakeEvent()})()
-        monkeypatch.delenv("GUARD_LIVE_REQUEST_POLL_INTERVAL", raising=False)
-        monkeypatch.setattr(live_request_sync_module.threading, "Thread", FakeThread)
+        monkeypatch.delenv("GUARD_CLOUD_REVIEW_POLL_INTERVAL", raising=False)
+        monkeypatch.setattr(cloud_review_sync_module.threading, "Thread", FakeThread)
 
         new_worker = start_cloud_sync_sync_worker(store, existing=existing)  # type: ignore[arg-type]
         assert new_worker is not existing
@@ -240,20 +237,20 @@ class TestIndependentWorker:
 
 
 # ---------------------------------------------------------------------------
-# Contract: live_request_sync_status before dedicated cloud sync
+# Contract: cloud_review_sync_status before dedicated cloud sync
 # ---------------------------------------------------------------------------
 
 
 class TestSyncStatus:
-    """live_request_sync_status returns the current status dict."""
+    """cloud_review_sync_status returns the current status dict."""
 
     def test_status_returns_protocol_version(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.store import GuardStore
 
         store = GuardStore(tmp_path)
-        from codex_plugin_scanner.guard.runtime.live_request_sync import live_request_sync_status
+        from codex_plugin_scanner.guard.runtime.cloud_review_sync import cloud_review_sync_status
 
-        status = live_request_sync_status(store)
+        status = cloud_review_sync_status(store)
         assert isinstance(status, dict)
         assert status["protocolVersion"] == CLOUD_REVIEW_EVENT_PROTOCOL_VERSION
 
@@ -261,7 +258,7 @@ class TestSyncStatus:
 class TestRedactionLevelNone:
     """Redaction level 'none' emits the actual scrubbed command for display/raw.
 
-    Live request with a real command + secret: raw_command and display_command
+    Cloud Review with a real command + secret: raw_command and display_command
     carry the secret-scrubbed text; display_provenance is 'raw'; redacted_command
     is None.
     """
@@ -281,7 +278,7 @@ class TestRedactionLevelNone:
             "last_seen_at": "2026-07-10T00:00:00+00:00",
             "expires_at": "2026-07-10T01:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="none",
@@ -326,7 +323,7 @@ class TestRedactionLevelNone:
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="none",
@@ -357,7 +354,7 @@ class TestRedactionLevelNone:
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="none",
@@ -383,7 +380,7 @@ class TestRedactionLevelNone:
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="none",
@@ -415,7 +412,7 @@ class TestRedactionLevelNone:
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="none",
@@ -456,7 +453,7 @@ class TestRedactionLevelPartial:
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="partial",
@@ -486,7 +483,7 @@ class TestRedactionLevelPartial:
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="partial",
@@ -512,7 +509,7 @@ class TestRedactionLevelPartial:
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="partial",
@@ -535,7 +532,7 @@ class TestRedactionLevelPartial:
             "created_at": "2026-07-10T00:00:00+00:00",
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="full",
@@ -561,7 +558,7 @@ class TestRedactionLevelPartial:
             "last_seen_at": "2026-07-10T00:00:00+00:00",
         }
 
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="full",
@@ -582,7 +579,7 @@ class TestPendingRequestAgeConnectivity:
     must not suppress the command text.
     """
 
-    def test_pending_request_ignores_legacy_expiration_timestamp(self, tmp_path: Path) -> None:
+    def test_pending_request_ignores_non_authoritative_expiration_timestamp(self, tmp_path: Path) -> None:
         """A pending request with a past expires_at emits no product expiration."""
         store = Store(tmp_path)
         item: dict[str, object] = {
@@ -596,7 +593,7 @@ class TestPendingRequestAgeConnectivity:
             "last_seen_at": "2026-07-01T00:00:00+00:00",
             "expires_at": "2026-07-01T01:00:00+00:00",  # already expired
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="none",
@@ -624,7 +621,7 @@ class TestPendingRequestAgeConnectivity:
             "expires_at": "2026-07-10T12:00:00+00:00",
         }
         # oauth=None simulates disconnected daemon (no cloud auth available)
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="none",
@@ -651,7 +648,7 @@ class TestPendingRequestAgeConnectivity:
             "last_seen_at": "2026-07-10T00:00:00+00:00",
             "expires_at": "2026-07-06T00:00:00+00:00",
         }
-        event = _build_live_request_event(
+        event = build_cloud_review_event(
             item,
             oauth=None,
             redaction_level="none",
@@ -662,32 +659,6 @@ class TestPendingRequestAgeConnectivity:
         # Must be 'request_created', NOT 'request_expired'
         assert event["eventType"] == "request_created"
         assert event["eventType"] != "request_expired"
-
-    def test_legacy_expired_status_reopens_as_live(self, tmp_path: Path) -> None:
-        store = Store(tmp_path)
-        item: dict[str, object] = {
-            "request_id": "req-legacy-expired-1",
-            "status": "expired",
-            "action_identity": "deploy-critical-fix",
-            "trigger_summary": "Hotfix for production",
-            "harness": "guard-review",
-            "raw_command_text": "./run-hotfix.sh --force",
-            "created_at": "2026-07-01T00:00:00+00:00",
-            "last_seen_at": "2026-07-01T00:00:00+00:00",
-            "resolved_at": "2026-07-01T01:00:00+00:00",
-        }
-
-        event = _build_live_request_event(
-            item,
-            oauth=None,
-            redaction_level="none",
-            store=store,
-            event_sequence=1,
-        )
-
-        assert event is not None
-        assert event["eventType"] == "request_created"
-        assert event["requestPayload"]["status"] == "pending"
 
 
 def test_canonical_transport_posts_structured_event_content(

@@ -27,11 +27,11 @@ def _retry_at(now: str, attempt_count: int) -> str:
 
 
 class StoreReviewEventOutboxMixin:
-    def requeue_pending_live_requests(self, *, changed_at: str) -> int:
+    def requeue_pending_review_events(self, *, changed_at: str) -> int:
         with self._connect() as connection:
             return requeue_pending_request_events(connection, source=self._guard_source, changed_at=changed_at)
 
-    def requeue_pending_live_requests_with_marker(
+    def requeue_pending_review_events_with_marker(
         self,
         *,
         changed_at: str,
@@ -52,12 +52,12 @@ class StoreReviewEventOutboxMixin:
             )
             return count
 
-    def get_live_request_oauth_binding(self) -> dict[str, str] | None:
+    def get_review_event_oauth_binding(self) -> dict[str, str] | None:
         with self._connect() as connection:
             binding = load_review_oauth_binding(connection, self._guard_source)
         return dict(binding) if binding is not None else None
 
-    def claim_unowned_live_request_outbox(
+    def refresh_review_event_outbox_binding_for_identity(
         self,
         workspace_id: str,
         *,
@@ -87,11 +87,11 @@ class StoreReviewEventOutboxMixin:
                 return 0
             return refresh_same_subject_binding(connection, self._guard_source)
 
-    def refresh_live_request_outbox_binding(self) -> int:
+    def refresh_review_event_outbox_binding(self) -> int:
         with self._connect() as connection:
             return refresh_same_subject_binding(connection, self._guard_source)
 
-    def reassign_quarantined_live_request_outbox(
+    def reassign_quarantined_review_events(
         self,
         *,
         approved_source: str,
@@ -106,7 +106,7 @@ class StoreReviewEventOutboxMixin:
                 approved_workspace_id=approved_workspace_id,
             )
 
-    def list_ready_live_request_outbox(
+    def list_ready_review_events(
         self,
         *,
         now: str,
@@ -134,7 +134,7 @@ class StoreReviewEventOutboxMixin:
         identity = (oauth_subject_hash, workspace_id, machine_id, machine_installation_id)
         if any(value is not None for value in identity):
             if not all(isinstance(value, str) for value in identity):
-                raise ValueError("complete live-request OAuth binding is required")
+                raise ValueError("complete Review event OAuth binding is required")
             binding = normalized_delivery_binding(
                 oauth_subject_hash=str(oauth_subject_hash),
                 workspace_id=str(workspace_id),
@@ -172,7 +172,7 @@ class StoreReviewEventOutboxMixin:
             for row in rows
         ]
 
-    def acknowledge_live_request_outbox(
+    def acknowledge_review_events(
         self,
         sequences: Sequence[int],
         *,
@@ -248,7 +248,7 @@ class StoreReviewEventOutboxMixin:
             )
             return max(0, int(cursor.rowcount or 0))
 
-    def retry_live_request_outbox(
+    def retry_review_events(
         self,
         sequences: Sequence[int],
         *,
@@ -294,7 +294,7 @@ class StoreReviewEventOutboxMixin:
                 updated += max(0, int(cursor.rowcount or 0))
         return updated
 
-    def quarantine_live_request_outbox_event(
+    def quarantine_review_event(
         self,
         sequence: int,
         *,
@@ -326,7 +326,7 @@ class StoreReviewEventOutboxMixin:
             )
             return max(0, int(cursor.rowcount or 0))
 
-    def live_request_outbox_status(
+    def review_event_outbox_status(
         self,
         *,
         now: str,
@@ -351,7 +351,7 @@ class StoreReviewEventOutboxMixin:
             parameters.append(workspace_id)
         elif any(value is not None for value in identity):
             if not all(isinstance(value, str) for value in identity):
-                raise ValueError("complete live-request OAuth binding is required")
+                raise ValueError("complete Review event OAuth binding is required")
             binding = normalized_delivery_binding(
                 oauth_subject_hash=str(oauth_subject_hash),
                 workspace_id=str(workspace_id),
@@ -366,9 +366,8 @@ class StoreReviewEventOutboxMixin:
         diagnostics_query = """
             select
               sum(case when binding_status = 'quarantined' then 1 else 0 end) as quarantined_depth,
-              sum(case when binding_status = 'quarantined' and oauth_source is null then 1 else 0 end)
-                as legacy_unbound_depth,
-              sum(case when binding_status = 'quarantined' and workspace_id is null then 1 else 0 end)
+              sum(case when binding_status = 'quarantined'
+                and (oauth_source is null or workspace_id is null) then 1 else 0 end)
                 as unbound_depth,
               0 as other_workspace_depth
             from guard_review_outbox_events
@@ -380,10 +379,9 @@ class StoreReviewEventOutboxMixin:
                   sum(case when binding_status = 'quarantined'
                     and (oauth_source = ? or (oauth_source is null and (workspace_id is null or workspace_id = ?)))
                     then 1 else 0 end) as quarantined_depth,
-                  sum(case when binding_status = 'quarantined' and oauth_source is null
-                    and (workspace_id is null or workspace_id = ?) then 1 else 0 end) as legacy_unbound_depth,
-                  sum(case when binding_status = 'quarantined' and workspace_id is null
-                    and (oauth_source = ? or oauth_source is null) then 1 else 0 end) as unbound_depth,
+                  sum(case when binding_status = 'quarantined'
+                    and (oauth_source is null or workspace_id is null)
+                    and (workspace_id is null or workspace_id = ?) then 1 else 0 end) as unbound_depth,
                   sum(case when binding_status = 'quarantined' and workspace_id is not null
                     and workspace_id != ? and (oauth_source = ? or oauth_source is null)
                     then 1 else 0 end) as other_workspace_depth
@@ -393,7 +391,6 @@ class StoreReviewEventOutboxMixin:
                 self._guard_source,
                 workspace_id,
                 workspace_id,
-                self._guard_source,
                 workspace_id,
                 self._guard_source,
             ]
@@ -401,7 +398,6 @@ class StoreReviewEventOutboxMixin:
             row = connection.execute(query, parameters).fetchone()
             diagnostics = connection.execute(diagnostics_query, diagnostics_parameters).fetchone()
         quarantined = int(diagnostics["quarantined_depth"] or 0) if diagnostics is not None else 0
-        legacy = int(diagnostics["legacy_unbound_depth"] or 0) if diagnostics is not None else 0
         unbound = int(diagnostics["unbound_depth"] or 0) if diagnostics is not None else 0
         other_workspace = int(diagnostics["other_workspace_depth"] or 0) if diagnostics is not None else 0
         return {
@@ -415,9 +411,7 @@ class StoreReviewEventOutboxMixin:
             "last_error": row["last_error"] if row is not None else None,
             "unbound_depth": unbound,
             "other_workspace_depth": other_workspace,
-            "identity_mismatch_depth": max(0, quarantined - legacy),
-            "legacy_unbound_depth": legacy,
-            "repairable_legacy_unbound_depth": legacy,
+            "identity_mismatch_depth": max(0, quarantined - unbound),
             "quarantined_depth": quarantined,
             "checked_at": now,
         }

@@ -143,6 +143,7 @@ from ..policy_bundle_trusted_keys import (
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
 from ..receipts.manager import build_receipt
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
+from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
 from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
 from ..runtime.command_evaluation import evaluate_command
@@ -155,7 +156,6 @@ from ..runtime.command_shadow_evaluation import (
 )
 from ..runtime.extension_control_authority import ExtensionControlAuthorityError, ExtensionControlAuthorityView
 from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
-from ..runtime.live_request_sync import LiveRequestSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.local_temp_paths import trusted_temporary_root_for_path
 from ..runtime.network_status import build_network_status, project_network_supervisor_health
 from ..runtime.network_supervisor import NetworkSupervisor
@@ -173,7 +173,7 @@ from ..runtime.runner import (
     _policy_bundle_cloud_exception_items,
     _policy_bundle_downgrade_reference,
     _policy_bundle_is_version_downgrade,
-    _requeue_live_request_privacy_projection,
+    _requeue_cloud_review_privacy_projection,
     _reset_cloud_receipt_redaction_authority,
     _resolve_guard_sync_auth_context,
     _validate_cached_policy_bundle,
@@ -5000,7 +5000,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 config = load_guard_config(guard_home)
             if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_live_request_privacy_projection(  # type: ignore[arg-type]
+                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
                     self.server.store,
                     level=config.receipt_redaction_level,
                     changed_at=_now(),
@@ -5082,7 +5082,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
                 config = load_guard_config(guard_home)
             if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_live_request_privacy_projection(  # type: ignore[arg-type]
+                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
                     self.server.store,
                     level=config.receipt_redaction_level,
                     changed_at=_now(),
@@ -5110,7 +5110,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             config = reset_guard_settings(guard_home, approval_gate_grant=approval_gate_grant)
             if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_live_request_privacy_projection(  # type: ignore[arg-type]
+                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
                     self.server.store,
                     level=config.receipt_redaction_level,
                     changed_at=_now(),
@@ -7976,7 +7976,7 @@ class GuardDaemonServer:
         self._command_activity_maintenance_thread: threading.Thread | None = None
         self._extension_control_refresh_thread: threading.Thread | None = None
         self._extension_control_refresh_interval_seconds = extension_control_refresh_interval_seconds
-        self._live_request_sync_worker: LiveRequestSyncWorker | None = None
+        self._cloud_review_sync_worker: CloudReviewSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
 
@@ -8087,9 +8087,9 @@ class GuardDaemonServer:
         self._start_aibom_inventory_refresh()
         self._start_extension_control_refresh()
         self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
-        self._live_request_sync_worker = start_cloud_sync_sync_worker(
+        self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
             self._server.store,
-            self._live_request_sync_worker,
+            self._cloud_review_sync_worker,
         )
         self._refresh_stale_harness_shims_best_effort()
         self._start_command_activity_maintenance()
@@ -8293,8 +8293,8 @@ class GuardDaemonServer:
         except Exception:
             contained = False
         try:
-            self._live_request_sync_worker = stop_cloud_sync_sync_worker(self._live_request_sync_worker)
-            contained = self._live_request_sync_worker is None and contained
+            self._cloud_review_sync_worker = stop_cloud_sync_sync_worker(self._cloud_review_sync_worker)
+            contained = self._cloud_review_sync_worker is None and contained
         except Exception:
             contained = False
         runtime_heartbeat = getattr(self._server, "runtime_heartbeat", None)
@@ -8440,13 +8440,13 @@ class GuardDaemonServer:
             with self._server.active_stream_clients_lock:
                 active_stream_clients = self._server.active_stream_clients
             try:
-                pending_live_requests = self._server.store.list_approval_requests(
+                pending_review_requests = self._server.store.list_approval_requests(
                     status="pending",
                     limit=1,
                 )
                 cloud_profile = self._server.store.get_cloud_sync_profile()
                 workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
-                outbox_status = self._server.store.live_request_outbox_status(
+                outbox_status = self._server.store.review_event_outbox_status(
                     now=_now(),
                     workspace_id=workspace_id,
                 )
@@ -8456,7 +8456,7 @@ class GuardDaemonServer:
                 continue
             if (
                 active_stream_clients > 0
-                or pending_live_requests
+                or pending_review_requests
                 or (workspace_id is not None and isinstance(outbox_depth, int) and outbox_depth > 0)
             ):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)

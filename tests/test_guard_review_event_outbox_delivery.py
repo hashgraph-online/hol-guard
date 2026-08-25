@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.continuation_runtime import (
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
-from codex_plugin_scanner.guard.runtime import live_request_sync
+from codex_plugin_scanner.guard.runtime import cloud_review_sync
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_review_event_outbox_test_support import as_int
 
@@ -60,7 +60,7 @@ def _connect(store: GuardStore) -> _Binding:
         {"grant_id": "grant-1", "workspace_id": "workspace-1", "machine_id": "machine-1"},
         _NOW,
     )
-    binding = store.get_live_request_oauth_binding()
+    binding = store.get_review_event_oauth_binding()
     assert binding is not None
     return {
         "oauth_subject_hash": binding["oauth_subject_hash"],
@@ -131,9 +131,9 @@ def test_create_then_resolve_before_sync_delivers_distinct_immutable_transitions
         resolved_at=_LATER,
     )
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
+    monkeypatch.setattr(cloud_review_sync, "post_review_events", _accepting_transport(captured))
 
-    result = live_request_sync.sync_live_requests_once(store, _auth(binding))
+    result = cloud_review_sync.sync_cloud_review_events_once(store, _auth(binding))
 
     assert result["synced"] == 2
     assert [event["eventType"] for event in captured] == ["request_created", "request_resolved"]
@@ -179,9 +179,9 @@ def test_projection_uses_frozen_continuation_after_operation_changes(
         },
     )
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
+    monkeypatch.setattr(cloud_review_sync, "post_review_events", _accepting_transport(captured))
 
-    result = live_request_sync.sync_live_requests_once(store, _auth(binding))
+    result = cloud_review_sync.sync_cloud_review_events_once(store, _auth(binding))
 
     assert result["synced"] == 1
     assert len(captured) == 1
@@ -245,9 +245,9 @@ def test_terminal_continuation_projects_as_a_distinct_authenticated_event(
     completed = record_live_hook_completion(store, request_id=request.request_id, action="allow", now=_LATER)
     assert completed is not None and completed["continuationStatus"] == "resumed"
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
+    monkeypatch.setattr(cloud_review_sync, "post_review_events", _accepting_transport(captured))
 
-    result = live_request_sync.sync_live_requests_once(store, _auth(binding))
+    result = cloud_review_sync.sync_cloud_review_events_once(store, _auth(binding))
 
     assert result["synced"] == 2
     terminal = captured[-1]
@@ -273,12 +273,12 @@ def test_request_sequence_survives_ack_compaction_refresh_and_restart(
     store = GuardStore(guard_home)
     binding = _connect(store)
     store.add_approval_request(_request("request-1"), _NOW)
-    first = store.list_ready_live_request_outbox(now=_NOW, limit=1, **binding)[0]
-    assert store.acknowledge_live_request_outbox([as_int(first["sequence"])], **binding) == 1
+    first = store.list_ready_review_events(now=_NOW, limit=1, **binding)[0]
+    assert store.acknowledge_review_events([as_int(first["sequence"])], **binding) == 1
 
     restarted = GuardStore(guard_home)
     restarted.add_approval_request(_request("request-1", summary="refreshed"), _LATER)
-    refreshed = restarted.list_ready_live_request_outbox(now=_LATER, limit=1, **binding)
+    refreshed = restarted.list_ready_review_events(now=_LATER, limit=1, **binding)
 
     assert len(refreshed) == 1
     assert refreshed[0]["request_sequence"] == 2
@@ -305,9 +305,9 @@ def test_invalid_stored_event_is_dead_lettered_without_send_or_ack(
     with store._connect() as connection:
         connection.execute(mutation)
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
+    monkeypatch.setattr(cloud_review_sync, "post_review_events", _accepting_transport(captured))
 
-    result = live_request_sync.sync_live_requests_once(store, _auth(binding))
+    result = cloud_review_sync.sync_cloud_review_events_once(store, _auth(binding))
 
     assert result["synced"] == 0
     assert captured == []
@@ -316,7 +316,7 @@ def test_invalid_stored_event_is_dead_lettered_without_send_or_ack(
     assert row["binding_status"] == "quarantined"
     assert row["quarantine_reason"] == expected_reason
     assert (
-        store.reassign_quarantined_live_request_outbox(
+        store.reassign_quarantined_review_events(
             approved_source="default",
             approved_workspace_id=binding["workspace_id"],
         )
@@ -340,9 +340,9 @@ def test_missing_canonical_snapshot_is_quarantined_without_fabricated_defaults(
     del payload["requestSnapshot"]
     _replace_event_payload(store, row, payload)
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
+    monkeypatch.setattr(cloud_review_sync, "post_review_events", _accepting_transport(captured))
 
-    result = live_request_sync.sync_live_requests_once(store, _auth(binding))
+    result = cloud_review_sync.sync_cloud_review_events_once(store, _auth(binding))
 
     assert result["synced"] == 0
     assert captured == []
@@ -381,9 +381,9 @@ def test_rehashed_noncanonical_snapshot_is_quarantined_before_projection(
         payload["oauthSource"] = "other"
     _replace_event_payload(store, row, payload)
     captured: list[dict[str, object]] = []
-    monkeypatch.setattr(live_request_sync, "post_review_events", _accepting_transport(captured))
+    monkeypatch.setattr(cloud_review_sync, "post_review_events", _accepting_transport(captured))
 
-    result = live_request_sync.sync_live_requests_once(store, _auth(binding))
+    result = cloud_review_sync.sync_cloud_review_events_once(store, _auth(binding))
 
     assert result["synced"] == 0
     assert captured == []

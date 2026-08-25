@@ -50,7 +50,7 @@ def _queue_state(store) -> dict[str, object]:
 
 def _outbox_status(store, workspace_id: str | None) -> dict[str, object]:
     try:
-        status = store.live_request_outbox_status(now=datetime.now(timezone.utc).isoformat(), workspace_id=workspace_id)
+        status = store.review_event_outbox_status(now=datetime.now(timezone.utc).isoformat(), workspace_id=workspace_id)
     except (AttributeError, OSError, RuntimeError, ValueError, sqlite3.Error):
         return {"state": "unavailable"}
     if not isinstance(status, dict):

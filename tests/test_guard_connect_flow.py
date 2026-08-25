@@ -291,7 +291,7 @@ def test_connect_repair_copy_points_to_browser_sign_in(tmp_path: Path) -> None:
     assert "guardPairSecret" not in rendered
 
 
-def test_connect_status_surfaces_legacy_live_request_recovery(
+def test_connect_status_surfaces_quarantined_review_event_recovery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -303,13 +303,13 @@ def test_connect_status_surfaces_legacy_live_request_recovery(
         "machine_id": "machine-1",
         "machine_installation_id": "installation-1",
     }
-    monkeypatch.setattr(store, "get_live_request_oauth_binding", lambda: binding)
+    monkeypatch.setattr(store, "get_review_event_oauth_binding", lambda: binding)
     monkeypatch.setattr(
         store,
-        "live_request_outbox_status",
+        "review_event_outbox_status",
         lambda **kwargs: {
-            "binding_state": "legacy_ambiguous",
-            "legacy_unbound_depth": 3,
+            "binding_state": "quarantined",
+            "unbound_depth": 3,
             **kwargs,
         },
     )
@@ -320,9 +320,9 @@ def test_connect_status_surfaces_legacy_live_request_recovery(
         connect_url="https://hol.org/guard/connect",
     )
 
-    assert payload["live_request_outbox"]["binding_state"] == "legacy_ambiguous"
-    assert payload["live_request_outbox"]["legacy_unbound_depth"] == 3
-    assert payload["live_request_recovery_command"] == (
+    assert payload["review_event_outbox"]["binding_state"] == "quarantined"
+    assert payload["review_event_outbox"]["unbound_depth"] == 3
+    assert payload["review_event_recovery_command"] == (
         "hol-guard connect reassign-quarantined --confirm-source default --confirm-workspace workspace-1"
     )
 

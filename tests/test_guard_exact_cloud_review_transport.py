@@ -202,7 +202,7 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(
 
     monkeypatch.setattr(
         command_queue,
-        "_live_request_sync_repair_status",
+        "_cloud_review_sync_repair_status",
         lambda _store: {"status": "repair_required"},
     )
     lease = command_queue._lease_payload(store, operations=(EXACT_CLOUD_REVIEW_OPERATION,))

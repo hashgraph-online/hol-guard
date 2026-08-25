@@ -15,6 +15,7 @@ from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
 from .auto_update import maybe_auto_update
+from .cloud_review_repair import cloud_review_sync_repair_status
 from .command_capability import (
     CommandCapabilityError,
     audit_command_decision,
@@ -66,7 +67,6 @@ from .exact_cloud_review_transport import (
     lease_next_job,
     uses_exact_transport,
 )
-from .live_request_repair import live_request_sync_repair_status
 from .runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotConfiguredError,
@@ -261,7 +261,7 @@ def _lease_payload(
         capabilities["schemaVersions"] = generic_schema_versions
     exact_review_only = operations == (EXACT_CLOUD_REVIEW_OPERATION,)
     if not exact_review_only:
-        repair_status = _live_request_sync_repair_status(store)
+        repair_status = _cloud_review_sync_repair_status(store)
         if repair_status is not None:
             capabilities["liveRequestSync"] = repair_status
     payload: dict[str, object] = {
@@ -277,11 +277,11 @@ def _lease_payload(
     return payload
 
 
-def _live_request_sync_repair_status(store: GuardStore) -> dict[str, object] | None:
+def _cloud_review_sync_repair_status(store: GuardStore) -> dict[str, object] | None:
     try:
-        return live_request_sync_repair_status(store)
+        return cloud_review_sync_repair_status(store)
     except Exception as exc:
-        _LOGGER.warning("Guard live request repair status failed: %s", _redacted_error(exc))
+        _LOGGER.warning("Guard Cloud Review repair status failed: %s", _redacted_error(exc))
         return None
 
 

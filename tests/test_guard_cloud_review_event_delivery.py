@@ -6,7 +6,7 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery as delivery
-from codex_plugin_scanner.guard.runtime import live_request_sync
+from codex_plugin_scanner.guard.runtime import cloud_review_sync
 from tests.guard_exact_cloud_review_support import connected_exact_review_store
 
 _AUTH: dict[str, object] = {"sync_url": "https://guard.example/api/guard/receipts/sync"}
@@ -36,7 +36,7 @@ def _post(events: list[dict[str, object]]) -> dict[str, object]:
 
 def test_canonical_upload_drains_real_immutable_outbox(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
-    binding = store.get_live_request_oauth_binding()
+    binding = store.get_review_event_oauth_binding()
     assert binding is not None
     store.add_approval_request(
         GuardApprovalRequest(
@@ -86,7 +86,7 @@ def test_canonical_upload_drains_real_immutable_outbox(monkeypatch: pytest.Monke
 
     monkeypatch.setattr(delivery, "_post_json", accept_batch)
 
-    result = live_request_sync.sync_live_requests_once(
+    result = cloud_review_sync.sync_cloud_review_events_once(
         store,
         {"oauth_source": "default", "sync_url": "https://guard.example", **binding},
     )

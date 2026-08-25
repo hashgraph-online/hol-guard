@@ -135,7 +135,7 @@ def test_local_request_snapshot_pending_is_cursorless(tmp_path: Path) -> None:
 
     # Second snapshot: pending status does NOT persist cursors,
     # so every call returns the same first batch (rows 0-124).
-    # This is the new live-request invariant: each lease covers
+    # Each canonical local-request lease covers
     # the newest pending rows without advancing a store cursor.
     second_payload = command_executors._local_request_snapshot_payload(store)
     assert second_payload["pendingComplete"] is False

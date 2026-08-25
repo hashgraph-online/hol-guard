@@ -2752,7 +2752,7 @@ def sync_receipts(
     sync_url = _normalized_receipts_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     local_guard_online_at = _now()
     redaction_level = _resolve_cloud_receipt_redaction_level(store)
-    _ensure_live_request_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
+    _ensure_cloud_review_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
     _ensure_relaxed_receipt_redaction_resync(store, level=redaction_level, synced_at=local_guard_online_at)
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
@@ -4447,12 +4447,12 @@ def repair_guard_cloud_connect_storage(store: GuardStore) -> dict[str, object]:
     repaired_storage = store.repair_oauth_local_credential_storage_from_primary()
     credentials = store.get_oauth_local_credentials(allow_primary=True)
     repaired_oauth_binding = False
-    claimed_live_requests = 0
+    rebound_review_events = 0
     if credentials is not None:
         repaired_oauth_binding = _persist_recovered_oauth_binding(store, credentials)
-        binding = store.get_live_request_oauth_binding()
+        binding = store.get_review_event_oauth_binding()
         if binding is not None:
-            claimed_live_requests = store.claim_unowned_live_request_outbox(
+            rebound_review_events = store.refresh_review_event_outbox_binding_for_identity(
                 workspace_id=binding["workspace_id"],
                 oauth_subject_hash=binding["oauth_subject_hash"],
                 machine_id=binding["machine_id"],
@@ -4462,7 +4462,7 @@ def repair_guard_cloud_connect_storage(store: GuardStore) -> dict[str, object]:
     return {
         "cleared_stale_sign_in": False,
         "existing_sign_in_valid": existing_sign_in_valid,
-        "claimed_live_requests": claimed_live_requests,
+        "rebound_review_events": rebound_review_events,
         "repaired_oauth_binding": repaired_oauth_binding,
         "repaired_storage": repaired_storage,
     }
@@ -5922,7 +5922,7 @@ _RECEIPT_REDACTION_LEVEL_RANK: dict[str, int] = {
     "none": 2,
 }
 _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER = "cloud_receipt_redaction_relaxed_resync_v1"
-_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER = "cloud_live_request_privacy_projection_v1"
+_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER = "cloud_review_privacy_projection_v2"
 _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER = "cloud_receipt_command_detail_backfill_v2"
 _RECEIPT_COMMAND_DETAIL_BACKFILL_FLAG = "__command_detail_backfill"
 
@@ -5970,7 +5970,7 @@ def _persist_cloud_receipt_redaction_level(store: GuardStore, *, level: str, syn
         synced_at,
     )
     if level != previous_level:
-        _requeue_live_request_privacy_projection(store, level=level, changed_at=synced_at)
+        _requeue_cloud_review_privacy_projection(store, level=level, changed_at=synced_at)
     if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank("full"):
         store.set_sync_payload(
             _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
@@ -5990,32 +5990,32 @@ def _reset_cloud_receipt_redaction_authority(store: GuardStore, *, synced_at: st
         synced_at,
     )
     if previous_level is not None and previous_level != local_level:
-        _requeue_live_request_privacy_projection(store, level=local_level, changed_at=synced_at)
+        _requeue_cloud_review_privacy_projection(store, level=local_level, changed_at=synced_at)
     store.delete_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
     store.delete_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
 
 
-def _ensure_live_request_privacy_projection(
+def _ensure_cloud_review_privacy_projection(
     store: GuardStore,
     *,
     level: str,
     synced_at: str,
 ) -> None:
-    marker = store.get_sync_payload(_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER)
+    marker = store.get_sync_payload(_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER)
     if isinstance(marker, dict) and marker.get("level") == level:
         return
-    _requeue_live_request_privacy_projection(store, level=level, changed_at=synced_at)
+    _requeue_cloud_review_privacy_projection(store, level=level, changed_at=synced_at)
 
 
-def _requeue_live_request_privacy_projection(
+def _requeue_cloud_review_privacy_projection(
     store: GuardStore,
     *,
     level: str,
     changed_at: str,
 ) -> int:
-    return store.requeue_pending_live_requests_with_marker(
+    return store.requeue_pending_review_events_with_marker(
         changed_at=changed_at,
-        marker_key=_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER,
+        marker_key=_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER,
         marker_payload={"level": level, "updated_at": changed_at},
     )
 
