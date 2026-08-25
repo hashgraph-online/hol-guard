@@ -285,5 +285,5 @@ const fallbackCloud = normalizeLocalCliList({
 });
 assert.equal(
   fallbackCloud.cloud.summary,
-  "Custom extensions stay on this device. Guard Cloud can keep the same extension on your other machines.",
+  "Custom Extensions remain local to this device until portable continuity is enabled.",
 );

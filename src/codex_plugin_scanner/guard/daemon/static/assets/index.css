@@ -136,6 +136,8 @@
     --color-blue-600: oklch(54.6% .245 262.881);
     --color-blue-700: oklch(48.8% .243 264.376);
     --color-blue-950: oklch(28.2% .091 267.935);
+    --color-indigo-50: oklch(96.2% .018 272.314);
+    --color-indigo-200: oklch(87% .065 274.039);
     --color-indigo-950: oklch(25.7% .09 281.288);
     --color-violet-50: oklch(96.9% .016 293.756);
     --color-violet-200: oklch(89.4% .057 293.283);
@@ -2415,6 +2417,10 @@
     border-color: var(--color-green-200);
   }
 
+  .border-indigo-200 {
+    border-color: var(--color-indigo-200);
+  }
+
   .border-muted-foreground\/20 {
     border-color: hsl(var(--muted-foreground));
   }
@@ -3341,6 +3347,10 @@
 
   .bg-green-100 {
     background-color: var(--color-green-100);
+  }
+
+  .bg-indigo-50 {
+    background-color: var(--color-indigo-50);
   }
 
   .bg-muted {

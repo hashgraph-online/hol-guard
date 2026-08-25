@@ -26,6 +26,7 @@ from .store_command_shadow import StoreCommandShadowMixin
 from .store_connection_schema import StoreConnectionSchemaMixin
 from .store_event_receipts import StoreEventReceiptsMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
+from .store_managed_controls_status import StoreManagedControlsStatusMixin
 from .store_local_cli import StoreLocalCliMixin
 from .store_local_mcp import StoreLocalMcpMixin
 from .store_evidence_facade import StoreEvidenceMixin
@@ -59,6 +60,7 @@ class GuardStore(
     StoreSecretPolicyIntegrityMixin,
     StoreWorkflowCapabilitySecretControlMixin,
     StoreConnectionSchemaMixin,
+    StoreManagedControlsStatusMixin,
     StoreExtensionControlAuthorityMixin,
     StoreLocalCliMixin,
     StoreLocalMcpMixin,

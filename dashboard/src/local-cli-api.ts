@@ -392,7 +392,7 @@ export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
       sync_local_only: cloud.sync_local_only !== false,
       summary: typeof cloud.summary === "string"
         ? cloud.summary
-        : "Custom extensions stay on this device. Guard Cloud can keep the same extension on your other machines.",
+        : "Custom Extensions remain local to this device until portable continuity is enabled.",
     },
   };
 }

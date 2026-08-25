@@ -19,8 +19,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 _ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_ROOT / "tests"))
-from test_managed_controls_activation_integration import _activate, _bundle  # noqa: E402
+sys.path.insert(0, str(_ROOT))
+from tests.test_managed_controls_activation_integration import _activate, _bundle  # noqa: E402
 
 
 def _run_activation_crash_child(guard_home: Path, stage: str) -> None:

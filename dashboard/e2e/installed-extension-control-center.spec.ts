@@ -95,6 +95,8 @@ async function authenticateAndApply(page: import("@playwright/test").Page, count
 }
 
 async function openDeveloperDetails(page: import("@playwright/test").Page) {
+  await page.getByRole("tab", { name: "Technical details" }).click();
+  await expect(page.getByRole("tab", { name: "Technical details" })).toHaveAttribute("aria-selected", "true");
   await page.getByTestId("protection-more-detail").locator("summary").click();
   await expect(page.getByRole("heading", { name: "Detections" })).toBeVisible();
 }
@@ -165,11 +167,13 @@ test("installed Protection Center keeps canonical routes and real-daemon inspect
     await expect(page.getByRole("heading", { name: "Detections" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Protection setting identifiers" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Test Lab" })).toHaveCount(0);
-    await expect(page.getByRole("tab", { name: "Activity" })).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Activity" })).toHaveCount(1);
   }
 
   await page.goto("/extensions/command.git");
   await expectSecretSafeUrl(page);
+  await page.getByRole("tab", { name: "Activity" }).click();
+  await expect(page.getByRole("heading", { name: "Recent Extension decisions" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Test Lab", exact: true })).toBeVisible();
   const labCommand = "git reset --hard HEAD~1";
   await page.getByLabel("Command to check").fill(labCommand);

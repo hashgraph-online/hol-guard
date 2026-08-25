@@ -28,6 +28,7 @@ import { CustomExtensionCommandList, commandStatesPayload, withCommandState } fr
 import { useModalDialog } from "../use-modal-dialog";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError, ProtectionModuleRow } from "./components/protection-primitives";
+import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
 
 export { AddCustomExtensionWorkspace } from "./add-custom-extension-dialog";
 
@@ -93,7 +94,7 @@ function reviewModalDetail(gate: GuardApprovalGatePublicConfig | null): string {
   if (gate?.totp_enabled === true) {
     return "Enter the current authenticator code to save these settings on this device.";
   }
-  return "This stays on this device. Guard Cloud can keep the same custom extension on your other machines.";
+  return "This custom Extension remains local to this device until portable continuity is enabled.";
 }
 
 function customExtensionUnits(surface: LocalCliItem["surface"]): { unit: string; units: string; source: string } {
@@ -181,6 +182,7 @@ function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string)
 export function LocalCliDetail(props: {
   item: LocalCliItem;
   revision: number;
+  continuity: LocalCliListResponse["cloud"];
   onBack: () => void;
   onRefresh: () => Promise<void>;
 }) {
@@ -220,6 +222,7 @@ export function LocalCliDetail(props: {
     : commands;
   const bulkState = bulkCommandState(bulkTargets);
   const bulkCopy = bulkPolicyCopy(props.item.surface);
+  const continuity = customExtensionContinuityView("local-only");
   const clearPending = useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -304,6 +307,11 @@ export function LocalCliDetail(props: {
           )}
         </div>
       </header>
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-labelledby="custom-extension-continuity-heading">
+        <h2 id="custom-extension-continuity-heading" className="text-sm font-semibold text-brand-dark">{continuity.title}</h2>
+        <p className="mt-2 text-sm leading-6 text-brand-dark/75">{props.continuity.summary || continuity.description}</p>
+        <p className="mt-2 text-xs leading-5 text-brand-dark/60">{continuity.privacyDisclosure}</p>
+      </section>
       {added ? (
         <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
           <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">
