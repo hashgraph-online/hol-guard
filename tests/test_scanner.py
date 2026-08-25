@@ -81,10 +81,12 @@ class TestScanPlugin:
         assert result.score == 73
         assert result.grade == "C"
 
-    def test_empty_dir_scores_38(self):
+    def test_empty_dir_uses_generic_profile(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             result = scan_plugin(tmpdir)
-            assert result.score == 38
+            assert result.score == 72
+            assert result.scope == "repository"
+            assert result.ecosystems == ("generic",)
 
     def test_mit_license_detected(self):
         result = scan_plugin(FIXTURES / "mit-license")

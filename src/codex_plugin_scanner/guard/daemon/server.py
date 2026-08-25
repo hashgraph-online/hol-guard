@@ -197,6 +197,10 @@ from ..runtime.runner import (
     sync_supply_chain_bundle,
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
+from ..runtime_artifact_reconciliation import (
+    reconcile_runtime_artifacts,
+    repair_failing_managed_harness_hooks,
+)
 from ..shims import (
     activate_package_shims,
     package_shim_dashboard_status,
@@ -2025,34 +2029,6 @@ def _repair_command_activity_persistence_health(store: GuardStore) -> None:
         shadow=shadow,
         shadow_evaluation_succeeded=shadow_evaluation_succeeded,
     )
-
-
-def _repair_failing_managed_harness_hooks(store: GuardStore) -> list[str]:
-    from ..approvals import _live_hook_verification
-
-    installs = store.list_managed_installs()
-    context = HarnessContext(
-        home_dir=Path.home().resolve(),
-        workspace_dir=None,
-        guard_home=store.guard_home,
-    )
-    verified = _live_hook_verification(installs, store)
-    failed: list[str] = []
-    for install in installs:
-        harness = install.get("harness")
-        if not isinstance(harness, str) or install.get("active") is not True:
-            continue
-        if verified.get(harness) is True:
-            continue
-        try:
-            apply_managed_install("install", harness, False, context, store, None, _now())
-        except (OSError, RuntimeError, TypeError, ValueError):
-            failed.append(harness)
-            continue
-        refreshed = store.get_managed_install(harness)
-        if refreshed is None or _live_hook_verification([refreshed], store).get(harness) is not True:
-            failed.append(harness)
-    return failed
 
 
 _GuardDaemonHttpServer = _GuardDaemonHTTPServer
@@ -5047,7 +5023,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if check_id == "all":
                 hook_repair_unknown = False
                 try:
-                    hook_failures = _repair_failing_managed_harness_hooks(store)
+                    _, hook_failures = repair_failing_managed_harness_hooks(store)
                 except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                     hook_failures = []
                     hook_repair_unknown = True
@@ -8282,6 +8258,7 @@ class GuardDaemonServer:
         self._require_command_activity_maintenance_stopped()
         self._shutdown_started.clear()
         self._server.hook_process_runner.start(defer_backfill=True)
+        self._reconcile_runtime_artifacts_best_effort()
         self._maintain_command_activity_best_effort()
         self._persist_aibom_inventory_context()
         self._server.last_activity_monotonic = time.monotonic()
@@ -8308,38 +8285,32 @@ class GuardDaemonServer:
             self._server.store,
             self._live_request_sync_worker,
         )
-        self._refresh_stale_harness_shims_best_effort()
         self._start_command_activity_maintenance()
         self._record_lifecycle("ready")
         self._diagnostics.record("daemon_ready")
 
-    def _refresh_stale_harness_shims_best_effort(self) -> None:
-        """Regenerate harness shims written by an older Guard generator.
-
-        install_guard_shim only runs on explicit protect/install, so upgraded
-        packages would otherwise leave stale launcher shims on disk. Failures
-        are recorded as diagnostics and never block daemon startup.
-        """
-        guard_home = self._server.store.guard_home.resolve()
+    def _reconcile_runtime_artifacts_best_effort(self) -> None:
+        """Align existing Guard-owned artifacts before publishing readiness."""
         try:
-            from ..shim_refresh import refresh_stale_harness_shims
-
-            managed_installs: list[Mapping[str, object]] = list(self._server.store.list_managed_installs())
-            result = refresh_stale_harness_shims(
-                home_dir=Path.home(),
-                guard_home=guard_home,
-                managed_installs=managed_installs,
+            result = reconcile_runtime_artifacts(
+                self._server.store,
+                home_dir=self._aibom_home_dir,
             )
         except Exception as error:
-            self._diagnostics.record("shim_refresh_failed", detail=str(error))
+            self._diagnostics.record("runtime_artifact_reconciliation_failed", detail=str(error))
             return
-        if result.refreshed or result.errors:
-            detail_parts = []
-            if result.refreshed:
-                detail_parts.append(f"refreshed={','.join(result.refreshed)}")
-            if result.errors:
-                detail_parts.append(f"errors={';'.join(result.errors)}")
-            self._diagnostics.record("shim_refresh_completed", detail=" ".join(detail_parts))
+        detail = (
+            f"launchers={','.join(result.refreshed_launchers) or 'none'} "
+            f"harnesses={','.join(result.repaired_harnesses) or 'none'} "
+            f"packages={','.join(result.repaired_package_managers) or 'none'} "
+            f"failed={','.join((*result.failed_harnesses, *result.errors)) or 'none'}"
+        )
+        event = (
+            "runtime_artifact_reconciliation_completed"
+            if result.healthy
+            else "runtime_artifact_reconciliation_degraded"
+        )
+        self._diagnostics.record(event, detail=detail)
 
     def _maintain_command_activity_best_effort(self) -> None:
         now = datetime.now(timezone.utc)
