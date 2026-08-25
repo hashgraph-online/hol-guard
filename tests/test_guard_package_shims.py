@@ -1215,25 +1215,6 @@ def test_guard_package_shims_status_ignores_dynamic_generated_paths(tmp_path: Pa
     assert status["manager_details"][0]["integrity"] == "ok"
 
 
-def test_guard_package_shims_status_distinguishes_absent_and_unreadable_manifests(
-    tmp_path: Path,
-) -> None:
-    home_dir = tmp_path / "home"
-    guard_home = tmp_path / "guard-home"
-    context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
-
-    assert package_shim_status(context)["manifest_state"] == "absent"
-
-    manifest_path = guard_home / "package-shims" / "manifest.json"
-    manifest_path.parent.mkdir(parents=True)
-    manifest_path.write_text("{not-json", encoding="utf-8")
-
-    status = package_shim_status(context)
-
-    assert status["manifest_state"] == "unreadable"
-    assert status["installed_managers"] == []
-
-
 def test_guard_package_shims_install_does_not_mutate_path_environment(
     tmp_path: Path,
     capsys,

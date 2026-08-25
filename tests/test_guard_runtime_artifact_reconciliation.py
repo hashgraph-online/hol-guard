@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import runtime_artifact_reconciliation as reconciliation
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.shim_refresh import ShimRefreshResult
+from codex_plugin_scanner.guard.shims import package_shim_status
 
 
 class _Store:
@@ -251,3 +253,22 @@ def test_reconcile_reports_unreadable_existing_package_manifest(
     assert result.healthy is False
     assert result.changed is False
     assert result.errors == ("package:manifest:unreadable",)
+
+
+def test_package_shim_status_distinguishes_absent_and_unreadable_manifests(
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
+
+    assert package_shim_status(context)["manifest_state"] == "absent"
+
+    manifest_path = guard_home / "package-shims" / "manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("{not-json", encoding="utf-8")
+
+    status = package_shim_status(context)
+
+    assert status["manifest_state"] == "unreadable"
+    assert status["installed_managers"] == []
