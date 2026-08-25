@@ -85,6 +85,8 @@ def test_path_set_matcher_rejects_empty_required_option_names_and_values() -> No
     with pytest.raises(ValueError, match="names cannot be empty"):
         _matcher(required_option_values=((" ", frozenset({"value"})),))
     with pytest.raises(ValueError, match="values cannot be empty"):
+        _matcher(required_option_values=(("--mode", frozenset()),))
+    with pytest.raises(ValueError, match="cannot contain blank values"):
         _matcher(required_option_values=(("--mode", frozenset({" "})),))
 
 
