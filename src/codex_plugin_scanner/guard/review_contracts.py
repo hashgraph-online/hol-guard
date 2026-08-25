@@ -320,7 +320,7 @@ def build_local_review_request_claim(
         "queueGroupId": _non_empty_string(request_row.get("queue_group_id")),
         "recommendedScope": recommended_scope,
         "riskCategory": _risk_category(request_row),
-        "runtimeGrantId": oauth.runtime_id,
+        "runtimeId": oauth.runtime_id,
         "workspaceId": oauth.workspace_id,
     }
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
@@ -417,6 +417,8 @@ def validate_remote_approval_request_binding(
         raise GuardReviewContractError("remote_approval_machine_mismatch")
     if _non_empty_string(envelope.get("deviceId")) != oauth.device_id:
         raise GuardReviewContractError("remote_approval_device_mismatch")
+    if _non_empty_string(envelope.get("runtimeId")) != oauth.runtime_id:
+        raise GuardReviewContractError("remote_approval_runtime_mismatch")
     reviewer_user_id = _non_empty_string(envelope.get("reviewerUserId"))
     reviewer_role = _non_empty_string(envelope.get("reviewerRole"))
     if reviewer_user_id is None or reviewer_role not in _REMOTE_APPROVAL_RESOLVER_ROLES:

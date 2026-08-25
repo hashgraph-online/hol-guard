@@ -50,7 +50,7 @@ from tests.guard_exact_cloud_review_support import (
 )
 
 _TRANSPORT_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "guard-cloud-review" / "exact-transport-fixture.json"
-_TRANSPORT_FIXTURE_SHA256 = "61c06b93537b813827450ed43f4440d80ce9f200c202ec84e7f1b36019d95881"
+_TRANSPORT_FIXTURE_SHA256 = "3b14a6c1ea73b53492d32bcd3031666fdd429220c1021525cb7df7510f12a0f3"
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -184,6 +184,7 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(tmp_pa
     assert advertisement["workspaceId"] == oauth.workspace_id == capability["workspaceId"]
     assert advertisement["machineId"] == oauth.machine_id
     assert advertisement["machineInstallationId"] == oauth.installation_id
+    assert advertisement["runtimeId"] == oauth.runtime_id == "hol-guard"
     assert advertisement["machineId"] != advertisement["machineInstallationId"]
     assert advertisement["localRequestId"] == request["request_id"]
     assert advertisement["sourceClaimHash"] == claim["claimHash"]

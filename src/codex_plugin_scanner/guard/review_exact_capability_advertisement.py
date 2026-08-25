@@ -24,6 +24,8 @@ def validate_exact_review_envelope_authority(
         raise GuardReviewContractError("remote_approval_grant_mismatch")
     if envelope.get("capabilityId") != capability_id:
         raise GuardReviewContractError("remote_approval_capability_mismatch")
+    if envelope.get("runtimeId") != oauth.runtime_id:
+        raise GuardReviewContractError("remote_approval_runtime_mismatch")
 
 
 def exact_review_capability_advertisement(
@@ -58,7 +60,7 @@ def exact_review_capability_advertisement(
         "nonce": capability["nonce"],
         "operation": EXACT_CLOUD_REVIEW_OPERATION,
         "requestVersion": claim["policyVersion"],
-        "runtimeGrantId": oauth.runtime_id,
+        "runtimeId": oauth.runtime_id,
         "sourceClaimHash": claim["claimHash"],
         "workspaceId": oauth.workspace_id,
     }

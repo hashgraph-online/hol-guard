@@ -45,6 +45,7 @@ def connected_exact_review_store(
         dpop_public_jwk_thumbprint=bound_device_id,
         grant_id="grant-1",
         machine_id=machine_id,
+        runtime_id="hol-guard",
         device_id=None if missing_device_id else bound_device_id,
         workspace_id="workspace-1",
         access_token=oauth_binding_access_token(
@@ -137,7 +138,8 @@ def remote_approval(
         "reviewerRole": "owner",
         "reviewerUserId": "user-1",
         "riskCategory": claim["riskCategory"],
-        "runtimeGrantId": claim["runtimeGrantId"],
+        "runtimeGrantId": "00000000-0000-4000-8000-000000000002",
+        "runtimeId": claim["runtimeId"],
         "scope": "artifact",
         "sourceClaimHash": claim["claimHash"],
         "stepUpChallengeId": None,
