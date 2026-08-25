@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as brid
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.live_process_identity import (
+    CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY,
     CODEX_BROWSER_WAIT_PROCESS_KEY,
     CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
 )
@@ -99,6 +100,7 @@ def test_main_binds_authenticated_daemon_request_to_bridge_process(
     assert captured_hook_payload.pop("guard_remaining_ms") in range(1, 4_001)
     assert captured_hook_payload.pop(CODEX_BROWSER_WAIT_PROCESS_KEY) == bridge_process
     assert captured_hook_payload.pop(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY) == 1
+    assert captured_hook_payload.pop(CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY) == 1
     assert captured_hook_payload == hook_payload
     assert json.loads(str(_DaemonHandler.captured_hook_body))["tool_input"]["command"] == complete_command
     assert _ProxyHandler.captured_paths == []
@@ -132,6 +134,7 @@ def test_bridge_replaces_untrusted_wait_process_metadata(monkeypatch: pytest.Mon
 
     assert payload[CODEX_BROWSER_WAIT_PROCESS_KEY] == live_process
     assert payload[CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] == 7
+    assert payload[CODEX_BROWSER_INLINE_WAIT_TIMEOUT_SECONDS_KEY] == 2
 
 
 def test_codex_approve_without_resume_binding_returns_honest_manual_fallback(tmp_path: Path) -> None:
