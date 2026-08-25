@@ -12,6 +12,7 @@ from typing import cast
 from .windows_paths import windows_process_creation_time
 
 _TRUSTED_POSIX_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
+CODEX_BROWSER_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 
 
 def current_process_identity() -> dict[str, object] | None:
@@ -94,4 +95,4 @@ def _linux_proc_stat(pid: int) -> str | None:
     return fields[19] if len(fields) > 19 and fields[19].isdigit() else None
 
 
-__all__ = ["current_process_identity", "process_identity_matches"]
+__all__ = ["CODEX_BROWSER_WAIT_PROCESS_KEY", "current_process_identity", "process_identity_matches"]

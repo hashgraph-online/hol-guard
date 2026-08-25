@@ -9,10 +9,11 @@ import importlib
 from typing import TYPE_CHECKING
 
 from ..browser_opener import open_browser_url
+from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, process_identity_matches
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 
 if TYPE_CHECKING:
-    from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _hook_command_text, _now
+    from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _now
     from .commands_support_hook_payload import _browser_url_with_guard_params
 
 
@@ -350,8 +351,6 @@ def _codex_browser_approval_decision(
 ) -> str | None:
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return None
-    if event_name == "PreToolUse" and not _codex_pretooluse_live_wait_candidate(response_payload):
-        return None
     if browser_wait_bound is False:
         return None
     operation = response_payload.get("operation")
@@ -563,11 +562,14 @@ def _codex_hook_waits_for_browser_approval(
     policy_action: str,
     payload: Mapping[str, object] | None = None,
 ) -> bool:
-    if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
-        return False
-    if event_name == "PreToolUse":
-        return _codex_pretooluse_live_wait_candidate(payload)
-    return True
+    if (
+        _canonical_harness_name(args.harness) == "codex"
+        and event_name == "PreToolUse"
+        and policy_action in {"review", "require-reapproval"}
+        and _codex_bridge_wait_process(payload) is not None
+    ):
+        return True
+    return _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action)
 
 def _codex_browser_wait_metadata(
     *,
@@ -593,7 +595,7 @@ def _codex_browser_wait_metadata(
     )
     started_at = datetime.now(timezone.utc)
     deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
-    process_identity = current_process_identity()
+    process_identity = _codex_bridge_wait_process(payload) or current_process_identity()
     if process_identity is None:
         return {
             "codex_hook_waits_for_browser_approval": False,
@@ -614,42 +616,13 @@ def _codex_browser_wait_timeout_seconds(*, event_name: str, configured_timeout: 
     return wait_timeout_seconds
 
 
-def _codex_pretooluse_live_wait_candidate(payload: Mapping[str, object] | None) -> bool:
+def _codex_bridge_wait_process(payload: Mapping[str, object] | None) -> dict[str, object] | None:
     if not isinstance(payload, Mapping):
-        return False
-    command_text = _hook_command_text(payload)
-    if not command_text:
-        tool_input = payload.get("tool_input")
-        if isinstance(tool_input, Mapping):
-            command_text = str(
-                tool_input.get("command")
-                or tool_input.get("cmd")
-                or tool_input.get("shell_command")
-                or tool_input.get("shellCommand")
-                or ""
-            )
-    if not command_text:
-        risk_signals = payload.get("risk_signals")
-        text_parts = [
-            str(payload.get("artifact_name", "")),
-            str(payload.get("risk_summary", "")),
-            str(payload.get("risk_headline", "")),
-            str(payload.get("trigger_summary", "")),
-            " ".join(
-                str(item)
-                for item in (risk_signals if isinstance(risk_signals, list) else [])
-                if isinstance(item, str)
-            )
-            if isinstance(risk_signals, list)
-            else "",
-        ]
-        command_text = " ".join(text_parts)
-    lowered = command_text.lower()
-    return bool(
-        re.search(r"\b(?:npm|pnpm|yarn|bun|pip|pip3|python(?:3(?:\.\d+)?)?\s+-m\s+pip)\s+install\b", lowered)
-        or "package install request" in lowered
-        or "before install" in lowered
-    )
+        return None
+    process_identity: object = payload.get(CODEX_BROWSER_WAIT_PROCESS_KEY)
+    if isinstance(process_identity, dict) and process_identity_matches(process_identity):
+        return process_identity
+    return None
 
 def _attach_primary_approval_link(
     response_payload: dict[str, object],
@@ -740,7 +713,7 @@ __all__ = [
     "_codex_browser_wait_metadata",
     "_codex_browser_wait_timeout_seconds",
     "_codex_can_use_browser_approval",
-    "_codex_hook_waits_for_browser_approval", "_codex_pretooluse_live_wait_candidate", "_emit",
+    "_codex_hook_waits_for_browser_approval", "_emit",
     "_guard_cloud_app_error_payload", "_guard_cloud_app_urls", "_open_codex_live_approval",
     "_open_guard_cloud_app", "_policy_write_needs_approval_gate", "_policy_write_requires_approval_gate",
     "_preferred_approval_review_url", "_primary_approval_lookup_kwargs", "_record_harness_usage_for_hook",

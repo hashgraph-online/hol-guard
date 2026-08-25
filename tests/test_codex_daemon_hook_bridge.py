@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as brid
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY
 from codex_plugin_scanner.guard.runtime.local_temp_paths import trusted_temporary_root_for_path
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
@@ -214,6 +215,8 @@ def test_main_posts_to_authenticated_daemon(
         "tool_name": "Bash",
         "tool_input": {"command": complete_command},
     }
+    bridge_process = {"pid": 4102, "startToken": "fixture-start"}
+    monkeypatch.setattr(bridge, "current_process_identity", lambda: bridge_process)
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(hook_payload)))
 
     try:
@@ -229,6 +232,7 @@ def test_main_posts_to_authenticated_daemon(
     assert _DaemonHandler.captured_guard_token == "fixture-token"
     captured_hook_payload = json.loads(str(_DaemonHandler.captured_hook_body))
     assert captured_hook_payload.pop("guard_remaining_ms") in range(1, 10_001)
+    assert captured_hook_payload.pop(CODEX_BROWSER_WAIT_PROCESS_KEY) == bridge_process
     assert captured_hook_payload == hook_payload
     assert json.loads(str(_DaemonHandler.captured_hook_body))["tool_input"]["command"] == complete_command
     assert _ProxyHandler.captured_paths == []
@@ -239,6 +243,27 @@ def test_main_posts_to_authenticated_daemon(
         assert response["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     else:
         assert response["continue"] is False
+
+
+def test_bridge_replaces_untrusted_wait_process_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    live_process = {"pid": 4102, "startToken": "fixture-start"}
+    monkeypatch.setattr(bridge, "current_process_identity", lambda: live_process)
+
+    payload = json.loads(
+        bridge._with_browser_wait_process(
+            json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    CODEX_BROWSER_WAIT_PROCESS_KEY: {
+                        "pid": 9999,
+                        "startToken": "untrusted-input",
+                    },
+                }
+            )
+        )
+    )
+
+    assert payload[CODEX_BROWSER_WAIT_PROCESS_KEY] == live_process
 
 
 @pytest.mark.parametrize(

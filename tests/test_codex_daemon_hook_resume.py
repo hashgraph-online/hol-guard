@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as brid
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
@@ -147,6 +148,49 @@ def test_codex_json_pretool_does_not_hold_inside_daemon_worker() -> None:
         event_name="PreToolUse",
         policy_action="require-reapproval",
         payload={"tool_input": {"command": "cat ~/.npmrc"}},
+    )
+
+
+def test_codex_bridge_pretool_advertises_the_live_outer_waiter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process_identity = {"pid": 4102, "startToken": "fixture-start"}
+    monkeypatch.setattr(
+        interaction,
+        "process_identity_matches",
+        lambda value: value == process_identity,
+    )
+    args = argparse.Namespace(harness="codex", json=True)
+
+    payload = {
+        "tool_name": "Read",
+        "tool_input": {"path": "/workspace/project/.env"},
+        CODEX_BROWSER_WAIT_PROCESS_KEY: process_identity,
+    }
+    assert interaction._codex_hook_waits_for_browser_approval(
+        args,
+        event_name="PreToolUse",
+        policy_action="require-reapproval",
+        payload=payload,
+    )
+    metadata = interaction._codex_browser_wait_metadata(
+        args=args,
+        event_name="PreToolUse",
+        policy_action="require-reapproval",
+        config=GuardConfig(tmp_path, None, approval_wait_timeout_seconds=30),
+        payload=payload,
+    )
+    assert metadata["codex_hook_waits_for_browser_approval"] is True
+    assert metadata["codex_browser_wait_process"] == process_identity
+
+
+def test_codex_direct_pretool_wait_is_not_limited_to_package_installs() -> None:
+    assert interaction._codex_hook_waits_for_browser_approval(
+        argparse.Namespace(harness="codex", json=False),
+        event_name="PreToolUse",
+        policy_action="review",
+        payload={"tool_name": "Read", "tool_input": {"path": "/workspace/project/.env"}},
     )
 
 
