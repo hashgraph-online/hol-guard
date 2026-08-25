@@ -7,8 +7,11 @@ from pathlib import Path
 from codex_plugin_scanner.guard.runtime.command_cloud_aws_operation_matrix import (
     AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1,
 )
-from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
-from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
+from tests.command_extension_contracts import (
+    assert_review_required_cases,
+    assert_reviewed_command_cases,
+    assert_safe_command_cases,
+)
 
 _ACTION = "AWS destructive command"
 _RULE = "command.cloud.aws.resource-deletion"
@@ -20,9 +23,10 @@ AWS_BATCH_1_REVIEW_CASES: tuple[tuple[str, str, str], ...] = tuple(
 AWS_BATCH_1_SAFE_CASES: tuple[str, ...] = tuple(
     command
     for path in AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
+    for skeleton_value in ("input", "output", "yaml-input")
     for command in (
         f"aws {' '.join(path)} --help",
-        f"aws {' '.join(path)} --generate-cli-skeleton input",
+        f"aws {' '.join(path)} --generate-cli-skeleton {skeleton_value}",
     )
 )
 
@@ -31,6 +35,11 @@ def test_aws_batch_1_matrix_is_exactly_one_hundred_unique_operations() -> None:
     assert len(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1) == 100
     assert len(set(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1)) == 100
     assert all(len(path) == 2 for path in AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1)
+    assert all(
+        token and token == token.strip() and not token.startswith("-")
+        for path in AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1
+        for token in path
+    )
 
 
 def test_aws_batch_1_operations_feed_inspection_and_runtime_hooks(tmp_path: Path) -> None:
@@ -85,26 +94,22 @@ def test_aws_batch_1_unknown_global_options_fail_secure(tmp_path: Path) -> None:
 
 def test_aws_batch_1_invalid_request_skeleton_forms_remain_reviewable(tmp_path: Path) -> None:
     service, operation = AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1[0]
-    for command in (
-        f"aws {service} {operation} --generate-cli-skeleton=bogus",
-        f"aws {service} {operation} --generate-cli-skeleton=output --generate-cli-skeleton=bogus",
-    ):
-        payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
-        assert payload["status"] == "review"
-        assert _RULE in {rule["rule_id"] for rule in payload["rules"]}
+    assert_review_required_cases(
+        (
+            f"aws {service} {operation} --generate-cli-skeleton=bogus",
+            f"aws {service} {operation} --generate-cli-skeleton=output --generate-cli-skeleton=bogus",
+        ),
+        tmp_path,
+    )
 
 
 def test_aws_batch_1_safe_segment_cannot_hide_later_destructive_segment(tmp_path: Path) -> None:
     first = " ".join(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1[0])
     second = " ".join(AWS_DESTRUCTIVE_COMMAND_PATHS_BATCH_1[1])
-    payload = inspect_command(
-        f"aws {first} --help && aws {second} --cli-input-json '{{}}'",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+    assert_review_required_cases(
+        (f"aws {first} --help && aws {second} --cli-input-json '{{}}'",),
+        tmp_path,
     )
-
-    assert payload["status"] == "review"
-    assert payload["controlling_rule_id"] == _RULE
 
 
 def test_aws_batch_1_quoted_examples_remain_data(tmp_path: Path) -> None:
