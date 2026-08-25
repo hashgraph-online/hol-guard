@@ -124,6 +124,32 @@ def _anchored_review_verification_keys(store) -> tuple[PolicyBundleVerificationK
     )
 
 
+def validated_review_verification_keys_from_sync(
+    value: object,
+    *,
+    store,
+    workspace_id: str,
+) -> tuple[PolicyBundleVerificationKey, ...]:
+    """Admit purpose-scoped Review keys only when their material is already anchored."""
+
+    if not isinstance(value, list):
+        raise GuardReviewContractError("review_verification_keys_invalid")
+    keys = safe_load_policy_bundle_verification_keys(value)
+    if not keys or len(keys) != len(value):
+        raise GuardReviewContractError("review_verification_keys_invalid")
+    anchored_fingerprints = {key.fingerprint_sha256 for key in _anchored_review_verification_keys(store)}
+    for key in keys:
+        if key.purpose != _REMOTE_APPROVAL_KEY_PURPOSE:
+            raise GuardReviewContractError("signing_key_purpose_mismatch")
+        if key.workspace_id != workspace_id:
+            raise GuardReviewContractError("signing_key_workspace_mismatch")
+        if key.fingerprint_sha256 not in anchored_fingerprints:
+            raise GuardReviewContractError("unknown_signing_key")
+        if key.state == "revoked" or not signing_key_is_current(key):
+            raise GuardReviewContractError("expired_signing_key")
+    return keys
+
+
 def _resolve_anchored_signing_key(
     *,
     advertised_keys: tuple[PolicyBundleVerificationKey, ...],

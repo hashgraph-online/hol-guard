@@ -83,6 +83,7 @@ from ..policy_bundle_v2 import (
 from ..policy_document import GuardPolicyDocument
 from ..policy_document_io import PolicyCompilationError, compile_policy_document
 from ..redaction import redact_sensitive_text
+from ..review_contracts import validated_review_verification_keys_from_sync
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
@@ -2771,6 +2772,7 @@ def sync_receipts(
     policy_bundle_field_provided = False
     policy_bundle_field_malformed = False
     alert_preferences_payload: dict[str, object] | None = None
+    review_verification_keys_payload: object | None = None
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
     sync_context = _receipt_sync_context(
@@ -2896,6 +2898,8 @@ def sync_receipts(
         alert_preferences = payload.get("alertPreferences")
         if isinstance(alert_preferences, dict) and (alert_preferences or alert_preferences_payload is None):
             alert_preferences_payload = alert_preferences
+        if "reviewVerificationKeys" in payload:
+            review_verification_keys_payload = payload.get("reviewVerificationKeys")
     now = _sync_timestamp(payload)
     aibom_context: dict[str, object] = {}
     if home_dir is not None:
@@ -2930,6 +2934,19 @@ def sync_receipts(
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
     cloud_workspace_id = store.get_cloud_workspace_id()
+    if review_verification_keys_payload is not None:
+        if cloud_workspace_id is None:
+            raise RuntimeError("review_verification_keys_workspace_missing")
+        review_verification_keys = validated_review_verification_keys_from_sync(
+            review_verification_keys_payload,
+            store=store,
+            workspace_id=cloud_workspace_id,
+        )
+        store.set_sync_payload(
+            "guard_review_verification_keyring",
+            [key.to_dict() for key in review_verification_keys],
+            now,
+        )
     canonical_enforcement = _canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=cloud_workspace_id,

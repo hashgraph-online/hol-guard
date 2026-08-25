@@ -17,7 +17,9 @@ from codex_plugin_scanner.guard.daemon import command_queue_worker as queue_work
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.review_contracts import (
+    GuardReviewContractError,
     build_local_review_request_claim,
+    validated_review_verification_keys_from_sync,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.command_capability import (
@@ -59,6 +61,37 @@ from tests.guard_exact_cloud_review_support import (
 from tests.guard_exact_cloud_review_support import (
     review_request as _request,
 )
+from tests.guard_review_signing_helpers import review_verification_keys
+
+
+def test_review_sync_keys_require_preanchored_key_material(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    review_keys = review_verification_keys(workspace_id="workspace-1")
+    policy_anchor = {**review_keys[0], "purpose": "policy_bundle"}
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        [policy_anchor],
+        "2026-08-25T00:00:00+00:00",
+    )
+
+    admitted = validated_review_verification_keys_from_sync(
+        review_keys,
+        store=store,
+        workspace_id="workspace-1",
+    )
+
+    assert [key.to_dict() for key in admitted] == review_keys
+
+
+def test_review_sync_keys_reject_unanchored_key_material(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    with pytest.raises(GuardReviewContractError, match="unknown_signing_key"):
+        validated_review_verification_keys_from_sync(
+            review_verification_keys(workspace_id="workspace-1"),
+            store=store,
+            workspace_id="workspace-1",
+        )
 
 
 def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_path: Path) -> None:
