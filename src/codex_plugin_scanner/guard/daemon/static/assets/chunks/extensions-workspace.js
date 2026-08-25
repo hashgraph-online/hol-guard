@@ -1,4 +1,4 @@
-import { az as fetchLocalCliApi, r as reactExports, aA as fetchExtensionControlApi, j as jsxRuntimeExports, aB as useResolvedApprovalGate, a8 as HiMiniLockClosed, M as HiMiniExclamationTriangle, aC as HiMiniArrowPath, t as HiMiniShieldCheck, aD as HiMiniInformationCircle, aE as isApprovalProofSubmitDisabled, z as HiMiniXMark, aF as ApprovalProofFieldInputs, aG as buildApprovalProofCredentials, aH as GenIcon, N as HiMiniBolt, aI as HiMiniGlobeAlt, aJ as HiMiniCube, I as HiMiniCloud, aK as HiMiniServerStack, b as HiMiniCommandLine, aL as HiMiniFolder, aM as FaWindows, aN as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aO as approvalProofRecentlySatisfied, aP as HiMiniArrowLeft, aQ as HiMiniPlus, a1 as HiMiniClipboardDocumentCheck, a2 as HiMiniClipboard, au as HiMiniMagnifyingGlass, y as HiMiniSparkles, aR as HiMiniNoSymbol, at as WorkspacePageHeader, aS as guardAwareHref } from "../guard-dashboard.js";
+import { az as fetchLocalCliApi, r as reactExports, aA as fetchExtensionControlApi, j as jsxRuntimeExports, aB as useResolvedApprovalGate, a8 as HiMiniLockClosed, M as HiMiniExclamationTriangle, aC as HiMiniArrowPath, t as HiMiniShieldCheck, aD as HiMiniInformationCircle, aE as isApprovalProofSubmitDisabled, z as HiMiniXMark, aF as ApprovalProofFieldInputs, aG as buildApprovalProofCredentials, aH as GenIcon, N as HiMiniBolt, aI as HiMiniGlobeAlt, aJ as HiMiniCube, I as HiMiniCloud, aK as HiMiniServerStack, b as HiMiniCommandLine, aL as HiMiniFolder, aM as FaWindows, aN as FaAws, o as HiMiniCheckCircle, c as HiMiniChevronRight, C as HiMiniChevronDown, aO as approvalProofRecentlySatisfied, aP as HiMiniArrowLeft, aQ as HiMiniPlus, a1 as HiMiniClipboardDocumentCheck, a2 as HiMiniClipboard, au as HiMiniMagnifyingGlass, y as HiMiniSparkles, aR as HiMiniNoSymbol, R as startGuardCloudConnect, aS as HiMiniArrowTopRightOnSquare, at as WorkspacePageHeader, aT as guardAwareHref } from "../guard-dashboard.js";
 import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -37,7 +37,7 @@ function readExtensionDetailUrlState(search) {
   const rawRule = params.get("rule")?.trim().toLowerCase() ?? null;
   const ruleId = rawRule && RULE_ID_PATTERN.test(rawRule) ? rawRule : null;
   return {
-    tab: oneOf(params.get("tab"), ["overview", "commands", "policy", "test-lab", "activity"], "overview"),
+    tab: oneOf(params.get("tab"), ["overview", "permissions", "managed-controls", "activity", "technical", "commands", "policy", "test-lab"], "overview"),
     query,
     risk: oneOf(params.get("risk"), ["all", "low", "medium", "high", "critical"], "all"),
     state: oneOf(params.get("state"), ["all", "allowed", "blocked"], "all"),
@@ -101,6 +101,13 @@ function extensionEffectiveState(effective, extension2) {
   if (extension2.required) return "enabled";
   return explicitControlState(effective, "extension", extension2.extension_id) ?? "enabled";
 }
+function permissionEffectiveState(effective, extension2, permission2) {
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission2.permission_id);
+  if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
+  if (extensionEffectiveState(effective, extension2) === "disabled") return "disabled";
+  if (!permission2.configurable) return permission2.default_enabled ? "enabled" : "disabled";
+  return explicitControlState(effective, "permission", permission2.permission_id) ?? (permission2.default_enabled ? "enabled" : "disabled");
+}
 function extensionDisplayName(name) {
   for (const suffix of [" command protection", " protection"]) {
     if (!name.toLowerCase().endsWith(suffix)) continue;
@@ -118,23 +125,24 @@ function extensionStateLabel(effective, extension2) {
   return extensionEffectiveState(effective, extension2) === "enabled" ? "Allowed" : "Blocked";
 }
 function controlProvenance(effective, kind, targetId2) {
+  const managedSource2 = effective.managed_controls?.authority_mode === "managed-restrictive" ? `Managed by ${effective.managed_controls.workspace_id}` : "Synced from Guard Cloud";
   const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2) : effective.projection?.permissions.find((item) => item.permission_id === targetId2);
   if (projected) {
     const sources2 = [];
-    if (effective.global_lockdown) sources2.push("Global lockdown");
-    if (projected.managed_state !== "inherited") sources2.push("Signed cloud policy");
-    if (projected.local_state !== "inherited") sources2.push("Local administrator");
-    if (sources2.length === 0) sources2.push("Built-in default");
+    if (effective.global_lockdown) sources2.push("Emergency Lockdown");
+    if (projected.managed_state !== "inherited") sources2.push(managedSource2);
+    if (projected.local_state !== "inherited") sources2.push("Set on this device");
+    if (sources2.length === 0) sources2.push("Recommended by Guard");
     return sources2;
   }
   const sources = [];
-  if (effective.global_lockdown) sources.push("Global lockdown");
+  if (effective.global_lockdown) sources.push("Emergency Lockdown");
   for (const layer of effective.layers) {
     if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId2)) {
-      sources.push(layer.kind === "signed-cloud" ? "Signed cloud policy" : "Local administrator");
+      sources.push(layer.kind === "signed-cloud" ? managedSource2 : "Set on this device");
     }
   }
-  if (sources.length === 0) sources.push("Built-in default");
+  if (sources.length === 0) sources.push("Recommended by Guard");
   return sources;
 }
 function permissionForRule(extension2, rule2) {
@@ -403,7 +411,19 @@ function normalizeLocalCliItem(value) {
     authority_revision: requiredInt(value.authority_revision, "revision"),
     suggestable: value.suggestable === true,
     suggestion_score: optionalScore(value.suggestion_score),
-    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : []
+    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
+    continuity: normalizeContinuity(value.continuity)
+  };
+}
+function normalizeContinuity(value) {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  if (status !== "applied" && status !== "pending_observation" && status !== "changed_identity" && status !== "locally_overridden" && status !== "removed" && status !== "stale") return null;
+  return {
+    status,
+    reason: typeof value.reason === "string" ? value.reason : "",
+    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision) ? value.cloud_revision : null,
+    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts" ? value.surface : null
   };
 }
 function normalizeSurface(value) {
@@ -461,7 +481,8 @@ function normalizeLocalCliList(value) {
     items,
     cloud: {
       sync_local_only: cloud.sync_local_only !== false,
-      summary: typeof cloud.summary === "string" ? cloud.summary : "Custom extensions stay on this device. Guard Cloud can keep the same extension on your other machines."
+      continuity_enabled: cloud.continuity_enabled === true,
+      summary: typeof cloud.summary === "string" ? cloud.summary : "Custom Extensions remain local to this device until portable continuity is enabled."
     }
   };
 }
@@ -999,6 +1020,47 @@ function normalizeEffectiveExtensionControls(value) {
       layer_kind: raw.layer_kind === void 0 ? void 0 : string$1(raw.layer_kind, `effective.failures[${index}].layer_kind`)
     };
   });
+  const managedControls = root.managed_controls === void 0 ? void 0 : (() => {
+    const managed = record$2(root.managed_controls, "effective.managed_controls");
+    const acknowledgement = record$2(
+      managed.acknowledgement,
+      "effective.managed_controls.acknowledgement"
+    );
+    const bundleVersion = managed.bundle_version;
+    if (!(typeof bundleVersion === "string" && bundleVersion.length > 0 && bundleVersion.length <= 160) && !(typeof bundleVersion === "number" && Number.isSafeInteger(bundleVersion) && bundleVersion >= 0)) {
+      throw new ExtensionControlProtocolError("effective.managed_controls.bundle_version is invalid");
+    }
+    const policyRevision = acknowledgement.policy_revision;
+    if (policyRevision !== void 0 && !(typeof policyRevision === "string" && policyRevision.length > 0 && policyRevision.length <= 160) && !(typeof policyRevision === "number" && Number.isSafeInteger(policyRevision) && policyRevision >= 0)) {
+      throw new ExtensionControlProtocolError("effective.managed_controls.acknowledgement.policy_revision is invalid");
+    }
+    return {
+      control_set_id: managed.control_set_id === void 0 ? void 0 : string$1(managed.control_set_id, "effective.managed_controls.control_set_id"),
+      control_set_name: managed.control_set_name === void 0 ? void 0 : string$1(managed.control_set_name, "effective.managed_controls.control_set_name"),
+      bundle_version: bundleVersion,
+      workspace_id: string$1(managed.workspace_id, "effective.managed_controls.workspace_id"),
+      authority_mode: managed.authority_mode === void 0 ? void 0 : enumValue(
+        managed.authority_mode,
+        "effective.managed_controls.authority_mode",
+        ["personal-shared", "workspace-shared", "managed-restrictive"]
+      ),
+      catalog_digest: digest$1(managed.catalog_digest, "effective.managed_controls.catalog_digest"),
+      issued_at: managed.issued_at === void 0 ? void 0 : string$1(managed.issued_at, "effective.managed_controls.issued_at"),
+      expires_at: managed.expires_at === void 0 ? void 0 : string$1(managed.expires_at, "effective.managed_controls.expires_at"),
+      acknowledgement: {
+        extension_authority_revision: integer$1(
+          acknowledgement.extension_authority_revision,
+          "effective.managed_controls.acknowledgement.extension_authority_revision"
+        ),
+        policy_revision: policyRevision,
+        effective_projection_digest: acknowledgement.effective_projection_digest === void 0 ? void 0 : digest$1(
+          acknowledgement.effective_projection_digest,
+          "effective.managed_controls.acknowledgement.effective_projection_digest"
+        ),
+        status: string$1(acknowledgement.status, "effective.managed_controls.acknowledgement.status")
+      }
+    };
+  })();
   return {
     schema_version: string$1(root.schema_version, "effective.schema_version"),
     health: enumValue(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
@@ -1008,7 +1070,8 @@ function normalizeEffectiveExtensionControls(value) {
     controls,
     layers,
     failures,
-    projection: root.projection === void 0 ? void 0 : normalizeEffectiveExtensionControlProjection(root.projection)
+    projection: root.projection === void 0 ? void 0 : normalizeEffectiveExtensionControlProjection(root.projection),
+    managed_controls: managedControls
   };
 }
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -1687,6 +1750,126 @@ function ProtectionSettingsHistory(props) {
     ] }, item.revision)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-dark/70", children: "No earlier authenticated device settings are available yet." })
   ] });
 }
+function managedControlsHref(input) {
+  if (!input.cloudControlsUrl) {
+    return null;
+  }
+  let target2;
+  try {
+    target2 = new URL("/guard/controls", input.cloudControlsUrl);
+  } catch {
+    return null;
+  }
+  if (input.extensionId) {
+    target2.searchParams.set("extensionId", input.extensionId);
+  }
+  if (input.permissionId) {
+    target2.searchParams.set("permissionId", input.permissionId);
+  }
+  return target2.toString();
+}
+function buildLocalProtectionView(input) {
+  const sources = input.sources?.length ? input.sources : [input.source];
+  const technicalDetails = [
+    ...sources.length > 1 ? [{ label: "Contributors", value: sources.join(" · ") }] : [],
+    ...input.catalogDigest ? [{ label: "Catalog digest", value: input.catalogDigest }] : [],
+    ...input.acknowledgementRevision !== void 0 ? [{ label: "Acknowledgement revision", value: String(input.acknowledgementRevision) }] : [],
+    ...input.controlSetName ? [{ label: "Control Set", value: input.controlSetName }] : [],
+    ...input.controlSetVersion !== void 0 ? [{ label: "Control Set version", value: String(input.controlSetVersion) }] : [],
+    ...input.workspace ? [{ label: "Workspace", value: input.workspace }] : [],
+    ...input.authorityMode ? [{ label: "Authority mode", value: input.authorityMode }] : [],
+    ...input.acknowledgementStatus ? [{ label: "Acknowledgement", value: input.acknowledgementStatus }] : [],
+    ...input.lastAcknowledgedAt ? [{ label: "Last acknowledged", value: input.lastAcknowledgedAt }] : [],
+    ...input.effectiveProjectionDigest ? [{ label: "Effective projection digest", value: input.effectiveProjectionDigest }] : []
+  ];
+  if (input.recovery === "unsupported-version") {
+    return {
+      title: input.extensionName,
+      summary: "Update Guard before this managed setting can be applied.",
+      source: input.source,
+      sources,
+      effectiveState: input.effectiveState,
+      status: "unsupported",
+      primaryAction: { label: "Check for updates", action: "refresh" },
+      technicalDetails
+    };
+  }
+  if (input.recovery) {
+    let recoverySummary = "Guard is using the last verified setting while it checks for an update.";
+    if (input.recovery === "catalog-mismatch") {
+      recoverySummary = "Guard is using the last verified setting because this Control Set and the local Extension catalog do not match.";
+    } else if (input.recovery === "degraded") {
+      recoverySummary = "Guard is preserving the last verified authority while local control recovery is required.";
+    }
+    return {
+      title: input.extensionName,
+      summary: recoverySummary,
+      source: input.source,
+      sources,
+      effectiveState: input.effectiveState,
+      status: "needs-attention",
+      primaryAction: { label: "Check again", action: "refresh" },
+      technicalDetails
+    };
+  }
+  let status = "protected";
+  if (input.effectiveState === "lockdown") {
+    status = "lockdown";
+  } else if (input.source === "Organization Control Set" || input.source.startsWith("Managed by ")) {
+    status = "managed";
+  }
+  let summary = "Guard checks matching actions before they run.";
+  if (input.effectiveState === "blocked") {
+    summary = "Matching actions are blocked.";
+  } else if (input.effectiveState === "partial") {
+    summary = "Some matching actions are blocked while the remaining actions stay available.";
+  } else if (input.effectiveState === "required") {
+    summary = "This protection stays on.";
+  } else if (input.effectiveState === "lockdown") {
+    summary = "Emergency Lockdown blocks governed actions.";
+  }
+  const controlsHref = managedControlsHref(input);
+  const hasManagedContributor = sources.some(
+    (source) => source === "Organization Control Set" || source === "Synced from Guard Cloud" || source.startsWith("Managed by ")
+  );
+  const primaryAction = controlsHref ? {
+    label: hasManagedContributor ? "Manage in Guard Cloud" : "Apply across my devices",
+    href: controlsHref
+  } : { label: "Connect Guard Cloud", action: "connect-cloud" };
+  return {
+    title: input.extensionName,
+    summary,
+    source: input.source,
+    sources,
+    effectiveState: input.effectiveState,
+    status,
+    primaryAction,
+    technicalDetails
+  };
+}
+function AppliedPolicyToast(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", "data-testid": "extension-policy-applied-toast", className: "mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-emerald-950", children: [
+      "Applied · revision ",
+      props.revision
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      props.applyAcrossHref ? /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: props.applyAcrossHref, target: "_blank", rel: "noopener noreferrer", className: "inline-flex min-h-11 items-center rounded-xl border border-emerald-300 bg-white/70 px-3 text-sm font-semibold text-emerald-950", children: "Apply across my devices" }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onViewHistory, className: "min-h-11 rounded-xl border border-emerald-300 bg-white/70 px-3 text-sm font-semibold text-emerald-950", children: "View history" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onUndo, className: "min-h-11 rounded-xl bg-emerald-800 px-3 text-sm font-semibold text-white", children: "Undo" })
+    ] })
+  ] });
+}
+function appliedPolicyCloudHref(input) {
+  return managedControlsHref({
+    extensionName: input.extensionName,
+    extensionId: input.extensionId,
+    permissionId: input.changedPermissionIds.length === 1 ? input.changedPermissionIds[0] : void 0,
+    effectiveState: "allowed",
+    source: "Set on this device",
+    cloudControlsUrl: input.cloudControlsUrl
+  });
+}
 const RISK_TONE = {
   critical: "border-red-200 bg-red-50 text-red-950",
   high: "border-orange-200 bg-orange-50 text-orange-950",
@@ -1947,18 +2130,6 @@ function PolicyReviewSheet(props) {
     }
   ) });
 }
-function AppliedPolicyToast(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", "data-testid": "extension-policy-applied-toast", className: "mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-emerald-950", children: [
-      "Applied · revision ",
-      props.revision
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onViewHistory, className: "min-h-11 rounded-xl border border-emerald-300 bg-white/70 px-3 text-sm font-semibold text-emerald-950", children: "View history" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onUndo, className: "min-h-11 rounded-xl bg-emerald-800 px-3 text-sm font-semibold text-white", children: "Undo" })
-    ] })
-  ] });
-}
 function ExtensionPolicyPanel(props) {
   const [policyExtension, setPolicyExtension] = reactExports.useState(props.extension);
   const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
@@ -2011,6 +2182,12 @@ function ExtensionPolicyPanel(props) {
   }, [reviewOpen, resolveApprovalGate]);
   const managedCount = policyExtension.permissions.filter((permission2) => managedPermissionState(baseEffective, permission2.permission_id) !== null).length;
   const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission2) => permission2.permission_id));
+  const applyAcrossHref = appliedPolicyCloudHref({
+    extensionName: policyExtension.name,
+    extensionId: policyExtension.extension_id,
+    changedPermissionIds: lastApplied?.changedPermissionIds ?? [],
+    cloudControlsUrl: props.cloudControlsUrl
+  });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "extension-policy-editor", "aria-labelledby": "extension-policy-heading", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "extension-policy-heading", className: "text-lg font-semibold text-brand-dark", children: "Protection settings" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/80", children: "Recommended follows Guard defaults. Allow is available only where built-in safety and organization policy still permit it. Block is a stricter local floor." }),
@@ -2038,6 +2215,7 @@ function ExtensionPolicyPanel(props) {
       AppliedPolicyToast,
       {
         revision: lastApplied.revision,
+        applyAcrossHref,
         onUndo: () => {
           undoLastApplied();
         },
@@ -3068,8 +3246,8 @@ function ProtectionModuleRow(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0 flex-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex flex-wrap items-center gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: props.name }),
-        props.required ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Required" }) : null,
-        props.managed ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Managed" }) : null,
+        props.required ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Required by Guard" }) : null,
+        props.managed ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: props.managedLabel ?? "Synced from Guard Cloud" }) : null,
         props.custom ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Custom" }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate text-sm text-brand-dark/70", children: props.behavior })
@@ -3088,6 +3266,83 @@ function TechnicalDetails(props) {
 }
 function InlineError({ message }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800", children: message });
+}
+function customExtensionContinuityView(state) {
+  const privacyDisclosure = "Guard Cloud receives stable identity and compatibility metadata, not local source paths.";
+  switch (state) {
+    case "local-only":
+      return {
+        state,
+        title: "Available on this device",
+        description: "This custom protection remains local until portable continuity is enabled.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "identity-matched":
+      return {
+        state,
+        title: "Matched on another device",
+        description: "Guard matched the stable identity. Each device still uses its own verified definition.",
+        canApplyAcrossDevices: true,
+        privacyDisclosure
+      };
+    case "portable":
+      return {
+        state,
+        title: "Portable continuity enabled",
+        description: "A verified portable definition is available to compatible devices.",
+        canApplyAcrossDevices: true,
+        privacyDisclosure
+      };
+    case "incompatible":
+      return {
+        state,
+        title: "Needs a compatible definition",
+        description: "This device cannot apply the shared custom protection safely.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "pending-observation":
+      return {
+        state,
+        title: "Waiting for this device",
+        description: "Cloud settings stay pending until Guard observes the same extension identity locally.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "changed-identity":
+      return {
+        state,
+        title: "Identity changed",
+        description: "Guard refused the Cloud settings because this device observed a different identity.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "locally-overridden":
+      return {
+        state,
+        title: "Changed on this device",
+        description: "Guard kept this device's local setting until a newer Cloud revision is available.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "removed":
+      return {
+        state,
+        title: "Removed on this device",
+        description: "The local setting was removed. Guard did not delete the script, executable, or MCP configuration.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+    case "stale":
+      return {
+        state,
+        title: "Cloud observation is stale",
+        description: "Guard kept the last-known-good local setting and did not apply expired Cloud state.",
+        canApplyAcrossDevices: false,
+        privacyDisclosure
+      };
+  }
 }
 function randomToken$2() {
   return crypto.randomUUID().replaceAll("-", "");
@@ -3468,7 +3723,7 @@ function reviewModalDetail(gate) {
   if (gate?.totp_enabled === true) {
     return "Enter the current authenticator code to save these settings on this device.";
   }
-  return "This stays on this device. Guard Cloud can keep the same custom extension on your other machines.";
+  return "This custom Extension remains local to this device until portable continuity is enabled.";
 }
 function customExtensionUnits(surface) {
   if (surface === "mcp") return { unit: "tool", units: "tools", source: "this server" };
@@ -3490,6 +3745,19 @@ function customExtensionStateLabel(item) {
     return `${units.charAt(0).toUpperCase()}${units.slice(1)} follow Recommended until you allow or block them.`;
   }
   return item.example_label;
+}
+function continuityCopy(item) {
+  const status = item.continuity?.status;
+  if (status === "applied") {
+    const view = customExtensionContinuityView("identity-matched");
+    return { title: view.title, description: view.description };
+  }
+  if (status === "pending_observation") return customExtensionContinuityView("pending-observation");
+  if (status === "changed_identity") return customExtensionContinuityView("changed-identity");
+  if (status === "locally_overridden") return customExtensionContinuityView("locally-overridden");
+  if (status === "removed") return customExtensionContinuityView("removed");
+  if (status === "stale") return customExtensionContinuityView("stale");
+  return null;
 }
 function CustomExtensionsSection(props) {
   const added = addedCustomExtensions(props.items);
@@ -3517,13 +3785,14 @@ function CustomExtensionRow(props) {
   const handleOpen = reactExports.useCallback(() => {
     props.onOpen(props.item.cli_id);
   }, [props]);
+  const continuity = continuityCopy(props.item);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ProtectionModuleRow,
     {
       extensionId: props.item.cli_id,
       name: props.item.name,
       description: props.item.source_label ? `${props.item.example_label} · ${props.item.source_label}` : props.item.example_label,
-      behavior: customExtensionStateLabel(props.item),
+      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item),
       custom: true,
       executables: [props.item.name],
       onOpen: handleOpen
@@ -3565,6 +3834,7 @@ function LocalCliDetail(props) {
   const bulkTargets = props.item.surface === "package-scripts" ? enrollablePackageScriptCommands(commands) : commands;
   const bulkState = bulkCommandState(bulkTargets);
   const bulkCopy = bulkPolicyCopy(props.item.surface);
+  const continuity = customExtensionContinuityView("local-only");
   const clearPending = reactExports.useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -3611,12 +3881,21 @@ function LocalCliDetail(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.item.example_label }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: props.item.name }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: customExtensionStateLabel(props.item) }),
+      continuityCopy(props.item) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3", "data-testid": "custom-extension-continuity", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: continuityCopy(props.item)?.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-slate-600", children: continuityCopy(props.item)?.description })
+      ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75", children: detailPolicyCopy(props.item.surface) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-3", children: added ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         props.item.state === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Allowed on this device" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: "Allow this extension's commands" }),
         props.item.state === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Blocked" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", onClick: requestBlock, children: "Block this extension" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80", onClick: requestRemove, children: "Remove custom extension" })
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAdd, children: "Add custom extension" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4", "aria-labelledby": "custom-extension-continuity-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-continuity-heading", className: "text-sm font-semibold text-brand-dark", children: continuity.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: props.continuity.summary || continuity.description }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs leading-5 text-brand-dark/60", children: continuity.privacyDisclosure })
     ] }),
     added ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8", "aria-labelledby": "custom-extension-commands-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-commands-heading", className: "text-lg font-semibold text-brand-dark", children: detailCatalogHeading(props.item.surface) }),
@@ -4275,6 +4554,204 @@ function PatternSearchConsole(props) {
     ) : null
   ] });
 }
+function safeCloudSignInHref(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+function ManagedControlsPrimaryAction(props) {
+  if (!props.action) return null;
+  if (props.action.href) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: props.action.href, target: "_blank", rel: "noopener noreferrer", className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", children: [
+      props.action.label,
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+    ] });
+  }
+  if (props.action.action === "refresh") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onRefresh, className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", children: props.action.label });
+  }
+  if (props.action.action === "connect-cloud") {
+    if (props.connectHref) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: props.connectHref, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "size-4", "aria-hidden": "true" }),
+        "Open Guard Cloud sign-in"
+      ] });
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onConnect, disabled: props.connecting, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "size-4", "aria-hidden": "true" }),
+      props.connecting ? "Starting sign-in..." : props.action.label
+    ] });
+  }
+  return null;
+}
+function layerTargetsExtension(effective, extension2, kind) {
+  const permissionIds = new Set(extension2.permissions.map((permission2) => permission2.permission_id));
+  return effective.layers.some(
+    (layer) => layer.kind === kind && layer.controls.some(
+      (control) => control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id)
+    )
+  );
+}
+function managedSource(effective) {
+  const managed = effective.managed_controls;
+  return managed?.authority_mode === "managed-restrictive" ? `Managed by ${managed.workspace_id}` : "Synced from Guard Cloud";
+}
+function extensionProtectionAuthority(effective, extension2) {
+  if (effective.global_lockdown) {
+    return { effectiveState: "lockdown", source: "Emergency Lockdown", sources: ["Emergency Lockdown"] };
+  }
+  const permissionIds = new Set(extension2.permissions.map((permission2) => permission2.permission_id));
+  const extensionProjection = effective.projection?.extensions.find(
+    (item) => item.extension_id === extension2.extension_id
+  );
+  const permissionProjections = effective.projection?.permissions.filter(
+    (item) => item.extension_id === extension2.extension_id || permissionIds.has(item.permission_id)
+  ) ?? [];
+  const projections = extensionProjection ? [extensionProjection, ...permissionProjections] : permissionProjections;
+  const managed = managedSource(effective);
+  const hasManaged = projections.some((item) => item.managed_state !== "inherited") || layerTargetsExtension(effective, extension2, "signed-cloud");
+  const hasLocal = projections.some((item) => item.local_state !== "inherited") || layerTargetsExtension(effective, extension2, "local-admin");
+  const sources = [];
+  if (hasManaged) sources.push(managed);
+  if (hasLocal) sources.push("Set on this device");
+  if (sources.length === 0) sources.push(extension2.required ? "Required by Guard" : "Recommended by Guard");
+  const managedBlocks = projections.some(
+    (item) => item.effective_state === "blocked" && item.managed_state === "disabled"
+  ) || effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some(
+    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
+  ));
+  const localBlocks = projections.some(
+    (item) => item.effective_state === "blocked" && item.local_state === "disabled"
+  ) || effective.layers.some((layer) => layer.kind === "local-admin" && layer.controls.some(
+    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
+  ));
+  const extensionBlocked = extensionProjection?.effective_state === "blocked" || extensionEffectiveState(effective, extension2) === "disabled";
+  const permissionStates = extension2.permissions.map(
+    (permission2) => permissionEffectiveState(effective, extension2, permission2)
+  );
+  const blockedPermissionCount = permissionStates.filter((state) => state === "disabled").length;
+  let effectiveState;
+  if (extensionBlocked) effectiveState = "blocked";
+  else if (blockedPermissionCount > 0 && blockedPermissionCount < permissionStates.length) effectiveState = "partial";
+  else if (blockedPermissionCount > 0 || localBlocks || managedBlocks) effectiveState = "blocked";
+  else if (extension2.required) effectiveState = "required";
+  else effectiveState = extensionEffectiveState(effective, extension2) === "enabled" ? "allowed" : "blocked";
+  let source = sources.at(-1) ?? "Recommended by Guard";
+  if (localBlocks) source = "Set on this device";
+  if (managedBlocks) source = managed;
+  return { effectiveState, source, sources };
+}
+function extensionProtectionSource(effective, extension2) {
+  return extensionProtectionAuthority(effective, extension2).source;
+}
+function cloudBase(runtime) {
+  const candidate = runtime?.dashboard_url?.trim() || runtime?.connect_url?.trim();
+  return candidate || void 0;
+}
+function recoveryNotice(recovery) {
+  if (recovery === "unsupported-version") {
+    return "This Control Set uses a newer control schema. Update Guard before applying it; the last verified authority remains in force.";
+  }
+  if (recovery === "catalog-mismatch") {
+    return "The Control Set and local Extension catalog do not match. Guard keeps the last verified authority fail-safe until compatibility is restored.";
+  }
+  if (recovery === "degraded") {
+    return "Local control authority needs recovery. Guard keeps the last verified authority fail-safe while you refresh or repair it.";
+  }
+  return "Cloud sync is stale. Guard keeps the last verified authority fail-safe until a fresh acknowledgement succeeds.";
+}
+function extensionLocalProtectionInput(extension2, effective, runtime) {
+  const managed = effective.managed_controls;
+  const authority = extensionProtectionAuthority(effective, extension2);
+  const failureCodes = new Set(effective.failures.map((failure) => failure.code.toLowerCase()));
+  let recovery;
+  if (failureCodes.has("unsupported-control-schema")) recovery = "unsupported-version";
+  else if (failureCodes.has("catalog-digest-mismatch") || failureCodes.has("catalog-unavailable")) recovery = "catalog-mismatch";
+  else if (runtime?.cloud_policy_sync_error || [...failureCodes].some((code) => code.includes("stale"))) recovery = "stale";
+  else if (effective.health !== "protected") recovery = "degraded";
+  return {
+    extensionName: extension2.name,
+    extensionId: extension2.extension_id,
+    effectiveState: authority.effectiveState,
+    source: authority.source,
+    sources: authority.sources,
+    catalogDigest: effective.catalog_digest,
+    recovery,
+    cloudControlsUrl: cloudBase(runtime),
+    controlSetName: managed?.control_set_name ?? managed?.control_set_id,
+    controlSetVersion: managed?.bundle_version,
+    workspace: managed?.workspace_id,
+    authorityMode: managed?.authority_mode,
+    acknowledgementRevision: managed?.acknowledgement.extension_authority_revision,
+    acknowledgementStatus: managed?.acknowledgement.status,
+    lastAcknowledgedAt: runtime?.cloud_policy_last_ack_at ?? void 0,
+    effectiveProjectionDigest: managed?.acknowledgement.effective_projection_digest
+  };
+}
+function ExtensionManagedControlsPanel(props) {
+  const [connecting, setConnecting] = reactExports.useState(false);
+  const [connectHref, setConnectHref] = reactExports.useState(null);
+  const [connectMessage, setConnectMessage] = reactExports.useState(null);
+  const input = extensionLocalProtectionInput(props.extension, props.effective, props.runtime);
+  const view = buildLocalProtectionView(input);
+  const connected = props.runtime?.cloud_state === "paired_active" || props.runtime?.cloud_state === "paired_waiting";
+  const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
+  const refresh = () => {
+    void props.onRefresh();
+  };
+  const connect = reactExports.useCallback(() => {
+    setConnecting(true);
+    setConnectMessage(null);
+    void startGuardCloudConnect().then((status) => {
+      if (!status.connect_required) {
+        setConnectMessage("Guard Cloud is connected.");
+        return;
+      }
+      const href = safeCloudSignInHref(status.connect_flow?.authorize_url) ?? safeCloudSignInHref(status.connect_flow?.connect_url);
+      setConnectHref(href);
+      setConnectMessage(href ? "Complete sign-in to resume synced Control Sets." : "Guard could not start sign-in. Try again.");
+    }).catch((error) => {
+      setConnectMessage(error instanceof Error ? error.message : "Guard could not start sign-in. Try again.");
+    }).finally(() => setConnecting(false));
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "managed-controls-heading", className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Source and authority" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "managed-controls-heading", className: "mt-1 text-lg font-semibold text-brand-dark", children: hasManagedControl ? "Active managed control" : "No Control Set targets this Extension" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75", children: view.summary })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex self-start rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-brand-dark", children: view.source })
+      ] }),
+      view.status === "needs-attention" || view.status === "unsupported" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "alert", className: "mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
+        recoveryNotice(input.recovery)
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: view.technicalDetails.map((detail) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase tracking-wide text-brand-dark/55", children: detail.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all text-sm text-brand-dark", children: detail.value })
+      ] }, detail.label)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ManagedControlsPrimaryAction,
+        {
+          action: view.primaryAction,
+          connecting,
+          connectHref,
+          onConnect: connect,
+          onRefresh: refresh
+        }
+      ) }),
+      connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null
+    ] }),
+    !connected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-brand-dark/75", children: "Guard Cloud is disconnected. Local protection and local tightening remain available on this device; cross-device Control Sets resume after reconnecting." }) : null,
+    hasManagedControl && input.authorityMode === "managed-restrictive" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950", children: "This is a managed-restrictive Control Set. Local settings can add stricter blocks, but they cannot weaken this workspace restriction." }) : null
+  ] });
+}
 function sourceIsManaged(effective, extensionId) {
   return effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some(
     (control) => control.target_kind === "extension" && control.target_id === extensionId
@@ -4289,6 +4766,8 @@ function CatalogExtensionRow(props) {
   const handleOpen = reactExports.useCallback(() => {
     props.onOpen(props.extension);
   }, [props]);
+  const source = extensionProtectionSource(props.effective, props.extension);
+  const cloudSource = source === "Synced from Guard Cloud" || source.startsWith("Managed by ");
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ProtectionModuleRow,
     {
@@ -4297,7 +4776,8 @@ function CatalogExtensionRow(props) {
       description: props.extension.description,
       behavior: catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension)),
       required: props.extension.required,
-      managed: sourceIsManaged(props.effective, props.extension.extension_id),
+      managed: cloudSource || sourceIsManaged(props.effective, props.extension.extension_id),
+      managedLabel: cloudSource ? source : void 0,
       executables: props.extension.executables,
       ecosystemIds: props.extension.ecosystem_ids,
       onOpen: handleOpen
@@ -4314,7 +4794,7 @@ function ExtensionsOverview(props) {
       {
         eyebrow: "On this device",
         title: PROTECTION_TERMS.pageTitle,
-        description: "Pick a tool to see the commands Guard watches and change how they're handled."
+        description: "Choose an Extension to review its permissions and effective protection."
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6", children: [
@@ -4382,6 +4862,57 @@ function pushExtensionHistory(href) {
 }
 function replaceExtensionHistory(href) {
   window.history.replaceState({}, "", guardAwareHref(href));
+}
+function receiptMatchesExtension(receipt, extension2) {
+  const identities = /* @__PURE__ */ new Set([
+    extension2.extension_id,
+    ...extension2.permissions.map((permission2) => permission2.permission_id),
+    ...extension2.rules.map((rule2) => rule2.rule_id)
+  ]);
+  if (identities.has(receipt.artifact_id)) return true;
+  if (receipt.changed_capabilities.some((capability) => identities.has(capability))) return true;
+  const envelope = receipt.action_envelope_json;
+  if (!envelope) return false;
+  if (envelope.command_category === extension2.extension_id) return true;
+  const toolName = envelope.tool_name?.trim().toLowerCase();
+  return Boolean(toolName && extension2.executables.some((executable) => executable.toLowerCase() === toolName));
+}
+function recentExtensionReceipts(receipts, extension2, limit = 8) {
+  return receipts.filter((receipt) => receiptMatchesExtension(receipt, extension2)).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)).slice(0, limit);
+}
+function receiptDecisionLabel(receipt) {
+  if (receipt.policy_decision === "allow") return "Allowed";
+  if (receipt.policy_decision === "block") return "Blocked";
+  return "Reviewed";
+}
+function ExtensionActivity(props) {
+  const receipts = recentExtensionReceipts(props.receipts, props.extension);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Recent Extension decisions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: "Receipt-backed decisions mapped to this canonical Extension. Guard does not synthesize activity." }),
+    receipts.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-100", "aria-label": "Recent Extension receipts", children: receipts.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+          receiptDecisionLabel(receipt),
+          " · ",
+          receipt.harness
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-brand-dark/60", children: [
+          receipt.capabilities_summary,
+          " · ",
+          new Date(receipt.timestamp).toLocaleString()
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: `/evidence?view=actions&selected=${encodeURIComponent(receipt.receipt_id)}&search=${encodeURIComponent(receipt.receipt_id)}`, className: "inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-blue hover:underline", children: [
+        "Open receipt ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+      ] })
+    ] }, receipt.receipt_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-brand-dark/70", children: "No matching receipts are available on this device yet." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: `/evidence?view=actions&search=${encodeURIComponent(props.extension.extension_id)}`, className: "mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", children: [
+      "View matching Evidence ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+    ] })
+  ] });
 }
 const DECISIONS = /* @__PURE__ */ new Set(["allowed", "ask-first", "blocked"]);
 const MINIMUM_ACTIONS = /* @__PURE__ */ new Set(["allow", "monitor", "review", "block"]);
@@ -4560,16 +5091,25 @@ function ProtectionTestLab({ extension: extension2 }) {
     ] }) : null
   ] });
 }
-function sourceForTarget(effective, targetKind, targetId2) {
-  for (const layer of effective.layers) {
-    if (!layer.controls.some((control) => control.target_kind === targetKind && control.target_id === targetId2)) continue;
-    return layer.kind === "signed-cloud" ? "organization" : "device";
-  }
-  return "built-in";
+const DETAIL_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "permissions", label: "Permissions" },
+  { id: "managed-controls", label: "Managed controls" },
+  { id: "activity", label: "Activity" },
+  { id: "technical", label: "Technical details" }
+];
+function canonicalProtectionDetailTab(tab) {
+  if (tab === "commands" || tab === "policy") return "permissions";
+  if (tab === "test-lab") return "activity";
+  if (tab === "managed-controls" || tab === "permissions" || tab === "technical") return tab;
+  return tab === "activity" ? "activity" : "overview";
 }
 function requiredLine(extension2) {
   if (!extension2.required) return null;
   return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
+}
+function protectionStateLabel(state) {
+  return state.charAt(0).toUpperCase() + state.slice(1);
 }
 function DeveloperModuleDetails(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalDetails, { title: "Developer details", testId: "protection-more-detail", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5", children: [
@@ -4673,8 +5213,53 @@ function ProtectionModuleDetail(props) {
   const extensionEnabled = !props.effective.layers.some(
     (layer) => layer.controls.some((control) => control.target_kind === "extension" && control.target_id === props.extension.extension_id && control.state === "disabled")
   );
-  const orgManaged = sourceForTarget(props.effective, "extension", props.extension.extension_id) === "organization";
   const requestExtensionChange = props.extension.required ? void 0 : props.onRequestExtensionChange;
+  const activeTab = canonicalProtectionDetailTab(props.urlState?.tab ?? "overview");
+  const protectionView = buildLocalProtectionView(
+    extensionLocalProtectionInput(props.extension, props.effective, props.runtime)
+  );
+  const orgManaged = protectionView.sources.some(
+    (source) => source === "Synced from Guard Cloud" || source.startsWith("Managed by ")
+  );
+  const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || void 0;
+  const setActiveTab = reactExports.useCallback((tab) => {
+    if (!props.onUrlState) return false;
+    if (tab !== activeTab && policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) {
+      return false;
+    }
+    props.onUrlState({
+      ...props.urlState ?? {
+        tab: "overview",
+        query: "",
+        risk: "all",
+        state: "all",
+        configurable: "all",
+        source: "all",
+        deprecated: "all",
+        type: "all",
+        sort: "name",
+        ruleId: null
+      },
+      tab,
+      ruleId: null
+    });
+    return true;
+  }, [activeTab, policyDirty, props.onUrlState, props.urlState]);
+  const handleTabKeyDown = (event, tab) => {
+    if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
+    const index = DETAIL_TABS.findIndex((item) => item.id === tab);
+    let nextIndex = index;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % DETAIL_TABS.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + DETAIL_TABS.length) % DETAIL_TABS.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = DETAIL_TABS.length - 1;
+    if (nextIndex === index && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const next = DETAIL_TABS[nextIndex];
+    if (!next) return;
+    if (!setActiveTab(next.id)) return;
+    window.requestAnimationFrame(() => document.getElementById(`protection-tab-${next.id}`)?.focus());
+  };
   const handleBack = () => {
     if (policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) return;
     props.onBack();
@@ -4699,7 +5284,8 @@ function ProtectionModuleDetail(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.extension.executables.join(" · ") }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: props.extension.name }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: props.extension.description })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: props.extension.description }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-3 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-brand-dark", children: protectionView.source })
         ] })
       ] }),
       requiredNote ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/80", children: requiredNote }) : null,
@@ -4728,18 +5314,105 @@ function ProtectionModuleDetail(props) {
         "Emergency Lockdown currently controls this module. Matching optional actions remain blocked."
       ] }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "mt-5 flex gap-5 overflow-x-auto border-b border-slate-200", role: "tablist", "aria-label": "Extension detail sections", children: DETAIL_TABS.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        id: `protection-tab-${tab.id}`,
+        type: "button",
+        role: "tab",
+        "aria-selected": activeTab === tab.id,
+        "aria-controls": `protection-panel-${tab.id}`,
+        tabIndex: activeTab === tab.id ? 0 : -1,
+        onClick: () => setActiveTab(tab.id),
+        onKeyDown: (event) => handleTabKeyDown(event, tab.id),
+        className: `-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === tab.id ? "border-brand-blue text-brand-blue" : "border-transparent text-brand-dark/60 hover:text-brand-dark"}`,
+        children: tab.label
+      },
+      tab.id
+    )) }),
+    activeTab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "protection-panel-overview", role: "tabpanel", "aria-labelledby": "protection-tab-overview", className: "mt-6 grid gap-4 lg:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Effective protection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: protectionView.summary }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "State" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm font-semibold text-brand-dark", children: protectionStateLabel(protectionView.effectiveState) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Source" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm font-semibold text-brand-dark", children: protectionView.source })
+          ] }),
+          protectionView.sources.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Contributors" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: protectionView.sources.join(" · ") })
+          ] }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Required" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.required ? "Yes" : "No" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Delegated protection" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.delegated_protection === "package-firewall" ? "Package Firewall" : props.extension.delegated_protection ?? "None" })
+          ] })
+        ] }),
+        props.extension.delegated_protection === "package-firewall" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: "/supply-chain", className: "mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-blue hover:underline", children: [
+          "Open Package Firewall enforcement ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+        ] }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "What this Extension protects" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: "Choose Permissions to review effective behavior, built-in floors, and settings you may tighten locally." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Permissions" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.permission_count })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Detection rules" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.rule_count })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Baseline floors" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: [...new Set(props.extension.permissions.map((permission2) => treatmentLabel(permission2.baseline_floor)))].join(", ") || "Built-in" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Configurable" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1 text-sm text-brand-dark", children: [
+              props.extension.permissions.filter((permission2) => permission2.configurable).length,
+              " of ",
+              props.extension.permission_count
+            ] })
+          ] })
+        ] })
+      ] })
+    ] }) : null,
+    activeTab === "permissions" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-permissions", role: "tabpanel", "aria-labelledby": "protection-tab-permissions", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       ExtensionPolicyPanel,
       {
         extension: props.extension,
         effective: props.effective,
         catalogDigest: props.catalogDigest,
         onRefresh: props.onRefresh,
-        onDirtyChange: setPolicyDirty
+        onDirtyChange: setPolicyDirty,
+        cloudControlsUrl
       }
-    ) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionTestLab, { extension: props.extension }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-8", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeveloperModuleDetails, { extension: props.extension, effective: props.effective, catalogDigest: props.catalogDigest }) })
+    ) }) : null,
+    activeTab === "managed-controls" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-managed-controls", role: "tabpanel", "aria-labelledby": "protection-tab-managed-controls", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ExtensionManagedControlsPanel,
+      {
+        extension: props.extension,
+        effective: props.effective,
+        runtime: props.runtime,
+        onRefresh: props.onRefresh
+      }
+    ) }) : null,
+    activeTab === "activity" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "protection-panel-activity", role: "tabpanel", "aria-labelledby": "protection-tab-activity", className: "mt-6 space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionActivity, { extension: props.extension, receipts: props.runtime?.latest_receipts ?? [] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionTestLab, { extension: props.extension })
+    ] }) : null,
+    activeTab === "technical" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-technical", role: "tabpanel", "aria-labelledby": "protection-tab-technical", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeveloperModuleDetails, { extension: props.extension, effective: props.effective, catalogDigest: props.catalogDigest }) }) : null
   ] });
 }
 function ExtensionsLoadingState(props) {
@@ -4855,6 +5528,49 @@ function deriveProtectionStatus(effective) {
       };
   }
 }
+function ReviewModal(props) {
+  const [password, setPassword] = reactExports.useState("");
+  const [totp, setTotp] = reactExports.useState("");
+  const dialogRef = useModalDialog(props.onCancel, !props.busy);
+  const title = "globalLockdown" in props.change ? `${props.change.globalLockdown ? "Enable" : "Disable"} Emergency Lockdown` : `${props.change.enabled ? "Permit" : "Block"} ${props.change.extension.name}`;
+  const current = "globalLockdown" in props.change ? props.change.globalLockdown ? "Off" : "Active" : props.change.enabled ? "Blocked" : "Allowed";
+  const requested = "globalLockdown" in props.change ? props.change.globalLockdown ? "Active" : "Off" : props.change.enabled ? "Allowed within Guard safety rules" : "Blocked";
+  const handlePassword = reactExports.useCallback((event) => {
+    setPassword(event.target.value);
+  }, []);
+  const handleTotp = reactExports.useCallback((event) => {
+    setTotp(event.target.value);
+  }, []);
+  const handleSubmit = reactExports.useCallback((event) => {
+    event.preventDefault();
+    props.onConfirm(buildApprovalProofCredentials(props.approvalGate, { approvalPassword: password, approvalTotpCode: totp }));
+  }, [password, props, totp]);
+  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totp }, props.busy);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { ref: dialogRef, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "protection-review-title", onSubmit: handleSubmit, className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Review protection change" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-review-title", className: "mt-2 text-xl font-semibold text-brand-dark", children: title })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, "aria-label": "Close review", className: "grid size-11 place-items-center rounded-full text-brand-dark hover:bg-white/70 disabled:opacity-50", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-5" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl bg-[rgba(85,153,254,0.08)] p-4 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Current" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "→" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Requested" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: current }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: requested })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard's built-in minimum safety rules and organization policy remain active. This change does not disable detection." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofFieldInputs, { approvalGate: props.approvalGate, approvalPassword: password, approvalTotpCode: totp, onApprovalPasswordChange: handlePassword, onApprovalTotpCodeChange: handleTotp }) }),
+    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark hover:bg-white/70 disabled:opacity-50", children: "Cancel" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60", children: props.busy ? "Verifying…" : "Confirm change" })
+    ] })
+  ] }) });
+}
 function currentExtensionRouteState() {
   return {
     route: parseProtectionRoute(window.location.pathname),
@@ -4921,59 +5637,7 @@ function buildExtensionMutation(state, change) {
     nonce: randomToken()
   };
 }
-function ReviewModal(props) {
-  const [password, setPassword] = reactExports.useState("");
-  const [totp, setTotp] = reactExports.useState("");
-  const dialogRef = useModalDialog(props.onCancel, !props.busy);
-  const title = "globalLockdown" in props.change ? `${props.change.globalLockdown ? "Enable" : "Disable"} Emergency Lockdown` : `${props.change.enabled ? "Permit" : "Block"} ${props.change.extension.name}`;
-  const current = "globalLockdown" in props.change ? props.change.globalLockdown ? "Off" : "Active" : props.change.enabled ? "Blocked" : "Allowed";
-  const requested = "globalLockdown" in props.change ? props.change.globalLockdown ? "Active" : "Off" : props.change.enabled ? "Allowed within Guard safety rules" : "Blocked";
-  const handlePassword = reactExports.useCallback((event) => {
-    setPassword(event.target.value);
-  }, []);
-  const handleTotp = reactExports.useCallback((event) => {
-    setTotp(event.target.value);
-  }, []);
-  const handleSubmit = reactExports.useCallback((event) => {
-    event.preventDefault();
-    props.onConfirm(buildApprovalProofCredentials(props.approvalGate, { approvalPassword: password, approvalTotpCode: totp }));
-  }, [password, props, totp]);
-  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totp }, props.busy);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { ref: dialogRef, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "protection-review-title", onSubmit: handleSubmit, className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Review protection change" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-review-title", className: "mt-2 text-xl font-semibold text-brand-dark", children: title })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, "aria-label": "Close review", className: "grid size-11 place-items-center rounded-full text-brand-dark hover:bg-white/70 disabled:opacity-50", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-5" }) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl bg-[rgba(85,153,254,0.08)] p-4 text-sm text-brand-dark", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Current" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "→" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Requested" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: current }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", {}),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: requested })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard's built-in minimum safety rules and organization policy remain active. This change does not disable detection." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalProofFieldInputs,
-      {
-        approvalGate: props.approvalGate,
-        approvalPassword: password,
-        approvalTotpCode: totp,
-        onApprovalPasswordChange: handlePassword,
-        onApprovalTotpCodeChange: handleTotp
-      }
-    ) }),
-    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark hover:bg-white/70 disabled:opacity-50", children: "Cancel" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60", children: props.busy ? "Verifying…" : "Confirm change" })
-    ] })
-  ] }) });
-}
-function ProtectionCenterWorkspace() {
+function ProtectionCenterWorkspace(props) {
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [routeState, setRouteState] = reactExports.useState(() => currentExtensionRouteState());
   const [pending, setPending] = reactExports.useState(null);
@@ -5029,6 +5693,11 @@ function ProtectionCenterWorkspace() {
     setRouteState({ route: { kind: "overview" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
+  const updateExtensionDetailState = reactExports.useCallback((detail) => {
+    if (!canonicalSelected) return;
+    pushExtensionHistory(extensionDetailHref(canonicalSelected, detail));
+    setRouteState({ route: { kind: "detail", extensionId: canonicalSelected }, detail });
+  }, [canonicalSelected]);
   const openLocalCliDetail = reactExports.useCallback((cliId) => {
     pushExtensionHistory(localCliHref(cliId));
     setRouteState({ route: { kind: "local-cli", cliId }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
@@ -5203,6 +5872,7 @@ function ProtectionCenterWorkspace() {
       {
         item: selectedLocalCli,
         revision: localClis.data.revision,
+        continuity: localClis.data.cloud,
         onBack: closeExtension,
         onRefresh: localClis.load
       }
@@ -5213,6 +5883,9 @@ function ProtectionCenterWorkspace() {
         extension: selectedExtension,
         effective: state.effective,
         catalogDigest: state.catalog.catalog_digest,
+        runtime: props.runtime,
+        urlState: routeState.detail,
+        onUrlState: updateExtensionDetailState,
         onBack: closeExtension,
         onRefresh: refreshProtection,
         onRequestExtensionChange: handleRequestExtensionChange

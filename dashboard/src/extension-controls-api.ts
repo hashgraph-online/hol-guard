@@ -143,6 +143,23 @@ export type EffectiveExtensionControlProjection = {
   permissions: EffectivePermissionProjectionItem[];
 };
 
+export type ManagedControlsStatus = {
+  control_set_id?: string;
+  control_set_name?: string;
+  bundle_version: number | string;
+  workspace_id: string;
+  authority_mode?: "personal-shared" | "workspace-shared" | "managed-restrictive";
+  catalog_digest: string;
+  issued_at?: string;
+  expires_at?: string;
+  acknowledgement: {
+    extension_authority_revision: number;
+    policy_revision?: number | string;
+    effective_projection_digest?: string;
+    status: string;
+  };
+};
+
 export type EffectiveExtensionControls = {
   schema_version: string;
   health: EffectiveExtensionControlProjection["health"];
@@ -156,6 +173,7 @@ export type EffectiveExtensionControls = {
   layers: ExtensionControlLayer[];
   failures: Array<{ code: string; detail?: string; layer_kind?: string }>;
   projection?: EffectiveExtensionControlProjection;
+  managed_controls?: ManagedControlsStatus;
 };
 
 export type ExtensionControlHistoryItem = {

@@ -48,9 +48,7 @@ class _ExtensionControlAuthoritySupportMixin:
         try:
             value = self._secret_store().get_secret(self._key_ref())
         except Exception as exc:
-            if required:
-                raise ExtensionControlAuthorityError("extension control credential store unavailable") from exc
-            raise
+            raise ExtensionControlAuthorityError("extension control credential store unavailable") from exc
         if value is None:
             if required:
                 raise ExtensionControlAuthorityError("extension control authentication key missing")

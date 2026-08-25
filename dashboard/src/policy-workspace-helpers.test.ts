@@ -7,12 +7,12 @@ import {
   resolvePolicyRowFolder,
   resolvePolicyRowFrequency,
   resolvePolicyRowSubtitle,
-  resolvePolicyRowSourceLabel,
   resolvePolicyRowTitle,
   resolveWorkspaceLabel,
   formatPolicyScopePath,
   isScannerGeneratedPolicyLabel,
 } from "./policy-workspace-helpers";
+import { resolvePolicyRowSourceLabel } from "./policy-managed-authority";
 import { scopeLabel } from "./approval-center-utils";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -80,12 +80,26 @@ assert(
 );
 
 assert(
-  resolvePolicyRowSourceLabel(enrichedPackageRule) === "Local",
-  "POL-H23: source column shows Local for local rules",
+  resolvePolicyRowSourceLabel(enrichedPackageRule) === "Remembered on this device",
+  "POL-H23: source column identifies device-local remembered rules",
 );
 assert(
   resolvePolicyRowSourceLabel(basePolicy({ source: "trusted-local-tool" })) === "Trusted local tool",
   "POL-H23b: digest-bound local tool grants have a clear source label",
+);
+for (const source of ["cloud-sync", "team-policy", "policy-bundle"]) {
+  assert(
+    resolvePolicyRowSourceLabel(basePolicy({ source })) === "Synced contextual rule",
+    `POL-H23c: ${source} remains a Cloud-managed source`,
+  );
+}
+assert(
+  resolvePolicyRowSourceLabel(basePolicy({
+    source: "policy-bundle",
+    authority_mode: "managed-restrictive",
+    cloud_workspace_label: "workspace-managed-controls",
+  })) === "Managed by workspace-managed-controls",
+  "POL-H23d: serialized authenticated managed authority names its workspace",
 );
 
 const scannerLabelRule = basePolicy({

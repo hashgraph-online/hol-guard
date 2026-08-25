@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Added the HOL Guard 3.0 Managed Controls user, operator, migration, recovery,
+  incident, rollback, support, and release documentation set.
 - Persistent menu-bar and system-tray ownership moved to the separate
   `hashgraph-online/hol-guard-desktop` application.
 - HOL Guard Core remains headless and continues to own policy enforcement,

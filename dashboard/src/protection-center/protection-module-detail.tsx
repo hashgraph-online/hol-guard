@@ -1,28 +1,44 @@
-import { useEffect, useState } from "react";
-import { HiMiniArrowLeft, HiMiniLockClosed } from "react-icons/hi2";
+import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import { HiMiniArrowLeft, HiMiniArrowTopRightOnSquare, HiMiniLockClosed } from "react-icons/hi2";
 
-import { controlProvenance, permissionForRule, treatmentLabel } from "../extension-control-center-model";
+import { controlProvenance, permissionForRule, treatmentLabel, type ExtensionDetailUrlState } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
 import { ExtensionPolicyPanel } from "../extension-policy-panel";
+import type { GuardRuntimeSnapshot } from "../guard-types";
+import { buildLocalProtectionView } from "../managed-controls/local-protection-model";
+import {
+  ExtensionManagedControlsPanel,
+  extensionLocalProtectionInput,
+} from "../managed-controls/extension-managed-controls-panel";
 import { TechnicalDetails } from "./components/protection-primitives";
 import { ExtensionBrandMark } from "./components/extension-brand-mark";
+import { ExtensionActivity } from "./extension-activity";
 import { ProtectionTestLab } from "./protection-test-lab";
 
-function sourceForTarget(
-  effective: EffectiveExtensionControls,
-  targetKind: "extension" | "permission",
-  targetId: string,
-): "built-in" | "device" | "organization" {
-  for (const layer of effective.layers) {
-    if (!layer.controls.some((control) => control.target_kind === targetKind && control.target_id === targetId)) continue;
-    return layer.kind === "signed-cloud" ? "organization" : "device";
-  }
-  return "built-in";
+export type ProtectionDetailTab = "overview" | "permissions" | "managed-controls" | "activity" | "technical";
+
+const DETAIL_TABS: ReadonlyArray<{ id: ProtectionDetailTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "permissions", label: "Permissions" },
+  { id: "managed-controls", label: "Managed controls" },
+  { id: "activity", label: "Activity" },
+  { id: "technical", label: "Technical details" },
+];
+
+export function canonicalProtectionDetailTab(tab: ExtensionDetailUrlState["tab"]): ProtectionDetailTab {
+  if (tab === "commands" || tab === "policy") return "permissions";
+  if (tab === "test-lab") return "activity";
+  if (tab === "managed-controls" || tab === "permissions" || tab === "technical") return tab;
+  return tab === "activity" ? "activity" : "overview";
 }
 
 function requiredLine(extension: ExtensionCatalogItem): string | null {
   if (!extension.required) return null;
   return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
+}
+
+function protectionStateLabel(state: "allowed" | "blocked" | "partial" | "required" | "lockdown"): string {
+  return state.charAt(0).toUpperCase() + state.slice(1);
 }
 
 function DeveloperModuleDetails(props: {
@@ -103,6 +119,9 @@ export function ProtectionModuleDetail(props: {
   extension: ExtensionCatalogItem;
   effective: EffectiveExtensionControls;
   catalogDigest: string;
+  runtime?: GuardRuntimeSnapshot | null;
+  urlState?: ExtensionDetailUrlState;
+  onUrlState?: (state: ExtensionDetailUrlState) => void;
   onBack: () => void;
   onRefresh: () => Promise<void> | void;
   onRequestExtensionChange?: (extension: ExtensionCatalogItem, enabled: boolean) => void;
@@ -155,8 +174,57 @@ export function ProtectionModuleDetail(props: {
   const extensionEnabled = !props.effective.layers.some((layer) =>
     layer.controls.some((control) => control.target_kind === "extension" && control.target_id === props.extension.extension_id && control.state === "disabled"),
   );
-  const orgManaged = sourceForTarget(props.effective, "extension", props.extension.extension_id) === "organization";
   const requestExtensionChange = props.extension.required ? undefined : props.onRequestExtensionChange;
+  const activeTab = canonicalProtectionDetailTab(props.urlState?.tab ?? "overview");
+  const protectionView = buildLocalProtectionView(
+    extensionLocalProtectionInput(props.extension, props.effective, props.runtime),
+  );
+  const orgManaged = protectionView.sources.some(
+    (source) => source === "Synced from Guard Cloud" || source.startsWith("Managed by "),
+  );
+  const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || undefined;
+  const setActiveTab = useCallback((tab: ProtectionDetailTab): boolean => {
+    if (!props.onUrlState) return false;
+    if (
+      tab !== activeTab
+      && policyDirty
+      && !window.confirm("Discard your unreviewed protection setting changes?")
+    ) {
+      return false;
+    }
+    props.onUrlState({
+      ...(props.urlState ?? {
+        tab: "overview",
+        query: "",
+        risk: "all",
+        state: "all",
+        configurable: "all",
+        source: "all",
+        deprecated: "all",
+        type: "all",
+        sort: "name",
+        ruleId: null,
+      }),
+      tab,
+      ruleId: null,
+    });
+    return true;
+  }, [activeTab, policyDirty, props.onUrlState, props.urlState]);
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: ProtectionDetailTab) => {
+    if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
+    const index = DETAIL_TABS.findIndex((item) => item.id === tab);
+    let nextIndex = index;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % DETAIL_TABS.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + DETAIL_TABS.length) % DETAIL_TABS.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = DETAIL_TABS.length - 1;
+    if (nextIndex === index && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const next = DETAIL_TABS[nextIndex];
+    if (!next) return;
+    if (!setActiveTab(next.id)) return;
+    window.requestAnimationFrame(() => document.getElementById(`protection-tab-${next.id}`)?.focus());
+  };
   const handleBack = () => {
     if (policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) return;
     props.onBack();
@@ -181,6 +249,9 @@ export function ProtectionModuleDetail(props: {
             <p className="font-mono text-xs font-semibold tracking-[0.14em] text-slate-400">{props.extension.executables.join(" · ")}</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.extension.name}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{props.extension.description}</p>
+            <span className="mt-3 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-brand-dark">
+              {protectionView.source}
+            </span>
           </div>
         </div>
         {requiredNote ? <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/80">{requiredNote}</p> : null}
@@ -217,21 +288,79 @@ export function ProtectionModuleDetail(props: {
           </p>
         ) : null}
       </header>
-      <div className="mt-2">
+      <nav className="mt-5 flex gap-5 overflow-x-auto border-b border-slate-200" role="tablist" aria-label="Extension detail sections">
+        {DETAIL_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            id={`protection-tab-${tab.id}`}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`protection-panel-${tab.id}`}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
+            className={`-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === tab.id ? "border-brand-blue text-brand-blue" : "border-transparent text-brand-dark/60 hover:text-brand-dark"}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+      {activeTab === "overview" ? (
+        <section id="protection-panel-overview" role="tabpanel" aria-labelledby="protection-tab-overview" className="mt-6 grid gap-4 lg:grid-cols-2">
+          <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold text-brand-dark">Effective protection</h2>
+            <p className="mt-2 text-sm leading-6 text-brand-dark/75">{protectionView.summary}</p>
+            <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">State</dt><dd className="mt-1 text-sm font-semibold text-brand-dark">{protectionStateLabel(protectionView.effectiveState)}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">Source</dt><dd className="mt-1 text-sm font-semibold text-brand-dark">{protectionView.source}</dd></div>
+              {protectionView.sources.length > 1 ? <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">Contributors</dt><dd className="mt-1 text-sm text-brand-dark">{protectionView.sources.join(" · ")}</dd></div> : null}
+              <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">Required</dt><dd className="mt-1 text-sm text-brand-dark">{props.extension.required ? "Yes" : "No"}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">Delegated protection</dt><dd className="mt-1 text-sm text-brand-dark">{props.extension.delegated_protection === "package-firewall" ? "Package Firewall" : props.extension.delegated_protection ?? "None"}</dd></div>
+            </dl>
+            {props.extension.delegated_protection === "package-firewall" ? (
+              <a href="/supply-chain" className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-blue hover:underline">
+                Open Package Firewall enforcement <HiMiniArrowTopRightOnSquare className="size-4" aria-hidden="true" />
+              </a>
+            ) : null}
+          </article>
+          <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold text-brand-dark">What this Extension protects</h2>
+            <p className="mt-2 text-sm leading-6 text-brand-dark/75">Choose Permissions to review effective behavior, built-in floors, and settings you may tighten locally.</p>
+            <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">Permissions</dt><dd className="mt-1 text-sm text-brand-dark">{props.extension.permission_count}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">Detection rules</dt><dd className="mt-1 text-sm text-brand-dark">{props.extension.rule_count}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">Baseline floors</dt><dd className="mt-1 text-sm text-brand-dark">{[...new Set(props.extension.permissions.map((permission) => treatmentLabel(permission.baseline_floor)))].join(", ") || "Built-in"}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-brand-dark/55">Configurable</dt><dd className="mt-1 text-sm text-brand-dark">{props.extension.permissions.filter((permission) => permission.configurable).length} of {props.extension.permission_count}</dd></div>
+            </dl>
+          </article>
+        </section>
+      ) : null}
+      {activeTab === "permissions" ? <div id="protection-panel-permissions" role="tabpanel" aria-labelledby="protection-tab-permissions" className="mt-6">
         <ExtensionPolicyPanel
           extension={props.extension}
           effective={props.effective}
           catalogDigest={props.catalogDigest}
           onRefresh={props.onRefresh}
           onDirtyChange={setPolicyDirty}
+          cloudControlsUrl={cloudControlsUrl}
         />
-      </div>
-      <div className="mt-10">
+      </div> : null}
+      {activeTab === "managed-controls" ? <div id="protection-panel-managed-controls" role="tabpanel" aria-labelledby="protection-tab-managed-controls" className="mt-6">
+        <ExtensionManagedControlsPanel
+          extension={props.extension}
+          effective={props.effective}
+          runtime={props.runtime}
+          onRefresh={props.onRefresh}
+        />
+      </div> : null}
+      {activeTab === "activity" ? <div id="protection-panel-activity" role="tabpanel" aria-labelledby="protection-tab-activity" className="mt-6 space-y-6">
+        <ExtensionActivity extension={props.extension} receipts={props.runtime?.latest_receipts ?? []} />
         <ProtectionTestLab extension={props.extension} />
-      </div>
-      <div className="mt-8">
+      </div> : null}
+      {activeTab === "technical" ? <div id="protection-panel-technical" role="tabpanel" aria-labelledby="protection-tab-technical" className="mt-6">
         <DeveloperModuleDetails extension={props.extension} effective={props.effective} catalogDigest={props.catalogDigest} />
-      </div>
+      </div> : null}
     </div>
   );
 }

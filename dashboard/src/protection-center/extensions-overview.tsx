@@ -19,6 +19,7 @@ import {
 } from "./components/protection-primitives";
 import { PROTECTION_TERMS } from "./copy/protection-copy";
 import type { ProtectionStatusView } from "./model/protection-presentation";
+import { extensionProtectionSource } from "../managed-controls/extension-managed-controls-panel";
 
 function sourceIsManaged(effective: EffectiveExtensionControls, extensionId: string): boolean {
   return effective.layers.some((layer) =>
@@ -48,6 +49,8 @@ function CatalogExtensionRow(props: {
   const handleOpen = useCallback(() => {
     props.onOpen(props.extension);
   }, [props]);
+  const source = extensionProtectionSource(props.effective, props.extension);
+  const cloudSource = source === "Synced from Guard Cloud" || source.startsWith("Managed by ");
   return (
     <ProtectionModuleRow
       extensionId={props.extension.extension_id}
@@ -55,7 +58,8 @@ function CatalogExtensionRow(props: {
       description={props.extension.description}
       behavior={catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension))}
       required={props.extension.required}
-      managed={sourceIsManaged(props.effective, props.extension.extension_id)}
+      managed={cloudSource || sourceIsManaged(props.effective, props.extension.extension_id)}
+      managedLabel={cloudSource ? source : undefined}
       executables={props.extension.executables}
       ecosystemIds={props.extension.ecosystem_ids}
       onOpen={handleOpen}
@@ -92,7 +96,7 @@ export function ExtensionsOverview(props: {
       <WorkspacePageHeader
         eyebrow="On this device"
         title={PROTECTION_TERMS.pageTitle}
-        description="Pick a tool to see the commands Guard watches and change how they're handled."
+        description="Choose an Extension to review its permissions and effective protection."
       />
       <div className="mt-6">
         <ProtectionStatusHero

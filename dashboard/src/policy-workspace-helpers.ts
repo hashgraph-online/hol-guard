@@ -1,5 +1,6 @@
 import type { GuardPolicyDecision } from "./guard-types";
 import { harnessDisplayName, policyActionLabel, scopeLabel } from "./approval-center-utils";
+import { isCloudManagedPolicySource, resolvePolicyRowSourceLabel } from "./policy-managed-authority";
 
 const MATCHER_FAMILY_LABELS: Record<string, string> = {
   "package-request": "Package install",
@@ -60,7 +61,7 @@ export function formatPolicyScopePath(path: string | null | undefined): string |
 }
 
 export function isCloudManagedPolicy(source: string): boolean {
-  return source === "cloud-sync" || source === "team-policy" || source === "policy-bundle";
+  return isCloudManagedPolicySource(source);
 }
 
 export function resolvePolicySourceLabel(source: string): string {
@@ -370,10 +371,6 @@ export function resolvePolicyRowTitle(policy: GuardPolicyDecision, display: Poli
     return headline.slice(verb.length).trim() || headline;
   }
   return headline;
-}
-
-export function resolvePolicyRowSourceLabel(policy: GuardPolicyDecision): string {
-  return resolvePolicySourceLabel(policy.source);
 }
 
 export type PolicySortKey = "action" | "rule" | "source" | "scope" | "app" | "updated" | "approval";

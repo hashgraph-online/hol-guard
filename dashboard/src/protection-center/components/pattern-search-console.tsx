@@ -6,11 +6,11 @@ import { extensionDisplayName } from "../../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem, ExtensionPermission } from "../../extension-controls-api";
 import type { PermissionDraftState } from "../../extension-policy-draft";
 import {
-  AppliedPolicyToast,
   managedPermissionState,
   PermissionPolicyRow,
   PolicyReviewSheet,
 } from "../../extension-policy-panel";
+import { AppliedPolicyToast } from "../../extension-policy-applied-toast";
 import { useResolvedApprovalGate } from "../../use-resolved-approval-gate";
 import { useExtensionPolicyDraft } from "../../use-extension-policy-draft";
 import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns } from "../model/protection-landing";

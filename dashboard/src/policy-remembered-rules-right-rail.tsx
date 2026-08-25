@@ -41,16 +41,28 @@ const REVIEW_SCOPE_LADDER = [
 type PolicyRememberedRulesRightRailProps = {
   snapshot: GuardRuntimeSnapshot;
   onOpenCloudExceptions: () => void;
+  decisionOrder: readonly string[];
 };
 
 export function PolicyRememberedRulesRightRail({
   snapshot,
   onOpenCloudExceptions,
+  decisionOrder,
 }: PolicyRememberedRulesRightRailProps) {
   const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
 
   return (
     <aside className="space-y-4 lg:sticky lg:top-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="font-medium text-brand-dark">How Guard decides</p>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+          Extension posture is evaluated before contextual rules. This page never duplicates the Extension editor.
+        </p>
+        <ol className="mt-3 space-y-2 text-xs leading-5 text-brand-dark/75">
+          {decisionOrder.map((step, index) => <li key={step}><strong>{index + 1}.</strong> {step}</li>)}
+        </ol>
+        <a href="/extensions" className="mt-3 inline-flex text-sm font-semibold text-brand-blue hover:underline">Open Extensions</a>
+      </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="font-medium text-brand-dark">Approvals are still fast</p>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
@@ -82,8 +94,8 @@ export function PolicyRememberedRulesRightRail({
           <div>
             <p className="font-medium text-brand-dark">Cloud exceptions</p>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              Governed risk acceptances override team policy when approved in Guard Cloud. They sync as signed bundle
-              entries on this device.
+              Bounded exceptions apply to contextual Cloud rules. They never weaken a managed-restrictive Extension
+              block, and sync as signed bundle entries on this device.
             </p>
           </div>
         </div>

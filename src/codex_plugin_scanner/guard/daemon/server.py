@@ -254,6 +254,7 @@ from .extension_control_api import ExtensionControlApiError, ExtensionControlApi
 from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_cli_api import LocalCliApiError, LocalCliApiService
+from .managed_controls_api import managed_policy_rows
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     acquire_guard_daemon_owner_lock,
@@ -1411,8 +1412,7 @@ def _maybe_queue_first_cloud_sync(
     store: GuardStore,
     managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
 ) -> dict[str, object] | None:
-    if store.get_cloud_sync_profile() is None:
-        # Startup recovery remains best-effort so local protection never depends on Cloud availability.
+    if store.get_cloud_sync_profile() is None:  # Local protection must not depend on Cloud recovery.
         try:
             repair_guard_cloud_connect_storage(store)
         except Exception:
@@ -1428,6 +1428,7 @@ def _maybe_queue_first_cloud_sync(
         oauth_health = store.get_oauth_local_credential_health()
         if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":
             return None
+
     latest_state = store.get_effective_guard_connect_state(now=_now())
     if latest_state is None:
         return None
@@ -2390,7 +2391,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             harness_filter = harness if isinstance(harness, str) else None
             self._write_json(
                 {
-                    "items": store.list_policy_decisions(harness=harness_filter),
+                    "items": managed_policy_rows(store, harness_filter),
                     "cloud_exceptions": store.list_cloud_exceptions(harness=harness_filter),
                 }
             )

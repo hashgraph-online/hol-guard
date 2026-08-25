@@ -88,13 +88,13 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     icon: HiMiniDocumentText,
   },
   {
-    href: "/supply-chain",
-    label: "Supply chain",
-    shortLabel: "Supply",
-    description: "Packages, audits, and feed health",
-    view: "supply-chain",
+    href: "/extensions",
+    label: "Extensions",
+    shortLabel: "Extensions",
+    description: "Tools and capabilities protected on this device",
+    view: "extensions",
     group: "manage",
-    icon: HiMiniSquares2X2,
+    icon: HiMiniPuzzlePiece,
   },
   {
     href: "/policy",
@@ -106,13 +106,13 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     icon: HiMiniClipboardDocumentList,
   },
   {
-    href: "/extensions",
-    label: "Extensions",
-    shortLabel: "Extensions",
-    description: "Tools and capabilities protected on this device",
-    view: "extensions",
+    href: "/supply-chain",
+    label: "Supply chain",
+    shortLabel: "Supply",
+    description: "Packages, audits, and feed health",
+    view: "supply-chain",
     group: "manage",
-    icon: HiMiniPuzzlePiece,
+    icon: HiMiniSquares2X2,
   },
   {
     href: "/settings",
@@ -136,7 +136,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
 
 const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "evidence"]);
 
-export const NAVIGATION_GROUPS: readonly Array<{ id: NavigationGroup; label: string }> = [
+export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: string }> = [
   { id: "primary", label: "Guard" },
   { id: "manage", label: "Manage" },
   { id: "support", label: "Support" },

@@ -8,7 +8,15 @@ import type {
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 
-export type ExtensionDetailTab = "overview" | "commands" | "policy" | "test-lab" | "activity";
+export type ExtensionDetailTab =
+  | "overview"
+  | "permissions"
+  | "managed-controls"
+  | "activity"
+  | "technical"
+  | "commands"
+  | "policy"
+  | "test-lab";
 export type ExtensionDetailRiskFilter = "all" | "low" | "medium" | "high" | "critical";
 export type ExtensionDetailStateFilter = "all" | "allowed" | "blocked";
 export type ExtensionDetailTriFilter = "all" | "yes" | "no";
@@ -72,7 +80,7 @@ export function readExtensionDetailUrlState(search: string): ExtensionDetailUrlS
   const rawRule = params.get("rule")?.trim().toLowerCase() ?? null;
   const ruleId = rawRule && RULE_ID_PATTERN.test(rawRule) ? rawRule : null;
   return {
-    tab: oneOf(params.get("tab"), ["overview", "commands", "policy", "test-lab", "activity"] as const, "overview"),
+    tab: oneOf(params.get("tab"), ["overview", "permissions", "managed-controls", "activity", "technical", "commands", "policy", "test-lab"] as const, "overview"),
     query,
     risk: oneOf(params.get("risk"), ["all", "low", "medium", "high", "critical"] as const, "all"),
     state: oneOf(params.get("state"), ["all", "allowed", "blocked"] as const, "all"),
@@ -221,25 +229,28 @@ export function controlProvenance(
   kind: "extension" | "permission",
   targetId: string,
 ): string[] {
+  const managedSource = effective.managed_controls?.authority_mode === "managed-restrictive"
+    ? `Managed by ${effective.managed_controls.workspace_id}`
+    : "Synced from Guard Cloud";
   const projected = kind === "extension"
     ? effective.projection?.extensions.find((item) => item.extension_id === targetId)
     : effective.projection?.permissions.find((item) => item.permission_id === targetId);
   if (projected) {
     const sources: string[] = [];
-    if (effective.global_lockdown) sources.push("Global lockdown");
-    if (projected.managed_state !== "inherited") sources.push("Signed cloud policy");
-    if (projected.local_state !== "inherited") sources.push("Local administrator");
-    if (sources.length === 0) sources.push("Built-in default");
+    if (effective.global_lockdown) sources.push("Emergency Lockdown");
+    if (projected.managed_state !== "inherited") sources.push(managedSource);
+    if (projected.local_state !== "inherited") sources.push("Set on this device");
+    if (sources.length === 0) sources.push("Recommended by Guard");
     return sources;
   }
   const sources: string[] = [];
-  if (effective.global_lockdown) sources.push("Global lockdown");
+  if (effective.global_lockdown) sources.push("Emergency Lockdown");
   for (const layer of effective.layers) {
     if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId)) {
-      sources.push(layer.kind === "signed-cloud" ? "Signed cloud policy" : "Local administrator");
+      sources.push(layer.kind === "signed-cloud" ? managedSource : "Set on this device");
     }
   }
-  if (sources.length === 0) sources.push("Built-in default");
+  if (sources.length === 0) sources.push("Recommended by Guard");
   return sources;
 }
 

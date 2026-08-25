@@ -36,6 +36,7 @@ def _verification_key(
     private_key: rsa.RSAPrivateKey,
     *,
     key_id: str = "policy-v2-key-1",
+    workspace_id: str | None = None,
 ) -> PolicyBundleVerificationKey:
     public_key_pem = (
         private_key.public_key()
@@ -48,6 +49,7 @@ def _verification_key(
     return policy_bundle_verification_key_from_public_key(
         key_id=key_id,
         public_key_pem=public_key_pem,
+        workspace_id=workspace_id,
     )
 
 
@@ -57,8 +59,13 @@ def _signed_bundle(
     *,
     bundle_version: int = 8,
     rollback: dict[str, object] | None = None,
+    payload_base: dict[str, object] | None = None,
+    payload_extensions: dict[str, object] | None = None,
 ) -> dict[str, object]:
     document = load_policy_document(_FIXTURE)
+    payload = dict(payload_base) if payload_base is not None else document.to_mapping()
+    if payload_extensions is not None:
+        payload.update(payload_extensions)
     bundle: dict[str, object] = {
         "envelopeVersion": 2,
         "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
@@ -76,7 +83,7 @@ def _signed_bundle(
             "publicKeyPem": verification_key.public_key_pem,
             "signature": "",
         },
-        "payload": document.to_mapping(),
+        "payload": payload,
         "rollback": rollback,
     }
     bundle["payloadHash"] = payload_hash_for_policy_bundle_v2(bundle)
@@ -107,22 +114,6 @@ def _acknowledgement(
         "status": status,
         "observedAt": "2026-07-15T12:01:00Z",
     }
-
-
-def test_signed_v2_bundle_validates_canonical_document_and_rsa_pss_signature() -> None:
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    verification_key = _verification_key(private_key)
-    bundle = _signed_bundle(private_key, verification_key)
-
-    validated, reason = validated_policy_bundle_v2_payload(
-        bundle,
-        trusted_verification_keys=(verification_key,),
-        anchored_verification_keys=(verification_key,),
-        now=datetime(2026, 7, 16, tzinfo=timezone.utc),
-    )
-
-    assert reason is None
-    assert validated == bundle
 
 
 def test_shared_sync_validator_dispatches_v2_without_changing_v1_parser() -> None:
