@@ -9,7 +9,6 @@ from codex_plugin_scanner.guard.runtime.command_cloud_gcp_operation_matrix impor
     gcp_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
-    assert_review_required_cases,
     assert_reviewed_command_cases,
     assert_safe_command_cases,
 )
@@ -78,14 +77,23 @@ def test_gcp_unknown_global_options_fail_secure(tmp_path: Path) -> None:
 
 def test_gcp_disabled_help_form_remains_reviewable(tmp_path: Path) -> None:
     command = " ".join(GCP_DESTRUCTIVE_COMMAND_PATHS[0])
-    assert_review_required_cases((f"gcloud {command} fixture --help --help=false",), tmp_path)
+    assert_reviewed_command_cases(
+        ((f"gcloud {command} fixture --help --help=false", _ACTION, _RULE),),
+        tmp_path,
+    )
 
 
 def test_gcp_safe_segment_cannot_hide_later_destructive_segment(tmp_path: Path) -> None:
     first = " ".join(GCP_DESTRUCTIVE_COMMAND_PATHS[0])
     second = " ".join(GCP_DESTRUCTIVE_COMMAND_PATHS[1])
-    assert_review_required_cases(
-        (f"gcloud {first} --help && gcloud {second} fixture --quiet",),
+    assert_reviewed_command_cases(
+        (
+            (
+                f"gcloud {first} --help && gcloud {second} fixture --quiet",
+                _ACTION,
+                _RULE,
+            ),
+        ),
         tmp_path,
     )
 
