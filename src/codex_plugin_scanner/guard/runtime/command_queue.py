@@ -259,9 +259,11 @@ def _lease_payload(
     }
     if generic_schema_versions:
         capabilities["schemaVersions"] = generic_schema_versions
-    repair_status = _live_request_sync_repair_status(store)
-    if repair_status is not None:
-        capabilities["liveRequestSync"] = repair_status
+    exact_review_only = operations == (EXACT_CLOUD_REVIEW_OPERATION,)
+    if not exact_review_only:
+        repair_status = _live_request_sync_repair_status(store)
+        if repair_status is not None:
+            capabilities["liveRequestSync"] = repair_status
     payload: dict[str, object] = {
         "workspaceId": workspace_id,
         "deviceId": machine_id,
@@ -270,7 +272,7 @@ def _lease_payload(
         "maxJobs": 1,
         "waitMs": _command_queue_lease_wait_ms() if wait_ms is None else wait_ms,
     }
-    if operations == (EXACT_CLOUD_REVIEW_OPERATION,):
+    if exact_review_only:
         payload["protocolVersion"] = 2
     return payload
 

@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabil
 from codex_plugin_scanner.guard.runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
+    EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     _oauth_metadata,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
@@ -169,7 +170,10 @@ def test_shared_exact_transport_fixture_binds_queue_eligibility_and_verifies_sig
     validate_exact_command_result(expected_result["result"])
 
 
-def test_exact_claim_binds_current_local_authority_without_queue_snapshot(tmp_path: Path) -> None:
+def test_exact_claim_binds_current_local_authority_without_queue_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store, _job_payload = _exact_job(tmp_path)
     request = store.get_approval_request("exact-transport")
     assert isinstance(request, dict)
@@ -192,8 +196,15 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(tmp_pa
     assert advertisement["localRequestId"] == request["request_id"]
     assert advertisement["sourceClaimHash"] == claim["claimHash"]
 
+    monkeypatch.setattr(
+        command_queue,
+        "_live_request_sync_repair_status",
+        lambda _store: {"status": "repair_required"},
+    )
     lease = command_queue._lease_payload(store, operations=(EXACT_CLOUD_REVIEW_OPERATION,))
     assert "localRequestsSnapshot" not in lease
+    assert lease["protocolVersion"] == EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
+    assert lease["capabilities"] == {"operations": [EXACT_CLOUD_REVIEW_OPERATION]}
     disable_exact_cloud_review(store)
     refreshed_claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
     assert "exactReviewCapability" not in refreshed_claim

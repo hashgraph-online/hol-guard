@@ -197,10 +197,11 @@ def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp
         dpop_private_key_pem=str(original_credentials["dpop_private_key_pem"]),
         dpop_public_jwk={str(key): str(value) for key, value in original_public_jwk.items()},
         dpop_public_jwk_thumbprint=str(original_credentials["dpop_public_jwk_thumbprint"]),
-        grant_id="grant-1",
+        grant_id=str(original_credentials["grant_id"]),
         machine_id=str(original_credentials["machine_id"]),
         device_id=str(original_credentials["device_id"]),
-        workspace_id="workspace-1",
+        workspace_id=str(original_credentials["workspace_id"]),
+        runtime_id=str(original_credentials["runtime_id"]),
         now=datetime.now(timezone.utc).isoformat(),
     )
     store.set_sync_payload("guard_exact_cloud_review_capability", capability, datetime.now(timezone.utc).isoformat())
