@@ -410,7 +410,10 @@ class ExtensionControlApiService:
                     raise ExtensionControlApiError(400, "unknown_permission")
         self._validate_authority_mutability(mutation.layers)
         local_layers = tuple(layer for layer in mutation.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
-        raw_authority = self._store.read_extension_control_authority_for_registry(self._registry)
+        raw_authority = self._store.read_extension_control_authority_for_registry(
+            self._registry,
+            include_managed_controls=False,
+        )
         persisted_signed_layers = tuple(
             layer for layer in raw_authority.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
         )

@@ -104,6 +104,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
     def read_extension_control_authority_for_registry(
         self,
         registry: CommandSafetyExtensionRegistry,
+        *,
+        include_managed_controls: bool = True,
     ) -> ExtensionControlAuthorityView:
         catalog_digest = registry.catalog_digest
         self._extension_control_last_catalog_digest = catalog_digest
@@ -117,7 +119,9 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
                     key = self._authority_key(required=True)
                     assert key is not None
                     self._record_catalog_manifest(registry, key=key)
-                return self._with_managed_controls_activation(view)
+                if include_managed_controls:
+                    return self._with_managed_controls_activation(view)
+                return view
         except ExtensionControlAuthorityError:
             return self._tampered_view(catalog_digest)
         except Exception:
