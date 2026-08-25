@@ -97,6 +97,8 @@ class CatalogExtension:
         permission_ids = [item.permission_id for item in self.permissions]
         if len(permission_ids) != len(set(permission_ids)):
             raise CatalogValidationError("duplicate permission id")
+        if any(not permission_id.startswith(f"{self.extension_id}.permission.") for permission_id in permission_ids):
+            raise CatalogValidationError("permission owner mismatch")
 
     def to_dict(self) -> dict[str, object]:
         ordered_permissions = sorted(
@@ -130,6 +132,11 @@ class CatalogProjection:
         extension_ids = [item.extension_id for item in self.extensions]
         if len(extension_ids) != len(set(extension_ids)):
             raise CatalogValidationError("duplicate extension id")
+        permission_ids = [
+            permission.permission_id for extension in self.extensions for permission in extension.permissions
+        ]
+        if len(permission_ids) != len(set(permission_ids)):
+            raise CatalogValidationError("duplicate permission id")
         if len(self.canonical_bytes()) > MAX_CATALOG_PAYLOAD_BYTES:
             raise CatalogValidationError("catalog payload limit exceeded")
 

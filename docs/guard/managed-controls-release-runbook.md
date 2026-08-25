@@ -16,6 +16,8 @@ This runbook covers the HOL Guard Local side of Extension-First Managed Controls
 10. Confirm local blocks still tighten Cloud permits.
 11. Verify custom Extension copy remains local-only until continuity is real.
 12. Run adversarial, privacy, accessibility, and performance checks.
+13. Complete and record the independent review required by the
+    [Managed Controls threat model](managed-controls-threat-model.md).
 
 From the repository root, run:
 

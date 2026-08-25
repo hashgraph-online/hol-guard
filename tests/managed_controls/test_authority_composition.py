@@ -54,6 +54,25 @@ def test_managed_block_cannot_be_weakened_by_local_permit() -> None:
     assert result.managed_floor
 
 
+def test_remembered_local_allow_cannot_bypass_managed_restriction() -> None:
+    result = compose_control_instructions(
+        (
+            _control(
+                ControlEffect.PERMIT,
+                AuthorityMode.PERSONAL_SHARED,
+                "remembered-allow:exact-command-context",
+            ),
+            _control(
+                ControlEffect.BLOCK,
+                AuthorityMode.MANAGED_RESTRICTIVE,
+                "managed-control-set",
+            ),
+        )
+    )
+    assert result.effect is ControlEffect.BLOCK
+    assert result.managed_floor
+
+
 def test_managed_authority_cannot_publish_permit() -> None:
     with pytest.raises(AuthorityValidationError):
         _control(
