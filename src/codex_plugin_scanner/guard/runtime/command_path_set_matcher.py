@@ -46,19 +46,18 @@ def _normalized_inverse_pairs(
 
 
 def _normalized_required_option_values(values: RequiredOptionValues) -> RequiredOptionValues:
-    return tuple(
-        sorted(
+    normalized: list[tuple[str, frozenset[str]]] = []
+    for option, allowed in values:
+        normalized_option = option.strip().lower()
+        if not normalized_option:
+            raise ValueError("Required option names cannot be empty")
+        normalized.append(
             (
-                (
-                    option.strip().lower(),
-                    frozenset(value.strip().lower() for value in allowed if value.strip()),
-                )
-                for option, allowed in values
-                if option.strip()
-            ),
-            key=lambda item: item[0],
+                normalized_option,
+                frozenset(value.strip().lower() for value in allowed if value.strip()),
+            )
         )
-    )
+    return tuple(sorted(normalized, key=lambda item: item[0]))
 
 
 def _validate_flag_constraints(
