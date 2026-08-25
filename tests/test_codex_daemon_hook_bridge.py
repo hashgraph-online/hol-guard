@@ -89,6 +89,25 @@ def test_fail_closed_uses_supported_codex_deny_shapes() -> None:
     assert prompt["continue"] is False
 
 
+def test_bridge_keeps_inline_browser_wait_within_daemon_worker_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        bridge,
+        "current_process_identity",
+        lambda: {"pid": 4102, "startToken": "fixture-start"},
+    )
+
+    payload = json.loads(
+        bridge._with_browser_wait_process(
+            '{"hook_event_name":"PreToolUse"}',
+            wait_timeout_seconds=607,
+        )
+    )
+
+    assert payload[bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] == 2
+
+
 def test_unavailable_prompt_warns_without_stopping_conversation() -> None:
     assert bridge._unavailable_response("UserPromptSubmit", "review failed") == {
         "continue": True,

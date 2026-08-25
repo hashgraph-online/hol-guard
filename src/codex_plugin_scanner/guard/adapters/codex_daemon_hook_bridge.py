@@ -70,6 +70,7 @@ else:  # pragma: no cover - exercised by subprocess integration tests
 
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
 _DAEMON_START_TIMEOUT_SECONDS = 8
+_DAEMON_INLINE_BROWSER_WAIT_SECONDS = 2
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_HOOK_INPUT_BYTES = 1_000_000
 _FAIL_CLOSED_REASON = "HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair`, then retry."
@@ -142,7 +143,10 @@ def _with_browser_wait_process(data: str, *, wait_timeout_seconds: float) -> str
         payload.pop(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY, None)
     else:
         payload[CODEX_BROWSER_WAIT_PROCESS_KEY] = process_identity
-        payload[CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] = max(1, int(wait_timeout_seconds))
+        payload[CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] = min(
+            _DAEMON_INLINE_BROWSER_WAIT_SECONDS,
+            max(1, int(wait_timeout_seconds)),
+        )
     return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
