@@ -183,6 +183,17 @@ def test_codex_bridge_pretool_advertises_the_live_outer_waiter(
     )
     assert metadata["codex_hook_waits_for_browser_approval"] is True
     assert metadata["codex_browser_wait_process"] == process_identity
+    assert metadata["codex_browser_wait_timeout_seconds"] == 30
+
+
+def test_codex_unbound_browser_wait_retains_the_worker_budget() -> None:
+    assert (
+        interaction._codex_browser_wait_timeout_seconds(
+            event_name="PreToolUse",
+            configured_timeout=30,
+        )
+        == 8
+    )
 
 
 def test_codex_direct_pretool_wait_is_not_limited_to_package_installs() -> None:

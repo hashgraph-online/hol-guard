@@ -568,6 +568,7 @@ def _codex_browser_wait_metadata(
     config: GuardConfig,
     payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    bridge_wait_process = _codex_bridge_wait_process(payload)
     waits_for_browser = _codex_hook_waits_for_browser_approval(
         args=args,
         event_name=event_name,
@@ -581,10 +582,11 @@ def _codex_browser_wait_metadata(
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
         event_name=event_name,
         configured_timeout=config.approval_wait_timeout_seconds,
+        outer_wait_bound=bridge_wait_process is not None,
     )
     started_at = datetime.now(timezone.utc)
     deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
-    process_identity = _codex_bridge_wait_process(payload) or current_process_identity()
+    process_identity = bridge_wait_process or current_process_identity()
     if process_identity is None:
         return {
             "codex_hook_waits_for_browser_approval": False,
@@ -598,8 +600,18 @@ def _codex_browser_wait_metadata(
         "codex_browser_wait_process": process_identity,
     }
 
-def _codex_browser_wait_timeout_seconds(*, event_name: str, configured_timeout: int) -> int:
-    wait_timeout_seconds = max(configured_timeout, 0)
+def _codex_browser_wait_timeout_seconds(
+    *,
+    event_name: str,
+    configured_timeout: int,
+    outer_wait_bound: bool = False,
+) -> int:
+    wait_timeout_seconds = min(
+        max(configured_timeout, 0),
+        MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+    )
+    if outer_wait_bound:
+        return wait_timeout_seconds
     if event_name in {"UserPromptSubmit", "PreToolUse", "PostToolUse"}:
         wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS)
     return wait_timeout_seconds
