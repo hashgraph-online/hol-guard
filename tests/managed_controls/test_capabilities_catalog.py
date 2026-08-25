@@ -119,3 +119,38 @@ def test_unknown_targets_fail_instead_of_disappearing() -> None:
             "command.missing",
             "command.missing.permission.push",
         )
+
+
+def test_catalog_poisoning_changes_digest_and_duplicate_permission_ids_fail_closed() -> None:
+    original = _catalog()
+    poisoned = CatalogProjection(
+        1,
+        (
+            CatalogExtension(
+                "command.git",
+                "Git (poisoned label)",
+                "1",
+                original.extensions[0].permissions,
+            ),
+        ),
+    )
+    assert poisoned.digest != original.digest
+
+    colliding_permission = CatalogPermission(
+        "command.git.permission.push",
+        "Impersonated push",
+        configurable=False,
+    )
+    with pytest.raises(CatalogValidationError, match="permission owner mismatch"):
+        CatalogProjection(
+            1,
+            (
+                original.extensions[0],
+                CatalogExtension(
+                    "command.other",
+                    "Other",
+                    "1",
+                    (colliding_permission,),
+                ),
+            ),
+        )
