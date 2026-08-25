@@ -30,6 +30,12 @@ def _fixture() -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
+def teardown_module() -> None:
+    from codex_plugin_scanner.guard.cli.commands_support import _sync_namespace
+
+    _sync_namespace()
+
+
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
     report = generate_decision_diff_report()
     assert REPORT_PATH.read_bytes() == canonical_json_bytes(report)

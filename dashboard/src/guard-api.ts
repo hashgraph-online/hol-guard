@@ -3121,6 +3121,9 @@ export class GuardProtectionRepairError extends Error {
   readonly status: number;
   readonly code: string | null;
   readonly repairScope: "local_integrity" | null;
+  readonly failedCheckIds: string[];
+  readonly failedHarnesses: string[];
+  readonly pendingCheckIds: string[];
 
   constructor(status: number, payload: Record<string, unknown> | null) {
     const message = payload === null ? null : stringValue(payload.message);
@@ -3129,7 +3132,15 @@ export class GuardProtectionRepairError extends Error {
     this.status = status;
     this.code = payload === null ? null : stringValue(payload.error);
     this.repairScope = payload?.repair_scope === "local_integrity" ? "local_integrity" : null;
+    this.failedCheckIds = stringArrayValue(payload?.failed_check_ids);
+    this.failedHarnesses = stringArrayValue(payload?.failed_harnesses);
+    this.pendingCheckIds = stringArrayValue(payload?.pending_check_ids);
   }
+}
+
+function stringArrayValue(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
 export async function repairProtectionCheck(checkId: string): Promise<GuardProtectionRepairResult> {

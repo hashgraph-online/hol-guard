@@ -263,7 +263,7 @@ def _lease_payload(
     if not exact_review_only:
         repair_status = _cloud_review_sync_repair_status(store)
         if repair_status is not None:
-            capabilities["liveRequestSync"] = repair_status
+            capabilities["reviewSync"] = repair_status
     payload: dict[str, object] = {
         "workspaceId": workspace_id,
         "deviceId": machine_id,

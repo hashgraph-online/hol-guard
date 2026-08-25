@@ -48,15 +48,10 @@ STATE_CHANGING_COMMAND_OPERATIONS: frozenset[str] = frozenset(
         "guard.app.connect",
         "guard.app.update",
         "guard.review.syncPolicyMemory",
-        "guard.liveRequests.reassignQuarantined",
     }
 )
 POLICY_MEMORY_COMMAND_OPERATIONS: frozenset[str] = frozenset({"guard.review.syncPolicyMemory"})
-REMOTE_STEP_UP_COMMAND_OPERATIONS: frozenset[str] = frozenset(
-    {
-        "guard.liveRequests.reassignQuarantined",
-    }
-)
+REMOTE_STEP_UP_COMMAND_OPERATIONS: frozenset[str] = frozenset()
 
 
 class CommandCapabilityError(ValueError):

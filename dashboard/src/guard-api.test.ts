@@ -47,11 +47,20 @@ const localIntegrityRepairError = new GuardProtectionRepairError(409, {
   error: "local_integrity_repair_incomplete",
   repair_scope: "local_integrity",
   message: "Guard could not establish a local integrity proof.",
+  failed_check_ids: ["harness_hooks"],
+  failed_harnesses: ["codex"],
+  pending_check_ids: ["sandbox"],
 });
 assert(
   localIntegrityRepairError.code === "local_integrity_repair_incomplete" &&
     localIntegrityRepairError.repairScope === "local_integrity",
   "protection repair preserves the structured local-integrity failure scope",
+);
+assert(
+  localIntegrityRepairError.failedCheckIds[0] === "harness_hooks" &&
+    localIntegrityRepairError.failedHarnesses[0] === "codex" &&
+    localIntegrityRepairError.pendingCheckIds[0] === "sandbox",
+  "protection repair preserves actionable failed-layer metadata",
 );
 
 const missingRuntimeStateSnapshot = normalizeRuntimeSnapshot({

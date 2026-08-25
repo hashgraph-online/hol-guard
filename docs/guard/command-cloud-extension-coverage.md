@@ -2,22 +2,30 @@
 
 Guard evaluates cloud CLI operations from the canonical parsed command model. Rules match executable and subcommand structure, remain independent of shell text examples, and feed the existing policy, approval, memory, receipt, and sync pipeline.
 
-## Extensions
+## Matrix coverage
 
-| Extension | Reviewed operations | Safe counterparts |
-| --- | --- | --- |
-| `command.cloud.aws` | EC2 instance termination, RDS instance or cluster deletion, EKS cluster deletion | Help, request skeleton generation, EC2 permission-only dry run, describe operations |
-| `command.cloud.gcp` | Compute Engine instance deletion, including alpha, beta, and preview tracks; Cloud SQL instance deletion, including alpha and beta tracks | Help and describe operations |
-| `command.cloud.azure` | Virtual machine deletion | Help and show operations |
+| Extension | Matrix-reviewed operations | Existing focused operations | Safe counterparts |
+| --- | ---: | --- | --- |
+| `command.cloud.aws` | 100 | EC2 instance termination, RDS instance or cluster deletion, and EKS cluster deletion | Help, request skeleton generation, EC2 permission-only dry run, and describe operations |
+| `command.cloud.gcp` | 100 | Compute Engine instance deletion and Cloud SQL instance deletion | Help and describe operations |
+| `command.cloud.azure` | 0 | Virtual machine deletion | Help and show operations |
 
-Global account, project, subscription, profile, region, output, and query options are normalized wherever the CLI accepts them. Reordered operation flags do not change the result. Native Windows launcher suffixes are recognized.
+The operation matrices are declarative, typed, count-checked, and uniqueness-checked. They preserve the existing provider rule IDs and action classes, so policy, approval, receipt, memory, and synchronization contracts remain stable.
 
-## References
+Global account, project, subscription, profile, region, output, query, configuration, impersonation, filtering, pagination, and verbosity options are normalized wherever the CLI accepts them. Reordered operation flags do not change the result. Native Windows launcher suffixes are recognized. Unknown future global options fail secure when a destructive path remains recognizable.
 
-- [AWS EC2 terminate-instances](https://docs.aws.amazon.com/cli/latest/reference/ec2/terminate-instances.html)
-- [AWS RDS delete-db-instance](https://docs.aws.amazon.com/cli/latest/reference/rds/delete-db-instance.html)
-- [AWS RDS delete-db-cluster](https://docs.aws.amazon.com/cli/latest/reference/rds/delete-db-cluster.html)
-- [AWS EKS delete-cluster](https://docs.aws.amazon.com/cli/latest/reference/eks/delete-cluster.html)
-- [Google Cloud compute instances delete](https://cloud.google.com/sdk/gcloud/reference/compute/instances/delete)
-- [Google Cloud SQL instances delete](https://cloud.google.com/sdk/gcloud/reference/sql/instances/delete)
-- [Azure vm delete](https://learn.microsoft.com/cli/azure/vm#az-vm-delete)
+## Security and usability boundaries
+
+- Rules match canonical command structure rather than raw words such as `delete`, `destroy`, or `terminate`.
+- Quoted examples, printed commands, and source-search patterns remain data.
+- A help or preview form suppresses only its owning rule and command segment.
+- AWS request skeletons remain safe only for documented values.
+- EC2 dry-run safety remains scoped to EC2 termination.
+- Compound commands retain later destructive matches even when an earlier segment is safe.
+- Every matrix entry is exercised through command inspection and runtime tool-action extraction.
+
+## Primary references
+
+- [AWS CLI command reference](https://docs.aws.amazon.com/cli/latest/reference/)
+- [Google Cloud CLI reference](https://cloud.google.com/sdk/gcloud/reference)
+- [Azure CLI reference](https://learn.microsoft.com/cli/azure/reference-index)

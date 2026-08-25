@@ -18,6 +18,7 @@ import {
   fetchGuardUpdateStatus,
   guardAwareHref,
   bulkAllowReadOnce,
+  GuardProtectionRepairError,
   repairApprovalCenter,
   repairProtectionCheck,
   resolveRequestWithQueueResult,
@@ -31,6 +32,7 @@ import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-util
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
 import { protectionHealthFor, remainingProtectionRepairParts } from "./protection-health";
+import { ProtectionRepairFlowError } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
 
@@ -802,6 +804,7 @@ export function App() {
 
   const handleRepairProtection = useCallback(async (harnesses: string[]) => {
     const failures: string[] = [];
+    const failedHarnesses = new Set<string>();
     try {
       await repairApprovalCenter();
     } catch {
@@ -811,6 +814,7 @@ export function App() {
       try {
         await runHarnessAction({ harness, action: "repair", dryRun: false });
       } catch (error: unknown) {
+        failedHarnesses.add(harness);
         failures.push(
           error instanceof Error && error.message.trim()
             ? error.message
@@ -821,34 +825,40 @@ export function App() {
     try {
       await repairProtectionCheck("all");
     } catch (error: unknown) {
+      if (error instanceof GuardProtectionRepairError) {
+        for (const harness of error.failedHarnesses) failedHarnesses.add(harness);
+      }
       failures.push(error instanceof Error ? error.message : "integrity protection");
     }
     const refreshedSnapshot = await refreshStateAfterAction();
-    if (failures.length > 0) {
-      throw new Error(`Repair paused at ${failures.join(", ")}. Retry repair to continue from this page.`);
-    }
     if (refreshedSnapshot === null) {
-      throw new Error("Repair completed, but Guard could not recheck protection. Check again in a moment.");
+      const detail = failures.length > 0 ? ` Repair reported: ${failures.join(", ")}.` : "";
+      throw new ProtectionRepairFlowError(
+        `Guard could not recheck protection. Check again in a moment.${detail}`,
+        [],
+      );
     }
     const remainingHealth = protectionHealthFor(refreshedSnapshot);
-    if (remainingHealth.state !== "protected") {
-      const remainingParts = remainingProtectionRepairParts(remainingHealth);
-      const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
-      const remainingMessages: string[] = [];
-      if (failedHookApps.length > 0) {
-        remainingMessages.push(
-          `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`,
-        );
-      }
-      if (remainingParts.evidenceFailed) {
-        remainingMessages.push("Command evidence still needs repair.");
-      }
-      const remaining = remainingMessages.length > 0
-        ? remainingMessages.join(" ")
-        : "A local protection check still needs attention.";
-      throw new Error(`${remaining} Open the repair details below for the exact check.`);
+    if (remainingHealth.state === "protected") {
+      return "Automatic repairs completed. Guard rechecked every protection layer below.";
     }
-    return "Automatic repairs completed. Guard rechecked every protection layer below.";
+    const remainingParts = remainingProtectionRepairParts(remainingHealth);
+    const currentFailedHarnesses = new Set(remainingParts.failedHookHarnesses);
+    const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
+    const remainingMessages: string[] = [];
+    if (failedHookApps.length > 0) {
+      remainingMessages.push(
+        `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`,
+      );
+    }
+    if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
+    const remaining = remainingMessages.length > 0
+      ? remainingMessages.join(" ")
+      : "A local protection check still needs attention.";
+    throw new ProtectionRepairFlowError(
+      `${remaining} Open the repair details below for the exact check.`,
+      [...failedHarnesses].filter((harness) => currentFailedHarnesses.has(harness)),
+    );
   }, [refreshStateAfterAction]);
 
   const appDetailContent = useMemo(() => {

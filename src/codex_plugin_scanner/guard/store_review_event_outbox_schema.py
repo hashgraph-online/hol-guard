@@ -6,6 +6,7 @@ import json
 import sqlite3
 from collections.abc import Mapping
 from typing import Final
+from uuid import uuid4
 
 from .review_event_integrity import review_event_payload_digest
 from .store_review_event_outbox_upgrade import ensure_review_event_outbox_upgrade
@@ -15,6 +16,7 @@ from .store_review_event_outbox_upgrade import ensure_review_event_outbox_upgrad
 REVIEW_EVENT_SCHEMA_VERSION: Final = 1
 REVIEW_EVENT_SCHEMA_NAME: Final = "guard-cloud-review-event-v2"
 REVIEW_EVENT_OUTBOX_MIGRATION_VERSION: Final = 25
+_RETIRED_OUTBOX_MIGRATION_STATE_KEY: Final = "guard_review_outbox_events_migrated"
 REVIEW_REQUEST_SNAPSHOT_COLUMNS: Final = (
     "request_id",
     "harness",
@@ -320,10 +322,135 @@ def review_event_outbox_schema_statements() -> tuple[str, ...]:
     )
 
 
+def _retired_outbox_payload(
+    connection: sqlite3.Connection,
+    row: sqlite3.Row,
+) -> tuple[str, str | None]:
+    request = connection.execute(
+        "select * from approval_requests where request_id = ?",
+        (row["local_request_id"],),
+    ).fetchone()
+    if request is None:
+        return _retired_outbox_marker_payload(row), "retired_request_snapshot_missing"
+    request_values = dict(request)
+    try:
+        payload = review_event_payload_json(
+            request_values,
+            event_type="review.request.snapshot_migrated",
+            occurred_at=str(row["changed_at"]),
+        )
+    except ValueError:
+        return _retired_outbox_marker_payload(row), "retired_request_snapshot_incomplete"
+    if request_values.get("oauth_source") != row["oauth_source"]:
+        return payload, "retired_request_source_ambiguous"
+    return payload, None
+
+
+def _retired_outbox_marker_payload(row: sqlite3.Row) -> str:
+    return json.dumps(
+        {
+            "schema": REVIEW_EVENT_SCHEMA_NAME,
+            "localRequestId": str(row["local_request_id"]),
+            "eventType": "review.request.snapshot_migrated",
+            "occurredAt": str(row["changed_at"]),
+            "retiredSequence": int(row["sequence"]),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _migrate_retired_outbox(connection: sqlite3.Connection, now: str) -> None:
+    marker = connection.execute(
+        "select 1 from sync_state where state_key = ?",
+        (_RETIRED_OUTBOX_MIGRATION_STATE_KEY,),
+    ).fetchone()
+    if marker is not None:
+        return
+    old_table = connection.execute(
+        "select 1 from sqlite_master where type = 'table' and name = 'guard_live_request_outbox'"
+    ).fetchone()
+    if old_table is not None:
+        rows = connection.execute(
+            """
+            select sequence, local_request_id, changed_at, oauth_source,
+                   oauth_subject_hash, workspace_id, machine_id, machine_installation_id,
+                   attempt_count, next_attempt_at, last_error
+            from guard_live_request_outbox order by sequence
+            """
+        ).fetchall()
+        for row in rows:
+            payload, source_quarantine = _retired_outbox_payload(connection, row)
+            identity = tuple(
+                row[name]
+                for name in (
+                    "oauth_source",
+                    "oauth_subject_hash",
+                    "workspace_id",
+                    "machine_id",
+                    "machine_installation_id",
+                )
+            )
+            complete = all(isinstance(value, str) and value.strip() for value in identity)
+            quarantine_reason = source_quarantine or (None if complete else "retired_identity_incomplete")
+            connection.execute(
+                """
+                insert or ignore into guard_review_outbox_events (
+                  event_id, local_request_id, request_sequence, event_type,
+                  event_schema_version, payload_json, payload_hash, occurred_at,
+                  oauth_source, oauth_subject_hash, workspace_id, machine_id,
+                  machine_installation_id, binding_status, quarantine_reason,
+                  attempt_count, next_attempt_at, last_error
+                ) values (?, ?, ?, 'review.request.snapshot_migrated', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    uuid4().hex,
+                    row["local_request_id"],
+                    row["sequence"],
+                    REVIEW_EVENT_SCHEMA_VERSION,
+                    payload,
+                    review_event_payload_digest(
+                        payload,
+                        oauth_source=identity[0],
+                        oauth_subject_hash=identity[1],
+                        workspace_id=identity[2],
+                        machine_id=identity[3],
+                        machine_installation_id=identity[4],
+                    ),
+                    row["changed_at"],
+                    *identity,
+                    "ready" if quarantine_reason is None else "quarantined",
+                    quarantine_reason,
+                    row["attempt_count"],
+                    row["next_attempt_at"],
+                    row["last_error"],
+                ),
+            )
+            connection.execute(
+                """
+                insert into guard_review_outbox_request_sequences (
+                  local_request_id, last_sequence, updated_at, oauth_source,
+                  oauth_subject_hash, workspace_id, machine_id, machine_installation_id
+                ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(local_request_id) do update set
+                  last_sequence = max(last_sequence, excluded.last_sequence), updated_at = excluded.updated_at
+                """,
+                (row["local_request_id"], row["sequence"], row["changed_at"], *identity),
+            )
+        connection.execute("drop table guard_live_request_outbox")
+    connection.execute(
+        "insert into sync_state (state_key, payload_json, updated_at) values (?, '{\"migrated\":true}', ?)",
+        (_RETIRED_OUTBOX_MIGRATION_STATE_KEY, now),
+    )
+
+
 def ensure_review_event_outbox_schema(connection: sqlite3.Connection, now: str) -> None:
     for statement in review_event_outbox_schema_statements():
         connection.execute(statement)
     ensure_review_event_outbox_upgrade(connection, migration_version=REVIEW_EVENT_OUTBOX_MIGRATION_VERSION)
+    _migrate_retired_outbox(connection, now)
+    connection.execute("drop trigger if exists guard_live_request_outbox_after_insert")
+    connection.execute("drop trigger if exists guard_live_request_outbox_after_update")
     connection.execute("drop trigger if exists guard_review_outbox_after_insert")
     connection.execute("drop trigger if exists guard_review_outbox_after_update")
     connection.execute(_insert_trigger())

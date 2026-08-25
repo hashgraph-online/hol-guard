@@ -36,7 +36,6 @@ from ..shims import (
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
-from .cloud_review_repair import execute_cloud_review_sync_repair
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 from .exact_cloud_review_executor import execute_exact_cloud_review_operation
 from .review_policy_memory_executor import (
@@ -63,13 +62,11 @@ APP_OPERATIONS: tuple[str, ...] = (
 )
 EXACT_CLOUD_REVIEW_OPERATIONS: tuple[str, ...] = (EXACT_CLOUD_REVIEW_OPERATION,)
 POLICY_MEMORY_OPERATIONS: tuple[str, ...] = (REVIEW_POLICY_MEMORY_OPERATION,)
-LIVE_REQUEST_OPERATIONS: tuple[str, ...] = ("guard.liveRequests.reassignQuarantined",)
 SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (
     *PACKAGE_SHIM_OPERATIONS,
     *APP_OPERATIONS,
     *EXACT_CLOUD_REVIEW_OPERATIONS,
     *POLICY_MEMORY_OPERATIONS,
-    *LIVE_REQUEST_OPERATIONS,
 )
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
 
@@ -111,12 +108,6 @@ def execute_guard_command_job(
         if operation in POLICY_MEMORY_OPERATIONS:
             return _result(
                 execute_review_policy_memory(payload, store=store, generated_at=generated_at),
-                generated_at=generated_at,
-            )
-        if operation in LIVE_REQUEST_OPERATIONS:
-            return execute_cloud_review_sync_repair(
-                payload,
-                store=store,
                 generated_at=generated_at,
             )
     except ValueError as error:

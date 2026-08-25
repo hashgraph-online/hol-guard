@@ -6,6 +6,7 @@ from .command_backup_extensions import BACKUP_COMMAND_RULES
 from .command_cloud_extensions import CLOUD_COMMAND_RULES
 from .command_database_extensions import DATABASE_COMMAND_RULES
 from .command_domain_extensions import DOMAIN_COMMAND_RULES
+from .command_git_porcelain_extensions import GIT_PORCELAIN_COMMAND_RULES
 from .command_github_rules import GITHUB_ACTION_RISK_CLASSES, GITHUB_COMMAND_RULES
 from .command_remote_extensions import REMOTE_COMMAND_RULES
 from .command_rules import (
@@ -45,6 +46,8 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "git destructive command": ("destructive_shell",),
     "git origin refresh": ("network_egress",),
     "git index inspection": ("local_secret_read",),
+    "git workspace command": ("destructive_shell", "network_egress"),
+    "git read command": ("local_secret_read",),
     "system destructive command": ("destructive_shell",),
     "windows destructive command": ("destructive_shell",),
     "kubernetes destructive command": ("destructive_shell", "network_egress"),
@@ -468,6 +471,7 @@ BUILT_IN_COMMAND_RULES = (
             ),
         ),
     ),
+    *GIT_PORCELAIN_COMMAND_RULES,
     *DOMAIN_COMMAND_RULES,
     *CLOUD_COMMAND_RULES,
     *STORAGE_COMMAND_RULES,

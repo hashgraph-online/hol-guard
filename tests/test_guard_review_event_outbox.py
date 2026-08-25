@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_review_event_outbox_schema import (
     REVIEW_EVENT_SCHEMA_VERSION,
     REVIEW_REQUEST_SNAPSHOT_COLUMNS,
+    ensure_review_event_outbox_schema,
 )
 from tests.guard_review_event_outbox_test_support import as_int
 
@@ -366,3 +367,90 @@ def test_retry_metadata_updates_event_without_replacing_it(tmp_path) -> None:
     retried = store.list_ready_review_events(now="9999-01-01T00:00:00+00:00", limit=1, **binding)
     assert retried[0]["event_id"] == row["event_id"]
     assert retried[0]["attempt_count"] == 1
+
+
+def _retired_outbox_connection() -> sqlite3.Connection:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.execute(
+        "create table sync_state (state_key text primary key, payload_json text not null, updated_at text not null)"
+    )
+    connection.execute("create table approval_requests (request_id text primary key)")
+    connection.execute(
+        """
+        create table guard_live_request_outbox (
+          sequence integer primary key autoincrement, local_request_id text not null,
+          changed_at text not null, oauth_source text, oauth_subject_hash text,
+          workspace_id text, machine_id text, machine_installation_id text,
+          attempt_count integer not null default 0, next_attempt_at text, last_error text
+        )
+        """
+    )
+    return connection
+
+
+def test_retired_outbox_rows_migrate_once_without_data_loss() -> None:
+    connection = _retired_outbox_connection()
+    for changed_at in (_NOW, _LATER):
+        connection.execute(
+            """
+            insert into guard_live_request_outbox (
+              local_request_id, changed_at, oauth_source, oauth_subject_hash,
+              workspace_id, machine_id, machine_installation_id
+            ) values ('request-1', ?, 'default', 'subject-1',
+                      'workspace-1', 'machine-1', 'installation-1')
+            """,
+            (changed_at,),
+        )
+
+    ensure_review_event_outbox_schema(connection, _LATER)
+    connection.execute("delete from sync_state where state_key = 'guard_review_outbox_events_migrated'")
+    ensure_review_event_outbox_schema(connection, _LATER)
+
+    rows = connection.execute("select * from guard_review_outbox_events order by request_sequence").fetchall()
+    assert [(row["local_request_id"], row["request_sequence"]) for row in rows] == [
+        ("request-1", 1),
+        ("request-1", 2),
+    ]
+    assert all(row["quarantine_reason"] == "retired_request_snapshot_missing" for row in rows)
+    assert all(
+        row["payload_hash"]
+        == review_event_payload_digest(
+            str(row["payload_json"]),
+            oauth_source=row["oauth_source"],
+            oauth_subject_hash=row["oauth_subject_hash"],
+            workspace_id=row["workspace_id"],
+            machine_id=row["machine_id"],
+            machine_installation_id=row["machine_installation_id"],
+        )
+        for row in rows
+    )
+    assert (
+        connection.execute(
+            "select 1 from sqlite_master where type = 'table' and name = 'guard_live_request_outbox'"
+        ).fetchone()
+        is None
+    )
+    assert (
+        connection.execute(
+            "select 1 from sync_state where state_key = 'guard_review_outbox_events_migrated'"
+        ).fetchone()
+        is not None
+    )
+
+
+def test_retired_outbox_incomplete_identity_stays_quarantined() -> None:
+    connection = _retired_outbox_connection()
+    connection.execute(
+        "insert into guard_live_request_outbox (local_request_id, changed_at, oauth_source) values (?, ?, ?)",
+        ("request-1", _NOW, "default"),
+    )
+
+    ensure_review_event_outbox_schema(connection, _LATER)
+
+    row = connection.execute("select binding_status, quarantine_reason from guard_review_outbox_events").fetchone()
+    assert row is not None
+    assert (row["binding_status"], row["quarantine_reason"]) == (
+        "quarantined",
+        "retired_request_snapshot_missing",
+    )

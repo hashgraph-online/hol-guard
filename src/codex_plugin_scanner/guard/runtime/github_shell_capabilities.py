@@ -12,6 +12,7 @@ from .github_capability_contract import (
     github_assessment,
 )
 from .github_command_capabilities import classify_github_cli
+from .github_shell_redirections import github_shell_args_and_redirection
 
 
 def _text_assignment_updates(
@@ -461,24 +462,7 @@ def _classify_indirect_github_segment(
 
 
 def _classify_github_shell_segment(segment: list[str], command_index: int) -> GitHubCommandAssessment:
-    args: list[str] = []
-    has_redirection = False
-    index = command_index + 1
-    while index < len(segment):
-        token = segment[index]
-        if token in {"2>&1", "1>&2"}:
-            index += 1
-            continue
-        if token in {">", ">>", ">|", "<", "<<", "<<<"}:
-            has_redirection = True
-            index += 2
-            continue
-        if any(marker in token for marker in (">", "<")):
-            has_redirection = True
-            index += 1
-            continue
-        args.append(token)
-        index += 1
+    args, has_redirection = github_shell_args_and_redirection(segment, command_index)
     github_operation = classify_github_cli(args)
     if not has_redirection:
         return github_operation
