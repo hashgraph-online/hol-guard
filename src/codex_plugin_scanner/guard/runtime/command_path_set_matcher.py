@@ -14,6 +14,72 @@ from .command_option_parsing import (
 )
 from .command_rules import _after_leading_options, _segment_matches_executable, _without_options
 
+RequiredOptionValues = tuple[tuple[str, frozenset[str]], ...]
+
+
+def _normalized_strings(values: frozenset[str]) -> frozenset[str]:
+    return frozenset(value.strip().lower() for value in values if value.strip())
+
+
+def _normalized_paths(paths: frozenset[tuple[str, ...]]) -> frozenset[tuple[str, ...]]:
+    if not paths:
+        raise ValueError("ExecutablePathSetMatcher requires at least one path")
+    normalized: set[tuple[str, ...]] = set()
+    for path in paths:
+        if not path:
+            raise ValueError("ExecutablePathSetMatcher paths require non-empty path tokens")
+        normalized_path = tuple(token.strip().lower() for token in path)
+        if any(not token for token in normalized_path):
+            raise ValueError("ExecutablePathSetMatcher paths require non-empty path tokens")
+        normalized.add(normalized_path)
+    return frozenset(normalized)
+
+
+def _normalized_inverse_pairs(
+    pairs: frozenset[tuple[str, str]],
+) -> frozenset[tuple[str, str]]:
+    return frozenset(
+        (positive.strip().lower(), negative.strip().lower())
+        for positive, negative in pairs
+        if positive.strip() and negative.strip()
+    )
+
+
+def _normalized_required_option_values(values: RequiredOptionValues) -> RequiredOptionValues:
+    return tuple(
+        sorted(
+            (
+                (
+                    option.strip().lower(),
+                    frozenset(value.strip().lower() for value in allowed if value.strip()),
+                )
+                for option, allowed in values
+                if option.strip()
+            ),
+            key=lambda item: item[0],
+        )
+    )
+
+
+def _validate_flag_constraints(
+    required_flags: frozenset[str],
+    forbidden_flags: frozenset[str],
+    inverse_flag_pairs: frozenset[tuple[str, str]],
+) -> None:
+    if required_flags & forbidden_flags:
+        raise ValueError("A matcher flag cannot be both required and forbidden")
+    inverse_names = [name for pair in inverse_flag_pairs for name in pair]
+    if len(inverse_names) != len(set(inverse_names)):
+        raise ValueError("Inverse flag pairs cannot reuse an option name")
+
+
+def _validate_required_option_values(values: RequiredOptionValues) -> None:
+    option_names = [option for option, _allowed in values]
+    if len(option_names) != len(set(option_names)):
+        raise ValueError("Required option values cannot declare an option more than once")
+    if any(not allowed for _option, allowed in values):
+        raise ValueError("Required option values cannot be empty")
+
 
 @final
 @dataclass(frozen=True, slots=True)
@@ -30,96 +96,52 @@ class ExecutablePathSetMatcher:
     interspersed_flags: frozenset[str] = frozenset()
     options_with_values: frozenset[str] = frozenset()
     inverse_flag_pairs: frozenset[tuple[str, str]] = frozenset()
-    required_option_values: tuple[tuple[str, frozenset[str]], ...] = ()
+    required_option_values: RequiredOptionValues = ()
     required_flags_in_all_arguments: bool = False
     fail_secure_unknown_options: bool = False
     _path_lengths_desc: tuple[int, ...] = field(init=False, repr=False, compare=False)
     _paths_desc: tuple[tuple[str, ...], ...] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        normalized_executables = frozenset(
-            value.strip().lower() for value in self.executables if value.strip()
-        )
-        if not normalized_executables:
+        executables = _normalized_strings(self.executables)
+        if not executables:
             raise ValueError("ExecutablePathSetMatcher requires at least one executable")
-        if not self.paths:
-            raise ValueError("ExecutablePathSetMatcher requires at least one path")
-        if any(not path or any(not token.strip() for token in path) for path in self.paths):
-            raise ValueError("ExecutablePathSetMatcher paths require non-empty path tokens")
+        paths = _normalized_paths(self.paths)
+        required_flags = _normalized_strings(self.required_flags)
+        forbidden_flags = _normalized_strings(self.forbidden_flags)
+        inverse_flag_pairs = _normalized_inverse_pairs(self.inverse_flag_pairs)
+        required_option_values = _normalized_required_option_values(self.required_option_values)
+        _validate_flag_constraints(required_flags, forbidden_flags, inverse_flag_pairs)
+        _validate_required_option_values(required_option_values)
 
-        normalized_paths = frozenset(
-            tuple(token.strip().lower() for token in path) for path in self.paths
+        object.__setattr__(self, "executables", executables)
+        object.__setattr__(self, "paths", paths)
+        object.__setattr__(self, "required_flags", required_flags)
+        object.__setattr__(self, "forbidden_flags", forbidden_flags)
+        object.__setattr__(
+            self,
+            "leading_options_with_values",
+            _normalized_strings(self.leading_options_with_values),
         )
-        normalized_required_flags = frozenset(
-            value.strip().lower() for value in self.required_flags if value.strip()
+        object.__setattr__(
+            self,
+            "interspersed_options_with_values",
+            _normalized_strings(self.interspersed_options_with_values),
         )
-        normalized_forbidden_flags = frozenset(
-            value.strip().lower() for value in self.forbidden_flags if value.strip()
-        )
-        normalized_leading_options = frozenset(
-            value.strip().lower() for value in self.leading_options_with_values if value.strip()
-        )
-        normalized_interspersed_options = frozenset(
-            value.strip().lower()
-            for value in self.interspersed_options_with_values
-            if value.strip()
-        )
-        normalized_interspersed_flags = frozenset(
-            value.strip().lower() for value in self.interspersed_flags if value.strip()
-        )
-        normalized_options = frozenset(
-            value.strip().lower() for value in self.options_with_values if value.strip()
-        )
-        normalized_inverse_pairs = frozenset(
-            (positive.strip().lower(), negative.strip().lower())
-            for positive, negative in self.inverse_flag_pairs
-            if positive.strip() and negative.strip()
-        )
-        normalized_required_option_values = tuple(
-            sorted(
-                (
-                    (
-                        option.strip().lower(),
-                        frozenset(value.strip().lower() for value in values if value.strip()),
-                    )
-                    for option, values in self.required_option_values
-                    if option.strip()
-                ),
-                key=lambda item: item[0],
-            )
-        )
-
-        object.__setattr__(self, "executables", normalized_executables)
-        object.__setattr__(self, "paths", normalized_paths)
-        object.__setattr__(self, "required_flags", normalized_required_flags)
-        object.__setattr__(self, "forbidden_flags", normalized_forbidden_flags)
-        object.__setattr__(self, "leading_options_with_values", normalized_leading_options)
-        object.__setattr__(self, "interspersed_options_with_values", normalized_interspersed_options)
-        object.__setattr__(self, "interspersed_flags", normalized_interspersed_flags)
-        object.__setattr__(self, "options_with_values", normalized_options)
-        object.__setattr__(self, "inverse_flag_pairs", normalized_inverse_pairs)
-        object.__setattr__(self, "required_option_values", normalized_required_option_values)
+        object.__setattr__(self, "interspersed_flags", _normalized_strings(self.interspersed_flags))
+        object.__setattr__(self, "options_with_values", _normalized_strings(self.options_with_values))
+        object.__setattr__(self, "inverse_flag_pairs", inverse_flag_pairs)
+        object.__setattr__(self, "required_option_values", required_option_values)
         object.__setattr__(
             self,
             "_path_lengths_desc",
-            tuple(sorted({len(path) for path in normalized_paths}, reverse=True)),
+            tuple(sorted({len(path) for path in paths}, reverse=True)),
         )
         object.__setattr__(
             self,
             "_paths_desc",
-            tuple(sorted(normalized_paths, key=lambda item: (-len(item), item))),
+            tuple(sorted(paths, key=lambda item: (-len(item), item))),
         )
-
-        if normalized_required_flags & normalized_forbidden_flags:
-            raise ValueError("A matcher flag cannot be both required and forbidden")
-        inverse_names = [name for pair in normalized_inverse_pairs for name in pair]
-        if len(inverse_names) != len(set(inverse_names)):
-            raise ValueError("Inverse flag pairs cannot reuse an option name")
-        required_option_names = [option for option, _values in normalized_required_option_values]
-        if len(required_option_names) != len(set(required_option_names)):
-            raise ValueError("Required option values cannot declare an option more than once")
-        if any(not values for _option, values in normalized_required_option_values):
-            raise ValueError("Required option values cannot be empty")
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
