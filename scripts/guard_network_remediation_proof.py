@@ -212,9 +212,7 @@ def _capability_summary(repository_root: Path) -> tuple[list[str], list[str]]:
     payload = load_reachability_manifest(manifest_path)
     validation_errors = validate_reachability_manifest(payload, repository_root=repository_root)
     if validation_errors:
-        raise ProofValidationError(
-            "capability reachability manifest is invalid: " + "; ".join(validation_errors)
-        )
+        raise ProofValidationError("capability reachability manifest is invalid: " + "; ".join(validation_errors))
 
     raw_capabilities = payload.get("capabilities")
     if not isinstance(raw_capabilities, list):
@@ -248,118 +246,125 @@ def _capability_summary(repository_root: Path) -> tuple[list[str], list[str]]:
     return sorted(advertised), sorted(production_ready)
 
 
-def validate_proof_manifest(payload: Mapping[str, object], *, repository_root: Path) -> tuple[str, ...]:
-    """Return deterministic validation errors for a proof manifest."""
-
-    errors: list[str] = []
+def _validate_manifest_header(payload: Mapping[str, object], errors: list[str]) -> None:
     if payload.get("schema_version") != SCHEMA_VERSION:
         errors.append("schema_version must equal 1")
     if payload.get("repository") != "hashgraph-online/hol-guard":
         errors.append("repository must identify hashgraph-online/hol-guard")
     if payload.get("target_branch") != "release/3.0":
         errors.append("target_branch must equal release/3.0")
-
     raw_task_range = payload.get("task_range")
+    expected_range = {"first": TASK_IDS[0], "last": TASK_IDS[-1], "count": len(TASK_IDS)}
     if not isinstance(raw_task_range, Mapping):
         errors.append("task_range must be an object")
-    else:
-        task_range = cast(Mapping[str, object], raw_task_range)
-        expected_range = {"first": TASK_IDS[0], "last": TASK_IDS[-1], "count": len(TASK_IDS)}
-        if dict(task_range) != expected_range:
-            errors.append("task_range must exactly cover REM-121 through REM-139")
+    elif dict(raw_task_range) != expected_range:
+        errors.append("task_range must exactly cover REM-121 through REM-139")
 
+
+def _validate_privacy(payload: Mapping[str, object], errors: list[str]) -> None:
     raw_privacy = payload.get("privacy")
     if not isinstance(raw_privacy, Mapping):
         errors.append("privacy must be an object")
+        return
+    privacy = cast(Mapping[str, object], raw_privacy)
+    if privacy.get("raw_domain_storage") is not False:
+        errors.append("raw_domain_storage must remain disabled")
+    try:
+        prohibited_fields = set(_string_list(privacy.get("prohibited_fields"), field="privacy.prohibited_fields"))
+    except ProofValidationError as exc:
+        errors.append(str(exc))
     else:
-        privacy = cast(Mapping[str, object], raw_privacy)
-        if privacy.get("raw_domain_storage") is not False:
-            errors.append("raw_domain_storage must remain disabled")
-        try:
-            prohibited_fields = set(
-                _string_list(privacy.get("prohibited_fields"), field="privacy.prohibited_fields")
-            )
-        except ProofValidationError as exc:
-            errors.append(str(exc))
-        else:
-            if prohibited_fields != PROHIBITED_PRIVACY_FIELDS:
-                errors.append("privacy.prohibited_fields must preserve the complete bounded-evidence denylist")
+        if prohibited_fields != PROHIBITED_PRIVACY_FIELDS:
+            errors.append("privacy.prohibited_fields must preserve the complete bounded-evidence denylist")
 
+
+def _validated_tasks(payload: Mapping[str, object], errors: list[str]) -> list[Mapping[str, object]] | None:
     raw_tasks = payload.get("tasks")
     if not isinstance(raw_tasks, list):
-        return (*errors, "tasks must be a list")
-
+        errors.append("tasks must be a list")
+        return None
     tasks: list[Mapping[str, object]] = []
     for index, raw_task in enumerate(raw_tasks):
         if not isinstance(raw_task, Mapping):
             errors.append(f"tasks[{index}] must be an object")
             continue
         tasks.append(cast(Mapping[str, object], raw_task))
-
-    identifiers = [task.get("id") for task in tasks]
-    if identifiers != list(TASK_IDS):
+    if [task.get("id") for task in tasks] != list(TASK_IDS):
         errors.append("tasks must appear exactly once in REM-121 through REM-139 order")
+    return tasks
 
-    for index, task in enumerate(tasks):
-        identifier = task.get("id")
-        label = identifier if isinstance(identifier, str) else f"tasks[{index}]"
-        outcome = task.get("outcome")
-        complete = task.get("complete")
-        if outcome not in ALLOWED_OUTCOMES:
-            errors.append(f"{label}: outcome is invalid")
-        if type(complete) is not bool:
-            errors.append(f"{label}: complete must be a boolean")
-        if not isinstance(task.get("title"), str) or not task["title"]:
-            errors.append(f"{label}: title must be a non-empty string")
+
+def _validate_task(
+    task: Mapping[str, object],
+    *,
+    index: int,
+    repository_root: Path,
+    errors: list[str],
+) -> None:
+    identifier = task.get("id")
+    label = identifier if isinstance(identifier, str) else f"tasks[{index}]"
+    outcome = task.get("outcome")
+    complete = task.get("complete")
+    if outcome not in ALLOWED_OUTCOMES:
+        errors.append(f"{label}: outcome is invalid")
+    if type(complete) is not bool:
+        errors.append(f"{label}: complete must be a boolean")
+    if not isinstance(task.get("title"), str) or not task["title"]:
+        errors.append(f"{label}: title must be a non-empty string")
+    try:
+        evidence = _string_list(task.get("evidence"), field=f"{label}.evidence")
+        blockers = _string_list(task.get("blockers"), field=f"{label}.blockers", allow_empty=True)
+    except ProofValidationError as exc:
+        errors.append(str(exc))
+        return
+    if EXPECTED_TASK_EVIDENCE.get(label) is None or tuple(evidence) != EXPECTED_TASK_EVIDENCE[label]:
+        errors.append(f"{label}.evidence must match the task-specific evidence contract")
+    for evidence_index, evidence_path in enumerate(evidence):
         try:
-            evidence = _string_list(task.get("evidence"), field=f"{label}.evidence")
-            blockers = _string_list(
-                task.get("blockers"),
-                field=f"{label}.blockers",
-                allow_empty=True,
-            )
+            _repository_file(repository_root, evidence_path, field=f"{label}.evidence[{evidence_index}]")
         except ProofValidationError as exc:
             errors.append(str(exc))
-            continue
-        expected_evidence = EXPECTED_TASK_EVIDENCE.get(label)
-        if expected_evidence is None or tuple(evidence) != expected_evidence:
-            errors.append(f"{label}.evidence must match the task-specific evidence contract")
-        for evidence_index, evidence_path in enumerate(evidence):
-            try:
-                _repository_file(
-                    repository_root,
-                    evidence_path,
-                    field=f"{label}.evidence[{evidence_index}]",
-                )
-            except ProofValidationError as exc:
-                errors.append(str(exc))
-        if complete is True and (outcome != "passed" or blockers):
-            errors.append(f"{label}: completed tasks must pass without blockers")
-        if complete is False and not blockers:
-            errors.append(f"{label}: incomplete tasks must retain exact blockers")
+    if complete is True and (outcome != "passed" or blockers):
+        errors.append(f"{label}: completed tasks must pass without blockers")
+    if complete is False and not blockers:
+        errors.append(f"{label}: incomplete tasks must retain exact blockers")
 
-    raw_closure = payload.get("closure")
-    closure_ready: object = None
+
+def _validate_closure(raw_closure: object, tasks: list[Mapping[str, object]], errors: list[str]) -> object:
     if not isinstance(raw_closure, Mapping):
         errors.append("closure must be an object")
-    else:
-        closure = cast(Mapping[str, object], raw_closure)
-        ready = closure.get("ready")
-        closure_ready = ready
-        if type(ready) is not bool:
-            errors.append("closure.ready must be a boolean")
-        if closure.get("release_authorized") is not False:
-            errors.append("proof work cannot authorize a release")
-        if not isinstance(closure.get("reason"), str) or not closure["reason"]:
-            errors.append("closure.reason must be a non-empty string")
-        all_complete = bool(tasks) and all(task.get("complete") is True for task in tasks)
-        if ready is True and not all_complete:
-            errors.append("closure cannot be ready while any task remains incomplete")
-        if ready is False and all_complete:
-            errors.append("closure must explain at least one incomplete task")
-        expected_verdict = "ready" if ready is True else "not-ready"
-        if closure.get("verdict") != expected_verdict:
-            errors.append("closure.verdict must match closure.ready")
+        return None
+    closure = cast(Mapping[str, object], raw_closure)
+    ready = closure.get("ready")
+    if type(ready) is not bool:
+        errors.append("closure.ready must be a boolean")
+    if closure.get("release_authorized") is not False:
+        errors.append("proof work cannot authorize a release")
+    if not isinstance(closure.get("reason"), str) or not closure["reason"]:
+        errors.append("closure.reason must be a non-empty string")
+    all_complete = bool(tasks) and all(task.get("complete") is True for task in tasks)
+    if ready is True and not all_complete:
+        errors.append("closure cannot be ready while any task remains incomplete")
+    if ready is False and all_complete:
+        errors.append("closure must explain at least one incomplete task")
+    if closure.get("verdict") != ("ready" if ready is True else "not-ready"):
+        errors.append("closure.verdict must match closure.ready")
+    return ready
+
+
+def validate_proof_manifest(payload: Mapping[str, object], *, repository_root: Path) -> tuple[str, ...]:
+    """Return deterministic validation errors for a proof manifest."""
+
+    errors: list[str] = []
+    _validate_manifest_header(payload, errors)
+    _validate_privacy(payload, errors)
+    tasks = _validated_tasks(payload, errors)
+    if tasks is None:
+        return tuple(errors)
+    for index, task in enumerate(tasks):
+        _validate_task(task, index=index, repository_root=repository_root, errors=errors)
+
+    closure_ready = _validate_closure(payload.get("closure"), tasks, errors)
 
     advertised: list[str] = []
     production_ready: list[str] = []
