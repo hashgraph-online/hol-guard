@@ -124,6 +124,33 @@ def test_codex_bridge_wait_uses_the_outer_hook_budget(tmp_path: Path, monkeypatc
     assert metadata["codex_browser_wait_timeout_seconds"] == 7
 
 
+def test_codex_bridge_budget_bounds_the_actual_approval_wait(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_timeout: list[int] = []
+
+    def capture_wait(**kwargs: object) -> dict[str, object]:
+        captured_timeout.append(int(kwargs["timeout_seconds"]))
+        return {"resolved": False, "items": []}
+
+    monkeypatch.setattr(interaction, "wait_for_approval_requests", capture_wait)
+    monkeypatch.setattr(interaction, "_open_codex_live_approval", lambda *_args, **_kwargs: None)
+    decision = interaction._codex_browser_approval_decision(
+        args=argparse.Namespace(harness="codex", json=True),
+        event_name="PreToolUse",
+        policy_action="require-reapproval",
+        response_payload={"approval_requests": [{"request_id": "request-bound"}]},
+        store=GuardStore(tmp_path / "guard-home"),
+        config=GuardConfig(tmp_path, None, approval_wait_timeout_seconds=600),
+        browser_wait_bound=True,
+        browser_wait_timeout_seconds=7,
+    )
+
+    assert decision is None
+    assert captured_timeout == [7]
+
+
 def test_codex_unbound_browser_wait_retains_the_worker_budget() -> None:
     assert (
         interaction._codex_browser_wait_timeout_seconds(

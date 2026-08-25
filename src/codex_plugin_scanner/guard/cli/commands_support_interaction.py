@@ -347,21 +347,22 @@ def _codex_browser_approval_decision(
     store: GuardStore,
     config: GuardConfig,
     browser_wait_bound: bool | None = None,
+    browser_wait_timeout_seconds: int | None = None,
     daemon_client: object | None = None,
     expected_artifact_hash: str | None = None,
     fresh_context_provider: Callable[[], Mapping[str, object] | None] | None = None,
 ) -> str | None:
-    if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
+    if browser_wait_bound is not True and not _codex_can_use_browser_approval(
+        args, event_name=event_name, policy_action=policy_action
+    ):
         return None
-    request_ids = browser_wait_request_ids(
-        response_payload,
-        browser_wait_bound=browser_wait_bound,
-    )
+    request_ids = browser_wait_request_ids(response_payload, browser_wait_bound=browser_wait_bound)
     if not request_ids:
         return None
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
         event_name=event_name,
         configured_timeout=config.approval_wait_timeout_seconds,
+        outer_wait_timeout_seconds=browser_wait_timeout_seconds if browser_wait_bound else None,
     )
     if wait_timeout_seconds <= 0:
         return None
