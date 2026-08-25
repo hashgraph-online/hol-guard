@@ -118,9 +118,9 @@ def _verification_keys_from_payload(value: object) -> tuple[PolicyBundleVerifica
 
 def _anchored_review_verification_keys(store) -> tuple[PolicyBundleVerificationKey, ...]:
     return merge_policy_bundle_trusted_keys(
-        safe_load_policy_bundle_verification_keys(store.get_sync_payload(_GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY)),
-        safe_load_policy_bundle_verification_keys(store.get_sync_payload("policy_bundle_keyring")),
         policy_bundle_keys_from_supply_chain_keyring(store.get_sync_payload("supply_chain_bundle_keyring")),
+        safe_load_policy_bundle_verification_keys(store.get_sync_payload("policy_bundle_keyring")),
+        safe_load_policy_bundle_verification_keys(store.get_sync_payload(_GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY)),
     )
 
 

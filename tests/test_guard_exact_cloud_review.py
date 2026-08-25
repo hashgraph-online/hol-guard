@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.review_contracts import (
     GuardReviewContractError,
+    _anchored_review_verification_keys,
     build_local_review_request_claim,
     validated_review_verification_keys_from_sync,
 )
@@ -79,8 +80,14 @@ def test_review_sync_keys_require_preanchored_key_material(tmp_path: Path) -> No
         store=store,
         workspace_id="workspace-1",
     )
+    store.set_sync_payload(
+        "guard_review_verification_keyring",
+        [key.to_dict() for key in admitted],
+        "2026-08-25T00:01:00+00:00",
+    )
 
     assert [key.to_dict() for key in admitted] == review_keys
+    assert _anchored_review_verification_keys(store)[0].purpose == "remote_approval"
 
 
 def test_review_sync_keys_reject_unanchored_key_material(tmp_path: Path) -> None:
