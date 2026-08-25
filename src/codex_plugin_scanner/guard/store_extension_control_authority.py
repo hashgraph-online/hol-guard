@@ -920,9 +920,12 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
             key_name = target_key(control.target.kind, control.target.target_id)
             if key_name not in current_manifest:
                 return False
-            return (
-                control.state is ControlState.DISABLED or previous_manifest.get(key_name) == current_manifest[key_name]
-            )
+            if control.state is ControlState.DISABLED:
+                return True
+            previous_fingerprint = previous_manifest.get(key_name)
+            if previous_fingerprint is None:
+                return True
+            return previous_fingerprint == current_manifest[key_name]
 
         retired_targets = tuple(
             sorted(
