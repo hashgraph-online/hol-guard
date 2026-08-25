@@ -12,9 +12,7 @@ from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
 
-def test_frozen_package_shim_uses_direct_protect_command(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_frozen_package_shim_uses_direct_protect_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
     monkeypatch.setattr(
         guard_shims_module.sys,
@@ -38,9 +36,7 @@ def test_frozen_package_shim_uses_direct_protect_command(
     assert "codex_plugin_scanner.cli" not in command
 
 
-def test_frozen_package_shim_install_uses_quoted_shell_wrapper(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_frozen_package_shim_install_uses_quoted_shell_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     frozen_exe = tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
     frozen_exe.parent.mkdir(parents=True)
     frozen_exe.write_text("", encoding="utf-8")
@@ -69,6 +65,35 @@ def test_frozen_package_shim_install_uses_quoted_shell_wrapper(
     assert shlex.split(wrapper.splitlines()[1])[:3] == ["exec", str(frozen_exe), str(python_path)]
     assert f"{guard_shims_module.FROZEN_PACKAGE_SHIM_SENTINEL} = True" in python_source
     assert wrapper_path.stat().st_mode & 0o111
+
+
+def test_frozen_package_shim_status_fails_when_sidecar_is_tampered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frozen_exe = tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
+    frozen_exe.parent.mkdir(parents=True)
+    frozen_exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(guard_shims_module.sys, "executable", str(frozen_exe))
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    monkeypatch.setattr(
+        guard_shims_module,
+        "_detect_system_package_managers",
+        lambda _context, path_env=None: (["npm"], []),
+    )
+
+    guard_shims_module.install_package_shims(context, managers=("npm",))
+    sidecar = context.guard_home / "package-shims" / "bin" / ".npm.py"
+    sidecar.write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+    status = guard_shims_module.package_shim_status(context)
+    details = next(item for item in status["manager_details"] if item["manager"] == "npm")
+
+    assert details["integrity"] != "ok"
 
 
 def test_resolve_frozen_package_shim_path_rejects_untrusted_files(

@@ -5,20 +5,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping
 
+from .supply_chain_repair_errors import SupplyChainRepairDeferredError
+from .supply_chain_repair_sync import repair_sync_intelligence
+
 _LOGGER = logging.getLogger(__name__)
 
 RepairStep = Callable[[], object]
 ActivationStep = Callable[[], tuple[int, Mapping[str, object]]]
-
-
-class SupplyChainRepairDeferredError(Exception):
-    """A recovery step still needs a named user action instead of another silent retry."""
-
-    def __init__(self, *, code: str, message: str, action: str) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.action = action
 
 
 def coordinate_supply_chain_repair(
@@ -83,16 +76,12 @@ def coordinate_supply_chain_repair(
 
     repaired = not failed_steps and not remaining_steps
     connect_only = (
-        not failed_steps
-        and remaining_steps
-        and all(step.get("action") == "connect" for step in remaining_steps)
+        not failed_steps and remaining_steps and all(step.get("action") == "connect" for step in remaining_steps)
     )
     if repaired:
         message = "Supply-chain protection restored and refreshed."
     elif connect_only:
-        message = (
-            "Package protection is on. Connect Guard Cloud to refresh safety intelligence."
-        )
+        message = "Package protection is on. Connect Guard Cloud to refresh safety intelligence."
     elif completed_steps:
         message = "Guard restored some supply-chain protection. Retry remaining steps to finish."
     else:
@@ -106,4 +95,4 @@ def coordinate_supply_chain_repair(
     }
 
 
-__all__ = ["SupplyChainRepairDeferredError", "coordinate_supply_chain_repair"]
+__all__ = ["SupplyChainRepairDeferredError", "coordinate_supply_chain_repair", "repair_sync_intelligence"]

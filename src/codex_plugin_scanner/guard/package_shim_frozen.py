@@ -24,7 +24,7 @@ def package_shim_shell_wrapper(python_path: Path) -> str:
     return "\n".join(
         (
             "#!/bin/sh",
-            f"exec {shlex.quote(sys.executable)} {shlex.quote(str(python_path))} \"$@\"",
+            f'exec {shlex.quote(sys.executable)} {shlex.quote(str(python_path))} "$@"',
             "",
         )
     )
@@ -62,6 +62,74 @@ def write_package_manager_shim_files(
     return posix_path
 
 
+_SIDECAR_ATTESTATION_MARK = b"\n# hol-guard-sidecar\n"
+
+
+def expected_package_shim_attestation_bytes(python_source: str, shim_dir: Path, command: str) -> bytes:
+    wrapper = expected_package_shim_executable_bytes(python_source, shim_dir, command)
+    if not package_shim_needs_shell_wrapper():
+        return wrapper
+    return wrapper + _SIDECAR_ATTESTATION_MARK + python_source.encode("utf-8")
+
+
+def installed_package_shim_attestation_bytes(shim_dir: Path, command: str, wrapper: bytes) -> bytes:
+    if not package_shim_needs_shell_wrapper():
+        return wrapper
+    sidecar_path = frozen_package_shim_python_path(shim_dir, command)
+    if sidecar_path.is_symlink() or not sidecar_path.is_file():
+        return wrapper + _SIDECAR_ATTESTATION_MARK
+    return wrapper + _SIDECAR_ATTESTATION_MARK + sidecar_path.read_bytes()
+
+
+def package_shim_integrity_ok(
+    *,
+    python_source: str,
+    shim_dir: Path,
+    command: str,
+    installed_wrapper: bytes,
+) -> bool:
+    expected = expected_package_shim_attestation_bytes(python_source, shim_dir, command)
+    current = installed_package_shim_attestation_bytes(shim_dir, command, installed_wrapper)
+    if current == expected:
+        return True
+    expected_wrapper = expected_package_shim_executable_bytes(python_source, shim_dir, command)
+    if normalized_package_shim_content(installed_wrapper) != normalized_package_shim_content(expected_wrapper):
+        return False
+    if not package_shim_needs_shell_wrapper():
+        return True
+    sidecar_path = frozen_package_shim_python_path(shim_dir, command)
+    if sidecar_path.is_symlink() or not sidecar_path.is_file():
+        return False
+    return normalized_package_shim_content(sidecar_path.read_bytes()) == normalized_package_shim_content(
+        python_source.encode("utf-8")
+    )
+
+
+def classify_installed_package_shim_integrity(
+    *,
+    python_source: str,
+    shim_dir: Path,
+    command: str,
+    installed_wrapper: bytes,
+    stored_hash: str | None,
+    hash_content: Callable[[bytes], str],
+) -> str:
+    current_hash = hash_content(installed_package_shim_attestation_bytes(shim_dir, command, installed_wrapper))
+    expected_hash = hash_content(expected_package_shim_attestation_bytes(python_source, shim_dir, command))
+    if current_hash == expected_hash or package_shim_integrity_ok(
+        python_source=python_source,
+        shim_dir=shim_dir,
+        command=command,
+        installed_wrapper=installed_wrapper,
+    ):
+        return "ok"
+    if stored_hash == current_hash:
+        return "stale"
+    if stored_hash is None:
+        return "unknown"
+    return "tampered"
+
+
 def _has_package_shim_layout(candidate: Path) -> bool:
     parent = candidate.parent
     grandparent = parent.parent
@@ -76,9 +144,14 @@ def resolve_frozen_package_shim_path(argv: list[str]) -> Path | None:
     from .shims import _PACKAGE_SHIM_COMMANDS
 
     trusted_commands = set(_PACKAGE_SHIM_COMMANDS.values())
+    candidate = Path(argv[0]).expanduser()
     try:
-        resolved = Path(argv[0]).expanduser().resolve(strict=True)
+        if candidate.is_symlink() or not candidate.is_file():
+            return None
+        resolved = candidate.resolve(strict=True)
     except OSError:
+        return None
+    if resolved.parent.resolve() != candidate.parent.resolve():
         return None
     if resolved.name not in trusted_commands:
         if not (resolved.name.startswith(".") and resolved.name.endswith(".py")):
@@ -184,8 +257,13 @@ def _normalized_base_command_repr(line: str) -> str:
 
 __all__ = [
     "FROZEN_PACKAGE_SHIM_SENTINEL",
+    "classify_installed_package_shim_integrity",
+    "expected_package_shim_attestation_bytes",
     "expected_package_shim_executable_bytes",
     "frozen_package_shim_python_path",
+    "installed_package_shim_attestation_bytes",
+    "normalized_package_shim_content",
+    "package_shim_integrity_ok",
     "package_shim_needs_shell_wrapper",
     "package_shim_shell_wrapper",
     "resolve_frozen_package_shim_path",

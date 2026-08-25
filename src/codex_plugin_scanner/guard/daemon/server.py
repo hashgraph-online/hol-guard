@@ -218,7 +218,7 @@ from ..store_evidence import (
     list_evidence,
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
-from ..supply_chain_repair import coordinate_supply_chain_repair
+from ..supply_chain_repair import coordinate_supply_chain_repair, repair_sync_intelligence
 from .bounded_http import BoundedThreadingHTTPServer
 from .command_activity_api import (
     handle_command_activity_analytics,
@@ -3889,7 +3889,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=status,
             )
             return
-        from ..supply_chain_repair_sync import repair_sync_intelligence
         result = coordinate_supply_chain_repair(
             repair_package_shims=lambda: _repair_detected_package_shims(context),
             activate_runtime=lambda: _activate_package_firewall_runtime(context),

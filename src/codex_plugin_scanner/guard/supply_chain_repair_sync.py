@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .runtime.runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
+from .runtime.runner import (
+    GuardSyncAuthorizationExpiredError,
+    GuardSyncEndpointUntrustedError,
+    GuardSyncNotConfiguredError,
+)
 from .store import GuardStore
-from .supply_chain_repair import SupplyChainRepairDeferredError
+from .supply_chain_repair_errors import SupplyChainRepairDeferredError
 
 
 def _deferred_cloud_error(error: BaseException) -> SupplyChainRepairDeferredError:
+    if isinstance(error, GuardSyncEndpointUntrustedError):
+        raise error
     if isinstance(error, GuardSyncAuthorizationExpiredError):
         return SupplyChainRepairDeferredError(
             code="guard_cloud_reconnect_required",
@@ -40,6 +46,8 @@ def repair_sync_intelligence(
 
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
+    except GuardSyncEndpointUntrustedError:
+        raise
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         raise _deferred_cloud_error(error) from error
     try:
@@ -49,6 +57,8 @@ def repair_sync_intelligence(
             workspace_dir=workspace_dir,
         )
     except SupplyChainRepairDeferredError:
+        raise
+    except GuardSyncEndpointUntrustedError:
         raise
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         raise _deferred_cloud_error(error) from error

@@ -16,8 +16,9 @@ from typing import Protocol
 from .launcher import merge_guard_launcher_env
 from .package_shim_frozen import (
     FROZEN_PACKAGE_SHIM_SENTINEL,
-    expected_package_shim_executable_bytes,
+    classify_installed_package_shim_integrity,
     frozen_package_shim_python_path,
+    installed_package_shim_attestation_bytes,
     normalized_package_shim_content,
     resolve_frozen_package_shim_path,
     run_frozen_package_shim,
@@ -225,14 +226,6 @@ def _build_python_shim(harness: str, context: HarnessContextLike, workspace_args
 
 def _build_windows_script(posix_path: Path) -> str:
     return "\r\n".join(("@echo off", f'"{sys.executable}" "{posix_path}" %*', ""))
-
-
-def _expected_package_shim_executable_bytes(context: HarnessContext, command: str) -> bytes:
-    return expected_package_shim_executable_bytes(
-        _build_package_manager_python_shim(context, command),
-        context.guard_home / "package-shims" / "bin",
-        command,
-    )
 
 
 def _write_package_manager_shim_files(context: HarnessContext, command: str, shim_dir: Path) -> Path:
@@ -475,7 +468,9 @@ def install_package_shims(
     for manager in normalized_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
         posix_path = _write_package_manager_shim_files(context, command, shim_dir)
-        content_hashes[manager] = build_shim_content_hash(posix_path.read_bytes())
+        content_hashes[manager] = build_shim_content_hash(
+            installed_package_shim_attestation_bytes(shim_dir, command, posix_path.read_bytes())
+        )
         installed.append(manager)
     manifest_payload: dict[str, object] = {
         "content_hashes": content_hashes,
@@ -556,21 +551,15 @@ def package_shim_status(context: HarnessContext, *, path_env: str | None = None)
         path_status = get_path_order_status(context, manager=manager, path_env=path_env)
         if exists:
             active_managers.append(manager)
-            current_content = shim_path.read_bytes()
-            current_hash = build_shim_content_hash(current_content)
-            stored_hash = stored_hashes.get(manager)
-            expected_content = _expected_package_shim_executable_bytes(context, command)
-            expected_hash = build_shim_content_hash(expected_content)
-            if current_hash == expected_hash or _normalized_package_shim_content(
-                current_content
-            ) == _normalized_package_shim_content(expected_content):
-                integrity = "ok"
-            elif stored_hash == current_hash:
-                integrity = "stale"
-            elif stored_hash is None:
-                integrity = "unknown"
-            else:
-                integrity = "tampered"
+            python_source = _build_package_manager_python_shim(context, command)
+            integrity = classify_installed_package_shim_integrity(
+                python_source=python_source,
+                shim_dir=shim_dir,
+                command=command,
+                installed_wrapper=shim_path.read_bytes(),
+                stored_hash=stored_hashes.get(manager),
+                hash_content=build_shim_content_hash,
+            )
         else:
             missing_managers.append(manager)
             integrity = "missing"
