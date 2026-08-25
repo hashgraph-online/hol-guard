@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -178,11 +178,11 @@ def test_runtime_posture_uses_cloud_capabilities_and_bounded_digests() -> None:
     posture = build_managed_controls_runtime_posture(
         catalog_digest="a" * 64,
         extension_authority_revision=7,
-        effective_projection_digest="b" * 64,
+        effective_projection_digest="sha256:" + "b" * 64,
     )
     assert posture["managedControlsCapabilities"] == list(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
     assert posture["extensionAuthorityRevision"] == 7
-    assert posture["effectiveProjectionDigest"] == "b" * 64
+    assert posture["effectiveProjectionDigest"] == "sha256:" + "b" * 64
 
 
 @pytest.mark.parametrize(
@@ -219,6 +219,26 @@ def test_shared_catalog_fixture_is_schema_valid_and_canonically_executable() -> 
         ensure_ascii=False,
     ).encode("utf-8")
     assert hashlib.sha256(canonical).hexdigest() == parsed["catalogDigest"]
+
+
+@pytest.mark.parametrize("field", ["riskClasses", "typedCapabilities"])
+def test_shared_catalog_schema_rejects_empty_permission_capability_values(field: str) -> None:
+    fixtures = _shared_catalog_fixture()
+    invalid = deepcopy(fixtures["valid"])
+    assert isinstance(invalid, dict)
+    extensions = invalid["extensions"]
+    assert isinstance(extensions, list)
+    extension = extensions[0]
+    assert isinstance(extension, dict)
+    permissions = extension["permissions"]
+    assert isinstance(permissions, list)
+    permission = permissions[0]
+    assert isinstance(permission, dict)
+    permission[field] = [""]
+    schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(invalid)
 
 
 def test_shared_catalog_unicode_uses_utf8_canonical_bytes() -> None:

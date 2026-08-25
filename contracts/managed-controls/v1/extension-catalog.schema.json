@@ -52,8 +52,8 @@
                 "name": { "type": "string", "minLength": 1, "maxLength": 8192 },
                 "configurable": { "type": "boolean" },
                 "required": { "type": "boolean" },
-                "riskClasses": { "type": "array", "maxItems": 128, "items": { "type": "string", "maxLength": 8192 }, "uniqueItems": true },
-                "typedCapabilities": { "type": "array", "maxItems": 128, "items": { "type": "string", "maxLength": 8192 }, "uniqueItems": true }
+                "riskClasses": { "type": "array", "maxItems": 128, "items": { "type": "string", "minLength": 1, "maxLength": 8192 }, "uniqueItems": true },
+                "typedCapabilities": { "type": "array", "maxItems": 128, "items": { "type": "string", "minLength": 1, "maxLength": 8192 }, "uniqueItems": true }
               }
             }
           }

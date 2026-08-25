@@ -30,6 +30,7 @@ def _runtime_summary() -> dict[str, object]:
         "runtime_device_id": "device-managed-controls",
         "extensionCatalogDigest": _WIRE_CATALOG_DIGEST,
         "extensionAuthorityRevision": 7,
+        "effectiveProjectionDigest": "sha256:" + "c" * 64,
     }
 
 
@@ -48,7 +49,9 @@ def _delivery() -> dict[str, object]:
         "policyRevision": 7,
         "extensionAuthorityRevision": 7,
         "catalogDigest": _WIRE_CATALOG_DIGEST,
-        "effectiveProjectionDigest": bundle["payloadHash"],
+        "effectiveProjectionDigest": "sha256:" + "c" * 64,
+        "payloadHash": bundle["payloadHash"],
+        "extensionProjectionDigest": "sha256:" + "d" * 64,
         "lastKnownGoodBundleHash": rollback["lastGoodBundleHash"],
     }
 
@@ -80,11 +83,15 @@ def test_delivery_binds_exact_cloud_correlation_to_signed_bundle_and_runtime_pos
         (lambda delivery: delivery.update({"runtimeSessionId": "runtime-other"}), "policy_bundle_delivery_mismatch"),
         (lambda delivery: delivery.update({"catalogDigest": "0" * 64}), "policy_bundle_delivery_mismatch"),
         (lambda delivery: delivery.update({"policyRevision": 8}), "policy_bundle_delivery_mismatch"),
-        (lambda delivery: delivery.update({"extensionAuthorityRevision": 8}), "policy_bundle_delivery_mismatch"),
+        (
+            lambda delivery: delivery.update({"extensionAuthorityRevision": 8}),
+            "policy_bundle_delivery_mismatch",
+        ),
         (
             lambda delivery: delivery.update({"effectiveProjectionDigest": "sha256:" + "0" * 64}),
             "policy_bundle_delivery_mismatch",
         ),
+        (lambda delivery: delivery.update({"payloadHash": "sha256:" + "0" * 64}), "policy_bundle_delivery_mismatch"),
         (lambda delivery: delivery.update({"lastKnownGoodBundleHash": None}), "policy_bundle_delivery_mismatch"),
     ],
 )
@@ -112,6 +119,8 @@ def test_acknowledgement_requires_complete_delivery_evidence_and_rejects_unknown
     acknowledgement = {
         "contractVersion": "guard-policy-bundle.v2",
         **_delivery(),
+        "appliedExtensionAuthorityRevision": 8,
+        "appliedEffectiveProjectionDigest": "sha256:" + "e" * 64,
         "sequence": 1,
         "status": "applied",
         "observedAt": "2026-08-25T12:00:00Z",

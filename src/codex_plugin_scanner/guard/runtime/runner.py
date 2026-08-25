@@ -3195,6 +3195,7 @@ def sync_receipts(
                 policy_bundle_last_error=activation_last_error,
                 managed_controls_policy=effective_managed_controls,
                 managed_controls_negotiated_capabilities=effective_managed_capabilities,
+                managed_controls_delivery=validated_policy_bundle_delivery,
                 managed_controls_publish=managed_controls_publish,
                 remote_write_authorized=True,
             )

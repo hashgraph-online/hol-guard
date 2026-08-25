@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING
 
 from ...version import __version__
 from ..managed_controls.feature_flags import ManagedControlsFeatureFlags
-from ..managed_controls_policy_bundle import parsed_managed_controls_from_validated_policy_bundle
+from ..managed_controls_policy_bundle import (
+    parsed_managed_controls_from_validated_policy_bundle,
+    signed_cloud_extension_projection_digest,
+)
 from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
 from ..policy_bundle_delivery import validated_managed_policy_delivery
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
@@ -57,6 +60,7 @@ def validated_managed_controls_candidate(
     except ManagedControlsPolicyError as error:
         return None, None, None, error.code, True
     candidate = parsed if parsed.has_extension_semantics else None
+    delivery_catalog_digest = delivery_payload.get("catalogDigest") if isinstance(delivery_payload, dict) else None
     delivery, error = validated_managed_policy_delivery(
         policy_bundle=policy_bundle,
         delivery_field_provided=delivery_field_provided,
@@ -64,6 +68,14 @@ def validated_managed_controls_candidate(
         workspace_id=workspace_id,
         device_id=device_id,
         runtime_summary=runtime_summary,
+        expected_extension_projection_digest=(
+            signed_cloud_extension_projection_digest(
+                parsed,
+                catalog_digest=delivery_catalog_digest,
+            )
+            if candidate is not None and isinstance(delivery_catalog_digest, str)
+            else None
+        ),
     )
     return (None if error is not None else policy_bundle), candidate, delivery, error, True
 
@@ -129,7 +141,7 @@ def _authority_posture(
     return (
         True,
         authority.revision,
-        ExtensionControlRuntimeSnapshot.from_authority_view(authority).effective_digest,
+        f"sha256:{ExtensionControlRuntimeSnapshot.from_authority_view(authority).effective_digest}",
     )
 
 

@@ -61,7 +61,7 @@ def activate_managed_bundle(
             key=None,
         )
     parsed = parse_managed_bundle(bundle)
-    return store.apply_policy_bundle_authority(
+    result = store.apply_policy_bundle_authority(
         list(decisions),
         "2026-08-23T12:00:00Z",
         policy_bundle=bundle,
@@ -75,3 +75,4 @@ def activate_managed_bundle(
         managed_controls_publish=managed_controls_publish,
         remote_write_authorized=True,
     )
+    return result is not None

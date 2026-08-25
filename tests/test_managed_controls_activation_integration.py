@@ -176,7 +176,7 @@ def test_activation_requires_protected_local_authority(tmp_path: Path) -> None:
         remote_write_authorized=True,
     )
 
-    assert activated is False
+    assert activated is None
     assert store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY) is None
 
 

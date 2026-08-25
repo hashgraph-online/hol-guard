@@ -6,9 +6,11 @@ import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Literal
-from uuid import UUID
 
+from .contract_validation import canonical_uuid
 from .policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT, validated_policy_bundle_v2_acknowledgement
+from .runtime.extension_control_authority import ExtensionControlAuthorityView
+from .runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
 _DELIVERY_KEYS = frozenset(
     {
@@ -23,11 +25,20 @@ _DELIVERY_KEYS = frozenset(
         "extensionAuthorityRevision",
         "catalogDigest",
         "effectiveProjectionDigest",
+        "payloadHash",
+        "extensionProjectionDigest",
         "lastKnownGoodBundleHash",
     }
 )
 _SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 _CATALOG_DIGEST = re.compile(r"^[0-9a-f]{64}$")
+
+
+def effective_projection_digest(view: ExtensionControlAuthorityView) -> str:
+    """Return the Portal wire digest for the exact candidate runtime snapshot."""
+
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
+    return f"sha256:{snapshot.effective_digest}"
 
 
 def policy_bundle_has_extension_semantics(policy_bundle: Mapping[str, object]) -> bool:
@@ -57,15 +68,43 @@ def _positive_integer(value: object) -> int | None:
     return value
 
 
-def _canonical_uuid(value: object) -> str | None:
-    candidate = _bounded_string(value)
-    if candidate is None:
+def _non_negative_integer(value: object) -> int | None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         return None
-    try:
-        parsed = UUID(candidate)
-    except ValueError:
-        return None
-    return candidate if str(parsed) == candidate else None
+    return value
+
+
+def _delivery_scalars_are_valid(value: dict[str, object]) -> bool:
+    string_fields = ("bundleId", "workspaceId", "deviceId", "runtimeSessionId")
+    digest_fields = ("effectiveProjectionDigest", "payloadHash", "extensionProjectionDigest")
+    return (
+        all(_bounded_string(value.get(field)) is not None for field in string_fields)
+        and canonical_uuid(value.get("deliveryId")) is not None
+        and _SHA256.fullmatch(str(value.get("bundleHash"))) is not None
+        and all(_SHA256.fullmatch(str(value.get(field))) is not None for field in digest_fields)
+        and _CATALOG_DIGEST.fullmatch(str(value.get("catalogDigest"))) is not None
+        and all(_positive_integer(value.get(field)) is not None for field in ("bundleVersion", "policyRevision"))
+        and _non_negative_integer(value.get("extensionAuthorityRevision")) is not None
+    )
+
+
+def _last_good_hash_is_valid(value: object) -> bool:
+    return value is None or (isinstance(value, str) and _SHA256.fullmatch(value) is not None)
+
+
+def _delivery_runtime_matches(
+    value: dict[str, object],
+    *,
+    runtime_summary: dict[str, object],
+    device_id: str,
+) -> bool:
+    return (
+        value.get("runtimeSessionId") == runtime_summary.get("runtime_session_id")
+        and runtime_summary.get("runtime_device_id") in {None, device_id}
+        and runtime_summary.get("extensionCatalogDigest") == value.get("catalogDigest")
+        and runtime_summary.get("extensionAuthorityRevision") == value.get("extensionAuthorityRevision")
+        and runtime_summary.get("effectiveProjectionDigest") == value.get("effectiveProjectionDigest")
+    )
 
 
 def validate_policy_bundle_delivery(
@@ -83,27 +122,10 @@ def validate_policy_bundle_delivery(
     if set(value) != _DELIVERY_KEYS:
         return None, "invalid_policy_bundle_delivery_fields"
 
-    string_fields = ("bundleId", "workspaceId", "deviceId", "runtimeSessionId")
-    if any(_bounded_string(value.get(field)) is None for field in string_fields):
-        return None, "invalid_policy_bundle_delivery"
-    if _canonical_uuid(value.get("deliveryId")) is None:
-        return None, "invalid_policy_bundle_delivery"
-    if _SHA256.fullmatch(str(value.get("bundleHash"))) is None:
-        return None, "invalid_policy_bundle_delivery"
-    if _SHA256.fullmatch(str(value.get("effectiveProjectionDigest"))) is None:
+    if not _delivery_scalars_are_valid(value):
         return None, "invalid_policy_bundle_delivery"
     last_good_hash = value.get("lastKnownGoodBundleHash")
-    if last_good_hash is not None and (
-        not isinstance(last_good_hash, str) or _SHA256.fullmatch(last_good_hash) is None
-    ):
-        return None, "invalid_policy_bundle_delivery"
-    catalog_digest = value.get("catalogDigest")
-    if not isinstance(catalog_digest, str) or _CATALOG_DIGEST.fullmatch(catalog_digest) is None:
-        return None, "invalid_policy_bundle_delivery"
-    if any(
-        _positive_integer(value.get(field)) is None
-        for field in ("bundleVersion", "policyRevision", "extensionAuthorityRevision")
-    ):
+    if not _last_good_hash_is_valid(last_good_hash):
         return None, "invalid_policy_bundle_delivery"
 
     payload = policy_bundle.get("payload")
@@ -117,7 +139,7 @@ def validate_policy_bundle_delivery(
         "workspaceId": policy_bundle.get("workspaceId"),
         "deviceId": device_id,
         "policyRevision": policy_revision,
-        "effectiveProjectionDigest": policy_bundle.get("payloadHash"),
+        "payloadHash": policy_bundle.get("payloadHash"),
         "lastKnownGoodBundleHash": signed_last_good_hash,
     }
     if workspace_id is None or expected["workspaceId"] != workspace_id:
@@ -126,13 +148,7 @@ def validate_policy_bundle_delivery(
         return None, "policy_bundle_delivery_mismatch"
     if not isinstance(runtime_summary, dict):
         return None, "policy_bundle_delivery_runtime_unavailable"
-    if value.get("runtimeSessionId") != runtime_summary.get("runtime_session_id"):
-        return None, "policy_bundle_delivery_mismatch"
-    if runtime_summary.get("runtime_device_id") not in {None, device_id}:
-        return None, "policy_bundle_delivery_mismatch"
-    if runtime_summary.get("extensionCatalogDigest") != catalog_digest:
-        return None, "policy_bundle_delivery_mismatch"
-    if runtime_summary.get("extensionAuthorityRevision") != value.get("extensionAuthorityRevision"):
+    if not _delivery_runtime_matches(value, runtime_summary=runtime_summary, device_id=device_id):
         return None, "policy_bundle_delivery_mismatch"
     return dict(value), None
 
@@ -145,6 +161,7 @@ def validated_managed_policy_delivery(
     workspace_id: str | None,
     device_id: str,
     runtime_summary: object,
+    expected_extension_projection_digest: str | None,
 ) -> tuple[dict[str, object] | None, str | None]:
     """Validate delivery metadata only when a V2 bundle carries Extension semantics."""
 
@@ -154,13 +171,21 @@ def validated_managed_policy_delivery(
         return None, None
     if not delivery_field_provided:
         return None, "missing_policy_bundle_delivery"
-    return validate_policy_bundle_delivery(
+    delivery, error = validate_policy_bundle_delivery(
         delivery_payload,
         policy_bundle=policy_bundle,
         workspace_id=workspace_id,
         device_id=device_id,
         runtime_summary=runtime_summary,
     )
+    if error is not None or delivery is None:
+        return None, error
+    if (
+        expected_extension_projection_digest is None
+        or delivery.get("extensionProjectionDigest") != expected_extension_projection_digest
+    ):
+        return None, "policy_bundle_delivery_mismatch"
+    return delivery, None
 
 
 def policy_bundle_acknowledgement_payload(
@@ -172,6 +197,8 @@ def policy_bundle_acknowledgement_payload(
     status: Literal["validated", "applied"] = "applied",
     previous: dict[str, object] | None = None,
     delivery: dict[str, object] | None = None,
+    applied_extension_authority_revision: int | None = None,
+    applied_effective_projection_digest: str | None = None,
 ) -> dict[str, object]:
     """Build a legacy acknowledgement or an exact delivery-bound V2 acknowledgement."""
 
@@ -186,21 +213,12 @@ def policy_bundle_acknowledgement_payload(
         }
     if delivery is None:
         return {}
-    identity_fields = (
-        "workspaceId",
-        "deviceId",
-        "deliveryId",
-        "runtimeSessionId",
-        "bundleId",
-        "bundleVersion",
-        "bundleHash",
-        "policyRevision",
-        "extensionAuthorityRevision",
-        "catalogDigest",
-        "effectiveProjectionDigest",
-        "lastKnownGoodBundleHash",
-    )
+    if applied_extension_authority_revision is None or applied_effective_projection_digest is None:
+        return {}
+    identity_fields = tuple(_DELIVERY_KEYS)
     candidate_identity = {field: delivery[field] for field in identity_fields}
+    candidate_identity["appliedExtensionAuthorityRevision"] = applied_extension_authority_revision
+    candidate_identity["appliedEffectiveProjectionDigest"] = applied_effective_projection_digest
     matching_previous = (
         previous
         if previous is not None and all(previous.get(field) == candidate_identity[field] for field in identity_fields)

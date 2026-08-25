@@ -26,6 +26,7 @@ MANAGED_CONTROLS_RUNTIME_CAPABILITIES = (
 )
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_WIRE_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 _RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
 _EXTENSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 _PERMISSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
@@ -482,8 +483,8 @@ def build_managed_controls_runtime_posture(
         raise ValueError("catalog_digest must be a lowercase SHA-256 digest")
     if extension_authority_revision is not None and extension_authority_revision < 0:
         raise ValueError("extension_authority_revision cannot be negative")
-    if effective_projection_digest is not None and _SHA256.fullmatch(effective_projection_digest) is None:
-        raise ValueError("effective_projection_digest must be a lowercase SHA-256 digest")
+    if effective_projection_digest is not None and _WIRE_SHA256.fullmatch(effective_projection_digest) is None:
+        raise ValueError("effective_projection_digest must be a sha256-prefixed lowercase digest")
     requested = frozenset(capabilities)
     return {
         "extensionCatalogDigest": catalog_digest,

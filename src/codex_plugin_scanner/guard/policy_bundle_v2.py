@@ -8,13 +8,13 @@ import hashlib
 import re
 from datetime import datetime, timezone
 from typing import TypeGuard, cast
-from uuid import UUID
 
 from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
+from .contract_validation import canonical_uuid
 from .policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     resolve_policy_bundle_signing_key,
@@ -77,6 +77,10 @@ _ALLOWED_ACK_KEYS = frozenset(
         "extensionAuthorityRevision",
         "catalogDigest",
         "effectiveProjectionDigest",
+        "payloadHash",
+        "extensionProjectionDigest",
+        "appliedExtensionAuthorityRevision",
+        "appliedEffectiveProjectionDigest",
         "lastKnownGoodBundleHash",
         "sequence",
         "status",
@@ -122,17 +126,6 @@ def _strict_utc_timestamp(value: object) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
         return None
     return parsed
-
-
-def _canonical_uuid(value: object) -> str | None:
-    candidate = _non_empty_string(value, maximum=128)
-    if candidate is None:
-        return None
-    try:
-        parsed = UUID(candidate)
-    except ValueError:
-        return None
-    return candidate if str(parsed) == candidate else None
 
 
 def _positive_integer(value: object) -> int | None:
@@ -461,11 +454,16 @@ def _policy_bundle_v2_acknowledgement_error(
     string_fields = ("workspaceId", "deviceId", "deliveryId", "runtimeSessionId", "bundleId", "bundleHash")
     if any(_non_empty_string(acknowledgement.get(key), maximum=256) is None for key in string_fields):
         return "invalid_acknowledgement"
-    if _canonical_uuid(acknowledgement.get("deliveryId")) is None:
+    if canonical_uuid(acknowledgement.get("deliveryId")) is None:
         return "invalid_acknowledgement"
-    if not _is_sha256_digest(acknowledgement.get("bundleHash")) or not _is_sha256_digest(
-        acknowledgement.get("effectiveProjectionDigest")
-    ):
+    digest_fields = (
+        "bundleHash",
+        "effectiveProjectionDigest",
+        "payloadHash",
+        "extensionProjectionDigest",
+        "appliedEffectiveProjectionDigest",
+    )
+    if any(not _is_sha256_digest(acknowledgement.get(field)) for field in digest_fields):
         return "invalid_acknowledgement"
     catalog_digest = acknowledgement.get("catalogDigest")
     if not isinstance(catalog_digest, str) or re.fullmatch(r"[0-9a-f]{64}", catalog_digest) is None:
@@ -473,8 +471,20 @@ def _policy_bundle_v2_acknowledgement_error(
     last_good_hash = acknowledgement.get("lastKnownGoodBundleHash")
     if last_good_hash is not None and not _is_sha256_digest(last_good_hash):
         return "invalid_acknowledgement"
-    integer_fields = ("bundleVersion", "sequence", "policyRevision", "extensionAuthorityRevision")
+    integer_fields = (
+        "bundleVersion",
+        "sequence",
+        "policyRevision",
+        "appliedExtensionAuthorityRevision",
+    )
     if any(_positive_integer(acknowledgement.get(field)) is None for field in integer_fields):
+        return "invalid_acknowledgement"
+    extension_authority_revision = acknowledgement.get("extensionAuthorityRevision")
+    if (
+        not isinstance(extension_authority_revision, int)
+        or isinstance(extension_authority_revision, bool)
+        or extension_authority_revision < 0
+    ):
         return "invalid_acknowledgement"
     status = acknowledgement.get("status")
     if status not in POLICY_BUNDLE_V2_ACK_STATUSES:

@@ -127,8 +127,7 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..managed_controls_policy_bundle import parsed_managed_controls_from_validated_policy_bundle
-from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
+from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
@@ -180,7 +179,6 @@ from ..runtime.runner import (
     _build_policy_bundle_decisions,
     _daemon_version_supported,
     _guard_device_metadata,
-    _managed_controls_negotiated_capabilities,
     _persist_cloud_receipt_redaction_level,
     _policy_bundle_acceptance_checkpoint,
     _policy_bundle_acknowledgement_payload,
@@ -255,6 +253,7 @@ from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_cli_api import LocalCliApiError, LocalCliApiService
 from .managed_controls_api import managed_policy_rows
+from .managed_policy_delivery import daemon_managed_controls_candidate
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     acquire_guard_daemon_owner_lock,
@@ -3413,6 +3412,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         policy_memory = self._policy_memory_payload(payload.get("policy_memory"))
         policy_bundle = self._policy_memory_payload(payload.get("policy_bundle") or payload.get("policyBundle"))
         validated_policy_bundle: dict[str, object] | None = None
+        validated_policy_bundle_delivery: dict[str, object] | None = None
         managed_controls_policy: ParsedManagedControlsPolicy | None = None
         managed_controls_capabilities = frozenset[str]()
         applied_bundle_hash: str | None = None
@@ -3464,22 +3464,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ):
                 self._write_json({"error": "bundle_version_downgrade"}, status=400)
                 return
+            device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
             if validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                managed_controls_capabilities = _managed_controls_negotiated_capabilities(
-                    self.server.store,  # type: ignore[attr-defined]
-                    payload,
+                (
+                    managed_controls_policy,
+                    managed_controls_capabilities,
+                    validated_policy_bundle_delivery,
+                    managed_error,
+                ) = daemon_managed_controls_candidate(
+                    store=self.server.store,  # type: ignore[attr-defined]
+                    payload=payload,
+                    policy_bundle=validated_policy_bundle,
+                    device_id=device_id,
                 )
-                try:
-                    managed_controls_policy = parsed_managed_controls_from_validated_policy_bundle(
-                        validated_policy_bundle,
-                        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-                        negotiated_capabilities=managed_controls_capabilities,
-                    )
-                except ManagedControlsPolicyError as error:
-                    self._write_json({"error": error.code}, status=400)
+                if managed_error is not None:
+                    self._write_json({"error": managed_error}, status=400)
                     return
             applied_at = _now()
-            device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
             signed_remote_decisions = _build_policy_bundle_decisions(
                 validated_policy_bundle,
                 device_id=device_id,
@@ -3490,6 +3491,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 device_name=device_name,
                 policy_bundle=validated_policy_bundle,
                 synced_at=applied_at,
+                delivery=validated_policy_bundle_delivery,
             )
             cloud_exception_items = _policy_bundle_cloud_exception_items(
                 self.server.store,  # type: ignore[attr-defined]
@@ -3514,6 +3516,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     policy_bundle_last_error={},
                     managed_controls_policy=managed_controls_policy,
                     managed_controls_negotiated_capabilities=managed_controls_capabilities,
+                    managed_controls_delivery=validated_policy_bundle_delivery,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                     approval_gate_grant=approval_gate_grant,
                     remote_write_authorized=True,
