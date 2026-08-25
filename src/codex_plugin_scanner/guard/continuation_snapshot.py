@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from hashlib import sha256
 from typing import Final, cast
+
+from .review_correlation import cloud_review_correlation_id
 
 CONTINUATION_CAPABILITIES: Final = frozenset({"retry-only", "session-resume", "suspended-response", "unsupported"})
 _CORRELATION_PATTERN: Final = re.compile(r"^gcr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -22,6 +23,8 @@ def canonical_continuation_correlation_id(
 
     candidates: list[object] = []
     for source in (
+        _mapping(request_row.get("continuation_snapshot")),
+        _mapping(request_row.get("continuation_snapshot_json")),
         operation_metadata,
         _mapping(request_row.get("decision_v2_json")),
         _mapping(request_row.get("action_envelope_json")),
@@ -32,8 +35,7 @@ def canonical_continuation_correlation_id(
         value = _text(candidate)
         if value is not None and _CORRELATION_PATTERN.fullmatch(value) is not None:
             return value
-    digest = sha256(f"guard-cloud-review\0{request_id}".encode()).hexdigest()[:32]
-    return f"gcr_{digest[:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:]}"
+    return cloud_review_correlation_id(request_id)
 
 
 def non_resumable_continuation_snapshot(request_row: Mapping[str, object]) -> dict[str, object]:

@@ -175,6 +175,9 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(tmp_pa
     assert isinstance(request, dict)
     oauth = _oauth_metadata(store)
     claim = build_local_review_request_claim(request_row=request, oauth=oauth, store=store)
+    continuation = request["continuation_snapshot"]
+    assert isinstance(continuation, dict)
+    assert claim["correlationId"] == continuation["correlationId"]
     advertisement = claim["exactReviewCapability"]
     assert isinstance(advertisement, dict)
     capability = store.get_sync_payload("guard_exact_cloud_review_capability")
