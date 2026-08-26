@@ -22,7 +22,7 @@ jobs:
       - name: Check out the pull request branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Correct daemon launcher environment isolation
         shell: bash
@@ -38,28 +38,29 @@ jobs:
 
           path = Path("src/codex_plugin_scanner/guard/daemon/manager.py")
           source = path.read_text(encoding="utf-8")
-          old = '''    if getattr(sys, "frozen", False) is True or executable is not None:
-              env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-              env.setdefault("HOL_GUARD_DESKTOP", "1")
-              for key in _GUARD_DAEMON_DESKTOP_ENV_KEYS:
-                  if value := os.environ.get(key):
-                      env[key] = value
-          '''
-          new = '''    if getattr(sys, "frozen", False) is True or executable is not None:
-              env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-              for key in _GUARD_DAEMON_DESKTOP_ENV_KEYS:
-                  if value := os.environ.get(key):
-                      env[key] = value
-                  else:
-                      env.pop(key, None)
-          else:
-              env.pop("PYINSTALLER_RESET_ENVIRONMENT", None)
-              for key in _GUARD_DAEMON_DESKTOP_ENV_KEYS:
-                  env.pop(key, None)
-          '''
-          if source.count(old) != 1:
-              raise RuntimeError("expected daemon launcher environment block was not found exactly once")
-          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          start_marker = '    if getattr(sys, "frozen", False) is True or executable is not None:\n'
+          end_marker = '    if platform.system() == "Linux":\n'
+          if source.count(start_marker) != 1:
+              raise RuntimeError("expected daemon launcher environment block start was not found exactly once")
+          start = source.index(start_marker)
+          end = source.index(end_marker, start)
+          replacement = "\n".join(
+              [
+                  '    if getattr(sys, "frozen", False) is True or executable is not None:',
+                  '        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"',
+                  '        for key in _GUARD_DAEMON_DESKTOP_ENV_KEYS:',
+                  '            if value := os.environ.get(key):',
+                  '                env[key] = value',
+                  '            else:',
+                  '                env.pop(key, None)',
+                  '    else:',
+                  '        env.pop("PYINSTALLER_RESET_ENVIRONMENT", None)',
+                  '        for key in _GUARD_DAEMON_DESKTOP_ENV_KEYS:',
+                  '            env.pop(key, None)',
+                  '',
+              ]
+          )
+          path.write_text(source[:start] + replacement + source[end:], encoding="utf-8")
           PY
 
           python -m py_compile src/codex_plugin_scanner/guard/daemon/manager.py
