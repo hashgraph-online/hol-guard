@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          git config user.name "github-actions[bot]"
+          git config user.name "github-actions[bot]]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config commit.gpgsign false
 
@@ -39,7 +39,7 @@ jobs:
           path = Path("src/codex_plugin_scanner/guard/daemon/manager.py")
           source = path.read_text(encoding="utf-8")
           start_marker = '    if getattr(sys, "frozen", False) is True or executable is not None:\n'
-          end_marker = '    if platform.system() == "Linux":\n'
+          end_marker = '    if os.name == "nt":\n'
           if source.count(start_marker) != 1:
               raise RuntimeError("expected daemon launcher environment block start was not found exactly once")
           start = source.index(start_marker)
