@@ -129,6 +129,13 @@ def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
     assert '-name "hol_guard-${CORE_VERSION}-*.whl"' not in text
 
 
+def test_frozen_sidecar_copies_cloud_review_package_data() -> None:
+    text = workflow_text()
+    assert "codex_plugin_scanner/guard/contracts/data/guard-cloud-review" in text
+    assert "contracts/guard-cloud-review/v2/contract.json" in text
+    assert "docs/guard/contracts/guard-cloud-review.md" in text
+
+
 def test_existing_asset_set_is_all_or_nothing(tmp_path: Path, capsys) -> None:
     namespace = runpy.run_path(str(TOOL))
     assets = tmp_path / "assets.txt"
