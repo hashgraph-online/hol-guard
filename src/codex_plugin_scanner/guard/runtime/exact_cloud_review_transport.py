@@ -112,7 +112,7 @@ def lease_next_job(
                 }
             )
         except HTTPError as error:
-            if not generic:
+            if error.code == 401 or not generic:
                 raise
             if exact_route_failure is not None:
                 exact_route_failure(error)

@@ -418,10 +418,8 @@ def _transient_not_ready_test_runner(tmp_path: Path, responses: list[object]) ->
 def test_idempotent_review_retries_transient_evaluator_not_ready(tmp_path: Path) -> None:
     runner, connection = _transient_not_ready_test_runner(
         tmp_path,
-        [
-            ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
-            ("result", {"payload": {"decision": "allow"}, "reason_code": None}),
-        ],
+        [("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"})] * 4
+        + [("result", {"payload": {"decision": "allow"}, "reason_code": None})],
     )
 
     result = runner.review(
@@ -440,7 +438,7 @@ def test_idempotent_review_retries_transient_evaluator_not_ready(tmp_path: Path)
     )
 
     assert result == HookProcessReview({"decision": "allow"}, None)
-    assert connection.send.call_count == 2
+    assert connection.send.call_count == 5
     assert runner._slots.qsize() == 1  # pyright: ignore[reportPrivateUsage]
 
 
@@ -496,11 +494,7 @@ def test_failed_send_does_not_mark_request_as_exposed(
 def test_idempotent_review_bounds_transient_not_ready_retries(tmp_path: Path) -> None:
     runner, connection = _transient_not_ready_test_runner(
         tmp_path,
-        [
-            ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
-            ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
-            ("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"}),
-        ],
+        [("result", {"payload": None, "reason_code": "daemon_hook_process_not_ready"})] * 9,
     )
 
     result = runner.review(
@@ -519,7 +513,7 @@ def test_idempotent_review_bounds_transient_not_ready_retries(tmp_path: Path) ->
     )
 
     assert result == HookProcessReview(None, "daemon_hook_process_not_ready")
-    assert connection.send.call_count == 3
+    assert connection.send.call_count == 9
 
 
 def test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial(
@@ -649,6 +643,9 @@ def test_default_worker_budget_stays_below_pi_hook_deadline() -> None:
 
     assert runner._timeout_seconds == 2.8  # pyright: ignore[reportPrivateUsage]
     assert runner._timeout_seconds < 3.1  # pyright: ignore[reportPrivateUsage]
+    assert hook_runner_module._HOOK_PROCESS_START_TIMEOUT_SECONDS > (  # pyright: ignore[reportPrivateUsage]
+        hook_runner_module._HOOK_PROCESS_READY_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
+    )
 
 
 def test_prewarmed_runner_scans_post_tool_output_in_isolated_worker(tmp_path: Path) -> None:
@@ -990,6 +987,7 @@ def test_persistent_spawn_failure_uses_one_bounded_backoff_supervisor(
         raise OSError("process table exhausted")
 
     monkeypatch.setattr(hook_runner_module, "_HOOK_PROCESS_READY_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(hook_runner_module, "_HOOK_PROCESS_START_TIMEOUT_SECONDS", 0.3)
     monkeypatch.setattr(runner, "_start_slot", unavailable_start)
     runner.start()
     try:
@@ -1019,6 +1017,7 @@ def test_blocked_worker_spawn_does_not_block_supervisor_shutdown(
         return original_start(generation=generation)
 
     monkeypatch.setattr(hook_runner_module, "_HOOK_PROCESS_READY_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(hook_runner_module, "_HOOK_PROCESS_START_TIMEOUT_SECONDS", 0.1)
     monkeypatch.setattr(runner, "_start_slot", controlled_start)
     runner.start()
     assert spawn_started.wait(timeout=1)
@@ -1035,6 +1034,7 @@ def test_blocked_worker_spawn_does_not_block_supervisor_shutdown(
     with pytest.raises(RuntimeError, match="previous hook worker generation is not contained"):
         runner.start()
     monkeypatch.setattr(hook_runner_module, "_HOOK_PROCESS_READY_TIMEOUT_SECONDS", 5.0)
+    monkeypatch.setattr(hook_runner_module, "_HOOK_PROCESS_START_TIMEOUT_SECONDS", 10.0)
     with monkeypatch.context() as failed_stale_retirement:
         failed_stale_retirement.setattr(
             runner,

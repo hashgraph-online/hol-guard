@@ -39,8 +39,7 @@ def _store(tmp_path: Path) -> GuardStore:
 
 
 def _bundle(store: GuardStore, *, rule_scope: str = "workspace") -> dict[str, object]:
-    credentials = store.get_oauth_local_credentials(allow_primary=False)
-    assert isinstance(credentials, dict)
+    workspace_id = (store.get_cloud_sync_profile() or {})["workspace_id"]
     issued_at = datetime.now(timezone.utc).replace(microsecond=0)
     expires_at = issued_at + timedelta(days=30)
     bundle: dict[str, object] = {
@@ -68,7 +67,7 @@ def _bundle(store: GuardStore, *, rule_scope: str = "workspace") -> dict[str, ob
                 "sourceReceiptIds": ["receipt-1"],
                 "target": {
                     "machineIds": [str(store.get_device_metadata()["installation_id"])],
-                    "workspaceIds": [credentials["workspace_id"]],
+                    "workspaceIds": [workspace_id],
                 },
             }
         ],
@@ -82,7 +81,7 @@ def _bundle(store: GuardStore, *, rule_scope: str = "workspace") -> dict[str, ob
         },
         "verificationKeys": review_verification_keys(workspace_id=None, purpose="unscoped"),
         "signatureAlgorithm": "rsa-pss-sha256",
-        "workspaceId": credentials["workspace_id"],
+        "workspaceId": workspace_id,
     }
     return _resign_bundle(bundle)
 

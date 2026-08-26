@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from ..review_contracts import GuardReviewContractError, GuardReviewOAuthMetadata, guard_review_oauth_metadata
+from ..stable_digest import sha256_content_digest
 from ..stable_json import stable_json_serialize
 from .exact_cloud_review_diagnostics import enrich_exact_cloud_review_status
 from .time_support import parse_utc_timestamp
@@ -420,7 +421,7 @@ def _exact_job_identity(job: Mapping[str, object]) -> dict[str, object]:
     payload = job.get("payload")
     if not isinstance(payload, Mapping):
         raise ExactCloudReviewError("remote_exact_job_invalid")
-    identity["payloadDigest"] = hashlib.sha256(_canonical(dict(payload))).hexdigest()
+    identity["payloadDigest"] = sha256_content_digest(_canonical(dict(payload)))
     return identity
 
 
