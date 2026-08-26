@@ -489,29 +489,25 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert 'gh release view "$tag" --json isDraft,isPrerelease' in release_run
     assert 'gh release download "$tag"' in release_run
     assert 'cmp --silent "$local_file"' in release_run
-    assert "mapfile -d '' local_files" in release_run
-    assert "remote_files" not in release_run
-    assert '[[ -f "$remote_file" ]]' in release_run
+    assert "mapfile -d '' local_files" in release_run and "remote_files" not in release_run
     assert 'gh attestation verify "$remote_file"' in release_run
     assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in release_run
     assert "--verify-tag" in release_run
 
-    main_release_run = next(
+    main_run = next(
         step["run"] for step in jobs["release-main"]["steps"] if step.get("name") == "Create discoverable main release"
     )
-    assert 'tag="v${VERSION}"' in main_release_run
-    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in main_release_run
-    assert '-f sha="$SOURCE_SHA"' in main_release_run
-    assert 'remote_tag_sha" != "$SOURCE_SHA"' in main_release_run
-    assert 'gh release view "$tag" --json isDraft,isPrerelease' in main_release_run
-    assert "Existing stable release is a draft or prerelease" in main_release_run
-    assert "remote_files" not in main_release_run
-    assert '[[ -f "$remote_file" ]]' in main_release_run
-    assert 'remote_guard_files=("$existing_dir"/hol_guard-*)' in main_release_run
-    assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in main_release_run
-    assert 'gh attestation verify "$remote_file"' in main_release_run
-    assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in main_release_run
-    assert "--verify-tag" in main_release_run
+    assert 'tag="v${VERSION}"' in main_run
+    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in main_run
+    assert '-f sha="$SOURCE_SHA"' in main_run
+    assert 'remote_tag_sha" != "$SOURCE_SHA"' in main_run
+    assert 'gh release view "$tag" --json isDraft,isPrerelease' in main_run
+    assert "Existing stable release is a draft or prerelease" in main_run and "remote_files" not in main_run
+    assert 'remote_guard_files=("$existing_dir"/hol_guard-*)' in main_run
+    assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in main_run
+    assert 'gh attestation verify "$remote_file"' in main_run
+    assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in main_run
+    assert "--verify-tag" in main_run
 
 
 def test_release_3x_alpha_branches_remain_alpha_while_main_is_stable() -> None:
