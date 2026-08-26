@@ -8,6 +8,7 @@ import random
 import threading
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_event_wake import ReviewEventWake, ReviewEventWakeSignal, review_event_wake_signal
@@ -17,6 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SAFETY_POLL_SECONDS = 30.0
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
+DEFAULT_ERROR_BACKOFF_BASE_SECONDS = 1.0
 
 
 @dataclass
@@ -55,6 +57,9 @@ def start_cloud_sync_sync_worker(
     maximum_backoff = error_backoff or float(
         os.environ.get("GUARD_CLOUD_REVIEW_ERROR_BACKOFF", str(DEFAULT_ERROR_BACKOFF_SECONDS))
     )
+    initial_backoff = float(
+        os.environ.get("GUARD_CLOUD_REVIEW_ERROR_BACKOFF_BASE", str(DEFAULT_ERROR_BACKOFF_BASE_SECONDS))
+    )
     thread = threading.Thread(
         target=_cloud_sync_sync_loop,
         kwargs={
@@ -63,6 +68,7 @@ def start_cloud_sync_sync_worker(
             "wake_signal": wake_signal,
             "poll_interval": safety_poll,
             "error_backoff": maximum_backoff,
+            "error_backoff_base": initial_backoff,
         },
         daemon=True,
         name="hol-guard-cloud-review-sync",
@@ -83,9 +89,21 @@ def stop_cloud_sync_sync_worker(
     return worker if worker.thread.is_alive() else None
 
 
-def _bounded_error_wait(poll_interval: float, maximum: float, streak: int) -> float:
-    exponential = min(maximum, poll_interval * (2 ** min(streak, 10)))
+def _bounded_error_wait(initial: float, maximum: float, streak: int) -> float:
+    exponential = min(maximum, initial * (2 ** min(streak, 10)))
     return exponential * random.uniform(0.5, 1.0)
+
+
+def _seconds_until(timestamp: object) -> float | None:
+    if not isinstance(timestamp, str):
+        return None
+    try:
+        due_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if due_at.tzinfo is None:
+        return None
+    return max(0.0, (due_at - datetime.now(timezone.utc)).total_seconds())
 
 
 def _cloud_sync_sync_loop(
@@ -95,6 +113,7 @@ def _cloud_sync_sync_loop(
     *,
     poll_interval: float,
     error_backoff: float,
+    error_backoff_base: float = DEFAULT_ERROR_BACKOFF_BASE_SECONDS,
 ) -> None:
     """Drain immediately after commits and poll durably if a hint is lost."""
     from . import cloud_review_sync as sync
@@ -103,6 +122,7 @@ def _cloud_sync_sync_loop(
     error_streak = 0
     while not stop_event.is_set():
         observed_generation = wake_signal.generation()
+        result: dict[str, object] = {}
         try:
             auth_context = sync._resolve_cloud_review_sync_auth_context(store)
             result = sync.sync_cloud_review_events_once(store, auth_context)
@@ -113,6 +133,11 @@ def _cloud_sync_sync_loop(
             synced = result.get("synced", 0)
             if isinstance(synced, int) and synced > 0:
                 continue
+            outbox = result.get("outbox")
+            if isinstance(outbox, dict):
+                ready_depth = outbox.get("ready_depth")
+                if isinstance(ready_depth, int) and ready_depth > 0:
+                    continue
         except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
             error_streak += 1
             state = sync._load_sync_state(store)
@@ -137,7 +162,11 @@ def _cloud_sync_sync_loop(
             )
             sync._save_sync_state(store, state)
 
-        wait = _bounded_error_wait(poll_interval, error_backoff, error_streak) if error_streak else poll_interval
+        wait = _bounded_error_wait(error_backoff_base, error_backoff, error_streak) if error_streak else poll_interval
+        if not error_streak:
+            retry_wait = _seconds_until(result.get("next_attempt_at"))
+            if retry_wait is not None:
+                wait = min(wait, retry_wait)
         wake_signal.wait(observed_generation, wait)
 
 

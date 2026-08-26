@@ -13,6 +13,10 @@ from uuid import uuid4
 from .review_event_integrity import review_event_payload_digest
 from .review_event_wake import review_event_wake_signal
 from .store_review_event_outbox_upgrade import ensure_review_event_outbox_upgrade
+from .store_review_event_wake_schema import (
+    review_event_outbox_generation,
+    review_event_wake_schema_statements,
+)
 
 # pyright: reportAny=false, reportUnusedCallResult=false
 
@@ -71,17 +75,6 @@ REVIEW_REQUEST_SNAPSHOT_COLUMNS: Final = (
     "created_at",
     "resolved_at",
 )
-
-
-def review_event_outbox_generation(connection: sqlite3.Connection) -> int:
-    """Return the latest durable outbox sequence, or zero before schema creation."""
-    table = connection.execute(
-        "select 1 from sqlite_master where type = 'table' and name = 'guard_review_outbox_events'"
-    ).fetchone()
-    if table is None:
-        return 0
-    row = connection.execute("select coalesce(max(stream_sequence), 0) from guard_review_outbox_events").fetchone()
-    return int(row[0]) if row is not None else 0
 
 
 def commit_review_event_transaction(
@@ -353,6 +346,7 @@ def review_event_outbox_schema_statements() -> tuple[str, ...]:
           select raise(abort, 'approval OAuth source is immutable');
         end
         """,
+        *review_event_wake_schema_statements(),
     )
 
 

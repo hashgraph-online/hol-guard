@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -79,7 +80,7 @@ def test_adaptive_limits_honor_server_contract_and_advertised_caps() -> None:
     )
 
     assert grown.events == 100
-    assert advertised == CloudReviewBatchLimits(events=75, bytes=200_000)
+    assert advertised == CloudReviewBatchLimits(events=75, bytes=200_000, event_cap=75)
     assert hostile.events == 150
     assert hostile.bytes == CLOUD_REVIEW_MAX_BATCH_BYTES
     assert maximum.events == CLOUD_REVIEW_MAX_BATCH_EVENTS
@@ -128,6 +129,111 @@ def test_sync_shares_requests_across_events_and_adapts_after_success(
     assert result["batches"] == 2
 
 
+def test_authenticated_batch_cap_persists_across_worker_rounds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = connected_exact_review_store(tmp_path)
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    batch_sizes: list[int] = []
+
+    def accept_batch(
+        _store: object,
+        auth: dict[str, object],
+        events: list[dict[str, object]],
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        batch_sizes.append(len(events))
+        return (
+            {
+                "accepted": len(events),
+                "rejected": 0,
+                "perEventResults": [{"index": index, "accepted": True} for index, _event_payload in enumerate(events)],
+                "maxBatchEvents": 2,
+                "maxBatchBytes": CLOUD_REVIEW_MAX_BATCH_BYTES,
+            },
+            auth,
+        )
+
+    monkeypatch.setattr(cloud_review_sync, "_post_events_with_oauth_refresh", accept_batch)
+    store.add_approval_request(_approval(1), "2026-08-26T12:00:00+00:00")
+    auth: dict[str, object] = {"oauth_source": "default", "sync_url": "https://guard.example", **binding}
+    cloud_review_sync.sync_cloud_review_events_once(store, auth)
+    for index in range(2, 5):
+        store.add_approval_request(_approval(index), "2026-08-26T12:00:00+00:00")
+
+    cloud_review_sync.sync_cloud_review_events_once(store, auth)
+
+    assert batch_sizes == [1, 2, 1]
+
+
+def test_oversized_oldest_event_is_quarantined_without_starving_following_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = connected_exact_review_store(tmp_path)
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    for index in range(1, 3):
+        store.add_approval_request(_approval(index), "2026-08-26T12:00:00+00:00")
+    binding_key = cloud_review_sync._batch_binding_key(
+        {key: value for key, value in binding.items() if key != "oauth_source"}
+    )
+    cloud_review_sync._save_sync_state(
+        store,
+        {
+            "batch_binding_key": binding_key,
+            "batch_events": 50,
+            "batch_max_bytes": 400,
+            "batch_event_cap": CLOUD_REVIEW_MAX_BATCH_EVENTS,
+        },
+    )
+    posted_sequences: list[int] = []
+
+    def project(
+        _store: object,
+        *,
+        outbox_row: dict[str, object],
+        **_kwargs: object,
+    ) -> tuple[int, dict[str, object]]:
+        sequence_value = outbox_row["stream_sequence"]
+        assert isinstance(sequence_value, int)
+        sequence = sequence_value
+        return sequence, _event(sequence, padding=1_000 if sequence == 1 else 0)
+
+    def accept_batch(
+        _store: object,
+        auth: dict[str, object],
+        events: list[dict[str, object]],
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        sequence_values = [event["localStreamSequence"] for event in events]
+        assert all(isinstance(sequence, int) for sequence in sequence_values)
+        posted_sequences.extend(sequence for sequence in sequence_values if isinstance(sequence, int))
+        return (
+            {
+                "accepted": len(events),
+                "rejected": 0,
+                "perEventResults": [{"index": index, "accepted": True} for index, _event_payload in enumerate(events)],
+            },
+            auth,
+        )
+
+    monkeypatch.setattr(cloud_review_sync, "project_cloud_review_event", project)
+    monkeypatch.setattr(cloud_review_sync, "_post_events_with_oauth_refresh", accept_batch)
+
+    result = cloud_review_sync.sync_cloud_review_events_once(
+        store,
+        {"oauth_source": "default", "sync_url": "https://guard.example", **binding},
+    )
+
+    assert posted_sequences == [2]
+    assert result["synced"] == 1
+    assert result["rejected"] == 1
+    outbox = result["outbox"]
+    assert isinstance(outbox, dict)
+    assert outbox["quarantined_depth"] == 1
+
+
 def test_committed_store_write_wakes_worker_but_rollback_does_not(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
     signal = review_event_wake_signal(store.path)
@@ -148,6 +254,63 @@ def test_committed_store_write_wakes_worker_but_rollback_does_not(tmp_path: Path
     assert binding is not None
     delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"}
     assert store.review_event_outbox_status(now="2026-08-26T12:00:01+00:00", **delivery_binding)["depth"] == 1
+
+
+def test_committed_existing_outbox_mutation_wakes_worker(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    store.add_approval_request(_approval(1), "2026-08-26T12:00:00+00:00")
+    signal = review_event_wake_signal(store.path)
+    initial = signal.generation()
+
+    with store._connect() as connection:
+        connection.execute(
+            "update guard_review_outbox_events set binding_status = 'quarantined' where stream_sequence = 1"
+        )
+
+    assert signal.generation() > initial
+    changed = signal.generation()
+    with store._connect() as connection:
+        connection.execute("update guard_review_outbox_events set machine_id = machine_id")
+    assert signal.generation() == changed
+
+
+def test_retryable_rejection_exposes_next_attempt_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = connected_exact_review_store(tmp_path)
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    store.add_approval_request(_approval(1), "2026-08-26T12:00:00+00:00")
+
+    def reject_batch(
+        _store: object,
+        auth: dict[str, object],
+        events: list[dict[str, object]],
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        return (
+            {
+                "accepted": 0,
+                "rejected": len(events),
+                "perEventResults": [
+                    {"index": index, "accepted": False, "code": "retry_later"}
+                    for index, _event_payload in enumerate(events)
+                ],
+            },
+            auth,
+        )
+
+    monkeypatch.setattr(cloud_review_sync, "_post_events_with_oauth_refresh", reject_batch)
+
+    result = cloud_review_sync.sync_cloud_review_events_once(
+        store,
+        {"oauth_source": "default", "sync_url": "https://guard.example", **binding},
+    )
+
+    assert isinstance(result["next_attempt_at"], str)
+    outbox = result["outbox"]
+    assert isinstance(outbox, dict)
+    assert outbox["ready_depth"] == 0
 
 
 def test_empty_authenticated_round_resets_backoff_to_safety_poll(
@@ -189,7 +352,41 @@ def test_empty_authenticated_round_resets_backoff_to_safety_poll(
         error_backoff=30.0,
     )
 
-    assert waits == [14.0, 7.0]
+    assert waits == [2.0, 7.0]
+
+
+def test_retry_deadline_bounds_healthy_worker_wait(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = connected_exact_review_store(tmp_path)
+    stop_event = threading.Event()
+    waits: list[float] = []
+
+    class RecordingSignal:
+        def generation(self) -> int:
+            return 0
+
+        def wait(self, generation: int, timeout: float) -> int:
+            del generation
+            waits.append(timeout)
+            stop_event.set()
+            return 0
+
+    retry_at = (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
+    monkeypatch.setattr(cloud_review_sync, "_resolve_cloud_review_sync_auth_context", lambda _store: {})
+    monkeypatch.setattr(
+        cloud_review_sync,
+        "sync_cloud_review_events_once",
+        lambda _store, _auth: {"synced": 0, "next_attempt_at": retry_at},
+    )
+
+    cloud_review_sync_worker._cloud_sync_sync_loop(
+        store,
+        stop_event,
+        RecordingSignal(),
+        poll_interval=30.0,
+        error_backoff=30.0,
+    )
+
+    assert 0.0 < waits[0] <= 1.0
 
 
 def test_error_backoff_jitter_is_exponential_and_bounded(monkeypatch: pytest.MonkeyPatch) -> None:

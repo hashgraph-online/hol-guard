@@ -1,5 +1,6 @@
 """Durable, independent synchronization for local Guard approval requests."""
 
+import json
 import logging
 import urllib.error
 from datetime import datetime, timezone
@@ -11,7 +12,9 @@ from ..review_contracts import (
 from ..store import GuardStore
 from .cloud_review_batching import (
     CloudReviewBatchLimits,
+    CloudReviewEventTooLargeError,
     next_review_batch_limits,
+    persisted_review_batch_limits,
     select_review_event_batch,
 )
 from .cloud_review_event_delivery import (
@@ -67,6 +70,64 @@ def _load_sync_state(store: GuardStore) -> dict[str, object]:
 
 def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
     store.set_sync_payload(_cloud_review_sync_state_key(store), state, _now())
+
+
+def _batch_binding_key(binding: dict[str, str]) -> str:
+    return json.dumps(
+        [binding[key] for key in ("oauth_subject_hash", "workspace_id", "machine_id", "machine_installation_id")],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+
+
+def _prepare_sync_batch_state(
+    store: GuardStore,
+    delivery_binding: dict[str, str],
+) -> tuple[dict[str, object], str, CloudReviewBatchLimits]:
+    state = _load_sync_state(store)
+    binding_key = _batch_binding_key(delivery_binding)
+    limits = persisted_review_batch_limits(state, binding_key)
+    state.update({"state": "syncing", "last_sync_attempt_at": _now(), "last_error": None})
+    _save_sync_state(store, state)
+    return state, binding_key, limits
+
+
+def _persist_sync_batch_limits(
+    store: GuardStore,
+    state: dict[str, object],
+    binding_key: str,
+    limits: CloudReviewBatchLimits,
+) -> None:
+    state.update(
+        {
+            "batch_binding_key": binding_key,
+            "batch_events": limits.events,
+            "batch_max_bytes": limits.bytes,
+            "batch_event_cap": limits.event_cap,
+        }
+    )
+    _save_sync_state(store, state)
+
+
+def _select_or_quarantine_sync_batch(
+    store: GuardStore,
+    events: list[dict[str, object]],
+    sequences: list[int],
+    limits: CloudReviewBatchLimits,
+    delivery_binding: dict[str, str],
+) -> tuple[list[dict[str, object]], list[int], int, list[str]]:
+    try:
+        selected = select_review_event_batch(events, limits)
+    except CloudReviewEventTooLargeError as error:
+        message = _redacted_error(error)
+        store.quarantine_review_event(
+            sequences[0],
+            reason="event_exceeds_upload_limit",
+            error=message,
+            **delivery_binding,
+        )
+        return [], [], 1, [message]
+    return selected, sequences[: len(selected)], 0, []
 
 
 def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
@@ -144,21 +205,11 @@ def sync_cloud_review_events_once(
     }
     store.refresh_review_event_outbox_binding_for_identity(**delivery_binding)
 
-    state = _load_sync_state(store)
-    state.update(
-        {
-            "state": "syncing",
-            "last_sync_attempt_at": _now(),
-            "last_error": None,
-        }
-    )
-    _save_sync_state(store, state)
+    state, batch_binding_key, batch_limits = _prepare_sync_batch_state(store, delivery_binding)
 
-    total_accepted = 0
-    total_rejected = 0
+    total_accepted = total_rejected = 0
     all_errors: list[str] = []
     batches = 0
-    batch_limits = CloudReviewBatchLimits()
 
     try:
         while batches < CLOUD_REVIEW_SYNC_MAX_BATCHES:
@@ -192,10 +243,18 @@ def sync_cloud_review_events_once(
                 sequence, event = projected
                 sequences.append(sequence)
                 events.append(event)
+            events, sequences, local_rejected, local_errors = _select_or_quarantine_sync_batch(
+                store,
+                events,
+                sequences,
+                batch_limits,
+                delivery_binding,
+            )
+            total_rejected += local_rejected
+            all_errors.extend(local_errors)
+            batches += local_rejected
             if not events:
                 continue
-            events = select_review_event_batch(events, batch_limits)
-            sequences = sequences[: len(events)]
             try:
                 response, auth_context = _post_events_with_oauth_refresh(store, auth_context, events)
             except Exception as error:
@@ -215,6 +274,7 @@ def sync_cloud_review_events_once(
             total_rejected += rejected
             batches += 1
             batch_limits = next_review_batch_limits(batch_limits, response)
+            _persist_sync_batch_limits(store, state, batch_binding_key, batch_limits)
 
             errors = response.get("errors")
             if isinstance(errors, list):
@@ -314,6 +374,7 @@ def sync_cloud_review_events_once(
             "cursor": None,
             "batches": batches,
             "outbox": outbox_status,
+            "next_attempt_at": outbox_status.get("next_attempt_at"),
         }
     except urllib.error.HTTPError as error:
         error_message = f"HTTP {error.code}: {error.reason}"

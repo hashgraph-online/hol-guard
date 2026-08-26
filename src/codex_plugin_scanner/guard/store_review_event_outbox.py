@@ -337,11 +337,14 @@ class StoreReviewEventOutboxMixin:
     ) -> dict[str, object]:
         query = """
             select count(*) as depth, min(occurred_at) as oldest_changed_at,
-                   max(attempt_count) as max_attempt_count, max(last_error) as last_error
+                   max(attempt_count) as max_attempt_count, max(last_error) as last_error,
+                   min(next_attempt_at) as next_attempt_at,
+                   sum(case when next_attempt_at is null or next_attempt_at <= ? then 1 else 0 end)
+                     as ready_depth
             from guard_review_outbox_events where oauth_source = ? and binding_status = 'ready'
               and acknowledged_at is null
         """
-        parameters: list[object] = [self._guard_source]
+        parameters: list[object] = [now, self._guard_source]
         identity = (oauth_subject_hash, workspace_id, machine_id, machine_installation_id)
         only_workspace = workspace_id is not None and all(
             value is None for value in (oauth_subject_hash, machine_id, machine_installation_id)
@@ -406,9 +409,11 @@ class StoreReviewEventOutboxMixin:
             "binding_state": "quarantined" if quarantined else "healthy",
             "binding_hint": "Review events require explicit identity repair." if quarantined else None,
             "depth": int(row["depth"] if row is not None else 0),
+            "ready_depth": int(row["ready_depth"] or 0) if row is not None else 0,
             "oldest_changed_at": row["oldest_changed_at"] if row is not None else None,
             "max_attempt_count": int(row["max_attempt_count"] or 0) if row is not None else 0,
             "last_error": row["last_error"] if row is not None else None,
+            "next_attempt_at": row["next_attempt_at"] if row is not None else None,
             "unbound_depth": unbound,
             "other_workspace_depth": other_workspace,
             "identity_mismatch_depth": max(0, quarantined - unbound),
