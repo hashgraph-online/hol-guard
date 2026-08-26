@@ -19,7 +19,7 @@ SQLiteStoreProbe = Literal["fatal", "healthy", "io", "unknown"]
 
 def _probe_sqlite_store(path: Path) -> SQLiteStoreProbe:
     try:
-        with sqlite3.connect(path, timeout=0.1) as connection:
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1.0) as connection:
             result = connection.execute("pragma quick_check").fetchone()
     except sqlite3.DatabaseError as error:
         message = str(error).lower()
@@ -65,3 +65,21 @@ def sqlite_store_is_proven_unusable(
     if state != "io" or not _guard_home_accepts_sqlite_write(guard_home):
         return False
     return _probe_sqlite_store(path) in {"fatal", "io"}
+
+
+def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bool:
+    """Move a quarantined store back when it still opens and passes integrity."""
+
+    if destination.exists() or destination.is_symlink():
+        return False
+    if _probe_sqlite_store(quarantined) != "healthy":
+        return False
+    try:
+        quarantined.replace(destination)
+        for suffix in ("-wal", "-shm"):
+            extra = Path(f"{quarantined}{suffix}")
+            if extra.exists() and not extra.is_symlink():
+                extra.replace(Path(f"{destination}{suffix}"))
+        return True
+    except OSError:
+        return False

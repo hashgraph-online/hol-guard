@@ -3,12 +3,16 @@ from __future__ import annotations
 import sqlite3
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import store_connection_schema
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -20,6 +24,21 @@ def _corrupt_store(path: Path) -> bytes:
 
 def _quarantined_databases(guard_home: Path) -> list[Path]:
     return sorted(guard_home.glob("guard.db.corrupt-*"))
+
+
+def _connects_store(database: str | Path, path: Path) -> bool:
+    raw = str(database)
+    if raw.startswith("file:"):
+        raw = raw.removeprefix("file:").split("?", 1)[0]
+    return Path(raw) == path
+
+
+def _main_quarantined_databases(guard_home: Path) -> list[Path]:
+    return [
+        path
+        for path in _quarantined_databases(guard_home)
+        if not path.name.endswith("-wal") and not path.name.endswith("-shm")
+    ]
 
 
 def test_store_startup_quarantines_corruption_and_recovers(tmp_path: Path) -> None:
@@ -118,12 +137,12 @@ def test_transient_io_error_does_not_quarantine_healthy_store(
     real_connect = store_connection_schema.sqlite3.connect
     attempts = 0
 
-    def fail_once(database: str | Path, timeout: float = 5.0) -> sqlite3.Connection:
+    def fail_once(database: str | Path, timeout: float = 5.0, **kwargs: object) -> sqlite3.Connection:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
             raise sqlite3.OperationalError("disk I/O error")
-        return real_connect(database, timeout=timeout)
+        return real_connect(database, timeout=timeout, **kwargs)
 
     monkeypatch.setattr(store_connection_schema.sqlite3, "connect", fail_once)
 
@@ -142,13 +161,13 @@ def test_io_error_that_clears_after_directory_probe_does_not_quarantine(
     real_connect = store_connection_schema.sqlite3.connect
     active_attempts = 0
 
-    def fail_first_active_probe(database: str | Path, timeout: float = 5.0) -> sqlite3.Connection:
+    def fail_first_active_probe(database: str | Path, timeout: float = 5.0, **kwargs: object) -> sqlite3.Connection:
         nonlocal active_attempts
-        if Path(database) == store.path:
+        if _connects_store(database, store.path):
             active_attempts += 1
             if active_attempts == 1:
                 raise sqlite3.OperationalError("disk I/O error")
-        return real_connect(database, timeout=timeout)
+        return real_connect(database, timeout=timeout, **kwargs)
 
     monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery.sqlite3.connect", fail_first_active_probe)
 
@@ -170,12 +189,12 @@ def test_fatal_error_recovers_when_rechecks_report_persistent_io(
     real_connect = store_connection_schema.sqlite3.connect
     active_attempts = 0
 
-    def fail_active_probes(database: str | Path, timeout: float = 5.0) -> sqlite3.Connection:
+    def fail_active_probes(database: str | Path, timeout: float = 5.0, **kwargs: object) -> sqlite3.Connection:
         nonlocal active_attempts
-        if Path(database) == store.path:
+        if _connects_store(database, store.path):
             active_attempts += 1
             raise sqlite3.OperationalError("disk I/O error")
-        return real_connect(database, timeout=timeout)
+        return real_connect(database, timeout=timeout, **kwargs)
 
     monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery.sqlite3.connect", fail_active_probes)
 
@@ -186,6 +205,103 @@ def test_fatal_error_recovers_when_rechecks_report_persistent_io(
         is True
     )
     assert active_attempts == 2
+
+
+def test_recovery_restores_readable_quarantined_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    identity = UnlistedCliIdentity(
+        cli_id="local-cli.ship-12345678",
+        name="ship",
+        kind="executable",
+        identity_hash="a" * 64,
+        example_label="ship",
+    )
+    store.record_local_cli_observation(identity, seen_at=utc_now())
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=0,
+        updated_at=utc_now(),
+    )
+    monkeypatch.setattr(store, "_store_is_proven_unusable", lambda _error: True)
+
+    recovered = store._recover_fatal_sqlite_store(  # pyright: ignore[reportPrivateUsage]
+        sqlite3.DatabaseError("database disk image is malformed")
+    )
+
+    assert recovered is True
+    assert getattr(store, "_last_sqlite_recovery", None) == "restored"
+    assert _main_quarantined_databases(store.guard_home) == []
+    granted = store.read_local_cli_grant(identity.cli_id)
+    assert granted is not None
+    assert granted["state"] == "allowed"
+
+
+def test_connect_retries_after_restored_readable_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    identity = UnlistedCliIdentity(
+        cli_id="local-cli.ship-12345678",
+        name="ship",
+        kind="executable",
+        identity_hash="a" * 64,
+        example_label="ship",
+    )
+    store.record_local_cli_observation(identity, seen_at=utc_now())
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=0,
+        updated_at=utc_now(),
+    )
+    original_connect_once = store._connect_once  # pyright: ignore[reportPrivateUsage]
+    calls = {"count": 0}
+
+    @contextmanager
+    def fail_first_open() -> Iterator[sqlite3.Connection]:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise sqlite3.DatabaseError("database disk image is malformed")
+        with original_connect_once() as connection:
+            yield connection
+
+    monkeypatch.setattr(store, "_connect_once", fail_first_open)
+    monkeypatch.setattr(store, "_store_is_proven_unusable", lambda _error: True)
+
+    assert store.get_runtime_state() is None
+    granted = store.read_local_cli_grant(identity.cli_id)
+    assert granted is not None
+    assert granted["state"] == "allowed"
+    assert calls["count"] >= 2
+    assert _main_quarantined_databases(store.guard_home) == []
+
+
+def test_connect_retries_busy_lock_without_quarantine(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    original_connect_once = store._connect_once  # pyright: ignore[reportPrivateUsage]
+    calls = {"count": 0}
+
+    @contextmanager
+    def fail_first_busy() -> Iterator[sqlite3.Connection]:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise sqlite3.OperationalError("database is locked")
+        with original_connect_once() as connection:
+            yield connection
+
+    monkeypatch.setattr(store, "_connect_once", fail_first_busy)
+
+    assert store.get_runtime_state() is None
+    assert _quarantined_databases(store.guard_home) == []
+    assert calls["count"] >= 2
 
 
 def test_stale_fatal_error_does_not_quarantine_healthy_store(tmp_path: Path) -> None:

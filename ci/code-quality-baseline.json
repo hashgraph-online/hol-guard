@@ -578,7 +578,7 @@
     "src/codex_plugin_scanner/guard/shims.py": 1595,
     "src/codex_plugin_scanner/guard/store_approvals.py": 1256,
     "src/codex_plugin_scanner/guard/store_base.py": 1680,
-    "src/codex_plugin_scanner/guard/store_connection_schema.py": 1358,
+    "src/codex_plugin_scanner/guard/store_connection_schema.py": 1376,
     "src/codex_plugin_scanner/guard/store_extension_control_authority.py": 1093,
     "src/codex_plugin_scanner/guard/store_oauth.py": 1173,
     "src/codex_plugin_scanner/guard/store_policy.py": 2463,

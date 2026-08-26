@@ -22,6 +22,7 @@ from .sqlite_profile import (
 from .sqlite_recovery import (
     FATAL_SQLITE_ERROR_MARKERS,
     SQLITE_IO_ERROR_MARKER,
+    restore_readable_sqlite_store,
     sqlite_store_is_proven_unusable,
 )
 
@@ -264,6 +265,7 @@ class StoreConnectionSchemaMixin:
         *,
         failed_identity: tuple[int, int] | None = None,
     ) -> bool:
+        self._last_sqlite_recovery = "skipped"
         is_io_error = SQLITE_IO_ERROR_MARKER in str(error).lower()
         if (
             not isinstance(error, sqlite3.DatabaseError)
@@ -286,6 +288,7 @@ class StoreConnectionSchemaMixin:
             except OSError:
                 current_identity = None
             if current_identity != failed_identity:
+                self._last_sqlite_recovery = "replaced"
                 return True
 
             if not self._store_is_proven_unusable(error):
@@ -293,19 +296,24 @@ class StoreConnectionSchemaMixin:
 
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
             quarantine_id = f"{stamp}-{uuid4().hex[:8]}"
+            quarantined = self.guard_home / f"guard.db.corrupt-{quarantine_id}"
             for suffix in ("", "-wal", "-shm"):
                 source = Path(f"{self.path}{suffix}")
                 if not source.exists() or source.is_symlink():
                     continue
-                destination = self.guard_home / f"guard.db.corrupt-{quarantine_id}{suffix}"
-                source.replace(destination)
+                source.replace(self.guard_home / f"{quarantined.name}{suffix}")
             _store_logger.error(
                 "Guard quarantined an unusable SQLite store after a fatal storage error: %s",
                 type(error).__name__,
             )
             self._storage_recovery_local.owner = id(self)
             try:
-                self._initialize_schema()
+                if restore_readable_sqlite_store(destination=self.path, quarantined=quarantined):
+                    self._last_sqlite_recovery = "restored"
+                    _store_logger.error("Guard restored the quarantined SQLite store after it still opened cleanly.")
+                else:
+                    self._initialize_schema()
+                    self._last_sqlite_recovery = "reinitialized"
             finally:
                 self._storage_recovery_local.owner = None
             return True
@@ -336,12 +344,15 @@ class StoreConnectionSchemaMixin:
             with self._connect_once() as connection:
                 yield connection
             return
+        yielded = False
         fatal_error: sqlite3.DatabaseError | None = None
         failed_identity: tuple[int, int] | None = None
         with self._hold_storage_gate(exclusive=False):
             try:
                 with self._connect_once() as connection:
+                    yielded = True
                     yield connection
+                return
             except sqlite3.DatabaseError as error:
                 fatal_error = error
                 try:
@@ -349,9 +360,16 @@ class StoreConnectionSchemaMixin:
                     failed_identity = failed_stat.st_dev, failed_stat.st_ino
                 except OSError:
                     failed_identity = None
-        if fatal_error is not None:
-            self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+                if yielded:
+                    raise
+        if fatal_error is None:
+            return
+        self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+        retry = sqlite_error_is_busy_locked(fatal_error) or getattr(self, "_last_sqlite_recovery", None) == "restored"
+        if not retry:
             raise fatal_error
+        with self._hold_storage_gate(exclusive=False), self._connect_once() as connection:
+            yield connection
 
     @contextmanager
     def _connect_once(self) -> Iterator[sqlite3.Connection]:

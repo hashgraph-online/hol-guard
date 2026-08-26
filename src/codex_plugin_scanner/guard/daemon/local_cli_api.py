@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -55,6 +56,7 @@ from ..runtime.package_json_script_memory import (
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
 from .local_cli_continuity_api import decorate_local_cli_continuity
+from .local_cli_mcp_store import bound_mcp_observation, stored_mcp_has_tools, stored_mcp_recognition
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -98,8 +100,18 @@ class LocalCliApiService:
         home_dir = Path.home()
         live_command = None
         cli_id = payload.get("cli_id")
+        stored_id = cli_id if isinstance(cli_id, str) and is_local_cli_id(cli_id) else None
+        stored_mcp = stored_mcp_recognition(
+            self._store,
+            command,
+            cli_id=stored_id,
+            recognize_payload=self._recognize_payload,
+            recognize_summary=_recognize_mcp_summary,
+        )
+        if stored_mcp is not None and stored_mcp_has_tools(stored_mcp):
+            return stored_mcp
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
-        if isinstance(cli_id, str) and is_local_cli_id(cli_id):
+        if stored_id is not None:
             _ = self._observe_harness_mcp_servers()
             live_command = self._live_mcp_launch_command(payload)
         elif tokens is not None and is_package_mcp_launcher(tokens):
@@ -107,6 +119,8 @@ class LocalCliApiService:
         mcp_item = self._recognize_mcp(live_command or command, home_dir)
         if mcp_item is not None:
             return mcp_item
+        if stored_mcp is not None:
+            return stored_mcp
         operator_cwd = operator_working_directory(payload, home_dir=home_dir)
         package_scripts = recognize_operator_package_scripts(
             command,
@@ -154,8 +168,20 @@ class LocalCliApiService:
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
         if tokens is None or not looks_like_mcp_launch(tokens, command_text=command, cwd=home_dir, home_dir=home_dir):
             return None
-        probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir)
+        try:
+            probed = probe_stdio_mcp_server(command, cwd=home_dir, home_dir=home_dir)
+        except (OSError, RuntimeError, TimeoutError):
+            probed = None
         if probed is None:
+            stored = stored_mcp_recognition(
+                self._store,
+                command,
+                cli_id=None,
+                recognize_payload=self._recognize_payload,
+                recognize_summary=_recognize_mcp_summary,
+            )
+            if stored is not None:
+                return stored
             if is_strict_package_mcp_launcher(tokens):
                 launcher = Path(tokens[0]).name
                 raise LocalCliApiError(
@@ -167,7 +193,7 @@ class LocalCliApiService:
                     ),
                 )
             return None
-        identity, server_hash, server_command, server_args_hash = _bound_mcp_observation(
+        identity, server_hash, server_command, server_args_hash = bound_mcp_observation(
             self._store,
             probed.identity,
             probed.server_identity,
@@ -197,7 +223,7 @@ class LocalCliApiService:
                 self._discovered_servers(),
                 seen_at=utc_now(),
             )
-        except (OSError, RuntimeError, TypeError, ValueError):
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
             return {}
 
     def _discovered_servers(self) -> tuple[DiscoveredHarnessMcpServer, ...]:
@@ -369,49 +395,6 @@ class LocalCliApiService:
         if type(value) is not int:
             raise LocalCliApiError(400, f"missing_{key}")
         return value
-
-
-def _bound_mcp_observation(
-    store: object,
-    probed_identity: UnlistedCliIdentity,
-    server_identity: object,
-) -> tuple[UnlistedCliIdentity, str, str, str]:
-    identity_hash = getattr(server_identity, "identity_hash", "")
-    command = getattr(server_identity, "command", "")
-    args_hash = getattr(server_identity, "args_hash", "")
-    finder = getattr(store, "find_local_mcp_observation", None)
-    existing = (
-        finder(server_identity_hash=identity_hash, command=command, args_hash=args_hash) if callable(finder) else None
-    )
-    if not isinstance(existing, dict):
-        return probed_identity, str(identity_hash), str(command), str(args_hash)
-    cli_id = existing.get("cli_id")
-    stored_hash = existing.get("identity_hash")
-    if not isinstance(cli_id, str) or not isinstance(stored_hash, str):
-        return probed_identity, str(identity_hash), str(command), str(args_hash)
-    name = existing.get("name")
-    stored_label = existing.get("example_label")
-    identity = UnlistedCliIdentity(
-        cli_id=cli_id,
-        name=name if isinstance(name, str) and name.strip() else probed_identity.name,
-        kind="executable",
-        identity_hash=stored_hash,
-        example_label=stored_label
-        if isinstance(stored_label, str) and stored_label.strip()
-        else probed_identity.example_label,
-    )
-    return (
-        identity,
-        _string_field(existing.get("server_identity_hash"), identity_hash),
-        _string_field(existing.get("server_command"), command),
-        _string_field(existing.get("server_args_hash"), args_hash),
-    )
-
-
-def _string_field(value: object, fallback: object) -> str:
-    if isinstance(value, str) and value:
-        return value
-    return str(fallback)
 
 
 def _preview_summary(name: str, state: str) -> str:
