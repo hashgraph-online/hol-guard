@@ -57,6 +57,17 @@ def test_affinity_plan_splits_only_an_oversized_file() -> None:
     assert max(loads) - min(loads) <= 1.0
 
 
+def test_affinity_plan_caps_large_files_without_duration_telemetry() -> None:
+    large = [f"tests/test_slow.py::test_{index}" for index in range(148)]
+    filler = [f"tests/test_filler_{index}.py::test_one" for index in range(148)]
+
+    shards, _loads = build_affinity_node_shards(large + filler, 8, {})
+
+    large_nodes_per_shard = [sum(node_file(node_id) == "tests/test_slow.py" for node_id in shard) for shard in shards]
+    assert max(large_nodes_per_shard) <= 32
+    assert sum(count > 0 for count in large_nodes_per_shard) == 5
+
+
 def test_affinity_plan_rejects_duplicate_or_invalid_nodes() -> None:
     with pytest.raises(ValueError, match="unique"):
         build_affinity_node_shards(

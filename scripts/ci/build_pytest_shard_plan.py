@@ -22,6 +22,7 @@ from scripts.ci.pytest_shard import discover_test_nodes
 PLAN_SCHEMA_VERSION = 1
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
 MAX_UNSPLIT_FILE_TARGET_MULTIPLIER = 1.15
+MAX_NODES_PER_AFFINITY_GROUP = 32
 
 
 class _Arguments(Protocol):
@@ -45,19 +46,12 @@ def node_file(node_id: str) -> str:
 def estimate_node_durations(node_ids: Sequence[str], durations: Mapping[str, float]) -> dict[str, float]:
     """Map collected node IDs to current estimates with a conservative fallback."""
 
-    known = sorted(
-        duration
-        for node_id in node_ids
-        if (duration := durations.get(node_id_digest(node_id), 0.0)) > 0
-    )
+    known = sorted(duration for node_id in node_ids if (duration := durations.get(node_id_digest(node_id), 0.0)) > 0)
     fallback = max(
         UNKNOWN_NODE_DURATION_SECONDS,
         known[(len(known) - 1) // 2] if known else 0.0,
     )
-    return {
-        node_id: float(durations.get(node_id_digest(node_id), fallback))
-        for node_id in node_ids
-    }
+    return {node_id: float(durations.get(node_id_digest(node_id), fallback)) for node_id in node_ids}
 
 
 def _split_file_nodes(
@@ -67,9 +61,10 @@ def _split_file_nodes(
     target_seconds: float,
 ) -> list[tuple[str, int, list[str], float]]:
     total = sum(estimates[node_id] for node_id in node_ids)
-    split_count = 1
+    split_count = math.ceil(len(node_ids) / MAX_NODES_PER_AFFINITY_GROUP)
     if total > target_seconds * MAX_UNSPLIT_FILE_TARGET_MULTIPLIER:
-        split_count = min(len(node_ids), max(1, math.ceil(total / target_seconds)))
+        split_count = max(split_count, math.ceil(total / target_seconds))
+    split_count = min(len(node_ids), max(1, split_count))
 
     chunks: list[list[str]] = [[] for _ in range(split_count)]
     loads = [0.0] * split_count
@@ -78,11 +73,7 @@ def _split_file_nodes(
         chunks[index].append(node_id)
         loads[index] += estimates[node_id]
 
-    return [
-        (file_path, index, sorted(chunk), loads[index])
-        for index, chunk in enumerate(chunks)
-        if chunk
-    ]
+    return [(file_path, index, sorted(chunk), loads[index]) for index, chunk in enumerate(chunks) if chunk]
 
 
 def build_affinity_node_shards(
