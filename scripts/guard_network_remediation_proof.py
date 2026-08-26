@@ -212,9 +212,7 @@ def _capability_summary(repository_root: Path) -> tuple[list[str], list[str]]:
     payload = load_reachability_manifest(manifest_path)
     validation_errors = validate_reachability_manifest(payload, repository_root=repository_root)
     if validation_errors:
-        raise ProofValidationError(
-            "capability reachability manifest is invalid: " + "; ".join(validation_errors)
-        )
+        raise ProofValidationError("capability reachability manifest is invalid: " + "; ".join(validation_errors))
 
     raw_capabilities = payload.get("capabilities")
     if not isinstance(raw_capabilities, list):
@@ -248,10 +246,7 @@ def _capability_summary(repository_root: Path) -> tuple[list[str], list[str]]:
     return sorted(advertised), sorted(production_ready)
 
 
-def validate_proof_manifest(payload: Mapping[str, object], *, repository_root: Path) -> tuple[str, ...]:
-    """Return deterministic validation errors for a proof manifest."""
-
-    errors: list[str] = []
+def _validate_manifest_header(payload: Mapping[str, object], errors: list[str]) -> None:
     if payload.get("schema_version") != SCHEMA_VERSION:
         errors.append("schema_version must equal 1")
     if payload.get("repository") != "hashgraph-online/hol-guard":
@@ -268,26 +263,30 @@ def validate_proof_manifest(payload: Mapping[str, object], *, repository_root: P
         if dict(task_range) != expected_range:
             errors.append("task_range must exactly cover REM-121 through REM-139")
 
+
+def _validate_manifest_privacy(payload: Mapping[str, object], errors: list[str]) -> None:
     raw_privacy = payload.get("privacy")
     if not isinstance(raw_privacy, Mapping):
         errors.append("privacy must be an object")
-    else:
-        privacy = cast(Mapping[str, object], raw_privacy)
-        if privacy.get("raw_domain_storage") is not False:
-            errors.append("raw_domain_storage must remain disabled")
-        try:
-            prohibited_fields = set(
-                _string_list(privacy.get("prohibited_fields"), field="privacy.prohibited_fields")
-            )
-        except ProofValidationError as exc:
-            errors.append(str(exc))
-        else:
-            if prohibited_fields != PROHIBITED_PRIVACY_FIELDS:
-                errors.append("privacy.prohibited_fields must preserve the complete bounded-evidence denylist")
+        return
 
+    privacy = cast(Mapping[str, object], raw_privacy)
+    if privacy.get("raw_domain_storage") is not False:
+        errors.append("raw_domain_storage must remain disabled")
+    try:
+        prohibited_fields = set(_string_list(privacy.get("prohibited_fields"), field="privacy.prohibited_fields"))
+    except ProofValidationError as exc:
+        errors.append(str(exc))
+        return
+    if prohibited_fields != PROHIBITED_PRIVACY_FIELDS:
+        errors.append("privacy.prohibited_fields must preserve the complete bounded-evidence denylist")
+
+
+def _manifest_tasks(payload: Mapping[str, object], errors: list[str]) -> list[Mapping[str, object]] | None:
     raw_tasks = payload.get("tasks")
     if not isinstance(raw_tasks, list):
-        return (*errors, "tasks must be a list")
+        errors.append("tasks must be a list")
+        return None
 
     tasks: list[Mapping[str, object]] = []
     for index, raw_task in enumerate(raw_tasks):
@@ -295,7 +294,15 @@ def validate_proof_manifest(payload: Mapping[str, object], *, repository_root: P
             errors.append(f"tasks[{index}] must be an object")
             continue
         tasks.append(cast(Mapping[str, object], raw_task))
+    return tasks
 
+
+def _validate_manifest_tasks(
+    tasks: list[Mapping[str, object]],
+    errors: list[str],
+    *,
+    repository_root: Path,
+) -> None:
     identifiers = [task.get("id") for task in tasks]
     if identifiers != list(TASK_IDS):
         errors.append("tasks must appear exactly once in REM-121 through REM-139 order")
@@ -338,29 +345,44 @@ def validate_proof_manifest(payload: Mapping[str, object], *, repository_root: P
         if complete is False and not blockers:
             errors.append(f"{label}: incomplete tasks must retain exact blockers")
 
+
+def _validate_manifest_closure(
+    payload: Mapping[str, object],
+    tasks: list[Mapping[str, object]],
+    errors: list[str],
+) -> object:
     raw_closure = payload.get("closure")
     closure_ready: object = None
     if not isinstance(raw_closure, Mapping):
         errors.append("closure must be an object")
-    else:
-        closure = cast(Mapping[str, object], raw_closure)
-        ready = closure.get("ready")
-        closure_ready = ready
-        if type(ready) is not bool:
-            errors.append("closure.ready must be a boolean")
-        if closure.get("release_authorized") is not False:
-            errors.append("proof work cannot authorize a release")
-        if not isinstance(closure.get("reason"), str) or not closure["reason"]:
-            errors.append("closure.reason must be a non-empty string")
-        all_complete = bool(tasks) and all(task.get("complete") is True for task in tasks)
-        if ready is True and not all_complete:
-            errors.append("closure cannot be ready while any task remains incomplete")
-        if ready is False and all_complete:
-            errors.append("closure must explain at least one incomplete task")
-        expected_verdict = "ready" if ready is True else "not-ready"
-        if closure.get("verdict") != expected_verdict:
-            errors.append("closure.verdict must match closure.ready")
+        return closure_ready
 
+    closure = cast(Mapping[str, object], raw_closure)
+    ready = closure.get("ready")
+    closure_ready = ready
+    if type(ready) is not bool:
+        errors.append("closure.ready must be a boolean")
+    if closure.get("release_authorized") is not False:
+        errors.append("proof work cannot authorize a release")
+    if not isinstance(closure.get("reason"), str) or not closure["reason"]:
+        errors.append("closure.reason must be a non-empty string")
+    all_complete = bool(tasks) and all(task.get("complete") is True for task in tasks)
+    if ready is True and not all_complete:
+        errors.append("closure cannot be ready while any task remains incomplete")
+    if ready is False and all_complete:
+        errors.append("closure must explain at least one incomplete task")
+    expected_verdict = "ready" if ready is True else "not-ready"
+    if closure.get("verdict") != expected_verdict:
+        errors.append("closure.verdict must match closure.ready")
+    return closure_ready
+
+
+def _validate_capabilities_and_private_artifacts(
+    errors: list[str],
+    *,
+    closure_ready: object,
+    repository_root: Path,
+) -> None:
     advertised: list[str] = []
     production_ready: list[str] = []
     try:
@@ -375,6 +397,20 @@ def validate_proof_manifest(payload: Mapping[str, object], *, repository_root: P
     private_hits = _private_artifact_hits(repository_root)
     if private_hits:
         errors.append(f"private planning artifact paths are present: {', '.join(private_hits)}")
+
+
+def validate_proof_manifest(payload: Mapping[str, object], *, repository_root: Path) -> tuple[str, ...]:
+    """Return deterministic validation errors for a proof manifest."""
+
+    errors: list[str] = []
+    _validate_manifest_header(payload, errors)
+    _validate_manifest_privacy(payload, errors)
+    tasks = _manifest_tasks(payload, errors)
+    if tasks is None:
+        return tuple(errors)
+    _validate_manifest_tasks(tasks, errors, repository_root=repository_root)
+    closure_ready = _validate_manifest_closure(payload, tasks, errors)
+    _validate_capabilities_and_private_artifacts(errors, closure_ready=closure_ready, repository_root=repository_root)
 
     return tuple(errors)
 
@@ -436,11 +472,7 @@ def _write_report(report: Mapping[str, object], *, output: Path | None) -> None:
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository-root", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument(
-        "--manifest",
-        type=Path,
-        default=Path("ci/guard-network-remediation-proof.v1.json"),
-    )
+    parser.add_argument("--manifest", type=Path, default=Path("ci/guard-network-remediation-proof.v1.json"))
     parser.add_argument("--output", type=Path)
     parser.add_argument("--require-ready", action="store_true")
     return parser.parse_args(argv)

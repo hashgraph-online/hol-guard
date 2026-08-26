@@ -196,7 +196,7 @@ def test_main_starts_daemon_once_then_retries_hook(
         failure_kind: str,
     ) -> bool:
         starts.append(tuple(command))
-        assert 7.9 < timeout_seconds <= 8
+        assert 1.0 < timeout_seconds <= 2
         assert failure_kind == "transport-failure"
         return True
 
