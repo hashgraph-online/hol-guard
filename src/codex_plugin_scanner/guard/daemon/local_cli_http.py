@@ -28,7 +28,7 @@ def handle_local_cli_list(handler: object) -> None:
     _write_unavailable(write_json)
 
 
-def _write_unavailable(write_json: Callable[..., None]) -> None:
+def _write_unavailable(write_json: Callable[..., object]) -> None:
     write_json(
         {
             "error": "local_cli_unavailable",
