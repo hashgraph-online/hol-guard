@@ -104,6 +104,7 @@ def persist_discovered_harness_mcp_servers(
             server_identity_hash=server.server_identity.identity_hash,
             server_command=server.server_identity.command,
             server_args_hash=server.server_identity.args_hash,
+            source_label=server.source_label,
         )
         if isinstance(cli_id, str) and cli_id:
             labels[cli_id] = server.source_label

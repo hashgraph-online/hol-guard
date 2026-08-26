@@ -2127,7 +2127,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/local-clis":
             try:
                 payload = self._daemon_server().local_cli_api.list_items()
-            except Exception:
+            except Exception as error:
+                self._daemon_server().diagnostics.record_exception(
+                    "local_cli_list_failed",
+                    detail=type(error).__name__,
+                )
                 self._write_json(
                     {
                         "error": "local_cli_unavailable",

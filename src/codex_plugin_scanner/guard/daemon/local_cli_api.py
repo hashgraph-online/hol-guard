@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from ..adapters.harness_mcp_discovery import (
     DiscoveredHarnessMcpServer,
-    apply_source_labels,
     discover_harness_mcp_servers,
     discovered_server_for_observation,
     persist_discovered_harness_mcp_servers,
@@ -87,26 +86,12 @@ class LocalCliApiService:
         stored = self._store.list_local_cli_items()
         items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
         revision = self._store.read_local_cli_revision()
-        try:
-            labels = self._cached_source_labels()
-            items = apply_source_labels(items, labels)
-        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError):
-            pass
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "revision": revision,
             "items": items,
             "cloud": decorate_local_cli_continuity(self._store, items),
         }
-
-    def _cached_source_labels(self) -> dict[str, str]:
-        cached = self._discovery_cache
-        if cached is None:
-            return {}
-        labels: dict[str, str] = {}
-        for server in cached[1]:
-            labels[server.identity.cli_id] = server.source_label
-        return labels
 
     def recognize(self, payload: dict[str, object]) -> dict[str, object]:
         command = self._required_string(payload, "command")

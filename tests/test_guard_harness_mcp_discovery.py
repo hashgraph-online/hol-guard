@@ -194,6 +194,7 @@ def test_list_items_observes_without_probing_or_incrementing(tmp_path: Path, mon
     assert unread["items"] == []
     _ = service._observe_harness_mcp_servers()
     first = service.list_items()
+    restarted = LocalCliApiService(store=GuardStore(home)).list_items()
     second = service.list_items()
     items = first["items"]
     assert isinstance(items, list)
@@ -213,6 +214,11 @@ def test_list_items_observes_without_probing_or_incrementing(tmp_path: Path, mon
     assert isinstance(second_item, dict)
     assert second_item["observed_count"] == 1
     assert second_item["source_label"] == "Cursor"
+    restarted_items = restarted["items"]
+    assert isinstance(restarted_items, list)
+    restarted_item = restarted_items[0]
+    assert isinstance(restarted_item, dict)
+    assert restarted_item["source_label"] == "Cursor"
 
 
 def test_recognize_reuses_harness_identity(tmp_path: Path, monkeypatch) -> None:
@@ -419,6 +425,7 @@ def test_cli_id_collision_keeps_both_servers(tmp_path: Path) -> None:
         server_identity_hash="a" * 64,
         server_command="npx",
         server_args_hash="1" * 64,
+        source_label="Cursor",
     )
     second_id = store.ensure_local_mcp_observation(
         second,
@@ -426,12 +433,13 @@ def test_cli_id_collision_keeps_both_servers(tmp_path: Path) -> None:
         server_identity_hash="b" * 64,
         server_command="uvx",
         server_args_hash="2" * 64,
+        source_label="Codex",
     )
     assert first_id == "local-cli.mcp-aaaaaaaa"
     assert second_id != first_id
     assert second_id.startswith("local-cli.mcp-")
-    names = {item["name"] for item in store.list_local_cli_items()}
-    assert names == {"one", "two"}
+    listed = {str(item["name"]): item.get("source_label") for item in store.list_local_cli_items()}
+    assert listed == {"one": "Cursor", "two": "Codex"}
 
 
 def test_persist_and_overlay_labels(tmp_path: Path) -> None:
@@ -453,7 +461,13 @@ def test_persist_and_overlay_labels(tmp_path: Path) -> None:
         detections=detections,
     )
     labels = persist_discovered_harness_mcp_servers(store, servers, seen_at=utc_now())
-    items = apply_source_labels(store.list_local_cli_items(), labels)
+    stored = store.list_local_cli_items()
+    assert len(stored) == 1
+    assert stored[0]["source_label"] == "Gemini"
+    items = apply_source_labels(stored, labels)
     assert len(items) == 1
     assert items[0]["source_label"] == "Gemini"
     assert items[0]["surface"] == "mcp"
+    listed = LocalCliApiService(store=store).list_items()["items"]
+    assert isinstance(listed, list)
+    assert listed[0]["source_label"] == "Gemini"
