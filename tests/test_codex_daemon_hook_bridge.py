@@ -89,7 +89,7 @@ def test_fail_closed_uses_supported_codex_deny_shapes() -> None:
     assert prompt["continue"] is False
 
 
-def test_bridge_keeps_inline_browser_wait_within_daemon_worker_budget(
+def test_bridge_keeps_inline_browser_wait_within_consumer_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -105,7 +105,7 @@ def test_bridge_keeps_inline_browser_wait_within_daemon_worker_budget(
         )
     )
 
-    assert payload[bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] == 607
+    assert payload[bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] == 600
     assert set(payload) == {
         "hook_event_name",
         bridge.CODEX_BROWSER_WAIT_PROCESS_KEY,
