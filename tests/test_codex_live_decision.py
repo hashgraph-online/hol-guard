@@ -117,7 +117,12 @@ def test_allow_consumes_exact_authority_and_records_terminal_continuation(tmp_pa
         with_exact_allow=True,
     )
 
-    result = complete_codex_live_decision(store, request_id=request_id, now=now)
+    result = complete_codex_live_decision(
+        store,
+        request_id=request_id,
+        now=now,
+        fresh_allow_authorized=True,
+    )
 
     assert result["completed"] is True
     assert result["action"] == "allow"
@@ -151,13 +156,14 @@ def test_allow_completes_after_inline_wait_but_before_outer_deadline(tmp_path: P
         store,
         request_id=request_id,
         now=completed_at,
+        fresh_allow_authorized=True,
     )
 
     assert result["completed"] is True
     assert result["action"] == "allow"
 
 
-def test_allow_without_matching_exact_authority_stays_closed(tmp_path: Path) -> None:
+def test_allow_without_fresh_policy_revalidation_stays_closed(tmp_path: Path) -> None:
     request_id = "request-live-missing"
     store, now = _seed_resolved_request(
         tmp_path,
@@ -168,10 +174,61 @@ def test_allow_without_matching_exact_authority_stays_closed(tmp_path: Path) -> 
 
     result = complete_codex_live_decision(store, request_id=request_id, now=now)
 
-    assert result == {"completed": False, "error": "exact_approval_unavailable"}
+    assert result == {"completed": False, "error": "fresh_policy_revalidation_failed"}
     resume = store.get_request_resume(request_id)
     assert resume is not None
     assert resume["status"] == "pending"
+
+
+def test_allow_fails_when_fresh_review_has_no_exact_authority(tmp_path: Path) -> None:
+    request_id = "request-live-fresh-consumed"
+    store, now = _seed_resolved_request(
+        tmp_path,
+        request_id=request_id,
+        action="allow",
+        with_exact_allow=False,
+    )
+
+    result = complete_codex_live_decision(
+        store,
+        request_id=request_id,
+        now=now,
+        fresh_allow_authorized=True,
+    )
+
+    assert result == {"completed": False, "error": "exact_approval_authority_missing"}
+    resume = store.get_request_resume(request_id)
+    assert resume is not None
+    assert resume["status"] == "pending"
+
+
+def test_allow_replay_still_requires_fresh_policy_revalidation(tmp_path: Path) -> None:
+    request_id = "request-live-replay"
+    store, now = _seed_resolved_request(
+        tmp_path,
+        request_id=request_id,
+        action="allow",
+        with_exact_allow=True,
+    )
+    first = complete_codex_live_decision(
+        store,
+        request_id=request_id,
+        now=now,
+        fresh_allow_authorized=True,
+    )
+    assert first["completed"] is True
+
+    rejected = complete_codex_live_decision(store, request_id=request_id, now=now)
+    replayed = complete_codex_live_decision(
+        store,
+        request_id=request_id,
+        now=now,
+        fresh_allow_authorized=True,
+    )
+
+    assert rejected == {"completed": False, "error": "fresh_policy_revalidation_failed"}
+    assert replayed["completed"] is True
+    assert replayed["replayed"] is True
 
 
 def test_allow_claim_rolls_back_when_continuation_finalization_fails(tmp_path: Path) -> None:
@@ -194,7 +251,12 @@ def test_allow_claim_rolls_back_when_continuation_finalization_fails(tmp_path: P
         )
 
     with pytest.raises(sqlite3.IntegrityError, match="injected finalization failure"):
-        complete_codex_live_decision(store, request_id=request_id, now=now)
+        complete_codex_live_decision(
+            store,
+            request_id=request_id,
+            now=now,
+            fresh_allow_authorized=True,
+        )
 
     assert (
         store.peek_local_once_approval(
@@ -210,7 +272,12 @@ def test_allow_claim_rolls_back_when_continuation_finalization_fails(tmp_path: P
     with sqlite3.connect(store.path) as connection:
         connection.execute("drop trigger fail_continuation_effect_insert")
 
-    result = complete_codex_live_decision(store, request_id=request_id, now=now)
+    result = complete_codex_live_decision(
+        store,
+        request_id=request_id,
+        now=now,
+        fresh_allow_authorized=True,
+    )
 
     assert result["completed"] is True
     assert (

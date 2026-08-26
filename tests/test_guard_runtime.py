@@ -18885,7 +18885,7 @@ def test_guard_hook_codex_post_tool_use_queues_retryable_browser_approval(
     assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
 
 
-def test_guard_hook_codex_browser_allow_rechecks_policy_changed_during_wait(
+def test_guard_hook_codex_direct_denial_does_not_inline_complete_browser_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -18945,8 +18945,10 @@ def test_guard_hook_codex_browser_allow_rechecks_policy_changed_during_wait(
     )
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
+    worker.join(timeout=3)
 
     assert rc == 0
+    assert not worker.is_alive()
     assert payload["decision"] == "block"
     assert payload["continue"] is False
     tool_receipts = [

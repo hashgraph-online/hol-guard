@@ -69,6 +69,9 @@ def _run_guard_hook_command(
     config: GuardConfig | None = None,
     input_text: str | None = None,
     output_stream: TextIO | None = None,
+    _claim_saved_approval: bool = True,
+    _claimed_saved_allow_hash: str | None = None,
+    _claimed_approval_request_id: str | None = None,
 ) -> int:
     if guard_home is None:
         raise RuntimeError("Guard home is required")
@@ -361,7 +364,7 @@ def _run_guard_hook_command(
                 _claimed_trusted_request_override=claimed_trusted_request_override,
                 _claimed_package_approval_consumed=claimed_package_approval_consumed,
                 _claimed_approval_request_id=claimed_approval_request_id,
-                _claim_saved_approval=claimed_saved_allow_hash is None,
+                _claim_saved_approval=claimed_saved_allow_hash is None and _claim_saved_approval,
             )
 
         def revalidate_runtime_after_claim(
@@ -389,6 +392,9 @@ def _run_guard_hook_command(
             runtime_workspace=runtime_workspace,
             store=store,
             post_claim_revalidator=revalidate_runtime_after_claim,
+            _claimed_saved_allow_hash=_claimed_saved_allow_hash,
+            _claimed_approval_request_id=_claimed_approval_request_id,
+            _claim_saved_approval=_claim_saved_approval,
         )
         if isinstance(evaluated, int):
             return evaluated
@@ -459,6 +465,8 @@ def _run_guard_hook_command(
         runtime_workspace=runtime_workspace,
         store=store,
         post_claim_revalidator=revalidate_generic_after_claim,
+        _claimed_saved_allow_hash=_claimed_saved_allow_hash,
+        _claim_saved_approval=_claim_saved_approval,
     )
 
 

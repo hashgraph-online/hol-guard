@@ -315,6 +315,7 @@ def test_bridge_converts_denied_pretool_to_allow_after_browser_approval(
     _ResumeDaemonHandler.get_count = 0
     _ResumeDaemonHandler.finalize_count = 0
     _ResumeDaemonHandler.finalize_completed = True
+    _ResumeDaemonHandler.finalize_payload = None
     monkeypatch.setattr(
         "sys.stdin",
         io.StringIO(
@@ -341,6 +342,10 @@ def test_bridge_converts_denied_pretool_to_allow_after_browser_approval(
     assert "permissionDecision" not in payload.get("hookSpecificOutput", {})
     assert _ResumeDaemonHandler.get_count >= 1
     assert _ResumeDaemonHandler.finalize_count == 1
+    assert isinstance(_ResumeDaemonHandler.finalize_payload, dict)
+    hook_input = _ResumeDaemonHandler.finalize_payload.get("hook_input")
+    assert isinstance(hook_input, str)
+    assert json.loads(hook_input)["tool_input"]["command"] == "npm install is-even@1.0.0"
     assert "guardApprovalRequestId" not in payload
 
 

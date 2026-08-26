@@ -117,6 +117,7 @@ class _ResumeDaemonHandler(_DaemonHandler):
     get_count: ClassVar[int] = 0
     finalize_count: ClassVar[int] = 0
     finalize_completed: ClassVar[bool] = True
+    finalize_payload: ClassVar[dict[str, object] | None] = None
 
     def do_POST(self) -> None:
         if self.path == "/v1/daemon/identity-challenge":
@@ -124,7 +125,9 @@ class _ResumeDaemonHandler(_DaemonHandler):
             return
         if self.path == f"/v1/requests/{type(self).request_id}/live-decision":
             length = int(self.headers.get("Content-Length", "0"))
-            _ = self.rfile.read(length)
+            raw_body = self.rfile.read(length)
+            parsed_body = json.loads(raw_body) if raw_body else {}
+            type(self).finalize_payload = parsed_body if isinstance(parsed_body, dict) else None
             type(self).finalize_count += 1
             if self.headers.get("X-Guard-Token") != type(self).auth_token:
                 self._write_json({"error": "unauthorized"}, status=401)

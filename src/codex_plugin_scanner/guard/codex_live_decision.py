@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import cast
 
 from .continuation_runtime import record_live_hook_completion
 from .store import GuardStore
@@ -15,6 +16,7 @@ def complete_codex_live_decision(
     *,
     request_id: str,
     now: str,
+    fresh_allow_authorized: bool = False,
 ) -> dict[str, object]:
     """Consume exact authority and persist terminal continuation evidence."""
 
@@ -31,11 +33,12 @@ def complete_codex_live_decision(
         return _failure("policy_no_longer_reviewable")
 
     previous = store.get_request_resume(request_id)
-    if isinstance(previous, dict) and _terminal_resume_matches(previous, action=action):
-        return {"action": action, "completed": True, "continuation": previous, "replayed": True}
-
     approval_decision: Mapping[str, object] | None = None
     if action == "allow":
+        if not fresh_allow_authorized:
+            return _failure("fresh_policy_revalidation_failed")
+        if isinstance(previous, dict) and _terminal_resume_matches(previous, action=action):
+            return {"action": action, "completed": True, "continuation": previous, "replayed": True}
         lookup = store.resolve_policy_decision_lookup(
             str(request["harness"]),
             _optional_text(request.get("artifact_id")),
@@ -46,9 +49,12 @@ def complete_codex_live_decision(
             consume_one_shot=False,
         )
         decision = lookup.get("decision")
-        if not isinstance(decision, Mapping) or not _exact_request_authority(decision, request_id=request_id):
-            return _failure("exact_approval_unavailable")
-        approval_decision = {str(key): value for key, value in decision.items()}
+        if isinstance(decision, Mapping) and _exact_request_authority(decision, request_id=request_id):
+            approval_decision = {str(key): value for key, value in decision.items()}
+        if approval_decision is None:
+            return _failure("exact_approval_authority_missing")
+    elif isinstance(previous, dict) and _terminal_resume_matches(previous, action=action):
+        return {"action": action, "completed": True, "continuation": previous, "replayed": True}
 
     completion = record_live_hook_completion(
         store,
@@ -64,20 +70,25 @@ def complete_codex_live_decision(
 
 
 def _exact_request_authority(value: object, *, request_id: str) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    authority = cast(Mapping[str, object], value)
     return (
-        isinstance(value, Mapping)
-        and value.get("action") == "allow"
-        and value.get("source") == "approval-gate-once"
-        and value.get("request_id") == request_id
-        and value.get("integrity_status") == "valid"
-        and isinstance(value.get("approval_id"), str)
+        authority.get("action") == "allow"
+        and authority.get("source") == "approval-gate-once"
+        and authority.get("request_id") == request_id
+        and authority.get("integrity_status") == "valid"
+        and isinstance(authority.get("approval_id"), str)
     )
 
 
 def _terminal_resume_matches(value: object, *, action: object) -> bool:
-    if not isinstance(value, Mapping) or value.get("resolution_action") != action:
+    if not isinstance(value, Mapping):
         return False
-    status = value.get("status")
+    resume = cast(Mapping[str, object], value)
+    if resume.get("resolution_action") != action:
+        return False
+    status = resume.get("status")
     return status in {"resumed", "sent"} if action == "allow" else status in {"blocked", "skipped"}
 
 

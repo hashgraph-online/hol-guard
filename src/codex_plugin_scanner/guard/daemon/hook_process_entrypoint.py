@@ -198,12 +198,18 @@ def _run_resident_hook_request(
     home_value = request.get("home_dir")
     guard_home_value = request.get("guard_home")
     workspace_value = request.get("workspace")
+    claim_saved_approval = request.get("claim_saved_approval", True)
+    claimed_saved_allow_hash = request.get("claimed_saved_allow_hash")
+    claimed_approval_request_id = request.get("claimed_approval_request_id")
     if (
         not isinstance(payload, dict)
         or not isinstance(harness, str)
         or not isinstance(home_value, str)
         or not isinstance(guard_home_value, str)
         or (workspace_value is not None and not isinstance(workspace_value, str))
+        or not isinstance(claim_saved_approval, bool)
+        or (claimed_saved_allow_hash is not None and not isinstance(claimed_saved_allow_hash, str))
+        or (claimed_approval_request_id is not None and not isinstance(claimed_approval_request_id, str))
     ):
         return {"payload": None, "reason_code": "daemon_hook_process_invalid_request"}
     guard_home = Path(guard_home_value).resolve(strict=False)
@@ -274,6 +280,9 @@ def _run_resident_hook_request(
                 config=config,
                 input_text=json.dumps(payload, separators=(",", ":")),
                 output_stream=output,
+                _claim_saved_approval=claim_saved_approval,
+                _claimed_saved_allow_hash=claimed_saved_allow_hash,
+                _claimed_approval_request_id=claimed_approval_request_id,
             )
         )
 

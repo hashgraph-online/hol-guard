@@ -417,7 +417,15 @@ def main(
             else _FAIL_CLOSED_REASON
         )
         response = _unavailable_response(event_name, failure_reason)
-    sys.stdout.write(_bridge_output(response, event_name=event_name, state_path=state_path, deadline=deadline))
+    sys.stdout.write(
+        _bridge_output(
+            response,
+            event_name=event_name,
+            hook_input=data,
+            state_path=state_path,
+            deadline=deadline,
+        )
+    )
     return 0
 
 
@@ -425,12 +433,14 @@ def _bridge_output(
     response: dict[str, object],
     *,
     event_name: str,
+    hook_input: str,
     state_path: str | Path,
     deadline: float,
 ) -> str:
     payload = apply_browser_approval_wait(
         response,
         event_name=event_name,
+        hook_input=hook_input,
         state_path=state_path,
         deadline=deadline,
     )

@@ -32,6 +32,7 @@ def apply_browser_approval_wait(
     response: dict[str, object],
     *,
     event_name: str,
+    hook_input: str,
     state_path: str | Path,
     deadline: float,
 ) -> dict[str, object]:
@@ -50,6 +51,7 @@ def apply_browser_approval_wait(
     completed_action = _complete_resolution(
         request_id=request_id,
         action=action,
+        hook_input=hook_input,
         state_path=state_path,
         deadline=deadline,
     )
@@ -116,6 +118,7 @@ def _complete_resolution(
     *,
     request_id: str,
     action: str | None,
+    hook_input: str,
     state_path: str | Path,
     deadline: float,
 ) -> str | None:
@@ -129,7 +132,7 @@ def _complete_resolution(
         payload = _daemon_json_post(
             state_path=state_path,
             path=path,
-            payload={},
+            payload={"hook_input": hook_input},
             timeout_seconds=min(remaining, _FINALIZE_TIMEOUT_CAP_SECONDS),
         )
     except (OSError, TimeoutError, ValueError, http.client.HTTPException, urllib.error.URLError):

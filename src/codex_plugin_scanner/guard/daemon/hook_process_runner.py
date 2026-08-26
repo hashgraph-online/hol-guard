@@ -168,6 +168,9 @@ class HookProcessRunner:
         workspace: Path | None,
         hook_env: Mapping[str, str],
         deadline: float | None = None,
+        claim_saved_approval: bool = True,
+        claimed_saved_allow_hash: str | None = None,
+        claimed_approval_request_id: str | None = None,
         _transient_not_ready_retries: int = _HOOK_PROCESS_TRANSIENT_NOT_READY_RETRIES,
     ) -> HookProcessReview:
         with self._state_lock:
@@ -188,6 +191,9 @@ class HookProcessRunner:
             "guard_home": str(guard_home),
             "workspace": str(workspace) if workspace is not None else None,
             "hook_env": {key: value for key, value in hook_env.items() if key in HOOK_ENV_ALLOWLIST},
+            "claim_saved_approval": claim_saved_approval,
+            "claimed_saved_allow_hash": claimed_saved_allow_hash,
+            "claimed_approval_request_id": claimed_approval_request_id,
         }
         try:
             if review_deadline <= time.monotonic():
@@ -313,6 +319,9 @@ class HookProcessRunner:
                     workspace=workspace,
                     hook_env=hook_env,
                     deadline=review_deadline,
+                    claim_saved_approval=claim_saved_approval,
+                    claimed_saved_allow_hash=claimed_saved_allow_hash,
+                    claimed_approval_request_id=claimed_approval_request_id,
                     _transient_not_ready_retries=_transient_not_ready_retries - 1,
                 )
             return HookProcessReview(

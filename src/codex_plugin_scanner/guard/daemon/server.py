@@ -95,6 +95,7 @@ from ..cloud_exception_requests import (
     submit_cloud_exception_request,
 )
 from ..codex_live_decision import complete_codex_live_decision
+from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..codex_live_hook_target import codex_live_hook_process_is_unavailable
 from ..codex_resume import defer_request_resume_to_live_hook, get_request_resume_status, retry_request_resume
 from ..codex_resume_response import project_codex_resume_response
@@ -406,6 +407,27 @@ def _runtime_hook_remaining_hint(payload: dict[str, object]) -> float:
     return _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
 
 
+def _codex_live_replay_authority(
+    request: object,
+    previous: object,
+) -> tuple[str | None, str | None]:
+    """Return already-claimed exact context only for a terminal allow replay."""
+
+    if not isinstance(request, Mapping) or not isinstance(previous, Mapping):
+        return None, None
+    if request.get("resolution_action") != "allow" or previous.get("resolution_action") != "allow":
+        return None, None
+    if previous.get("status") not in {"resumed", "sent"}:
+        return None, None
+    artifact_hash = request.get("artifact_hash")
+    request_id = request.get("request_id")
+    if not isinstance(artifact_hash, str) or not artifact_hash:
+        return None, None
+    if not isinstance(request_id, str) or not request_id:
+        return None, None
+    return artifact_hash, request_id
+
+
 _PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 
 
@@ -476,6 +498,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     auth_audit_lock: threading.Lock
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: GuardDaemonServer | None
+    home_dir: Path
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         """Suppress expected peer disconnects without hiding server defects."""
@@ -507,6 +530,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         runtime_host: str,
         runtime_session_id: str,
         runtime_started_at: str,
+        home_dir: Path,
         idle_timeout_seconds: float | None,
         shutdown_started: threading.Event,
         diagnostics: DaemonDiagnostics,
@@ -520,6 +544,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.runtime_host = runtime_host
         self.runtime_session_id = runtime_session_id
         self.runtime_started_at = runtime_started_at
+        self.home_dir = home_dir.resolve(strict=False)
         self.idle_timeout_seconds = idle_timeout_seconds
         self.last_activity_monotonic = time.monotonic()
         self.start_monotonic = time.monotonic()
@@ -2827,7 +2852,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_request_resume_retry(path_parts[2])
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "live-decision":
-            self._handle_codex_live_decision(path_parts[2])
+            self._handle_codex_live_decision(path_parts[2], payload)
             return
         if len(path_parts) == 5 and path_parts[:3] == ["v1", "mcp-policy", "requests"] and path_parts[4] == "decision":
             self._handle_mcp_policy_decision(path_parts[3], payload)
@@ -5612,9 +5637,55 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         self._write_json(payload)
 
-    def _handle_codex_live_decision(self, request_id: str) -> None:
-        payload = complete_codex_live_decision(self.server.store, request_id=request_id, now=_now())  # type: ignore[attr-defined]
-        self._write_json(payload, status=200 if payload.get("completed") is True else 409)
+    def _handle_codex_live_decision(self, request_id: str, payload: Mapping[str, object]) -> None:
+        request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
+        previous = self.server.store.get_request_resume(request_id)  # type: ignore[attr-defined]
+        claimed_hash, claimed_request_id = _codex_live_replay_authority(request, previous)
+        fresh_allow_authorized = self._revalidate_codex_live_allow(
+            request,
+            payload,
+            claimed_saved_allow_hash=claimed_hash,
+            claimed_approval_request_id=claimed_request_id,
+        )
+        result = complete_codex_live_decision(
+            self.server.store,  # type: ignore[attr-defined]
+            request_id=request_id,
+            now=_now(),
+            fresh_allow_authorized=fresh_allow_authorized,
+        )
+        self._write_json(result, status=200 if result.get("completed") is True else 409)
+
+    def _revalidate_codex_live_allow(
+        self,
+        request: object,
+        payload: Mapping[str, object],
+        *,
+        claimed_saved_allow_hash: str | None = None,
+        claimed_approval_request_id: str | None = None,
+    ) -> bool:
+        daemon_server = self._daemon_server()
+        home_dir = daemon_server.home_dir
+        return revalidate_codex_live_allow(
+            request,
+            payload,
+            home_dir=home_dir,
+            claimed_saved_allow_hash=claimed_saved_allow_hash,
+            claimed_approval_request_id=claimed_approval_request_id,
+            reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: (
+                daemon_server.hook_process_runner.review(
+                    payload=hook_payload,
+                    harness="codex",
+                    home_dir=home_dir,
+                    guard_home=daemon_server.store.guard_home,
+                    workspace=workspace,
+                    hook_env={},
+                    deadline=time.monotonic() + _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS,
+                    claim_saved_approval=False,
+                    claimed_saved_allow_hash=claimed_hash,
+                    claimed_approval_request_id=claimed_request_id,
+                ).payload
+            ),
+        )
 
     def _apply_codex_resume_result(
         self,
@@ -7911,6 +7982,7 @@ class GuardDaemonServer:
                 runtime_host=host,
                 runtime_session_id=uuid.uuid4().hex,
                 runtime_started_at=_now(),
+                home_dir=(home_dir or Path.home()).expanduser().resolve(strict=False),
                 idle_timeout_seconds=_guard_daemon_idle_timeout_seconds(
                     store.guard_home,
                     idle_timeout_seconds=idle_timeout_seconds,
