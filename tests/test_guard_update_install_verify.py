@@ -12,12 +12,11 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.update_install_verify import (
-    parse_distribution_probe_payload,
     verify_installed_distribution,
 )
 from codex_plugin_scanner.guard.cli.update_subprocess import (
-    TrustedUpdateContext,
     TrustedProcessResult,
+    TrustedUpdateContext,
     UpdateSubprocessError,
 )
 

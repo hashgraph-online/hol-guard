@@ -39,6 +39,7 @@ from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
     build_approval_context_token,
     build_runtime_launch_identity,
+    parse_approval_context_token,
     resolved_runtime_launch_argv,
     runtime_launch_identity_is_reusable,
 )
@@ -1368,6 +1369,37 @@ def _bound_external_archive_launch_command(
     return bound_command
 
 
+def _package_manager_launch_environment(
+    environment: Mapping[str, str],
+    *,
+    guard_home: Path,
+    launch_cwd: Path,
+) -> dict[str, str]:
+    """Exclude Guard's interception shim from the reviewed and executed package-manager path."""
+
+    launch_environment = dict(environment)
+    try:
+        shim_dir = (guard_home / "package-shims" / "bin").expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        raise ValueError("Guard's package shim path could not be verified") from None
+    path_entries = environment.get("PATH", "").split(os.pathsep)
+    filtered_entries: list[str] = []
+    for entry in path_entries:
+        if not entry:
+            continue
+        try:
+            path_entry = Path(entry).expanduser()
+            if not path_entry.is_absolute():
+                path_entry = launch_cwd / path_entry
+            resolved_entry = path_entry.resolve()
+        except (OSError, RuntimeError, ValueError):
+            raise ValueError("package manager PATH could not be verified") from None
+        if resolved_entry != shim_dir:
+            filtered_entries.append(entry)
+    launch_environment["PATH"] = os.pathsep.join(filtered_entries)
+    return launch_environment
+
+
 def _build_package_protect_authority(
     *,
     command: Sequence[str],
@@ -1385,8 +1417,16 @@ def _build_package_protect_authority(
         raise ValueError("package workspace must resolve to an existing directory") from None
     if not launch_cwd.is_dir():
         raise ValueError("package workspace must resolve to an existing directory")
-    launch_environment = dict(os.environ)
-    intent = _package_intent_parser_module().parse_package_intent(shlex.join(command), workspace=launch_cwd)
+    launch_environment = _package_manager_launch_environment(
+        os.environ,
+        guard_home=store.guard_home,
+        launch_cwd=launch_cwd,
+    )
+    intent = _package_intent_parser_module().parse_package_intent(
+        shlex.join(command),
+        workspace=launch_cwd,
+        environment=launch_environment,
+    )
     if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
@@ -2199,12 +2239,14 @@ def _resolve_stored_package_policy_override(
     fresh_local_approval = isinstance(decision, dict) and (
         _is_fresh_artifact_approval(decision, store=store) or legacy_local_approval
     )
+    durable_exact_approval = isinstance(decision, dict) and _is_durable_exact_artifact_approval(decision)
     reuse = evaluate_approval_reuse(
         effective_current_action,
         action,
         saved_decision_present=True,
         validation_reason=validation_reason,
         fresh_local_approval=fresh_local_approval,
+        durable_exact_approval=durable_exact_approval,
     )
     claim_disposition: _PackageApprovalClaimDisposition | None = None
     disposition_resolver = getattr(store, "approval_reuse_claim_disposition", None)
@@ -2314,6 +2356,19 @@ def _is_fresh_artifact_approval(decision: dict[str, object], *, store: Any) -> b
     except Exception:
         return False
     return isinstance(request, dict) and request.get("resolution_scope") == "artifact"
+
+
+def _is_durable_exact_artifact_approval(decision: dict[str, object]) -> bool:
+    decision_id = decision.get("decision_id")
+    return (
+        isinstance(decision_id, int)
+        and not isinstance(decision_id, bool)
+        and decision.get("action") == "allow"
+        and decision.get("source") == "approval-gate"
+        and decision.get("scope") == "artifact"
+        and decision.get("expires_at") is None
+        and parse_approval_context_token(decision.get("artifact_hash")) is not None
+    )
 
 
 def _is_legacy_package_local_approval(decision: dict[str, object], *, store: Any) -> bool:

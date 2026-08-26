@@ -580,6 +580,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.unclassified_watchdog_thread = None
         self.hook_process_runner = HookProcessRunner(guard_home=store.guard_home)
         self.hook_process_runner.set_capacity_listener(self.runtime_hook_process_scheduler.set_active_limit)
+        self.runtime_hook_process_scheduler.set_queue_listener(self.hook_process_runner.notify_queued_work)
         self.runtime_heartbeat = RuntimeHeartbeatWriter(
             store=store,
             session_id=runtime_session_id,
@@ -4090,7 +4091,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return managers, None
 
     def _supply_chain_entitlement(self) -> dict[str, object]:
-        return resolve_package_firewall_entitlement_with_refresh(self.server.store)  # type: ignore[attr-defined]
+        server = self.server  # type: ignore[attr-defined]
+        with server.guard_cloud_browser_session_lock:
+            cloud_connect = _copy_guard_cloud_connect_state(server)
+            package_connect = _copy_package_firewall_connect_state(server)
+            if _guard_cloud_connect_state_is_in_flight(cloud_connect) or _guard_cloud_connect_state_is_in_flight(
+                package_connect
+            ):
+                return resolve_package_firewall_entitlement(server.store)
+            return resolve_package_firewall_entitlement_with_refresh(server.store)
 
     def _handle_get_supply_chain_bundle(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
@@ -8190,10 +8199,7 @@ class GuardDaemonServer:
             self._thread = threading.Thread(target=self._serve_forever, daemon=True)
             self._thread.start()
             serve_thread_started = True
-            self._server.hook_process_runner.enable_full_capacity(
-                delay_seconds=0,
-                active_deferral_seconds=0,
-            )
+            self._server.hook_process_runner.enable_full_capacity()
         except BaseException as error:
             self._diagnostics.record_exception("daemon_start_thread_failed")
             serve_thread_contained = True
@@ -8216,10 +8222,7 @@ class GuardDaemonServer:
 
     def serve(self) -> None:
         self._begin_service()
-        self._server.hook_process_runner.enable_full_capacity(
-            delay_seconds=0,
-            active_deferral_seconds=0,
-        )
+        self._server.hook_process_runner.enable_full_capacity()
         self._serve_forever()
 
     def stop(self) -> None:

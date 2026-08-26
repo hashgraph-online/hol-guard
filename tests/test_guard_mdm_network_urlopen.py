@@ -6,6 +6,7 @@ import urllib.request
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 from urllib3.exceptions import MaxRetryError
@@ -21,7 +22,7 @@ from codex_plugin_scanner.guard.mdm.network_urlopen import ManagedUrlOpener
 class _FakeHTTPResponse:
     status = 401
     reason = "Unauthorized"
-    headers = {"Content-Type": "application/json"}
+    headers: ClassVar[dict[str, str]] = {"Content-Type": "application/json"}
 
     def __init__(self, body: bytes) -> None:
         self._body = body

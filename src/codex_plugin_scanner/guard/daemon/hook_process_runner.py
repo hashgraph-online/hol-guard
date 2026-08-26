@@ -33,7 +33,7 @@ from .hook_process_worker import (
 _HOOK_PROCESS_MAX_LIMIT = 16
 _HOOK_PROCESS_TIMEOUT_SECONDS = 2.8
 _HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
-_HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 2.0
+_HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 30.0
 _HOOK_PROCESS_BACKFILL_MAX_DEFERRAL_SECONDS = 5.0
 _HOOK_PROCESS_RETRY_MAX_SECONDS = 5.0
 _HOOK_PROCESS_RETRY_READY_SECONDS = 0.75
@@ -378,7 +378,15 @@ class HookProcessRunner:
         if adaptive_capacity is None:
             return
         adaptive_capacity.observe_load(queue_p95_ms=queue_p95_ms, queued=queued)
+        if queued > 0:
+            self.notify_queued_work()
         self._refresh_capacity_policy()
+
+    def notify_queued_work(self) -> None:
+        with self._state_lock:
+            self._backfill_not_before = 0.0
+            self._backfill_force_after = 0.0
+        self._recovery_event.set()
 
     def close(self) -> None:
         _ = self.close_contained()

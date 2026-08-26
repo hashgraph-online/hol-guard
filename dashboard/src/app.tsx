@@ -22,6 +22,7 @@ import {
   repairApprovalCenter,
   repairProtectionCheck,
   resolveRequestWithQueueResult,
+  GuardRequestResolutionError,
   retryResume,
   runHarnessAction,
 } from "./guard-api";
@@ -152,6 +153,7 @@ function parseRequestId(pathname: string): string | null {
 }
 
 export const PROTECT_ROUTE = "/protect";
+export const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 
 export function viewTitle(view: AppView): string {
   if (view === "home") return "Home";
@@ -230,7 +232,9 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
   try {
     const item = await fetchRequest(requestId);
     const [diff, receipt, policy] = await Promise.all([
-      fetchDiff(item.artifact_id, item.harness),
+      shouldFetchArtifactDiff(item.artifact_type)
+        ? fetchDiff(item.artifact_id, item.harness)
+        : Promise.resolve(null),
       fetchLatestReceipt(item.artifact_id, item.harness),
       fetchPolicy(item.harness)
     ]);
@@ -257,6 +261,26 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
       message: message.length > 0 ? message : "Unable to load the approval request."
     };
   }
+}
+
+export async function refreshStaleScopeContractSelection<T>({
+  requestId,
+  refreshQueue,
+  loadSelectedDetail,
+  applySelectedDetail,
+}: {
+  requestId: string | null;
+  refreshQueue: () => Promise<void>;
+  loadSelectedDetail: (requestId: string) => Promise<T>;
+  applySelectedDetail: (detail: T) => void;
+}): Promise<void> {
+  await refreshQueue();
+  if (requestId === null) return;
+  applySelectedDetail(await loadSelectedDetail(requestId));
+}
+
+export function shouldFetchArtifactDiff(artifactType: string): boolean {
+  return new Set(["mcp_server", "skill", "skill_file"]).has(artifactType);
 }
 
 export function App() {
@@ -534,6 +558,7 @@ export function App() {
   const handleOpenInbox = useCallback(() => navigate("/inbox"), []);
   const handleOpenFleet = useCallback(() => navigate(PROTECT_ROUTE), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
+  const handleOpenTodayEvidence = useCallback(() => navigate(TODAY_EVIDENCE_ROUTE), []);
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
@@ -693,7 +718,26 @@ export function App() {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
     try {
-      const result = await resolveRequestWithQueueResult(payload);
+      const result = await resolveRequestWithQueueResult(payload).catch(async (error: unknown) => {
+        if (
+          error instanceof GuardRequestResolutionError &&
+          error.status === 409 &&
+          error.payload?.["error"] === "stale_scope_contract"
+        ) {
+          await refreshStaleScopeContractSelection({
+            requestId: activeRequestId,
+            refreshQueue: async () => {
+              await refreshStateAfterAction();
+            },
+            loadSelectedDetail: loadDetail,
+            applySelectedDetail: setDetail,
+          });
+          throw new Error(
+            "This request changed while you were reviewing it. Guard refreshed the current action and scopes; review them, then retry.",
+          );
+        }
+        throw error;
+      });
       const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
       const resume = result.codex_resume ?? null;
       setCodexResume(resume);
@@ -709,7 +753,7 @@ export function App() {
     } finally {
       resolutionInFlight.current = false;
     }
-  }, [requests, refreshStateAfterAction, setResolutionMessage]);
+  }, [activeRequestId, requests, refreshStateAfterAction, setResolutionMessage]);
 
   const handleRetryResume = useCallback(async () => {
     if (resolvedRequestId === null) return;
@@ -951,6 +995,7 @@ export function App() {
             onOpenInbox={handleOpenInbox}
             onOpenFleet={handleOpenFleet}
             onOpenEvidence={handleOpenEvidence}
+            onOpenTodayEvidence={handleOpenTodayEvidence}
             onOpenInsights={handleOpenInsights}
             onOpenCommands={handleOpenCommands}
             onOpenSettings={handleOpenSettings}

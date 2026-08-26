@@ -1031,7 +1031,10 @@ def test_dashboard_update_runner_preserves_state_for_trusted_successful_restart(
         assert state_path.read_text(encoding="utf-8") == state_text
         calls.append("run_update")
         update_kwargs.update(kwargs)
-        return {"status": "updated", "daemon_refresh": {"status": "restarted"}}, 0
+        return {
+            "status": "updated",
+            "daemon_refresh": {"status": "restarted", "runtime_verified": True},
+        }, 0
 
     monkeypatch.setattr(runner_module.update_commands, "run_guard_update", fake_run_guard_update)
     isolated_refresh = MagicMock()
@@ -1077,6 +1080,59 @@ def test_dashboard_update_runner_preserves_state_for_trusted_successful_restart(
     ]
 
 
+def test_dashboard_update_runner_accepts_verified_retained_newer_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.daemon import dashboard_update_runner as runner_module
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    update_token = "d" * 64
+    written_payload: dict[str, object] = {}
+    monkeypatch.setattr(runner_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(runner_module, "claim_dashboard_update_lock", lambda _home, *, token: True)
+    monkeypatch.setattr(runner_module, "retire_all_guard_daemons_for_home", lambda _home: [])
+    monkeypatch.setattr(runner_module, "_retire_guard_daemon_pid", lambda _pid, **_kwargs: True)
+    monkeypatch.setattr(runner_module, "guard_daemon_retirement_is_complete", lambda _home: True)
+    monkeypatch.setattr(
+        runner_module.update_commands,
+        "run_guard_update",
+        lambda **_kwargs: (
+            {
+                "status": "updated",
+                "daemon_refresh": {
+                    "status": "retained_newer_runtime",
+                    "runtime_verified": True,
+                },
+            },
+            0,
+        ),
+    )
+    monkeypatch.setattr(
+        runner_module,
+        "write_dashboard_update_outcome",
+        lambda _home, payload: written_payload.update(payload),
+    )
+    monkeypatch.setattr(runner_module, "clear_dashboard_update_lock", MagicMock(return_value=True))
+
+    exit_code = runner_module.main(
+        [
+            "--guard-home",
+            str(guard_home),
+            "--daemon-pid",
+            "5151",
+            "--daemon-port",
+            "5474",
+            "--update-token",
+            update_token,
+        ]
+    )
+
+    assert exit_code == 0
+    assert written_payload["status"] == "updated"
+
+
 def test_dashboard_update_runner_blocks_install_when_daemon_retirement_is_unproven(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1088,7 +1144,7 @@ def test_dashboard_update_runner_blocks_install_when_daemon_retirement_is_unprov
     update_token = "9" * 64
     written_payload: dict[str, object] = {}
     run_update = MagicMock()
-    isolated_refresh = MagicMock(return_value=({"status": "restarted"}, None))
+    isolated_refresh = MagicMock(return_value=({"status": "restarted", "runtime_verified": True}, None))
 
     monkeypatch.setattr(runner_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(runner_module, "claim_dashboard_update_lock", lambda _home, *, token: True)
@@ -1144,7 +1200,7 @@ def test_dashboard_update_runner_exit_zero_requires_embedded_daemon_restart(
         "run_guard_update",
         lambda **kwargs: ({"status": "skipped"}, 0),
     )
-    isolated_refresh = MagicMock(return_value=({"status": "restarted"}, "restarted"))
+    isolated_refresh = MagicMock(return_value=({"status": "restarted", "runtime_verified": True}, "restarted"))
     legacy_restart = MagicMock()
     monkeypatch.setattr(runner_module.update_commands, "refresh_guard_daemon_after_update", isolated_refresh)
     monkeypatch.setattr(runner_module, "ensure_guard_daemon_after_update", legacy_restart)
@@ -1258,7 +1314,7 @@ def test_dashboard_update_runner_failure_stderr_never_renders_payload_details(
         "run_guard_update",
         lambda **kwargs: ({"status": "failed", **failure_detail}, 1),
     )
-    isolated_refresh = MagicMock(return_value=({"status": "restarted"}, "restarted"))
+    isolated_refresh = MagicMock(return_value=({"status": "restarted", "runtime_verified": True}, "restarted"))
     legacy_restart = MagicMock()
     clear_lock = MagicMock(return_value=True)
     monkeypatch.setattr(runner_module.update_commands, "refresh_guard_daemon_after_update", isolated_refresh)

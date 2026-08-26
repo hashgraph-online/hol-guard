@@ -467,7 +467,9 @@ See [`devcontainer-features/hol-guard/README.md`](devcontainer-features/hol-guar
 | :--- | :--- |
 | Codex | `.codex-plugin/plugin.json`, `marketplace.json`, `.agents/plugins/marketplace.json` |
 | Claude Code | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` |
+| DeepSeek Harness | `package.json` with `dsh.bundle`, declared patch file, and Cordis `apply(ctx)` runtime export |
 | Gemini CLI | `gemini-extension.json`, `commands/**/*.toml` |
+| Kimi Code | `kimi.plugin.json`, `.kimi-plugin/plugin.json`, declared skills, agents, commands, prompts, and MCP servers |
 | OpenCode | `opencode.json`, `opencode.jsonc`, `.opencode/commands`, `.opencode/plugins` |
 
 Use `--ecosystem auto` (default) to scan all detected packages in a repository, or select a single ecosystem explicitly.
@@ -505,6 +507,12 @@ plugin-scanner scan ./plugins-repo --ecosystem auto
 
 # Scan only Claude package surfaces
 plugin-scanner scan ./plugins-repo --ecosystem claude
+
+# Scan only native Kimi Code plugin surfaces
+plugin-scanner scan ./plugins-repo --ecosystem kimi
+
+# Scan a native DeepSeek Harness (DSH/Cordis) package
+plugin-scanner scan ./dsh-plugin --ecosystem deepseek-harness
 
 # List supported ecosystems
 plugin-scanner --list-ecosystems

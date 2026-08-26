@@ -102,9 +102,6 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "APPDATA",
         "COMSPEC",
         "HOME",
-        "HOL_GUARD_DESKTOP",
-        "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
-        "HOL_GUARD_DESKTOP_VERSION",
         "LANG",
         "LC_ALL",
         "LC_CTYPE",
@@ -124,6 +121,11 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "USERPROFILE",
         "WINDIR",
     }
+)
+_GUARD_DAEMON_DESKTOP_ENV_KEYS = (
+    "HOL_GUARD_DESKTOP",
+    "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
+    "HOL_GUARD_DESKTOP_VERSION",
 )
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
@@ -195,7 +197,9 @@ def _daemon_launcher_env(
     )
     if getattr(sys, "frozen", False) is True or executable is not None:
         env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-        env.setdefault("HOL_GUARD_DESKTOP", "1")
+        for key in _GUARD_DAEMON_DESKTOP_ENV_KEYS:
+            if value := os.environ.get(key):
+                env[key] = value
     if os.name == "nt":
         env["USERPROFILE"] = str(trusted_home)
     if guard_home is not None and not _guard_home_is_ephemeral(guard_home):

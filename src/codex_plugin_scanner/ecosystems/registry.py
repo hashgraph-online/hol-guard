@@ -5,7 +5,9 @@ from __future__ import annotations
 from .base import EcosystemAdapter
 from .claude import ClaudeAdapter
 from .codex import CodexAdapter
+from .deepseek_harness import DeepSeekHarnessAdapter
 from .gemini import GeminiAdapter
+from .kimi import KimiAdapter
 from .opencode import OpenCodeAdapter
 from .types import Ecosystem
 
@@ -16,7 +18,9 @@ def get_default_adapters() -> tuple[EcosystemAdapter, ...]:
     return (
         CodexAdapter(),
         ClaudeAdapter(),
+        DeepSeekHarnessAdapter(),
         GeminiAdapter(),
+        KimiAdapter(),
         OpenCodeAdapter(),
     )
 
@@ -29,6 +33,8 @@ def resolve_ecosystem(value: str | None) -> Ecosystem | None:
     lowered = value.strip().lower()
     if lowered in ("", "auto"):
         return None
+    if lowered in ("dsh", "deepseek_harness"):
+        lowered = Ecosystem.DEEPSEEK_HARNESS.value
     try:
         return Ecosystem(lowered)
     except ValueError:

@@ -9,8 +9,8 @@ from codex_plugin_scanner.guard.store_local_cli_schema import (
     _V1_CHECKSUM,
     _V2_CHECKSUM,
     _V3_CHECKSUM,
-    LocalCliSchemaError,
     LOCAL_CLI_SCHEMA_VERSION,
+    LocalCliSchemaError,
     ensure_local_cli_schema,
 )
 

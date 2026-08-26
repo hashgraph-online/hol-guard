@@ -172,25 +172,27 @@ def _load_source_wheel(path: Path, *, version: str) -> SourceWheel:
 
     entries: dict[str, bytes] = {}
     modes: dict[str, int] = {}
-    with _open_regular_file(path, max_bytes=_MAX_SOURCE_WHEEL_BYTES, label="source wheel") as source_file:
-        with zipfile.ZipFile(source_file, "r") as archive:
-            infos = archive.infolist()
-            _validate_source_archive_bounds(infos)
-            names = [info.filename for info in infos if not info.is_dir()]
-            if len(names) != len(set(names)):
-                raise NativeWheelError("source wheel contains duplicate entries")
-            canonical_names: set[str] = set()
-            for info in infos:
-                if info.is_dir():
-                    continue
-                if not _safe_archive_path(info.filename):
-                    raise NativeWheelError(f"source wheel contains an unsafe path: {info.filename}")
-                collision_key = _canonical_archive_key(info.filename)
-                if collision_key in canonical_names:
-                    raise NativeWheelError(f"source wheel contains a canonical path collision: {info.filename}")
-                canonical_names.add(collision_key)
-                entries[info.filename] = _read_zip_entry_bounded(archive, info)
-                modes[info.filename] = _entry_mode(info)
+    with (
+        _open_regular_file(path, max_bytes=_MAX_SOURCE_WHEEL_BYTES, label="source wheel") as source_file,
+        zipfile.ZipFile(source_file, "r") as archive,
+    ):
+        infos = archive.infolist()
+        _validate_source_archive_bounds(infos)
+        names = [info.filename for info in infos if not info.is_dir()]
+        if len(names) != len(set(names)):
+            raise NativeWheelError("source wheel contains duplicate entries")
+        canonical_names: set[str] = set()
+        for info in infos:
+            if info.is_dir():
+                continue
+            if not _safe_archive_path(info.filename):
+                raise NativeWheelError(f"source wheel contains an unsafe path: {info.filename}")
+            collision_key = _canonical_archive_key(info.filename)
+            if collision_key in canonical_names:
+                raise NativeWheelError(f"source wheel contains a canonical path collision: {info.filename}")
+            canonical_names.add(collision_key)
+            entries[info.filename] = _read_zip_entry_bounded(archive, info)
+            modes[info.filename] = _entry_mode(info)
 
     wheel_paths = [name for name in entries if name.endswith(".dist-info/WHEEL")]
     metadata_paths = [name for name in entries if name.endswith(".dist-info/METADATA")]
@@ -276,8 +278,7 @@ def _runtime_capabilities(path: Path) -> RuntimeCapabilities:
         completed = subprocess.run(
             (str(path.resolve(strict=True)), "capabilities", "--json"),
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
             timeout=5.0,
             env=environment,

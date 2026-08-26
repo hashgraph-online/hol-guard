@@ -6,7 +6,6 @@ import multiprocessing
 
 import pytest
 
-
 _PACKAGE_SHIM_SQLITE_LOCK_TEST = (
     "tests/test_guard_package_shims.py::test_package_manager_shim_waits_out_transient_store_writer_lock"
 )

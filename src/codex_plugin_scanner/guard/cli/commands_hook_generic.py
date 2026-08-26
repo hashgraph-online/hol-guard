@@ -140,6 +140,7 @@ from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
     build_approval_context_token,
     build_runtime_launch_identity,
+    parse_approval_context_token,
 )
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
@@ -593,11 +594,21 @@ def _generic_hook_approval_reuse(
             saved_action = "allow"
             saved_present = True
             validation_reason = cast(ApprovalReuseValidationFailure, diagnosed_reason)
+    durable_exact_approval = (
+        validation_reason is None
+        and decision is not None
+        and decision.get("action") == "allow"
+        and decision.get("source") == "approval-gate"
+        and decision.get("scope") == "artifact"
+        and decision.get("expires_at") is None
+        and parse_approval_context_token(decision.get("artifact_hash")) is not None
+    )
     reuse = evaluate_approval_reuse(
         current_action,
         saved_action,
         saved_decision_present=saved_present,
         validation_reason=validation_reason,
+        durable_exact_approval=durable_exact_approval,
     )
     return reuse, saved_present
 
@@ -960,6 +971,14 @@ def _run_hook_generic_payload(
             "allow",
             saved_decision_present=True,
             validation_reason=claimed_validation_reason,
+            durable_exact_approval=(
+                claimed_validation_reason is None
+                and stored_policy_decision is not None
+                and stored_policy_decision.get("source") == "approval-gate"
+                and stored_policy_decision.get("scope") == "artifact"
+                and stored_policy_decision.get("expires_at") is None
+                and parse_approval_context_token(stored_policy_decision.get("artifact_hash")) is not None
+            ),
         )
         policy_action = approval_reuse.action
         approval_reuse_source = "claimed_saved_policy_decision"

@@ -1,4 +1,6 @@
 import {
+  approvalDecisionContractKey,
+  approvalDecisionSubjectKey,
   ADVANCED_SCOPE_VALUES,
   DEFAULT_SCOPE_CHOICES,
   advancedScopeChoicesForRequest,

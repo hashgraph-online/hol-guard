@@ -128,8 +128,8 @@ class _SavedPackagePolicyStore:
         return True
 
 
-@pytest.mark.parametrize("current_action", ["require-reapproval", "sandbox-required", "block"])
-def test_package_saved_allow_never_lowers_stronger_current_action(
+@pytest.mark.parametrize("current_action", ["sandbox-required", "block"])
+def test_package_saved_allow_never_lowers_terminal_current_action(
     tmp_path: Path,
     current_action: GuardAction,
 ) -> None:
@@ -151,11 +151,32 @@ def test_package_saved_allow_never_lowers_stronger_current_action(
 
     assert result.policy_action == current_action
     assert result.reasons[0]["code"] in {
-        "approval_reuse_reapproval_required",
         "approval_reuse_sandbox_required",
         "approval_reuse_current_block",
     }
     assert store.claimed is False
+
+
+def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    artifact = _package_artifact(workspace)
+    context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
+    store = _SavedPackagePolicyStore("allow")
+
+    result = apply_stored_package_policy_override(
+        _package_evaluation("require-reapproval"),
+        store=store,
+        artifact=artifact,
+        artifact_hash=_EXACT_PACKAGE_CONTEXT_TOKEN,
+        workspace_dir=workspace,
+        now="2026-07-17T00:00:00Z",
+        execution_context=context,
+    )
+
+    assert result.policy_action == "allow"
+    assert result.reasons[0]["code"] == "saved_package_approval"
+    assert store.claimed is True
 
 
 def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path) -> None:

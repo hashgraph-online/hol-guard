@@ -567,6 +567,22 @@ def run_guard_update(
         payload["changed"] = False
         payload["resulting_version"] = current_version
         payload["message"] = already_current_update_message(version_check)
+        newer_runtime = (
+            _verified_newer_guard_daemon(
+                context.guard_home,
+                minimum_version=current_version,
+            )
+            if context is not None
+            else None
+        )
+        if newer_runtime is not None:
+            payload["daemon_refresh"] = newer_runtime
+            payload["runtime_artifact_owner"] = "newer_runtime"
+            _append_payload_note(
+                payload,
+                "Kept newer-runtime package shims and harness hooks unchanged.",
+            )
+            return payload, 0
         # Skip force-reinstall/upgrade noise when PyPI already reports current.
         package_shims, package_shim_note = _refresh_package_shims_after_update(
             context=context,
@@ -800,7 +816,28 @@ def run_guard_update(
     notes = _success_notes(payload)
     if notes:
         payload["notes"] = [*_payload_notes(payload), *notes]
-    if payload.get("changed") is True or payload.get("status") == "current":
+    daemon_refresh: dict[str, object] | None = None
+    if context is not None:
+        daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
+            context,
+            update_context=update_context,
+            minimum_version=resulting_version,
+        )
+        if daemon_refresh is not None:
+            payload["daemon_refresh"] = daemon_refresh
+        _append_payload_note(payload, daemon_refresh_note)
+    newer_runtime_owns_artifacts = (
+        isinstance(daemon_refresh, dict)
+        and daemon_refresh.get("status") == "retained_newer_runtime"
+        and daemon_refresh.get("runtime_verified") is True
+    )
+    if newer_runtime_owns_artifacts:
+        payload["runtime_artifact_owner"] = "newer_runtime"
+        _append_payload_note(
+            payload,
+            "Deferred package shim and harness hook repair to the verified newer runtime.",
+        )
+    elif payload.get("changed") is True or payload.get("status") == "current":
         package_shims, package_shim_note = _refresh_package_shims_after_update(
             context=context,
             dry_run=dry_run,
@@ -809,37 +846,28 @@ def run_guard_update(
         if package_shims is not None:
             payload["package_shims"] = package_shims
         _append_payload_note(payload, package_shim_note)
-    repaired_installs, repair_notes = _repair_supported_harnesses(
-        context=context,
-        store=store,
-        workspace=workspace,
-        now=now,
-        dry_run=dry_run,
-        update_context=update_context,
-    )
-    if repair_notes:
-        payload["notes"] = [*_payload_notes(payload), *repair_notes]
-    if repaired_installs:
-        payload["managed_installs"] = repaired_installs
-        if len(repaired_installs) == 1:
-            payload["managed_install"] = repaired_installs[0]
+    if not newer_runtime_owns_artifacts:
+        repaired_installs, repair_notes = _repair_supported_harnesses(
+            context=context,
+            store=store,
+            workspace=workspace,
+            now=now,
+            dry_run=dry_run,
+            update_context=update_context,
+        )
+        if repair_notes:
+            payload["notes"] = [*_payload_notes(payload), *repair_notes]
+        if repaired_installs:
+            payload["managed_installs"] = repaired_installs
+            if len(repaired_installs) == 1:
+                payload["managed_install"] = repaired_installs[0]
     if context is not None:
-        package_changed = _version_changed(current_version, resulting_version)
-        if package_changed:
-            daemon_refresh, daemon_refresh_note = refresh_guard_daemon_after_update(
-                context,
-                update_context=update_context,
-            )
-        else:
-            daemon_refresh, daemon_refresh_note = None, None
-        if daemon_refresh is not None:
-            payload["daemon_refresh"] = daemon_refresh
-        _append_payload_note(payload, daemon_refresh_note)
-        if (
-            daemon_refresh_required
-            and package_changed
-            and not (isinstance(daemon_refresh, dict) and daemon_refresh.get("status") == "restarted")
-        ):
+        daemon_refresh_succeeded = (
+            isinstance(daemon_refresh, dict)
+            and daemon_refresh.get("status") in {"restarted", "retained_newer_runtime"}
+            and daemon_refresh.get("runtime_verified") is True
+        )
+        if daemon_refresh_required and not daemon_refresh_succeeded:
             payload.update(
                 {
                     "status": "failed",
@@ -2152,11 +2180,21 @@ def refresh_guard_daemon_after_update(
     context: HarnessContext,
     *,
     update_context: TrustedUpdateContext | None = None,
+    minimum_version: str | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
     """Restart a resident daemon in a fresh interpreter after a CLI package update."""
 
     if not (context.guard_home / "daemon-state.json").is_file():
         return None, None
+    newer_runtime = _verified_newer_guard_daemon(
+        context.guard_home,
+        minimum_version=minimum_version,
+    )
+    if newer_runtime is not None:
+        return (
+            newer_runtime,
+            "Kept the newer HOL Guard runtime active while updating the shell CLI.",
+        )
     active_context: TrustedUpdateContext | None = None
     try:
         active_context = update_context or _standalone_update_context(context)
@@ -2216,6 +2254,92 @@ def refresh_guard_daemon_after_update(
             cleanup_verified=cleanup_verified,
         )
     return payload, "Restarted the Guard daemon to load the updated package."
+
+
+def _verified_newer_guard_daemon(
+    guard_home: Path,
+    *,
+    minimum_version: str | None = None,
+) -> dict[str, object] | None:
+    """Retain a live newer runtime only after signed-state and loopback health agree."""
+
+    from ..daemon.discovery import load_authenticated_daemon_state
+    from ..daemon.manager import (
+        GUARD_DAEMON_COMPATIBILITY_VERSION,
+        load_guard_daemon_auth_token,
+    )
+
+    state = load_authenticated_daemon_state(guard_home)
+    if state is None:
+        return None
+    daemon_version_text = state.get("package_version")
+    host = state.get("host")
+    port = state.get("port")
+    compatibility_version = state.get("compatibility_version")
+    runtime_fingerprint = state.get("runtime_fingerprint")
+    daemon_pid = state.get("pid")
+    token = load_guard_daemon_auth_token(guard_home)
+    if (
+        not isinstance(daemon_version_text, str)
+        or not isinstance(host, str)
+        or host not in {"127.0.0.1", "::1"}
+        or not isinstance(port, int)
+        or not 1 <= port <= 65535
+        or compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION
+        or not isinstance(runtime_fingerprint, str)
+        or not runtime_fingerprint
+        or not isinstance(daemon_pid, int)
+        or daemon_pid <= 0
+        or not isinstance(token, str)
+        or not token
+    ):
+        return None
+    try:
+        daemon_version = Version(daemon_version_text)
+        required_version_text = minimum_version or package_version.__version__
+        required_version = Version(required_version_text)
+    except InvalidVersion:
+        return None
+    if daemon_version <= required_version:
+        return None
+
+    daemon_url = f"http://{f'[{host}]' if host == '::1' else host}:{port}"
+    request = urllib.request.Request(
+        f"{daemon_url}/v1/healthz/details",
+        headers={"X-Guard-Token": token},
+        method="GET",
+    )
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=1.0) as response:
+            if response.status != 200:
+                return None
+            response_bytes = response.read(65_537)
+            if len(response_bytes) > 65_536:
+                return None
+            details = json.loads(response_bytes.decode("utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
+        return None
+    if not isinstance(details, dict) or details.get("ok") is not True:
+        return None
+    try:
+        details_guard_home = Path(str(details.get("guard_home"))).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    identity_fields = ("package_version", "compatibility_version", "runtime_fingerprint", "pid")
+    if (
+        details_guard_home != guard_home.expanduser().resolve()
+        or any(field not in state or field not in details for field in identity_fields)
+        or any(details.get(field) != state.get(field) for field in identity_fields)
+    ):
+        return None
+    return {
+        "status": "retained_newer_runtime",
+        "daemon_url": daemon_url,
+        "daemon_version": daemon_version_text,
+        "cli_version": required_version_text,
+        "runtime_verified": True,
+    }
 
 
 def _cleanup_failed_guard_daemon_refresh(
@@ -2736,7 +2860,9 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             trusted_failure_reason = error.reason_code
             blocked_reason = "The trusted update environment could not be verified."
 
-    current_version = installed_distribution.version if installed_distribution is not None else "unknown"
+    # Verification failures block updates, but they must not erase display
+    # metadata for the package that is already running.
+    current_version = installed_distribution.version if installed_distribution is not None else _current_version()
     direct_url = installed_distribution.direct_url if installed_distribution is not None else None
     local_source_install = _local_source_install_payload(direct_url)
     local_archive_install = _recover_local_archive_install(
@@ -2752,11 +2878,11 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             network_policy=(managed_policy.network if managed_policy is not None else ManagedNetworkPolicy()),
             include_alpha=include_alpha,
         )
-        if installed_distribution is not None
+        if installed_distribution is not None and installer != "desktop"
         else {
             "source": source_kind,
-            "status": "unavailable",
-            "current_version": None,
+            "status": "managed" if installer == "desktop" else "unavailable",
+            "current_version": current_version if current_version != "unknown" else None,
             "latest_version": None,
             "update_available": None,
         }

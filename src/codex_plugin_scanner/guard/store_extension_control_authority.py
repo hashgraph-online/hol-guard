@@ -699,7 +699,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         migration_registry: CommandSafetyExtensionRegistry | None = None,
     ) -> ExtensionControlAuthorityView:
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            if not ensure_extension_control_authority_schema(connection, require_compatible=False):
+                return self._degraded_view(catalog_digest)
             row = connection.execute(
                 "select * from extension_control_authority_snapshot where singleton = 1"
             ).fetchone()

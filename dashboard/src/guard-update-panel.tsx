@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { HiMiniAdjustmentsHorizontal, HiMiniArrowPath, HiMiniBeaker } from "react-icons/hi2";
+import { HiMiniArrowPath, HiMiniBeaker } from "react-icons/hi2";
 
 import {
   fetchGuardUpdateStatus,
@@ -173,8 +173,50 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
 
   return (
     <div className={props.compact ? "space-y-1" : "space-y-2"}>
-      {version ? (
-        <p className="font-mono text-[10px] text-brand-dark/60" aria-label={`Guard version ${version}`}>
+      {props.onSetUpdateChannel ? (
+        <div className="flex items-center justify-between gap-2">
+          {version ? (
+            <p
+              className="min-w-0 truncate font-mono text-[10px] leading-4 text-brand-dark/70"
+              aria-label={`Guard version ${version}`}
+            >
+              v{version}
+            </p>
+          ) : (
+            <span className="min-w-0 flex-1" aria-hidden="true" />
+          )}
+          {useAlpha ? (
+            <div
+              className="inline-flex min-w-0 shrink-0 items-center gap-1.5"
+              role="status"
+              aria-label="Alpha updates enabled"
+            >
+              <HiMiniBeaker className="h-3 w-3 shrink-0 text-brand-blue" aria-hidden="true" />
+              <span className="text-[11px] font-semibold leading-4 text-brand-blue">Alpha updates</span>
+              <button
+                type="button"
+                onClick={handleOpenAlphaModal}
+                disabled={busy}
+                aria-label="Manage alpha updates"
+                title="Manage alpha updates"
+                className="rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Manage
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleOpenAlphaModal}
+              disabled={busy}
+              className="shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Try alpha updates
+            </button>
+          )}
+        </div>
+      ) : version ? (
+        <p className="font-mono text-[10px] text-brand-dark/70" aria-label={`Guard version ${version}`}>
           v{version}
         </p>
       ) : null}
@@ -183,37 +225,6 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       ) : null}
       {helpCopy ? (
         <p className="text-[11px] leading-relaxed text-brand-dark/70">{helpCopy}</p>
-      ) : null}
-      {props.onSetUpdateChannel && useAlpha ? (
-        <div
-          className="flex items-center justify-between gap-2 rounded-md border border-brand-blue/20 bg-brand-blue/[0.06] px-2 py-1.5"
-          role="status"
-          aria-label="Alpha updates enabled"
-        >
-          <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-brand-blue">
-            <HiMiniBeaker className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            Alpha updates
-          </span>
-          <button
-            type="button"
-            onClick={handleOpenAlphaModal}
-            disabled={busy}
-            aria-label="Manage alpha updates"
-            title="Manage alpha updates"
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-brand-blue transition-colors hover:bg-brand-blue/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <HiMiniAdjustmentsHorizontal className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-      ) : props.onSetUpdateChannel ? (
-        <button
-          type="button"
-          onClick={handleOpenAlphaModal}
-          disabled={busy}
-          className="inline-flex min-h-9 w-full items-center justify-center rounded-lg border border-brand-blue/25 bg-white px-3 py-2 text-xs font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Try alpha updates
-        </button>
       ) : null}
       {showUpdateButton && props.onUpdateGuard ? (
         <button

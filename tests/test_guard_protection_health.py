@@ -11,7 +11,6 @@ import pytest
 
 from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.models import GuardRuntimeState
-from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
 from codex_plugin_scanner.guard.runtime.containment_health import (
     CONTAINMENT_POLICY_CONTRACT_DIGEST,
@@ -27,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.protection_health import (
 from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
     build_runtime_protection_health,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
 

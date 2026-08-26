@@ -120,6 +120,7 @@ Documentation = "https://github.com/hashgraph-online/hol-guard/tree/main/docs/gu
 Repository = "https://github.com/hashgraph-online/hol-guard"
 Issues = "https://github.com/hashgraph-online/hol-guard/issues"
 Changelog = "https://github.com/hashgraph-online/hol-guard/releases"
+Dataset = "https://huggingface.co/datasets/HashgraphOnline/hol-plugin-security"
 
 [tool.ruff]
 target-version = "py310"
@@ -156,6 +157,8 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/fixtures/mcp-canary-server.py" = ["N999"]
+"scripts/codex-auto-resume-smoke.py" = ["N999"]
+"scripts/e2e-cursor-hook-smoke.py" = ["N999"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

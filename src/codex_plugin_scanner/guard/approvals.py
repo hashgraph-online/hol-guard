@@ -1513,6 +1513,11 @@ def _live_hook_verification(
 
                 verified[harness] = grok_hooks_protection_ready(context)
                 continue
+            if harness == "grok":
+                from .cli.install_commands import grok_hooks_protection_ready
+
+                verified[harness] = grok_hooks_protection_ready(context)
+                continue
             verified[harness] = verify_managed_install_proof(install.get("manifest"), context) is True
         except (ImportError, OSError, RuntimeError, TypeError, ValueError):
             continue

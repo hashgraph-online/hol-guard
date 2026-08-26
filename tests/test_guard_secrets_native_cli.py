@@ -187,7 +187,7 @@ def test_precommit_install_refuses_custom_hooks_path(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     _git(tmp_path, "config", "core.hooksPath", ".custom-hooks")
 
-    with pytest.raises(ValueError, match="custom core.hooksPath"):
+    with pytest.raises(ValueError, match=r"custom core.hooksPath"):
         install_precommit_hook(tmp_path)
 
 

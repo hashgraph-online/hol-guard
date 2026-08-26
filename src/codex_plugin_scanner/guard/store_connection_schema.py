@@ -974,7 +974,7 @@ class StoreConnectionSchemaMixin:
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())
             ensure_command_activity_api_schema(connection, applied_at=_now())
             ensure_evidence_schema(connection)
-            ensure_extension_control_authority_schema(connection)
+            ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)
             ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
