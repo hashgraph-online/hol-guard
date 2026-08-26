@@ -31,6 +31,8 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config commit.gpgsign false
+          git config tag.gpgsign false
           git fetch --no-tags origin release/3.0
 
           set +e
@@ -216,7 +218,7 @@ jobs:
           git diff --cached --check
           test -z "$(git diff --name-only --diff-filter=U)"
 
-          git commit \
+          git -c commit.gpgsign=false commit \
             -m "Merge branch 'release/3.0' into chore/reconcile-main-into-release-3.0" \
             -m "Signed-off-by: Michael Kantor <6068672+kantorcodes@users.noreply.github.com>"
           git push origin HEAD:chore/reconcile-main-into-release-3.0
