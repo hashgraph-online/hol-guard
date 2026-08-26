@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
+from ..stable_digest import sha256_content_digest
 from ..store import GuardStore
 from .time_support import parse_utc_timestamp
 
@@ -25,7 +26,6 @@ COMMAND_CAPABILITY_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
 COMMAND_REPLAY_MAX_ITEMS = 512
 COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
-
 READ_ONLY_COMMAND_OPERATIONS: tuple[str, ...] = (
     "guard.packageShims.status",
     "guard.packageShims.test",
@@ -366,7 +366,7 @@ def command_job_identity(
     payload = job.get("payload")
     if not isinstance(payload, dict):
         raise CommandCapabilityError("command_payload_invalid")
-    identity["payloadDigest"] = hashlib.sha256(_canonical_bytes(payload)).hexdigest()
+    identity["payloadDigest"] = sha256_content_digest(_canonical_bytes(payload))
     return identity
 
 
@@ -409,7 +409,7 @@ def authorize_command_job(
 
 
 def _identity_digest(identity: Mapping[str, object]) -> str:
-    return hashlib.sha256(_canonical_bytes(identity)).hexdigest()
+    return sha256_content_digest(_canonical_bytes(identity))
 
 
 def register_pending_command(

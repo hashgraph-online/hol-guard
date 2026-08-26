@@ -7,7 +7,6 @@ import urllib.error
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
 
 from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_contracts import (
@@ -15,16 +14,17 @@ from ..review_contracts import (
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
-from ..store_review_event_outbox_binding import review_event_oauth_subject_hash
 from .cloud_review_event_delivery import (
     CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     post_review_events,
 )
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
+from .cloud_review_sync_auth import resolve_cloud_review_sync_auth_context as _resolve_cloud_review_sync_auth_context
 from .local_request_snapshots import (
     _cloud_scrub_text,
     _resolve_cloud_receipt_redaction_level,
 )
+from .oauth_request_retry import request_after_oauth_refresh
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,6 +101,20 @@ def _retry_result_message(items: list[dict[str, object]]) -> str:
     if details:
         return f"{message} Cloud reported: {'; '.join(details[:3])}."
     return message
+
+
+def _post_events_with_oauth_refresh(
+    store: GuardStore,
+    auth_context: dict[str, object],
+    events: list[dict[str, object]],
+) -> tuple[dict[str, object], dict[str, object]]:
+    return request_after_oauth_refresh(
+        auth_context,
+        request=lambda current: post_review_events(current, events=events),
+        refresh=lambda: _resolve_cloud_review_sync_auth_context(store, force_refresh=True),
+        logger=_LOGGER,
+        operation="Cloud Review event upload",
+    )
 
 
 def sync_cloud_review_events_once(
@@ -182,12 +196,8 @@ def sync_cloud_review_events_once(
                 events.append(event)
             if not events:
                 continue
-
             try:
-                response = post_review_events(
-                    auth_context,
-                    events=events,
-                )
+                response, auth_context = _post_events_with_oauth_refresh(store, auth_context, events)
             except Exception as error:
                 store.retry_review_events(
                     sequences,
@@ -432,48 +442,6 @@ def stop_cloud_sync_sync_worker(
     worker.stop_event.set()
     worker.thread.join(timeout=1.0)
     return worker if worker.thread.is_alive() else None
-
-
-def _with_cloud_review_sync_identity(
-    store: GuardStore,
-    auth_context: dict[str, object],
-) -> dict[str, object]:
-    oauth = guard_review_oauth_metadata(store)
-    subject_hash = review_event_oauth_subject_hash(oauth.grant_id)
-    if subject_hash is None:
-        raise GuardReviewContractError("missing_oauth_subject")
-    binding = store.get_review_event_oauth_binding()
-    expected_binding = {
-        "oauth_source": store.guard_source,
-        "oauth_subject_hash": subject_hash,
-        "workspace_id": oauth.workspace_id,
-        "machine_id": oauth.machine_id,
-        "machine_installation_id": oauth.installation_id,
-    }
-    if binding != expected_binding:
-        raise GuardReviewContractError("oauth_binding_mismatch")
-    return {
-        **auth_context,
-        **expected_binding,
-    }
-
-
-def _resolve_cloud_review_sync_auth_context(store: GuardStore) -> dict[str, Any]:
-    """Resolve cloud sync auth context and repair paired storage when possible."""
-    from .runner import (
-        GuardSyncAuthorizationExpiredError,
-        GuardSyncNotConfiguredError,
-        _resolve_guard_sync_auth_context,
-        repair_guard_cloud_connect_storage,
-    )
-
-    try:
-        return _with_cloud_review_sync_identity(store, _resolve_guard_sync_auth_context(store))
-    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError):
-        repair = repair_guard_cloud_connect_storage(store)
-        if repair["existing_sign_in_valid"] or repair["repaired_storage"]:
-            return _with_cloud_review_sync_identity(store, _resolve_guard_sync_auth_context(store))
-        raise
 
 
 def _cloud_sync_sync_loop(
