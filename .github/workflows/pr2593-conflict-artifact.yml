@@ -22,6 +22,8 @@ jobs:
       - name: Record merge conflicts
         shell: bash
         run: |
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
           git fetch origin release/3.0:refs/remotes/origin/release/3.0
           set +e
           git merge --no-commit --no-ff origin/release/3.0 > pr2593-merge-output.txt 2>&1
@@ -36,8 +38,6 @@ jobs:
           } > pr2593-conflicts.txt
           git merge --abort || true
           rm -f pr2593-merge-output.txt
-          git config user.name "Michael Kantor"
-          git config user.email "6068672+kantorcodes@users.noreply.github.com"
           git add pr2593-conflicts.txt
           git commit --signoff -m "chore(ci): refresh PR 2593 conflicts"
           git push origin HEAD:chore/reconcile-main-into-release-3.0
