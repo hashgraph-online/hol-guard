@@ -8,12 +8,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ..daemon import GuardDaemonHookFailureKind
     from ..daemon.manager import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
     from ._commands_shared import _now
     from .commands_support_connect import _guard_service_runtime_profile
     from .commands_support_interaction import _emit, _resolve_cisco_scan_options
     from .commands_support_runtime_artifacts import _optional_string
-
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -247,6 +247,7 @@ def _handle_daemon_repair(guard_home: Path, as_json: bool) -> int:
     _emit("daemon", result, as_json)
     return 0
 
+
 def _handle_daemon_stop(guard_home: Path, as_json: bool) -> int:
     import json as _json
     import os
@@ -279,10 +280,95 @@ def _handle_daemon_stop(guard_home: Path, as_json: bool) -> int:
     _emit("daemon", payload, as_json)
     return 0
 
+
+def _handle_daemon_recover(
+    guard_home: Path,
+    *,
+    home_dir: Path | None,
+    failure_kind: GuardDaemonHookFailureKind,
+) -> int:
+    from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure
+
+    try:
+        _ = recover_guard_daemon_after_hook_failure(
+            guard_home,
+            home_dir=home_dir,
+            failure_kind=failure_kind,
+        )
+    except Exception as error:  # pragma: no cover - recovery adapters can raise platform errors.
+        _emit(
+            "daemon",
+            {
+                "recovered": False,
+                "running": False,
+                "error": {
+                    "code": "daemon_recovery_failed",
+                    "message": str(error),
+                },
+            },
+            True,
+        )
+        return 1
+    return 0
+
+
+def _dispatch_guard_daemon_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None,
+    workspace: Path | None,
+    context: HarnessContext | None,
+    store: GuardStore | None,
+) -> int:
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
+    daemon_command = getattr(args, "daemon_command", None)
+    home_dir = context.home_dir if context is not None else None
+    if daemon_command == "ensure":
+        wake_token = getattr(args, "wake_token", None)
+        try:
+            ensure_guard_daemon(guard_home, home_dir=home_dir)
+        finally:
+            if isinstance(wake_token, str) and wake_token:
+                clear_guard_daemon_wake_reservation(guard_home, token=wake_token)
+        return 0
+    if daemon_command == "recover":
+        return _handle_daemon_recover(
+            guard_home,
+            home_dir=home_dir,
+            failure_kind=args.failure_kind,
+        )
+    if daemon_command == "status":
+        return _handle_daemon_status(guard_home, getattr(args, "json", False))
+    if daemon_command == "repair":
+        return _handle_daemon_repair(guard_home, getattr(args, "json", False))
+    if daemon_command == "stop":
+        return _handle_daemon_stop(guard_home, getattr(args, "json", False))
+    if store is None:
+        store = GuardStore(
+            guard_home,
+            prime_policy_integrity=bool(getattr(args, "serve", False)),
+        )
+    workspace_dir = (
+        context.workspace_dir if context is not None and context.workspace_dir is not None else workspace
+    )
+    daemon = GuardDaemonServer(
+        store,
+        port=args.port or 0,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
+    if args.serve:
+        daemon.serve()
+        return 0
+    _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
+    return 0
+
 __all__ = [
     "_build_abom_payload",
     "_build_explain_payload",
     "_build_explain_payload_with_mode",
+    "_dispatch_guard_daemon_command",
     "_guard_service_login_payload",
     "_guard_service_status_payload",
     "_guard_service_sync_failure_message",
@@ -290,6 +376,7 @@ __all__ = [
     "_guard_service_sync_prerequisite_message",
     "_guard_sync_failure_message",
     "_guard_sync_prerequisite_message",
+    "_handle_daemon_recover",
     "_handle_daemon_repair",
     "_handle_daemon_status",
     "_handle_daemon_stop",

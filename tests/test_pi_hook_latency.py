@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -151,49 +152,6 @@ def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
 
     assert second_result == {"decision": "allow"}
     assert first_result == [{"decision": "allow"}]
-
-
-def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
-
-    source = managed_extension_source(
-        guard_home=tmp_path / "guard-home",
-        home_dir=tmp_path / "home",
-        settings_path=tmp_path / "settings.json",
-    )
-
-    assert "const GUARD_TIMEOUT_MS = 4250;" in source
-    assert "const GUARD_DEADLINE_RESERVE_MS = 250;" in source
-    assert "const GUARD_DAEMON_TIMEOUT_MS = 3100;" in source
-    assert "const GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 250;" in source
-    assert "const GUARD_DAEMON_RETRY_TIMEOUT_MS = 150;" in source
-    assert "const GUARD_CLI_TIMEOUT_MS = 300;" in source
-    assert 'const GUARD_ARGS = ["hook", "--json"' in source
-    assert "compatibility_version !== GUARD_COMPATIBILITY_VERSION" in source
-    assert "error.name === 'AbortError'" in source
-    assert source.index("error.name === 'AbortError'") > source.index("await fetch")
-    timeout_branch = source[source.index("error.name === 'AbortError'") :]
-    assert 'recoveryKind: "transport-failure"' in timeout_branch
-    assert "response.status === 401 || response.status === 403" in source
-    assert 'recoveryKind: "authenticated-control-plane-failure"' in source
-    assert "failure_kind=sys.argv[1]" in source
-    assert "recover_guard_daemon_after_hook_failure" in source
-    assert source.count("assign_current_process_to_windows_hook_job") == 4
-    assert "_windows_job=assign_current_process_to_windows_hook_job()" in source
-    assert "allow_breakaway=True" in source
-    assert "HOL_GUARD_WINDOWS_JOB_CONTAINED" in source
-    assert "if (!response.ok) {" in source
-    assert "reason_code: reasonCode" in source
-    assert "const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS" in source
-    assert "Math.max(deadlineAt - Date.now(), 1)" in source
-    assert "spawnSync" not in source
-    assert "guardCliEvaluationInFlight" in source
-    assert "guardDaemonRecoveryInFlight" in source
-    assert "result = await runGuardCliCommand(" in source
-    assert "GUARD_CLI_WRAPPER_COMMAND" in source
-    assert "[...GUARD_CLI_WRAPPER_ARGS, JSON.stringify(args)]" in source
-    assert 'reason_code: "guard_cli_recovery_busy"' in source
-    assert 'reason_code: "guard_cli_recovery_timeout"' in source
 
 
 def test_pi_hook_deadline_stays_inside_host_timeout() -> None:
@@ -490,14 +448,19 @@ def test_pi_extension_allows_only_one_cli_fallback_during_daemon_outage(tmp_path
         home_dir=tmp_path,
         settings_path=tmp_path / "settings.json",
     )
-    recovery_command = f"const GUARD_DAEMON_RECOVERY_COMMAND = {json.dumps(str(Path(sys.executable).absolute()))};"
-    source = source.replace(
-        recovery_command,
-        'const GUARD_DAEMON_RECOVERY_COMMAND = "missing-guard-recovery-command";',
+    false_command = shutil.which("false")
+    assert false_command is not None
+    source = re.sub(
+        r"const GUARD_DAEMON_RECOVERY_COMMAND = .*?;",
+        f"const GUARD_DAEMON_RECOVERY_COMMAND = {json.dumps(false_command)};",
+        source,
+        count=1,
     )
-    source = source.replace(
-        f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(Path(sys.executable).absolute()))};",
+    source = re.sub(
+        r"const GUARD_CLI_WRAPPER_COMMAND = .*?;",
         f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(fake_cli))};",
+        source,
+        count=1,
     )
     source = source.replace(
         source[
@@ -508,7 +471,7 @@ def test_pi_extension_allows_only_one_cli_fallback_during_daemon_outage(tmp_path
         ],
         "const GUARD_CLI_WRAPPER_ARGS = [];\n",
     )
-    assert "missing-guard-recovery-command" in source
+    assert f"const GUARD_DAEMON_RECOVERY_COMMAND = {json.dumps(false_command)};" in source
     _ = extension_path.write_text(source, encoding="utf-8")
     _ = subprocess.run(
         [

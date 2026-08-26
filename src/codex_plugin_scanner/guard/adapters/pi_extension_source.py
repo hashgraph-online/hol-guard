@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
 
 from ..codex_hook_windows_job import windows_system_executable_path
@@ -12,6 +11,7 @@ from ..daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
 from .pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
+from .pi_extension_runtime_ownership import resolve_pi_extension_runtime_ownership
 
 # Pi terminates extension hooks at roughly 4.5 seconds. Keep Guard's daemon and
 # recovery/fallback paths below that host deadline so a fail-safe result returns.
@@ -36,50 +36,20 @@ def managed_extension_source(
     harness: str = "pi",
     display_name: str = "Pi",
 ) -> str:
-    guard_args = ["hook", "--json", "--guard-home", str(guard_home), "--harness", harness]
-    if home_dir.resolve() != Path.home().resolve():
-        guard_args.extend(["--home", str(home_dir)])
+    runtime = resolve_pi_extension_runtime_ownership(
+        guard_home=guard_home, home_dir=home_dir, harness=harness, package_source=Path(__file__)
+    )
+    guard_args = list(runtime.guard_args)
     guard_args_json = json.dumps(guard_args)
     guard_home_json = json.dumps(str(guard_home))
     home_dir_json = json.dumps(str(home_dir))
     home_dir_is_default_json = "true" if home_dir.resolve() == Path.home().resolve() else "false"
     config_path_json = json.dumps(str(settings_path))
     compatibility_version_json = json.dumps(GUARD_DAEMON_COMPATIBILITY_VERSION)
-    package_root = Path(__file__).resolve().parents[3]
-    cli_wrapper_bootstrap = (
-        "import json,os,sys;"
-        f"sys.path.insert(0,{str(package_root)!r});"
-        "from codex_plugin_scanner.guard.codex_hook_windows_job import "
-        "assign_current_process_to_windows_hook_job;"
-        "_windows_job=assign_current_process_to_windows_hook_job() if os.name=='nt' else None;"
-        "sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;"
-        "sys.stderr.flush() if _windows_job is not None else None;"
-        "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;"
-        "argv=json.loads(sys.argv[1]);"
-        "config={'python_executable':sys.executable,"
-        f"'package_root':{str(package_root)!r},"
-        f"'guard_home':{str(guard_home)!r},"
-        f"'cli_args':argv,'harness':{harness!r},'timeout_seconds':0.75}};"
-        "raise SystemExit(run_bounded_cli_hook(config,input_text=sys.stdin.read(1000001)))"
-    )
-    cli_wrapper_command_json = json.dumps(str(Path(sys.executable).expanduser().absolute()))
-    cli_wrapper_args_json = json.dumps(["-I", "-c", cli_wrapper_bootstrap])
-    recovery_bootstrap = (
-        "import os,sys;"
-        f"sys.path.insert(0,{str(package_root)!r});"
-        "from codex_plugin_scanner.guard.codex_hook_windows_job import "
-        "assign_current_process_to_windows_hook_job;"
-        "_windows_job=assign_current_process_to_windows_hook_job(allow_breakaway=True) if os.name=='nt' else None;"
-        "sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;"
-        "sys.stderr.flush() if _windows_job is not None else None;"
-        "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon.manager import recover_guard_daemon_after_hook_failure;"
-        f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}),"
-        f"home_dir=Path({str(home_dir)!r}),failure_kind=sys.argv[1])"
-    )
-    recovery_command_json = json.dumps(str(Path(sys.executable).expanduser().absolute()))
-    recovery_args_json = json.dumps(["-I", "-c", recovery_bootstrap])
+    cli_wrapper_command_json = json.dumps(runtime.cli_command)
+    cli_wrapper_args_json = json.dumps(runtime.cli_args)
+    recovery_command_json = json.dumps(runtime.recovery_command)
+    recovery_args_json = json.dumps(runtime.recovery_args)
     try:
         taskkill_path = windows_system_executable_path("taskkill.exe") if os.name == "nt" else None
     except (OSError, ValueError):
@@ -95,8 +65,10 @@ def managed_extension_source(
         "\n"
         f"const GUARD_CLI_WRAPPER_COMMAND = {cli_wrapper_command_json};\n"
         f"const GUARD_CLI_WRAPPER_ARGS = {cli_wrapper_args_json};\n"
+        f"const GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS = {str(runtime.cli_accepts_json_args).lower()};\n"
         f"const GUARD_DAEMON_RECOVERY_COMMAND = {recovery_command_json};\n"
         f"const GUARD_DAEMON_RECOVERY_ARGS = {recovery_args_json};\n"
+        f"const GUARD_DAEMON_RECOVERY_ACCEPTS_FAILURE_KIND = {str(runtime.recovery_accepts_failure_kind).lower()};\n"
         f"const GUARD_TASKKILL_PATH = {taskkill_path_json};\n"
         f"const GUARD_ARGS = {guard_args_json};\n"
         f"const GUARD_HOME = {guard_home_json};\n"
@@ -352,7 +324,9 @@ def managed_extension_source(
         "  try {\n"
         "    result = await runGuardCliCommand(\n"
         "      GUARD_CLI_WRAPPER_COMMAND,\n"
-        "      [...GUARD_CLI_WRAPPER_ARGS, JSON.stringify(args)],\n"
+        "      GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS\n"
+        "        ? [...GUARD_CLI_WRAPPER_ARGS, JSON.stringify(args)]\n"
+        "        : args,\n"
         "      serializedPayload,\n"
         "      cliTimeoutMs,\n"
         "    );\n"
