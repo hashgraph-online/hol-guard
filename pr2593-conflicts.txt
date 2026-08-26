@@ -1,1 +1,16 @@
 status=128
+output_begin
+Committer identity unknown
+
+*** Please tell me who you are.
+
+Run
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
+
+to set your account's default identity.
+Omit --global to set the identity only in this repository.
+
+fatal: empty ident name (for <runner@runnervmgx7h7.uy2f3jgrofrezmhnynlbnfxqnb.bx.internal.cloudapp.net>) not allowed
+output_end
