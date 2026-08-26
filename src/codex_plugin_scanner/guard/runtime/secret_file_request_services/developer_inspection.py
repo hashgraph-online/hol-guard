@@ -391,8 +391,7 @@ def _read_only_lookup_search_args_are_safe(
         return False
     if command == "rg" and os.environ.get("RIPGREP_CONFIG_PATH") and not _ripgrep_config_is_disabled(args):
         return False
-    targets = local_read_operands._search_concrete_file_operand_tokens(command, args)
-    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in targets)
+    return local_read_operands.search_operands_are_safe(command, args, root=home_dir)
 
 
 def _read_only_lookup_search_uses_file_input(command: str, args: list[str]) -> bool:

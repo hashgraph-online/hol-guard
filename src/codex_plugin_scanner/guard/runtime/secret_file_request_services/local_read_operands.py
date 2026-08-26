@@ -300,9 +300,25 @@ def _search_concrete_file_operand_tokens(command_name: str, args: list[str]) -> 
     )
 
 
+def search_operands_are_safe(command_name: str, args: list[str], *, root: Path | None) -> bool:
+    """Validate search globs, lexical targets, and resolved local operands together."""
+
+    if root is None:
+        return False
+    roles = _search_file_operand_roles(command_name, args)
+    if not all(
+        _search_glob_pattern_is_safe(operand, root=root)
+        if is_search_glob
+        else _read_only_lookup_target_is_safe(operand, allow_dirs=True, home_dir=root)
+        for operand, is_search_glob in roles
+    ):
+        return False
+    return _local_read_operands_resolve_safely(command_name, args, cwd=root, root=root)
+
+
 def _search_file_operand_roles(command_name: str, args: list[str]) -> tuple[tuple[str, bool], ...]:
     operands: list[tuple[str, bool]] = []
-    pattern_seen = False
+    pattern_seen = _search_command_has_no_pattern(command_name, args)
     skip_next = False
     skip_next_is_operand = False
     after_options = False
@@ -396,6 +412,10 @@ def _search_file_operand_roles(command_name: str, args: list[str]) -> tuple[tupl
     return tuple(operands)
 
 
+def _search_command_has_no_pattern(command_name: str, args: list[str]) -> bool:
+    return command_name == "rg" and "--files" in args
+
+
 def _search_glob_pattern_is_safe(pattern: str, *, root: Path) -> bool:
     is_exclusion = pattern.startswith("!")
     effective_pattern = pattern[1:] if is_exclusion else pattern
@@ -441,4 +461,5 @@ __all__ = [
     "_search_file_operand_tokens",
     "_sed_file_operand_tokens",
     "_shell_segment_file_operand_tokens",
+    "search_operands_are_safe",
 ]
