@@ -18,6 +18,7 @@ from .managed_controls_policy_bundle import (
     managed_controls_revision_from_state,
 )
 from .policy_bundle_activation import (
+    PolicyBundleActivationRejectionError,
     composed_managed_authority,
     encoded_delivery_acknowledgement,
     managed_delivery_matches_base,
@@ -867,6 +868,7 @@ class StorePolicyMixin:
         managed_controls_negotiated_capabilities: frozenset[str] = frozenset(),
         managed_controls_delivery: Mapping[str, object] | None = None,
         managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
+        raise_on_rejection: bool = False,
         approval_gate_grant: ApprovalGateGrant | None = None,
         remote_write_authorized: bool = False,
     ) -> dict[str, object] | None:
@@ -881,6 +883,16 @@ class StorePolicyMixin:
         partially activated bundle behind.
         """
 
+        def reject(
+            reason: str,
+            connection: sqlite3.Connection | None = None,
+        ) -> None:
+            if connection is not None:
+                connection.rollback()
+            if raise_on_rejection:
+                raise PolicyBundleActivationRejectionError(reason)
+            return None
+
         normalized_now, rows = self._prepared_remote_policy_rows(
             decisions,
             now,
@@ -891,7 +903,7 @@ class StorePolicyMixin:
 
         normalized_checkpoint = policy_bundle_acceptance_checkpoint(dict(policy_bundle))
         if dict(policy_bundle_checkpoint) != normalized_checkpoint:
-            return None
+            return reject("policy_bundle_checkpoint_mismatch")
         state_payloads: dict[str, object] = {
             "cloud_exceptions": [dict(item) for item in cloud_exceptions],
             "policy": {},
@@ -929,15 +941,12 @@ class StorePolicyMixin:
             managed_revision = 0
             if managed_controls_policy is not None:
                 if managed_base_authority.health is not AuthorityHealth.PROTECTED:
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_authority_unprotected", connection)
                 if managed_base_snapshot is None:
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_authority_snapshot_missing", connection)
                 managed_authority_key = self._authority_key(required=True)
                 if managed_authority_key is None:
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_authority_key_unavailable", connection)
             checkpoint_row = connection.execute(
                 "select payload_json from sync_state where state_key = ?",
                 ("policy_bundle_acceptance_checkpoint",),
@@ -946,16 +955,13 @@ class StorePolicyMixin:
                 try:
                     existing_checkpoint = json.loads(str(checkpoint_row["payload_json"]))
                 except json.JSONDecodeError:
-                    connection.rollback()
-                    return None
+                    return reject("policy_bundle_checkpoint_invalid", connection)
                 if not isinstance(existing_checkpoint, dict) or not existing_checkpoint:
-                    connection.rollback()
-                    return None
+                    return reject("policy_bundle_checkpoint_invalid", connection)
                 from .policy_bundle_parser import policy_bundle_is_version_downgrade
 
                 if policy_bundle_is_version_downgrade(existing_checkpoint, dict(policy_bundle)):
-                    connection.rollback()
-                    return None
+                    return reject("bundle_version_downgrade", connection)
             active_row = connection.execute(
                 "select payload_json from sync_state where state_key = ?",
                 (MANAGED_CONTROLS_ACTIVE_STATE_KEY,),
@@ -967,8 +973,7 @@ class StorePolicyMixin:
             if (active_row is not None or revision_row is not None) and managed_authority_key is None:
                 managed_authority_key = self._authority_key(required=True)
                 if managed_authority_key is None:
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_authority_key_unavailable", connection)
             previous_revision = 0
             previous_bundle_hash: object = None
             active_managed_layers = ()
@@ -981,8 +986,7 @@ class StorePolicyMixin:
                         authority_key=managed_authority_key,
                     )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError):
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_revision_state_invalid", connection)
             if active_row is not None:
                 assert managed_base_authority is not None
                 assert managed_authority_key is not None
@@ -994,17 +998,14 @@ class StorePolicyMixin:
                         authority_key=managed_authority_key,
                     )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError):
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_activation_state_invalid", connection)
                 if revision_row is not None and active_revision != previous_revision:
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_revision_state_mismatch", connection)
                 previous_revision = active_revision
                 previous_bundle_hash = previous_active.get("bundleHash")
             if managed_controls_delivery is not None:
                 if managed_controls_policy is None or managed_base_authority is None:
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_delivery_policy_missing", connection)
                 current_authority = composed_managed_authority(
                     managed_base_authority,
                     managed_layers=active_managed_layers,
@@ -1016,8 +1017,7 @@ class StorePolicyMixin:
                     policy=managed_controls_policy,
                     base_authority=current_authority,
                 ):
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_delivery_mismatch", connection)
             if managed_controls_policy is not None:
                 assert managed_base_authority is not None
                 assert managed_base_snapshot is not None
@@ -1072,7 +1072,7 @@ class StorePolicyMixin:
                     (MANAGED_CONTROLS_ACTIVE_STATE_KEY, MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY),
                 )
             published_authority = None
-            if managed_controls_publish is not None:
+            if managed_controls_policy is not None or managed_controls_publish is not None:
                 assert managed_base_authority is not None
                 published_authority = published_managed_authority(
                     managed_base_authority,
@@ -1080,9 +1080,8 @@ class StorePolicyMixin:
                     managed_revision=managed_revision,
                 )
             if managed_controls_delivery is not None:
-                if published_authority is None or managed_controls_publish is None:
-                    connection.rollback()
-                    return None
+                if published_authority is None:
+                    return reject("managed_controls_delivery_authority_missing", connection)
                 try:
                     encoded_payloads["policy_bundle_ack"] = encoded_delivery_acknowledgement(
                         connection,
@@ -1092,8 +1091,7 @@ class StorePolicyMixin:
                         observed_at=normalized_now,
                     )
                 except json.JSONDecodeError:
-                    connection.rollback()
-                    return None
+                    return reject("managed_controls_delivery_ack_invalid", connection)
             self._replace_remote_policy_rows_locked(connection, rows)
             for state_key, payload_json in encoded_payloads.items():
                 connection.execute(

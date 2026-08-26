@@ -140,6 +140,7 @@ from ..package_firewall_entitlement import (
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
+from ..policy_bundle_activation import activate_with_reason
 from ..policy_bundle_parser import policy_bundle_is_enforceable, policy_bundle_rejection_message
 from ..policy_bundle_trusted_keys import (
     MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
@@ -1359,8 +1360,7 @@ def _queue_headless_cloud_sync(
                 "status": "in_progress",
                 "message": "Cloud sync already running.",
             }
-        # This probe only short-circuits obviously overlapping cross-process work.
-        # sync_local_guard_cloud_proof() still acquires the real cloud sync lock.
+        # Short-circuit obvious overlap; sync_local_guard_cloud_proof() still owns the real lock.
         if store.cloud_sync_in_progress():
             return {
                 "status": "in_progress",
@@ -3415,8 +3415,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         validated_policy_bundle_delivery: dict[str, object] | None = None
         managed_controls_policy: ParsedManagedControlsPolicy | None = None
         managed_controls_capabilities = frozenset[str]()
-        applied_bundle_hash: str | None = None
-        applied_bundle_version: str | None = None
+        applied_bundle_hash = applied_bundle_version = cast(str | None, None)
         if not policy_memory and not policy_bundle:
             self._write_json({"error": "missing_policy_memory"}, status=400)
             return
@@ -3501,7 +3500,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 device_id=device_id,
             )
             try:
-                activated = self.server.store.apply_policy_bundle_authority(  # type: ignore[attr-defined]
+                activated, activation_rejection_reason = activate_with_reason(
+                    self.server.store.apply_policy_bundle_authority,  # type: ignore[attr-defined]
                     signed_remote_decisions,
                     applied_at,
                     policy_bundle=validated_policy_bundle,
@@ -3525,7 +3525,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_json({"error": "managed_runtime_publish_failed"}, status=503)
                 return
             if activated is None:
-                self._write_json({"error": "bundle_version_downgrade"}, status=400)
+                self._write_json({"error": activation_rejection_reason}, status=400)
                 return
             receipt_redaction_level = validated_policy_bundle.get("receiptRedactionLevel")
             if isinstance(receipt_redaction_level, str) and receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:

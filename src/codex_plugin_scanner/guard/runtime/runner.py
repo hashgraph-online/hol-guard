@@ -55,6 +55,7 @@ from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
     reconcile_connect_state_with_oauth_entitlement,
 )
+from ..policy_bundle_activation import activate_with_reason, persist_activation_rejection
 from ..policy_bundle_decisions import build_policy_bundle_decisions as _materialize_policy_bundle_decisions
 from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
@@ -3180,7 +3181,8 @@ def sync_receipts(
             policy_bundle_ack=policy_bundle_ack,
         )
         try:
-            activated = store.apply_policy_bundle_authority(
+            activated, activation_rejection_reason = activate_with_reason(
+                store.apply_policy_bundle_authority,
                 list(remote_decisions),
                 now,
                 policy_bundle=effective_policy_bundle,
@@ -3201,12 +3203,8 @@ def sync_receipts(
             )
             if activated is None:
                 cloud_exception_items = []
-                activation_last_error = _policy_bundle_rejection_payload("bundle_version_downgrade")
-                store.add_event(
-                    "policy_bundle/rejected",
-                    activation_last_error,
-                    now,
-                )
+                activation_last_error = _policy_bundle_rejection_payload(activation_rejection_reason)
+                persist_activation_rejection(store, activation_last_error, now)
             else:
                 remote_policies_stored = len(remote_decisions)
                 apply_custom_extension_continuity_from_sync(store, effective_policy_bundle, now=now)

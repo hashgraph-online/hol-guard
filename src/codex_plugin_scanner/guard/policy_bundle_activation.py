@@ -4,13 +4,57 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
+from typing import Protocol
 
 from .managed_controls_policy_bundle import signed_cloud_extension_projection_digest
 from .managed_controls_policy_fields import ParsedManagedControlsPolicy
 from .policy_bundle_delivery import effective_projection_digest, policy_bundle_acknowledgement_payload
 from .runtime.extension_control_authority import ExtensionControlAuthorityView
 from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
+
+
+class PolicyBundleActivationRejectionError(RuntimeError):
+    """Typed fail-closed policy activation rejection."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class PolicyBundleRejectionStore(Protocol):
+    def set_sync_payload(
+        self,
+        state_key: str,
+        payload: Mapping[str, object] | Sequence[object],
+        now: str,
+    ) -> None: ...
+
+    def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None: ...
+
+
+def activate_with_reason(
+    activate: Callable[..., dict[str, object] | None],
+    *args: object,
+    **kwargs: object,
+) -> tuple[dict[str, object] | None, str]:
+    """Run strict activation while preserving its typed rejection reason."""
+
+    kwargs["raise_on_rejection"] = True
+    try:
+        result = activate(*args, **kwargs)
+        return result, "" if result is not None else "policy_bundle_activation_rejected"
+    except PolicyBundleActivationRejectionError as error:
+        return None, error.reason
+
+
+def persist_activation_rejection(
+    store: PolicyBundleRejectionStore,
+    payload: dict[str, object],
+    now: str,
+) -> None:
+    store.set_sync_payload("policy_bundle_last_error", payload, now)
+    store.add_event("policy_bundle/rejected", payload, now)
 
 
 def managed_delivery_matches_base(
