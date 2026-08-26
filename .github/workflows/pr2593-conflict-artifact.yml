@@ -1,0 +1,39 @@
+name: PR 2593 conflict artifact
+
+on:
+  push:
+    branches:
+      - chore/reconcile-main-into-release-3.0
+    paths:
+      - .github/workflows/pr2593-conflict-artifact.yml
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: chore/reconcile-main-into-release-3.0
+          fetch-depth: 0
+      - name: Record merge conflicts
+        shell: bash
+        run: |
+          git fetch origin release/3.0
+          set +e
+          git merge --no-commit --no-ff origin/release/3.0
+          status=$?
+          set -e
+          {
+            echo "status=$status"
+            git diff --name-only --diff-filter=U
+          } > pr2593-conflicts.txt
+          git merge --abort || true
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git add pr2593-conflicts.txt
+          git commit --signoff -m "chore(ci): record PR 2593 conflicts"
+          git push origin HEAD:chore/reconcile-main-into-release-3.0
