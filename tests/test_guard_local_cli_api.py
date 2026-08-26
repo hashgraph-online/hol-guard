@@ -137,6 +137,40 @@ def test_list_items_returns_stored_grants_when_discovery_fails(tmp_path: Path, m
     assert listed["state"] == "allowed"
 
 
+def test_list_items_fallback_hides_unset_package_scripts_without_a_project(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    project = tmp_path / "gone-app"
+    project.mkdir()
+    (project / "package.json").write_text(
+        '{"name":"gone-app","scripts":{"guard:audit":"tsx audit.ts"}}\n',
+        encoding="utf-8",
+    )
+    (project / "pnpm-lock.yaml").write_text("{}\n", encoding="utf-8")
+    store = GuardStore(home)
+    service = LocalCliApiService(store=store)
+    recognized = service.recognize({"command": "pnpm run", "cwd": str(project)})
+    item = recognized["item"]
+    assert isinstance(item, dict)
+    (project / "package.json").unlink()
+
+    def fail_discovery() -> dict[str, str]:
+        raise RuntimeError("harness discovery unavailable")
+
+    monkeypatch.setattr(service, "_observe_harness_mcp_servers", fail_discovery)
+    payload = service.list_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    assert all(entry.get("cli_id") != item["cli_id"] for entry in items if isinstance(entry, dict))
+
+
 def test_list_items_keeps_granted_package_scripts_after_project_is_gone(
     tmp_path: Path,
     monkeypatch,

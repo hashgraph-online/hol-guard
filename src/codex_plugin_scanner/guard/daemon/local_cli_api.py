@@ -49,6 +49,7 @@ from ..runtime.local_mcp_probe import (
     probe_stdio_mcp_server,
 )
 from ..runtime.package_json_script_memory import (
+    _package_item_available,
     operator_working_directory,
     public_local_cli_item,
     recognize_operator_package_scripts,
@@ -89,7 +90,7 @@ class LocalCliApiService:
                 labels,
             )
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError):
-            items = [public_local_cli_item(item) for item in stored]
+            items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
         revision = self._store.read_local_cli_revision()
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
