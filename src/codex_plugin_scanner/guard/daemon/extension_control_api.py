@@ -45,6 +45,7 @@ from ..runtime.extension_control_proof import (
 from ..runtime.extension_control_resolver import compose_control_layers
 from ..runtime.extension_control_runtime import ExtensionControlRuntime
 from .extension_control_errors import ExtensionControlApiError
+from .extension_control_request import request_needs_proof, required_request_string
 from .extension_control_semantic_preview import build_extension_control_semantic_preview
 from .managed_controls_api import effective_controls_payload
 
@@ -144,7 +145,7 @@ class ExtensionControlApiService:
         current = self._store.read_extension_control_authority_for_registry(self._registry)
         if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
             raise ExtensionControlApiError(409, "authority_not_recoverable")
-        session_nonce = self._required_string(payload, "session_nonce")
+        session_nonce = required_request_string(payload, "session_nonce")
         action = "recover-authority"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
         try:
@@ -179,7 +180,7 @@ class ExtensionControlApiService:
     def acknowledge_degraded(self, payload: dict[str, object]) -> dict[str, object]:
         if self._runtime.current().health is not AuthorityHealth.DEGRADED_UNACKNOWLEDGED:
             raise ExtensionControlApiError(409, "authority_not_degraded")
-        session_nonce = self._required_string(payload, "session_nonce")
+        session_nonce = required_request_string(payload, "session_nonce")
         current = self._store.read_extension_control_authority_for_registry(self._registry)
         action = "acknowledge-degraded"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
@@ -229,8 +230,8 @@ class ExtensionControlApiService:
                 proposed_layers,
             ),
         }
-        if self._payload_requests_proof(payload):
-            session_nonce = self._required_string(payload, "session_nonce")
+        if request_needs_proof(payload):
+            session_nonce = required_request_string(payload, "session_nonce")
             try:
                 proof = issue_extension_control_proof(
                     self._store.guard_home,
@@ -249,7 +250,7 @@ class ExtensionControlApiService:
             return self._apply_locked(payload)
 
     def _apply_locked(self, payload: dict[str, object]) -> dict[str, object]:
-        proof_id = self._required_string(payload, "proof_id")
+        proof_id = required_request_string(payload, "proof_id")
         mutation = self._mutation_from_payload(payload)
         pending = self._proof_state(proof_id)
         if isinstance(pending, _AppliedMutation):
@@ -380,11 +381,11 @@ class ExtensionControlApiService:
                 raise ExtensionControlApiError(400, "control_limit_exceeded")
             mutation = ExtensionControlMutation(
                 previous_revision=previous_revision,
-                catalog_digest=self._required_string(payload, "catalog_digest"),
+                catalog_digest=required_request_string(payload, "catalog_digest"),
                 layers=layers,
-                actor_id=self._required_string(payload, "actor_id"),
-                idempotency_key=self._required_string(payload, "idempotency_key"),
-                nonce=self._required_string(payload, "nonce"),
+                actor_id=required_request_string(payload, "actor_id"),
+                idempotency_key=required_request_string(payload, "idempotency_key"),
+                nonce=required_request_string(payload, "nonce"),
             )
             _ = mutation.canonical_digest
         except ExtensionControlApiError:
@@ -464,25 +465,6 @@ class ExtensionControlApiService:
                 }
             )
         return event_targets
-
-    @staticmethod
-    def _required_string(payload: dict[str, object], key: str) -> str:
-        value = payload.get(key)
-        if not isinstance(value, str) or not value.strip() or len(value) > 256:
-            raise ExtensionControlApiError(400, f"invalid_{key}")
-        return value
-
-    @staticmethod
-    def _payload_requests_proof(payload: dict[str, object]) -> bool:
-        return any(
-            key in payload
-            for key in (
-                "approval_gate",
-                "approval_password",
-                "approval_totp_code",
-                "session_nonce",
-            )
-        )
 
     def _remember_proof(self, mutation: ExtensionControlMutation, proof: ExtensionControlProof) -> None:
         with self._proof_lock:

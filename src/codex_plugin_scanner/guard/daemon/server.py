@@ -120,8 +120,7 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..managed_controls_policy_bundle import parsed_managed_controls_from_validated_policy_bundle
-from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
+from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
@@ -134,6 +133,8 @@ from ..package_firewall_entitlement import (
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
+from ..policy_bundle_activation import activate_with_reason
+from ..policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from ..policy_bundle_parser import policy_bundle_is_enforceable, policy_bundle_rejection_message
 from ..policy_bundle_trusted_keys import (
     MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
@@ -166,10 +167,8 @@ from ..runtime.runner import (
     _build_policy_bundle_decisions,
     _daemon_version_supported,
     _guard_device_metadata,
-    _managed_controls_negotiated_capabilities,
     _persist_cloud_receipt_redaction_level,
     _policy_bundle_acceptance_checkpoint,
-    _policy_bundle_acknowledgement_payload,
     _policy_bundle_cloud_exception_items,
     _policy_bundle_downgrade_reference,
     _policy_bundle_is_version_downgrade,
@@ -248,6 +247,7 @@ from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiError, LocalCliApiService
 from .managed_controls_api import managed_policy_rows
+from .managed_policy_delivery import daemon_managed_controls_candidate
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     acquire_guard_daemon_owner_lock,
@@ -1383,8 +1383,7 @@ def _queue_headless_cloud_sync(
                 "status": "in_progress",
                 "message": "Cloud sync already running.",
             }
-        # This probe only short-circuits obviously overlapping cross-process work.
-        # sync_local_guard_cloud_proof() still acquires the real cloud sync lock.
+        # Short-circuit obvious overlap; sync_local_guard_cloud_proof() still owns the real lock.
         if store.cloud_sync_in_progress():
             return {
                 "status": "in_progress",
@@ -3326,10 +3325,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         policy_memory = self._policy_memory_payload(payload.get("policy_memory"))
         policy_bundle = self._policy_memory_payload(payload.get("policy_bundle") or payload.get("policyBundle"))
         validated_policy_bundle: dict[str, object] | None = None
+        validated_policy_bundle_delivery: dict[str, object] | None = None
         managed_controls_policy: ParsedManagedControlsPolicy | None = None
         managed_controls_capabilities = frozenset[str]()
-        applied_bundle_hash: str | None = None
-        applied_bundle_version: str | None = None
+        applied_bundle_hash = applied_bundle_version = cast(str | None, None)
         if not policy_memory and not policy_bundle:
             self._write_json({"error": "missing_policy_memory"}, status=400)
             return
@@ -3377,32 +3376,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ):
                 self._write_json({"error": "bundle_version_downgrade"}, status=400)
                 return
+            device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
             if validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                managed_controls_capabilities = _managed_controls_negotiated_capabilities(
-                    self.server.store,  # type: ignore[attr-defined]
-                    payload,
+                (
+                    managed_controls_policy,
+                    managed_controls_capabilities,
+                    validated_policy_bundle_delivery,
+                    managed_error,
+                ) = daemon_managed_controls_candidate(
+                    store=self.server.store,  # type: ignore[attr-defined]
+                    payload=payload,
+                    policy_bundle=validated_policy_bundle,
+                    device_id=device_id,
                 )
-                try:
-                    managed_controls_policy = parsed_managed_controls_from_validated_policy_bundle(
-                        validated_policy_bundle,
-                        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-                        negotiated_capabilities=managed_controls_capabilities,
-                    )
-                except ManagedControlsPolicyError as error:
-                    self._write_json({"error": error.code}, status=400)
+                if managed_error is not None:
+                    self._write_json({"error": managed_error}, status=400)
                     return
             applied_at = _now()
-            device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
             signed_remote_decisions = _build_policy_bundle_decisions(
                 validated_policy_bundle,
                 device_id=device_id,
                 device_name=device_name,
             )
-            policy_bundle_ack = _policy_bundle_acknowledgement_payload(
+            policy_bundle_ack = policy_bundle_acknowledgement_payload(
                 device_id=device_id,
                 device_name=device_name,
                 policy_bundle=validated_policy_bundle,
                 synced_at=applied_at,
+                delivery=validated_policy_bundle_delivery,
             )
             cloud_exception_items = _policy_bundle_cloud_exception_items(
                 self.server.store,  # type: ignore[attr-defined]
@@ -3412,7 +3413,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 device_id=device_id,
             )
             try:
-                activated = self.server.store.apply_policy_bundle_authority(  # type: ignore[attr-defined]
+                activated, activation_rejection_reason = activate_with_reason(
+                    self.server.store.apply_policy_bundle_authority,  # type: ignore[attr-defined]
                     signed_remote_decisions,
                     applied_at,
                     policy_bundle=validated_policy_bundle,
@@ -3427,6 +3429,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     policy_bundle_last_error={},
                     managed_controls_policy=managed_controls_policy,
                     managed_controls_negotiated_capabilities=managed_controls_capabilities,
+                    managed_controls_delivery=validated_policy_bundle_delivery,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                     approval_gate_grant=approval_gate_grant,
                     remote_write_authorized=True,
@@ -3434,8 +3437,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             except (ExtensionControlAuthorityError, ValueError):
                 self._write_json({"error": "managed_runtime_publish_failed"}, status=503)
                 return
-            if not activated:
-                self._write_json({"error": "bundle_version_downgrade"}, status=400)
+            if activated is None:
+                self._write_json({"error": activation_rejection_reason}, status=400)
                 return
             receipt_redaction_level = validated_policy_bundle.get("receiptRedactionLevel")
             if isinstance(receipt_redaction_level, str) and receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:

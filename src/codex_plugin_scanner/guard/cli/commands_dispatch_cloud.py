@@ -297,15 +297,14 @@ def _run_guard_sync_command(
 
         with GuardProgress(total=2, title="Guard Sync") as bar:
             bar.step("Syncing receipts, Guard events, and inventory to Guard Cloud...")
-            with store.hold_cloud_sync_lock():
-                payload = sync_receipts(
-                    store,
-                    auth_context=auth_context,
-                    home_dir=context.home_dir,
-                    workspace_dir=context.workspace_dir,
-                    include_aibom=True,
-                    force_aibom=force_aibom,
-                )
+            payload = sync_local_guard_cloud_proof(
+                store,
+                auth_context=auth_context,
+                home_dir=context.home_dir,
+                workspace_dir=context.workspace_dir,
+                include_aibom=True,
+                force_aibom=force_aibom,
+            )
             bar.step("Syncing supply chain state...")
             with suppress(GuardSyncNotConfiguredError, RuntimeError):
                 payload["supply_chain"] = _validated_supply_chain_sync_payload(

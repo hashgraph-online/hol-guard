@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
+from .contract_validation import canonical_uuid, positive_integer
 from .policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     resolve_policy_bundle_signing_key,
@@ -67,8 +68,20 @@ _ALLOWED_ACK_KEYS = frozenset(
         "contractVersion",
         "workspaceId",
         "deviceId",
+        "deliveryId",
+        "runtimeSessionId",
+        "bundleId",
         "bundleVersion",
         "bundleHash",
+        "policyRevision",
+        "extensionAuthorityRevision",
+        "catalogDigest",
+        "effectiveProjectionDigest",
+        "payloadHash",
+        "extensionProjectionDigest",
+        "appliedExtensionAuthorityRevision",
+        "appliedEffectiveProjectionDigest",
+        "lastKnownGoodBundleHash",
         "sequence",
         "status",
         "observedAt",
@@ -404,38 +417,91 @@ def validated_policy_bundle_v2_acknowledgement(
 ) -> tuple[dict[str, object] | None, str | None]:
     """Validate a monotonic explicit device acknowledgement transition."""
 
-    if not _validate_keys(acknowledgement, _ALLOWED_ACK_KEYS):
-        return None, "unknown_field"
     required = _ALLOWED_ACK_KEYS - {"errorCode"}
-    if any(key not in acknowledgement for key in required):
-        return None, "missing_required_field"
-    if acknowledgement.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
-        return None, "unsupported_contract_version"
-    string_fields = ("workspaceId", "deviceId", "bundleHash")
-    if any(_non_empty_string(acknowledgement.get(key), maximum=256) is None for key in string_fields):
-        return None, "invalid_acknowledgement"
-    bundle_version = acknowledgement.get("bundleVersion")
-    sequence = acknowledgement.get("sequence")
-    if (
-        not isinstance(bundle_version, int)
-        or isinstance(bundle_version, bool)
-        or bundle_version < 1
-        or not isinstance(sequence, int)
-        or isinstance(sequence, bool)
-        or sequence < 1
-    ):
-        return None, "invalid_acknowledgement"
+    error = _policy_bundle_v2_acknowledgement_error(acknowledgement, required=required)
+    if error is not None:
+        return None, error
+    sequence = positive_integer(acknowledgement.get("sequence"))
     status = acknowledgement.get("status")
-    if status not in POLICY_BUNDLE_V2_ACK_STATUSES:
-        return None, "invalid_acknowledgement_status"
-    if _strict_utc_timestamp(acknowledgement.get("observedAt")) is None:
-        return None, "invalid_acknowledgement"
-    error_code = acknowledgement.get("errorCode")
-    if error_code is not None and _non_empty_string(error_code, maximum=128) is None:
+    if sequence is None or not isinstance(status, str):
         return None, "invalid_acknowledgement"
     if previous is None:
         return acknowledgement, None
-    identity_fields = ("workspaceId", "deviceId", "bundleVersion", "bundleHash")
+    return _validated_acknowledgement_transition(
+        acknowledgement,
+        previous=previous,
+        required=required,
+        sequence=sequence,
+        status=status,
+    )
+
+
+def _policy_bundle_v2_acknowledgement_error(
+    acknowledgement: dict[str, object],
+    *,
+    required: frozenset[str],
+) -> str | None:
+    if any(key not in _ALLOWED_ACK_KEYS for key in acknowledgement):
+        return "unknown_field"
+    if any(key not in acknowledgement for key in required):
+        return "missing_required_field"
+    if acknowledgement.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
+        return "unsupported_contract_version"
+    string_fields = ("workspaceId", "deviceId", "deliveryId", "runtimeSessionId", "bundleId", "bundleHash")
+    if any(_non_empty_string(acknowledgement.get(key), maximum=256) is None for key in string_fields):
+        return "invalid_acknowledgement"
+    if canonical_uuid(acknowledgement.get("deliveryId")) is None:
+        return "invalid_acknowledgement"
+    digest_fields = (
+        "bundleHash",
+        "effectiveProjectionDigest",
+        "payloadHash",
+        "extensionProjectionDigest",
+        "appliedEffectiveProjectionDigest",
+    )
+    if any(not _is_sha256_digest(acknowledgement.get(field)) for field in digest_fields):
+        return "invalid_acknowledgement"
+    catalog_digest = acknowledgement.get("catalogDigest")
+    if not isinstance(catalog_digest, str) or re.fullmatch(r"[0-9a-f]{64}", catalog_digest) is None:
+        return "invalid_acknowledgement"
+    last_good_hash = acknowledgement.get("lastKnownGoodBundleHash")
+    if last_good_hash is not None and not _is_sha256_digest(last_good_hash):
+        return "invalid_acknowledgement"
+    integer_fields = (
+        "bundleVersion",
+        "sequence",
+        "policyRevision",
+        "appliedExtensionAuthorityRevision",
+    )
+    if any(positive_integer(acknowledgement.get(field)) is None for field in integer_fields):
+        return "invalid_acknowledgement"
+    extension_authority_revision = acknowledgement.get("extensionAuthorityRevision")
+    if (
+        not isinstance(extension_authority_revision, int)
+        or isinstance(extension_authority_revision, bool)
+        or extension_authority_revision < 0
+    ):
+        return "invalid_acknowledgement"
+    status = acknowledgement.get("status")
+    if status not in POLICY_BUNDLE_V2_ACK_STATUSES:
+        return "invalid_acknowledgement_status"
+    if _strict_utc_timestamp(acknowledgement.get("observedAt")) is None:
+        return "invalid_acknowledgement"
+    error_code = acknowledgement.get("errorCode")
+    if error_code is not None and _non_empty_string(error_code, maximum=128) is None:
+        return "invalid_acknowledgement"
+    return None
+
+
+def _validated_acknowledgement_transition(
+    acknowledgement: dict[str, object],
+    *,
+    previous: dict[str, object],
+    required: frozenset[str],
+    sequence: int,
+    status: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    identity_fields = tuple(required - {"contractVersion", "sequence", "status", "observedAt"})
     if any(previous.get(key) != acknowledgement.get(key) for key in identity_fields):
         return None, "acknowledgement_identity_mismatch"
     previous_sequence = previous.get("sequence")

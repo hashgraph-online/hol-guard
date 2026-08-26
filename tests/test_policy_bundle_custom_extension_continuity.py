@@ -143,6 +143,7 @@ def test_sync_receipts_consumes_signed_custom_extension_continuity_in_production
     )
     grant = store.read_local_cli_grant(identity.cli_id)
     assert summary["remote_policies_stored"] >= 0 and grant is not None and grant["state"] == "blocked"
+    assert store.get_sync_payload("policy_bundle_ack") == {}
     assert store.read_local_cli_command_states(identity.cli_id) == {"deploy": "block"}
     state = store.get_sync_payload("custom_extension_continuity")
     assert state["items"][identity.cli_id]["status"] == "applied"

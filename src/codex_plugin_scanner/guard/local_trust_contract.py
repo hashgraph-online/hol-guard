@@ -133,7 +133,7 @@ class _ProcessHandle(Protocol):
 
 
 _TrustResult = TypeVar("_TrustResult")
-_TRUST_BACKEND_SPAWN_TIMEOUT_SECONDS = 3.0
+_TRUST_BACKEND_SPAWN_TIMEOUT_SECONDS = 10.0
 
 
 class TrustBackendUnavailableError(RuntimeError):

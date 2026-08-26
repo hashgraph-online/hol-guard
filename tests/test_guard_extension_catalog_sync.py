@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -14,12 +16,24 @@ from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
     MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
     build_extension_catalog_wire,
     build_managed_controls_runtime_posture,
+    canonical_extension_catalog_json,
+    catalog_digest_for_extensions,
+    validate_extension_catalog_wire,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+ROOT = Path(__file__).resolve().parents[1]
+CONTRACT_ROOT = ROOT / "contracts" / "managed-controls" / "v1"
+
+
+def _shared_catalog_fixture() -> dict[str, object]:
+    payload = json.loads((CONTRACT_ROOT / "extension-catalog.fixtures.json").read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
 
 
 @dataclass(frozen=True)
@@ -164,11 +178,11 @@ def test_runtime_posture_uses_cloud_capabilities_and_bounded_digests() -> None:
     posture = build_managed_controls_runtime_posture(
         catalog_digest="a" * 64,
         extension_authority_revision=7,
-        effective_projection_digest="b" * 64,
+        effective_projection_digest="sha256:" + "b" * 64,
     )
     assert posture["managedControlsCapabilities"] == list(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
     assert posture["extensionAuthorityRevision"] == 7
-    assert posture["effectiveProjectionDigest"] == "b" * 64
+    assert posture["effectiveProjectionDigest"] == "sha256:" + "b" * 64
 
 
 @pytest.mark.parametrize(
@@ -192,26 +206,196 @@ def test_runtime_posture_rejects_invalid_evidence(
         )
 
 
-def test_production_runtime_sync_path_defaults_off_without_touching_local_authority(monkeypatch) -> None:
+def test_shared_catalog_fixture_is_schema_valid_and_canonically_executable() -> None:
+    fixtures = _shared_catalog_fixture()
+    schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
+    valid = fixtures["valid"]
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(valid)
+    parsed = validate_extension_catalog_wire(valid)
+    canonical = json.dumps(
+        parsed["extensions"],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    assert hashlib.sha256(canonical).hexdigest() == parsed["catalogDigest"]
+
+
+def test_shared_catalog_schema_requires_the_semantic_identity_validator() -> None:
+    schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
+
+    assert schema["x-hol-guard-semantic-validator"] == {
+        "id": "validate-extension-catalog-wire-v1",
+        "required": True,
+        "rules": [
+            "unique-extension-id",
+            "globally-unique-permission-id",
+            "replacement-target-exists",
+            "replacement-target-is-not-self",
+        ],
+    }
+
+
+def test_shared_catalog_schema_rejects_replacement_on_active_extension() -> None:
+    fixtures = _shared_catalog_fixture()
+    invalid = deepcopy(fixtures["valid"])
+    extension = invalid["extensions"][0]
+    extension["deprecated"] = False
+    extension["replacementId"] = "command.package-manager"
+    schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(invalid)
+
+
+@pytest.mark.parametrize("field", ["riskClasses", "typedCapabilities"])
+def test_shared_catalog_schema_rejects_empty_permission_capability_values(field: str) -> None:
+    fixtures = _shared_catalog_fixture()
+    invalid = deepcopy(fixtures["valid"])
+    assert isinstance(invalid, dict)
+    extensions = invalid["extensions"]
+    assert isinstance(extensions, list)
+    extension = extensions[0]
+    assert isinstance(extension, dict)
+    permissions = extension["permissions"]
+    assert isinstance(permissions, list)
+    permission = permissions[0]
+    assert isinstance(permission, dict)
+    permission[field] = [""]
+    schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(invalid)
+
+
+def test_shared_catalog_unicode_uses_utf8_canonical_bytes() -> None:
+    fixtures = _shared_catalog_fixture()
+    valid = deepcopy(fixtures["valid"])
+    assert isinstance(valid, dict)
+    extensions = valid["extensions"]
+    assert isinstance(extensions, list)
+    extension = extensions[0]
+    assert isinstance(extension, dict)
+    extension["name"] = "Git protection — café"
+    valid["catalogDigest"] = catalog_digest_for_extensions(extensions)
+    parsed = validate_extension_catalog_wire(valid)
+    assert "café" in json.dumps(parsed, ensure_ascii=False)
+
+
+def test_shared_cross_language_canonicalization_vector_is_exact() -> None:
+    vector = _shared_catalog_fixture()["canonicalizationVectors"][0]
+    extensions = vector["extensions"]
+    assert canonical_extension_catalog_json(extensions) == vector["canonicalJson"]
+    assert catalog_digest_for_extensions(extensions) == vector["catalogDigest"]
+
+
+def test_shared_invalid_generated_at_mutation_fails() -> None:
+    fixture = _shared_catalog_fixture()
+    mutation = fixture["invalidMutations"][0]
+    payload = deepcopy(fixture["valid"])
+    payload[mutation["field"]] = mutation["value"]
+    with pytest.raises(ValueError, match="generatedAt"):
+        validate_extension_catalog_wire(payload)
+
+
+@pytest.mark.parametrize(
+    "case",
+    ("duplicateExtension", "duplicatePermission", "unknownField", "oversized", "privateField"),
+)
+def test_shared_invalid_catalog_cases_fail_behaviorally(case: str) -> None:
+    fixtures = _shared_catalog_fixture()
+    invalid = fixtures["invalid"]
+    assert isinstance(invalid, dict)
+    assert case in invalid
+    payload = deepcopy(fixtures["valid"])
+    assert isinstance(payload, dict)
+    extensions = payload["extensions"]
+    assert isinstance(extensions, list)
+    extension = extensions[0]
+    assert isinstance(extension, dict)
+    permissions = extension["permissions"]
+    assert isinstance(permissions, list)
+    if case == "duplicateExtension":
+        extensions.append(deepcopy(extension))
+        payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
+    elif case == "duplicatePermission":
+        permissions.append(deepcopy(permissions[0]))
+        payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
+    elif case == "unknownField":
+        payload["unexpected"] = True
+    elif case == "oversized":
+        payload["unexpected"] = "x" * 1_000_001
+    else:
+        payload["sourcePath"] = "/private/workspace"
+    with pytest.raises(ValueError):
+        validate_extension_catalog_wire(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "oversized_id"),
+    (
+        ("extension", "command." + ("a" * 300)),
+        ("permission", "command.git.permission." + ("a" * 300)),
+    ),
+)
+def test_catalog_validator_rejects_ids_over_shared_schema_limit(
+    field: str,
+    oversized_id: str,
+) -> None:
+    payload = deepcopy(_shared_catalog_fixture()["valid"])
+    extensions = payload["extensions"]
+    extension = extensions[0]
+    if field == "extension":
+        extension["id"] = oversized_id
+        extension["permissions"][0]["id"] = f"{oversized_id}.permission.push"
+    else:
+        extension["permissions"][0]["id"] = oversized_id
+    payload["catalogDigest"] = catalog_digest_for_extensions(extensions)
+    with pytest.raises(ValueError, match="identity"):
+        validate_extension_catalog_wire(payload)
+
+
+def test_production_runtime_session_defaults_to_legacy_without_touching_local_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
-        "GUARD_EXTENSION_FIRST_CONTROLS_UI",
     ):
         monkeypatch.delenv(name, raising=False)
     store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
-    assert guard_runner_module._managed_controls_runtime_sync_posture(
-        store,
-        generated_at="2026-08-25T16:00:00Z",
-    ) == {}
+    assert (
+        guard_runner_module._managed_controls_runtime_sync_posture(
+            store,
+            generated_at="2026-08-25T00:00:00Z",
+        )
+        == {}
+    )
     assert store.reads == 0
 
 
-def test_real_cloud_runtime_payload_advertises_only_enabled_protected_capabilities(
+def test_cloud_runtime_session_payload_carries_catalog_posture_on_real_sync_path(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    monkeypatch,
+) -> None:
+    monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "true")
+    payload = guard_runner_module._cloud_runtime_session_payload(
+        GuardStore(tmp_path / "guard-home"),
+        {
+            "session_id": "runtime-session-1",
+            "updated_at": "2026-08-25T00:00:00Z",
+            "workspace": "local-machine",
+        },
+    )
+    assert payload["extensionCatalogDigest"]
+    assert payload["extensionControlSchemaVersions"] == ["guard.extension-controls.v1"]
+    assert payload["managedControlsCapabilities"] == ["extension-catalog.v1"]
+
+
+def test_production_runtime_session_advertises_only_enabled_protected_capabilities(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -220,47 +404,72 @@ def test_real_cloud_runtime_payload_advertises_only_enabled_protected_capabiliti
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
     ):
         monkeypatch.setenv(name, "true")
-    payload = guard_runner_module._cloud_runtime_session_payload(
-        GuardStore(tmp_path / "guard-home"),
-        {
-            "session_id": "runtime-session-1",
-            "updated_at": "2026-08-25T16:00:00Z",
-            "workspace": "local-machine",
-        },
+    store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
+    posture = guard_runner_module._managed_controls_runtime_sync_posture(
+        store,
+        generated_at="2026-08-25T00:00:00Z",
     )
-    assert payload["extensionCatalogDigest"]
-    assert payload["managedControlsCapabilities"] == ["extension-catalog.v1"]
+    assert posture["extensionAuthorityRevision"] == 7
+    assert posture["effectiveProjectionDigest"] is not None
+    assert posture["managedControlsCapabilities"] == list(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
+    assert store.reads == 1
 
 
-def test_each_runtime_flag_removes_its_capability_without_touching_local_authority(monkeypatch) -> None:
-    names = (
+@pytest.mark.parametrize(
+    ("disabled_flag", "missing_capabilities"),
+    (
+        (
+            "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
+            {
+                "extension-control-layer.v1",
+                "policy-extension-targets.v1",
+                "managed-controls-atomic-apply.v1",
+            },
+        ),
+        (
+            "GUARD_POLICY_EXTENSION_TARGETS_V1",
+            {"policy-extension-targets.v1", "managed-controls-atomic-apply.v1"},
+        ),
+        ("GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1", {"managed-controls-atomic-apply.v1"}),
+    ),
+)
+def test_production_runtime_session_downgrades_each_capability_independently(
+    monkeypatch: pytest.MonkeyPatch,
+    disabled_flag: str,
+    missing_capabilities: set[str],
+) -> None:
+    for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
-    )
-    for name in names:
+    ):
         monkeypatch.setenv(name, "true")
+    monkeypatch.setenv(disabled_flag, "false")
     store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
-    full = guard_runner_module._managed_controls_runtime_sync_posture(
+    posture = guard_runner_module._managed_controls_runtime_sync_posture(
         store,
-        generated_at="2026-08-25T16:00:00Z",
+        generated_at="2026-08-25T00:00:00Z",
     )
-    assert set(full["managedControlsCapabilities"]) == set(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
-    for disabled in names:
-        monkeypatch.setenv(disabled, "false")
-        posture = guard_runner_module._managed_controls_runtime_sync_posture(
-            store,
-            generated_at="2026-08-25T16:00:00Z",
-        )
-        capabilities = set(posture.get("managedControlsCapabilities", []))
-        if disabled == "GUARD_EXTENSION_CATALOG_SYNC_V1":
-            assert posture == {}
-        elif disabled == "GUARD_MANAGED_EXTENSION_CONTROLS_V1":
-            assert capabilities == {"extension-catalog.v1"}
-        elif disabled == "GUARD_POLICY_EXTENSION_TARGETS_V1":
-            assert "policy-extension-targets.v1" not in capabilities
-            assert "managed-controls-atomic-apply.v1" not in capabilities
-        else:
-            assert "managed-controls-atomic-apply.v1" not in capabilities
-        monkeypatch.setenv(disabled, "true")
+    advertised = set(posture["managedControlsCapabilities"])
+    assert advertised == set(MANAGED_CONTROLS_RUNTIME_CAPABILITIES) - missing_capabilities
+
+
+def test_production_runtime_session_downgrades_degraded_authority_to_catalog_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "GUARD_EXTENSION_CATALOG_SYNC_V1",
+        "GUARD_POLICY_EXTENSION_TARGETS_V1",
+        "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
+        "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
+    ):
+        monkeypatch.setenv(name, "true")
+    store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.TAMPERED, 7, "a" * 64, ()))
+    posture = guard_runner_module._managed_controls_runtime_sync_posture(
+        store,
+        generated_at="2026-08-25T00:00:00Z",
+    )
+    assert posture["extensionAuthorityRevision"] is None
+    assert posture["effectiveProjectionDigest"] is None
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v1"]

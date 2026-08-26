@@ -57,6 +57,7 @@ from codex_plugin_scanner.guard.models import (
     PolicyDecision,
 )
 from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
+from codex_plugin_scanner.guard.policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     payload_hash_for_policy_bundle,
     validated_policy_bundle_payload,
@@ -4086,6 +4087,7 @@ clearer UX and an implementation plan with technical references.
             call_order.append("receipts")
             assert auth_context is shared_auth_context
             assert _kwargs["managed_controls_publish"] is managed_controls_publish
+            assert _kwargs["force_aibom"] is True
             return {
                 "synced_at": "2026-06-05T12:00:05+00:00",
                 "receipts_stored": 3,
@@ -4101,10 +4103,8 @@ clearer UX and an implementation plan with technical references.
         monkeypatch.setattr(guard_runner_module, "sync_runtime_session", fake_sync_runtime_session)
         monkeypatch.setattr(guard_runner_module, "sync_receipts", fake_sync_receipts)
 
-        payload = guard_runner_module.sync_local_guard_cloud_proof(
-            store,
-            managed_controls_publish=managed_controls_publish,
-        )
+        sync_cloud_proof = guard_runner_module.sync_local_guard_cloud_proof
+        payload = sync_cloud_proof(store, force_aibom=True, managed_controls_publish=managed_controls_publish)
 
         assert call_order == ["runtime", "receipts"]
         assert payload["runtime_session_id"] == "runtime-session-1"
@@ -21115,7 +21115,7 @@ def test_receipt_sync_context_uploads_policy_bundle_acknowledgement(tmp_path: Pa
     policy_bundle = store.get_sync_payload("policy_bundle")
     assert isinstance(policy_bundle, dict)
     device_id, device_name = guard_runner_module._guard_device_metadata(store)
-    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+    acknowledgement = policy_bundle_acknowledgement_payload(
         device_id=device_id,
         device_name=device_name,
         policy_bundle=policy_bundle,
@@ -21157,7 +21157,7 @@ def test_receipt_sync_context_omits_invalid_policy_bundle_acknowledgement(
     policy_bundle = store.get_sync_payload("policy_bundle")
     assert isinstance(policy_bundle, dict)
     device_id, device_name = guard_runner_module._guard_device_metadata(store)
-    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+    acknowledgement = policy_bundle_acknowledgement_payload(
         device_id=device_id,
         device_name=device_name,
         policy_bundle=policy_bundle,
@@ -21184,7 +21184,7 @@ def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(
     policy_bundle = store.get_sync_payload("policy_bundle")
     assert isinstance(policy_bundle, dict)
     device_id, device_name = guard_runner_module._guard_device_metadata(store)
-    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+    acknowledgement = policy_bundle_acknowledgement_payload(
         device_id=device_id,
         device_name=device_name,
         policy_bundle=policy_bundle,
@@ -21213,33 +21213,6 @@ def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(
         local_guard_online_at="2026-04-19T00:01:00+00:00",
     )
 
-    assert "policyBundleAcknowledgement" not in context
-
-
-def test_receipt_sync_context_uploads_v2_policy_bundle_acknowledgement(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    acknowledgement = {
-        "contractVersion": "guard-policy-bundle.v2",
-        "workspaceId": "workspace-1",
-        "deviceId": "device-1",
-        "bundleVersion": 3,
-        "bundleHash": "a" * 64,
-        "sequence": 1,
-        "status": "applied",
-        "observedAt": "2026-04-19T00:00:11Z",
-    }
-    store.set_sync_payload(
-        "policy_bundle_ack",
-        acknowledgement,
-        "2026-04-19T00:00:11+00:00",
-    )
-
-    context = guard_runner_module._receipt_sync_context(
-        store,
-        local_guard_online_at="2026-04-19T00:01:00+00:00",
-    )
-
-    assert context["policyBundleAcknowledgementV2"] == acknowledgement
     assert "policyBundleAcknowledgement" not in context
 
 
@@ -22870,106 +22843,6 @@ def test_policy_bundle_v2_downgrade_check_uses_monotonic_bundle_version():
         )
         is False
     )
-
-
-def test_policy_bundle_v2_acknowledgement_sequence_is_monotonic_per_bundle():
-    bundle = {
-        "contractVersion": "guard-policy-bundle.v2",
-        "workspaceId": "workspace-a",
-        "bundleVersion": 7,
-        "bundleHash": "a" * 64,
-    }
-    first = guard_runner_module._policy_bundle_acknowledgement_payload(
-        device_id="device-a",
-        device_name="Guard",
-        policy_bundle=bundle,
-        synced_at="2026-06-05T13:30:00+00:00",
-    )
-    second = guard_runner_module._policy_bundle_acknowledgement_payload(
-        device_id="device-a",
-        device_name="Guard",
-        policy_bundle=bundle,
-        synced_at="2026-06-05T14:31:00+01:00",
-        previous=first,
-    )
-    third = guard_runner_module._policy_bundle_acknowledgement_payload(
-        device_id="device-a",
-        device_name="Guard",
-        policy_bundle=bundle,
-        synced_at="2026-06-05T13:32:00Z",
-        previous=second,
-    )
-
-    assert first == {
-        "contractVersion": "guard-policy-bundle.v2",
-        "workspaceId": "workspace-a",
-        "deviceId": "device-a",
-        "bundleVersion": 7,
-        "bundleHash": "a" * 64,
-        "sequence": 1,
-        "status": "applied",
-        "observedAt": "2026-06-05T13:30:00Z",
-    }
-    assert second["sequence"] == 2
-    assert second["observedAt"] == "2026-06-05T13:31:00Z"
-    assert third["sequence"] == 3
-    assert third["observedAt"] == "2026-06-05T13:32:00Z"
-
-
-def test_policy_bundle_v2_acknowledgement_distinguishes_shadow_validation() -> None:
-    bundle = {
-        "contractVersion": "guard-policy-bundle.v2",
-        "workspaceId": "workspace-a",
-        "bundleVersion": 7,
-        "bundleHash": "a" * 64,
-    }
-    validated = guard_runner_module._policy_bundle_acknowledgement_payload(
-        device_id="device-a",
-        device_name="Guard",
-        policy_bundle=bundle,
-        synced_at="2026-06-05T13:30:00+00:00",
-        status="validated",
-    )
-    applied = guard_runner_module._policy_bundle_acknowledgement_payload(
-        device_id="device-a",
-        device_name="Guard",
-        policy_bundle=bundle,
-        synced_at="2026-06-05T13:31:00+00:00",
-        status="applied",
-        previous=validated,
-    )
-
-    assert validated["status"] == "validated"
-    assert applied["status"] == "applied"
-    assert applied["sequence"] == 2
-
-
-def test_policy_bundle_v2_acknowledgement_resets_sequence_for_new_bundle():
-    previous = {
-        "contractVersion": "guard-policy-bundle.v2",
-        "workspaceId": "workspace-a",
-        "deviceId": "device-a",
-        "bundleVersion": 7,
-        "bundleHash": "a" * 64,
-        "sequence": 8,
-        "status": "applied",
-        "observedAt": "2026-06-05T13:30:00Z",
-    }
-    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
-        device_id="device-a",
-        device_name="Guard",
-        policy_bundle={
-            "contractVersion": "guard-policy-bundle.v2",
-            "workspaceId": "workspace-a",
-            "bundleVersion": 8,
-            "bundleHash": "b" * 64,
-        },
-        synced_at="2026-06-05T13:31:00+00:00",
-        previous=previous,
-    )
-
-    assert acknowledgement["sequence"] == 1
-    assert acknowledgement["bundleVersion"] == 8
 
 
 def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypatch):

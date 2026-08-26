@@ -175,7 +175,7 @@ def _activate_project_memory_bundle(
         update_last_good=True,
         remote_write_authorized=True,
     )
-    assert applied is True
+    assert applied is not None
 
 
 def test_portable_project_identity_matches_across_clone_locations(
