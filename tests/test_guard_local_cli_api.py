@@ -123,10 +123,10 @@ def test_list_items_returns_stored_grants_when_discovery_fails(tmp_path: Path, m
     )
     service = LocalCliApiService(store=store)
 
-    def fail_discovery() -> dict[str, str]:
-        raise RuntimeError("harness discovery unavailable")
+    def fail_observe() -> dict[str, str]:
+        raise AssertionError("list_items must not persist harness MCP")
 
-    monkeypatch.setattr(service, "_observe_harness_mcp_servers", fail_discovery)
+    monkeypatch.setattr(service, "_observe_harness_mcp_servers", fail_observe)
     payload = service.list_items()
     items = payload["items"]
     assert isinstance(items, list)
@@ -160,11 +160,6 @@ def test_list_items_fallback_hides_unset_package_scripts_without_a_project(
     item = recognized["item"]
     assert isinstance(item, dict)
     (project / "package.json").unlink()
-
-    def fail_discovery() -> dict[str, str]:
-        raise RuntimeError("harness discovery unavailable")
-
-    monkeypatch.setattr(service, "_observe_harness_mcp_servers", fail_discovery)
     payload = service.list_items()
     items = payload["items"]
     assert isinstance(items, list)

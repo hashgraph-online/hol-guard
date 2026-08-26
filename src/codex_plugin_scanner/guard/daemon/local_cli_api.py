@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from ..adapters.harness_mcp_discovery import (
     DiscoveredHarnessMcpServer,
-    apply_source_labels,
     discover_harness_mcp_servers,
     discovered_server_for_observation,
     persist_discovered_harness_mcp_servers,
@@ -53,7 +52,6 @@ from ..runtime.package_json_script_memory import (
     operator_working_directory,
     public_local_cli_item,
     recognize_operator_package_scripts,
-    refresh_package_script_catalogs,
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
 from .local_cli_continuity_api import decorate_local_cli_continuity
@@ -82,15 +80,11 @@ class LocalCliApiService:
         self._discovery_cache: tuple[float, tuple[DiscoveredHarnessMcpServer, ...]] | None = None
 
     def list_items(self) -> dict[str, object]:
+        # Listing must stay a read of persisted grants. Live MCP/package
+        # discovery writes to the same store and can abort the HTTP response
+        # when the daemon is under lock contention.
         stored = self._store.list_local_cli_items()
-        try:
-            labels = self._observe_harness_mcp_servers()
-            items = apply_source_labels(
-                refresh_package_script_catalogs(self._store, home_dir=Path.home()),
-                labels,
-            )
-        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError):
-            items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
+        items = [public_local_cli_item(item) for item in stored if _package_item_available(item)]
         revision = self._store.read_local_cli_revision()
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,

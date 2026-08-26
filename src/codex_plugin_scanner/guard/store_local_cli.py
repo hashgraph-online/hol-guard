@@ -113,7 +113,7 @@ class StoreLocalCliMixin:
                 """
                 select cli_id, identity_hash, kind, name, interpreter_name, example_label,
                        observed_count, last_seen_at, source_path, help_status, surface,
-                       server_identity_hash
+                       server_identity_hash, source_label
                 from local_cli_observation
                 order by last_seen_at desc, cli_id asc
                 """
@@ -150,6 +150,7 @@ class StoreLocalCliMixin:
                         "help_status": None,
                         "surface": "cli",
                         "server_identity_hash": None,
+                        "source_label": None,
                         "state": grant["state"],
                         "stale": False,
                         "grant_revision": grant["revision"],
@@ -405,8 +406,9 @@ def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
 
 
 def _observation_from_row(row: object) -> dict[str, object]:
-    values = _row_values(row, 12)
+    values = _row_values(row, 13)
     surface = values[10] if values[10] in {"cli", "mcp", "package-scripts"} else "cli"
+    source_label = values[12]
     return {
         "cli_id": values[0],
         "identity_hash": values[1],
@@ -420,6 +422,7 @@ def _observation_from_row(row: object) -> dict[str, object]:
         "help_status": values[9],
         "surface": surface,
         "server_identity_hash": values[11],
+        "source_label": source_label if isinstance(source_label, str) and source_label else None,
     }
 
 

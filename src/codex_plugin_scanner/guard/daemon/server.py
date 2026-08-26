@@ -246,6 +246,7 @@ from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiError, LocalCliApiService
+from .local_cli_http import handle_local_cli_list
 from .managed_controls_api import managed_policy_rows
 from .managed_policy_delivery import daemon_managed_controls_candidate
 from .manager import (
@@ -2126,10 +2127,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(history, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path == "/v1/local-clis":
-            self._write_json(
-                self._daemon_server().local_cli_api.list_items(),
-                extra_headers={"Cache-Control": "no-store"},
-            )
+            handle_local_cli_list(self)
             return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()

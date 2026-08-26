@@ -6,11 +6,12 @@ import hashlib
 import sqlite3
 from typing import Final, cast
 
-LOCAL_CLI_SCHEMA_VERSION: Final = 4
+LOCAL_CLI_SCHEMA_VERSION: Final = 5
 _V1_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v1").hexdigest()
 _V2_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v2").hexdigest()
 _V3_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v3").hexdigest()
-_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v4").hexdigest()
+_V4_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v4").hexdigest()
+_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v5").hexdigest()
 
 
 class LocalCliSchemaError(ValueError):
@@ -57,7 +58,11 @@ def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
             version, checksum = 3, _V3_CHECKSUM
         if version == 3 and checksum == _V3_CHECKSUM:
             _migrate_v3_to_v4(connection)
-        elif version != LOCAL_CLI_SCHEMA_VERSION or checksum != _SCHEMA_CHECKSUM:
+            version, checksum = 4, _V4_CHECKSUM
+        if version == 4 and checksum == _V4_CHECKSUM:
+            _migrate_v4_to_v5(connection)
+            version, checksum = 5, _SCHEMA_CHECKSUM
+        if version != LOCAL_CLI_SCHEMA_VERSION or checksum != _SCHEMA_CHECKSUM:
             if version > LOCAL_CLI_SCHEMA_VERSION:
                 raise LocalCliSchemaError(
                     f"local CLI state schema v{version} is newer than this Guard build "
@@ -88,7 +93,8 @@ def ensure_local_cli_schema(connection: sqlite3.Connection) -> None:
             surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),
             server_identity_hash text,
             server_command text,
-            server_args_hash text
+            server_args_hash text,
+            source_label text
         )
         """
     )
@@ -181,6 +187,16 @@ def _migrate_v3_to_v4(connection: sqlite3.Connection) -> None:
         """
     )
     _ = connection.execute("drop table local_cli_observation_v3")
+    _ = connection.execute(
+        "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+        (4, _V4_CHECKSUM),
+    )
+
+
+def _migrate_v4_to_v5(connection: sqlite3.Connection) -> None:
+    columns = _table_column_names(connection, "local_cli_observation")
+    if "source_label" not in columns:
+        _ = connection.execute("alter table local_cli_observation add column source_label text")
     _ = connection.execute(
         "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
         (LOCAL_CLI_SCHEMA_VERSION, _SCHEMA_CHECKSUM),

@@ -74,6 +74,7 @@ class StoreLocalMcpMixin:
         server_identity_hash: str,
         server_command: str,
         server_args_hash: str,
+        source_label: str | None = None,
     ) -> str:
         """Insert or refresh an MCP observation without incrementing observed_count."""
 
@@ -94,6 +95,7 @@ class StoreLocalMcpMixin:
                     server_identity_hash=server_identity_hash,
                     server_command=server_command,
                     server_args_hash=server_args_hash,
+                    source_label=source_label,
                 )
                 if inserted is not None:
                     return inserted
@@ -118,6 +120,7 @@ class StoreLocalMcpMixin:
                         server_identity_hash=server_identity_hash,
                         server_command=server_command,
                         server_args_hash=server_args_hash,
+                        source_label=source_label,
                         cli_id=_collision_cli_id(identity.identity_hash),
                     )
                     if retry is not None:
@@ -130,7 +133,8 @@ class StoreLocalMcpMixin:
                 set name = ?, example_label = ?, last_seen_at = ?,
                     server_identity_hash = coalesce(server_identity_hash, ?),
                     server_command = coalesce(server_command, ?),
-                    server_args_hash = coalesce(server_args_hash, ?)
+                    server_args_hash = coalesce(server_args_hash, ?),
+                    source_label = coalesce(?, source_label)
                 where cli_id = ?
                 """,
                 (
@@ -140,6 +144,7 @@ class StoreLocalMcpMixin:
                     server_identity_hash,
                     server_command,
                     server_args_hash,
+                    source_label,
                     cli_id,
                 ),
             )
@@ -259,6 +264,7 @@ def _insert_mcp_observation(
     server_identity_hash: str,
     server_command: str,
     server_args_hash: str,
+    source_label: str | None = None,
     cli_id: str | None = None,
 ) -> str | None:
     target_id = cli_id or identity.cli_id
@@ -270,8 +276,8 @@ def _insert_mcp_observation(
             insert into local_cli_observation (
                 cli_id, identity_hash, kind, name, interpreter_name, example_label,
                 observed_count, last_seen_at, source_path, help_status, surface,
-                server_identity_hash, server_command, server_args_hash
-            ) values (?, ?, ?, ?, ?, ?, 1, ?, null, null, 'mcp', ?, ?, ?)
+                server_identity_hash, server_command, server_args_hash, source_label
+            ) values (?, ?, ?, ?, ?, ?, 1, ?, null, null, 'mcp', ?, ?, ?, ?)
             """,
             (
                 target_id,
@@ -284,6 +290,7 @@ def _insert_mcp_observation(
                 server_identity_hash,
                 server_command,
                 server_args_hash,
+                source_label,
             ),
         )
     except sqlite3.IntegrityError:

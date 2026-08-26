@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.store_local_cli_schema import (
     _V1_CHECKSUM,
     _V2_CHECKSUM,
     _V3_CHECKSUM,
+    _V4_CHECKSUM,
     LOCAL_CLI_SCHEMA_VERSION,
     LocalCliSchemaError,
     ensure_local_cli_schema,
@@ -57,6 +58,7 @@ def test_v1_schema_migrates_to_command_tables(tmp_path: Path) -> None:
     columns = {row[1] for row in connection.execute("pragma table_info(local_cli_observation)").fetchall()}
     assert "surface" in columns
     assert "server_identity_hash" in columns
+    assert "source_label" in columns
     connection.close()
 
 
@@ -101,6 +103,7 @@ def test_v2_schema_migrates_to_mcp_surface(tmp_path: Path) -> None:
     columns = {row[1] for row in connection.execute("pragma table_info(local_cli_observation)").fetchall()}
     assert "surface" in columns
     assert "server_identity_hash" in columns
+    assert "source_label" in columns
     connection.close()
 
 
@@ -154,6 +157,8 @@ def test_v3_schema_accepts_package_scripts_surface(tmp_path: Path) -> None:
         "select version, checksum from local_cli_schema_migration where singleton = 1"
     ).fetchone()
     assert version == LOCAL_CLI_SCHEMA_VERSION
+    columns = {row[1] for row in connection.execute("pragma table_info(local_cli_observation)").fetchall()}
+    assert "source_label" in columns
     connection.execute(
         """
         insert into local_cli_observation (
@@ -170,6 +175,53 @@ def test_v3_schema_accepts_package_scripts_surface(tmp_path: Path) -> None:
         "select surface from local_cli_observation where cli_id = 'local-cli.pkg-demo-abcdef12'"
     ).fetchone()[0]
     assert surface == "package-scripts"
+    connection.close()
+
+
+def test_v4_schema_migrates_source_label(tmp_path: Path) -> None:
+    db = tmp_path / "guard.db"
+    connection = sqlite3.connect(db)
+    connection.execute(
+        """
+        create table local_cli_schema_migration (
+            singleton integer primary key,
+            version integer not null,
+            checksum text not null
+        )
+        """
+    )
+    connection.execute(
+        "insert into local_cli_schema_migration (singleton, version, checksum) values (1, 4, ?)",
+        (_V4_CHECKSUM,),
+    )
+    connection.execute(
+        """
+        create table local_cli_observation (
+            cli_id text primary key,
+            identity_hash text not null,
+            kind text not null,
+            name text not null,
+            interpreter_name text,
+            example_label text not null,
+            observed_count integer not null,
+            last_seen_at text not null,
+            source_path text,
+            help_status text,
+            surface text not null default 'cli',
+            server_identity_hash text,
+            server_command text,
+            server_args_hash text
+        )
+        """
+    )
+    connection.commit()
+    ensure_local_cli_schema(connection)
+    version, _checksum = connection.execute(
+        "select version, checksum from local_cli_schema_migration where singleton = 1"
+    ).fetchone()
+    assert version == LOCAL_CLI_SCHEMA_VERSION
+    columns = {row[1] for row in connection.execute("pragma table_info(local_cli_observation)").fetchall()}
+    assert "source_label" in columns
     connection.close()
 
 
