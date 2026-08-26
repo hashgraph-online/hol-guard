@@ -383,19 +383,16 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     assert "terminal policy decision" in str(hook_output["permissionDecisionReason"]).lower()
 
 
-def test_gr081b_codex_package_install_pretooluse_is_live_wait_candidate() -> None:
-    assert guard_commands_module._codex_pretooluse_live_wait_candidate(
-        {
+def test_gr081b_codex_reviewable_pretooluse_is_live_wait_candidate() -> None:
+    assert guard_commands_module._codex_hook_waits_for_browser_approval(
+        argparse.Namespace(harness="codex", json=False),
+        event_name="PreToolUse",
+        policy_action="review",
+        payload={
             "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "pnpm install minimist@1.2.8"},
-        }
-    )
-    assert guard_commands_module._codex_pretooluse_live_wait_candidate(
-        {
-            "risk_signals": ["invokes a package install request via npm"],
-            "risk_summary": "HOL Guard blocked `minimist@1.2.66` before install.",
-        }
+            "tool_name": "Read",
+            "tool_input": {"path": "/workspace/project/.env"},
+        },
     )
 
 

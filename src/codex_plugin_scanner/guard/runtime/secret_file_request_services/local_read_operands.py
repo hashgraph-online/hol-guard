@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 
-from ..false_positive_rules import SOURCE_INSPECTION_SENSITIVE_PARTS
+from ..false_positive_rules import SOURCE_INSPECTION_BENIGN_DOTFILES, SOURCE_INSPECTION_SENSITIVE_PARTS
 from .read_only_filters import _read_only_lookup_target_is_safe
 
 _RG_SHORT_OPTIONS_WITH_VALUE = frozenset("ABCEdefgjmMrTt")
@@ -300,9 +300,25 @@ def _search_concrete_file_operand_tokens(command_name: str, args: list[str]) -> 
     )
 
 
+def search_operands_are_safe(command_name: str, args: list[str], *, root: Path | None) -> bool:
+    """Validate search globs, lexical targets, and resolved local operands together."""
+
+    roles = _search_file_operand_roles(command_name, args)
+    if not all(
+        _search_glob_pattern_is_safe(operand, root=root)
+        if is_search_glob
+        else _read_only_lookup_target_is_safe(operand, allow_dirs=True, home_dir=root)
+        for operand, is_search_glob in roles
+    ):
+        return False
+    if root is None:
+        return True
+    return _local_read_operands_resolve_safely(command_name, args, cwd=root, root=root)
+
+
 def _search_file_operand_roles(command_name: str, args: list[str]) -> tuple[tuple[str, bool], ...]:
     operands: list[tuple[str, bool]] = []
-    pattern_seen = False
+    pattern_seen = _search_command_has_no_pattern(command_name, args)
     skip_next = False
     skip_next_is_operand = False
     after_options = False
@@ -396,16 +412,30 @@ def _search_file_operand_roles(command_name: str, args: list[str]) -> tuple[tupl
     return tuple(operands)
 
 
-def _search_glob_pattern_is_safe(pattern: str, *, root: Path) -> bool:
-    if any(token in pattern for token in ("**", "{", "}", "!")) or not _read_only_lookup_target_is_safe(
-        pattern,
-        allow_dirs=False,
-        home_dir=root,
+def _search_command_has_no_pattern(command_name: str, args: list[str]) -> bool:
+    return command_name == "rg" and "--files" in args
+
+
+def _search_glob_pattern_is_safe(pattern: str, *, root: Path | None) -> bool:
+    is_exclusion = pattern.startswith("!")
+    effective_pattern = pattern[1:] if is_exclusion else pattern
+    if (
+        not effective_pattern
+        or len(effective_pattern) > 4096
+        or "\n" in effective_pattern
+        or "\x00" in effective_pattern
+        or any(token in effective_pattern for token in ("**", "{", "}", "!"))
+        or Path(effective_pattern).is_absolute()
+        or any(component in {"", ".", ".."} for component in Path(effective_pattern).parts)
     ):
         return False
-    components = Path(pattern).parts
+    if is_exclusion:
+        return True
+    components = Path(effective_pattern).parts
     for component in components:
         folded = component.casefold()
+        if folded.startswith(".") and folded not in SOURCE_INSPECTION_BENIGN_DOTFILES:
+            return False
         for sensitive in SOURCE_INSPECTION_SENSITIVE_PARTS:
             sensitive_folded = sensitive.casefold()
             if fnmatch.fnmatchcase(sensitive_folded, folded) or fnmatch.fnmatchcase(
@@ -425,4 +455,5 @@ __all__ = [
     "_search_file_operand_tokens",
     "_sed_file_operand_tokens",
     "_shell_segment_file_operand_tokens",
+    "search_operands_are_safe",
 ]

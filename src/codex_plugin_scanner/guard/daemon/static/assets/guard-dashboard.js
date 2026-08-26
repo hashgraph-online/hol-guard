@@ -17044,7 +17044,7 @@ function normalizeQueueResolution(payload) {
     resolution_summary: typeof payload.resolution_summary === "string" ? payload.resolution_summary : "",
     retry_hint: isStringOrNull(payload.retry_hint) ? payload.retry_hint : null,
     copy: normalizeQueueCopy(payload.copy),
-    codex_resume: normalizeCodexResume(payload.codex_resume)
+    codexResume: normalizeCodexResume(payload.codexResume)
   };
 }
 function queueSearchParams(input) {
@@ -17912,7 +17912,7 @@ async function resolveRequestWithQueueResult(input) {
       resolution_summary: "Decision saved.",
       retry_hint: null,
       copy: null,
-      codex_resume: null
+      codexResume: null
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
@@ -31322,7 +31322,7 @@ function App() {
         throw error;
       });
       const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
-      const resume = result.codex_resume ?? null;
+      const resume = result.codexResume ?? null;
       setCodexResume(resume);
       setResolvedRequestId(resume !== null ? payload.requestId : null);
       if (nextId !== null) {

@@ -17,8 +17,8 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicy, ManagedPolicyState
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
 from codex_plugin_scanner.guard.runtime.runner import (
-    _LIVE_REQUEST_PRIVACY_PROJECTION_MARKER,
-    _ensure_live_request_privacy_projection,
+    _CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER,
+    _ensure_cloud_review_privacy_projection,
     _persist_cloud_receipt_redaction_level,
     _reset_cloud_receipt_redaction_authority,
 )
@@ -203,7 +203,7 @@ def test_relaxing_receipt_privacy_requeues_pending_cloud_projection(tmp_path: Pa
     assert [str(row["local_request_id"]) for row in rows] == [request_id]
     with store._connect() as connection:
         connection.execute(f"delete from {_LIVE_OUTBOX_TABLE}")
-    _ensure_live_request_privacy_projection(store, level="none", synced_at="2026-08-03T00:02:00Z")
+    _ensure_cloud_review_privacy_projection(store, level="none", synced_at="2026-08-03T00:02:00Z")
     with store._connect() as connection:
         assert connection.execute(f"select count(*) from {_LIVE_OUTBOX_TABLE}").fetchone()[0] == 0
 
@@ -214,7 +214,7 @@ def test_upgrade_republishes_pending_cloud_projection_once(tmp_path: Path) -> No
     with store._connect() as connection:
         connection.execute(f"delete from {_LIVE_OUTBOX_TABLE}")
 
-    _ensure_live_request_privacy_projection(store, level="none", synced_at="2026-08-03T00:01:00Z")
+    _ensure_cloud_review_privacy_projection(store, level="none", synced_at="2026-08-03T00:01:00Z")
 
     with store._connect() as connection:
         rows = connection.execute(
@@ -223,13 +223,13 @@ def test_upgrade_republishes_pending_cloud_projection_once(tmp_path: Path) -> No
         ).fetchall()
         connection.execute(f"delete from {_LIVE_OUTBOX_TABLE}")
     assert [str(row["local_request_id"]) for row in rows] == [request_id]
-    assert store.get_sync_payload(_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER) == {
+    assert store.get_sync_payload(_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER) == {
         "level": "none",
         "requeued": 1,
         "updated_at": "2026-08-03T00:01:00Z",
     }
 
-    _ensure_live_request_privacy_projection(store, level="none", synced_at="2026-08-03T00:02:00Z")
+    _ensure_cloud_review_privacy_projection(store, level="none", synced_at="2026-08-03T00:02:00Z")
     with store._connect() as connection:
         assert connection.execute(f"select count(*) from {_LIVE_OUTBOX_TABLE}").fetchone()[0] == 0
 
@@ -239,15 +239,19 @@ def test_cloud_privacy_transitions_advance_projection_marker(tmp_path: Path) -> 
     _ = store.add_approval_request(_pending_request("cloud-privacy"), "2026-08-03T00:00:00Z")
 
     _persist_cloud_receipt_redaction_level(store, level="none", synced_at="2026-08-03T00:01:00Z")
-    assert store.get_sync_payload(_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER)["level"] == "none"
+    projection_marker = store.get_sync_payload(_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER)
+    assert isinstance(projection_marker, dict)
+    assert projection_marker["level"] == "none"
     with store._connect() as connection:
         connection.execute(f"delete from {_LIVE_OUTBOX_TABLE}")
-    _ensure_live_request_privacy_projection(store, level="none", synced_at="2026-08-03T00:02:00Z")
+    _ensure_cloud_review_privacy_projection(store, level="none", synced_at="2026-08-03T00:02:00Z")
     with store._connect() as connection:
         assert connection.execute(f"select count(*) from {_LIVE_OUTBOX_TABLE}").fetchone()[0] == 0
 
     _reset_cloud_receipt_redaction_authority(store, synced_at="2026-08-03T00:03:00Z")
-    assert store.get_sync_payload(_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER)["level"] == "full"
+    projection_marker = store.get_sync_payload(_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER)
+    assert isinstance(projection_marker, dict)
+    assert projection_marker["level"] == "full"
 
 
 def test_relaxed_security_level_persists_granular_risk_settings(tmp_path: Path) -> None:

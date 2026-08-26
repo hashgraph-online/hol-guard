@@ -85,6 +85,7 @@ _COMMON_HANDLERS = {
     "service": "_run_guard_service_command",
     "device": "_run_guard_device_command",
     "commands": "_run_guard_commands_command",
+    "cloud-review": "_run_guard_cloud_review_command",
     "daemon": "_run_guard_daemon_command",
     "hook": "_run_guard_hook_command",
 }
@@ -123,7 +124,7 @@ def _should_prime_policy_integrity(args: argparse.Namespace) -> bool:
 def _should_allow_system_keyring(args: argparse.Namespace) -> bool:
     """Limit macOS Keychain access to explicit foreground account actions."""
 
-    return args.guard_command in {"connect", "disconnect", "login", "remote-pair"}
+    return args.guard_command in {"cloud-review", "connect", "disconnect", "login", "remote-pair"}
 
 
 def run_guard_command(

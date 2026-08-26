@@ -112,7 +112,7 @@ def test_phase14_package_approval_resume_targets_only_matching_request(
 
     serialized_payloads = json.dumps(captured_payloads)
 
-    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["codexResume"]["status"] == "sent"
     assert "req-minimist" in serialized_payloads
     assert "req-lodash" not in serialized_payloads
     assert store.get_approval_request("req-minimist")["status"] != "pending"

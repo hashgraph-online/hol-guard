@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from codex_plugin_scanner import install_integrity
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction_module
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as package_eval_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
@@ -270,6 +272,12 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
     runner.parent.mkdir(parents=True)
     runner.write_text("#!/bin/sh\n", encoding="utf-8")
     runner.chmod(0o755)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_bunx = fake_bin / "bunx"
+    fake_bunx.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_bunx.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
     command = "bunx --no-install vitest run tests/example.test.ts"
     payload_path = workspace_dir / "hook-event.json"
     _write_codex_pre_tool_payload(payload_path, workspace_dir, command)
@@ -302,6 +310,12 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
         lambda **kwargs: evaluate_package_request(**kwargs, now="2026-05-19T01:00:00Z"),
     )
     monkeypatch.setattr(install_integrity, "warn_if_shadowed", lambda: None)
+    monkeypatch.setattr(interaction_module, "open_browser_url", lambda _url: True)
+    monkeypatch.setattr(
+        guard_commands_module,
+        "wait_for_approval_requests",
+        lambda **_kwargs: {"resolved": False, "pending_request_ids": [], "items": []},
+    )
 
     rc = main(
         [
@@ -321,13 +335,17 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
 
     payload = json.loads(captured.out)
     assert rc == 0
-    assert captured.err == ""
+    approval_requests = store.list_approval_requests(limit=5)
+    assert approval_requests
+    assert captured.err.startswith("HOL Guard is waiting for approval in your browser: http://127.0.0.1:")
+    assert f"/requests/{approval_requests[0]['request_id']}" in captured.err
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     decision_reason = payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "needs your approval" in decision_reason
     assert "open hol guard to approve" in decision_reason
-    approval_requests = store.list_approval_requests(limit=5)
-    assert approval_requests
+    assert (
+        f"/requests/{approval_requests[0]['request_id']}" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    )
     assert approval_requests[0]["policy_action"] == "review"
     evidence = store.list_evidence()
     assert evidence
@@ -386,8 +404,9 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
 
     assert changed_rc == 0
     assert changed_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert changed_capture.err == ""
     assert "open hol guard to approve" in changed_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
     changed_requests = store.list_approval_requests(status="pending", limit=5)
     assert len(changed_requests) == 1
+    assert changed_capture.err.startswith("HOL Guard is waiting for approval in your browser: http://127.0.0.1:")
+    assert f"/requests/{changed_requests[0]['request_id']}" in changed_capture.err
     assert changed_requests[0]["policy_action"] == "review"

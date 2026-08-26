@@ -11,7 +11,8 @@ def test_guard_live_fixtures_are_rejection_only() -> None:
     legacy_bearer = re.compile(rf"{legacy_prefix}[A-Za-z0-9_-]+")
     schema_reference = re.compile(
         rf"(?:create\s+(?:table|trigger)|insert\s+into)\s+{legacy_prefix}request_outbox"
-        + rf"(?:_after_(?:insert|update))?\b|name\s+like\s+['\"]{legacy_prefix}request_outbox_%['\"]",
+        + rf"(?:_after_(?:insert|update))?\b|name\s+like\s+['\"]{legacy_prefix}request_outbox_%['\"]"
+        + rf"|{legacy_prefix}request_outbox\b",
         re.IGNORECASE,
     )
 
@@ -24,6 +25,7 @@ def test_guard_live_fixtures_are_rejection_only() -> None:
     assert not contains_legacy_bearer(f"create table {legacy_prefix}request_outbox")
     assert not contains_legacy_bearer(f"create trigger {legacy_prefix}request_outbox_after_insert")
     assert not contains_legacy_bearer(f"name like '{legacy_prefix}request_outbox_%'")
+    assert not contains_legacy_bearer(f"select * from {legacy_prefix}request_outbox")
     tests_root = Path(__file__).resolve().parent
     allowed_files = {
         "test_guard_oauth_device_connect.py",

@@ -25,16 +25,12 @@ from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_pack
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore
+from tests.guard_oauth_token_support import oauth_binding_access_token
 from tests.test_guard_store_migrations import _install_fake_system_keyring
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
-    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
-
-    Also installs a test-only resolver override so sync-path exercises stay hermetic
-    (no OAuth token refresh against the network). Tests that need real sync against a
-    local server pass sync_url=<url>.
-    """
+    """Seed OAuth and a hermetic sync resolver; pass sync_url for local servers."""
     from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
     from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
@@ -295,7 +291,7 @@ def test_connect_repair_copy_points_to_browser_sign_in(tmp_path: Path) -> None:
     assert "guardPairSecret" not in rendered
 
 
-def test_connect_status_surfaces_legacy_live_request_recovery(
+def test_connect_status_surfaces_quarantined_review_event_recovery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -307,13 +303,13 @@ def test_connect_status_surfaces_legacy_live_request_recovery(
         "machine_id": "machine-1",
         "machine_installation_id": "installation-1",
     }
-    monkeypatch.setattr(store, "get_live_request_oauth_binding", lambda: binding)
+    monkeypatch.setattr(store, "get_review_event_oauth_binding", lambda: binding)
     monkeypatch.setattr(
         store,
-        "live_request_outbox_status",
+        "review_event_outbox_status",
         lambda **kwargs: {
-            "binding_state": "legacy_ambiguous",
-            "legacy_unbound_depth": 3,
+            "binding_state": "quarantined",
+            "unbound_depth": 3,
             **kwargs,
         },
     )
@@ -324,9 +320,9 @@ def test_connect_status_surfaces_legacy_live_request_recovery(
         connect_url="https://hol.org/guard/connect",
     )
 
-    assert payload["live_request_outbox"]["binding_state"] == "legacy_ambiguous"
-    assert payload["live_request_outbox"]["legacy_unbound_depth"] == 3
-    assert payload["live_request_recovery_command"] == (
+    assert payload["review_event_outbox"]["binding_state"] == "quarantined"
+    assert payload["review_event_outbox"]["unbound_depth"] == 3
+    assert payload["review_event_recovery_command"] == (
         "hol-guard connect reassign-quarantined --confirm-source default --confirm-workspace workspace-1"
     )
 
@@ -764,6 +760,7 @@ def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fall
         dpop_private_key_pem="private-key-old",
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value-old", "y": "y-value-old"},
         dpop_public_jwk_thumbprint="thumbprint-old",
+        device_id="device-old",
         grant_id="grant-old",
         machine_id="machine-old",
         supply_chain_entitlement_expires_at="2027-07-05T01:39:51+00:00",
@@ -787,7 +784,7 @@ def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fall
         guard_runner_module,
         "_refresh_guard_oauth_access_token",
         lambda **_kwargs: {
-            "access_token": "access-token-1",
+            "access_token": oauth_binding_access_token("device-old", "grant-old", "machine-old", "workspace-1"),
             "refresh_token": "refresh-token-new",
             "package_firewall_entitlement": {
                 "supply_chain_entitlement_expires_at": "2027-07-05T01:39:51+00:00",
@@ -820,13 +817,13 @@ def test_sync_local_guard_cloud_proof_repairs_degraded_oauth_from_encrypted_fall
             "local_guard_online_at": "2026-06-05T01:40:20+00:00",
         },
     )
-
     summary = guard_runner_module.sync_local_guard_cloud_proof(store)
 
     assert summary["synced_at"] == "2026-06-05T01:40:20+00:00"
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
     repaired_credentials = store.get_oauth_local_credentials()
     assert repaired_credentials is not None
+    assert repaired_credentials["device_id"] == "device-old"
     assert repaired_credentials["refresh_token"] == "refresh-token-new"
     entitlement = resolve_package_firewall_entitlement(store)
     assert entitlement == {

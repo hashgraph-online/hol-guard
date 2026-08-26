@@ -77,6 +77,7 @@ from ..codex_app_server import codex_resume_metadata_from_hook_payload
 from ..codex_resume import inspect_codex_resume_capabilities
 from ..config import (
     DEFAULT_SECURITY_LEVEL,
+    MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
     VALID_RISK_ACTION_KEYS,
     VALID_SECURITY_LEVELS,
     GuardConfig,

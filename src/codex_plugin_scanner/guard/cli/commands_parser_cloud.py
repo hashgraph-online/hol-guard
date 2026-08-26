@@ -16,6 +16,17 @@ import argparse
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
+def _add_cloud_review_connect_consent(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--enable-cloud-review",
+        action="store_true",
+        help=(
+            "After successful sign-in, allow authorized Guard Cloud reviewers to approve or keep blocked "
+            "one exact request already paused on this device. This cannot create reusable policy or bypass "
+            "an immutable block."
+        ),
+    )
+
 def _configure_guard_cloud_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -35,7 +46,6 @@ def _configure_guard_cloud_parsers(
         help="Named connection profile for multi-environment usage.",
     )
     login_parser.add_argument("--json", action="store_true")
-
     connect_parser = guard_subparsers.add_parser(
         "connect",
         help="Open browser OAuth, pair this runtime to HOL Guard, and send the first sync",
@@ -78,6 +88,7 @@ def _configure_guard_cloud_parsers(
         default="default",
         help="Named connection profile for multi-environment usage (e.g. 'staging'). Defaults to 'default'.",
     )
+    _add_cloud_review_connect_consent(connect_parser)
     connect_parser.add_argument(
         "--confirm-source",
         help="With reassign-quarantined, approve the exact destination source name.",

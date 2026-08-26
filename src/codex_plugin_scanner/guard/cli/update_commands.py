@@ -2310,15 +2310,14 @@ def _verified_newer_guard_daemon(
         method="GET",
     )
     try:
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(request, timeout=1.0) as response:
+        with managed_urlopen(request, timeout=1.0, policy=ManagedNetworkPolicy(proxy_mode="none")) as response:
             if response.status != 200:
                 return None
             response_bytes = response.read(65_537)
             if len(response_bytes) > 65_536:
                 return None
             details = json.loads(response_bytes.decode("utf-8"))
-    except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
+    except (ManagedNetworkError, OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
         return None
     if not isinstance(details, dict) or details.get("ok") is not True:
         return None
@@ -2878,10 +2877,10 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             network_policy=(managed_policy.network if managed_policy is not None else ManagedNetworkPolicy()),
             include_alpha=include_alpha,
         )
-        if installed_distribution is not None and installer != "desktop"
+        if installed_distribution is not None
         else {
             "source": source_kind,
-            "status": "managed" if installer == "desktop" else "unavailable",
+            "status": "unavailable",
             "current_version": current_version if current_version != "unknown" else None,
             "latest_version": None,
             "update_available": None,

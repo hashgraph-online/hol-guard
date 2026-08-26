@@ -474,7 +474,13 @@ function normalizeLocalCliCommand(value) {
 function normalizeLocalCliList(value) {
   if (!isRecord(value)) throw new Error("Invalid local CLI list");
   const cloud = isRecord(value.cloud) ? value.cloud : {};
-  const items = Array.isArray(value.items) ? value.items.map(normalizeLocalCliItem) : [];
+  const items = Array.isArray(value.items) ? value.items.flatMap((entry) => {
+    try {
+      return [normalizeLocalCliItem(entry)];
+    } catch {
+      return [];
+    }
+  }) : [];
   return {
     schema_version: requiredString(value.schema_version, "schema"),
     revision: requiredInt(value.revision, "revision"),
@@ -4808,6 +4814,7 @@ function ExtensionsOverview(props) {
       props.recoveryStatus && !props.healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-emerald-800", children: props.recoveryStatus }) : null
     ] }),
     props.mutationError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.mutationError }) }) : null,
+    props.localCliError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.localCliError }) }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PatternSearchConsole,
       {
@@ -5837,6 +5844,7 @@ function ProtectionCenterWorkspace(props) {
         catalogExtensions,
         effective: state.effective,
         localCliItems: localClis.data?.items ?? [],
+        localCliError: localClis.error,
         mutationError: mutationError && !pending ? mutationError : null,
         recoveryStatus,
         healthBroken,
@@ -5857,6 +5865,7 @@ function ProtectionCenterWorkspace(props) {
         onRetry: retryLocalClis
       }
     ) : null,
+    showLocalCli && localClis.error && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mb-3 text-sm font-medium text-rose-800", children: localClis.error }) : null,
     showLocalCli && !localClis.data && !localClis.error ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading custom extension" }) : null,
     routeState.route.kind === "add-custom" && state.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       AddCustomExtensionWorkspace,

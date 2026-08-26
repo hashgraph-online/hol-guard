@@ -17,7 +17,7 @@ class StoreApprovalsMixin:
                 now,
                 oauth_source=self._guard_source,
             )
-            bind_live_request_outbox_for_request(
+            bind_review_events_for_request(
                 connection,
                 request_id=request_id,
                 oauth_source=self._guard_source,
