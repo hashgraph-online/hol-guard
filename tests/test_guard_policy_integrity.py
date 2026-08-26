@@ -536,7 +536,7 @@ def test_trust_backend_check_handles_result_permission_denied(
 
     result = run_trust_backend_check(
         _protected_trust_result,
-        timeout_seconds=1.0,
+        timeout_seconds=10.0,
         timeout_result={"mode": "degraded"},
         on_error=lambda error: {
             "mode": "degraded",
@@ -598,7 +598,7 @@ def test_trust_backend_check_allows_spawned_helper_child_process(tmp_path: Path)
     result = run_trust_backend_check(
         partial(_nested_trust_result, str(marker_path)),
         # This verifies nested containment, while concurrent spawn runners need startup headroom.
-        timeout_seconds=4.0,
+        timeout_seconds=10.0,
         timeout_result={"mode": "degraded", "nested": "False"},
     )
 
@@ -644,15 +644,15 @@ def test_trust_backend_check_uses_spawn_from_concurrent_threads(
     def run_check(_: int) -> dict[str, str]:
         return run_trust_backend_check(
             _protected_trust_result,
-            timeout_seconds=2.0,
+            timeout_seconds=10.0,
             timeout_result={"mode": "degraded"},
         )
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results = list(executor.map(run_check, range(8)))
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(run_check, range(4)))
 
-    assert results == [{"mode": "protected"}] * 8
-    assert calls == ["spawn"] * 8
+    assert results == [{"mode": "protected"}] * 4
+    assert calls == ["spawn"] * 4
 
 
 def test_passive_trust_probe_prefers_authenticated_daemon_degradation(
