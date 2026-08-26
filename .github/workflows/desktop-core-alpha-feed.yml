@@ -318,6 +318,14 @@ jobs:
               *) echo "Version stamping changed an unexpected Core file: $changed_path" >&2; exit 1 ;;
             esac
           done < <(git -C "$SOURCE" diff --name-only)
+          # Editable uv installs do not apply hatch force-include, so copy the
+          # Cloud Review artifacts into package data before PyInstaller freeze.
+          DATA_ROOT="$SOURCE/src/codex_plugin_scanner/guard/contracts/data/guard-cloud-review"
+          mkdir -p "$DATA_ROOT/v2"
+          cp "$SOURCE/contracts/guard-cloud-review/v2/contract.json" "$DATA_ROOT/v2/contract.json"
+          cp "$SOURCE/contracts/guard-cloud-review/v2/command-result.json" "$DATA_ROOT/v2/command-result.json"
+          cp "$SOURCE/contracts/guard-cloud-review/v2/fixtures.json" "$DATA_ROOT/v2/fixtures.json"
+          cp "$SOURCE/docs/guard/contracts/guard-cloud-review.md" "$DATA_ROOT/guard-cloud-review.md"
           (
             cd "$SOURCE"
             uv run --no-sync pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" \
