@@ -1,0 +1,221 @@
+name: Reconcile PR 2593 with release 3.0
+
+on:
+  push:
+    branches:
+      - chore/reconcile-main-into-release-3.0
+    paths:
+      - .github/workflows/reconcile-pr-2593.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-pr-2593
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pull request branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge release/3.0 and resolve the reconciled files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags origin release/3.0
+
+          set +e
+          git merge --no-ff --no-commit origin/release/3.0
+          merge_status=$?
+          set -e
+
+          if [[ $merge_status -ne 0 ]] && [[ -z "$(git diff --name-only --diff-filter=U)" ]]; then
+            echo "The merge failed without producing resolvable file conflicts." >&2
+            exit $merge_status
+          fi
+
+          python <<'PY'
+          from __future__ import annotations
+
+          import copy
+          import json
+          import re
+          import subprocess
+          from pathlib import Path
+          from typing import Any
+
+          BASELINE = Path("ci/test-suite-ratchet-baseline.json")
+          HOOK_RUNNER = Path("src/codex_plugin_scanner/guard/daemon/hook_process_runner.py")
+          REPORT = Path("tests/fixtures/guard-command-corpus/decision-diff-report.json")
+          HOOK_TESTS = Path("tests/test_guard_hook_process_runner.py")
+          EXPECTED_CONFLICTS = {str(BASELINE), str(HOOK_RUNNER), str(REPORT), str(HOOK_TESTS)}
+
+
+          def command(*args: str) -> str:
+              return subprocess.check_output(args, text=True)
+
+
+          conflicts = {
+              line.strip()
+              for line in command("git", "diff", "--name-only", "--diff-filter=U").splitlines()
+              if line.strip()
+          }
+          unexpected = conflicts - EXPECTED_CONFLICTS
+          if unexpected:
+              raise RuntimeError(f"unexpected merge conflicts: {sorted(unexpected)}")
+
+
+          def stage_text(stage: int, path: Path) -> str:
+              return command("git", "show", f":{stage}:{path.as_posix()}")
+
+
+          def write(path: Path, text: str) -> None:
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(text, encoding="utf-8")
+
+
+          if str(BASELINE) in conflicts:
+              ancestor = json.loads(stage_text(1, BASELINE))
+              ours = json.loads(stage_text(2, BASELINE))
+              theirs = json.loads(stage_text(3, BASELINE))
+              merged = copy.deepcopy(ours)
+              for key in ("maximum_collected_cases", "maximum_test_source_lines"):
+                  merged[key] = ours[key] + theirs[key] - ancestor[key]
+              write(BASELINE, json.dumps(merged, indent=2, sort_keys=True) + "\n")
+
+
+          if str(HOOK_RUNNER) in conflicts:
+              ours = stage_text(2, HOOK_RUNNER)
+              theirs = stage_text(3, HOOK_RUNNER)
+
+              start_timeout_line = next(
+                  line
+                  for line in theirs.splitlines()
+                  if line.startswith("_HOOK_PROCESS_READY_TIMEOUT_SECONDS,")
+              )
+              retry_line = next(
+                  line
+                  for line in theirs.splitlines()
+                  if line.startswith("_HOOK_PROCESS_TRANSIENT_NOT_READY_RETRIES =")
+              )
+              merged = re.sub(
+                  r"^_HOOK_PROCESS_READY_TIMEOUT_SECONDS.*$",
+                  start_timeout_line,
+                  ours,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
+              merged = re.sub(
+                  r"^_HOOK_PROCESS_TRANSIENT_NOT_READY_RETRIES =.*$",
+                  retry_line,
+                  merged,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
+              old_start_wait = (
+                  "        _ = self.wait_for_capacity(\n"
+                  "            minimum_workers=self._capacity_target,\n"
+                  "            timeout_seconds=_HOOK_PROCESS_READY_TIMEOUT_SECONDS,\n"
+                  "        )\n\n"
+                  "    def enable_full_capacity("
+              )
+              new_start_wait = old_start_wait.replace(
+                  "timeout_seconds=_HOOK_PROCESS_READY_TIMEOUT_SECONDS",
+                  "timeout_seconds=_HOOK_PROCESS_START_TIMEOUT_SECONDS",
+              )
+              if old_start_wait not in merged:
+                  raise RuntimeError("could not locate the initial hook-worker capacity wait")
+              merged = merged.replace(old_start_wait, new_start_wait, 1)
+              if "_HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 30.0" not in merged:
+                  raise RuntimeError("the pull request backfill grace was not preserved")
+              if "def notify_queued_work(self) -> None:" not in merged:
+                  raise RuntimeError("the queued-work backfill override was not preserved")
+              write(HOOK_RUNNER, merged)
+
+
+          def apply_ours_delta(base: Any, ours: Any, target: Any, path: tuple[str, ...] = ()) -> Any:
+              if ours == base:
+                  return copy.deepcopy(target)
+              if isinstance(base, dict) and isinstance(ours, dict) and isinstance(target, dict):
+                  result = copy.deepcopy(target)
+                  for key in base.keys() - ours.keys():
+                      if key in result and result[key] != base[key]:
+                          raise RuntimeError(f"JSON deletion conflict at {'.'.join((*path, key))}")
+                      result.pop(key, None)
+                  for key in ours.keys() - base.keys():
+                      if key in result and result[key] != ours[key]:
+                          raise RuntimeError(f"JSON addition conflict at {'.'.join((*path, key))}")
+                      result[key] = copy.deepcopy(ours[key])
+                  for key in base.keys() & ours.keys():
+                      result[key] = apply_ours_delta(
+                          base[key],
+                          ours[key],
+                          result.get(key),
+                          (*path, key),
+                      )
+                  return result
+              if target != base and target != ours:
+                  location = ".".join(path) or "<root>"
+                  raise RuntimeError(f"JSON value conflict at {location}")
+              return copy.deepcopy(ours)
+
+
+          if str(REPORT) in conflicts:
+              ancestor = json.loads(stage_text(1, REPORT))
+              ours = json.loads(stage_text(2, REPORT))
+              theirs = json.loads(stage_text(3, REPORT))
+              merged = apply_ours_delta(ancestor, ours, theirs)
+              write(REPORT, json.dumps(merged, indent=2, sort_keys=True) + "\n")
+
+
+          if str(HOOK_TESTS) in conflicts:
+              ours = stage_text(2, HOOK_TESTS)
+              theirs = stage_text(3, HOOK_TESTS)
+              added_test = "\ndef test_default_backfill_grace_yields_immediately_to_queued_work"
+              following_test = "\ndef test_deferred_runner_bounds_backfill_deferral_during_active_reviews"
+              start = ours.index(added_test)
+              end = ours.index(following_test, start)
+              block = ours[start:end]
+              if added_test in theirs:
+                  merged = theirs
+              else:
+                  insertion = theirs.index(following_test)
+                  merged = theirs[:insertion] + block + theirs[insertion:]
+              write(HOOK_TESTS, merged)
+
+
+          remaining = {
+              line.strip()
+              for line in command("git", "diff", "--name-only", "--diff-filter=U").splitlines()
+              if line.strip()
+          }
+          if remaining:
+              raise RuntimeError(f"unresolved merge conflicts remain: {sorted(remaining)}")
+          PY
+
+          python -m py_compile src/codex_plugin_scanner/guard/daemon/hook_process_runner.py
+          python -m json.tool tests/fixtures/guard-command-corpus/decision-diff-report.json >/dev/null
+
+          git add \
+            ci/test-suite-ratchet-baseline.json \
+            src/codex_plugin_scanner/guard/daemon/hook_process_runner.py \
+            tests/fixtures/guard-command-corpus/decision-diff-report.json \
+            tests/test_guard_hook_process_runner.py
+          git rm .github/workflows/reconcile-pr-2593.yml
+          git add -A
+          git diff --cached --check
+          test -z "$(git diff --name-only --diff-filter=U)"
+
+          git commit \
+            -m "Merge branch 'release/3.0' into chore/reconcile-main-into-release-3.0" \
+            -m "Signed-off-by: Michael Kantor <6068672+kantorcodes@users.noreply.github.com>"
+          git push origin HEAD:chore/reconcile-main-into-release-3.0
