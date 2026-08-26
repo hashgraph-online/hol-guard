@@ -13,7 +13,6 @@ from ..runtime.extension_control_runtime import (
 )
 
 if TYPE_CHECKING:
-    from ..runtime.hook_review_types import HookOutputSummary, HookSourceFileRef
     from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
     from .commands_support_claude_approval import _persist_claude_guard_question_decision
     from .commands_support_connect import _synced_policy_payload
@@ -50,6 +49,8 @@ from .commands_hook_generic import _run_hook_generic_payload
 from .commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
 from .commands_hook_runtime_finish import _finalize_runtime_artifact_hook
 from .commands_hook_runtime_review import _review_runtime_artifact_hook
+from .commands_hook_runtime_state import RuntimeArtifactHookState
+from .commands_hook_source_ref import _try_source_ref_fast_path
 from .commands_parser_helpers import *
 from .commands_support_command_activity import (
     hook_post_succeeded,
@@ -176,7 +177,6 @@ def _run_guard_hook_command(
         args,
         config=config,
         context=context,
-        guard_home=guard_home,
         payload=payload,
         runtime_workspace=runtime_workspace,
         store=store,
@@ -310,78 +310,7 @@ def _run_guard_hook_command(
     ):
         return 0
     if runtime_artifact is not None:
-
-        def evaluate_fresh_runtime_artifact(
-            *,
-            claimed_saved_allow_hash: str | None = None,
-            claimed_trusted_request_override: bool = False,
-            claimed_package_approval_consumed: bool = False,
-            claimed_approval_request_id: str | None = None,
-            trusted_request_override_hash: str | None = None,
-        ):
-            fresh_config = overlay_synced_guard_policy(
-                load_guard_config(guard_home, workspace=runtime_workspace),
-                _synced_policy_payload(store),
-            )
-            fresh_action_envelope = _hook_action_envelope(
-                harness=args.harness,
-                payload=payload,
-                home_dir=context.home_dir,
-                workspace=runtime_workspace,
-            )
-            fresh_data_flow_signals = _runtime_action_data_flow_signals(
-                fresh_action_envelope,
-                workspace=runtime_workspace,
-            )
-            fresh_extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-                store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-            )
-            with use_extension_control_snapshot(fresh_extension_control_snapshot):
-                fresh_runtime_artifact = _hook_runtime_artifact(
-                    harness=args.harness,
-                    payload=payload,
-                    action_envelope=fresh_action_envelope,
-                    data_flow_signals=fresh_data_flow_signals,
-                    home_dir=context.home_dir,
-                    guard_home=context.guard_home,
-                    workspace=runtime_workspace,
-                )
-            if fresh_runtime_artifact is None:
-                return None
-            return _evaluate_runtime_artifact_hook(
-                args,
-                action_envelope=fresh_action_envelope,
-                config=fresh_config,
-                context=context,
-                data_flow_signals=fresh_data_flow_signals,
-                guard_home=guard_home,
-                payload=payload,
-                runtime_artifact=fresh_runtime_artifact,
-                runtime_workspace=runtime_workspace,
-                store=store,
-                trusted_request_override_hash=trusted_request_override_hash,
-                post_claim_revalidator=(revalidate_runtime_after_claim if claimed_saved_allow_hash is None else None),
-                _claimed_saved_allow_hash=claimed_saved_allow_hash,
-                _claimed_trusted_request_override=claimed_trusted_request_override,
-                _claimed_package_approval_consumed=claimed_package_approval_consumed,
-                _claimed_approval_request_id=claimed_approval_request_id,
-                _claim_saved_approval=claimed_saved_allow_hash is None and _claim_saved_approval,
-            )
-
-        def revalidate_runtime_after_claim(
-            claimed_artifact_hash: str,
-            trusted_request_override: bool,
-            approval_request_id: str | None,
-            package_approval_consumed: bool,
-        ):
-            return evaluate_fresh_runtime_artifact(
-                claimed_saved_allow_hash=claimed_artifact_hash,
-                claimed_trusted_request_override=trusted_request_override,
-                claimed_package_approval_consumed=package_approval_consumed,
-                claimed_approval_request_id=approval_request_id,
-            )
-
-        evaluated = _evaluate_runtime_artifact_hook(
+        return _run_runtime_artifact_hook_flow(
             args,
             action_envelope=action_envelope,
             config=config,
@@ -392,43 +321,13 @@ def _run_guard_hook_command(
             runtime_artifact=runtime_artifact,
             runtime_workspace=runtime_workspace,
             store=store,
-            post_claim_revalidator=revalidate_runtime_after_claim,
+            managed_install=managed_install,
+            output_stream=output_stream,
+            workspace=workspace,
             _claimed_saved_allow_hash=_claimed_saved_allow_hash,
             _claimed_trusted_request_override=_claimed_trusted_request_override,
             _claimed_approval_request_id=_claimed_approval_request_id,
             _claim_saved_approval=_claim_saved_approval,
-        )
-        if isinstance(evaluated, int):
-            return evaluated
-        result = _review_runtime_artifact_hook(
-            evaluated,
-            args,
-            config=config,
-            context=context,
-            guard_home=guard_home,
-            managed_install=managed_install,
-            output_stream=output_stream,
-            payload=payload,
-            store=store,
-            workspace=workspace,
-        )
-        if result is not None:
-            return result
-
-        def revalidate_after_browser_wait():
-            fresh_evaluation = evaluate_fresh_runtime_artifact(
-                trusted_request_override_hash=evaluated.runtime_artifact_hash,
-            )
-            return fresh_evaluation if not isinstance(fresh_evaluation, int) else None
-
-        return _finalize_runtime_artifact_hook(
-            evaluated,
-            args,
-            config=config,
-            output_stream=output_stream,
-            payload=payload,
-            store=store,
-            post_wait_revalidator=revalidate_after_browser_wait,
         )
 
     def revalidate_generic_after_claim(claimed_artifact_hash: str) -> int:
@@ -472,134 +371,160 @@ def _run_guard_hook_command(
     )
 
 
-def _try_source_ref_fast_path(
+def _fresh_runtime_artifact_evaluation(
     args: argparse.Namespace,
     *,
-    config: GuardConfig | None,
     context: HarnessContext,
     guard_home: Path,
     payload: dict[str, object],
     runtime_workspace: Path | None,
     store: GuardStore,
-) -> int | None:
-    """Try the hook review engine for source-ref payloads.
-
-    Returns an exit code if the fast path handled the request, or None
-    to fall through to the standard runtime artifact path.
-    """
-    if "guard_source_ref" not in payload:
-        return None
-    # CLI fallback is enabled by default. The HOL_GUARD_HOOK_SOURCE_REF=0
-    # flag disables guard_source_ref generation in the Pi extension, but
-    # the CLI should still handle source refs if they arrive.
-    import os
-
-    if os.environ.get("HOL_GUARD_HOOK_SOURCE_REF", "1") != "1":
-        return None
-
-    from collections.abc import Mapping
-
-    from ..runtime.hook_content_scanner import ContentScanner
-    from ..runtime.hook_decision_cache import HookDecisionCache
-    from ..runtime.hook_review_engine import HookReviewEngine
-    from ..runtime.hook_review_types import HookReviewRequest
-
-    source_ref_raw = payload.get("guard_source_ref")
-    if not isinstance(source_ref_raw, Mapping):
-        return None
-
-    source_ref = _parse_source_ref(source_ref_raw)
-    output_summary = _parse_output_summary(payload.get("tool_response_summary"))
-
-    request = HookReviewRequest(
+    claim_saved_approval: bool,
+    claimed_saved_allow_hash: str | None = None,
+    claimed_trusted_request_override: bool = False,
+    claimed_package_approval_consumed: bool = False,
+    claimed_approval_request_id: str | None = None,
+    trusted_request_override_hash: str | None = None,
+    post_claim_revalidator=None,
+):
+    fresh_config = overlay_synced_guard_policy(
+        load_guard_config(guard_home, workspace=runtime_workspace),
+        _synced_policy_payload(store),
+    )
+    fresh_action_envelope = _hook_action_envelope(
         harness=args.harness,
-        event_name=_hook_event_name(payload) or "PreToolUse",
         payload=payload,
-        payload_kind="source_file_ref",
-        config_path=None,
-        cwd=runtime_workspace,
         home_dir=context.home_dir,
-        guard_home=context.guard_home,
-        source_scope=str(payload.get("source_scope") or "project"),
-        source_ref=source_ref,
-        output_summary=output_summary,
+        workspace=runtime_workspace,
     )
-
-    scanner = ContentScanner()
-    cache = HookDecisionCache(store)
-    engine = HookReviewEngine(
-        store=store,
-        scanner=scanner,
-        cache=cache,
-        config_loader=lambda gh, ws: config if config is not None else load_guard_config(gh, workspace=ws),
+    fresh_data_flow_signals = _runtime_action_data_flow_signals(fresh_action_envelope, workspace=runtime_workspace)
+    fresh_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
-
-    response = engine.review(request)
-    event_name = _hook_event_name(payload) or "PostToolUse"
-    record_post_hook_command_activity_best_effort(
-        store=store,
-        guard_home=context.guard_home,
-        harness=_canonical_harness_name(args.harness),
-        event=event_name,
-        payload=payload,
-        succeeded=hook_post_succeeded(event_name, payload),
-    )
-    _emit("hook", response.to_harness_json(), getattr(args, "json", False))
-    return 0
-
-
-def _parse_source_ref(ref: Mapping[str, object]) -> HookSourceFileRef:
-    """Parse a guard_source_ref mapping into a HookSourceFileRef."""
-    from ..runtime.hook_review_types import HookSourceFileRef
-
-    version = ref.get("version")
-    path = ref.get("path")
-    output_sha256 = ref.get("output_sha256")
-    output_chars = ref.get("output_chars")
-    tool_input_path = ref.get("tool_input_path")
-    adapter_stat = ref.get("adapter_stat")
-
-    if not isinstance(version, int) or not isinstance(path, str) or not isinstance(output_sha256, str):
-        return HookSourceFileRef(version=-1, path="", output_sha256="", output_chars=0)
-
-    if not isinstance(output_chars, int):
-        output_chars = 0
-    if not isinstance(tool_input_path, str):
-        tool_input_path = None
-    stat_dict = dict(adapter_stat) if isinstance(adapter_stat, Mapping) else {}
-
-    return HookSourceFileRef(
-        version=version,
-        path=path,
-        output_sha256=output_sha256,
-        output_chars=output_chars,
-        tool_input_path=tool_input_path,
-        adapter_stat=stat_dict,
-    )
-
-
-def _parse_output_summary(summary_raw: object) -> HookOutputSummary | None:
-    """Parse a tool_response_summary mapping into a HookOutputSummary."""
-    from collections.abc import Mapping as _Mapping
-
-    from ..runtime.hook_review_types import HookOutputSummary
-
-    if not isinstance(summary_raw, _Mapping):
+    with use_extension_control_snapshot(fresh_snapshot):
+        fresh_runtime_artifact = _hook_runtime_artifact(
+            harness=args.harness,
+            payload=payload,
+            action_envelope=fresh_action_envelope,
+            data_flow_signals=fresh_data_flow_signals,
+            home_dir=context.home_dir,
+            guard_home=context.guard_home,
+            workspace=runtime_workspace,
+        )
+    if fresh_runtime_artifact is None:
         return None
-    text_excerpt = summary_raw.get("text_excerpt") or summary_raw.get("excerpt") or ""
-    if not isinstance(text_excerpt, str):
-        text_excerpt = str(text_excerpt)
-    excerpt_truncated = bool(summary_raw.get("excerpt_truncated", False))
-    output_sha256 = summary_raw.get("output_sha256")
-    if not isinstance(output_sha256, str):
-        output_sha256 = None
-    output_chars_raw = summary_raw.get("output_chars")
-    output_chars = int(output_chars_raw) if isinstance(output_chars_raw, (int, float)) else None
-    return HookOutputSummary(
-        text_excerpt=text_excerpt,
-        excerpt_truncated=excerpt_truncated,
-        output_sha256=output_sha256,
-        output_chars=output_chars,
+    return _evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=fresh_action_envelope,
+        config=fresh_config,
+        context=context,
+        data_flow_signals=fresh_data_flow_signals,
+        guard_home=guard_home,
+        payload=payload,
+        runtime_artifact=fresh_runtime_artifact,
+        runtime_workspace=runtime_workspace,
+        store=store,
+        trusted_request_override_hash=trusted_request_override_hash,
+        post_claim_revalidator=post_claim_revalidator if claimed_saved_allow_hash is None else None,
+        _claimed_saved_allow_hash=claimed_saved_allow_hash,
+        _claimed_trusted_request_override=claimed_trusted_request_override,
+        _claimed_package_approval_consumed=claimed_package_approval_consumed,
+        _claimed_approval_request_id=claimed_approval_request_id,
+        _claim_saved_approval=claimed_saved_allow_hash is None and claim_saved_approval,
+    )
+
+
+def _run_runtime_artifact_hook_flow(
+    args: argparse.Namespace,
+    *,
+    action_envelope,
+    config: GuardConfig,
+    context: HarnessContext,
+    data_flow_signals,
+    guard_home: Path,
+    managed_install,
+    output_stream: TextIO | None,
+    payload: dict[str, object],
+    runtime_artifact,
+    runtime_workspace: Path | None,
+    store: GuardStore,
+    workspace: Path | None,
+    _claimed_saved_allow_hash: str | None,
+    _claimed_trusted_request_override: bool,
+    _claimed_approval_request_id: str | None,
+    _claim_saved_approval: bool,
+) -> int:
+    def revalidate_runtime_after_claim(claimed_hash, trusted_override, approval_request_id, package_consumed):
+        return _fresh_runtime_artifact_evaluation(
+            args,
+            context=context,
+            guard_home=guard_home,
+            payload=payload,
+            runtime_workspace=runtime_workspace,
+            store=store,
+            claim_saved_approval=_claim_saved_approval,
+            claimed_saved_allow_hash=claimed_hash,
+            claimed_trusted_request_override=trusted_override,
+            claimed_package_approval_consumed=package_consumed,
+            claimed_approval_request_id=approval_request_id,
+            post_claim_revalidator=revalidate_runtime_after_claim,
+        )
+
+    evaluated = _evaluate_runtime_artifact_hook(
+        args,
+        action_envelope=action_envelope,
+        config=config,
+        context=context,
+        data_flow_signals=data_flow_signals,
+        guard_home=guard_home,
+        payload=payload,
+        runtime_artifact=runtime_artifact,
+        runtime_workspace=runtime_workspace,
+        store=store,
+        post_claim_revalidator=revalidate_runtime_after_claim,
+        _claimed_saved_allow_hash=_claimed_saved_allow_hash,
+        _claimed_trusted_request_override=_claimed_trusted_request_override,
+        _claimed_approval_request_id=_claimed_approval_request_id,
+        _claim_saved_approval=_claim_saved_approval,
+    )
+    if isinstance(evaluated, int):
+        return evaluated
+    result = _review_runtime_artifact_hook(
+        evaluated,
+        args,
+        config=config,
+        context=context,
+        guard_home=guard_home,
+        managed_install=managed_install,
+        output_stream=output_stream,
+        payload=payload,
+        store=store,
+        workspace=workspace,
+    )
+    if result is not None:
+        return result
+
+    def revalidate_runtime_after_wait() -> RuntimeArtifactHookState | None:
+        fresh = _fresh_runtime_artifact_evaluation(
+            args,
+            context=context,
+            guard_home=guard_home,
+            payload=payload,
+            runtime_workspace=runtime_workspace,
+            store=store,
+            claim_saved_approval=_claim_saved_approval,
+            trusted_request_override_hash=evaluated.runtime_artifact_hash,
+        )
+        return fresh if isinstance(fresh, RuntimeArtifactHookState) else None
+
+    return _finalize_runtime_artifact_hook(
+        evaluated,
+        args,
+        config=config,
+        output_stream=output_stream,
+        payload=payload,
+        store=store,
+        post_wait_revalidator=revalidate_runtime_after_wait,
     )
 
 

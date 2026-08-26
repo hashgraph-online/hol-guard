@@ -16,6 +16,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_auth as hook_auth
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as bridge_flow
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
@@ -134,10 +135,10 @@ def test_launcher_integrity_failure_does_not_stop_user_prompt(
         "sys.stdin",
         io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "resume"})),
     )
-    monkeypatch.setattr(bridge, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
+    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
     monkeypatch.setattr(
-        bridge,
-        "_trusted_hook_launch",
+        bridge_flow,
+        "trusted_hook_launch",
         lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
     )
     config = _bridge_config(guard_home, 5474)
@@ -161,10 +162,10 @@ def test_launcher_integrity_failure_still_denies_pretool_use(
         "sys.stdin",
         io.StringIO(json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"})),
     )
-    monkeypatch.setattr(bridge, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
+    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
     monkeypatch.setattr(
-        bridge,
-        "_trusted_hook_launch",
+        bridge_flow,
+        "trusted_hook_launch",
         lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
     )
     config = _bridge_config(guard_home, 5474)
@@ -306,12 +307,12 @@ def test_repeated_generation_rollover_stays_bounded(monkeypatch: pytest.MonkeyPa
     def changed_generation(**_kwargs: object) -> dict[str, object]:
         nonlocal attempts
         attempts += 1
-        raise bridge._DaemonGenerationChangedError("fixture rollover")
+        raise bridge_flow._DaemonGenerationChangedError("fixture rollover")
 
-    monkeypatch.setattr(bridge, "_daemon_response_once", changed_generation)
+    monkeypatch.setattr(bridge_flow, "_daemon_response_once", changed_generation)
 
-    with pytest.raises(bridge._DaemonGenerationChangedError):
-        bridge._daemon_response(
+    with pytest.raises(bridge_flow._DaemonGenerationChangedError):
+        bridge_flow._daemon_response(
             state_path="unused",
             query="",
             data='{"hook_event_name":"UserPromptSubmit"}',

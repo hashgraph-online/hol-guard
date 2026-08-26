@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -16,6 +18,25 @@ from codex_plugin_scanner.guard.daemon.hook_process_entrypoint import (
     _run_resident_hook_request,  # pyright: ignore[reportPrivateUsage]
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def test_daemon_server_import_is_order_independent() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer; "
+                "print(GuardDaemonServer.__name__)"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "GuardDaemonServer"
 
 
 def _fixture(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], Path]:

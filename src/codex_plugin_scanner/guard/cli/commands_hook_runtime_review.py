@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     )
     from .commands_support_interaction import (
         _attach_primary_approval_link,
+        _codex_bridge_wait_process,
         _codex_browser_wait_metadata,
         _preferred_approval_review_url,
         _record_harness_usage_for_hook,
@@ -96,7 +97,7 @@ def _browser_wait_binding(
     policy_action: str,
     config: GuardConfig,
     payload: Mapping[str, object],
-) -> tuple[dict[str, object], bool]:
+) -> tuple[dict[str, object], bool | None]:
     metadata = _codex_browser_wait_metadata(
         args=args,
         event_name=event_name,
@@ -104,7 +105,11 @@ def _browser_wait_binding(
         config=config,
         payload=payload,
     )
-    return metadata, metadata.get("codex_hook_waits_for_browser_approval") is True
+    if metadata.get("codex_hook_waits_for_browser_approval") is not True:
+        return metadata, False
+    if _codex_bridge_wait_process(payload) is not None:
+        return metadata, True
+    return metadata, None
 
 
 def _bind_review_state(

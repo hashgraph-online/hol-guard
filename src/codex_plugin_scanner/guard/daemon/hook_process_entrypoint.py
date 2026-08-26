@@ -10,6 +10,7 @@ import os
 import signal
 import time
 from contextlib import suppress
+from dataclasses import dataclass
 from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
@@ -29,6 +30,19 @@ if TYPE_CHECKING:
 
 _HOOK_SQLITE_TIMEOUT_ENV = "HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS"
 _HOOK_EVALUATOR_READY_TIMEOUT_SECONDS = 12.0
+
+
+@dataclass(frozen=True)
+class _ResidentHookRequest:
+    payload: dict[str, object]
+    harness: str
+    home_dir: Path
+    guard_home: Path
+    workspace: Path | None
+    claim_saved_approval: bool
+    claimed_saved_allow_hash: str | None
+    claimed_trusted_request_override: bool
+    claimed_approval_request_id: str | None
 
 
 def hook_worker_main(connection: Connection, configured_guard_home: str | None) -> None:
@@ -193,49 +207,28 @@ def _run_resident_hook_request(
     from ..store import GuardStore
     from .hook_worker import HookWorker, HookWorkerUnsupported
 
-    payload = request.get("payload")
-    harness = request.get("harness")
-    home_value = request.get("home_dir")
-    guard_home_value = request.get("guard_home")
-    workspace_value = request.get("workspace")
-    claim_saved_approval = request.get("claim_saved_approval", True)
-    claimed_saved_allow_hash = request.get("claimed_saved_allow_hash")
-    claimed_trusted_request_override = request.get("claimed_trusted_request_override", False)
-    claimed_approval_request_id = request.get("claimed_approval_request_id")
-    if (
-        not isinstance(payload, dict)
-        or not isinstance(harness, str)
-        or not isinstance(home_value, str)
-        or not isinstance(guard_home_value, str)
-        or (workspace_value is not None and not isinstance(workspace_value, str))
-        or not isinstance(claim_saved_approval, bool)
-        or (claimed_saved_allow_hash is not None and not isinstance(claimed_saved_allow_hash, str))
-        or not isinstance(claimed_trusted_request_override, bool)
-        or (claimed_approval_request_id is not None and not isinstance(claimed_approval_request_id, str))
-    ):
+    parsed = _coerce_resident_hook_request(request)
+    if parsed is None:
         return {"payload": None, "reason_code": "daemon_hook_process_invalid_request"}
-    guard_home = Path(guard_home_value).resolve(strict=False)
-    if configured_guard_home is not None and guard_home != Path(configured_guard_home):
+    if configured_guard_home is not None and parsed.guard_home != Path(configured_guard_home):
         return {"payload": None, "reason_code": "daemon_hook_process_guard_home_mismatch"}
-    store_key = str(guard_home)
+    store_key = str(parsed.guard_home)
     store = stores.get(store_key)
     if store is None:
         store = GuardStore(
-            guard_home,
+            parsed.guard_home,
             prime_policy_integrity=False,
             daemon_managed_schema=True,
         )
         stores[store_key] = store
-    home_dir = Path(home_value)
-    workspace = Path(workspace_value) if isinstance(workspace_value, str) else None
     context = HarnessContext(
-        home_dir=home_dir,
-        workspace_dir=workspace,
-        guard_home=guard_home,
+        home_dir=parsed.home_dir,
+        workspace_dir=parsed.workspace,
+        guard_home=parsed.guard_home,
         home_override_explicit=True,
-        workspace_override_explicit=workspace is not None,
+        workspace_override_explicit=parsed.workspace is not None,
     )
-    event_name = payload.get("hook_event_name", payload.get("event"))
+    event_name = parsed.payload.get("hook_event_name", parsed.payload.get("event"))
     if event_name == "PostToolUse":
         worker = hook_workers.get(store_key)
         if worker is None:
@@ -243,12 +236,12 @@ def _run_resident_hook_request(
             hook_workers[store_key] = worker
         try:
             worker_payload = worker.review_http_payload(
-                payload=payload,
-                params={"runtime-harness": [harness]},
-                default_harness=harness,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
+                payload=parsed.payload,
+                params={"runtime-harness": [parsed.harness]},
+                default_harness=parsed.harness,
+                home_dir=parsed.home_dir,
+                guard_home=parsed.guard_home,
+                workspace=parsed.workspace,
             )
         except HookWorkerUnsupported:
             pass
@@ -256,16 +249,16 @@ def _run_resident_hook_request(
             return {"payload": worker_payload, "reason_code": None}
     with applied_hook_environment(request):
         config = overlay_synced_guard_policy(
-            load_guard_config(guard_home, workspace=workspace),
+            load_guard_config(parsed.guard_home, workspace=parsed.workspace),
             _synced_policy_payload(store),
         )
         args = argparse.Namespace(
             guard_command="hook",
-            home=str(home_dir),
-            guard_home=str(guard_home),
-            workspace=str(workspace) if workspace is not None else None,
-            runtime_harness=harness,
-            harness=harness,
+            home=str(parsed.home_dir),
+            guard_home=str(parsed.guard_home),
+            workspace=str(parsed.workspace) if parsed.workspace is not None else None,
+            runtime_harness=parsed.harness,
+            harness=parsed.harness,
             artifact_id=None,
             artifact_name=None,
             policy_action=None,
@@ -275,19 +268,55 @@ def _run_resident_hook_request(
         return capture_hook_command(
             lambda output: _run_guard_hook_command(
                 args,
-                guard_home=guard_home,
-                workspace=workspace,
+                guard_home=parsed.guard_home,
+                workspace=parsed.workspace,
                 context=context,
                 store=store,
                 config=config,
-                input_text=json.dumps(payload, separators=(",", ":")),
+                input_text=json.dumps(parsed.payload, separators=(",", ":")),
                 output_stream=output,
-                _claim_saved_approval=claim_saved_approval,
-                _claimed_saved_allow_hash=claimed_saved_allow_hash,
-                _claimed_trusted_request_override=claimed_trusted_request_override,
-                _claimed_approval_request_id=claimed_approval_request_id,
+                _claim_saved_approval=parsed.claim_saved_approval,
+                _claimed_saved_allow_hash=parsed.claimed_saved_allow_hash,
+                _claimed_trusted_request_override=parsed.claimed_trusted_request_override,
+                _claimed_approval_request_id=parsed.claimed_approval_request_id,
             )
         )
+
+
+def _coerce_resident_hook_request(request: dict[str, object]) -> _ResidentHookRequest | None:
+    payload = request.get("payload")
+    harness = request.get("harness")
+    home_value = request.get("home_dir")
+    guard_home_value = request.get("guard_home")
+    workspace_value = request.get("workspace")
+    claim_saved_approval = request.get("claim_saved_approval", True)
+    claimed_saved_allow_hash = request.get("claimed_saved_allow_hash")
+    claimed_trusted_request_override = request.get("claimed_trusted_request_override", False)
+    claimed_approval_request_id = request.get("claimed_approval_request_id")
+    typed_payload = as_string_object_dict(payload)
+    if typed_payload is None or not isinstance(harness, str):
+        return None
+    if not isinstance(home_value, str) or not isinstance(guard_home_value, str):
+        return None
+    if workspace_value is not None and not isinstance(workspace_value, str):
+        return None
+    if not isinstance(claim_saved_approval, bool) or not isinstance(claimed_trusted_request_override, bool):
+        return None
+    if claimed_saved_allow_hash is not None and not isinstance(claimed_saved_allow_hash, str):
+        return None
+    if claimed_approval_request_id is not None and not isinstance(claimed_approval_request_id, str):
+        return None
+    return _ResidentHookRequest(
+        payload=typed_payload,
+        harness=harness,
+        home_dir=Path(home_value),
+        guard_home=Path(guard_home_value).resolve(strict=False),
+        workspace=Path(workspace_value) if isinstance(workspace_value, str) else None,
+        claim_saved_approval=claim_saved_approval,
+        claimed_saved_allow_hash=claimed_saved_allow_hash,
+        claimed_trusted_request_override=claimed_trusted_request_override,
+        claimed_approval_request_id=claimed_approval_request_id,
+    )
 
 
 __all__ = ["hook_worker_main"]

@@ -96,9 +96,7 @@ from ..cloud_exception_requests import (
 )
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
-from ..codex_live_hook_target import codex_live_hook_process_is_unavailable
-from ..codex_resume import defer_request_resume_to_live_hook, get_request_resume_status, retry_request_resume
-from ..codex_resume_response import project_codex_resume_response
+from ..codex_resume import get_request_resume_status, retry_request_resume
 from ..config import (
     VALID_RECEIPT_REDACTION_LEVELS,
     GuardConfig,
@@ -108,7 +106,6 @@ from ..config import (
     update_guard_settings,
     update_guard_update_channel,
 )
-from ..continuation_runtime import continue_request_after_application
 from ..desktop_notifications import (
     desktop_notification_setup_payload,
     ensure_desktop_notification_setup,
@@ -248,6 +245,7 @@ from .extension_control_api import ExtensionControlApiError, ExtensionControlApi
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
 from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
+from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiError, LocalCliApiService
 from .managed_controls_api import managed_policy_rows
 from .manager import (
@@ -2763,61 +2761,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_update_channel(payload)
             return
         if parsed.path == "/v1/update":
-            force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))
-            guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-            status_payload = build_guard_update_status_payload(guard_home=guard_home)
-            if status_payload.get("python_update_required") is True:
-                self._write_json(
-                    {
-                        "error": "update_not_supported",
-                        "message": status_payload.get("blocked_reason")
-                        or "Update requires a different Python runtime.",
-                    },
-                    status=400,
-                )
-                return
-            recovery_reinstall_available = bool(status_payload.get("recovery_reinstall_available"))
-            if force_pypi_reinstall and not recovery_reinstall_available:
-                self._write_json(
-                    {
-                        "error": "update_not_supported",
-                        "message": status_payload.get("blocked_reason")
-                        or "Reinstall is not available for this install.",
-                    },
-                    status=400,
-                )
-                return
-            if status_payload.get("auto_updatable") is not True and not force_pypi_reinstall:
-                self._write_json(
-                    {
-                        "error": "update_not_supported",
-                        "message": status_payload.get("blocked_reason")
-                        or "Automatic update is not available for this install.",
-                    },
-                    status=400,
-                )
-                return
-            if status_payload.get("update_available") is not True and not force_pypi_reinstall:
-                self._write_json(
-                    {
-                        "error": "update_not_available",
-                        "message": "Guard is already on the latest version.",
-                    },
-                    status=400,
-                )
-                return
-            daemon_pid = os.getpid()
-            daemon_port = self._daemon_server().daemon_port()
-            self._write_json(
-                schedule_guard_dashboard_update(
-                    guard_home,
-                    daemon_pid=daemon_pid,
-                    daemon_port=daemon_port,
-                    force_pypi_reinstall=force_pypi_reinstall,
-                    include_alpha=status_payload.get("release_channel") == "alpha",
-                    status_payload=status_payload,
-                )
-            )
+            self._handle_dashboard_update(payload)
             return
         if parsed.path == "/v1/notifications/setup":
             self._handle_notification_setup(payload)
@@ -3062,83 +3006,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness = str(updated.get("harness", ""))
         resolved_harness = harness_str or harness
         copy = _build_resolution_copy(action, resolved_harness)
-        updated, copy = self._apply_local_approval_continuation(
+        updated, copy = apply_local_approval_continuation(
+            store=self.server.store,  # type: ignore[attr-defined]
             updated=updated,
             request_id=request_id,
             action=action,
             harness=resolved_harness,
             copy=copy,
+            now=_now,
         )
         updated["copy"] = copy
         updated["retry_hint"] = copy["body"]
         self._write_json(updated)
-
-    def _apply_local_approval_continuation(
-        self,
-        *,
-        updated: dict[str, object],
-        request_id: str,
-        action: str,
-        harness: str,
-        copy: dict[str, str],
-    ) -> tuple[dict[str, object], dict[str, str]]:
-        """Attach the local harness continuation after a browser decision is stored."""
-
-        resolved_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
-        if not isinstance(resolved_request, dict) or action not in {"allow", "block"}:
-            return updated, copy
-        if harness != "codex":
-            continuation = continue_request_after_application(
-                self.server.store,  # type: ignore[attr-defined]
-                request_row=resolved_request,
-                action=action,
-                now=_now(),
-                headless=False,
-            )
-            harness_resume = continuation.get("harnessResume")
-            if isinstance(harness_resume, dict):
-                updated = self._apply_harness_resume_result(updated=updated, harness_resume=harness_resume)
-            return updated, copy
-        now = _now()
-        codex_resume = defer_request_resume_to_live_hook(
-            self.server.store,  # type: ignore[attr-defined]
-            request_id=request_id,
-            action=action,
-            now=now,
-        )
-        if codex_resume is None:
-            operation = self.server.store.get_guard_operation_for_approval_request(request_id)  # type: ignore[attr-defined]
-            metadata = operation.get("metadata") if isinstance(operation, dict) else None
-            if isinstance(metadata, Mapping) and codex_live_hook_process_is_unavailable(metadata):
-                continuation = continue_request_after_application(
-                    self.server.store,  # type: ignore[attr-defined]
-                    request_row=resolved_request,
-                    action=action,
-                    now=now,
-                    headless=False,
-                )
-                codex_resume = continuation.get("codexResume")
-                if not isinstance(codex_resume, dict):
-                    return updated, copy
-            else:
-                codex_resume = retry_request_resume(
-                    self.server.store,  # type: ignore[attr-defined]
-                    request_id=request_id,
-                    now=now,
-                )
-        updated = self._apply_codex_resume_result(
-            updated=updated,
-            request_id=request_id,
-            action=action,
-            copy=copy,
-            codex_resume=codex_resume,
-        )
-        updated_copy = updated.get("copy")
-        if _is_string_object_dict(updated_copy):
-            title = self._optional_string(updated_copy.get("title")) or copy["title"]
-            body = self._optional_string(updated_copy.get("body")) or copy["body"]
-            copy = {"title": title, "body": body}
-        return updated, copy
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         return
@@ -5637,6 +5516,58 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         self._write_json(payload)
 
+    def _handle_dashboard_update(self, payload: dict[str, object]) -> None:
+        force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        status_payload = build_guard_update_status_payload(guard_home=guard_home)
+        if status_payload.get("python_update_required") is True:
+            self._write_json(
+                {
+                    "error": "update_not_supported",
+                    "message": status_payload.get("blocked_reason") or "Update requires a different Python runtime.",
+                },
+                status=400,
+            )
+            return
+        recovery_reinstall_available = bool(status_payload.get("recovery_reinstall_available"))
+        if force_pypi_reinstall and not recovery_reinstall_available:
+            self._write_json(
+                {
+                    "error": "update_not_supported",
+                    "message": status_payload.get("blocked_reason") or "Reinstall is not available for this install.",
+                },
+                status=400,
+            )
+            return
+        if status_payload.get("auto_updatable") is not True and not force_pypi_reinstall:
+            self._write_json(
+                {
+                    "error": "update_not_supported",
+                    "message": status_payload.get("blocked_reason") or "Automatic update is not available.",
+                },
+                status=400,
+            )
+            return
+        if status_payload.get("update_available") is not True and not force_pypi_reinstall:
+            self._write_json(
+                {
+                    "error": "update_not_available",
+                    "message": "Guard is already on the latest version.",
+                },
+                status=400,
+            )
+            return
+        self._write_json(
+            schedule_guard_dashboard_update(
+                guard_home,
+                daemon_pid=os.getpid(),
+                daemon_port=self._daemon_server().daemon_port(),
+                force_pypi_reinstall=force_pypi_reinstall,
+                include_alpha=status_payload.get("release_channel") == "alpha",
+                status_payload=status_payload,
+            )
+        )
+
     def _handle_codex_live_decision(self, request_id: str, payload: Mapping[str, object]) -> None:
         request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
         previous = self.server.store.get_request_resume(request_id)  # type: ignore[attr-defined]
@@ -5698,36 +5629,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 ).payload
             ),
         )
-
-    def _apply_codex_resume_result(
-        self,
-        *,
-        updated: dict[str, object],
-        request_id: str,
-        action: str,
-        copy: dict[str, str],
-        codex_resume: dict[str, object],
-    ) -> dict[str, object]:
-        updated["codexResume"] = codex_resume
-        self.server.store.add_event(  # type: ignore[attr-defined]
-            "codex/thread_resume",
-            {"request_id": request_id, "action": action, **codex_resume},
-            _now(),
-        )
-        return project_codex_resume_response(
-            updated=updated,
-            copy=copy,
-            codex_resume=codex_resume,
-        )
-
-    def _apply_harness_resume_result(
-        self,
-        *,
-        updated: dict[str, object],
-        harness_resume: dict[str, object],
-    ) -> dict[str, object]:
-        updated["harnessResume"] = harness_resume
-        return updated
 
     def _handle_command_queue_worker_refresh(self) -> None:
         lifecycle = self.server.command_queue_lifecycle  # type: ignore[attr-defined]

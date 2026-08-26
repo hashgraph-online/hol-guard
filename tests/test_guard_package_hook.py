@@ -356,8 +356,9 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     assert output["policy_action"] == "require-reapproval"
     assert output["approval_requests"]
     pending = store.list_approval_requests(limit=5)
-    assert pending[0]["risk_summary"]
-    assert "minimist" in pending[0]["risk_summary"].lower()
+    risk_summary = pending[0]["risk_summary"]
+    assert isinstance(risk_summary, str)
+    assert "minimist" in risk_summary.lower()
 
 
 def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
@@ -380,7 +381,7 @@ def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
         ),
         "2026-05-19T00:00:00Z",
     )
-    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 10\n", encoding="utf-8")
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
 
     def fail_daemon(_home: Path) -> object:
@@ -414,7 +415,7 @@ def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
     )
     captured = capsys.readouterr()
 
-    assert rc == 0
+    assert rc == 0, captured
     payload = json.loads(captured.out)
     approval_requests = store.list_approval_requests(limit=5)
     assert len(approval_requests) == 1
@@ -427,7 +428,7 @@ def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
     assert captured.err == ""
 
 
-def test_guard_hook_ask_package_direct_hook_skips_browser_approval_wait(
+def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -484,13 +485,13 @@ def test_guard_hook_ask_package_direct_hook_skips_browser_approval_wait(
     )
     captured = capsys.readouterr()
 
-    assert rc == 0
+    assert rc == 0, captured
     payload = json.loads(captured.out)
-    assert observed_timeouts == []
+    assert observed_timeouts == [8]
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "/requests/" in reason
     assert "retry the same Codex action" in reason
-    assert captured.err == ""
+    assert "waiting for approval in your browser" in captured.err
 
 
 def test_guard_hook_warns_for_package_request_without_blocking(

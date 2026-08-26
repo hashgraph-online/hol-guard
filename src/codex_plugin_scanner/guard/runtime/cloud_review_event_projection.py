@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ..continuation_runtime import continuation_offer_payload
-from ..continuation_snapshot import non_resumable_continuation_snapshot, validated_continuation_snapshot
+from ..continuation_snapshot import (
+    CONTINUATION_CAPABILITIES,
+    non_resumable_continuation_snapshot,
+    validated_continuation_snapshot,
+)
 from ..review_contracts import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -24,6 +28,26 @@ _EVENT_TYPE_MAP = {
     "resolved": "request_resolved",
     "superseded": "request_superseded",
 }
+
+
+def _terminal_projection(
+    result: dict[str, object] | None,
+) -> tuple[dict[str, object], str, str] | None:
+    if result is None:
+        return None
+    capability = result.get("capability")
+    completed_at = result.get("completedAt")
+    if (
+        not isinstance(capability, str)
+        or capability not in CONTINUATION_CAPABILITIES
+        or not isinstance(completed_at, str)
+        or not completed_at
+    ):
+        raise StoredReviewEventError(
+            "continuation_result_invalid",
+            "Stored Review event continuation result is invalid.",
+        )
+    return result, capability, completed_at
 
 
 def _now() -> str:
@@ -113,6 +137,7 @@ def project_cloud_review_event(
                 "Stored Review event identity does not match the active delivery binding.",
             )
         stored_event = decode_stored_review_event(outbox_row)
+        terminal_projection = _terminal_projection(stored_event.continuation_result)
         raw_continuation = stored_event.snapshot.get("continuation_snapshot_json")
         if raw_continuation is None:
             continuation = non_resumable_continuation_snapshot(stored_event.snapshot)
@@ -155,8 +180,9 @@ def project_cloud_review_event(
             "payloadHash": stored_event.payload_hash,
         }
     )
-    if stored_event.continuation_result is not None:
-        event["continuationResult"] = stored_event.continuation_result
-        event["continuationCapability"] = stored_event.continuation_result["capability"]
-        event["localUpdatedAt"] = stored_event.continuation_result["completedAt"]
+    if terminal_projection is not None:
+        terminal_result, terminal_capability, terminal_completed_at = terminal_projection
+        event["continuationResult"] = terminal_result
+        event["continuationCapability"] = terminal_capability
+        event["localUpdatedAt"] = terminal_completed_at
     return sequence, event

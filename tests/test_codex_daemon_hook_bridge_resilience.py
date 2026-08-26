@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as bridge_flow
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
@@ -201,8 +202,8 @@ def test_main_starts_daemon_once_then_retries_hook(
         return True
 
     config = _bridge_config(guard_home, 1)
-    monkeypatch.setattr(bridge, "_daemon_response", daemon_response)
-    monkeypatch.setattr(bridge, "_run_daemon_start", start_daemon)
+    monkeypatch.setattr(bridge_flow, "_daemon_response", daemon_response)
+    monkeypatch.setattr(bridge_flow, "_run_daemon_start", start_daemon)
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
     exit_code = bridge.main(**config)
@@ -214,7 +215,7 @@ def test_main_starts_daemon_once_then_retries_hook(
 
     fallback_calls: list[str] = []
     monkeypatch.setattr(
-        bridge,
+        bridge_flow,
         "_daemon_response",
         lambda **_kwargs: {
             "continue": False,
@@ -224,7 +225,7 @@ def test_main_starts_daemon_once_then_retries_hook(
         },
     )
     monkeypatch.setattr(
-        bridge,
+        bridge_flow,
         "_run_local_fallback",
         lambda _command, *, data, timeout_seconds: (
             fallback_calls.append(data) or {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
@@ -252,7 +253,7 @@ def test_authenticated_overload_fails_closed_without_fallback_or_restart(
 
     def overloaded_daemon(**kwargs: object) -> dict[str, object]:
         del kwargs
-        raise bridge._DaemonResponseError(429, '{"error":"hook_capacity_exhausted"}', authenticated=True)
+        raise bridge_flow._DaemonResponseError(429, '{"error":"hook_capacity_exhausted"}', authenticated=True)
 
     def start_daemon(
         command: tuple[str, ...],
@@ -265,8 +266,8 @@ def test_authenticated_overload_fails_closed_without_fallback_or_restart(
         return True
 
     config = _bridge_config(guard_home, 1)
-    monkeypatch.setattr(bridge, "_daemon_response", overloaded_daemon)
-    monkeypatch.setattr(bridge, "_run_daemon_start", start_daemon)
+    monkeypatch.setattr(bridge_flow, "_daemon_response", overloaded_daemon)
+    monkeypatch.setattr(bridge_flow, "_run_daemon_start", start_daemon)
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
     assert bridge.main(**config) == 0
@@ -289,7 +290,7 @@ def test_typed_transient_overload_retries_once_when_deadline_fits(
         nonlocal attempts
         attempts += 1
         if attempts == 1:
-            raise bridge._DaemonResponseError(
+            raise bridge_flow._DaemonResponseError(
                 503,
                 '{"reason_code":"transient_overload","retry_after_ms":25,"estimated_service_ms":100}',
                 authenticated=True,
@@ -298,7 +299,7 @@ def test_typed_transient_overload_retries_once_when_deadline_fits(
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
-    monkeypatch.setattr(bridge, "_daemon_response", daemon_response)
+    monkeypatch.setattr(bridge_flow, "_daemon_response", daemon_response)
     monkeypatch.setattr(bridge.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr("sys.stdin", io.StringIO('{"hook_event_name":"PreToolUse"}'))
 
@@ -309,13 +310,13 @@ def test_typed_transient_overload_retries_once_when_deadline_fits(
 
 def test_daemon_failure_kind_separates_overload_transport_and_control_plane() -> None:
     assert (
-        bridge._daemon_failure_kind(
-            bridge._DaemonResponseError(429, '{"error":"hook_capacity_exhausted"}', authenticated=True)
+        bridge_flow._daemon_failure_kind(
+            bridge_flow._DaemonResponseError(429, '{"error":"hook_capacity_exhausted"}', authenticated=True)
         )
         == "overload"
     )
-    assert bridge._daemon_failure_kind(TimeoutError("deadline")) == "transport-failure"
-    assert bridge._daemon_failure_kind(ValueError("state authentication failed")) == (
+    assert bridge_flow._daemon_failure_kind(TimeoutError("deadline")) == "transport-failure"
+    assert bridge_flow._daemon_failure_kind(ValueError("state authentication failed")) == (
         "authenticated-control-plane-failure"
     )
 
@@ -326,7 +327,7 @@ def test_untrusted_fallback_timeout_kills_descendants(tmp_path: Path) -> None:
     child = f"import time;from pathlib import Path;time.sleep(.3);Path({str(marker)!r}).write_text('escaped')"
     parent = f"import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',{child!r}]);time.sleep(10)"
 
-    response = bridge._run_local_fallback(
+    response = bridge_flow._run_local_fallback(
         (sys.executable, "-c", parent),
         data="{}",
         timeout_seconds=0.05,

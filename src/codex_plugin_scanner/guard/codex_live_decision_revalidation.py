@@ -7,7 +7,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
-from .cli.commands_support_hook_payload import _action_envelope_json, _hook_action_envelope
 from .runtime.actions import GuardActionEnvelope, stable_action_hash
 
 FreshHookReviewer = Callable[
@@ -26,6 +25,11 @@ def revalidate_codex_live_allow(
     claimed_approval_request_id: str | None = None,
 ) -> bool:
     """Return true only when the exact original action is freshly allowed."""
+
+    # Importing this CLI facade while daemon.server is still initializing
+    # reaches back through _commands_shared to GuardDaemonServer. Defer the
+    # dependency until request handling so daemon imports remain order-safe.
+    from .cli.commands_support_hook_payload import _action_envelope_json, _hook_action_envelope
 
     if not isinstance(request, Mapping):
         return False

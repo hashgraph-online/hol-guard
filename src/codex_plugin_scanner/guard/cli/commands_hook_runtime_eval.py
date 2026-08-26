@@ -41,7 +41,6 @@ from ..action_lattice import (
     normalize_guard_action_result,
 )
 from ..approval_scope_support import package_request_runtime_workspace_scope
-from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
 from ..local_supply_chain import (
     _package_evaluation_requires_external_archive_binding,
     _package_policy_override_evaluation,
@@ -71,6 +70,7 @@ from .commands_hook_github_workflow import (
     github_workflow_approval_evidence,
     prepare_github_workflow_hook_state,
 )
+from .commands_hook_local_cli import local_cli_grant_action
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support_hook_state import _load_cursor_native_shell_allowance
@@ -624,6 +624,14 @@ def _evaluate_runtime_artifact_hook(
     current_policy_action = policy_action
     local_tool_eligibility: LocalToolApprovalEligibility | None = None
     raw_runtime_command = _runtime_package_raw_command(payload_map, action_envelope)
+    local_grants_allowed = (
+        current_action_override is None
+        and cli_action_normalization is None
+        and payload_action_normalization is None
+        and not data_flow_signals
+        and not scanner_evidence
+        and (package_evaluation is None or package_policy_action != "block")
+    )
     if (
         event_name == "PreToolUse"
         and runtime_artifact.artifact_type in {"tool_action_request", "package_request"}
@@ -641,12 +649,7 @@ def _evaluate_runtime_artifact_hook(
             eligibility=local_tool_eligibility,
             current_action=current_policy_action,
         )
-        if current_action_override is None
-        and cli_action_normalization is None
-        and payload_action_normalization is None
-        and not data_flow_signals
-        and not scanner_evidence
-        and (package_evaluation is None or package_policy_action != "block")
+        if local_grants_allowed
         else None
     )
     if local_tool_eligibility is not None:
@@ -663,32 +666,18 @@ def _evaluate_runtime_artifact_hook(
         current_policy_action = "allow"
         policy_action = "allow"
         approval_context_policy_action = "allow"
-    if raw_runtime_command is not None:
-        observe_unlisted_cli(
-            store=store,
-            command=raw_runtime_command,
-            cwd=runtime_workspace or Path.cwd(),
-            home_dir=context.home_dir,
-        )
-        if (
-            current_action_override is None
-            and cli_action_normalization is None
-            and payload_action_normalization is None
-            and not data_flow_signals
-            and not scanner_evidence
-            and (package_evaluation is None or package_policy_action != "block")
-        ):
-            granted = apply_local_cli_grant(
-                store=store,
-                command=raw_runtime_command,
-                cwd=runtime_workspace or Path.cwd(),
-                home_dir=context.home_dir,
-                current_action=current_policy_action,
-            )
-            if granted != current_policy_action:
-                current_policy_action = granted
-                policy_action = granted
-                approval_context_policy_action = granted
+    granted = local_cli_grant_action(
+        store=store,
+        command=raw_runtime_command,
+        cwd=runtime_workspace or Path.cwd(),
+        home_dir=context.home_dir,
+        current_action=current_policy_action,
+        grant_allowed=local_grants_allowed,
+    )
+    if granted != current_policy_action:
+        current_policy_action = granted
+        policy_action = granted
+        approval_context_policy_action = granted
     runtime_artifact_hash = _runtime_hook_approval_context_token(
         artifact=approval_context_artifact,
         content_hash=artifact_content_hash,

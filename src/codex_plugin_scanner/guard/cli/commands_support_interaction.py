@@ -714,6 +714,7 @@ def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_h
 
 __all__ = [
     "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_build_cisco_scan_options",
+    "_codex_bridge_wait_process",
     "_codex_browser_approval_decision",
     "_codex_browser_wait_metadata",
     "_codex_browser_wait_timeout_seconds",
