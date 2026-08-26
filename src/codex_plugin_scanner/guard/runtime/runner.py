@@ -113,6 +113,7 @@ from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, reg
 from .extension_catalog_handshake import (
     prepare_extension_catalog_handshake,
     runtime_session_success_summary,
+    runtime_summary_device_id,
 )
 from .extension_catalog_handshake import (
     validate_extension_catalog_sync_response as _validate_extension_catalog_sync_response,
@@ -2950,11 +2951,7 @@ def sync_receipts(
             policy_bundle_rejection_reason = "bundle_version_downgrade"
         candidate_managed_capabilities = _managed_controls_negotiated_capabilities(store, policy_bundle_sync_payload)
         runtime_session_summary = store.get_sync_payload("runtime_session_summary")
-        delivery_device_id = (
-            _optional_string(runtime_session_summary.get("runtime_device_id"))
-            if isinstance(runtime_session_summary, dict)
-            else None
-        ) or device_id
+        delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
         (
             validated_policy_bundle,
             candidate_managed_controls,

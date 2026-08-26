@@ -574,7 +574,7 @@
     "src/codex_plugin_scanner/guard/runtime/surface_server.py": 548,
     "src/codex_plugin_scanner/guard/runtime/trust_attestation.py": 1006,
     "src/codex_plugin_scanner/guard/secrets/secret_detection.py": 965,
-    "src/codex_plugin_scanner/guard/shims.py": 1594,
+    "src/codex_plugin_scanner/guard/shims.py": 1595,
     "src/codex_plugin_scanner/guard/store_approvals.py": 1252,
     "src/codex_plugin_scanner/guard/store_base.py": 1680,
     "src/codex_plugin_scanner/guard/store_connection_schema.py": 1355,

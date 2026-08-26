@@ -9707,11 +9707,7 @@ url = http://127.0.0.1:8787/guard-canary
                 },
             }
 
-        monkeypatch.setattr(
-            guard_commands_module,
-            "sync_local_guard_cloud_proof",
-            _fake_sync_local_guard_cloud_proof,
-        )
+        monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _fake_sync_local_guard_cloud_proof)
         monkeypatch.setattr(
             guard_commands_module,
             "sync_supply_chain_cloud_state",
@@ -9756,11 +9752,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "receipts_stored": 2,
             }
 
-        monkeypatch.setattr(
-            guard_commands_module,
-            "sync_local_guard_cloud_proof",
-            _fake_sync_local_guard_cloud_proof,
-        )
+        monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _fake_sync_local_guard_cloud_proof)
         monkeypatch.setattr(
             guard_commands_module,
             "sync_supply_chain_cloud_state",

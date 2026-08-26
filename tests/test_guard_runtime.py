@@ -4103,11 +4103,8 @@ clearer UX and an implementation plan with technical references.
         monkeypatch.setattr(guard_runner_module, "sync_runtime_session", fake_sync_runtime_session)
         monkeypatch.setattr(guard_runner_module, "sync_receipts", fake_sync_receipts)
 
-        payload = guard_runner_module.sync_local_guard_cloud_proof(
-            store,
-            force_aibom=True,
-            managed_controls_publish=managed_controls_publish,
-        )
+        sync_cloud_proof = guard_runner_module.sync_local_guard_cloud_proof
+        payload = sync_cloud_proof(store, force_aibom=True, managed_controls_publish=managed_controls_publish)
 
         assert call_order == ["runtime", "receipts"]
         assert payload["runtime_session_id"] == "runtime-session-1"

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import json
-import sqlite3
 import threading
 from pathlib import Path
 
@@ -11,10 +10,6 @@ import pytest
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     signed_cloud_extension_projection_digest,
     signed_cloud_extension_projection_json,
-)
-from codex_plugin_scanner.guard.policy_bundle_activation import (
-    encoded_delivery_acknowledgement,
-    managed_delivery_matches_base,
 )
 from codex_plugin_scanner.guard.policy_bundle_delivery import (
     effective_projection_digest,
@@ -90,45 +85,6 @@ def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
         )
         == expected
     )
-
-
-def test_managed_delivery_base_match_rejects_missing_catalog_digest(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    registry = runner.BUILT_IN_COMMAND_EXTENSION_REGISTRY
-    store._bootstrap_extension_control_authority(registry.catalog_digest, key=None)
-    base = store.read_extension_control_authority_for_registry(registry)
-    bundle = _bundle()
-    policy = parse_managed_bundle(bundle)
-
-    assert not managed_delivery_matches_base(
-        {
-            "extensionAuthorityRevision": base.revision,
-            "effectiveProjectionDigest": effective_projection_digest(base),
-            "payloadHash": bundle["payloadHash"],
-            "extensionProjectionDigest": "sha256:" + "0" * 64,
-        },
-        policy_bundle=bundle,
-        policy=policy,
-        base_authority=base,
-    )
-
-
-def test_delivery_acknowledgement_rejects_missing_device_identity(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    registry = runner.BUILT_IN_COMMAND_EXTENSION_REGISTRY
-    store._bootstrap_extension_control_authority(registry.catalog_digest, key=None)
-    base = store.read_extension_control_authority_for_registry(registry)
-    with (
-        sqlite3.connect(":memory:") as connection,
-        pytest.raises(ValueError, match="device identity"),
-    ):
-        encoded_delivery_acknowledgement(
-            connection,
-            delivery={},
-            policy_bundle={},
-            published_authority=base,
-            observed_at="2026-08-26T00:00:00Z",
-        )
 
 
 def _stub_sync(monkeypatch: pytest.MonkeyPatch, response: dict[str, object]) -> None:

@@ -145,6 +145,13 @@ def runtime_session_success_summary(
     return summary
 
 
+def runtime_summary_device_id(summary: object, fallback: str) -> str:
+    """Prefer the server-normalized runtime device identity when available."""
+
+    value = summary.get("runtime_device_id") if isinstance(summary, dict) else None
+    return value if isinstance(value, str) and value else fallback
+
+
 def _normalized_extension_catalog_sync_url(runtime_sync_url: str, *, upload_path: str) -> str:
     if upload_path != "/api/guard/runtime/extension-catalog/sync":
         raise RuntimeError("Invalid Extension catalog upload path")
