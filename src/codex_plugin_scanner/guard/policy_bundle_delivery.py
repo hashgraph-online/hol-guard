@@ -236,6 +236,7 @@ def policy_bundle_acknowledgement_payload(
         "sequence": previous_sequence + 1 if isinstance(previous_sequence, int) else 1,
         "status": resolved_status,
         "observedAt": _normalized_observed_at(synced_at),
+        "errorCode": None,
     }
     validated, error = validated_policy_bundle_v2_acknowledgement(acknowledgement, previous=matching_previous)
     if validated is None:
@@ -278,8 +279,13 @@ def effective_policy_bundle_acknowledgement(
     previous = stored_acknowledgement if isinstance(stored_acknowledgement, dict) else None
     if not activating_new_bundle:
         return dict(previous) if previous is not None else {}
+    acknowledgement_device_id = device_id
+    if validated_delivery is not None:
+        delivered_device_id = validated_delivery.get("deviceId")
+        if isinstance(delivered_device_id, str) and delivered_device_id:
+            acknowledgement_device_id = delivered_device_id
     return policy_bundle_acknowledgement_payload(
-        device_id=device_id,
+        device_id=acknowledgement_device_id,
         device_name=device_name,
         policy_bundle=effective_policy_bundle,
         synced_at=synced_at,

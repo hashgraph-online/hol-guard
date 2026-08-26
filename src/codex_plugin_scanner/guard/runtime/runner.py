@@ -2952,6 +2952,12 @@ def sync_receipts(
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "bundle_version_downgrade"
         candidate_managed_capabilities = _managed_controls_negotiated_capabilities(store, policy_bundle_sync_payload)
+        runtime_session_summary = store.get_sync_payload("runtime_session_summary")
+        delivery_device_id = (
+            _optional_string(runtime_session_summary.get("runtime_device_id"))
+            if isinstance(runtime_session_summary, dict)
+            else None
+        ) or device_id
         (
             validated_policy_bundle,
             candidate_managed_controls,
@@ -2964,8 +2970,8 @@ def sync_receipts(
             delivery_field_provided=policy_bundle_delivery_field_provided,
             delivery_payload=policy_bundle_delivery_payload,
             workspace_id=cloud_workspace_id,
-            device_id=device_id,
-            runtime_summary=store.get_sync_payload("runtime_session_summary"),
+            device_id=delivery_device_id,
+            runtime_summary=runtime_session_summary,
         )
         if managed_controls_error is not None:
             policy_bundle_rejection_reason = managed_controls_error
@@ -3954,6 +3960,7 @@ def sync_local_guard_cloud_proof(
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
     include_aibom: bool = False,
+    force_aibom: bool = False,
     managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
 ) -> dict[str, object]:
     """Publish the local Guard runtime session before syncing receipts."""
@@ -3979,6 +3986,7 @@ def sync_local_guard_cloud_proof(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
             include_aibom=include_aibom,
+            force_aibom=force_aibom,
             managed_controls_publish=managed_controls_publish,
         )
         summary = dict(receipts_summary)

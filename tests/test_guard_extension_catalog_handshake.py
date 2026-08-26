@@ -151,3 +151,29 @@ def test_catalog_upload_response_validation_fails_closed() -> None:
             },
             expected_digest="a" * 64,
         )
+
+
+def test_runtime_session_summary_uses_server_normalized_device_identity() -> None:
+    session_payload = {
+        "sessionId": "runtime-session-1",
+        "deviceId": "client-installation-id",
+        "harness": "hol-guard",
+        "surface": "cli",
+        "workspace": "local-machine",
+    }
+
+    summary = runner.runtime_session_success_summary(
+        session_payload=session_payload,
+        response_payload={
+            "items": [
+                {
+                    "sessionId": "runtime-session-1",
+                    "deviceId": "trusted-oauth-machine-id",
+                }
+            ]
+        },
+        synced_at="2026-08-25T00:00:00Z",
+        catalog_sync={},
+    )
+
+    assert summary["runtime_device_id"] == "trusted-oauth-machine-id"

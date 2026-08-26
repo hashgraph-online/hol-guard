@@ -107,6 +107,20 @@ def runtime_session_success_summary(
     catalog_sync: dict[str, object],
 ) -> dict[str, object]:
     synced_items = response_payload.get("items")
+    trusted_device_id = session_payload["deviceId"]
+    if isinstance(synced_items, list):
+        matching_item = next(
+            (
+                item
+                for item in synced_items
+                if isinstance(item, dict) and item.get("sessionId") == session_payload["sessionId"]
+            ),
+            None,
+        )
+        if isinstance(matching_item, dict):
+            response_device_id = matching_item.get("deviceId")
+            if isinstance(response_device_id, str) and response_device_id:
+                trusted_device_id = response_device_id
     summary: dict[str, object] = {
         "synced_at": synced_at,
         "runtime_session_synced_at": synced_at,
@@ -116,7 +130,7 @@ def runtime_session_success_summary(
         "runtime_harness": session_payload["harness"],
         "runtime_surface": session_payload["surface"],
         "runtime_workspace": session_payload["workspace"],
-        "runtime_device_id": session_payload["deviceId"],
+        "runtime_device_id": trusted_device_id,
     }
     for field in (
         "extensionCatalogDigest",

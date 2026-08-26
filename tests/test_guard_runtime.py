@@ -4086,6 +4086,7 @@ clearer UX and an implementation plan with technical references.
             call_order.append("receipts")
             assert auth_context is shared_auth_context
             assert _kwargs["managed_controls_publish"] is managed_controls_publish
+            assert _kwargs["force_aibom"] is True
             return {
                 "synced_at": "2026-06-05T12:00:05+00:00",
                 "receipts_stored": 3,
@@ -4103,6 +4104,7 @@ clearer UX and an implementation plan with technical references.
 
         payload = guard_runner_module.sync_local_guard_cloud_proof(
             store,
+            force_aibom=True,
             managed_controls_publish=managed_controls_publish,
         )
 

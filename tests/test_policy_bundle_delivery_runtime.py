@@ -183,6 +183,7 @@ def test_policy_bundle_v2_acknowledgement_sequence_is_monotonic_per_bundle() -> 
         "sequence": 1,
         "status": "applied",
         "observedAt": "2026-06-05T13:30:00Z",
+        "errorCode": None,
     }
     assert second["sequence"] == 2
     assert second["observedAt"] == "2026-06-05T13:31:00Z"
@@ -269,12 +270,13 @@ def test_receipt_sync_atomically_accepts_managed_delivery_and_emits_exact_v2_ack
     wire_digest = runner.build_builtin_extension_catalog_wire(
         guard_version="test", generated_at="2026-08-25T12:00:00Z"
     )["catalogDigest"]
-    device_id, _device_name = runner._guard_device_metadata(store)
+    _device_id, _device_name = runner._guard_device_metadata(store)
+    trusted_cloud_device_id = "oauth-machine-managed-controls"
     store.set_sync_payload(
         "runtime_session_summary",
         {
             "runtime_session_id": "runtime-managed-controls",
-            "runtime_device_id": device_id,
+            "runtime_device_id": trusted_cloud_device_id,
             "extensionCatalogDigest": wire_digest,
             "extensionAuthorityRevision": authority.revision,
             "effectiveProjectionDigest": f"sha256:{runtime.current().effective_digest}",
@@ -288,7 +290,7 @@ def test_receipt_sync_atomically_accepts_managed_delivery_and_emits_exact_v2_ack
         "bundleHash": bundle["bundleHash"],
         "bundleVersion": bundle["bundleVersion"],
         "workspaceId": bundle["workspaceId"],
-        "deviceId": device_id,
+        "deviceId": trusted_cloud_device_id,
         "runtimeSessionId": "runtime-managed-controls",
         "deliveryId": "00000000-0000-4000-8000-000000000001",
         "policyRevision": 7,
@@ -325,6 +327,7 @@ def test_receipt_sync_atomically_accepts_managed_delivery_and_emits_exact_v2_ack
         "sequence": 1,
         "status": "applied",
         "observedAt": "2026-08-25T12:00:01Z",
+        "errorCode": None,
     }
     context = runner._receipt_sync_context(store, local_guard_online_at="2026-08-25T12:00:02Z")
     assert context["policyBundleAcknowledgementV2"] == acknowledgement
