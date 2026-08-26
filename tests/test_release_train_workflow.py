@@ -43,7 +43,6 @@ def test_release_branches_run_ci_and_pr_canaries() -> None:
         "synchronize",
         "reopened",
         "labeled",
-        "closed",
     ]
     assert "tags" not in publish[True]["push"]
 
@@ -62,9 +61,7 @@ def test_release_branch_pushes_publish_alpha_while_main_pushes_publish_stable() 
         assert "github.event_name == 'workflow_dispatch'" in condition
         assert "github.event_name == 'push'" in condition
         assert "github.ref == 'refs/heads/release/3.0'" in condition
-        assert "github.event.action == 'closed'" in condition
-        assert "github.event.pull_request.merged" in condition
-        assert "github.event.pull_request.base.ref == 'release/3.0'" in condition
+        assert "github.event.action == 'closed'" not in condition
     for job_name in ("publish-main-testpypi", "publish-main-pypi", "release-main"):
         condition = jobs[job_name]["if"]
         assert "github.event_name == 'push'" in condition
@@ -91,9 +88,7 @@ def test_main_push_build_computes_a_registry_derived_stable_version() -> None:
     assert 'VERSION="$BASE_VERSION"' in compute_run
     assert 'elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]]' in compute_run
     assert "pull_request" in compute_run
-    assert compute_run.index("PR_MERGE_SHA") < compute_run.index('elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]')
-    assert 'SOURCE_SHA="$PR_MERGE_SHA"' in compute_run
-    assert 'ACTUAL_REF="$TRAIN_REF"' in compute_run
+    assert "PR_MERGE_SHA" not in compute_run
     assert 'SOURCE_SHA" != "$EXPECTED_SOURCE"' in compute_run
     assert 'TRAIN="3.0"' in compute_run
     assert "compute_alpha_release_version.py" in compute_run
@@ -542,21 +537,17 @@ def test_release_push_can_be_explicitly_suppressed_by_merge_marker() -> None:
     assert "github.event_name != 'push'" in condition
     assert "github.event.head_commit.message || ''" in condition
     assert "[skip release publish]" in condition
-    assert "github.event.action != 'closed'" in workflow["jobs"]["build"]["if"]
-    assert "github.event.pull_request.merged" in workflow["jobs"]["build"]["if"]
+    assert "github.event.action != 'closed'" not in workflow["jobs"]["build"]["if"]
 
 
-def test_release_merged_same_repo_pr_publishes_alpha_when_push_is_missing() -> None:
+def test_release_branch_push_is_the_single_automatic_alpha_publisher() -> None:
     workflow = _workflow(PUBLISH_WORKFLOW)
     jobs = workflow["jobs"]
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
 
-    assert "closed" in workflow[True]["pull_request"]["types"]
-    assert "github.event.pull_request.merge_commit_sha" in workflow_text
-    assert (
-        "hol-guard-publish-${{ github.event.pull_request.merged && "
-        "format('refs/heads/{0}', github.event.pull_request.base.ref) || github.ref }}" in workflow_text
-    )
+    assert "closed" not in workflow[True]["pull_request"]["types"]
+    assert "github.event.pull_request.merge_commit_sha" not in workflow_text
+    assert "group: hol-guard-publish-${{ github.ref }}" in workflow_text
     for job_name in (
         "reserve-alpha-tag",
         "publish-alpha-testpypi",
@@ -564,5 +555,5 @@ def test_release_merged_same_repo_pr_publishes_alpha_when_push_is_missing() -> N
         "release-alpha",
     ):
         condition = jobs[job_name]["if"]
-        assert "github.event.action == 'closed'" in condition
-        assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
+        assert "github.event.action == 'closed'" not in condition
+        assert "github.event.pull_request.merged" not in condition
