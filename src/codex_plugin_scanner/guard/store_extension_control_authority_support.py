@@ -64,6 +64,10 @@ def preserve_migrated_extension_control(
 
 
 class _ExtensionControlAuthoritySupportMixin:
+    def _require_compatible_extension_control_schema(self) -> None:
+        with self._connect() as connection:
+            ensure_extension_control_authority_schema(connection)
+
     def _authority_key(self, *, required: bool) -> bytes | None:
         try:
             value = self._secret_store().get_secret(self._key_ref())

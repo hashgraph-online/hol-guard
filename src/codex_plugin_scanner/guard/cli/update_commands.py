@@ -2877,10 +2877,10 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             network_policy=(managed_policy.network if managed_policy is not None else ManagedNetworkPolicy()),
             include_alpha=include_alpha,
         )
-        if installed_distribution is not None and installer != "desktop"
+        if installed_distribution is not None
         else {
             "source": source_kind,
-            "status": "managed" if installer == "desktop" else "unavailable",
+            "status": "unavailable",
             "current_version": current_version if current_version != "unknown" else None,
             "latest_version": None,
             "update_available": None,

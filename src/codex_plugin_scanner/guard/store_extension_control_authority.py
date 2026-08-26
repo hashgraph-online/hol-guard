@@ -111,10 +111,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         self._extension_control_last_catalog_digest = catalog_digest
         try:
             with self._extension_control_authority_lock():
-                view = self._read_extension_control_authority_locked(
-                    catalog_digest,
-                    migration_registry=registry,
-                )
+                self._require_compatible_extension_control_schema()
+                view = self._read_extension_control_authority_locked(catalog_digest, migration_registry=registry)
                 if view.health is AuthorityHealth.PROTECTED:
                     key = self._authority_key(required=True)
                     assert key is not None
