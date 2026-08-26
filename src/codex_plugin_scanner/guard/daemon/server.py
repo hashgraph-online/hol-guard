@@ -246,6 +246,7 @@ from .hook_process_runner import HookProcessRunner
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiError, LocalCliApiService
+from .local_cli_http import handle_local_cli_list
 from .managed_controls_api import managed_policy_rows
 from .managed_policy_delivery import daemon_managed_controls_candidate
 from .manager import (
@@ -2125,23 +2126,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(history, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path == "/v1/local-clis":
-            try:
-                payload = self._daemon_server().local_cli_api.list_items()
-            except Exception as error:
-                self._daemon_server().diagnostics.record_exception(
-                    "local_cli_list_failed",
-                    detail=type(error).__name__,
-                )
-                self._write_json(
-                    {
-                        "error": "local_cli_unavailable",
-                        "message": "Guard could not load custom extensions.",
-                    },
-                    status=500,
-                    extra_headers={"Cache-Control": "no-store"},
-                )
-                return
-            self._write_json(payload, extra_headers={"Cache-Control": "no-store"})
+            handle_local_cli_list(self)
             return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
