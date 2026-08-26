@@ -2,45 +2,38 @@
 
 from __future__ import annotations
 
-from typing import Protocol
-
-from .local_cli_api import LocalCliApiService
+from collections.abc import Callable
 
 
-class _LocalCliDiagnostics(Protocol):
-    def record_exception(self, event: str, *, detail: str | None = None) -> bool: ...
-
-
-class _LocalCliDaemon(Protocol):
-    local_cli_api: LocalCliApiService
-    diagnostics: _LocalCliDiagnostics
-
-
-class _LocalCliListHandler(Protocol):
-    def _daemon_server(self) -> _LocalCliDaemon: ...
-
-    def _write_json(
-        self,
-        payload: dict[str, object],
-        *,
-        status: int = 200,
-        extra_headers: dict[str, str] | None = None,
-    ) -> None: ...
-
-
-def handle_local_cli_list(handler: _LocalCliListHandler) -> None:
-    daemon = handler._daemon_server()
-    try:
-        payload = daemon.local_cli_api.list_items()
-    except Exception as error:
-        daemon.diagnostics.record_exception("local_cli_list_failed", detail=type(error).__name__)
-        handler._write_json(
-            {
-                "error": "local_cli_unavailable",
-                "message": "Guard could not load custom extensions.",
-            },
-            status=500,
-            extra_headers={"Cache-Control": "no-store"},
-        )
+def handle_local_cli_list(handler: object) -> None:
+    daemon_server = getattr(handler, "_daemon_server", None)
+    write_json = getattr(handler, "_write_json", None)
+    if not callable(daemon_server) or not callable(write_json):
         return
-    handler._write_json(payload, extra_headers={"Cache-Control": "no-store"})
+    daemon = daemon_server()
+    list_items = getattr(getattr(daemon, "local_cli_api", None), "list_items", None)
+    if not callable(list_items):
+        return
+    try:
+        payload = list_items()
+    except Exception as error:
+        record_exception = getattr(getattr(daemon, "diagnostics", None), "record_exception", None)
+        if callable(record_exception):
+            record_exception("local_cli_list_failed", detail=type(error).__name__)
+        _write_unavailable(write_json)
+        return
+    if isinstance(payload, dict):
+        write_json(payload, extra_headers={"Cache-Control": "no-store"})
+        return
+    _write_unavailable(write_json)
+
+
+def _write_unavailable(write_json: Callable[..., None]) -> None:
+    write_json(
+        {
+            "error": "local_cli_unavailable",
+            "message": "Guard could not load custom extensions.",
+        },
+        status=500,
+        extra_headers={"Cache-Control": "no-store"},
+    )
