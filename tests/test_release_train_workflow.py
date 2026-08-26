@@ -489,7 +489,7 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert 'gh release view "$tag" --json isDraft,isPrerelease' in alpha_run
     assert 'gh release download "$tag"' in alpha_run and "verify_release_asset_inventory.py" in alpha_run
     assert 'cmp --silent "$local_file"' in alpha_run
-    assert '"$existing_dir" dist "$VERSION"' in alpha_run
+    assert '"$existing_dir" dist "$VERSION" alpha' in alpha_run
     assert "mapfile -d '' local_files" in alpha_run
     assert 'gh attestation verify "$remote_file"' in alpha_run and '--bundle "$bundle"' in alpha_run
     assert '--source-digest "$SOURCE_SHA"' in alpha_run and "--verify-tag" in alpha_run
@@ -507,7 +507,7 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in stable_run
     assert 'gh attestation verify "$remote_file"' in stable_run
     assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in stable_run
-    assert "--verify-tag" in stable_run and '"$existing_dir" dist "$VERSION"' in stable_run
+    assert "--verify-tag" in stable_run and '"$existing_dir" dist "$VERSION" stable' in stable_run
 
 
 def test_release_3x_alpha_branches_remain_alpha_while_main_is_stable() -> None:

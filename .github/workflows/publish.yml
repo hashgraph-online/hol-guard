@@ -1393,7 +1393,7 @@ jobs:
                 cmp --silent "$local_file" "$remote_file"
               fi
             done
-            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION"
+            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" stable
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
             shopt -s nullglob
@@ -1500,7 +1500,7 @@ jobs:
                 cmp --silent "$local_file" "$remote_file"
               fi
             done
-            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION"
+            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" alpha
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
             for remote_file in "$existing_dir"/hol_guard-*; do
