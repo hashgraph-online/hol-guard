@@ -28,16 +28,16 @@ on:
     branches: [main, release/3.0]
   pull_request:
     branches: [main, release/3.0]
-    types: [opened, synchronize, reopened, labeled, closed]
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
   pull-requests: read
 
 concurrency:
-  # Serialize publish-capable events for one release branch while keeping
-  # ordinary pull-request validation isolated by its merge ref.
-  group: hol-guard-publish-${{ github.event.pull_request.merged && format('refs/heads/{0}', github.event.pull_request.base.ref) || github.ref }}
+  # Serialize publish-capable branch events while keeping pull-request
+  # validation isolated by its merge ref.
+  group: hol-guard-publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -81,8 +81,6 @@ jobs:
   build:
     name: Build + Verify
     if: >-
-      (github.event.action != 'closed' || github.event.pull_request.merged) &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
       (github.event_name != 'push' || github.run_attempt == 1) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip release publish]')) &&
@@ -98,7 +96,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
-          ref: ${{ (github.event.pull_request.merged && github.event.pull_request.merge_commit_sha) || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -127,10 +125,6 @@ jobs:
           GITHUB_EVENT_ACTION: ${{ github.event.action }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_MERGED: ${{ github.event.pull_request.merged }}
-          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_ACTOR_ID: ${{ github.actor_id }}
@@ -198,7 +192,7 @@ jobs:
               VALIDATOR_ARGS+=(--existing-version "$existing_version")
             done
             VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]] || [[ "$GITHUB_EVENT_NAME" == "pull_request" && "$GITHUB_EVENT_ACTION" == "closed" && "$PR_MERGED" == "true" && "$PR_BASE_REF" == "release/3.0" && "$PR_HEAD_REPO" == "$GITHUB_REPOSITORY" && -n "$PR_MERGE_SHA" ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/release/3.0" ]]; then
             if [[ "$RELEASE_PUBLISHING_ENABLED" != "true" ]]; then
               echo "Release publishing is disabled until protected environments are verified" >&2
               exit 1
@@ -207,11 +201,6 @@ jobs:
             TRAIN_REF="refs/heads/release/${TRAIN}"
             ACTUAL_REF="$GITHUB_REF"
             EXPECTED_SOURCE="$GITHUB_SHA"
-            if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-              SOURCE_SHA="$PR_MERGE_SHA"
-              EXPECTED_SOURCE="$PR_MERGE_SHA"
-              ACTUAL_REF="$TRAIN_REF"
-            fi
             if [[ "$SOURCE_SHA" != "$EXPECTED_SOURCE" ]]; then
               echo "Checked-out source does not match the immutable release source" >&2
               exit 1
@@ -405,7 +394,6 @@ jobs:
     name: Build native Guard wheel (${{ matrix.target }})
     if: >-
       needs.build.result == 'success' &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       (
         (
           github.event_name == 'pull_request' &&
@@ -416,7 +404,7 @@ jobs:
         (
           needs.build.outputs.channel == 'alpha' &&
           (
-            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository) ||
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
             (github.event_name == 'workflow_dispatch' && github.event.inputs.release_train == '3.0')
           )
         )
@@ -528,7 +516,6 @@ jobs:
     name: Assemble native Guard distributions
     if: >-
       needs.build.result == 'success' &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build-native-guard-wheels.result == 'success'
     needs: [build, build-native-guard-wheels]
     runs-on: ubuntu-latest
@@ -781,12 +768,11 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.result == 'success' && needs.assemble-native-guard-distributions.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
@@ -809,7 +795,6 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       vars.ALPHA_TESTPYPI_ENABLED == 'true' &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
@@ -817,7 +802,7 @@ jobs:
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, reserve-alpha-tag, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
@@ -916,14 +901,13 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.result == 'success' &&
       needs.assemble-native-guard-distributions.result == 'success' &&
       needs.reserve-alpha-tag.result == 'success' &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, reserve-alpha-tag, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
@@ -1071,7 +1055,6 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.outputs.channel == 'alpha' &&
       needs.reserve-alpha-tag.result == 'success' &&
       needs.publish-alpha-pypi.result != 'success'
@@ -1437,11 +1420,10 @@ jobs:
     name: Create alpha GitHub prerelease
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.outputs.channel == 'alpha' &&
       (
         (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+        (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
       )
     needs: [build, publish-alpha-pypi]
     runs-on: ubuntu-latest
@@ -1544,13 +1526,12 @@ jobs:
     if: >-
       always() &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      (github.event_name != 'pull_request' || github.event.action != 'closed' || !github.event.pull_request.merged || !contains(github.event.pull_request.labels.*.name, 'skip-release-publish')) &&
       needs.build.result == 'success' &&
       (
         (
           (
             (github.event_name == 'workflow_dispatch' && github.run_attempt == 1) ||
-            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') || (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.base.ref == 'release/3.0' && github.event.pull_request.head.repo.full_name == github.repository)
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0')
           ) &&
           needs.build.outputs.channel == 'alpha' &&
           needs.publish-alpha-pypi.result == 'success' &&
