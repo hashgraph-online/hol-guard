@@ -60,9 +60,6 @@ from ..policy_bundle_decisions import build_policy_bundle_decisions as _material
 from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
 )
-from ..policy_bundle_delivery import (
-    policy_bundle_acknowledgement_payload as _policy_bundle_acknowledgement_payload,  # noqa: F401
-)
 from ..policy_bundle_parser import (
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
     computed_policy_bundle_hash,

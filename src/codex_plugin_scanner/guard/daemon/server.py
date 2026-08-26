@@ -141,6 +141,7 @@ from ..package_firewall_entitlement import (
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
 from ..policy_bundle_activation import activate_with_reason
+from ..policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from ..policy_bundle_parser import policy_bundle_is_enforceable, policy_bundle_rejection_message
 from ..policy_bundle_trusted_keys import (
     MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY,
@@ -182,7 +183,6 @@ from ..runtime.runner import (
     _guard_device_metadata,
     _persist_cloud_receipt_redaction_level,
     _policy_bundle_acceptance_checkpoint,
-    _policy_bundle_acknowledgement_payload,
     _policy_bundle_cloud_exception_items,
     _policy_bundle_downgrade_reference,
     _policy_bundle_is_version_downgrade,
@@ -3485,7 +3485,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 device_id=device_id,
                 device_name=device_name,
             )
-            policy_bundle_ack = _policy_bundle_acknowledgement_payload(
+            policy_bundle_ack = policy_bundle_acknowledgement_payload(
                 device_id=device_id,
                 device_name=device_name,
                 policy_bundle=validated_policy_bundle,

@@ -1090,7 +1090,7 @@ class StorePolicyMixin:
                         published_authority=published_authority,
                         observed_at=normalized_now,
                     )
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     return reject("managed_controls_delivery_ack_invalid", connection)
             self._replace_remote_policy_rows_locked(connection, rows)
             for state_key, payload_json in encoded_payloads.items():

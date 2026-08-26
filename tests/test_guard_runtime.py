@@ -57,6 +57,7 @@ from codex_plugin_scanner.guard.models import (
     PolicyDecision,
 )
 from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
+from codex_plugin_scanner.guard.policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     payload_hash_for_policy_bundle,
     validated_policy_bundle_payload,
@@ -21147,7 +21148,7 @@ def test_receipt_sync_context_uploads_policy_bundle_acknowledgement(tmp_path: Pa
     policy_bundle = store.get_sync_payload("policy_bundle")
     assert isinstance(policy_bundle, dict)
     device_id, device_name = guard_runner_module._guard_device_metadata(store)
-    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+    acknowledgement = policy_bundle_acknowledgement_payload(
         device_id=device_id,
         device_name=device_name,
         policy_bundle=policy_bundle,
@@ -21189,7 +21190,7 @@ def test_receipt_sync_context_omits_invalid_policy_bundle_acknowledgement(
     policy_bundle = store.get_sync_payload("policy_bundle")
     assert isinstance(policy_bundle, dict)
     device_id, device_name = guard_runner_module._guard_device_metadata(store)
-    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+    acknowledgement = policy_bundle_acknowledgement_payload(
         device_id=device_id,
         device_name=device_name,
         policy_bundle=policy_bundle,
@@ -21216,7 +21217,7 @@ def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(
     policy_bundle = store.get_sync_payload("policy_bundle")
     assert isinstance(policy_bundle, dict)
     device_id, device_name = guard_runner_module._guard_device_metadata(store)
-    acknowledgement = guard_runner_module._policy_bundle_acknowledgement_payload(
+    acknowledgement = policy_bundle_acknowledgement_payload(
         device_id=device_id,
         device_name=device_name,
         policy_bundle=policy_bundle,

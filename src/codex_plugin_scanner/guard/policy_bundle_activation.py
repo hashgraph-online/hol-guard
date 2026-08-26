@@ -64,14 +64,17 @@ def managed_delivery_matches_base(
     policy: ParsedManagedControlsPolicy,
     base_authority: ExtensionControlAuthorityView,
 ) -> bool:
+    catalog_digest = delivery.get("catalogDigest")
     return (
-        delivery.get("extensionAuthorityRevision") == base_authority.revision
+        isinstance(catalog_digest, str)
+        and bool(catalog_digest)
+        and delivery.get("extensionAuthorityRevision") == base_authority.revision
         and delivery.get("effectiveProjectionDigest") == effective_projection_digest(base_authority)
         and delivery.get("payloadHash") == policy_bundle.get("payloadHash")
         and delivery.get("extensionProjectionDigest")
         == signed_cloud_extension_projection_digest(
             policy,
-            catalog_digest=str(delivery.get("catalogDigest")),
+            catalog_digest=catalog_digest,
         )
     )
 
@@ -119,6 +122,9 @@ def encoded_delivery_acknowledgement(
     published_authority: ExtensionControlAuthorityView,
     observed_at: str,
 ) -> str:
+    device_id = delivery.get("deviceId")
+    if not isinstance(device_id, str) or not device_id:
+        raise ValueError("Managed Controls delivery requires a device identity")
     row = connection.execute(
         "select payload_json from sync_state where state_key = ?",
         ("policy_bundle_ack",),
@@ -128,7 +134,7 @@ def encoded_delivery_acknowledgement(
         value = json.loads(str(row["payload_json"]))
         previous = value if isinstance(value, dict) else None
     acknowledgement = policy_bundle_acknowledgement_payload(
-        device_id=str(delivery["deviceId"]),
+        device_id=device_id,
         device_name="Guard",
         policy_bundle=dict(policy_bundle),
         synced_at=observed_at,
