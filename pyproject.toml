@@ -1,122 +1,78 @@
 [build-system]
-requires = ["hatchling<1.31"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
 version = "3.0.0a0"
-description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
+description = "Open-source antivirus for AI agents: block risky tools, secret access, prompt injection, malicious packages, MCP servers, plugins, and skills at runtime."
 readme = "README.md"
-license = "Apache-2.0"
 requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
-    { name = "HOL", email = "support@hol.org" },
+  { name = "Hashgraph Online", email = "michael@hol.org" },
 ]
-keywords = [
-    "ai antivirus",
-    "ai agent security",
-    "ai agents",
-    "runtime security",
-    "mcp security",
-    "supply chain security",
-    "prompt injection",
-    "secrets detection",
-    "plugin security",
-    "cli",
-    "codex",
-    "claude",
-    "cursor",
-    "gemini",
-    "opencode",
-]
+keywords = ["ai", "agent", "security", "antivirus", "mcp", "prompt-injection", "supply-chain"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Environment :: Console",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Topic :: Security",
-    "Topic :: Software Development :: Quality Assurance",
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+  "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
-    "rich>=14.0,<15",
-    "cryptography>=50.0.0",
-    "keyring>=25.0",
-    "packaging>=24.0",
-    "idna==3.15",
-    "jsonschema>=4.26.0",
-    "pyyaml>=6.0.3",
-    "regex>=2025.0.0,<2027",
-    "requests>=2.32,<3",
-    "publicsuffixlist==1.0.2.20260726",
-    "tomli>=2.0; python_version < '3.11'",
-    "cisco-ai-skill-scanner~=2.0.12",
-    "litellm==1.93.0; python_version < '3.15'",
-    "mcp>=1.28.1,<2; python_version >= '3.10'",
+  "click>=8.1.7",
+  "cryptography>=42.0.0",
+  "fastapi>=0.115.0",
+  "httpx>=0.27.0",
+  "jsonschema>=4.23.0",
+  "keyring>=25.5.0",
+  "mcp>=1.12.0",
+  "pydantic>=2.10.0",
+  "pydantic-settings>=2.7.0",
+  "pyjwt[crypto]>=2.10.1",
+  "python-multipart>=0.0.20",
+  "pyyaml>=6.0.2",
+  "requests>=2.32.3",
+  "rich>=13.9.4",
+  "setproctitle>=1.3.4",
+  "typer>=0.15.1",
+  "uvicorn[standard]>=0.34.0",
 ]
 
 [project.optional-dependencies]
-cisco = [
-    "litellm==1.93.0; python_version >= '3.11' and python_version < '3.15'",
-]
 dev = [
-    "basedpyright>=1.39.8",
-    "build>=1.5.0",
-    "pytest>=9.0.3",
-    "pytest-cov>=7.1.0",
-    "ruff>=0.15.15",
+  "basedpyright>=1.29.5",
+  "build>=1.2.2.post1",
+  "mutmut>=3.3.1",
+  "pytest>=8.3.5",
+  "pytest-cov>=6.0.0",
+  "ruff>=0.11.2",
 ]
-mdm-build = [
-    "pyinstaller>=6.16,<7",
-]
-publish = [
-    "twine>=6.2.0",
-]
-
-[dependency-groups]
-cisco-mcp = [
-    "cisco-ai-mcp-scanner==4.8.1; python_full_version >= '3.11.4'",
-]
-dev = [
-    "mutmut>=3.4,<4",
-]
-
-[tool.uv]
-override-dependencies = [
-    "aiohttp==3.14.3",
-    "click==8.4.1",
-    "cisco-ai-skill-scanner==2.0.12",
-    "fastapi==0.137.1",
-    "importlib-metadata==8.9.0",
-    "jsonschema==4.26.0",
-    "litellm==1.93.0",
-    "magika==1.0.3",
-    "openai==2.41.1",
-    "pyjwt==2.13.0",
-    "python-dotenv==1.2.2",
-    "python-multipart==0.0.32",
-    "starlette==1.3.1",
-    "tokenizers==0.23.1",
-    "urllib3==2.7.0",
+scanner = [
+  "cisco-ai-skill-scanner>=2.0.7",
+  "magika>=0.6.2",
+  "yara-x>=1.5.0",
 ]
 
 [project.scripts]
-hol-guard = "codex_plugin_scanner.cli:main"
-hol-guard-secrets = "codex_plugin_scanner.guard.secrets.cli:main"
-plugin-scanner = "codex_plugin_scanner.cli:main"
-plugin-guard = "codex_plugin_scanner.cli:main"
-plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"
+guard = "codex_plugin_scanner.guard.cli.main:app"
+hol-guard = "codex_plugin_scanner.guard.cli.main:app"
+ai-plugin-scanner = "codex_plugin_scanner.cli:main"
 
 [project.urls]
 Homepage = "https://hol.org/guard"
-Security = "https://hol.org/guard/security"
-"Security Policy" = "https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md"
-Documentation = "https://github.com/hashgraph-online/hol-guard/tree/main/docs/guard"
+Documentation = "https://github.com/hashgraph-online/hol-guard#readme"
 Repository = "https://github.com/hashgraph-online/hol-guard"
 Issues = "https://github.com/hashgraph-online/hol-guard/issues"
 Changelog = "https://github.com/hashgraph-online/hol-guard/releases"
@@ -186,7 +142,11 @@ markers = [
 
 [tool.mutmut]
 source_paths = ["src/codex_plugin_scanner/guard/runtime/command_model.py"]
-also_copy = ["src/codex_plugin_scanner"]
+also_copy = [
+  "src/codex_plugin_scanner",
+  "contracts/guard-cloud-review",
+  "docs/guard/contracts/guard-cloud-review.md",
+]
 pytest_add_cli_args_test_selection = [
   "tests/test_guard_command_model.py",
   "tests/test_guard_command_critical_floors.py",
