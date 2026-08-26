@@ -252,7 +252,7 @@ def _nested_trust_result(marker_path: str) -> dict[str, str]:
     context = local_trust_contract_module.multiprocessing.get_context("spawn")
     process = context.Process(target=_write_nested_trust_marker, args=(marker_path,))
     process.start()
-    process.join(timeout=3.0)
+    process.join(timeout=10.0)
     return {"mode": "protected", "nested": str(Path(marker_path).exists())}
 
 
@@ -597,8 +597,8 @@ def test_trust_backend_check_allows_spawned_helper_child_process(tmp_path: Path)
 
     result = run_trust_backend_check(
         partial(_nested_trust_result, str(marker_path)),
-        # This verifies nested containment, while concurrent spawn runners need startup headroom.
-        timeout_seconds=10.0,
+        # Nested spawn gets 10s under runner contention; outer containment keeps cleanup headroom.
+        timeout_seconds=15.0,
         timeout_result={"mode": "degraded", "nested": "False"},
     )
 

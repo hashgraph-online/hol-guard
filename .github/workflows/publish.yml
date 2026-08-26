@@ -444,6 +444,7 @@ jobs:
             runtime: rust/target/aarch64-apple-darwin/release/hol-guard-runtime
           - runner: windows-latest
             platform_tag: win_amd64
+            rustflags: -C link-arg=/Brepro
             target: x86_64-pc-windows-msvc
             runtime: rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe
     steps:
@@ -481,6 +482,7 @@ jobs:
         env:
           HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
           HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
           RUST_TARGET: ${{ matrix.target }}
           RUNTIME: ${{ matrix.runtime }}
         run: |
@@ -1392,9 +1394,7 @@ jobs:
             existing_dir=$(mktemp -d)
             gh release download "$tag" --dir "$existing_dir"
             mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
             [[ "${#local_files[@]}" -gt 0 ]]
-            [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
               [[ -f "$remote_file" ]]
@@ -1402,6 +1402,7 @@ jobs:
                 cmp --silent "$local_file" "$remote_file"
               fi
             done
+            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" stable
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
             shopt -s nullglob
@@ -1501,9 +1502,7 @@ jobs:
             existing_dir=$(mktemp -d)
             gh release download "$tag" --dir "$existing_dir"
             mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
             [[ "${#local_files[@]}" -gt 0 ]]
-            [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
               [[ -f "$remote_file" ]]
@@ -1511,6 +1510,7 @@ jobs:
                 cmp --silent "$local_file" "$remote_file"
               fi
             done
+            python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" alpha
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
             for remote_file in "$existing_dir"/hol_guard-*; do

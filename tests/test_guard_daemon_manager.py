@@ -722,6 +722,7 @@ def test_authenticated_daemon_state_rejects_post_write_tampering(tmp_path):
 def test_daemon_token_and_state_use_atomic_replacement(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     replacements: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(daemon_manager_module, "_current_guard_daemon_runtime_fingerprint", lambda: "f" * 64)
     real_replace = daemon_manager_module.os.replace
 
     def recording_replace(source, destination) -> None:
@@ -731,7 +732,6 @@ def test_daemon_token_and_state_use_atomic_replacement(tmp_path, monkeypatch):
     monkeypatch.setattr(daemon_manager_module.os, "replace", recording_replace)
 
     daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
-
     destinations = {destination for _temporary_path, destination in replacements}
     assert destinations == {
         daemon_manager_module._auth_token_path(guard_home),

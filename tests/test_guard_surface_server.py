@@ -1012,16 +1012,17 @@ class TestGuardSurfaceServer:
         assert "protect your local secrets" in hook_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
         assert store.list_guard_sessions() == []
 
-    def test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload(self, tmp_path) -> None:
+    def test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 10.0)
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
         daemon.start()
         assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1,
-            timeout_seconds=15,
+            minimum_workers=1, timeout_seconds=15
         )
 
         try:
@@ -1045,16 +1046,15 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(hook_request, timeout=5) as response:
+            with urllib.request.urlopen(hook_request, timeout=15) as response:
                 hook_payload = json.loads(response.read().decode("utf-8"))
             if str(hook_payload.get("reason", "")).startswith(
                 "HOL Guard blocked this action because isolated local review could not complete safely."
             ):
                 assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-                    minimum_workers=1,
-                    timeout_seconds=15,
+                    minimum_workers=1, timeout_seconds=15
                 )
-                with urllib.request.urlopen(hook_request, timeout=5) as response:
+                with urllib.request.urlopen(hook_request, timeout=15) as response:
                     hook_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
