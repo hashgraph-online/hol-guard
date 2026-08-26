@@ -126,6 +126,14 @@ def test_canonical_upload_uses_frozen_batch_contract(monkeypatch: pytest.MonkeyP
     assert result["perEventResults"] == [{"index": 0, "accepted": True, "code": "review_event_rejected", "error": None}]
 
 
+def test_canonical_transport_rejects_invalid_advertised_batch_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    for invalid_limit in (0, -1, True, "250"):
+        response = {**_response(), "maxBatchEvents": invalid_limit}
+        monkeypatch.setattr(delivery, "_post_json", lambda *_args, response=response, **_kwargs: response)
+        with pytest.raises(delivery.CloudReviewEventProtocolError, match="invalid batch limit"):
+            _post([_event()])
+
+
 @pytest.mark.parametrize("status", ["duplicate", "stale"])
 def test_duplicate_or_stale_result_is_idempotently_acknowledged(
     monkeypatch: pytest.MonkeyPatch,

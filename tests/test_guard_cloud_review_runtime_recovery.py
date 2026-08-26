@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import cloud_review_sync, command_queue
+from codex_plugin_scanner.guard.runtime import cloud_review_sync, cloud_review_sync_worker, command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import issue_command_capability
 from codex_plugin_scanner.guard.runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import authorize_exact_cloud_review_job
@@ -233,9 +233,10 @@ def test_cloud_review_worker_survives_ten_thousand_recurring_disconnects(
     monkeypatch.setattr(cloud_review_sync, "sync_cloud_review_events_once", sync)
     monkeypatch.setattr(cloud_review_sync._LOGGER, "exception", lambda *_args, **_kwargs: None)
 
-    cloud_review_sync._cloud_sync_sync_loop(
+    cloud_review_sync_worker._cloud_sync_sync_loop(
         store,
         stop_event,
+        cloud_review_sync_worker.review_event_wake_signal(store.path),
         poll_interval=0.001,
         error_backoff=0.001,
     )

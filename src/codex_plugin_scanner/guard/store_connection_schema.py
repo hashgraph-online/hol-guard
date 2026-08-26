@@ -400,13 +400,12 @@ class StoreConnectionSchemaMixin:
             # thrash the default 2 MiB cache.
             connection.execute(f"pragma cache_size=-{SQLITE_CACHE_SIZE_KIB}")
             connection.execute(f"pragma mmap_size={SQLITE_MMAP_SIZE_BYTES}")
+            initial_changes = connection.total_changes
             yield connection
             store_review_event_outbox_schema.finalize_review_event_payload_hashes(connection)
-            commit_started = time.monotonic()
-            try:
-                connection.commit()
-            finally:
-                profiler.record_commit((time.monotonic() - commit_started) * 1000)
+            outbox_generation = store_review_event_outbox_schema.commit_review_event_transaction(
+                connection, initial_changes, profiler.record_commit
+            )
             notification = self._take_policy_integrity_state_notification(connection)
         except sqlite3.OperationalError as error:
             database_failed = True
@@ -429,6 +428,7 @@ class StoreConnectionSchemaMixin:
                     "Guard store slow transaction (%.0fms); consider indexing hot query paths.",
                     elapsed_ms,
                 )
+        store_review_event_outbox_schema.notify_review_event_wake(self.path, outbox_generation)
         if notification is not None:
             self._publish_policy_integrity_state_notification(notification)
 

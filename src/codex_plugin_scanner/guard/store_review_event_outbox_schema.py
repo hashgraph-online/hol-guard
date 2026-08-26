@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from time import monotonic
 from typing import Final
 from uuid import uuid4
 
 from .review_event_integrity import review_event_payload_digest
+from .review_event_wake import review_event_wake_signal
 from .store_review_event_outbox_upgrade import ensure_review_event_outbox_upgrade
 
 # pyright: reportAny=false, reportUnusedCallResult=false
@@ -68,6 +71,37 @@ REVIEW_REQUEST_SNAPSHOT_COLUMNS: Final = (
     "created_at",
     "resolved_at",
 )
+
+
+def review_event_outbox_generation(connection: sqlite3.Connection) -> int:
+    """Return the latest durable outbox sequence, or zero before schema creation."""
+    table = connection.execute(
+        "select 1 from sqlite_master where type = 'table' and name = 'guard_review_outbox_events'"
+    ).fetchone()
+    if table is None:
+        return 0
+    row = connection.execute("select coalesce(max(stream_sequence), 0) from guard_review_outbox_events").fetchone()
+    return int(row[0]) if row is not None else 0
+
+
+def commit_review_event_transaction(
+    connection: sqlite3.Connection,
+    initial_changes: int,
+    record_commit: Callable[[float], None],
+) -> int | None:
+    """Commit durably and return the outbox generation only after writes."""
+    started = monotonic()
+    try:
+        connection.commit()
+    finally:
+        record_commit((monotonic() - started) * 1000)
+    return review_event_outbox_generation(connection) if connection.total_changes > initial_changes else None
+
+
+def notify_review_event_wake(database_path: Path, outbox_generation: int | None) -> None:
+    """Publish a wake hint only after a transaction commits changes."""
+    if outbox_generation is not None:
+        review_event_wake_signal(database_path).notify_if_outbox_changed(outbox_generation)
 
 
 def finalize_review_event_payload_hashes(connection: sqlite3.Connection) -> None:

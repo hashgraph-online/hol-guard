@@ -1,19 +1,19 @@
 """Durable, independent synchronization for local Guard approval requests."""
 
 import logging
-import os
-import threading
 import urllib.error
-from contextlib import suppress
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_contracts import (
     GuardReviewContractError,
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
+from .cloud_review_batching import (
+    CloudReviewBatchLimits,
+    next_review_batch_limits,
+    select_review_event_batch,
+)
 from .cloud_review_event_delivery import (
     CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     post_review_events,
@@ -28,11 +28,8 @@ from .oauth_request_retry import request_after_oauth_refresh
 
 _LOGGER = logging.getLogger(__name__)
 
-CLOUD_REVIEW_SYNC_BATCH_SIZE = 1
 CLOUD_REVIEW_SYNC_MAX_BATCHES = 200
 CLOUD_REVIEW_SYNC_STATE_KEY = "guard_cloud_review_sync_state"
-DEFAULT_POLL_INTERVAL_SECONDS = 0.1
-DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 
 __all__ = [
     "CloudReviewSyncWorker",
@@ -161,13 +158,14 @@ def sync_cloud_review_events_once(
     total_rejected = 0
     all_errors: list[str] = []
     batches = 0
+    batch_limits = CloudReviewBatchLimits()
 
     try:
         while batches < CLOUD_REVIEW_SYNC_MAX_BATCHES:
             newest_first = batches % 10 != 9
             outbox_rows = store.list_ready_review_events(
                 now=_now(),
-                limit=CLOUD_REVIEW_SYNC_BATCH_SIZE,
+                limit=batch_limits.events,
                 **delivery_binding,
                 newest_first=newest_first,
             )
@@ -196,6 +194,8 @@ def sync_cloud_review_events_once(
                 events.append(event)
             if not events:
                 continue
+            events = select_review_event_batch(events, batch_limits)
+            sequences = sequences[: len(events)]
             try:
                 response, auth_context = _post_events_with_oauth_refresh(store, auth_context, events)
             except Exception as error:
@@ -214,6 +214,7 @@ def sync_cloud_review_events_once(
             total_accepted += accepted
             total_rejected += rejected
             batches += 1
+            batch_limits = next_review_batch_limits(batch_limits, response)
 
             errors = response.get("errors")
             if isinstance(errors, list):
@@ -373,126 +374,8 @@ def cloud_review_sync_status(store: GuardStore) -> dict[str, object]:
     }
 
 
-@dataclass
-class CloudReviewSyncWorker:
-    """Background worker for Cloud Review event outbox sync."""
-
-    thread: threading.Thread
-    stop_event: threading.Event
-
-
-def start_cloud_sync_sync_worker(
-    store: GuardStore,
-    existing: CloudReviewSyncWorker | None = None,
-    *,
-    poll_interval: float | None = None,
-    error_backoff: float | None = None,
-) -> CloudReviewSyncWorker | None:
-    """Start the independent Cloud Review event worker at daemon startup.
-
-    Runs continuously syncing the outbox to cloud regardless of whether the
-    command-queue lease path is active. Offline preservation ensures local
-    enforcement continues while outbox buffers.
-    """
-    if existing is not None and existing.thread.is_alive() and not existing.stop_event.is_set():
-        return existing
-    if existing is not None and existing.thread.is_alive():
-        existing.thread.join(timeout=1.0)
-        if existing.thread.is_alive():
-            raise RuntimeError("Previous Cloud Review sync worker did not stop.")
-
-    profile = store.get_cloud_sync_profile()
-    if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
-        return None
-    stop_event = threading.Event()
-    poll_interval = poll_interval or float(
-        os.environ.get(
-            "GUARD_CLOUD_REVIEW_POLL_INTERVAL",
-            str(DEFAULT_POLL_INTERVAL_SECONDS),
-        )
-    )
-    error_backoff = error_backoff or float(
-        os.environ.get(
-            "GUARD_CLOUD_REVIEW_ERROR_BACKOFF",
-            str(DEFAULT_ERROR_BACKOFF_SECONDS),
-        )
-    )
-
-    thread = threading.Thread(
-        target=_cloud_sync_sync_loop,
-        kwargs={
-            "store": store,
-            "stop_event": stop_event,
-            "poll_interval": poll_interval,
-            "error_backoff": error_backoff,
-        },
-        daemon=True,
-        name="hol-guard-cloud-review-sync",
-    )
-    thread.start()
-    return CloudReviewSyncWorker(thread=thread, stop_event=stop_event)
-
-
-def stop_cloud_sync_sync_worker(
-    worker: CloudReviewSyncWorker | None,
-) -> CloudReviewSyncWorker | None:
-    """Signal a Cloud Review sync worker and wait briefly for shutdown."""
-    if worker is None:
-        return None
-    worker.stop_event.set()
-    worker.thread.join(timeout=1.0)
-    return worker if worker.thread.is_alive() else None
-
-
-def _cloud_sync_sync_loop(
-    store: GuardStore,
-    stop_event: threading.Event,
-    *,
-    poll_interval: float,
-    error_backoff: float,
-) -> None:
-    """Main loop for the independent Cloud Review sync worker."""
-    from .runner import (
-        GuardSyncAuthorizationExpiredError,
-        GuardSyncNotConfiguredError,
-    )
-
-    error_streak = 0
-    while not stop_event.is_set():
-        try:
-            auth_context = _resolve_cloud_review_sync_auth_context(store)
-            result = sync_cloud_review_events_once(store, auth_context)
-            with suppress(OSError, PermissionError, RuntimeError, ValueError):
-                if user_health_report_due(store.guard_home):
-                    run_user_health_cadence(store.guard_home)
-            synced = result.get("synced", 0)
-            if isinstance(synced, int) and synced > 0:
-                error_streak = 0
-                continue
-        except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
-            error_streak += 1
-            state = _load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": _redacted_error(error),
-                    "last_error_at": _now(),
-                }
-            )
-            _save_sync_state(store, state)
-        except Exception as error:
-            error_streak += 1
-            _LOGGER.exception("Unexpected error in Cloud Review sync loop")
-            state = _load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": _redacted_error(error),
-                    "last_error_at": _now(),
-                }
-            )
-            _save_sync_state(store, state)
-
-        wait = min(error_backoff, poll_interval * (2 ** min(error_streak, 10))) if error_streak else poll_interval
-        if stop_event.wait(wait):
-            return
+from .cloud_review_sync_worker import (  # noqa: E402
+    CloudReviewSyncWorker,
+    start_cloud_sync_sync_worker,
+    stop_cloud_sync_sync_worker,
+)
