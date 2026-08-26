@@ -196,10 +196,15 @@ def _daemon_launcher_env(
     )
     if getattr(sys, "frozen", False) is True or executable is not None:
         env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-        env.setdefault("HOL_GUARD_DESKTOP", "1")
         for key in _GUARD_DAEMON_DESKTOP_ENV_KEYS:
             if value := os.environ.get(key):
                 env[key] = value
+            else:
+                env.pop(key, None)
+    else:
+        env.pop("PYINSTALLER_RESET_ENVIRONMENT", None)
+        for key in _GUARD_DAEMON_DESKTOP_ENV_KEYS:
+            env.pop(key, None)
     if os.name == "nt":
         env["USERPROFILE"] = str(trusted_home)
     if guard_home is not None and not _guard_home_is_ephemeral(guard_home):
