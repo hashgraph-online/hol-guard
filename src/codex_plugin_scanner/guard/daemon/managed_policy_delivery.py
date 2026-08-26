@@ -44,13 +44,19 @@ def daemon_managed_controls_candidate(
         if isinstance(delivery_catalog_digest, str)
         else None
     )
+    runtime_summary = store.get_sync_payload("runtime_session_summary")
+    delivery_device_id = device_id
+    if isinstance(runtime_summary, dict):
+        trusted_device_id = runtime_summary.get("runtime_device_id")
+        if isinstance(trusted_device_id, str) and trusted_device_id:
+            delivery_device_id = trusted_device_id
     delivery, error = validated_managed_policy_delivery(
         policy_bundle=policy_bundle,
         delivery_field_provided="policyBundleDelivery" in payload,
         delivery_payload=delivery_payload,
         workspace_id=store.get_cloud_workspace_id(),
-        device_id=device_id,
-        runtime_summary=store.get_sync_payload("runtime_session_summary"),
+        device_id=delivery_device_id,
+        runtime_summary=runtime_summary,
         expected_extension_projection_digest=projection_digest,
     )
     return policy, capabilities, delivery, error

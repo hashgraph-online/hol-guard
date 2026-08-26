@@ -180,3 +180,30 @@ def test_daemon_persists_only_post_commit_managed_ack(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
     assert acknowledgement["appliedEffectiveProjectionDigest"] == f"sha256:{snapshot.effective_digest}"
+
+
+def test_daemon_accepts_cloud_normalized_device_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-managed-controls")
+    bundle, delivery = _fixture(store)
+    trusted_device_id = "oauth-machine-managed-controls"
+    delivery["deviceId"] = trusted_device_id
+    runtime_summary = store.get_sync_payload("runtime_session_summary")
+    assert isinstance(runtime_summary, dict)
+    runtime_summary["runtime_device_id"] = trusted_device_id
+    store.set_sync_payload(
+        "runtime_session_summary",
+        runtime_summary,
+        "2026-08-25T12:00:00Z",
+    )
+
+    status, response = _sync(store, bundle=bundle, delivery=delivery)
+
+    assert status == 200, response
+    acknowledgement = store.get_sync_payload("policy_bundle_ack")
+    assert isinstance(acknowledgement, dict)
+    assert acknowledgement["deviceId"] == trusted_device_id
