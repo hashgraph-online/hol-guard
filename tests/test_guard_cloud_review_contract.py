@@ -148,9 +148,42 @@ def test_command_result_contract_is_runtime_backed_and_maps_cloud_aggregation() 
         invalid_timestamp = {**result, field: "not-a-date"}
         with pytest.raises(ValueError, match=rf"{field} must be an RFC3339 date-time"):
             validate_exact_command_result(invalid_timestamp)
-    result.pop("receiptId")
+    _ = result.pop("receiptId")
     with pytest.raises(ValueError, match="receiptId"):
         validate_exact_command_result(result)
+
+
+@pytest.mark.parametrize(
+    ("application_status", "application_reason", "continuation_status"),
+    (
+        ("applied", None, "resumed"),
+        ("rejected_stale", "request is stale", "failed"),
+        ("rejected_binding", "binding changed", "failed"),
+        ("failed_retryable", "temporary network failure", "manual_retry_required"),
+        ("failed_terminal", "local application failed", "failed"),
+        ("not_applicable", None, "not_applicable"),
+    ),
+)
+def test_command_result_contract_accepts_every_runtime_application_status(
+    application_status: str,
+    application_reason: str | None,
+    continuation_status: str,
+) -> None:
+    validate_exact_command_result(
+        {
+            "applicationReason": application_reason,
+            "applicationStatus": application_status,
+            "applicationUpdatedAt": "2026-08-26T12:00:00+00:00",
+            "continuationReason": None,
+            "continuationStatus": continuation_status,
+            "continuationUpdatedAt": "2026-08-26T12:00:00+00:00",
+            "contractVersion": COMMAND_RESULT_CONTRACT_VERSION,
+            "correlationId": "command-runtime-status",
+            "localRequestId": "request-runtime-status",
+            "protocolVersion": 2,
+            "receiptId": "receipt-runtime-status",
+        }
+    )
 
 
 def test_result_schema_is_valid_draft_2020_12_with_root_addressable_references() -> None:
@@ -210,6 +243,8 @@ def test_valid_result_fixtures_cover_recorded_applied_and_continuation_outcomes(
         "block-recorded-awaiting-local-application",
         "allow-once-applied-and-already-resumed",
         "continuation-failed-after-terminal-local-application",
+        "continuation-failed-after-rejected-binding",
+        "continuation-failed-after-rejected-stale",
         "continuation-not-applicable-without-local-application",
     }
     for case in cases:

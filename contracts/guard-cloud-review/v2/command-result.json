@@ -19,7 +19,16 @@
     ],
     "properties": {
         "applicationReason": {"type": ["string", "null"], "maxLength": 128},
-        "applicationStatus": {"enum": ["applied", "failed_terminal"]},
+        "applicationStatus": {
+            "enum": [
+                "applied",
+                "rejected_stale",
+                "rejected_binding",
+                "failed_retryable",
+                "failed_terminal",
+                "not_applicable"
+            ]
+        },
         "applicationUpdatedAt": {"type": "string", "format": "date-time"},
         "continuationReason": {"type": ["string", "null"], "maxLength": 128},
         "continuationStatus": {
@@ -51,7 +60,16 @@
         },
         {
             "if": {
-                "properties": {"applicationStatus": {"const": "failed_terminal"}},
+                "properties": {
+                    "applicationStatus": {
+                        "enum": [
+                            "rejected_stale",
+                            "rejected_binding",
+                            "failed_retryable",
+                            "failed_terminal"
+                        ]
+                    }
+                },
                 "required": ["applicationStatus"]
             },
             "then": {"properties": {"applicationReason": {"type": "string", "minLength": 1}}}

@@ -2905,19 +2905,6 @@ def sync_receipts(
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
     cloud_workspace_id = store.get_cloud_workspace_id()
-    if review_verification_keys_payload is not None:
-        if cloud_workspace_id is None:
-            raise RuntimeError("review_verification_keys_workspace_missing")
-        review_verification_keys = validated_review_verification_keys_from_sync(
-            review_verification_keys_payload,
-            store=store,
-            workspace_id=cloud_workspace_id,
-        )
-        store.set_sync_payload(
-            "guard_review_verification_keyring",
-            [key.to_dict() for key in review_verification_keys],
-            now,
-        )
     canonical_enforcement = _canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=cloud_workspace_id,
@@ -3277,6 +3264,22 @@ def sync_receipts(
                 },
                 now,
             )
+    if review_verification_keys_payload is not None:
+        if cloud_workspace_id is None:
+            raise RuntimeError("review_verification_keys_workspace_missing")
+        # The first authenticated sync may advertise Review keys alongside the
+        # signed policy bundle that anchors their public-key material. Admit the
+        # purpose-scoped keys only after that policy authority commits.
+        review_verification_keys = validated_review_verification_keys_from_sync(
+            review_verification_keys_payload,
+            store=store,
+            workspace_id=cloud_workspace_id,
+        )
+        store.set_sync_payload(
+            "guard_review_verification_keyring",
+            [key.to_dict() for key in review_verification_keys],
+            now,
+        )
     _record_synced_alert_events(
         store=store,
         advisories=deduped_advisories,
