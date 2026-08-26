@@ -125,7 +125,6 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "WINDIR",
     }
 )
-
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
 _RECOVERY_LOCKS: dict[str, threading.Lock] = {}
