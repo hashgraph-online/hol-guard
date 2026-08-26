@@ -18957,8 +18957,8 @@ def test_guard_hook_codex_direct_denial_does_not_inline_complete_browser_approva
         if receipt["provenance_summary"] != "Guard approval decision"
     ]
     assert len(tool_receipts) == 1
-    assert tool_receipts[0]["policy_decision"] == "require-reapproval"
-    assert tool_receipts[0]["approval_source"] == "approval_center"
+    assert tool_receipts[0]["policy_decision"] == "block"
+    assert tool_receipts[0]["approval_source"] == "browser"
 
 
 def _codex_browser_approval_context_token(*, current_action: str) -> str:

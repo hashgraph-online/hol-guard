@@ -337,7 +337,8 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
     assert rc == 0
     approval_requests = store.list_approval_requests(limit=5)
     assert approval_requests
-    assert captured.err == ""
+    assert captured.err.startswith("HOL Guard is waiting for approval in your browser: http://127.0.0.1:")
+    assert f"/requests/{approval_requests[0]['request_id']}" in captured.err
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     decision_reason = payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "needs your approval" in decision_reason
@@ -406,9 +407,6 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
     assert "open hol guard to approve" in changed_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
     changed_requests = store.list_approval_requests(status="pending", limit=5)
     assert len(changed_requests) == 1
-    assert changed_capture.err == ""
-    assert (
-        f"/requests/{changed_requests[0]['request_id']}"
-        in changed_payload["hookSpecificOutput"]["permissionDecisionReason"]
-    )
+    assert changed_capture.err.startswith("HOL Guard is waiting for approval in your browser: http://127.0.0.1:")
+    assert f"/requests/{changed_requests[0]['request_id']}" in changed_capture.err
     assert changed_requests[0]["policy_action"] == "review"
