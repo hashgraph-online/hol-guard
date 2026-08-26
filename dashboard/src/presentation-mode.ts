@@ -53,18 +53,28 @@ export function resolvePresentationMode(input: {
   if (input.schemaVersion !== undefined && input.schemaVersion !== PRESENTATION_SCHEMA_VERSION) {
     return resolved("everyday", "default", false, "unsupported_presentation_schema_fell_back_to_everyday");
   }
-  if (input.value === "everyday" || input.value === "technical") {
-    if (input.explicit === true) return resolved(input.value, "local-explicit", true);
-    return resolved(input.value, "default", false);
+  const persistedMode = input.value === "everyday" || input.value === "technical"
+    ? input.value
+    : null;
+  if (persistedMode !== null && input.explicit === true) {
+    return resolved(persistedMode, "local-explicit", true);
   }
   if (typeof input.value === "string" && LEGACY[input.value]) {
     return resolved(LEGACY[input.value], "migrated", true, `migrated_legacy_${input.value}_presentation_mode`);
   }
-  if (input.value !== undefined && input.value !== null && input.value !== "") {
+  if (
+    input.value !== undefined &&
+    input.value !== null &&
+    input.value !== "" &&
+    persistedMode === null
+  ) {
     return resolved("everyday", "default", false, "unknown_presentation_mode_fell_back_to_everyday");
   }
   if (input.cloudProfile === "everyday" || input.cloudProfile === "technical") {
     return resolved(input.cloudProfile, "cloud-profile", false);
+  }
+  if (persistedMode !== null) {
+    return resolved(persistedMode, "default", false);
   }
   return resolved("everyday", "default", false);
 }
