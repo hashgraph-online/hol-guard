@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Literal
 
-from .contract_validation import canonical_uuid
+from .contract_validation import canonical_uuid, positive_integer
 from .policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT, validated_policy_bundle_v2_acknowledgement
 from .runtime.extension_control_authority import ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
@@ -62,12 +62,6 @@ def _bounded_string(value: object, *, maximum: int = 128) -> str | None:
     return value if len(value.encode("utf-8")) <= maximum else None
 
 
-def _positive_integer(value: object) -> int | None:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-        return None
-    return value
-
-
 def _non_negative_integer(value: object) -> int | None:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         return None
@@ -83,7 +77,7 @@ def _delivery_scalars_are_valid(value: dict[str, object]) -> bool:
         and _SHA256.fullmatch(str(value.get("bundleHash"))) is not None
         and all(_SHA256.fullmatch(str(value.get(field))) is not None for field in digest_fields)
         and _CATALOG_DIGEST.fullmatch(str(value.get("catalogDigest"))) is not None
-        and all(_positive_integer(value.get(field)) is not None for field in ("bundleVersion", "policyRevision"))
+        and all(positive_integer(value.get(field)) is not None for field in ("bundleVersion", "policyRevision"))
         and _non_negative_integer(value.get("extensionAuthorityRevision")) is not None
     )
 

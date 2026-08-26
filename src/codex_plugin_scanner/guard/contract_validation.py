@@ -17,3 +17,9 @@ def canonical_uuid(value: object, *, maximum_bytes: int = 128) -> str | None:
     except ValueError:
         return None
     return value if str(parsed) == value else None
+
+
+def positive_integer(value: object) -> int | None:
+    """Return a strict positive integer or ``None``."""
+
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 1 else None

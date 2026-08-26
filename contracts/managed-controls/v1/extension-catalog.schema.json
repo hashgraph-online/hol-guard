@@ -2,6 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hol.org/schemas/guard/extension-catalog.v1.json",
   "title": "HOL Guard Extension Catalog v1",
+  "$comment": "Structural validation MUST be followed by the shared validate-extension-catalog-wire-v1 semantic validator. JSON Schema cannot express identity uniqueness or catalog-wide replacement target existence and non-self-reference.",
+  "x-hol-guard-semantic-validator": {
+    "id": "validate-extension-catalog-wire-v1",
+    "required": true,
+    "rules": ["unique-extension-id", "globally-unique-permission-id", "replacement-target-exists", "replacement-target-is-not-self"]
+  },
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "catalogDigest", "guardVersion", "controlSchemaVersion", "generatedAt", "limits", "extensions"],
@@ -28,6 +34,15 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": { "replacementId": { "type": "string" } },
+              "required": ["replacementId"]
+            },
+            "then": { "properties": { "deprecated": { "const": true } } }
+          }
+        ],
         "required": ["id", "version", "name", "source", "executables", "ecosystemIds", "riskClasses", "delegatedProtection", "deprecated", "replacementId", "permissions"],
         "properties": {
           "id": { "type": "string", "pattern": "^command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$", "maxLength": 256 },

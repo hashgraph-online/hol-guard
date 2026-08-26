@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
-from .contract_validation import canonical_uuid
+from .contract_validation import canonical_uuid, positive_integer
 from .policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     resolve_policy_bundle_signing_key,
@@ -126,10 +126,6 @@ def _strict_utc_timestamp(value: object) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
         return None
     return parsed
-
-
-def _positive_integer(value: object) -> int | None:
-    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 1 else None
 
 
 def _json_value(value: object, *, depth: int = 0) -> JsonValue:
@@ -425,7 +421,7 @@ def validated_policy_bundle_v2_acknowledgement(
     error = _policy_bundle_v2_acknowledgement_error(acknowledgement, required=required)
     if error is not None:
         return None, error
-    sequence = _positive_integer(acknowledgement.get("sequence"))
+    sequence = positive_integer(acknowledgement.get("sequence"))
     status = acknowledgement.get("status")
     if sequence is None or not isinstance(status, str):
         return None, "invalid_acknowledgement"
@@ -477,7 +473,7 @@ def _policy_bundle_v2_acknowledgement_error(
         "policyRevision",
         "appliedExtensionAuthorityRevision",
     )
-    if any(_positive_integer(acknowledgement.get(field)) is None for field in integer_fields):
+    if any(positive_integer(acknowledgement.get(field)) is None for field in integer_fields):
         return "invalid_acknowledgement"
     extension_authority_revision = acknowledgement.get("extensionAuthorityRevision")
     if (

@@ -35,6 +35,8 @@ def daemon_managed_controls_candidate(
         )
     except ManagedControlsPolicyError as error:
         return None, capabilities, None, error.code
+    if not policy.has_extension_semantics:
+        return None, capabilities, None, None
     delivery_payload = payload.get("policyBundleDelivery")
     delivery_catalog_digest = delivery_payload.get("catalogDigest") if isinstance(delivery_payload, dict) else None
     projection_digest = (

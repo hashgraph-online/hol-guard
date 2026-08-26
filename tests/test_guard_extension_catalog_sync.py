@@ -221,6 +221,33 @@ def test_shared_catalog_fixture_is_schema_valid_and_canonically_executable() -> 
     assert hashlib.sha256(canonical).hexdigest() == parsed["catalogDigest"]
 
 
+def test_shared_catalog_schema_requires_the_semantic_identity_validator() -> None:
+    schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
+
+    assert schema["x-hol-guard-semantic-validator"] == {
+        "id": "validate-extension-catalog-wire-v1",
+        "required": True,
+        "rules": [
+            "unique-extension-id",
+            "globally-unique-permission-id",
+            "replacement-target-exists",
+            "replacement-target-is-not-self",
+        ],
+    }
+
+
+def test_shared_catalog_schema_rejects_replacement_on_active_extension() -> None:
+    fixtures = _shared_catalog_fixture()
+    invalid = deepcopy(fixtures["valid"])
+    extension = invalid["extensions"][0]
+    extension["deprecated"] = False
+    extension["replacementId"] = "command.package-manager"
+    schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema, format_checker=FormatChecker()).validate(invalid)
+
+
 @pytest.mark.parametrize("field", ["riskClasses", "typedCapabilities"])
 def test_shared_catalog_schema_rejects_empty_permission_capability_values(field: str) -> None:
     fixtures = _shared_catalog_fixture()

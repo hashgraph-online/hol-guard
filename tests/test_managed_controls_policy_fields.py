@@ -4,10 +4,11 @@ import copy
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import managed_policy_delivery as daemon_policy_delivery
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     validated_managed_controls_policy_bundle_v2_payload,
 )
@@ -106,6 +107,29 @@ def test_legacy_aliases_parse_but_policy_without_fields_needs_no_capabilities() 
     document.pop("x-hol-extension-controls")
     document["spec"]["rules"][0].pop("x-hol-extension-targets")
     assert not _parse(document, capabilities=frozenset()).has_extension_semantics
+
+
+def test_daemon_skips_managed_activation_for_v2_without_extension_semantics(monkeypatch: pytest.MonkeyPatch) -> None:
+    document = _document()
+    document.pop("x-hol-extension-controls")
+    document["spec"]["rules"][0].pop("x-hol-extension-targets")
+    monkeypatch.setattr(
+        daemon_policy_delivery,
+        "_managed_controls_negotiated_capabilities",
+        lambda _store, _payload: frozenset(),
+    )
+
+    candidate, capabilities, delivery, error = daemon_policy_delivery.daemon_managed_controls_candidate(
+        store=cast(Any, object()),
+        payload={},
+        policy_bundle={"contractVersion": "guard-policy-bundle.v2", "payload": document},
+        device_id="device-without-extension-semantics",
+    )
+
+    assert candidate is None
+    assert capabilities == frozenset()
+    assert delivery is None
+    assert error is None
 
 
 def test_shared_posture_materializes_only_into_signed_cloud_layer() -> None:
