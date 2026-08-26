@@ -71,6 +71,7 @@ export function ExtensionsOverview(props: {
   catalogExtensions: ExtensionCatalogItem[];
   effective: EffectiveExtensionControls;
   localCliItems: LocalCliItem[];
+  localCliError: string | null;
   mutationError: string | null;
   recoveryStatus: string | null;
   healthBroken: boolean;
@@ -110,6 +111,11 @@ export function ExtensionsOverview(props: {
       {props.mutationError ? (
         <div className="mt-4">
           <InlineError message={props.mutationError} />
+        </div>
+      ) : null}
+      {props.localCliError ? (
+        <div className="mt-4">
+          <InlineError message={props.localCliError} />
         </div>
       ) : null}
 

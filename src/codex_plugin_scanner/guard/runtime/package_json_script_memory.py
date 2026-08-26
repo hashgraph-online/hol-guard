@@ -68,8 +68,11 @@ def refresh_package_script_catalogs(store: object, *, home_dir: Path) -> list[di
             raw_hash if isinstance(raw_hash, str) else None,
         )
     seen_at = utc_now()
-    for root in _catalog_roots(items):
-        _publish_root(store, root, home_dir=home_dir, seen_at=seen_at, known=known)
+    for root in _catalog_roots(items, include_cwd=False):
+        try:
+            _publish_root(store, root, home_dir=home_dir, seen_at=seen_at, known=known)
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, json.JSONDecodeError):
+            continue
     refreshed = _listed_items(store)
     return [public_local_cli_item(item) for item in refreshed if _package_item_available(item)]
 
@@ -113,6 +116,8 @@ def _listed_items(store: object) -> list[dict[str, object]]:
 
 
 def _package_item_available(item: dict[str, object]) -> bool:
+    if item.get("state") in {"allowed", "blocked"}:
+        return True
     if item.get("surface") != _SURFACE:
         return True
     raw = item.get("source_path")

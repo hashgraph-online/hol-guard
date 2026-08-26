@@ -357,6 +357,7 @@ export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapsho
           catalogExtensions={catalogExtensions}
           effective={state.effective}
           localCliItems={localClis.data?.items ?? []}
+          localCliError={localClis.error && !localClis.data ? localClis.error : null}
           mutationError={mutationError && !pending ? mutationError : null}
           recoveryStatus={recoveryStatus}
           healthBroken={healthBroken}

@@ -81,8 +81,15 @@ class LocalCliApiService:
         self._discovery_cache: tuple[float, tuple[DiscoveredHarnessMcpServer, ...]] | None = None
 
     def list_items(self) -> dict[str, object]:
-        labels = self._observe_harness_mcp_servers()
-        items = apply_source_labels(refresh_package_script_catalogs(self._store, home_dir=Path.home()), labels)
+        stored = self._store.list_local_cli_items()
+        try:
+            labels = self._observe_harness_mcp_servers()
+            items = apply_source_labels(
+                refresh_package_script_catalogs(self._store, home_dir=Path.home()),
+                labels,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError):
+            items = [public_local_cli_item(item) for item in stored]
         revision = self._store.read_local_cli_revision()
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
