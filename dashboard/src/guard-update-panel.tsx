@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import { HiMiniArrowPath, HiMiniBeaker } from "react-icons/hi2";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { HiMiniArrowPath } from "react-icons/hi2";
 
 import {
   fetchGuardUpdateStatus,
@@ -21,6 +21,7 @@ import type {
   GuardUpdateStatus,
 } from "./guard-types";
 import { GuardModalLayer } from "./guard-modal-layer";
+import { GuardUpdateChannelSummary } from "./guard-update-channel-summary";
 
 const UPDATE_STATUS_POLL_MS = 60_000;
 const RECONNECT_POLL_MS = 1_500;
@@ -171,55 +172,27 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
     setAlphaApprovalTotpCode(event.target.value);
   }, []);
 
+  let updateChannelSummary: ReactNode = null;
+  if (props.onSetUpdateChannel) {
+    updateChannelSummary = (
+      <GuardUpdateChannelSummary
+        version={version}
+        useAlpha={useAlpha}
+        busy={busy}
+        onManage={handleOpenAlphaModal}
+      />
+    );
+  } else if (version) {
+    updateChannelSummary = (
+      <p className="font-mono text-[10px] text-brand-dark/70" aria-label={`Guard version ${version}`}>
+        v{version}
+      </p>
+    );
+  }
+
   return (
     <div className={props.compact ? "space-y-1" : "space-y-2"}>
-      {props.onSetUpdateChannel ? (
-        <div className="flex items-center justify-between gap-2">
-          {version ? (
-            <p
-              className="min-w-0 truncate font-mono text-[10px] leading-4 text-brand-dark/70"
-              aria-label={`Guard version ${version}`}
-            >
-              v{version}
-            </p>
-          ) : (
-            <span className="min-w-0 flex-1" aria-hidden="true" />
-          )}
-          {useAlpha ? (
-            <div
-              className="inline-flex min-w-0 shrink-0 items-center gap-1.5"
-              role="status"
-              aria-label="Alpha updates enabled"
-            >
-              <HiMiniBeaker className="h-3 w-3 shrink-0 text-brand-blue" aria-hidden="true" />
-              <span className="text-[11px] font-semibold leading-4 text-brand-blue">Alpha updates</span>
-              <button
-                type="button"
-                onClick={handleOpenAlphaModal}
-                disabled={busy}
-                aria-label="Manage alpha updates"
-                title="Manage alpha updates"
-                className="rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Manage
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleOpenAlphaModal}
-              disabled={busy}
-              className="shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Try alpha updates
-            </button>
-          )}
-        </div>
-      ) : version ? (
-        <p className="font-mono text-[10px] text-brand-dark/70" aria-label={`Guard version ${version}`}>
-          v{version}
-        </p>
-      ) : null}
+      {updateChannelSummary}
       {props.updateStatus?.update_available ? (
         <p className="text-[11px] leading-relaxed text-brand-dark/75">{updateStatusLabel(props.updateStatus)}</p>
       ) : null}

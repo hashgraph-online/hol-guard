@@ -27,6 +27,8 @@ def test_dsh_apply_detection_respects_exported_alias() -> None:
 def test_dsh_apply_detection_supports_commonjs_objects() -> None:
     assert _exports_apply("module.exports = { apply }")
     assert _exports_apply("module.exports = { apply: handler }")
+    assert _exports_apply("module.exports = { apply(ctx) {} }")
+    assert _exports_apply("module.exports = { async apply(ctx) {} }")
     assert not _exports_apply("module.exports = { handler: apply }")
 
 

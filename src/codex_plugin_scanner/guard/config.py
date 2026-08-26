@@ -672,21 +672,17 @@ def update_guard_settings(
         ]
         if weakened:
             raise ValueError(f"Managed policy locks prevent weakening: {', '.join(sorted(weakened))}")
-    preserving_sync_while_switching_to_watch_only = (
+    preserving_existing_sync = (
         current.get("sync") is True
         and current_config.sync is True
         and next_payload.get("sync") is True
-        and current.get("mode") != "observe"
-        and current_config.mode != "observe"
-        and payload.get("mode") == "observe"
-        and next_payload.get("mode") == "observe"
-        and effective_next_payload.get("mode") == "observe"
+        and (payload.get("mode") != "observe" or effective_next_payload.get("mode") == "observe")
     )
     if (
         next_payload.get("sync") is True
         and payload.get("sync") is True
         and not cloud_sync_entitled
-        and not preserving_sync_while_switching_to_watch_only
+        and not preserving_existing_sync
     ):
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)

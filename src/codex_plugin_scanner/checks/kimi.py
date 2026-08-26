@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from ..ecosystems.types import NormalizedPackage
 from ..models import CheckResult, Finding, Severity
+from ..object_support import string_keyed_mapping
 from ..path_support import is_safe_relative_path
 from .code_quality import check_no_eval, check_no_shell_injection
 from .kimi_support import looks_like_path, manifest_label, object_sequence
@@ -62,15 +63,6 @@ def _path_values(value: object) -> tuple[str, ...] | None:
         if all(isinstance(item, str) for item in items):
             return tuple(cast(str, item) for item in items)
     return None
-
-
-def _string_mapping(value: object) -> dict[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    mapping = cast(dict[object, object], value)
-    if not all(isinstance(key, str) for key in mapping):
-        return None
-    return {cast(str, key): item for key, item in mapping.items()}
 
 
 def check_kimi_manifest(package: NormalizedPackage) -> CheckResult:
@@ -206,7 +198,7 @@ def check_kimi_manifest_shapes(package: NormalizedPackage) -> CheckResult:
     manifest = package.raw_manifest
     findings: list[Finding] = []
     interface = manifest.get("interface")
-    interface_mapping = _string_mapping(interface)
+    interface_mapping = string_keyed_mapping(interface)
     if interface is not None and (
         interface_mapping is None or not all(isinstance(value, str) for value in interface_mapping.values())
     ):
@@ -221,7 +213,7 @@ def check_kimi_manifest_shapes(package: NormalizedPackage) -> CheckResult:
             )
         )
     session_start = manifest.get("sessionStart")
-    session_start_mapping = _string_mapping(session_start)
+    session_start_mapping = string_keyed_mapping(session_start)
     if session_start is not None and (
         session_start_mapping is None or not isinstance(session_start_mapping.get("skill"), str)
     ):
@@ -272,7 +264,7 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
     raw_servers = package.raw_manifest.get("mcpServers")
     if raw_servers is None:
         return CheckResult("Kimi MCP servers", True, 0, 0, "No Kimi MCP servers declared.", applicable=False)
-    servers = _string_mapping(raw_servers)
+    servers = string_keyed_mapping(raw_servers)
     if servers is None:
         finding = _finding(
             "KIMI_MCP_SERVERS_INVALID",
@@ -285,7 +277,7 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
 
     findings: list[Finding] = []
     for name, server_value in servers.items():
-        server = _string_mapping(server_value)
+        server = string_keyed_mapping(server_value)
         if server is None:
             findings.append(
                 _finding(
@@ -432,7 +424,7 @@ def check_kimi_mcp_servers(package: NormalizedPackage) -> CheckResult:
                             package,
                         )
                     )
-        env_mapping = _string_mapping(env)
+        env_mapping = string_keyed_mapping(env)
         if env is not None and (
             env_mapping is None or not all(isinstance(value, str) for value in env_mapping.values())
         ):

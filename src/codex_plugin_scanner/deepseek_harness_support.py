@@ -236,7 +236,13 @@ def _commonjs_object_has_apply(tokens: tuple[str, ...], start: int, end: int) ->
             depth -= 1
         elif depth == 0 and token == ",":
             clause = tokens[clause_start:index]
-            if clause and clause[0] == "apply" and (len(clause) == 1 or clause[1] == ":"):
+            property_index = 1 if clause and clause[0] == "async" else 0
+            property_tail = clause[property_index:]
+            if (
+                property_tail
+                and property_tail[0] == "apply"
+                and (len(property_tail) == 1 or property_tail[1] in {":", "("})
+            ):
                 return True
             clause_start = index + 1
         index += 1

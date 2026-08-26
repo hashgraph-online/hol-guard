@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import cast
 
+from ..object_support import string_keyed_mapping
 from ..path_support import is_safe_relative_path
 from .base import iter_safe_recursive_dirs, iter_safe_recursive_files
 from .types import Ecosystem, NormalizedPackage, PackageCandidate
@@ -24,19 +25,10 @@ def _load_manifest(path: Path) -> tuple[dict[str, object], bool, str | None]:
         return {}, True, "invalid-json"
     except OSError:
         return {}, True, "read-error"
-    manifest = _string_mapping(payload)
+    manifest = string_keyed_mapping(payload)
     if manifest is None:
         return {}, True, "not-object"
     return manifest, False, None
-
-
-def _string_mapping(value: object) -> dict[str, object] | None:
-    if not isinstance(value, dict):
-        return None
-    mapping = cast(dict[object, object], value)
-    if not all(isinstance(key, str) for key in mapping):
-        return None
-    return {cast(str, key): item for key, item in mapping.items()}
 
 
 def _path_values(value: object) -> tuple[str, ...]:
@@ -118,12 +110,12 @@ class KimiAdapter:
                 components[name] = files
 
         mcp_servers = manifest.get("mcpServers")
-        mcp_mapping = _string_mapping(mcp_servers)
+        mcp_mapping = string_keyed_mapping(mcp_servers)
         if mcp_mapping is not None:
             components["mcp_servers"] = tuple(sorted(mcp_mapping))
             local_files: set[str] = set()
             for server_value in mcp_mapping.values():
-                server = _string_mapping(server_value)
+                server = string_keyed_mapping(server_value)
                 if server is None:
                     continue
                 command = server.get("command")
