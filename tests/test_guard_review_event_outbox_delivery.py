@@ -17,7 +17,9 @@ from codex_plugin_scanner.guard.live_process_identity import current_process_ide
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
+from codex_plugin_scanner.guard.runtime.cloud_review_event_projection import project_cloud_review_event
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_review_event_outbox_writes import append_request_snapshot_event
 from tests.guard_review_event_outbox_test_support import as_int
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
@@ -268,6 +270,71 @@ def test_terminal_continuation_projects_as_a_distinct_authenticated_event(
     }
     envelope = json.loads(str(terminal["eventPayloadJson"]))
     assert envelope["continuationResult"] == terminal["continuationResult"]
+
+
+def test_terminal_continuation_projects_degraded_runtime_capability(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    correlation_id = "gcr_12345678-1234-1234-1234-123456789abc"
+    request = replace(
+        _request("request-degraded-continuation"),
+        continuation_snapshot={
+            "capability": "suspended-response",
+            "correlationId": correlation_id,
+            "hookAttached": True,
+            "opaqueTargetId": None,
+            "waitDeadline": "2026-08-24T15:00:00+00:00",
+        },
+    )
+    store.add_approval_request(request, _NOW)
+    with store._connect() as connection:
+        connection.execute("begin immediate")
+        assert (
+            append_request_snapshot_event(
+                connection,
+                request_id=request.request_id,
+                source="default",
+                event_type="review.continuation.manual_retry_required",
+                occurred_at=_LATER,
+                continuation_result={
+                    "action": "allow_once",
+                    "capability": "retry-only",
+                    "completedAt": _LATER,
+                    "correlationId": correlation_id,
+                    "evidenceId": "evidence-runtime-degraded",
+                    "reason": "manual_retry_required",
+                    "status": "manual_retry_required",
+                },
+            )
+            == 1
+        )
+    terminal_row = store.list_ready_review_events(now=_LATER, limit=10, **binding)[-1]
+
+    projected = project_cloud_review_event(
+        store,
+        outbox_row=terminal_row,
+        delivery_binding={
+            "oauth_subject_hash": binding["oauth_subject_hash"],
+            "workspace_id": binding["workspace_id"],
+            "machine_id": binding["machine_id"],
+            "machine_installation_id": binding["machine_installation_id"],
+        },
+        redaction_level="full",
+        oauth=None,
+    )
+
+    assert projected is not None
+    _, event = projected
+    assert event["continuationCapability"] == "retry-only"
+    assert event["continuationResult"] == {
+        "action": "allow_once",
+        "capability": "retry-only",
+        "completedAt": _LATER,
+        "correlationId": correlation_id,
+        "evidenceId": "evidence-runtime-degraded",
+        "reason": "manual_retry_required",
+        "status": "manual_retry_required",
+    }
 
 
 def test_request_sequence_survives_ack_compaction_refresh_and_restart(

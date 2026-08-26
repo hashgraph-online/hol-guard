@@ -157,5 +157,6 @@ def project_cloud_review_event(
     )
     if stored_event.continuation_result is not None:
         event["continuationResult"] = stored_event.continuation_result
+        event["continuationCapability"] = stored_event.continuation_result["capability"]
         event["localUpdatedAt"] = stored_event.continuation_result["completedAt"]
     return sequence, event
