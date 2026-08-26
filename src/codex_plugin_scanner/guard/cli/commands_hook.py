@@ -71,6 +71,7 @@ def _run_guard_hook_command(
     output_stream: TextIO | None = None,
     _claim_saved_approval: bool = True,
     _claimed_saved_allow_hash: str | None = None,
+    _claimed_trusted_request_override: bool = False,
     _claimed_approval_request_id: str | None = None,
 ) -> int:
     if guard_home is None:
@@ -393,6 +394,7 @@ def _run_guard_hook_command(
             store=store,
             post_claim_revalidator=revalidate_runtime_after_claim,
             _claimed_saved_allow_hash=_claimed_saved_allow_hash,
+            _claimed_trusted_request_override=_claimed_trusted_request_override,
             _claimed_approval_request_id=_claimed_approval_request_id,
             _claim_saved_approval=_claim_saved_approval,
         )

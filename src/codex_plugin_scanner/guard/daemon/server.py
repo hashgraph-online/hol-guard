@@ -5693,6 +5693,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     deadline=time.monotonic() + _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS,
                     claim_saved_approval=False,
                     claimed_saved_allow_hash=claimed_hash,
+                    claimed_trusted_request_override=claimed_hash is not None,
                     claimed_approval_request_id=claimed_request_id,
                 ).payload
             ),

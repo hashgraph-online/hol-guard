@@ -1118,7 +1118,7 @@ def _evaluate_runtime_artifact_hook(
             "allow",
             saved_decision_present=True,
             validation_reason=claimed_validation_reason,
-            fresh_local_approval=_claimed_package_approval_consumed,
+            fresh_local_approval=(_claimed_package_approval_consumed or _claimed_trusted_request_override),
         )
         policy_action = approval_reuse.action
         approval_reuse_source = (

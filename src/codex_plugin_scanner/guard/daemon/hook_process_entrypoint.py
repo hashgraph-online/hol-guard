@@ -200,6 +200,7 @@ def _run_resident_hook_request(
     workspace_value = request.get("workspace")
     claim_saved_approval = request.get("claim_saved_approval", True)
     claimed_saved_allow_hash = request.get("claimed_saved_allow_hash")
+    claimed_trusted_request_override = request.get("claimed_trusted_request_override", False)
     claimed_approval_request_id = request.get("claimed_approval_request_id")
     if (
         not isinstance(payload, dict)
@@ -209,6 +210,7 @@ def _run_resident_hook_request(
         or (workspace_value is not None and not isinstance(workspace_value, str))
         or not isinstance(claim_saved_approval, bool)
         or (claimed_saved_allow_hash is not None and not isinstance(claimed_saved_allow_hash, str))
+        or not isinstance(claimed_trusted_request_override, bool)
         or (claimed_approval_request_id is not None and not isinstance(claimed_approval_request_id, str))
     ):
         return {"payload": None, "reason_code": "daemon_hook_process_invalid_request"}
@@ -282,6 +284,7 @@ def _run_resident_hook_request(
                 output_stream=output,
                 _claim_saved_approval=claim_saved_approval,
                 _claimed_saved_allow_hash=claimed_saved_allow_hash,
+                _claimed_trusted_request_override=claimed_trusted_request_override,
                 _claimed_approval_request_id=claimed_approval_request_id,
             )
         )
