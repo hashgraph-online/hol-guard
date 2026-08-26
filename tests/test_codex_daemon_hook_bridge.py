@@ -688,6 +688,7 @@ def test_bridge_real_daemon_allows_static_github_content_read_with_safe_jq_filte
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     config = _bridge_config(guard_home, daemon.port)
+    config["hook_timeouts"] = {"PreToolUse": 12}
     config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
     config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
     monkeypatch.setattr(
