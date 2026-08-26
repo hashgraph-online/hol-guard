@@ -257,6 +257,27 @@ def test_hook_remembers_real_package_json_path(tmp_path: Path) -> None:
     assert stored["source_path"] == str((project / "package.json").resolve())
 
 
+def test_list_items_discovers_package_scripts_from_unremembered_cwd(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project = _write_package(tmp_path / "cwd-app", scripts={"guard:audit": "tsx audit.ts"})
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    payload = LocalCliApiService(store=GuardStore(home)).list_items()
+    items = payload["items"]
+    assert isinstance(items, list)
+    package_items = [item for item in items if isinstance(item, dict) and item.get("surface") == "package-scripts"]
+    listed = next(item for item in package_items if item.get("source_label") == "cwd-app")
+    assert listed["state"] == "unset"
+    assert listed["source_path"] == "user-tool"
+
+
 def test_list_items_redacts_remembered_package_paths(tmp_path: Path) -> None:
     project = _write_package(tmp_path / "ads-app", scripts={"guard:reddit-targeting:audit": "tsx audit.ts"})
     home = tmp_path / "home"

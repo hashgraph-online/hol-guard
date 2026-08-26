@@ -315,3 +315,15 @@ assert.equal(
   fallbackCloud.cloud.summary,
   "Custom Extensions remain local to this device until portable continuity is enabled.",
 );
+
+const mixedValidity = normalizeLocalCliList({
+  schema_version: "guard.daemon.local-clis.v1",
+  revision: 4,
+  items: [
+    item,
+    { cli_id: "not-a-local-cli", name: "broken" },
+    blockedItem,
+  ],
+});
+assert.deepEqual(mixedValidity.items.map((entry) => entry.cli_id), [item.cli_id, blockedItem.cli_id]);
+assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);

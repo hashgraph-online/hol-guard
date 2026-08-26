@@ -1,8 +1,0 @@
-status=1
-ci/test-suite-ratchet-baseline.json
-output_begin
-Auto-merging ci/test-suite-ratchet-baseline.json
-CONFLICT (content): Merge conflict in ci/test-suite-ratchet-baseline.json
-Auto-merging tests/fixtures/guard-command-corpus/decision-diff-report.json
-Automatic merge failed; fix conflicts and then commit the result.
-output_end
