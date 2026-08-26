@@ -62,7 +62,7 @@ from .pytest_binary_safety import (
     _contains_unsafe_pytest_environment_wrapper,
     _is_literal_cat_heredoc_to_stdout,
     _looks_like_safe_pytest_binary_invocation,
-    _looks_like_safe_python_module_invocation,
+    _looks_like_supported_python_invocation,
 )
 from .request_models import _MAX_DECODED_PAYLOAD_BYTES
 from .routine_move import _looks_like_safe_routine_move
@@ -330,7 +330,7 @@ def _looks_destructive_shell_command(
     if _single_interpreter_heredoc_script(normalized) is not None or any(
         _is_python_interpreter_command(command_name) for command_name in parsed_command_names
     ):
-        return not _looks_like_safe_python_module_invocation(parts, cwd=cwd)
+        return not _looks_like_supported_python_invocation(parts, cwd=cwd)
     if _contains_unmodeled_inline_interpreter_eval(normalized, parts, parsed_command_names):
         return True
     if _contains_destructive_node_inline_eval(parts):

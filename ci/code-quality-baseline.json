@@ -1,6 +1,7 @@
 {
   "complex_functions": {
     "scripts/ci/finish_extension_authority_stability.py::_move_authority_tests": 39,
+    "scripts/guard_network_remediation_proof.py::validate_proof_manifest": 50,
     "scripts/verify_native_runtime_release.py::local_native_hashes": 30,
     "src/codex_plugin_scanner/action_runner.py::main": 54,
     "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_bridge.py::_daemon_response_to_native": 34,
@@ -167,6 +168,7 @@
     "scripts/bench_guard_native_release_gate.py::main": 110,
     "scripts/ci/code_quality_audit.py::audit_repository": 101,
     "scripts/ci/finish_extension_authority_stability.py::_move_authority_tests": 148,
+    "scripts/guard_network_remediation_proof.py::validate_proof_manifest": 129,
     "scripts/codex-auto-resume-smoke.py::_queue_pending_request": 103,
     "scripts/stress_guard_daemon.py::run_stress": 133,
     "src/codex_plugin_scanner/action_runner.py::main": 384,

@@ -246,7 +246,9 @@ async function recoverGuardDaemon(
   guardDaemonRecoveryInFlight = (async () => {
     const result = await runGuardCliCommand(
       GUARD_DAEMON_RECOVERY_COMMAND,
-      [...GUARD_DAEMON_RECOVERY_ARGS, failureKind],
+      GUARD_DAEMON_RECOVERY_ACCEPTS_FAILURE_KIND
+        ? [...GUARD_DAEMON_RECOVERY_ARGS, failureKind]
+        : GUARD_DAEMON_RECOVERY_ARGS,
       '',
       timeoutMs,
     );

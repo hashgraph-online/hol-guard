@@ -398,6 +398,7 @@ def _configure_guard_cloud_parsers(
     ensure_p = daemon_subparsers.add_parser("ensure", help=argparse.SUPPRESS)
     _add_guard_common_args(ensure_p)
     ensure_p.add_argument("--wake-token")
+    _add_daemon_recover_parser(daemon_subparsers)
     status_p = daemon_subparsers.add_parser("status", help="Show local Guard daemon status")
     _add_guard_common_args(status_p)
     status_p.add_argument("--json", action="store_true")
@@ -407,7 +408,6 @@ def _configure_guard_cloud_parsers(
     stop_p = daemon_subparsers.add_parser("stop", help="Stop a running Guard daemon")
     _add_guard_common_args(stop_p)
     stop_p.add_argument("--json", action="store_true")
-
     codex_proxy_parser = guard_subparsers.add_parser("codex-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(codex_proxy_parser)
     codex_proxy_parser.add_argument("--server-name", required=True)

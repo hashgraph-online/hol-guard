@@ -7,7 +7,12 @@ from pathlib import Path
 
 from ..data_flow import extract_heredocs
 from ..env_wrapper import parse_env_wrapper
-from .constants_core import _PYTEST_UNSAFE_ENV_KEYS, _READ_ONLY_LOOKUP_FILTERS, _SAFE_STATIC_SHELL_COMMANDS
+from .constants_core import (
+    _PYTEST_UNSAFE_ENV_KEYS,
+    _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES,
+    _READ_ONLY_LOOKUP_FILTERS,
+    _SAFE_STATIC_SHELL_COMMANDS,
+)
 from .developer_inspection import _static_shell_segment_is_safe
 from .interpreter_observers import (
     _python_module_may_be_shadowed,
@@ -95,6 +100,73 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
             continue
         return False
     return saw_python_module
+
+
+def _looks_like_bounded_python_script_invocation(parts: list[str], *, cwd: Path | None = None) -> bool:
+    """Exclude ordinary workspace scripts from the destructive-shell category."""
+
+    if cwd is None:
+        return False
+    segments = _iter_shell_command_segments(parts)
+    if not segments:
+        return False
+    saw_script = False
+    for segment in segments:
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            return False
+        segment_args = segment[command_index + 1 :]
+        if _is_python_interpreter_command(command_name):
+            if saw_script or _bounded_python_script_path(segment_args, cwd=cwd) is None:
+                return False
+            saw_script = True
+            continue
+        if _shell_directory_setup_segment_is_safe(command_name, segment_args):
+            continue
+        return False
+    return saw_script
+
+
+def _looks_like_supported_python_invocation(parts: list[str], *, cwd: Path | None = None) -> bool:
+    return _looks_like_bounded_python_script_invocation(parts, cwd=cwd) or _looks_like_safe_python_module_invocation(
+        parts, cwd=cwd
+    )
+
+
+def _bounded_python_script_path(args: list[str], *, cwd: Path) -> Path | None:
+    args = _shell_args_without_trailing_redirections(args)
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            index += 1
+            break
+        if arg in {"-c", "--command", "-m"} or arg.startswith(("-c", "--command=", "-m")):
+            return None
+        if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(option) and len(arg) > len(option) for option in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES):
+            index += 1
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        break
+    if index >= len(args):
+        return None
+    operand = args[index]
+    if operand == "-" or not operand.endswith(".py") or _shell_token_has_command_substitution(operand):
+        return None
+    candidate = Path(operand).expanduser()
+    if not candidate.is_absolute():
+        candidate = cwd / candidate
+    try:
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(cwd.resolve(strict=True))
+    except (OSError, ValueError):
+        return None
+    return resolved if resolved.is_file() else None
 
 
 def _contains_unsafe_pytest_environment_wrapper(parts: list[str], *, cwd: Path | None) -> bool:
@@ -339,8 +411,10 @@ __all__ = [
     "_contains_pytest_process_substitution",
     "_contains_unsafe_pytest_environment_wrapper",
     "_is_literal_cat_heredoc_to_stdout",
+    "_looks_like_bounded_python_script_invocation",
     "_looks_like_safe_pytest_binary_invocation",
     "_looks_like_safe_python_module_invocation",
+    "_looks_like_supported_python_invocation",
     "_pytest_binary_segment_is_safe",
     "_shell_declaration_exports_env",
     "_shell_declared_env_key",

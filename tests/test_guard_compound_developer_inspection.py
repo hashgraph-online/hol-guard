@@ -153,6 +153,42 @@ def test_cross_workspace_recovery_preserves_mutating_command_review(tmp_path: Pa
     )
 
 
+@pytest.mark.parametrize("harness", ("omp", "pi", "codex", "claude-code", "gemini", "cursor"))
+def test_harnesses_do_not_call_bounded_workspace_python_script_destructive(tmp_path: Path, harness: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "projects" / "PelicanMarkdownWebsite" / "websiteToBuild"
+    script = workspace / "scripts" / "wp_to_pelican.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("print('converted')\n", encoding="utf-8")
+
+    assert (
+        _artifact(
+            f"cd {workspace} && python3 scripts/wp_to_pelican.py 2>&1",
+            home=home,
+            harness=harness,
+            workspace=workspace,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "python3 -c \"from pathlib import Path; Path('data').unlink()\"",
+        "python3 -m pip install unsafe-package",
+        "python3 ../outside.py",
+    ),
+)
+def test_python_escape_and_inline_mutation_still_require_review(tmp_path: Path, command: str) -> None:
+    home = tmp_path / "home"
+    workspace = home / "workspace"
+    workspace.mkdir(parents=True)
+    (home / "outside.py").write_text("print('outside')\n", encoding="utf-8")
+
+    assert _artifact(command, home=home, workspace=workspace) is not None
+
+
 def _write_local_vitest(workspace: Path, *, with_lock: bool) -> None:
     (workspace / "node_modules" / ".bin").mkdir(parents=True)
     (workspace / "node_modules" / "vitest").mkdir()
