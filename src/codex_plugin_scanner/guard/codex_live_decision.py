@@ -39,18 +39,12 @@ def complete_codex_live_decision(
             return _failure("fresh_policy_revalidation_failed")
         if isinstance(previous, dict) and _terminal_resume_matches(previous, action=action):
             return {"action": action, "completed": True, "continuation": previous, "replayed": True}
-        lookup = store.resolve_policy_decision_lookup(
-            str(request["harness"]),
-            _optional_text(request.get("artifact_id")),
-            artifact_hash=_optional_text(request.get("artifact_hash")),
-            workspace=_optional_text(request.get("workspace")),
-            publisher=_optional_text(request.get("publisher")),
+        approval_decision = resolve_codex_live_allow_authority(
+            store,
+            request=request,
+            request_id=request_id,
             now=now,
-            consume_one_shot=False,
         )
-        decision = lookup.get("decision")
-        if isinstance(decision, Mapping) and _exact_request_authority(decision, request_id=request_id):
-            approval_decision = {str(key): value for key, value in decision.items()}
         if approval_decision is None:
             return _failure("exact_approval_authority_missing")
     elif isinstance(previous, dict) and _terminal_resume_matches(previous, action=action):
@@ -67,6 +61,30 @@ def complete_codex_live_decision(
     if not isinstance(completion, Mapping) or completion.get("continuationStatus") != expected_status:
         return _failure("continuation_not_recorded")
     return {"action": action, "completed": True, "continuation": dict(completion), "replayed": False}
+
+
+def resolve_codex_live_allow_authority(
+    store: GuardStore,
+    *,
+    request: Mapping[str, object],
+    request_id: str,
+    now: str,
+) -> dict[str, object] | None:
+    """Return the exact unconsumed one-shot authority for this request."""
+
+    lookup = store.resolve_policy_decision_lookup(
+        str(request["harness"]),
+        _optional_text(request.get("artifact_id")),
+        artifact_hash=_optional_text(request.get("artifact_hash")),
+        workspace=_optional_text(request.get("workspace")),
+        publisher=_optional_text(request.get("publisher")),
+        now=now,
+        consume_one_shot=False,
+    )
+    decision = lookup.get("decision")
+    if not isinstance(decision, Mapping) or not _exact_request_authority(decision, request_id=request_id):
+        return None
+    return {str(key): value for key, value in decision.items()}
 
 
 def _exact_request_authority(value: object, *, request_id: str) -> bool:
@@ -100,4 +118,4 @@ def _failure(code: str) -> dict[str, object]:
     return {"completed": False, "error": code}
 
 
-__all__ = ["complete_codex_live_decision"]
+__all__ = ["complete_codex_live_decision", "resolve_codex_live_allow_authority"]

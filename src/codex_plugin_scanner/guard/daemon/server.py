@@ -94,7 +94,7 @@ from ..cloud_exception_requests import (
     fetch_cloud_exception_requests,
     submit_cloud_exception_request,
 )
-from ..codex_live_decision import complete_codex_live_decision
+from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..codex_live_hook_target import codex_live_hook_process_is_unavailable
 from ..codex_resume import defer_request_resume_to_live_hook, get_request_resume_status, retry_request_resume
@@ -5641,6 +5641,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
         previous = self.server.store.get_request_resume(request_id)  # type: ignore[attr-defined]
         claimed_hash, claimed_request_id = _codex_live_replay_authority(request, previous)
+        if isinstance(request, Mapping) and request.get("resolution_action") == "allow":
+            authority = resolve_codex_live_allow_authority(
+                self.server.store,  # type: ignore[attr-defined]
+                request=request,
+                request_id=request_id,
+                now=_now(),
+            )
+            artifact_hash = request.get("artifact_hash")
+            if authority is not None and isinstance(artifact_hash, str) and artifact_hash:
+                claimed_hash = artifact_hash
+                claimed_request_id = request_id
         fresh_allow_authorized = self._revalidate_codex_live_allow(
             request,
             payload,
