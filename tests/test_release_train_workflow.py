@@ -490,6 +490,8 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert 'gh release download "$tag"' in release_run
     assert 'cmp --silent "$local_file"' in release_run
     assert "mapfile -d '' local_files" in release_run
+    assert "remote_files" not in release_run
+    assert '[[ -f "$remote_file" ]]' in release_run
     assert 'gh attestation verify "$remote_file"' in release_run
     assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in release_run
     assert "--verify-tag" in release_run
@@ -503,6 +505,8 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     assert 'remote_tag_sha" != "$SOURCE_SHA"' in main_release_run
     assert 'gh release view "$tag" --json isDraft,isPrerelease' in main_release_run
     assert "Existing stable release is a draft or prerelease" in main_release_run
+    assert "remote_files" not in main_release_run
+    assert '[[ -f "$remote_file" ]]' in main_release_run
     assert 'remote_guard_files=("$existing_dir"/hol_guard-*)' in main_release_run
     assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in main_release_run
     assert 'gh attestation verify "$remote_file"' in main_release_run

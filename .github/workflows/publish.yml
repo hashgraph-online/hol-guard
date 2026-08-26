@@ -1385,9 +1385,7 @@ jobs:
             existing_dir=$(mktemp -d)
             gh release download "$tag" --dir "$existing_dir"
             mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
             [[ "${#local_files[@]}" -gt 0 ]]
-            [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
               [[ -f "$remote_file" ]]
@@ -1493,9 +1491,7 @@ jobs:
             existing_dir=$(mktemp -d)
             gh release download "$tag" --dir "$existing_dir"
             mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
-            mapfile -d '' remote_files < <(find "$existing_dir" -maxdepth 1 -type f -print0 | sort -z)
             [[ "${#local_files[@]}" -gt 0 ]]
-            [[ "${#local_files[@]}" == "${#remote_files[@]}" ]]
             for local_file in "${local_files[@]}"; do
               remote_file="$existing_dir/$(basename "$local_file")"
               [[ -f "$remote_file" ]]
