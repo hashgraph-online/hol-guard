@@ -397,13 +397,29 @@ def _search_file_operand_roles(command_name: str, args: list[str]) -> tuple[tupl
 
 
 def _search_glob_pattern_is_safe(pattern: str, *, root: Path) -> bool:
-    if any(token in pattern for token in ("**", "{", "}", "!")) or not _read_only_lookup_target_is_safe(
-        pattern,
-        allow_dirs=False,
-        home_dir=root,
+    is_exclusion = pattern.startswith("!")
+    effective_pattern = pattern[1:] if is_exclusion else pattern
+    if (
+        not effective_pattern
+        or len(effective_pattern) > 4096
+        or "\n" in effective_pattern
+        or "\x00" in effective_pattern
+        or any(token in effective_pattern for token in ("**", "{", "}", "!"))
+        or Path(effective_pattern).is_absolute()
+        or any(component in {"", ".", ".."} for component in Path(effective_pattern).parts)
+        or (
+            not is_exclusion
+            and not _read_only_lookup_target_is_safe(
+                effective_pattern,
+                allow_dirs=False,
+                home_dir=root,
+            )
+        )
     ):
         return False
-    components = Path(pattern).parts
+    if is_exclusion:
+        return True
+    components = Path(effective_pattern).parts
     for component in components:
         folded = component.casefold()
         for sensitive in SOURCE_INSPECTION_SENSITIVE_PARTS:

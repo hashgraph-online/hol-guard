@@ -19,6 +19,7 @@ from ..false_positive_rules import (
 from ..github_capability_interaction import github_capability_requires_confirmation
 from ..shell_command_wrappers import is_trusted_absolute_command_path
 from ..shell_execution_context import ShellExecutionContext, model_shell_execution_context
+from . import local_read_operands
 from .constants_core import (
     _FIND_EXEC_ACTION_FLAGS,
     _FIND_EXEC_PLACEHOLDER_TARGET,
@@ -31,7 +32,6 @@ from .constants_core import (
 from .constants_patterns import _FIND_PATH_VALUE_PREDICATES
 from .docker_requests import _which_for_execution_cwd, shell_execution_context_starts_with_literal_cd
 from .github_shell_capabilities import classify_github_shell_capabilities
-from .local_read_operands import _local_read_operands_resolve_safely, _search_file_operand_tokens
 from .read_only_filters import (
     _read_only_lookup_arg_is_redirection,
     _read_only_lookup_filter_segment_is_safe,
@@ -177,7 +177,7 @@ def _compound_developer_effect_graph(
             and _read_only_lookup_filter_segment_is_safe(command_name, args, home_dir=segment_root)
         )
         root_checked_args = (
-            list(_search_file_operand_tokens(command_name, args))
+            list(local_read_operands._search_file_operand_tokens(command_name, args))
             if safe_pipe_filter and command_name in {"grep", "egrep", "fgrep"}
             else args
         )
@@ -234,7 +234,7 @@ def _compound_developer_effect_graph(
                     home_dir=home_dir,
                 )
             )
-            and _local_read_operands_resolve_safely(
+            and local_read_operands._local_read_operands_resolve_safely(
                 command_name,
                 args,
                 cwd=segment_root,
@@ -391,10 +391,8 @@ def _read_only_lookup_search_args_are_safe(
         return False
     if command == "rg" and os.environ.get("RIPGREP_CONFIG_PATH") and not _ripgrep_config_is_disabled(args):
         return False
-    targets = [arg for arg in args if arg and not arg.startswith("-")]
-    return len(targets) < 2 or all(
-        _read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in targets[1:]
-    )
+    targets = local_read_operands._search_concrete_file_operand_tokens(command, args)
+    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in targets)
 
 
 def _read_only_lookup_search_uses_file_input(command: str, args: list[str]) -> bool:
