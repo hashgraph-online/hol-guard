@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 
-from ..false_positive_rules import SOURCE_INSPECTION_SENSITIVE_PARTS
+from ..false_positive_rules import SOURCE_INSPECTION_BENIGN_DOTFILES, SOURCE_INSPECTION_SENSITIVE_PARTS
 from .read_only_filters import _read_only_lookup_target_is_safe
 
 _RG_SHORT_OPTIONS_WITH_VALUE = frozenset("ABCEdefgjmMrTt")
@@ -303,8 +303,6 @@ def _search_concrete_file_operand_tokens(command_name: str, args: list[str]) -> 
 def search_operands_are_safe(command_name: str, args: list[str], *, root: Path | None) -> bool:
     """Validate search globs, lexical targets, and resolved local operands together."""
 
-    if root is None:
-        return False
     roles = _search_file_operand_roles(command_name, args)
     if not all(
         _search_glob_pattern_is_safe(operand, root=root)
@@ -313,6 +311,8 @@ def search_operands_are_safe(command_name: str, args: list[str], *, root: Path |
         for operand, is_search_glob in roles
     ):
         return False
+    if root is None:
+        return True
     return _local_read_operands_resolve_safely(command_name, args, cwd=root, root=root)
 
 
@@ -416,7 +416,7 @@ def _search_command_has_no_pattern(command_name: str, args: list[str]) -> bool:
     return command_name == "rg" and "--files" in args
 
 
-def _search_glob_pattern_is_safe(pattern: str, *, root: Path) -> bool:
+def _search_glob_pattern_is_safe(pattern: str, *, root: Path | None) -> bool:
     is_exclusion = pattern.startswith("!")
     effective_pattern = pattern[1:] if is_exclusion else pattern
     if (
@@ -427,14 +427,6 @@ def _search_glob_pattern_is_safe(pattern: str, *, root: Path) -> bool:
         or any(token in effective_pattern for token in ("**", "{", "}", "!"))
         or Path(effective_pattern).is_absolute()
         or any(component in {"", ".", ".."} for component in Path(effective_pattern).parts)
-        or (
-            not is_exclusion
-            and not _read_only_lookup_target_is_safe(
-                effective_pattern,
-                allow_dirs=False,
-                home_dir=root,
-            )
-        )
     ):
         return False
     if is_exclusion:
@@ -442,6 +434,8 @@ def _search_glob_pattern_is_safe(pattern: str, *, root: Path) -> bool:
     components = Path(effective_pattern).parts
     for component in components:
         folded = component.casefold()
+        if folded.startswith(".") and folded not in SOURCE_INSPECTION_BENIGN_DOTFILES:
+            return False
         for sensitive in SOURCE_INSPECTION_SENSITIVE_PARTS:
             sensitive_folded = sensitive.casefold()
             if fnmatch.fnmatchcase(sensitive_folded, folded) or fnmatch.fnmatchcase(
