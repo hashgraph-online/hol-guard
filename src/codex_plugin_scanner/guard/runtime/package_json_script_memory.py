@@ -68,7 +68,7 @@ def refresh_package_script_catalogs(store: object, *, home_dir: Path) -> list[di
             raw_hash if isinstance(raw_hash, str) else None,
         )
     seen_at = utc_now()
-    for root in _catalog_roots(items, include_cwd=False):
+    for root in _catalog_roots(items):
         try:
             _publish_root(store, root, home_dir=home_dir, seen_at=seen_at, known=known)
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, json.JSONDecodeError):

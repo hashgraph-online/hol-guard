@@ -2125,12 +2125,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(history, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path == "/v1/local-clis":
-            try:
-                payload = self._daemon_server().local_cli_api.list_items()
-            except LocalCliApiError as error:
-                self._write_json(error.to_payload(), status=error.status)
-                return
-            self._write_json(payload, extra_headers={"Cache-Control": "no-store"})
+            self._write_json(
+                self._daemon_server().local_cli_api.list_items(),
+                extra_headers={"Cache-Control": "no-store"},
+            )
             return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()

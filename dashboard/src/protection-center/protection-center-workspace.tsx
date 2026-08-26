@@ -357,7 +357,7 @@ export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapsho
           catalogExtensions={catalogExtensions}
           effective={state.effective}
           localCliItems={localClis.data?.items ?? []}
-          localCliError={localClis.error && !localClis.data ? localClis.error : null}
+          localCliError={localClis.error}
           mutationError={mutationError && !pending ? mutationError : null}
           recoveryStatus={recoveryStatus}
           healthBroken={healthBroken}
@@ -376,6 +376,9 @@ export function ProtectionCenterWorkspace(props: { runtime?: GuardRuntimeSnapsho
           detail={localClis.error}
           onRetry={retryLocalClis}
         />
+      ) : null}
+      {showLocalCli && localClis.error && localClis.data ? (
+        <p role="alert" className="mb-3 text-sm font-medium text-rose-800">{localClis.error}</p>
       ) : null}
       {showLocalCli && !localClis.data && !localClis.error ? (
         <ExtensionsLoadingState label="Loading custom extension" />
