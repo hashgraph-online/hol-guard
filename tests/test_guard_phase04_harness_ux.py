@@ -185,7 +185,7 @@ def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_pat
     assert "HOL Guard stopped this Codex prompt" in str(payload["reason"])
 
 
-def test_gr076b_codex_prompt_secret_read_returns_retryable_native_denial(
+def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -218,12 +218,12 @@ def test_gr076b_codex_prompt_secret_read_returns_retryable_native_denial(
     assert exit_code == 0
     assert payload["decision"] == "block"
     assert payload["continue"] is False
-    assert observed_timeouts == []
+    assert observed_timeouts == [8]
     assert "Open HOL Guard" in str(payload["reason"])
     assert "/requests/" in str(payload["reason"])
 
 
-def test_codex_post_tool_secret_output_returns_retryable_native_denial(
+def test_codex_post_tool_secret_output_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -258,7 +258,7 @@ def test_codex_post_tool_secret_output_returns_retryable_native_denial(
     assert exit_code == 0
     assert payload["decision"] == "block"
     assert payload["continue"] is False
-    assert observed_timeouts == []
+    assert observed_timeouts == [8]
     assert "Open HOL Guard" in str(payload["reason"])
     assert "/requests/" in str(payload["reason"])
 
