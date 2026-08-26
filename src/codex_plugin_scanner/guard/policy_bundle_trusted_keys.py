@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import time
 from dataclasses import dataclass
@@ -13,6 +12,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 
 from .runtime.supply_chain_bundle_base import SupplyChainBundleMalformedError, _parse_iso_timestamp
+from .stable_digest import sha256_content_digest
 
 _VERIFICATION_KEY_STATES = frozenset({"active", "grace", "revoked"})
 _POLICY_BUNDLE_V2_CONTRACT = "guard-policy-bundle.v2"
@@ -148,7 +148,7 @@ def _policy_bundle_v2_module() -> _PolicyBundleV2Module:
 
 def policy_bundle_key_fingerprint(public_key_pem: str) -> str:
     normalized_pem = public_key_pem.replace("\r\n", "\n").strip()
-    return hashlib.sha256(normalized_pem.encode("utf-8")).hexdigest()
+    return sha256_content_digest(normalized_pem.encode("utf-8"))
 
 
 def policy_bundle_verification_key_from_public_key(
