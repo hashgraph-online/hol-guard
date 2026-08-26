@@ -103,6 +103,7 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "COMSPEC",
         "HOME",
         "HOL_GUARD_DESKTOP",
+        "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
         "HOL_GUARD_DESKTOP_VERSION",
         "LANG",
         "LC_ALL",
@@ -124,7 +125,6 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "WINDIR",
     }
 )
-
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
 _RECOVERY_LOCKS: dict[str, threading.Lock] = {}
