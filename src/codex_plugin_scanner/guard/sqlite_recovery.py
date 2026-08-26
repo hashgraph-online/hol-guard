@@ -17,9 +17,13 @@ SQLITE_IO_ERROR_MARKER = "disk i/o error"
 SQLiteStoreProbe = Literal["fatal", "healthy", "io", "unknown"]
 
 
+def _sqlite_readonly_uri(path: Path) -> str:
+    return f"{path.resolve().as_uri()}?mode=ro"
+
+
 def _probe_sqlite_store(path: Path) -> SQLiteStoreProbe:
     try:
-        with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1.0) as connection:
+        with sqlite3.connect(_sqlite_readonly_uri(path), uri=True, timeout=1.0) as connection:
             result = connection.execute("pragma quick_check").fetchone()
     except sqlite3.DatabaseError as error:
         message = str(error).lower()
@@ -74,12 +78,25 @@ def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bo
         return False
     if _probe_sqlite_store(quarantined) != "healthy":
         return False
+    extras = [
+        (Path(f"{quarantined}{suffix}"), Path(f"{destination}{suffix}"))
+        for suffix in ("-wal", "-shm")
+        if Path(f"{quarantined}{suffix}").exists() and not Path(f"{quarantined}{suffix}").is_symlink()
+    ]
     try:
         quarantined.replace(destination)
-        for suffix in ("-wal", "-shm"):
-            extra = Path(f"{quarantined}{suffix}")
-            if extra.exists() and not extra.is_symlink():
-                extra.replace(Path(f"{destination}{suffix}"))
+    except OSError:
+        return False
+    moved: list[tuple[Path, Path]] = []
+    try:
+        for source, target in extras:
+            source.replace(target)
+            moved.append((source, target))
         return True
     except OSError:
+        for source, target in reversed(moved):
+            with suppress(OSError):
+                target.replace(source)
+        with suppress(OSError):
+            destination.replace(quarantined)
         return False

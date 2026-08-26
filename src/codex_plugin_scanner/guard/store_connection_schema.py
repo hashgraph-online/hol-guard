@@ -185,6 +185,7 @@ class StoreConnectionSchemaMixin:
     _startup_prefetched_policy_integrity_repair_failed = False
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
     _storage_gate_local: ClassVar[threading.local] = threading.local()
+    _last_sqlite_recovery = "skipped"
 
     def _current_thread_owns_storage_recovery(self) -> bool:
         return getattr(self._storage_recovery_local, "owner", None) == id(self)
@@ -364,9 +365,8 @@ class StoreConnectionSchemaMixin:
                     raise
         if fatal_error is None:
             return
-        self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
-        retry = sqlite_error_is_busy_locked(fatal_error) or getattr(self, "_last_sqlite_recovery", None) == "restored"
-        if not retry:
+        recovered = self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+        if not recovered and not sqlite_error_is_busy_locked(fatal_error):
             raise fatal_error
         with self._hold_storage_gate(exclusive=False), self._connect_once() as connection:
             yield connection

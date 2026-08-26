@@ -29,8 +29,11 @@ def _quarantined_databases(guard_home: Path) -> list[Path]:
 def _connects_store(database: str | Path, path: Path) -> bool:
     raw = str(database)
     if raw.startswith("file:"):
-        raw = raw.removeprefix("file:").split("?", 1)[0]
-    return Path(raw) == path
+        from urllib.parse import unquote, urlparse
+
+        parsed = urlparse(raw)
+        raw = unquote(parsed.path)
+    return Path(raw) == path or Path(raw) == path.resolve()
 
 
 def _main_quarantined_databases(guard_home: Path) -> list[Path]:
@@ -76,8 +79,7 @@ def test_live_store_recovers_after_fatal_sqlite_error(tmp_path: Path) -> None:
     store = GuardStore(guard_home, prime_policy_integrity=False)
     corrupt_bytes = _corrupt_store(store.path)
 
-    with pytest.raises(sqlite3.DatabaseError, match="file is not a database"):
-        store.get_runtime_state()
+    assert store.get_runtime_state() is None
 
     with sqlite3.connect(store.path) as connection:
         assert connection.execute("pragma quick_check").fetchone() == ("ok",)
@@ -304,6 +306,48 @@ def test_connect_retries_busy_lock_without_quarantine(
     assert calls["count"] >= 2
 
 
+def test_probe_encodes_reserved_path_characters(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.sqlite_recovery import _probe_sqlite_store, _sqlite_readonly_uri
+
+    home = tmp_path / "guard?home"
+    home.mkdir()
+    path = home / "guard.db"
+    with sqlite3.connect(path) as connection:
+        connection.execute("create table keep (value integer)")
+        connection.commit()
+    uri = _sqlite_readonly_uri(path)
+    assert "%3F" in uri.upper()
+    assert _probe_sqlite_store(path) == "healthy"
+
+
+def test_restore_rolls_back_when_sidecar_move_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.sqlite_recovery import restore_readable_sqlite_store
+
+    destination = tmp_path / "guard.db"
+    quarantined = tmp_path / "guard.db.corrupt-1"
+    with sqlite3.connect(quarantined) as connection:
+        connection.execute("create table keep (value integer)")
+        connection.execute("insert into keep values (7)")
+        connection.commit()
+    wal = Path(f"{quarantined}-wal")
+    wal.write_bytes(b"wal")
+    original_replace = Path.replace
+
+    def fail_wal(self: Path, target: Path, /, **_kwargs: object) -> Path:
+        if self == wal:
+            raise OSError("sidecar busy")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_wal)
+    assert restore_readable_sqlite_store(destination=destination, quarantined=quarantined) is False
+    assert destination.exists() is False
+    assert quarantined.exists() is True
+    assert wal.exists() is True
+
+
 def test_stale_fatal_error_does_not_quarantine_healthy_store(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
 
@@ -344,7 +388,7 @@ def test_connect_does_not_quarantine_replacement_inode(
 
     monkeypatch.setattr(store, "_recover_fatal_sqlite_store", replace_before_recovery)
 
-    with pytest.raises(sqlite3.DatabaseError, match="file is not a database"):
+    with pytest.raises(sqlite3.DatabaseError):
         store.get_runtime_state()
 
     assert observed_identity == failed_identity

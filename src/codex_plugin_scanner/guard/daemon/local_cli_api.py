@@ -56,7 +56,7 @@ from ..runtime.package_json_script_memory import (
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
 from .local_cli_continuity_api import decorate_local_cli_continuity
-from .local_cli_mcp_store import bound_mcp_observation, stored_mcp_has_tools, stored_mcp_recognition
+from .local_cli_mcp_store import bound_mcp_observation, stored_mcp_recognition
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -108,8 +108,6 @@ class LocalCliApiService:
             recognize_payload=self._recognize_payload,
             recognize_summary=_recognize_mcp_summary,
         )
-        if stored_mcp is not None and stored_mcp_has_tools(stored_mcp):
-            return stored_mcp
         tokens = mcp_launch_tokens(command, cwd=home_dir, home_dir=home_dir)
         if stored_id is not None:
             _ = self._observe_harness_mcp_servers()

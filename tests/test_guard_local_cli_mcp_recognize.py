@@ -8,6 +8,7 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     persist_discovered_harness_mcp_servers,
 )
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.daemon.local_cli_mcp_store import stored_mcp_recognition
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
@@ -143,3 +144,18 @@ def test_recognize_survives_discovery_store_lock(tmp_path: Path, monkeypatch) ->
     assert isinstance(item, dict)
     assert item["cli_id"] == listed["cli_id"]
     assert item["surface"] == "mcp"
+
+
+def test_stored_mcp_recognition_returns_none_on_sqlite_error() -> None:
+    class LockedStore:
+        def find_local_mcp_observation(self, **_kwargs: object) -> dict[str, object]:
+            raise sqlite3.OperationalError("database is locked")
+
+    recognized = stored_mcp_recognition(
+        LockedStore(),
+        "npx -y chrome-devtools-mcp@latest",
+        cli_id="local-cli.mcp-12345678",
+        recognize_payload=lambda *_args, **_kwargs: {"item": {}},
+        recognize_summary=lambda *_args, **_kwargs: "",
+    )
+    assert recognized is None

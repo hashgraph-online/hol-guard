@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import sqlite3
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from ..runtime.local_cli_identity import UnlistedCliIdentity
@@ -31,39 +32,48 @@ def stored_mcp_recognition(
     recognize_payload: RecognizePayload,
     recognize_summary: RecognizeSummary,
 ) -> dict[str, object] | None:
-    tokens = mcp_launch_tokens(command, cwd=Path.home(), home_dir=Path.home())
-    launch_command = None
-    args_hash = None
-    if tokens is not None:
-        identity = build_mcp_server_identity(
-            config_path="",
-            command=tokens[0],
-            args=tuple(tokens[1:]),
-            transport="stdio",
+    try:
+        finder = getattr(store, "find_local_mcp_observation", None)
+        if not callable(finder):
+            return None
+        found: object
+        if cli_id is not None:
+            found = finder(cli_id=cli_id)
+        else:
+            tokens = mcp_launch_tokens(command, cwd=Path.home(), home_dir=Path.home())
+            if tokens is None:
+                return None
+            identity = build_mcp_server_identity(
+                config_path="",
+                command=tokens[0],
+                args=tuple(tokens[1:]),
+                transport="stdio",
+            )
+            found = finder(command=identity.command, args_hash=identity.args_hash)
+        if not isinstance(found, Mapping):
+            return None
+        found_id = found.get("cli_id")
+        if not isinstance(found_id, str):
+            return None
+        lister = getattr(store, "list_local_cli_items", None)
+        listed_raw = lister() if callable(lister) else ()
+        if not isinstance(listed_raw, Sequence) or isinstance(listed_raw, (str, bytes)):
+            return None
+        listed = next(
+            (item for item in listed_raw if isinstance(item, dict) and item.get("cli_id") == found_id),
+            None,
         )
-        launch_command = identity.command
-        args_hash = identity.args_hash
-    finder = getattr(store, "find_local_mcp_observation", None)
-    found = finder(cli_id=cli_id, command=launch_command, args_hash=args_hash) if callable(finder) else None
-    if found is None:
+        if listed is None:
+            return None
+        help_status = listed.get("help_status")
+        status = help_status if help_status in {"ok", "empty", "failed"} else "failed"
+        raw_commands = listed.get("commands")
+        count = len(raw_commands) if isinstance(raw_commands, list) else 0
+        name = listed.get("name")
+        label = name if isinstance(name, str) and name.strip() else found_id
+        return recognize_payload(found_id, listed, status, recognize_summary(label, status, count))
+    except sqlite3.Error:
         return None
-    found_id = found.get("cli_id")
-    if not isinstance(found_id, str):
-        return None
-    lister = getattr(store, "list_local_cli_items", None)
-    listed = next(
-        (item for item in (lister() if callable(lister) else []) if item.get("cli_id") == found_id),
-        None,
-    )
-    if listed is None:
-        return None
-    help_status = listed.get("help_status")
-    status = help_status if help_status in {"ok", "empty", "failed"} else "failed"
-    raw_commands = listed.get("commands")
-    count = len(raw_commands) if isinstance(raw_commands, list) else 0
-    name = listed.get("name")
-    label = name if isinstance(name, str) and name.strip() else found_id
-    return recognize_payload(found_id, listed, status, recognize_summary(label, status, count))
 
 
 def bound_mcp_observation(
