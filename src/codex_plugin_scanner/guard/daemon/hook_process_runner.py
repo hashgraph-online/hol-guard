@@ -18,10 +18,11 @@ from .hook_process_capacity import (
 )
 from .hook_process_metrics import increment_bounded_metric
 from .hook_process_protocol import (
-    HOOK_ENV_ALLOWLIST,
     as_string_object_dict,
     is_pair,
 )
+from .hook_process_request import build_hook_process_review_request, runtime_hook_review_is_idempotent
+from .hook_process_slot_review import review_hook_worker_slot
 from .hook_process_spawner import hook_worker_became_isolated, hook_worker_became_ready, spawn_hook_worker
 from .hook_process_worker import (
     HookProcessReview,
@@ -168,6 +169,10 @@ class HookProcessRunner:
         workspace: Path | None,
         hook_env: Mapping[str, str],
         deadline: float | None = None,
+        claim_saved_approval: bool = True,
+        claimed_saved_allow_hash: str | None = None,
+        claimed_trusted_request_override: bool = False,
+        claimed_approval_request_id: str | None = None,
         _transient_not_ready_retries: int = _HOOK_PROCESS_TRANSIENT_NOT_READY_RETRIES,
     ) -> HookProcessReview:
         with self._state_lock:
@@ -181,14 +186,18 @@ class HookProcessRunner:
         worker_deadline = time.monotonic() + self._timeout_seconds
         review_deadline = min(worker_deadline, outer_deadline)
         caller_deadline_limited = outer_deadline <= worker_deadline
-        request = {
-            "payload": dict(payload),
-            "harness": harness,
-            "home_dir": str(home_dir),
-            "guard_home": str(guard_home),
-            "workspace": str(workspace) if workspace is not None else None,
-            "hook_env": {key: value for key, value in hook_env.items() if key in HOOK_ENV_ALLOWLIST},
-        }
+        request = build_hook_process_review_request(
+            payload=payload,
+            harness=harness,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+            hook_env=hook_env,
+            claim_saved_approval=claim_saved_approval,
+            claimed_saved_allow_hash=claimed_saved_allow_hash,
+            claimed_trusted_request_override=claimed_trusted_request_override,
+            claimed_approval_request_id=claimed_approval_request_id,
+        )
         try:
             if review_deadline <= time.monotonic():
                 return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")
@@ -205,55 +214,23 @@ class HookProcessRunner:
                 )
             except queue.Empty:
                 return HookProcessReview(None, "daemon_hook_process_not_ready")
-            try:
-                slot.connection.send(("review", request))
-                slot.request_exposed = True
-                remaining_seconds = max(0.0, review_deadline - time.monotonic())
-                if not slot.connection.poll(remaining_seconds):
-                    self._replace_slot_async(slot)
-                    if caller_deadline_limited:
-                        return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")
-                    self._increment_metric("timeouts")
-                    return HookProcessReview(None, "daemon_hook_process_timeout")
-                raw_message = slot.connection.recv()
-            except (BrokenPipeError, EOFError, OSError):
-                self._increment_metric("failures")
-                retry_slot: HookWorkerSlot | None = None
-                if _runtime_hook_review_is_idempotent(payload):
-                    with suppress(queue.Empty):
-                        retry_slot = self._slots.get_nowait()
-                self._replace_slot_async(slot)
-                if not _runtime_hook_review_is_idempotent(payload):
-                    return HookProcessReview(None, "daemon_hook_process_failed")
-                if retry_slot is None:
-                    remaining_seconds = max(0.0, review_deadline - time.monotonic())
-                    if not self.wait_for_capacity(
-                        minimum_workers=1,
-                        timeout_seconds=min(_HOOK_PROCESS_RETRY_READY_SECONDS, remaining_seconds),
-                    ):
-                        reason_code = (
-                            "daemon_hook_process_deadline_exhausted"
-                            if time.monotonic() >= review_deadline
-                            else "daemon_hook_process_failed"
-                        )
-                        return HookProcessReview(None, reason_code)
-                    try:
-                        retry_slot = self._slots.get_nowait()
-                    except queue.Empty:
-                        return HookProcessReview(None, "daemon_hook_process_failed")
-                slot = retry_slot
-                try:
-                    slot.connection.send(("review", request))
-                    slot.request_exposed = True
-                    remaining_seconds = max(0.0, review_deadline - time.monotonic())
-                    if not slot.connection.poll(remaining_seconds):
-                        self._replace_slot_async(slot)
-                        return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")
-                    raw_message = slot.connection.recv()
-                except (BrokenPipeError, EOFError, OSError):
-                    self._increment_metric("failures")
-                    self._replace_slot_async(slot)
-                    return HookProcessReview(None, "daemon_hook_process_failed")
+            review_result = review_hook_worker_slot(
+                slot=slot,
+                request=request,
+                payload=payload,
+                review_deadline=review_deadline,
+                caller_deadline_limited=caller_deadline_limited,
+                ready_slots=self._slots,
+                replace_slot=self._replace_slot_async,
+                increment_metric=self._increment_metric,
+                wait_for_capacity=lambda minimum, timeout: self.wait_for_capacity(
+                    minimum_workers=minimum,
+                    timeout_seconds=timeout,
+                ),
+            )
+            if isinstance(review_result, HookProcessReview):
+                return review_result
+            slot, raw_message = review_result
         finally:
             with self._state_lock:
                 remaining_reviews = self._active_reviews.get(generation, 0) - 1
@@ -296,7 +273,7 @@ class HookProcessRunner:
             if (
                 _transient_not_ready_retries > 0
                 and reason_code == "daemon_hook_process_not_ready"
-                and _runtime_hook_review_is_idempotent(payload)
+                and runtime_hook_review_is_idempotent(payload)
                 and time.monotonic() < review_deadline
             ):
                 time.sleep(
@@ -313,6 +290,10 @@ class HookProcessRunner:
                     workspace=workspace,
                     hook_env=hook_env,
                     deadline=review_deadline,
+                    claim_saved_approval=claim_saved_approval,
+                    claimed_saved_allow_hash=claimed_saved_allow_hash,
+                    claimed_trusted_request_override=claimed_trusted_request_override,
+                    claimed_approval_request_id=claimed_approval_request_id,
                     _transient_not_ready_retries=_transient_not_ready_retries - 1,
                 )
             return HookProcessReview(
@@ -700,16 +681,6 @@ class HookProcessRunner:
             self._capacity_target = target
         self._recovery_event.set()
         self._trim_excess_ready_capacity()
-
-
-def _runtime_hook_review_is_idempotent(payload: Mapping[str, object]) -> bool:
-    event_name = payload.get("hook_event_name") or payload.get("hookEventName")
-    if not isinstance(event_name, str):
-        return False
-    return any(
-        isinstance(payload.get(identity_key), str) and bool(payload.get(identity_key))
-        for identity_key in ("tool_call_id", "toolCallId", "action_id", "operation_id")
-    )
 
 
 __all__ = ["HookProcessReview", "HookProcessRunner"]

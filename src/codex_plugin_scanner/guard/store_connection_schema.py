@@ -33,8 +33,9 @@ from .store_command_activity_maintenance_schema import ensure_command_activity_m
 from .store_command_activity_schema import ensure_command_activity_schema
 from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_live_request_outbox import ensure_live_request_outbox_schema, seed_live_request_outbox
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_resume import ensure_resume_schema
+from .store_review_event_outbox_schema import ensure_review_event_outbox_schema
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
 from .store_storage_maintenance import (
     STORAGE_MAINTENANCE_MIGRATION_VERSION,
@@ -737,7 +738,7 @@ class StoreConnectionSchemaMixin:
             on guard_events (event_name, occurred_at desc, event_id desc)
             """,
             """
-            create table if not exists guard_remote_once_receipts (
+            create table if not exists guard_exact_cloud_review_receipts (
               receipt_id text primary key,
               request_id text not null,
               claimed_at text not null
@@ -969,6 +970,7 @@ class StoreConnectionSchemaMixin:
             self._enable_wal_mode(connection)
             for statement in statements:
                 connection.execute(statement)
+            ensure_resume_schema(connection)
             ensure_command_activity_schema(connection, applied_at=_now())
             ensure_command_activity_health_schema(connection, applied_at=_now())
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())
@@ -1042,6 +1044,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_approval_column(connection, "browser_intent_json", "text")
             self._ensure_approval_column(connection, "desktop_notified_at", "text")
             self._ensure_approval_column(connection, "raw_command_text", "text")
+            self._ensure_approval_column(connection, "continuation_snapshot_json", "text")
             ensure_watch_only_approval_schema(connection, schema=self)
             if not self._schema_version_applied(connection, version=3):
                 _backfill_approval_queue_columns_compat(connection)
@@ -1050,8 +1053,7 @@ class StoreConnectionSchemaMixin:
                 connection.execute("drop index if exists idx_approval_group_status")
             for idx_stmt in approval_index_statements():
                 connection.execute(idx_stmt)
-            ensure_live_request_outbox_schema(connection)
-            seed_live_request_outbox(connection, datetime.now(timezone.utc).isoformat())
+            ensure_review_event_outbox_schema(connection, datetime.now(timezone.utc).isoformat())
             if not self._schema_version_applied(connection, version=9):
                 self._record_schema_version(connection, version=9)
             for idx_stmt in receipt_index_statements():
@@ -1154,6 +1156,7 @@ class StoreConnectionSchemaMixin:
                         "first_seen_guard_version",
                         "last_seen_guard_version",
                         "watch_only_observation",
+                        "continuation_snapshot_json",
                     }
                     return (
                         row is not None

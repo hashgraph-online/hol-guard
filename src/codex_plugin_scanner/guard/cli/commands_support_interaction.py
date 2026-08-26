@@ -9,10 +9,12 @@ import importlib
 from typing import TYPE_CHECKING
 
 from ..browser_opener import open_browser_url
+from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, bound_wait_timeout_seconds, process_identity_matches
 from ..runtime.approval_context import approval_context_tokens_validation_reason
+from . import commands_support_browser_wait as browser_wait
 
 if TYPE_CHECKING:
-    from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _hook_command_text, _now
+    from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _now
     from .commands_support_hook_payload import _browser_url_with_guard_params
 
 
@@ -335,6 +337,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
+
 def _codex_browser_approval_decision(
     *,
     args: argparse.Namespace,
@@ -343,23 +346,21 @@ def _codex_browser_approval_decision(
     response_payload: dict[str, object],
     store: GuardStore,
     config: GuardConfig,
+    browser_wait_bound: bool | None = None,
     daemon_client: object | None = None,
     expected_artifact_hash: str | None = None,
     fresh_context_provider: Callable[[], Mapping[str, object] | None] | None = None,
 ) -> str | None:
-    if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
+    if browser_wait_bound is not True and not _codex_can_use_browser_approval(
+        args, event_name=event_name, policy_action=policy_action
+    ):
         return None
-    if event_name == "PreToolUse" and not _codex_pretooluse_live_wait_candidate(response_payload):
-        return None
-    approval_requests = response_payload.get("approval_requests")
-    if not isinstance(approval_requests, list):
-        return None
-    request_ids = [
-        item["request_id"]
-        for item in approval_requests
-        if isinstance(item, dict) and isinstance(item.get("request_id"), str)
-    ]
+    request_ids = browser_wait.browser_wait_request_ids(response_payload, browser_wait_bound=browser_wait_bound)
     if not request_ids:
+        return None
+    if browser_wait_bound is True:
+        # The authenticated outer bridge owns the approval wait. Returning the
+        # pending response here keeps the isolated daemon worker available.
         return None
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
         event_name=event_name,
@@ -369,11 +370,7 @@ def _codex_browser_approval_decision(
         return None
     if event_name == "PreToolUse":
         _open_codex_live_approval(response_payload, guard_home=store.guard_home)
-    wait_result = wait_for_approval_requests(
-        store=store,
-        request_ids=request_ids,
-        timeout_seconds=wait_timeout_seconds,
-    )
+    wait_result = wait_for_approval_requests(store=store, request_ids=request_ids, timeout_seconds=wait_timeout_seconds)
     response_payload["approval_wait"] = wait_result
     if not bool(wait_result.get("resolved")):
         _set_codex_browser_operation_status(response_payload, daemon_client, "approval_wait_timeout")
@@ -528,59 +525,15 @@ def _record_codex_live_hook_continuation(
     request_ids: list[str],
     action: str,
 ) -> None:
-    status = "resumed" if action == "allow" else "blocked"
-    sandbox_required = action == "sandbox-required"
-    continuation: dict[str, object] = {
-        "status": status,
-        "resolution_action": action,
-        "strategy": "live-hook",
-    }
-    response_payload["continuation"] = continuation
-    response_payload["codex_resume"] = dict(continuation)
-    now = _now()
-    for request_id in request_ids:
-        resume = store.get_request_resume(request_id)
-        if not isinstance(resume, Mapping):
-            continue
-        attempt_count = resume.get("attempt_count")
-        store.update_request_resume(
-            request_id=request_id,
-            resolution_action=action,
-            strategy=(
-                str(resume.get("strategy"))
-                if isinstance(resume.get("strategy"), str)
-                else "live-hook"
-            ),
-            supported=(
-                bool(resume.get("supported"))
-                if resume.get("supported") is not None
-                else action == "allow"
-            ),
-            status=status,
-            reason=(
-                "live_hook_completed"
-                if action == "allow"
-                else "sandbox_required_not_resumed"
-                if sandbox_required
-                else "blocked_not_resumed"
-            ),
-            message=(
-                "The original Codex hook consumed the exact browser approval and resumed the action."
-                if action == "allow"
-                else "Current HOL Guard policy requires a sandbox; the original Codex action was not resumed."
-                if sandbox_required
-                else "HOL Guard kept the original Codex action blocked."
-            ),
-            last_error=None,
-            attempt_count=int(attempt_count) if isinstance(attempt_count, int) else 0,
-            last_attempt_at=now,
-            sent_at=(
-                str(resume.get("sent_at"))
-                if isinstance(resume.get("sent_at"), str)
-                else None
-            ),
-            now=now,
-        )
+    from .codex_live_hook_completion import record_codex_live_hook_continuation
+
+    record_codex_live_hook_continuation(
+        response_payload=response_payload,
+        store=store,
+        request_ids=request_ids,
+        action=action,
+        now=_now(),
+    )
 
 def _codex_can_use_browser_approval(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
     return (
@@ -597,11 +550,14 @@ def _codex_hook_waits_for_browser_approval(
     policy_action: str,
     payload: Mapping[str, object] | None = None,
 ) -> bool:
-    if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
-        return False
-    if event_name == "PreToolUse":
-        return _codex_pretooluse_live_wait_candidate(payload)
-    return True
+    if (
+        _canonical_harness_name(args.harness) == "codex"
+        and event_name == "PreToolUse"
+        and policy_action in {"review", "require-reapproval"}
+        and _codex_bridge_wait_process(payload) is not None
+    ):
+        return True
+    return _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action)
 
 def _codex_browser_wait_metadata(
     *,
@@ -611,6 +567,7 @@ def _codex_browser_wait_metadata(
     config: GuardConfig,
     payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    bridge_wait_process = _codex_bridge_wait_process(payload)
     waits_for_browser = _codex_hook_waits_for_browser_approval(
         args=args,
         event_name=event_name,
@@ -619,62 +576,58 @@ def _codex_browser_wait_metadata(
     )
     if not waits_for_browser:
         return {"codex_hook_waits_for_browser_approval": False}
+    from ..live_process_identity import current_process_identity
+
     wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
         event_name=event_name,
         configured_timeout=config.approval_wait_timeout_seconds,
+        outer_wait_timeout_seconds=(
+            bound_wait_timeout_seconds(payload, maximum=MAX_APPROVAL_WAIT_TIMEOUT_SECONDS)
+            if bridge_wait_process is not None
+            else None
+        ),
     )
     started_at = datetime.now(timezone.utc)
     deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
+    process_identity = bridge_wait_process or current_process_identity()
+    if process_identity is None:
+        return {
+            "codex_hook_waits_for_browser_approval": False,
+            "codex_browser_wait_unavailable_reason": "process_identity_unavailable",
+        }
     return {
         "codex_hook_waits_for_browser_approval": True,
         "codex_browser_wait_started_at": started_at.isoformat(),
         "codex_browser_wait_deadline_at": deadline_at.isoformat(),
         "codex_browser_wait_timeout_seconds": wait_timeout_seconds,
+        "codex_browser_wait_process": process_identity,
     }
 
-def _codex_browser_wait_timeout_seconds(*, event_name: str, configured_timeout: int) -> int:
-    wait_timeout_seconds = max(configured_timeout, 0)
+def _codex_browser_wait_timeout_seconds(
+    *,
+    event_name: str,
+    configured_timeout: int,
+    outer_wait_timeout_seconds: int | None = None,
+) -> int:
+    wait_timeout_seconds = min(
+        max(configured_timeout, 0),
+        MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+    )
+    if outer_wait_timeout_seconds is not None:
+        return min(wait_timeout_seconds, outer_wait_timeout_seconds)
     if event_name in {"UserPromptSubmit", "PreToolUse", "PostToolUse"}:
         wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS)
     return wait_timeout_seconds
 
 
-def _codex_pretooluse_live_wait_candidate(payload: Mapping[str, object] | None) -> bool:
+def _codex_bridge_wait_process(payload: Mapping[str, object] | None) -> dict[str, object] | None:
     if not isinstance(payload, Mapping):
-        return False
-    command_text = _hook_command_text(payload)
-    if not command_text:
-        tool_input = payload.get("tool_input")
-        if isinstance(tool_input, Mapping):
-            command_text = str(
-                tool_input.get("command")
-                or tool_input.get("cmd")
-                or tool_input.get("shell_command")
-                or tool_input.get("shellCommand")
-                or ""
-            )
-    if not command_text:
-        risk_signals = payload.get("risk_signals")
-        text_parts = [
-            str(payload.get("artifact_name", "")),
-            str(payload.get("risk_summary", "")),
-            str(payload.get("risk_headline", "")),
-            str(payload.get("trigger_summary", "")),
-            " ".join(
-                str(item)
-                for item in (risk_signals if isinstance(risk_signals, list) else [])
-                if isinstance(item, str)
-            )
-            if isinstance(risk_signals, list)
-            else "",
-        ]
-        command_text = " ".join(text_parts)
-    lowered = command_text.lower()
-    return bool(
-        re.search(r"\b(?:npm|pnpm|yarn|bun|pip|pip3|python(?:3(?:\.\d+)?)?\s+-m\s+pip)\s+install\b", lowered)
-        or "package install request" in lowered
-        or "before install" in lowered
-    )
+        return None
+    process_identity: object = payload.get(CODEX_BROWSER_WAIT_PROCESS_KEY)
+    if isinstance(process_identity, dict) and process_identity_matches(process_identity):
+        return process_identity
+    return None
+
 
 def _attach_primary_approval_link(
     response_payload: dict[str, object],
@@ -761,11 +714,12 @@ def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_h
 
 __all__ = [
     "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_build_cisco_scan_options",
+    "_codex_bridge_wait_process",
     "_codex_browser_approval_decision",
     "_codex_browser_wait_metadata",
     "_codex_browser_wait_timeout_seconds",
     "_codex_can_use_browser_approval",
-    "_codex_hook_waits_for_browser_approval", "_codex_pretooluse_live_wait_candidate", "_emit",
+    "_codex_hook_waits_for_browser_approval", "_emit",
     "_guard_cloud_app_error_payload", "_guard_cloud_app_urls", "_open_codex_live_approval",
     "_open_guard_cloud_app", "_policy_write_needs_approval_gate", "_policy_write_requires_approval_gate",
     "_preferred_approval_review_url", "_primary_approval_lookup_kwargs", "_record_harness_usage_for_hook",

@@ -115,28 +115,13 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
 
     home_dir = temp_dir / "home"
     workspace_dir = temp_dir / "workspace"
-    guard_home = home_dir
+    guard_home = home_dir / ".hol-guard"
     proof_path = workspace_dir / PROOF_FILE_NAME
 
     _write_text(home_dir / ".codex" / "config.toml", 'model = "gpt-5"\n')
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n\n[features]\nhooks = true\n')
     workspace_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=workspace_dir, check=True, capture_output=True, text=True)
-
-    _run_guard_cli(
-        [
-            "guard",
-            "install",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ],
-        home_dir=home_dir,
-        codex_home=args.codex_home,
-    )
 
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -166,9 +151,9 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
             payload={"scope": "artifact", "reason": f"{decision}-smoke"},
             timeout_seconds=args.timeout_seconds,
         )
-        resume_payload = approval_payload.get("codex_resume") if isinstance(approval_payload, dict) else None
+        resume_payload = approval_payload.get("codexResume") if isinstance(approval_payload, dict) else None
         if not isinstance(resume_payload, dict):
-            raise RuntimeError(f"approval response did not include codex_resume: {approval_payload}")
+            raise RuntimeError(f"approval response did not include codexResume: {approval_payload}")
     finally:
         daemon.stop()
         codex_server.join(timeout=1.0)
@@ -244,65 +229,71 @@ def _start_fake_codex_app_server(
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(socket_path))
             listener.listen(1)
-            connection, _ = listener.accept()
-            with connection:
-                headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
-                key = ""
-                for line in headers.split("\r\n"):
-                    if line.lower().startswith("sec-websocket-key:"):
-                        key = line.split(":", 1)[1].strip()
-                        break
-                accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode(
-                    "ascii"
-                )
-                connection.sendall(
-                    (
-                        "HTTP/1.1 101 Switching Protocols\r\n"
-                        "Connection: Upgrade\r\n"
-                        "Upgrade: websocket\r\n"
-                        f"Sec-WebSocket-Accept: {accept}\r\n"
-                        "\r\n"
-                    ).encode("ascii")
-                )
-                while True:
-                    opcode, payload = _recv_websocket_frame(connection)
-                    if opcode != 0x1:
+            while True:
+                connection, _ = listener.accept()
+                with connection:
+                    try:
+                        headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
+                    except RuntimeError:
+                        # The daemon probes a recorded local socket before the
+                        # isolated continuation worker opens its WebSocket.
                         continue
-                    message = json.loads(payload.decode("utf-8"))
-                    received.append(message)
-                    if message.get("id") == 1:
-                        _send_websocket_text(
-                            connection,
-                            {
-                                "id": 1,
-                                "result": {
-                                    "userAgent": "smoke",
-                                    "codexHome": "/tmp",
-                                    "platformFamily": "unix",
-                                    "platformOs": "macos",
-                                },
-                            },
-                        )
-                    if message.get("id") == 2:
-                        _send_websocket_text(connection, {"id": 2, "result": {"threadId": thread_id}})
-                    if message.get("id") == 3:
-                        _send_websocket_text(connection, {"id": 3, "result": {"turnId": "turn-smoke"}})
-                        if message.get("method") == "turn/start":
-                            time.sleep(0.05)
+                    key = ""
+                    for line in headers.split("\r\n"):
+                        if line.lower().startswith("sec-websocket-key:"):
+                            key = line.split(":", 1)[1].strip()
+                            break
+                    accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode(
+                        "ascii"
+                    )
+                    connection.sendall(
+                        (
+                            "HTTP/1.1 101 Switching Protocols\r\n"
+                            "Connection: Upgrade\r\n"
+                            "Upgrade: websocket\r\n"
+                            f"Sec-WebSocket-Accept: {accept}\r\n"
+                            "\r\n"
+                        ).encode("ascii")
+                    )
+                    while True:
+                        opcode, payload = _recv_websocket_frame(connection)
+                        if opcode != 0x1:
+                            continue
+                        message = json.loads(payload.decode("utf-8"))
+                        received.append(message)
+                        if message.get("id") == 1:
                             _send_websocket_text(
                                 connection,
                                 {
-                                    "method": "turn/completed",
-                                    "params": {
-                                        "threadId": thread_id,
-                                        "turn": {
-                                            "id": "turn-smoke",
-                                            "status": "completed",
-                                        },
+                                    "id": 1,
+                                    "result": {
+                                        "userAgent": "smoke",
+                                        "codexHome": "/tmp",
+                                        "platformFamily": "unix",
+                                        "platformOs": "macos",
                                     },
                                 },
                             )
-                        break
+                        if message.get("id") == 2:
+                            _send_websocket_text(connection, {"id": 2, "result": {"threadId": thread_id}})
+                        if message.get("id") == 3:
+                            _send_websocket_text(connection, {"id": 3, "result": {"turnId": "turn-smoke"}})
+                            if message.get("method") == "turn/start":
+                                time.sleep(0.05)
+                                _send_websocket_text(
+                                    connection,
+                                    {
+                                        "method": "turn/completed",
+                                        "params": {
+                                            "threadId": thread_id,
+                                            "turn": {
+                                                "id": "turn-smoke",
+                                                "status": "completed",
+                                            },
+                                        },
+                                    },
+                                )
+                            return
 
     thread = threading.Thread(target=server, name="codex-app-server-smoke", daemon=True)
     thread.start()
@@ -362,6 +353,7 @@ def _send_websocket_text(connection: socket.socket, payload: dict[str, object]) 
 def _scenario_env(*, home_dir: Path, codex_home: str | None, guard_daemon_port: int | None = None) -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = _pythonpath_value(env.get("PYTHONPATH"))
+    env["HOME"] = str(home_dir)
     resolved_codex_home = codex_home or os.environ.get("CODEX_HOME") or str(Path.home() / ".codex")
     env["CODEX_HOME"] = resolved_codex_home
     if guard_daemon_port is not None:
@@ -423,13 +415,13 @@ def _assert_expected_outcome(
     proof_created: bool,
     transcript: str,
 ) -> None:
-    codex_resume = approval_payload.get("codex_resume")
+    codex_resume = approval_payload.get("codexResume")
     if not isinstance(codex_resume, dict):
-        raise AssertionError("approval payload did not include codex_resume")
+        raise AssertionError("approval payload did not include codexResume")
     status = str(codex_resume.get("status") or "")
     if decision == "allow":
         if status not in {"in_progress", "sent", "already_sent"}:
-            raise AssertionError(f"expected codex_resume status to show live continuation, got {status!r}")
+            raise AssertionError(f"expected codexResume status to show live continuation, got {status!r}")
         if "turn/start" not in transcript:
             raise AssertionError(f"same-thread Codex app-server prompt was not sent:\n{transcript}")
         if proof_created:
@@ -478,6 +470,18 @@ def _proof_command() -> str:
         f"print('{ALLOW_SENTINEL}')\n"
         "PY"
     )
+
+
+def _browser_wait_operation_metadata() -> dict[str, object]:
+    from codex_plugin_scanner.guard.live_process_identity import current_process_identity
+
+    process_identity = current_process_identity()
+    if process_identity is None:
+        raise RuntimeError("current process identity is unavailable")
+    return {
+        "codex_hook_waits_for_browser_approval": True,
+        "codex_browser_wait_process": process_identity,
+    }
 
 
 def _queue_pending_request(
@@ -544,7 +548,7 @@ def _queue_pending_request(
             "tool_name": "Bash",
             "event": "PostToolUse",
             "hook_event_name": "PostToolUse",
-            "codex_hook_waits_for_browser_approval": True,
+            **_browser_wait_operation_metadata(),
             "codex_browser_wait_deadline_at": "2000-01-01T00:00:00+00:00",
         },
         now=now,

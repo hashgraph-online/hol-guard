@@ -1,6 +1,6 @@
 # Guard Review Backend Contract
 
-Date: 2026-06-19
+Date: 2026-08-24
 Scope: local Guard daemon and command runtime
 
 ## Local ownership
@@ -11,22 +11,20 @@ Local owns:
 
 - pending approval queue creation
 - exact live request resolution
-- local policy persistence
-- bundle validation
 - signed/verified remote approval acceptance
-- signed memory acknowledgement generation
 
 Cloud must not bypass the local queue by posting loose metadata.
 
-## Accepted command payloads
+## Cloud Review transport
 
-### `guard.approval.resolve` for one live request
+Cloud Review accepts one signed decision through the versioned exact command
+route: `/api/guard/review/v2/commands`.
 
-Required payload:
+The sole review command operation is `guard.review.resolveExact`. Its payload
+must include:
 
-- `action=allow_once` or `action=block`
-- `localRequestId`
 - signed `remoteApproval`
+- optional expected `harness`
 
 Local validates:
 
@@ -44,71 +42,31 @@ Local validates:
 - signature and trusted verification key
 - replay receipt
 
-If any check fails, the request is rejected and no policy is written.
+If any check fails, Local rejects the decision and writes no policy or memory.
 
-### `guard.approval.resolve` for reusable memory
-
-Required payload:
-
-- `action=policy_sync`
-- signed `decisionMemoryBundle`
-
-Rejected payloads:
-
-- loose `policyMemory`
-- unsigned bundle
-- tampered bundle hash / payload hash
-- expired bundle
-- downgraded policy version
-- wrong workspace
-- wrong target machine for machine-scoped bundle
-- malformed or unsupported rule
-- overbroad allow rule local runtime cannot safely enforce
+Persistent policy memory uses the separate `guard.review.syncPolicyMemory`
+operation. It requires its own command capability and local confirmation before
+Local applies a signed `decisionMemoryBundle`.
 
 ## Local persistence behavior
 
-Remote once:
-
 - resolves exactly one pending queue item
 - records claimed remote receipt
-- does not upsert reusable policy
+- does not upsert reusable policy or decision memory
 
-Signed memory bundle:
-
-- updates only `cloud-signed-memory` policy rows derived from accepted rules
-- preserves unrelated remote policies
-- records bundle version and last ack payload
-- supports signed revocation bundle replay through bundle `revocations`
-
-## Acknowledgement contract
-
-After bundle processing, local emits `GuardDecisionMemoryAckV1` with:
-
-- `workspaceId`
-- `machineInstallationId`
-- `machineId`
-- `deviceId`
-- `bundleVersion`
-- `bundleHash`
-- `policyVersion`
-- `status`
-- `reason`
-- `appliedRuleCount`
-- `rejectedRuleIds`
-- `acknowledgedAt`
-
-Accepted ack means the machine now enforces the bundle. Rejected/stale/expired
-acks must not be treated as synced.
+Policy-memory synchronization is not a request resolution. It applies only
+after its separate authorization and local confirmation complete.
 
 ## Runtime and daemon touchpoints
 
 - `src/codex_plugin_scanner/guard/review_contracts.py`
-- `src/codex_plugin_scanner/guard/runtime/command_executors.py`
-- `src/codex_plugin_scanner/guard/daemon/server.py`
-- `src/codex_plugin_scanner/guard/store.py`
+- `src/codex_plugin_scanner/guard/runtime/exact_cloud_review.py`
+- `src/codex_plugin_scanner/guard/runtime/exact_cloud_review_executor.py`
+- `src/codex_plugin_scanner/guard/runtime/exact_cloud_review_transport.py`
+- `src/codex_plugin_scanner/guard/runtime/review_policy_memory_executor.py`
 
 ## Proof suites
 
-- `tests/test_guard_command_queue.py`
-- `tests/test_guard_headless_daemon_api.py`
-- `tests/test_guard_command_queue_stale_pending_result.py`
+- `tests/test_guard_exact_cloud_review.py`
+- `tests/test_guard_exact_cloud_review_transport.py`
+- `tests/test_guard_cloud_review_contract.py`

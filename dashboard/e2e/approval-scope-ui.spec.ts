@@ -83,7 +83,7 @@ async function mountApprovalFixture(
         resolution_summary: "Decision saved.",
         retry_hint: null,
         copy: null,
-        codex_resume: null,
+        codexResume: null,
       };
     } else if (path.endsWith(`/requests/${approvalRequest.request_id}`)) body = approvalRequest;
     else if (path.endsWith("/requests")) {

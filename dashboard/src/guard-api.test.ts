@@ -1754,7 +1754,7 @@ const fetchCodexResolveCalls = installFetchStub({
     resolution_summary: "Decision saved.",
     retry_hint: null,
     copy: null,
-    codex_resume: {
+    codexResume: {
       status: "sent",
       supported: true,
       attempt_count: 1,
@@ -1782,11 +1782,11 @@ const codexResolution = await resolveRequestWithQueueResult({
   reason: "reviewed"
 });
 assert(fetchCodexResolveCalls.length === 1, "L078: codex resolve calls approve endpoint");
-assert(codexResolution.codex_resume !== null, "L078: codex resolve returns codex_resume");
-assert(codexResolution.codex_resume?.status === "sent", "L078: codex_resume.status is 'sent'");
-assert(codexResolution.codex_resume?.supported === true, "L078: codex_resume.supported is true");
-assert(codexResolution.codex_resume?.thread_id === "thread-abc", "L078: codex_resume.thread_id normalizes");
-assert(codexResolution.codex_resume?.attempt_count === 1, "L078: codex_resume.attempt_count normalizes");
+assert(codexResolution.codexResume !== null, "L078: codex resolve returns codexResume");
+assert(codexResolution.codexResume?.status === "sent", "L078: codexResume.status is 'sent'");
+assert(codexResolution.codexResume?.supported === true, "L078: codexResume.supported is true");
+assert(codexResolution.codexResume?.thread_id === "thread-abc", "L078: codexResume.thread_id normalizes");
+assert(codexResolution.codexResume?.attempt_count === 1, "L078: codexResume.attempt_count normalizes");
 
 installGuardWindow("?guard-token=token-codex-statuses&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 
@@ -1803,7 +1803,7 @@ for (const status of ["pending", "in_progress", "already_sent", "failed", "skipp
       resolution_summary: null,
       retry_hint: null,
       copy: null,
-      codex_resume: {
+      codexResume: {
         status,
         supported: true,
         attempt_count: 0,
@@ -1829,7 +1829,7 @@ for (const status of ["pending", "in_progress", "already_sent", "failed", "skipp
     scope: "artifact",
     reason: ""
   });
-  assert(res.codex_resume?.status === status, `L078b: codex_resume.status '${status}' normalizes correctly`);
+  assert(res.codexResume?.status === status, `L078b: codexResume.status '${status}' normalizes correctly`);
 }
 
 installGuardWindow("?guard-token=token-fetch-resume&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");

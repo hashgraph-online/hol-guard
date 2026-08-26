@@ -189,7 +189,7 @@ type QueueResolutionPayload = Omit<
   | "resolved_duplicate_ids"
   | "resolved_scope_ids"
   | "copy"
-  | "codex_resume"
+  | "codexResume"
 > & {
   item?: RawGuardApprovalRequest | null;
   resolved_request?: RawGuardApprovalRequest | null;
@@ -197,7 +197,7 @@ type QueueResolutionPayload = Omit<
   resolved_duplicate_ids?: unknown;
   resolved_scope_ids?: unknown;
   copy?: unknown;
-  codex_resume?: unknown;
+  codexResume?: unknown;
 };
 
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -1827,7 +1827,7 @@ function normalizeQueueResolution(payload: QueueResolutionPayload): GuardQueueRe
     resolution_summary: typeof payload.resolution_summary === "string" ? payload.resolution_summary : "",
     retry_hint: isStringOrNull(payload.retry_hint) ? payload.retry_hint : null,
     copy: normalizeQueueCopy(payload.copy),
-    codex_resume: normalizeCodexResume(payload.codex_resume)
+    codexResume: normalizeCodexResume(payload.codexResume)
   };
 }
 
@@ -3008,7 +3008,7 @@ export async function resolveRequestWithQueueResult(
       resolution_summary: "Decision saved.",
       retry_hint: null,
       copy: null,
-      codex_resume: null
+      codexResume: null
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";

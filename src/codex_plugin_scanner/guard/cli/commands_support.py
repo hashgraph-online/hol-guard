@@ -42,6 +42,7 @@ from . import commands_dispatch_policy_document as _commands_dispatch_policy_doc
 from . import commands_dispatch_trust as _commands_dispatch_trust
 from . import commands_dispatch_admin as _commands_dispatch_admin
 from . import commands_dispatch_cloud as _commands_dispatch_cloud
+from . import commands_dispatch_cloud_review as _commands_dispatch_cloud_review
 from . import commands_hook_copilot as _commands_hook_copilot
 from . import commands_hook_claude as _commands_hook_claude
 from . import commands_hook_runtime_state as _commands_hook_runtime_state
@@ -85,6 +86,7 @@ _SOURCE_MODULES: tuple[ModuleType, ...] = (
     _commands_dispatch_trust,
     _commands_dispatch_admin,
     _commands_dispatch_cloud,
+    _commands_dispatch_cloud_review,
     _commands_hook_copilot,
     _commands_hook_claude,
     _commands_hook_runtime_state,

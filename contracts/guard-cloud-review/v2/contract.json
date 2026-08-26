@@ -1,250 +1,596 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hol.org/contracts/guard-cloud-review/v2/contract.json",
-  "title": "HOL Guard Cloud Review v2 exact-result contract",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "contractVersion",
-    "correlationId",
-    "observedAt",
-    "request",
-    "decision",
-    "delivery",
-    "application",
-    "continuation"
-  ],
-  "properties": {
-    "contractVersion": {"const": "guard-cloud-review-v2"},
-    "correlationId": {"$ref": "#/$defs/correlationId"},
-    "observedAt": {"type": "string", "format": "date-time"},
-    "request": {"$ref": "#/$defs/request"},
-    "decision": {"$ref": "#/$defs/decision"},
-    "delivery": {"$ref": "#/$defs/delivery"},
-    "application": {"$ref": "#/$defs/application"},
-    "continuation": {"$ref": "#/$defs/continuation"}
-  },
-  "$defs": {
-    "correlationId": {
-      "type": "string",
-      "pattern": "^gcrv2_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-    },
-    "opaqueId": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 256,
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
-    },
-    "decisionOutcome": {"enum": ["allow_once", "block"]},
-    "requestStatus": {
-      "enum": ["pending", "resolved_allow", "resolved_block", "expired", "cancelled", "superseded"]
-    },
-    "visibilityStatus": {"enum": ["local_only", "syncing", "visible", "quarantined", "stale"]},
-    "decisionStatus": {"enum": ["none", "submitting", "recorded", "rejected", "failed", "cancelled"]},
-    "deliveryStatus": {
-      "enum": ["none", "queued", "queued_offline", "leased", "applying", "applied", "rejected", "failed", "cancelled", "not_applicable"]
-    },
-    "applicationStatus": {
-      "enum": ["waiting", "applied", "rejected_stale", "rejected_binding", "failed_retryable", "failed_terminal", "not_applicable"]
-    },
-    "continuationStatus": {
-      "enum": [
-        "waiting",
-        "resumed",
-        "already_resumed",
-        "manual_retry_required",
-        "blocked_not_resumed",
-        "unsupported",
-        "failed",
-        "not_applicable"
-      ]
-    },
-    "continuationCapability": {"enum": ["suspended-response", "session-resume", "retry-only", "unsupported"]},
-    "request": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["correlationId", "localRequestId", "reviewRequestId", "kind", "status", "visibilityStatus"],
-      "properties": {
-        "correlationId": {"$ref": "#/$defs/correlationId"},
-        "localRequestId": {"$ref": "#/$defs/opaqueId"},
-        "reviewRequestId": {"$ref": "#/$defs/opaqueId"},
-        "kind": {"const": "reviewable_pause"},
-        "status": {"$ref": "#/$defs/requestStatus"},
-        "visibilityStatus": {"$ref": "#/$defs/visibilityStatus"}
-      }
-    },
-    "decision": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["correlationId", "status"],
-      "properties": {
-        "correlationId": {"$ref": "#/$defs/correlationId"},
-        "receiptId": {"$ref": "#/$defs/opaqueId"},
-        "outcome": {"$ref": "#/$defs/decisionOutcome"},
-        "status": {"$ref": "#/$defs/decisionStatus"},
-        "recordedAt": {"type": "string", "format": "date-time"}
-      },
-      "allOf": [
-        {
-          "if": {"properties": {"status": {"const": "recorded"}}, "required": ["status"]},
-          "then": {"required": ["receiptId", "outcome", "recordedAt"]}
-        },
-        {
-          "if": {"properties": {"status": {"enum": ["none", "not_applicable"]}}, "required": ["status"]},
-          "then": {"not": {"anyOf": [{"required": ["receiptId"]}, {"required": ["outcome"]}, {"required": ["recordedAt"]}]}}
-        }
-      ]
-    },
-    "delivery": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["correlationId", "status"],
-      "properties": {
-        "correlationId": {"$ref": "#/$defs/correlationId"},
-        "commandJobId": {"$ref": "#/$defs/opaqueId"},
-        "status": {"$ref": "#/$defs/deliveryStatus"},
-        "leasedAt": {"type": "string", "format": "date-time"},
-        "completedAt": {"type": "string", "format": "date-time"}
-      },
-      "allOf": [
-        {
-          "if": {"properties": {"status": {"enum": ["queued", "queued_offline", "leased", "applying", "applied", "rejected", "failed", "cancelled"]}}, "required": ["status"]},
-          "then": {"required": ["commandJobId"]}
-        },
-        {
-          "if": {"properties": {"status": {"enum": ["leased", "applying", "applied", "rejected", "failed", "cancelled"]}}, "required": ["status"]},
-          "then": {"required": ["leasedAt"]}
-        },
-        {
-          "if": {"properties": {"status": {"enum": ["applied", "rejected", "failed", "cancelled"]}}, "required": ["status"]},
-          "then": {"required": ["completedAt"]}
-        },
-        {
-          "if": {"properties": {"status": {"enum": ["none", "not_applicable"]}}, "required": ["status"]},
-          "then": {"not": {"anyOf": [{"required": ["commandJobId"]}, {"required": ["leasedAt"]}, {"required": ["completedAt"]}]}}
-        }
-      ]
-    },
-    "application": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["correlationId", "status"],
-      "properties": {
-        "correlationId": {"$ref": "#/$defs/correlationId"},
-        "status": {"$ref": "#/$defs/applicationStatus"},
-        "reason": {"type": "string", "maxLength": 128},
-        "appliedAt": {"type": "string", "format": "date-time"},
-        "completedAt": {"type": "string", "format": "date-time"}
-      },
-      "allOf": [
-        {
-          "if": {"properties": {"status": {"const": "applied"}}, "required": ["status"]},
-          "then": {"required": ["appliedAt"]}
-        },
-        {
-          "if": {"properties": {"status": {"enum": ["rejected_stale", "rejected_binding", "failed_retryable", "failed_terminal"]}}, "required": ["status"]},
-          "then": {"required": ["reason", "completedAt"]}
-        },
-        {
-          "if": {"properties": {"status": {"enum": ["waiting", "not_applicable"]}}, "required": ["status"]},
-          "then": {"not": {"anyOf": [{"required": ["reason"]}, {"required": ["appliedAt"]}, {"required": ["completedAt"]}]}}
-        }
-      ]
-    },
-    "continuation": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["correlationId", "capability", "status"],
-      "properties": {
-        "correlationId": {"$ref": "#/$defs/correlationId"},
-        "resultId": {"$ref": "#/$defs/opaqueId"},
-        "capability": {"$ref": "#/$defs/continuationCapability"},
-        "status": {"$ref": "#/$defs/continuationStatus"},
-        "reason": {"type": "string", "maxLength": 128},
-        "completedAt": {"type": "string", "format": "date-time"}
-      },
-      "allOf": [
-        {
-          "if": {"properties": {"status": {"enum": ["resumed", "already_resumed", "manual_retry_required", "blocked_not_resumed", "unsupported", "failed", "not_applicable"]}}, "required": ["status"]},
-          "then": {"required": ["resultId", "completedAt"]}
-        },
-        {
-          "if": {"properties": {"status": {"const": "waiting"}}, "required": ["status"]},
-          "then": {"not": {"anyOf": [{"required": ["resultId"]}, {"required": ["reason"]}, {"required": ["completedAt"]}]}}
-        }
-      ]
-    }
-  },
-  "x-hol-contract": {
-    "contractVersion": "guard-cloud-review-v2",
-    "protocolVersion": 2,
-    "compatibility": {"v1RuntimeBehaviorChanged": false, "implementationPhase": "contract-only"},
-    "glossary": {
-      "localRequest": "The exact pending request persisted by Local Guard before the harness pauses.",
-      "reviewRequest": "The Cloud canonical aggregate bound to one local request and machine installation.",
-      "decision": "An immutable reviewer outcome recorded by Cloud for one review request.",
-      "deliveryCommand": "The exact signed command that transports one recorded decision to its target Local Guard.",
-      "localApplication": "The Local Guard result after it verifies and resolves the exact pending local request.",
-      "agentContinuation": "The harness-reported result after Local Guard applies a decision; it is independent of application."
-    },
-    "invariants": [
-      {"id": "decision-not-application", "statement": "A recorded Cloud decision is not evidence of local application."},
-      {"id": "application-not-continuation", "statement": "A successful local application is not evidence that the agent continued."},
-      {"id": "allow-once-exact-request", "statement": "allow_once resolves only one pending local request and cannot create reusable policy or decision memory."},
-      {"id": "immutable-block-not-remotely-approvable", "statement": "An immutable policy block is not a reviewable request and cannot be approved remotely."},
-      {"id": "policy-memory-separate-operation", "statement": "Persistent memory and policy changes require guard.review.syncPolicyMemory and separate authorization."}
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://hol.org/contracts/guard-cloud-review/v2/contract.json",
+    "title": "HOL Guard Cloud Review exact-result contract (protocol v2)",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "contractVersion",
+        "correlationId",
+        "observedAt",
+        "request",
+        "decision",
+        "delivery",
+        "application",
+        "continuation"
     ],
-    "operations": {
-      "guard.review.resolveExact": {"outcomes": ["allow_once", "block"], "oneTime": true, "createsReusablePolicy": false, "createsDecisionMemory": false, "requiresSeparateAuthorization": false},
-      "guard.review.syncPolicyMemory": {"outcomes": [], "oneTime": false, "createsReusablePolicy": true, "createsDecisionMemory": true, "requiresSeparateAuthorization": true}
+    "properties": {
+        "contractVersion": {"const": "guard-cloud-review-v2"},
+        "correlationId": {"$ref": "#/$defs/correlationId"},
+        "observedAt": {"type": "string", "format": "date-time"},
+        "request": {"$ref": "#/$defs/request"},
+        "decision": {"$ref": "#/$defs/decision"},
+        "delivery": {"$ref": "#/$defs/delivery"},
+        "application": {"$ref": "#/$defs/application"},
+        "continuation": {"$ref": "#/$defs/continuation"}
     },
-    "correlation": {
-      "field": "correlationId",
-      "pattern": "^gcrv2_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "mustAppearOn": ["localRequest", "reviewRequest", "decisionReceipt", "deliveryCommand", "localApplication", "continuationResult"]
+    "$defs": {
+        "correlationId": {
+            "type": "string",
+            "pattern": "^gcr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "opaqueId": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+        "decisionOutcome": {"enum": ["allow_once", "block"]},
+        "requestStatus": {
+            "enum": ["pending", "resolved_allow", "resolved_block", "expired", "cancelled", "superseded"]
+        },
+        "visibilityStatus": {"enum": ["local_only", "syncing", "visible", "quarantined", "stale"]},
+        "decisionStatus": {"enum": ["none", "submitting", "recorded", "rejected", "failed", "cancelled"]},
+        "deliveryStatus": {
+            "enum": [
+                "none",
+                "queued",
+                "queued_offline",
+                "leased",
+                "applying",
+                "applied",
+                "rejected",
+                "failed",
+                "cancelled",
+                "not_applicable"
+            ]
+        },
+        "applicationStatus": {
+            "enum": [
+                "waiting",
+                "applied",
+                "rejected_stale",
+                "rejected_binding",
+                "failed_retryable",
+                "failed_terminal",
+                "not_applicable"
+            ]
+        },
+        "continuationStatus": {
+            "enum": [
+                "waiting",
+                "resumed",
+                "already_resumed",
+                "manual_retry_required",
+                "blocked_not_resumed",
+                "unsupported",
+                "failed",
+                "not_applicable"
+            ]
+        },
+        "continuationCapability": {"enum": ["suspended-response", "session-resume", "retry-only", "unsupported"]},
+        "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["correlationId", "localRequestId", "reviewRequestId", "kind", "status", "visibilityStatus"],
+            "properties": {
+                "correlationId": {"$ref": "#/$defs/correlationId"},
+                "localRequestId": {"$ref": "#/$defs/opaqueId"},
+                "reviewRequestId": {"$ref": "#/$defs/opaqueId"},
+                "kind": {"const": "reviewable_pause"},
+                "status": {"$ref": "#/$defs/requestStatus"},
+                "visibilityStatus": {"$ref": "#/$defs/visibilityStatus"}
+            }
+        },
+        "decision": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["correlationId", "status"],
+            "properties": {
+                "correlationId": {"$ref": "#/$defs/correlationId"},
+                "receiptId": {"$ref": "#/$defs/opaqueId"},
+                "outcome": {"$ref": "#/$defs/decisionOutcome"},
+                "status": {"$ref": "#/$defs/decisionStatus"},
+                "recordedAt": {"type": "string", "format": "date-time"}
+            },
+            "allOf": [
+                {
+                    "if": {"properties": {"status": {"const": "recorded"}}, "required": ["status"]},
+                    "then": {"required": ["receiptId", "outcome", "recordedAt"]}
+                },
+                {
+                    "if": {"properties": {"status": {"enum": ["none", "not_applicable"]}}, "required": ["status"]},
+                    "then": {
+                        "not": {
+                            "anyOf": [
+                                {"required": ["receiptId"]},
+                                {"required": ["outcome"]},
+                                {"required": ["recordedAt"]}
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "delivery": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["correlationId", "status"],
+            "properties": {
+                "correlationId": {"$ref": "#/$defs/correlationId"},
+                "commandJobId": {"$ref": "#/$defs/opaqueId"},
+                "status": {"$ref": "#/$defs/deliveryStatus"},
+                "leasedAt": {"type": "string", "format": "date-time"},
+                "completedAt": {"type": "string", "format": "date-time"}
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "status": {
+                                "enum": [
+                                    "queued",
+                                    "queued_offline",
+                                    "leased",
+                                    "applying",
+                                    "applied",
+                                    "rejected",
+                                    "failed",
+                                    "cancelled"
+                                ]
+                            }
+                        },
+                        "required": ["status"]
+                    },
+                    "then": {"required": ["commandJobId"]}
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "status": {"enum": ["leased", "applying", "applied", "rejected", "failed", "cancelled"]}
+                        },
+                        "required": ["status"]
+                    },
+                    "then": {"required": ["leasedAt"]}
+                },
+                {
+                    "if": {
+                        "properties": {"status": {"enum": ["applied", "rejected", "failed", "cancelled"]}},
+                        "required": ["status"]
+                    },
+                    "then": {"required": ["completedAt"]}
+                },
+                {
+                    "if": {"properties": {"status": {"enum": ["none", "not_applicable"]}}, "required": ["status"]},
+                    "then": {
+                        "not": {
+                            "anyOf": [
+                                {"required": ["commandJobId"]},
+                                {"required": ["leasedAt"]},
+                                {"required": ["completedAt"]}
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "application": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["correlationId", "status"],
+            "properties": {
+                "correlationId": {"$ref": "#/$defs/correlationId"},
+                "status": {"$ref": "#/$defs/applicationStatus"},
+                "reason": {"type": "string", "maxLength": 128},
+                "appliedAt": {"type": "string", "format": "date-time"},
+                "completedAt": {"type": "string", "format": "date-time"}
+            },
+            "allOf": [
+                {
+                    "if": {"properties": {"status": {"const": "applied"}}, "required": ["status"]},
+                    "then": {"required": ["appliedAt"]}
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "status": {
+                                "enum": ["rejected_stale", "rejected_binding", "failed_retryable", "failed_terminal"]
+                            }
+                        },
+                        "required": ["status"]
+                    },
+                    "then": {"required": ["reason", "completedAt"]}
+                },
+                {
+                    "if": {"properties": {"status": {"enum": ["waiting", "not_applicable"]}}, "required": ["status"]},
+                    "then": {
+                        "not": {
+                            "anyOf": [
+                                {"required": ["reason"]},
+                                {"required": ["appliedAt"]},
+                                {"required": ["completedAt"]}
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "continuation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["correlationId", "capability", "status"],
+            "properties": {
+                "correlationId": {"$ref": "#/$defs/correlationId"},
+                "resultId": {"$ref": "#/$defs/opaqueId"},
+                "capability": {"$ref": "#/$defs/continuationCapability"},
+                "status": {"$ref": "#/$defs/continuationStatus"},
+                "reason": {"type": "string", "maxLength": 128},
+                "completedAt": {"type": "string", "format": "date-time"}
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "status": {
+                                "enum": [
+                                    "resumed",
+                                    "already_resumed",
+                                    "manual_retry_required",
+                                    "blocked_not_resumed",
+                                    "unsupported",
+                                    "failed",
+                                    "not_applicable"
+                                ]
+                            }
+                        },
+                        "required": ["status"]
+                    },
+                    "then": {"required": ["resultId", "completedAt"]}
+                },
+                {
+                    "if": {"properties": {"status": {"const": "waiting"}}, "required": ["status"]},
+                    "then": {
+                        "not": {
+                            "anyOf": [
+                                {"required": ["resultId"]},
+                                {"required": ["reason"]},
+                                {"required": ["completedAt"]}
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
     },
-    "vocabularyPaths": {
-      "requestStatus": "#/$defs/requestStatus",
-      "visibilityStatus": "#/$defs/visibilityStatus",
-      "decisionStatus": "#/$defs/decisionStatus",
-      "deliveryStatus": "#/$defs/deliveryStatus",
-      "applicationStatus": "#/$defs/applicationStatus",
-      "continuationStatus": "#/$defs/continuationStatus",
-      "continuationCapability": "#/$defs/continuationCapability"
-    },
-    "semanticRules": [
-      {"id": "rfc3339-date-times", "operator": "rfc3339_date_time", "requiredPaths": ["/observedAt"], "optionalPaths": ["/decision/recordedAt", "/delivery/leasedAt", "/delivery/completedAt", "/application/appliedAt", "/application/completedAt", "/continuation/completedAt"]},
-      {"id": "correlation-equality", "operator": "all_equal", "paths": ["/correlationId", "/request/correlationId", "/decision/correlationId", "/delivery/correlationId", "/application/correlationId", "/continuation/correlationId"]},
-      {"id": "exact-result-reviewable-pause", "operator": "equals", "path": "/request/kind", "value": "reviewable_pause"},
-      {"id": "allow-once-request-status", "operator": "if_all_equals_then_in", "conditions": [{"path": "/decision/status", "value": "recorded"}, {"path": "/decision/outcome", "value": "allow_once"}], "thenPath": "/request/status", "thenValues": ["pending", "resolved_allow"]},
-      {"id": "block-request-status", "operator": "if_all_equals_then_in", "conditions": [{"path": "/decision/status", "value": "recorded"}, {"path": "/decision/outcome", "value": "block"}], "thenPath": "/request/status", "thenValues": ["pending", "resolved_block"]},
-      {"id": "resolved-allow-requires-recorded-decision", "operator": "if_equals_then_equals", "ifPath": "/request/status", "ifValue": "resolved_allow", "thenPath": "/decision/status", "thenValue": "recorded"},
-      {"id": "resolved-allow-requires-allow-once-outcome", "operator": "if_equals_then_equals", "ifPath": "/request/status", "ifValue": "resolved_allow", "thenPath": "/decision/outcome", "thenValue": "allow_once"},
-      {"id": "resolved-block-requires-recorded-decision", "operator": "if_equals_then_equals", "ifPath": "/request/status", "ifValue": "resolved_block", "thenPath": "/decision/status", "thenValue": "recorded"},
-      {"id": "resolved-block-requires-block-outcome", "operator": "if_equals_then_equals", "ifPath": "/request/status", "ifValue": "resolved_block", "thenPath": "/decision/outcome", "thenValue": "block"},
-      {"id": "resolved-block-requires-blocked-continuation", "operator": "if_equals_then_equals", "ifPath": "/request/status", "ifValue": "resolved_block", "thenPath": "/continuation/status", "thenValue": "blocked_not_resumed"},
-      {"id": "resolved-request-requires-applied-application", "operator": "if_in_then_equals", "ifPath": "/request/status", "ifValues": ["resolved_allow", "resolved_block"], "thenPath": "/application/status", "thenValue": "applied"},
-      {"id": "recorded-block-requires-blocked-continuation", "operator": "if_all_equals_then_in", "conditions": [{"path": "/decision/status", "value": "recorded"}, {"path": "/decision/outcome", "value": "block"}], "thenPath": "/continuation/status", "thenValues": ["waiting", "blocked_not_resumed"]},
-      {"id": "applied-block-requires-blocked-continuation", "operator": "if_all_equals_then_in", "conditions": [{"path": "/decision/status", "value": "recorded"}, {"path": "/decision/outcome", "value": "block"}, {"path": "/application/status", "value": "applied"}], "thenPath": "/continuation/status", "thenValues": ["blocked_not_resumed"]},
-      {"id": "resumed-continuation-requires-recorded-decision", "operator": "if_in_then_equals", "ifPath": "/continuation/status", "ifValues": ["resumed", "already_resumed"], "thenPath": "/decision/status", "thenValue": "recorded"},
-      {"id": "resumed-continuation-requires-allow-once-decision", "operator": "if_in_then_equals", "ifPath": "/continuation/status", "ifValues": ["resumed", "already_resumed"], "thenPath": "/decision/outcome", "thenValue": "allow_once"},
-      {"id": "recorded-decision-has-delivery", "operator": "if_equals_then_in", "ifPath": "/decision/status", "ifValue": "recorded", "thenPath": "/delivery/status", "thenValues": ["queued", "queued_offline", "leased", "applying", "applied", "rejected", "failed", "cancelled", "not_applicable"]},
-      {"id": "delivery-requires-recorded-decision", "operator": "if_in_then_equals", "ifPath": "/delivery/status", "ifValues": ["queued", "queued_offline", "leased", "applying", "applied", "rejected", "failed", "cancelled", "not_applicable"], "thenPath": "/decision/status", "thenValue": "recorded"},
-      {"id": "completed-application-requires-applied-delivery", "operator": "if_in_then_equals", "ifPath": "/application/status", "ifValues": ["applied", "rejected_stale", "rejected_binding", "failed_retryable", "failed_terminal"], "thenPath": "/delivery/status", "thenValue": "applied"},
-      {"id": "not-applicable-application-requires-not-applicable-delivery", "operator": "if_equals_then_equals", "ifPath": "/application/status", "ifValue": "not_applicable", "thenPath": "/delivery/status", "thenValue": "not_applicable"},
-      {"id": "not-applicable-delivery-requires-not-applicable-application", "operator": "if_equals_then_equals", "ifPath": "/delivery/status", "ifValue": "not_applicable", "thenPath": "/application/status", "thenValue": "not_applicable"},
-      {"id": "applied-continuation-requires-applied-application", "operator": "if_in_then_equals", "ifPath": "/continuation/status", "ifValues": ["resumed", "already_resumed", "manual_retry_required", "blocked_not_resumed", "unsupported"], "thenPath": "/application/status", "thenValue": "applied"},
-      {"id": "not-applicable-continuation-requires-not-applicable-application", "operator": "if_equals_then_equals", "ifPath": "/continuation/status", "ifValue": "not_applicable", "thenPath": "/application/status", "thenValue": "not_applicable"},
-      {"id": "failed-continuation-requires-compatible-application", "operator": "if_equals_then_in", "ifPath": "/continuation/status", "ifValue": "failed", "thenPath": "/application/status", "thenValues": ["failed_terminal", "applied"]},
-      {"id": "blocked-continuation-requires-block-decision", "operator": "if_equals_then_equals", "ifPath": "/continuation/status", "ifValue": "blocked_not_resumed", "thenPath": "/decision/outcome", "thenValue": "block"}
-    ],
-    "generation": {
-      "algorithm": "sha256",
-      "excludes": ["contract.json"],
-      "artifacts": {
-        "fixtures": {"path": "contracts/guard-cloud-review/v2/fixtures.json", "sha256": "59c024aebbe1044055144efccdd4a4920503fd1a2722c448fda01c935e6d474f"},
-        "publicDocumentation": {"path": "docs/guard/contracts/guard-cloud-review-v2.md", "sha256": "d0bb892db98150fed454a53f3fbdcb420e0cd2c6dde0ac5d1c81a94d6c30bf85"}
-      }
+    "x-hol-contract": {
+        "contractVersion": "guard-cloud-review-v2",
+        "protocolVersion": 2,
+        "implementationPhase": "runtime-backed",
+        "glossary": {
+            "localRequest": "The exact pending request persisted by Local Guard before the harness pauses.",
+            "reviewRequest": "The Cloud canonical aggregate bound to one local request and machine installation.",
+            "decision": "An immutable reviewer outcome recorded by Cloud for one review request.",
+            "deliveryCommand": "The exact signed command that transports one recorded decision to its target Local Guard.",
+            "localApplication": "The Local Guard result after it verifies and resolves the exact pending local request.",
+            "agentContinuation": "The harness-reported result after Local Guard applies a decision; it is independent of application."
+        },
+        "invariants": [
+            {
+                "id": "decision-not-application",
+                "statement": "A recorded Cloud decision is not evidence of local application."
+            },
+            {
+                "id": "application-not-continuation",
+                "statement": "A successful local application is not evidence that the agent continued."
+            },
+            {
+                "id": "allow-once-exact-request",
+                "statement": "allow_once resolves only one pending local request and cannot create reusable policy or decision memory."
+            },
+            {
+                "id": "immutable-block-not-remotely-approvable",
+                "statement": "An immutable policy block is not a reviewable request and cannot be approved remotely."
+            },
+            {
+                "id": "policy-memory-separate-operation",
+                "statement": "Persistent memory and policy changes require guard.review.syncPolicyMemory and separate authorization."
+            }
+        ],
+        "operations": {
+            "guard.review.resolveExact": {
+                "outcomes": ["allow_once", "block"],
+                "oneTime": true,
+                "createsReusablePolicy": false,
+                "createsDecisionMemory": false,
+                "requiresSeparateAuthorization": false
+            },
+            "guard.review.syncPolicyMemory": {
+                "outcomes": [],
+                "oneTime": false,
+                "createsReusablePolicy": true,
+                "createsDecisionMemory": true,
+                "requiresSeparateAuthorization": true
+            }
+        },
+        "correlation": {
+            "field": "correlationId",
+            "pattern": "^gcr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "mustAppearOn": [
+                "localRequest",
+                "reviewRequest",
+                "decisionReceipt",
+                "deliveryCommand",
+                "localApplication",
+                "continuationResult"
+            ]
+        },
+        "vocabularyPaths": {
+            "requestStatus": "#/$defs/requestStatus",
+            "visibilityStatus": "#/$defs/visibilityStatus",
+            "decisionStatus": "#/$defs/decisionStatus",
+            "deliveryStatus": "#/$defs/deliveryStatus",
+            "applicationStatus": "#/$defs/applicationStatus",
+            "continuationStatus": "#/$defs/continuationStatus",
+            "continuationCapability": "#/$defs/continuationCapability"
+        },
+        "semanticRules": [
+            {
+                "id": "rfc3339-date-times",
+                "operator": "rfc3339_date_time",
+                "requiredPaths": ["/observedAt"],
+                "optionalPaths": [
+                    "/decision/recordedAt",
+                    "/delivery/leasedAt",
+                    "/delivery/completedAt",
+                    "/application/appliedAt",
+                    "/application/completedAt",
+                    "/continuation/completedAt"
+                ]
+            },
+            {
+                "id": "correlation-equality",
+                "operator": "all_equal",
+                "paths": [
+                    "/correlationId",
+                    "/request/correlationId",
+                    "/decision/correlationId",
+                    "/delivery/correlationId",
+                    "/application/correlationId",
+                    "/continuation/correlationId"
+                ]
+            },
+            {
+                "id": "exact-result-reviewable-pause",
+                "operator": "equals",
+                "path": "/request/kind",
+                "value": "reviewable_pause"
+            },
+            {
+                "id": "allow-once-request-status",
+                "operator": "if_all_equals_then_in",
+                "conditions": [
+                    {"path": "/decision/status", "value": "recorded"},
+                    {"path": "/decision/outcome", "value": "allow_once"}
+                ],
+                "thenPath": "/request/status",
+                "thenValues": ["pending", "resolved_allow"]
+            },
+            {
+                "id": "block-request-status",
+                "operator": "if_all_equals_then_in",
+                "conditions": [
+                    {"path": "/decision/status", "value": "recorded"},
+                    {"path": "/decision/outcome", "value": "block"}
+                ],
+                "thenPath": "/request/status",
+                "thenValues": ["pending", "resolved_block"]
+            },
+            {
+                "id": "resolved-allow-requires-recorded-decision",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/request/status",
+                "ifValue": "resolved_allow",
+                "thenPath": "/decision/status",
+                "thenValue": "recorded"
+            },
+            {
+                "id": "resolved-allow-requires-allow-once-outcome",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/request/status",
+                "ifValue": "resolved_allow",
+                "thenPath": "/decision/outcome",
+                "thenValue": "allow_once"
+            },
+            {
+                "id": "resolved-block-requires-recorded-decision",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/request/status",
+                "ifValue": "resolved_block",
+                "thenPath": "/decision/status",
+                "thenValue": "recorded"
+            },
+            {
+                "id": "resolved-block-requires-block-outcome",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/request/status",
+                "ifValue": "resolved_block",
+                "thenPath": "/decision/outcome",
+                "thenValue": "block"
+            },
+            {
+                "id": "resolved-block-requires-blocked-continuation",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/request/status",
+                "ifValue": "resolved_block",
+                "thenPath": "/continuation/status",
+                "thenValue": "blocked_not_resumed"
+            },
+            {
+                "id": "resolved-request-requires-applied-application",
+                "operator": "if_in_then_equals",
+                "ifPath": "/request/status",
+                "ifValues": ["resolved_allow", "resolved_block"],
+                "thenPath": "/application/status",
+                "thenValue": "applied"
+            },
+            {
+                "id": "recorded-block-requires-blocked-continuation",
+                "operator": "if_all_equals_then_in",
+                "conditions": [
+                    {"path": "/decision/status", "value": "recorded"},
+                    {"path": "/decision/outcome", "value": "block"}
+                ],
+                "thenPath": "/continuation/status",
+                "thenValues": ["waiting", "blocked_not_resumed"]
+            },
+            {
+                "id": "applied-block-requires-blocked-continuation",
+                "operator": "if_all_equals_then_in",
+                "conditions": [
+                    {"path": "/decision/status", "value": "recorded"},
+                    {"path": "/decision/outcome", "value": "block"},
+                    {"path": "/application/status", "value": "applied"}
+                ],
+                "thenPath": "/continuation/status",
+                "thenValues": ["blocked_not_resumed"]
+            },
+            {
+                "id": "resumed-continuation-requires-recorded-decision",
+                "operator": "if_in_then_equals",
+                "ifPath": "/continuation/status",
+                "ifValues": ["resumed", "already_resumed"],
+                "thenPath": "/decision/status",
+                "thenValue": "recorded"
+            },
+            {
+                "id": "resumed-continuation-requires-allow-once-decision",
+                "operator": "if_in_then_equals",
+                "ifPath": "/continuation/status",
+                "ifValues": ["resumed", "already_resumed"],
+                "thenPath": "/decision/outcome",
+                "thenValue": "allow_once"
+            },
+            {
+                "id": "recorded-decision-has-delivery",
+                "operator": "if_equals_then_in",
+                "ifPath": "/decision/status",
+                "ifValue": "recorded",
+                "thenPath": "/delivery/status",
+                "thenValues": [
+                    "queued",
+                    "queued_offline",
+                    "leased",
+                    "applying",
+                    "applied",
+                    "rejected",
+                    "failed",
+                    "cancelled",
+                    "not_applicable"
+                ]
+            },
+            {
+                "id": "delivery-requires-recorded-decision",
+                "operator": "if_in_then_equals",
+                "ifPath": "/delivery/status",
+                "ifValues": [
+                    "queued",
+                    "queued_offline",
+                    "leased",
+                    "applying",
+                    "applied",
+                    "rejected",
+                    "failed",
+                    "cancelled",
+                    "not_applicable"
+                ],
+                "thenPath": "/decision/status",
+                "thenValue": "recorded"
+            },
+            {
+                "id": "completed-application-requires-applied-delivery",
+                "operator": "if_in_then_equals",
+                "ifPath": "/application/status",
+                "ifValues": ["applied", "rejected_stale", "rejected_binding", "failed_retryable", "failed_terminal"],
+                "thenPath": "/delivery/status",
+                "thenValue": "applied"
+            },
+            {
+                "id": "not-applicable-application-requires-not-applicable-delivery",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/application/status",
+                "ifValue": "not_applicable",
+                "thenPath": "/delivery/status",
+                "thenValue": "not_applicable"
+            },
+            {
+                "id": "not-applicable-delivery-requires-not-applicable-application",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/delivery/status",
+                "ifValue": "not_applicable",
+                "thenPath": "/application/status",
+                "thenValue": "not_applicable"
+            },
+            {
+                "id": "applied-continuation-requires-applied-application",
+                "operator": "if_in_then_equals",
+                "ifPath": "/continuation/status",
+                "ifValues": [
+                    "resumed",
+                    "already_resumed",
+                    "manual_retry_required",
+                    "blocked_not_resumed",
+                    "unsupported"
+                ],
+                "thenPath": "/application/status",
+                "thenValue": "applied"
+            },
+            {
+                "id": "not-applicable-continuation-requires-not-applicable-application",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/continuation/status",
+                "ifValue": "not_applicable",
+                "thenPath": "/application/status",
+                "thenValue": "not_applicable"
+            },
+            {
+                "id": "failed-continuation-requires-compatible-application",
+                "operator": "if_equals_then_in",
+                "ifPath": "/continuation/status",
+                "ifValue": "failed",
+                "thenPath": "/application/status",
+                "thenValues": ["failed_terminal", "applied"]
+            },
+            {
+                "id": "blocked-continuation-requires-block-decision",
+                "operator": "if_equals_then_equals",
+                "ifPath": "/continuation/status",
+                "ifValue": "blocked_not_resumed",
+                "thenPath": "/decision/outcome",
+                "thenValue": "block"
+            }
+        ],
+        "generation": {
+            "algorithm": "sha256",
+            "excludes": ["contract.json"],
+            "artifacts": {
+                "commandResult": {
+                    "path": "contracts/guard-cloud-review/v2/command-result.json",
+          "sha256": "1554a8d3e8d8e127dcc30515ba626400ffda664e8ff45f91c8ae0162194e6334"
+                },
+                "fixtures": {
+                    "path": "contracts/guard-cloud-review/v2/fixtures.json",
+                    "sha256": "3f8ae64c2185c6137314f26f44dedf68f54e7b14a9473d80c1783685dabb6909"
+                },
+                "publicDocumentation": {
+                    "path": "docs/guard/contracts/guard-cloud-review.md",
+                    "sha256": "99c976d7656be901348fd3599a47472c48e8bec4ab123f15e9ad2dcdd5bd4764"
+                }
+            }
+        }
     }
-  }
 }

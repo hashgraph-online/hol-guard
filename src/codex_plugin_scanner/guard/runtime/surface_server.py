@@ -228,14 +228,23 @@ class GuardSurfaceRuntime:
     ) -> dict[str, object]:
         if self.store.get_guard_session(session_id) is None:
             raise ValueError(f"Unknown guard session: {session_id}")
+        queued_at = _now()
+        continuation_operation: dict[str, object] = {
+            "created_at": queued_at,
+            "harness": harness,
+            "metadata": metadata or {},
+            "status": "waiting_on_approval",
+            "updated_at": queued_at,
+        }
         parsed_detection = _parse_detection(detection)
         queued = queue_blocked_approvals(
             detection=parsed_detection,
             evaluation=evaluation,
             store=self.store,
             approval_center_url=approval_center_url,
-            now=_now(),
+            now=queued_at,
             redaction_level=redaction_level,
+            continuation_operation=continuation_operation,
         )
         operation = self.start_operation(
             session_id=session_id,

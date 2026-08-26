@@ -427,7 +427,7 @@ def test_partial_start_failure_rolls_back_workers_state_and_owner_lock(
     assert daemon._headless_cloud_sync_thread is None
     assert daemon._command_activity_maintenance_thread is None
     assert daemon._command_queue_worker is None
-    assert daemon._live_request_sync_worker is None
+    assert daemon._cloud_review_sync_worker is None
     assert store.get_runtime_state() is None
 
     owner_lock = daemon_manager.acquire_guard_daemon_owner_lock(store.guard_home)

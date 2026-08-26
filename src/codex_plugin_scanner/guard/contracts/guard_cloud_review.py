@@ -1,4 +1,4 @@
-"""Contract-only adapter for the shared Guard Cloud Review v2 artifacts."""
+"""Shared adapter for Guard Cloud Review wire-contract artifacts."""
 
 from __future__ import annotations
 
@@ -15,12 +15,14 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
 CONTRACT_VERSION: Final = "guard-cloud-review-v2"
+COMMAND_RESULT_CONTRACT_VERSION: Final = "guard-cloud-review-command-result-v2"
 _SOURCE_ROOT: Final = Path(__file__).resolve().parents[4]
-_PACKAGE_DATA_ROOT: Final = Path(__file__).resolve().parent / "data" / "guard-cloud-review" / "v2"
+_PACKAGE_DATA_ROOT: Final = Path(__file__).resolve().parent / "data" / "guard-cloud-review"
 _SOURCE_ARTIFACTS: Final = {
-    "contract.json": _SOURCE_ROOT / "contracts" / "guard-cloud-review" / "v2" / "contract.json",
-    "fixtures.json": _SOURCE_ROOT / "contracts" / "guard-cloud-review" / "v2" / "fixtures.json",
-    "guard-cloud-review-v2.md": _SOURCE_ROOT / "docs" / "guard" / "contracts" / "guard-cloud-review-v2.md",
+    "v2/contract.json": _SOURCE_ROOT / "contracts" / "guard-cloud-review" / "v2" / "contract.json",
+    "v2/fixtures.json": _SOURCE_ROOT / "contracts" / "guard-cloud-review" / "v2" / "fixtures.json",
+    "v2/command-result.json": _SOURCE_ROOT / "contracts" / "guard-cloud-review" / "v2" / "command-result.json",
+    "guard-cloud-review.md": _SOURCE_ROOT / "docs" / "guard" / "contracts" / "guard-cloud-review.md",
 }
 
 
@@ -31,15 +33,17 @@ def _artifact_path(name: str) -> Path:
     source = _SOURCE_ARTIFACTS[name]
     if source.is_file():
         return source
-    raise FileNotFoundError(f"Guard Cloud Review v2 artifact is unavailable: {name}")
+    raise FileNotFoundError(f"Guard Cloud Review artifact is unavailable: {name}")
 
 
-CONTRACT_PATH: Final = _artifact_path("contract.json")
-FIXTURES_PATH: Final = _artifact_path("fixtures.json")
-PUBLIC_DOCUMENTATION_PATH: Final = _artifact_path("guard-cloud-review-v2.md")
+CONTRACT_PATH: Final = _artifact_path("v2/contract.json")
+COMMAND_RESULT_CONTRACT_PATH: Final = _artifact_path("v2/command-result.json")
+FIXTURES_PATH: Final = _artifact_path("v2/fixtures.json")
+PUBLIC_DOCUMENTATION_PATH: Final = _artifact_path("guard-cloud-review.md")
 _GENERATED_ARTIFACTS: Final = {
+    "commandResult": (COMMAND_RESULT_CONTRACT_PATH, "contracts/guard-cloud-review/v2/command-result.json"),
     "fixtures": (FIXTURES_PATH, "contracts/guard-cloud-review/v2/fixtures.json"),
-    "publicDocumentation": (PUBLIC_DOCUMENTATION_PATH, "docs/guard/contracts/guard-cloud-review-v2.md"),
+    "publicDocumentation": (PUBLIC_DOCUMENTATION_PATH, "docs/guard/contracts/guard-cloud-review.md"),
 }
 _MISSING: Final = object()
 _RFC3339_DATE_TIME: Final = re.compile(
@@ -99,12 +103,23 @@ def _contract_metadata(contract: Mapping[str, object]) -> Mapping[str, object]:
 
 
 def load_contract() -> dict[str, object]:
-    """Load and sanity-check the language-neutral v2 contract source."""
+    """Load and sanity-check the language-neutral Cloud Review contract source."""
 
     contract = _read_mapping(CONTRACT_PATH)
     metadata = _contract_metadata(contract)
     if metadata.get("contractVersion") != CONTRACT_VERSION:
         raise ValueError("unsupported Guard Cloud Review contract version")
+    Draft202012Validator.check_schema(contract)
+    return contract
+
+
+def load_exact_command_result_contract() -> dict[str, object]:
+    """Load the exact-command result contract used by the active transport."""
+
+    contract = _read_mapping(COMMAND_RESULT_CONTRACT_PATH)
+    metadata = _contract_metadata(contract)
+    if metadata.get("contractVersion") != COMMAND_RESULT_CONTRACT_VERSION:
+        raise ValueError("unsupported Guard Cloud Review command-result contract version")
     Draft202012Validator.check_schema(contract)
     return contract
 
@@ -327,10 +342,22 @@ def validate_semantic_rules(result: Mapping[str, object]) -> None:
 
 
 def validate_review_result(result: Mapping[str, object]) -> None:
-    """Validate the v2 result without submitting, queueing, or applying a decision."""
+    """Validate the versioned result without submitting, queueing, or applying a decision."""
 
     _validate_schema(result)
     validate_semantic_rules(result)
+
+
+def validate_exact_command_result(result: Mapping[str, object]) -> None:
+    """Validate a terminal exact-command result emitted to Cloud aggregation."""
+
+    try:
+        _schema_validator(load_exact_command_result_contract()).validate(dict(result))
+    except ValidationError as error:
+        raise ValueError(error.message) from error
+    for field in ("applicationUpdatedAt", "continuationUpdatedAt"):
+        if not _is_rfc3339_date_time(result.get(field)):
+            raise ValueError(f"{field} must be an RFC3339 date-time")
 
 
 def expected_artifact_digests() -> dict[str, str]:
@@ -396,11 +423,11 @@ def render_public_documentation() -> str:
     raw_invariants = cast(list[object], invariants)
     raw_semantic_rules = cast(list[object], semantic_rules)
     lines = [
-        "# Guard Cloud Review v2 Contract",
+        "# Guard Cloud Review Contract",
         "",
         "Generated from `contracts/guard-cloud-review/v2/contract.json`; do not edit this file by hand.",
         "",
-        "This contract freezes the v2 review vocabulary only. It does not change v1 Local Guard runtime behavior.",
+        ("This contract defines the active protocol 2 review boundary and its Local Guard runtime behavior."),
         "",
         "## Glossary",
         "",

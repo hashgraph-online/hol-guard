@@ -16,7 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from base64 import urlsafe_b64decode, urlsafe_b64encode
+from base64 import urlsafe_b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
@@ -50,6 +50,8 @@ from ..managed_controls_policy_bundle import parsed_managed_controls_from_valida
 from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
 from ..models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
+from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
+from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
 from ..package_firewall_defaults import extract_cloud_user_profile
 from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
@@ -86,6 +88,7 @@ from ..policy_bundle_v2 import (
 from ..policy_document import GuardPolicyDocument
 from ..policy_document_io import PolicyCompilationError, compile_policy_document
 from ..redaction import redact_sensitive_text
+from ..review_contracts import validated_review_verification_keys_from_sync
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
@@ -2716,7 +2719,7 @@ def sync_receipts(
     sync_url = _normalized_receipts_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     local_guard_online_at = _now()
     redaction_level = _resolve_cloud_receipt_redaction_level(store)
-    _ensure_live_request_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
+    _ensure_cloud_review_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
     _ensure_relaxed_receipt_redaction_resync(store, level=redaction_level, synced_at=local_guard_online_at)
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
@@ -2738,6 +2741,7 @@ def sync_receipts(
     policy_bundle_field_provided = False
     policy_bundle_field_malformed = False
     alert_preferences_payload: dict[str, object] | None = None
+    review_verification_keys_payload: object | None = None
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
     sync_context = _receipt_sync_context(
@@ -2865,6 +2869,8 @@ def sync_receipts(
         alert_preferences = payload.get("alertPreferences")
         if isinstance(alert_preferences, dict) and (alert_preferences or alert_preferences_payload is None):
             alert_preferences_payload = alert_preferences
+        if "reviewVerificationKeys" in payload:
+            review_verification_keys_payload = payload.get("reviewVerificationKeys")
     now = _sync_timestamp(payload)
     aibom_context: dict[str, object] = {}
     if home_dir is not None:
@@ -2899,6 +2905,19 @@ def sync_receipts(
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
     cloud_workspace_id = store.get_cloud_workspace_id()
+    if review_verification_keys_payload is not None:
+        if cloud_workspace_id is None:
+            raise RuntimeError("review_verification_keys_workspace_missing")
+        review_verification_keys = validated_review_verification_keys_from_sync(
+            review_verification_keys_payload,
+            store=store,
+            workspace_id=cloud_workspace_id,
+        )
+        store.set_sync_payload(
+            "guard_review_verification_keyring",
+            [key.to_dict() for key in review_verification_keys],
+            now,
+        )
     canonical_enforcement = _canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=cloud_workspace_id,
@@ -4402,12 +4421,12 @@ def repair_guard_cloud_connect_storage(store: GuardStore) -> dict[str, object]:
     repaired_storage = store.repair_oauth_local_credential_storage_from_primary()
     credentials = store.get_oauth_local_credentials(allow_primary=True)
     repaired_oauth_binding = False
-    claimed_live_requests = 0
+    rebound_review_events = 0
     if credentials is not None:
         repaired_oauth_binding = _persist_recovered_oauth_binding(store, credentials)
-        binding = store.get_live_request_oauth_binding()
+        binding = store.get_review_event_oauth_binding()
         if binding is not None:
-            claimed_live_requests = store.claim_unowned_live_request_outbox(
+            rebound_review_events = store.refresh_review_event_outbox_binding_for_identity(
                 workspace_id=binding["workspace_id"],
                 oauth_subject_hash=binding["oauth_subject_hash"],
                 machine_id=binding["machine_id"],
@@ -4417,7 +4436,7 @@ def repair_guard_cloud_connect_storage(store: GuardStore) -> dict[str, object]:
     return {
         "cleared_stale_sign_in": False,
         "existing_sign_in_valid": existing_sign_in_valid,
-        "claimed_live_requests": claimed_live_requests,
+        "rebound_review_events": rebound_review_events,
         "repaired_oauth_binding": repaired_oauth_binding,
         "repaired_storage": repaired_storage,
     }
@@ -4550,52 +4569,11 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
 
 
 _OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
-
-
-def _decode_oauth_access_token_claims(access_token: str) -> dict[str, object]:
-    parts = access_token.split(".")
-    if len(parts) != 3:
-        return {}
-    try:
-        padding = "=" * (-len(parts[1]) % 4)
-        payload = json.loads(urlsafe_b64decode(parts[1] + padding).decode("utf-8"))
-    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _nested_oauth_claim(claims: dict[str, object], section: str, key: str) -> str | None:
-    nested = claims.get(section)
-    if not isinstance(nested, dict):
-        return None
-    return _optional_string(nested.get(key))
-
-
-def _oauth_binding_metadata_from_access_token(credentials: dict[str, object]) -> dict[str, str]:
-    access_token = _optional_string(credentials.get("access_token"))
-    issuer = _optional_string(credentials.get("issuer"))
-    if access_token is None or issuer is None:
-        return {}
-    claims = _decode_oauth_access_token_claims(access_token)
-    token_issuer = _optional_string(claims.get("iss"))
-    if token_issuer is not None and token_issuer.rstrip("/") != issuer.rstrip("/"):
-        return {}
-    claimed = {
-        "grant_id": _nested_oauth_claim(claims, "grant", "grantId"),
-        "machine_id": _nested_oauth_claim(claims, "machine", "machineId"),
-        "workspace_id": _nested_oauth_claim(claims, "workspace", "workspaceId"),
-    }
-    if not all(claimed.values()):
-        return {}
-    for key, claimed_value in claimed.items():
-        existing_value = _optional_string(credentials.get(key))
-        if existing_value is not None and existing_value != claimed_value:
-            return {}
-    return {key: str(value) for key, value in claimed.items()}
+_oauth_binding_metadata_from_access_token = oauth_binding_from_credentials
 
 
 def _persist_recovered_oauth_binding(store: GuardStore, credentials: dict[str, object]) -> bool:
-    recovered = _oauth_binding_metadata_from_access_token(credentials)
+    recovered = oauth_binding_from_credentials(credentials)
     if not recovered or all(_optional_string(credentials.get(key)) is not None for key in recovered):
         return False
     refresh_token = _optional_string(credentials.get("refresh_token"))
@@ -4692,8 +4670,14 @@ def _persist_rotated_oauth_refresh_token(
             credentials_supply_chain_firewall if isinstance(credentials_supply_chain_firewall, bool) else None
         )
     effective_access_token = access_token or _optional_string(credentials.get("access_token"))
-    recovered_binding = _oauth_binding_metadata_from_access_token(
-        {**credentials, "access_token": effective_access_token}
+    if access_token is not None:
+        recovered_binding = oauth_binding_metadata(access_token, issuer=issuer)
+    else:
+        recovered_binding = oauth_binding_from_credentials({**credentials, "access_token": effective_access_token})
+    effective_binding = oauth_refresh_binding(
+        credentials,
+        recovered_binding,
+        refreshed=access_token is not None,
     )
     store.set_oauth_local_credentials(
         issuer=issuer,
@@ -4702,8 +4686,9 @@ def _persist_rotated_oauth_refresh_token(
         dpop_private_key_pem=dpop_private_key_pem,
         dpop_public_jwk={str(key): str(value) for key, value in dpop_public_jwk.items()},
         dpop_public_jwk_thumbprint=dpop_public_jwk_thumbprint,
-        grant_id=_optional_string(credentials.get("grant_id")) or recovered_binding.get("grant_id"),
-        machine_id=_optional_string(credentials.get("machine_id")) or recovered_binding.get("machine_id"),
+        grant_id=effective_binding["grant_id"],
+        machine_id=effective_binding["machine_id"],
+        device_id=effective_binding["device_id"],
         supply_chain_entitlement_expires_at=(
             _optional_string(package_firewall_entitlement.get("supply_chain_entitlement_expires_at"))
             if isinstance(package_firewall_entitlement, dict)
@@ -4715,7 +4700,7 @@ def _persist_rotated_oauth_refresh_token(
             if isinstance(package_firewall_entitlement, dict)
             else _optional_string(credentials.get("supply_chain_plan_id"))
         ),
-        workspace_id=_optional_string(credentials.get("workspace_id")) or recovered_binding.get("workspace_id"),
+        workspace_id=effective_binding["workspace_id"],
         cloud_user_profile=cloud_user_profile,
         runtime_id=_optional_string(credentials.get("runtime_id")),
         runtime_label=_optional_string(credentials.get("runtime_label")),
@@ -5911,7 +5896,7 @@ _RECEIPT_REDACTION_LEVEL_RANK: dict[str, int] = {
     "none": 2,
 }
 _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER = "cloud_receipt_redaction_relaxed_resync_v1"
-_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER = "cloud_live_request_privacy_projection_v1"
+_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER = "cloud_review_privacy_projection_v2"
 _RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER = "cloud_receipt_command_detail_backfill_v2"
 _RECEIPT_COMMAND_DETAIL_BACKFILL_FLAG = "__command_detail_backfill"
 
@@ -5949,7 +5934,7 @@ def _persist_cloud_receipt_redaction_level(store: GuardStore, *, level: str, syn
         synced_at,
     )
     if level != previous_level:
-        _requeue_live_request_privacy_projection(store, level=level, changed_at=synced_at)
+        _requeue_cloud_review_privacy_projection(store, level=level, changed_at=synced_at)
     if _receipt_redaction_level_rank(level) > _receipt_redaction_level_rank("full"):
         store.set_sync_payload(
             _RELAXED_RECEIPT_REDACTION_RESYNC_MARKER,
@@ -5969,32 +5954,32 @@ def _reset_cloud_receipt_redaction_authority(store: GuardStore, *, synced_at: st
         synced_at,
     )
     if previous_level is not None and previous_level != local_level:
-        _requeue_live_request_privacy_projection(store, level=local_level, changed_at=synced_at)
+        _requeue_cloud_review_privacy_projection(store, level=local_level, changed_at=synced_at)
     store.delete_sync_payload(_RELAXED_RECEIPT_REDACTION_RESYNC_MARKER)
     store.delete_sync_payload(_RECEIPT_COMMAND_DETAIL_BACKFILL_MARKER)
 
 
-def _ensure_live_request_privacy_projection(
+def _ensure_cloud_review_privacy_projection(
     store: GuardStore,
     *,
     level: str,
     synced_at: str,
 ) -> None:
-    marker = store.get_sync_payload(_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER)
+    marker = store.get_sync_payload(_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER)
     if isinstance(marker, dict) and marker.get("level") == level:
         return
-    _requeue_live_request_privacy_projection(store, level=level, changed_at=synced_at)
+    _requeue_cloud_review_privacy_projection(store, level=level, changed_at=synced_at)
 
 
-def _requeue_live_request_privacy_projection(
+def _requeue_cloud_review_privacy_projection(
     store: GuardStore,
     *,
     level: str,
     changed_at: str,
 ) -> int:
-    return store.requeue_pending_live_requests_with_marker(
+    return store.requeue_pending_review_events_with_marker(
         changed_at=changed_at,
-        marker_key=_LIVE_REQUEST_PRIVACY_PROJECTION_MARKER,
+        marker_key=_CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER,
         marker_payload={"level": level, "updated_at": changed_at},
     )
 

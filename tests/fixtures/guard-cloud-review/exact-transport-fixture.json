@@ -1,0 +1,137 @@
+{
+  "authorityModel": {
+    "executionAuthority": "local-signed-revocable-exact-capability-plus-signed-remote-approval",
+    "mutatesPersistentPolicy": false,
+    "queueEligibility": "authenticated-dpop-capability-advertisement-and-exact-request-claim",
+    "requiresGenericCommandCapability": false
+  },
+  "contractVersion": "guard-cloud-review-exact-transport-v2",
+  "leaseRequest": {
+    "capabilities": {
+      "operations": [
+        "guard.review.resolveExact"
+      ]
+    },
+    "daemonVersion": "3.0.0a0",
+    "deviceId": "dpop-thumbprint-fixture",
+    "maxJobs": 1,
+    "protocolVersion": 2,
+    "waitMs": 25000,
+    "workspaceId": "00000000-0000-4000-8000-000000000001"
+  },
+  "leaseResponse": {
+    "generatedAt": "2026-08-24T00:02:30+00:00",
+    "protocolVersion": 2,
+    "item": {
+      "deviceId": "dpop-thumbprint-fixture",
+      "expiresAt": "2026-08-24T00:09:00+00:00",
+      "id": "00000000-0000-4000-8000-000000000101",
+      "idempotencyKey": "fixture-job-idempotency",
+      "leaseExpiresAt": "2026-08-24T00:04:00+00:00",
+      "leaseId": "00000000-0000-4000-8000-000000000102",
+      "nonce": "fixture-job-nonce",
+      "operation": "guard.review.resolveExact",
+      "protocolVersion": 2,
+      "payload": {
+        "harness": "codex",
+        "remoteApproval": {
+          "actionEnvelopeHash": "fe0ea6187d0d3efc5ee9a0eeb1e69f99e5eeb80be28cc9786d06ba6c93aa09e3",
+          "approvalId": "fixture-request",
+          "capabilityCategory": "shell-command",
+          "capabilityId": "f4985a65ee4a2ce072d4b16fa00c4816ca0c8314fd5e8032926fe09f82e3c17d",
+          "contractVersion": "guard.remote-approval.v1",
+          "decision": "allow_once",
+          "decisionId": "fixture-receipt",
+          "deviceId": "dpop-thumbprint-fixture",
+          "expiresAt": "2026-08-24T00:08:00+00:00",
+          "grantId": "00000000-0000-4000-8000-000000000002",
+          "harnessId": "codex",
+          "issuedAt": "2026-08-24T00:02:00+00:00",
+          "keyId": "guard-review-exact-transport-fixture",
+          "localRequestId": "fixture-request",
+          "machineId": "machine-device-fixture",
+          "machineInstallationId": "machine-installation-fixture",
+          "nonce": "fixture-request:fixture-receipt",
+          "policyVersion": "request:2026-08-24T00:00:00+00:00",
+          "projectIdentity": null,
+          "receiptId": "fixture-receipt",
+          "reviewerRole": "owner",
+          "reviewerUserId": "fixture-owner",
+          "riskCategory": "medium",
+          "runtimeGrantId": "00000000-0000-4000-8000-000000000002",
+          "runtimeId": "hol-guard",
+          "scope": "artifact",
+          "signatureAlgorithm": "rsa-pss-sha256",
+          "sourceClaimHash": "e5e261c5ee2c01814c946b0f85574b71ba6fcff4ffcae14fed9bbe674d7dca14",
+          "stepUpChallengeId": null,
+          "verificationKeys": [
+            {
+              "fingerprintSha256": "39675b00d3e967c72404885fb271b74c1b16ced3241dd7f282bee447f0f84bf6",
+              "keyId": "guard-review-exact-transport-fixture",
+              "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAycMiacTLSb/ArvqP2qeX\nseCyqCs1He+XCYkaP0Gkak2lAFmRleBdkyEAUsUHSV8m7rORtQm0c3SbgfpCgSPH\n/stVRsGpBdET0ytwFpMNHQ3rKvVqbjMcCZyynHfyqP7IGcJ71mSke3L+kazxWFpm\ndyxwQ8VuN6n31ATjEyVpdJlI6J8GcJYjiw/8vVTw3oYh8OC2of89U/E0KaORbeNd\n0ELsHk789L8asr5Q3z5EUj2VrZTMnoQjS7TE65ONHWnXBhwASHLx4yWOLKb/m/5j\nBruFXWGrpzWcywYW4Q02wgUEsq5S+sbqQUVDt+4tI9k2tdPSSK2QmToisjkbz4Vc\nYwIDAQAB\n-----END PUBLIC KEY-----\n",
+              "purpose": "remote_approval",
+              "state": "active",
+              "validFrom": "2026-01-01T00:00:00+00:00",
+              "validUntil": "2099-01-01T00:00:00+00:00",
+              "workspaceId": "00000000-0000-4000-8000-000000000001"
+            }
+          ],
+          "workspaceId": "00000000-0000-4000-8000-000000000001",
+          "payloadHash": "15409a745faf33d939e1f97d9e0b4c0eb18d70d1bfd706b12040d8ba099d65f2",
+          "signature": "GblaZ6dvt7sA9H6KdrHtpAhje4CNfCChtav7Oh3zBtQocSWRy8DtFU9P7R/ZqApzJ7HG3uyUjCChoTfgTSodvj/vw67TqehaB/Mtk5vSy2ABMNnFfJsV5wlO6OhefKDVPUgOuZYc4WC7O00g8Thv/kuL0GKE7bg5Jd4oWdQ4zwGUX+u4zuOCXg4YvI23FoizVKyNw89bm6pIKWx4lMfv36kO1H4XD0908Epe9ZfPEy8RsUvMB9r/cHJdSP8CPwq2GbeTJUGlbs+evDsHkuha8I+Ece2W6/VZJPq2UNxEp7IjF17trVtl+gg5KaV8WRgmD4fzypJ3HvNH30hCIznC+Q=="
+        }
+      },
+      "serverResolvedBinding": {
+        "actionDigest": "fe0ea6187d0d3efc5ee9a0eeb1e69f99e5eeb80be28cc9786d06ba6c93aa09e3",
+        "approvalId": "fixture-request",
+        "claimDigest": "e5e261c5ee2c01814c946b0f85574b71ba6fcff4ffcae14fed9bbe674d7dca14",
+        "capabilityId": "f4985a65ee4a2ce072d4b16fa00c4816ca0c8314fd5e8032926fe09f82e3c17d",
+        "grantId": "00000000-0000-4000-8000-000000000002",
+        "localMachineInstallationId": "machine-installation-fixture",
+        "localRequestId": "fixture-request",
+        "localRequestVersion": "request:2026-08-24T00:00:00+00:00",
+        "machineId": "machine-device-fixture",
+        "machineInstallationId": "machine-installation-fixture",
+        "policyAction": "review",
+        "reviewRequestId": "00000000-0000-4000-8000-000000000103",
+        "runtimeGrantId": "00000000-0000-4000-8000-000000000002",
+        "runtimeId": "hol-guard",
+        "scope": "one-time"
+      },
+      "workspaceId": "00000000-0000-4000-8000-000000000001"
+    }
+  },
+  "queueEligibility": {
+    "actionEnvelopeHash": "fe0ea6187d0d3efc5ee9a0eeb1e69f99e5eeb80be28cc9786d06ba6c93aa09e3",
+    "capabilityId": "f4985a65ee4a2ce072d4b16fa00c4816ca0c8314fd5e8032926fe09f82e3c17d",
+    "deviceId": "dpop-thumbprint-fixture",
+    "localRequestId": "fixture-request",
+    "machineId": "machine-device-fixture",
+    "machineInstallationId": "machine-installation-fixture",
+    "operation": "guard.review.resolveExact",
+    "requestClaimHash": "e5e261c5ee2c01814c946b0f85574b71ba6fcff4ffcae14fed9bbe674d7dca14",
+    "requestExpiresAt": "2026-08-24T00:10:00+00:00",
+    "requestVersion": "request:2026-08-24T00:00:00+00:00",
+    "runtimeId": "hol-guard",
+    "workspaceId": "00000000-0000-4000-8000-000000000001"
+  },
+  "resultRequest": {
+    "idempotencyKey": "00000000-0000-4000-8000-000000000101:00000000-0000-4000-8000-000000000102:succeeded",
+    "leaseId": "00000000-0000-4000-8000-000000000102",
+    "protocolVersion": 2,
+    "result": {
+      "applicationReason": null,
+      "applicationStatus": "applied",
+      "applicationUpdatedAt": "2026-08-24T00:03:00+00:00",
+      "continuationReason": null,
+      "continuationStatus": "resumed",
+      "continuationUpdatedAt": "2026-08-24T00:03:00+00:00",
+      "contractVersion": "guard-cloud-review-command-result-v2",
+      "correlationId": "00000000-0000-4000-8000-000000000101",
+      "localRequestId": "fixture-request",
+      "protocolVersion": 2,
+      "receiptId": "fixture-receipt"
+    },
+    "status": "succeeded"
+  }
+}

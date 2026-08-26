@@ -16447,7 +16447,7 @@ def test_guard_hook_allows_codex_planning_markdown_write(
     assert "approval_requests" not in output
 
 
-def test_guard_hook_codex_user_prompt_submit_browser_approval_resumes_prompt(
+def test_guard_hook_codex_user_prompt_submit_queues_retryable_browser_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -16467,24 +16467,6 @@ def test_guard_hook_codex_user_prompt_submit_browser_approval_resumes_prompt(
         "source_scope": "project",
     }
 
-    def approve_pending() -> None:
-        for _ in range(40):
-            pending = store.list_approval_requests(limit=10)
-            if pending:
-                apply_approval_resolution(
-                    store=store,
-                    request_id=str(pending[0]["request_id"]),
-                    action="allow",
-                    scope="artifact",
-                    workspace=None,
-                    reason="approved in browser",
-                )
-                return
-            threading.Event().wait(0.05)
-
-    worker = threading.Thread(target=approve_pending, daemon=True)
-    worker.start()
-
     rc, output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -16496,8 +16478,12 @@ def test_guard_hook_codex_user_prompt_submit_browser_approval_resumes_prompt(
 
     assert rc == 0
     payload = json.loads(output)
+    assert payload["decision"] == "block"
+    assert payload["continue"] is False
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert store.list_approval_requests(limit=10) == []
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
 
 
 def test_guard_hook_codex_user_prompt_saved_artifact_allow_does_not_lower_reapproval(
@@ -18849,7 +18835,7 @@ def test_guard_hook_codex_post_tool_use_blocks_focused_pytest_medium_secret_outp
     assert "/requests/" not in payload["stopReason"]
 
 
-def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
+def test_guard_hook_codex_post_tool_use_queues_retryable_browser_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -18872,23 +18858,6 @@ def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
     store = GuardStore(home_dir)
     _install_fake_guard_surface_daemon(monkeypatch, store)
 
-    def approve_pending() -> None:
-        for _ in range(40):
-            pending = store.list_approval_requests(limit=10)
-            if pending:
-                apply_approval_resolution(
-                    store=store,
-                    request_id=str(pending[0]["request_id"]),
-                    action="allow",
-                    scope="artifact",
-                    workspace=None,
-                    reason="approved in browser",
-                )
-                return
-            threading.Event().wait(0.05)
-
-    worker = threading.Thread(target=approve_pending, daemon=True)
-    worker.start()
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
 
     rc = main(
@@ -18907,17 +18876,16 @@ def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
 
     assert rc == 0
     payload = json.loads(captured.out)
-    assert "hookSpecificOutput" in payload, (
-        payload,
-        store.list_receipts(limit=20),
-        store.list_approval_requests(limit=20),
-    )
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+    assert payload["decision"] == "block"
+    assert payload["continue"] is False
+    assert "hookSpecificOutput" not in payload
     assert captured.err == ""
-    assert store.list_approval_requests(limit=10) == []
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert f"/requests/{pending[0]['request_id']}" in payload["reason"]
 
 
-def test_guard_hook_codex_browser_allow_rechecks_policy_changed_during_wait(
+def test_guard_hook_codex_direct_denial_does_not_inline_complete_browser_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -18977,8 +18945,10 @@ def test_guard_hook_codex_browser_allow_rechecks_policy_changed_during_wait(
     )
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
+    worker.join(timeout=3)
 
     assert rc == 0
+    assert not worker.is_alive()
     assert payload["decision"] == "block"
     assert payload["continue"] is False
     tool_receipts = [

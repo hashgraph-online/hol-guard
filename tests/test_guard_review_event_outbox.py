@@ -10,7 +10,6 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
 from codex_plugin_scanner.guard.runtime.review_event_delivery import decode_stored_review_event
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_live_request_outbox import live_request_oauth_subject_hash
 from codex_plugin_scanner.guard.store_review_event_outbox_schema import (
     REVIEW_EVENT_SCHEMA_VERSION,
     REVIEW_REQUEST_SNAPSHOT_COLUMNS,
@@ -69,7 +68,7 @@ def _connect(
         {"grant_id": grant_id, "workspace_id": workspace_id, "machine_id": machine_id},
         _NOW,
     )
-    binding = store.get_live_request_oauth_binding()
+    binding = store.get_review_event_oauth_binding()
     assert binding is not None
     return {
         "oauth_subject_hash": binding["oauth_subject_hash"],
@@ -102,8 +101,8 @@ def test_identity_incomplete_event_is_quarantined_with_valid_hash(tmp_path) -> N
         machine_id=event["machine_id"],
         machine_installation_id=event["machine_installation_id"],
     )
-    assert store.list_ready_live_request_outbox(now=_NOW, limit=10) == []
-    assert store.live_request_outbox_status(now=_NOW)["quarantined_depth"] == 1
+    assert store.list_ready_review_events(now=_NOW, limit=10) == []
+    assert store.review_event_outbox_status(now=_NOW)["quarantined_depth"] == 1
 
 
 def test_later_credential_availability_does_not_silently_adopt_quarantine(tmp_path) -> None:
@@ -113,7 +112,7 @@ def test_later_credential_availability_does_not_silently_adopt_quarantine(tmp_pa
 
     store.add_approval_request(_request("request-1", summary="refreshed"), _LATER)
 
-    assert store.list_ready_live_request_outbox(now=_LATER, limit=10, **binding) == []
+    assert store.list_ready_review_events(now=_LATER, limit=10, **binding) == []
     events = _all_events(store)
     assert len(events) == 2
     assert all(row["binding_status"] == "quarantined" for row in events)
@@ -132,7 +131,7 @@ def test_create_refresh_and_resolution_are_append_only_and_versioned(tmp_path) -
         resolved_at=_LATER,
     )
 
-    rows = store.list_ready_live_request_outbox(now=_LATER, limit=10, **binding)
+    rows = store.list_ready_review_events(now=_LATER, limit=10, **binding)
     assert [row["event_type"] for row in rows] == [
         "review.request.created",
         "review.request.refreshed",
@@ -152,7 +151,7 @@ def test_global_stream_sequence_is_distinct_from_per_request_sequence(tmp_path) 
     store.add_approval_request(_request("request-b"), _NOW)
     store.add_approval_request(_request("request-a", summary="refreshed"), _LATER)
 
-    rows = store.list_ready_live_request_outbox(now=_LATER, limit=10, **binding)
+    rows = store.list_ready_review_events(now=_LATER, limit=10, **binding)
     assert [row["stream_sequence"] for row in rows] == [1, 2, 3]
     assert [(row["local_request_id"], row["request_sequence"]) for row in rows] == [
         ("request-a", 1),
@@ -167,10 +166,10 @@ def test_acknowledgement_compacts_only_contiguous_binding_prefix(tmp_path) -> No
     store.add_approval_request(_request("request-a"), _NOW)
     store.add_approval_request(_request("request-b"), _NOW)
     store.add_approval_request(_request("request-c"), _NOW)
-    rows = store.list_ready_live_request_outbox(now=_NOW, limit=10, **binding)
+    rows = store.list_ready_review_events(now=_NOW, limit=10, **binding)
     first, quarantined, third = (as_int(row["sequence"]) for row in rows)
     assert (
-        store.quarantine_live_request_outbox_event(
+        store.quarantine_review_event(
             quarantined,
             reason="payload_invalid",
             error="invalid payload",
@@ -179,9 +178,9 @@ def test_acknowledgement_compacts_only_contiguous_binding_prefix(tmp_path) -> No
         == 1
     )
 
-    assert store.acknowledge_live_request_outbox([third], **binding) == 0
-    assert len(store.list_ready_live_request_outbox(now=_NOW, limit=10, **binding)) == 1
-    assert store.acknowledge_live_request_outbox([first], **binding) == 2
+    assert store.acknowledge_review_events([third], **binding) == 0
+    assert len(store.list_ready_review_events(now=_NOW, limit=10, **binding)) == 1
+    assert store.acknowledge_review_events([first], **binding) == 2
 
     with store._connect() as connection:
         cursor = connection.execute("select acknowledged_stream_sequence from guard_review_outbox_cursors").fetchone()
@@ -241,8 +240,8 @@ def test_requeue_appends_snapshot_without_replacing_history(tmp_path) -> None:
     binding = _connect(store)
     store.add_approval_request(_request("request-1"), _NOW)
 
-    assert store.requeue_pending_live_requests(changed_at=_LATER) == 1
-    rows = store.list_ready_live_request_outbox(now=_LATER, limit=10, **binding)
+    assert store.requeue_pending_review_events(changed_at=_LATER) == 1
+    rows = store.list_ready_review_events(now=_LATER, limit=10, **binding)
     assert [row["event_type"] for row in rows] == [
         "review.request.created",
         "review.request.snapshot_requeued",
@@ -258,7 +257,7 @@ def test_requeue_appends_snapshot_without_replacing_history(tmp_path) -> None:
     reconnect_store = GuardStore(tmp_path / "reconnect-guard")
     reconnect_store.add_approval_request(_request("request-reconnect"), _NOW)
     reconnect_binding = _connect(reconnect_store)
-    assert reconnect_store.requeue_pending_live_requests(changed_at=_LATER) == 1
+    assert reconnect_store.requeue_pending_review_events(changed_at=_LATER) == 1
     reconnect_store.resolve_approval_request(
         "request-reconnect",
         resolution_action="approve",
@@ -266,7 +265,7 @@ def test_requeue_appends_snapshot_without_replacing_history(tmp_path) -> None:
         reason=None,
         resolved_at=_LATER,
     )
-    reconnect_rows = reconnect_store.list_ready_live_request_outbox(now=_LATER, limit=10, **reconnect_binding)
+    reconnect_rows = reconnect_store.list_ready_review_events(now=_LATER, limit=10, **reconnect_binding)
     assert [row["event_type"] for row in reconnect_rows] == [
         "review.request.created",
         "review.request.snapshot_requeued",
@@ -294,7 +293,7 @@ def test_requeue_never_retargets_request_after_identity_change(tmp_path) -> None
     store.add_approval_request(_request("request-1"), _NOW)
     new_binding = _connect(store, grant_id="grant-new", workspace_id="workspace-new")
 
-    assert store.requeue_pending_live_requests(changed_at=_LATER) == 1
+    assert store.requeue_pending_review_events(changed_at=_LATER) == 1
 
     rows = _all_events(store)
     assert len(rows) == 2
@@ -302,7 +301,7 @@ def test_requeue_never_retargets_request_after_identity_change(tmp_path) -> None
     assert rows[-1]["workspace_id"] == old_binding["workspace_id"]
     assert rows[-1]["binding_status"] == "quarantined"
     assert rows[-1]["quarantine_reason"] == "identity_changed_requires_confirmation"
-    assert store.list_ready_live_request_outbox(now=_LATER, limit=10, **new_binding) == []
+    assert store.list_ready_review_events(now=_LATER, limit=10, **new_binding) == []
 
 
 def test_same_subject_refresh_updates_machine_binding_without_confirmation(tmp_path) -> None:
@@ -311,9 +310,9 @@ def test_same_subject_refresh_updates_machine_binding_without_confirmation(tmp_p
     store.add_approval_request(_request("request-1"), _NOW)
     new_binding = _connect(store, machine_id="machine-new")
 
-    assert store.refresh_live_request_outbox_binding() == 1
-    assert store.list_ready_live_request_outbox(now=_NOW, limit=10, **old_binding) == []
-    rows = store.list_ready_live_request_outbox(now=_NOW, limit=10, **new_binding)
+    assert store.refresh_review_event_outbox_binding() == 1
+    assert store.list_ready_review_events(now=_NOW, limit=10, **old_binding) == []
+    rows = store.list_ready_review_events(now=_NOW, limit=10, **new_binding)
     assert len(rows) == 1
     assert decode_stored_review_event(rows[0]).request_sequence == 1
 
@@ -324,27 +323,27 @@ def test_cross_subject_or_workspace_change_requires_explicit_reassignment(tmp_pa
     store.add_approval_request(_request("request-1"), _NOW)
     new_binding = _connect(store, grant_id="grant-new", workspace_id="workspace-new")
 
-    assert store.claim_unowned_live_request_outbox(**new_binding) == 1
-    assert store.list_ready_live_request_outbox(now=_NOW, limit=10, **old_binding) == []
-    assert store.list_ready_live_request_outbox(now=_NOW, limit=10, **new_binding) == []
+    assert store.refresh_review_event_outbox_binding_for_identity(**new_binding) == 1
+    assert store.list_ready_review_events(now=_NOW, limit=10, **old_binding) == []
+    assert store.list_ready_review_events(now=_NOW, limit=10, **new_binding) == []
     with pytest.raises(ValueError, match="approved source"):
-        store.reassign_quarantined_live_request_outbox(
+        store.reassign_quarantined_review_events(
             approved_source="other",
             approved_workspace_id="workspace-new",
         )
     with pytest.raises(ValueError, match="approved workspace"):
-        store.reassign_quarantined_live_request_outbox(
+        store.reassign_quarantined_review_events(
             approved_source="default",
             approved_workspace_id="workspace-old",
         )
     assert (
-        store.reassign_quarantined_live_request_outbox(
+        store.reassign_quarantined_review_events(
             approved_source="default",
             approved_workspace_id="workspace-new",
         )
         == 1
     )
-    reassigned = store.list_ready_live_request_outbox(now=_NOW, limit=10, **new_binding)
+    reassigned = store.list_ready_review_events(now=_NOW, limit=10, **new_binding)
     assert len(reassigned) == 1
     assert decode_stored_review_event(reassigned[0]).request_sequence == 1
 
@@ -361,30 +360,22 @@ def test_retry_metadata_updates_event_without_replacing_it(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard")
     binding = _connect(store)
     store.add_approval_request(_request("request-1"), _NOW)
-    row = store.list_ready_live_request_outbox(now=_NOW, limit=1, **binding)[0]
+    row = store.list_ready_review_events(now=_NOW, limit=1, **binding)[0]
 
-    assert store.retry_live_request_outbox([as_int(row["sequence"])], now=_NOW, error="offline", **binding) == 1
-    assert store.list_ready_live_request_outbox(now=_NOW, limit=1, **binding) == []
-    retried = store.list_ready_live_request_outbox(now="9999-01-01T00:00:00+00:00", limit=1, **binding)
+    assert store.retry_review_events([as_int(row["sequence"])], now=_NOW, error="offline", **binding) == 1
+    assert store.list_ready_review_events(now=_NOW, limit=1, **binding) == []
+    retried = store.list_ready_review_events(now="9999-01-01T00:00:00+00:00", limit=1, **binding)
     assert retried[0]["event_id"] == row["event_id"]
     assert retried[0]["attempt_count"] == 1
 
 
-def test_migration_quarantines_legacy_row_without_request_snapshot() -> None:
+def _retired_outbox_connection() -> sqlite3.Connection:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
     connection.execute(
         "create table sync_state (state_key text primary key, payload_json text not null, updated_at text not null)"
     )
-    connection.execute(
-        """
-        create table approval_requests (
-          request_id text primary key, created_at text not null, last_seen_at text,
-          resolved_at text, status text not null, resolution_action text,
-          resolution_scope text, reason text, oauth_source text
-        )
-        """
-    )
+    connection.execute("create table approval_requests (request_id text primary key)")
     connection.execute(
         """
         create table guard_live_request_outbox (
@@ -395,70 +386,64 @@ def test_migration_quarantines_legacy_row_without_request_snapshot() -> None:
         )
         """
     )
-    subject = live_request_oauth_subject_hash("grant-1")
-    connection.execute(
-        """
-        insert into guard_live_request_outbox (
-          local_request_id, changed_at, oauth_source, oauth_subject_hash,
-          workspace_id, machine_id, machine_installation_id
-        ) values ('request-1', ?, 'default', ?, 'workspace-1', 'machine-1', 'install-1')
-        """,
-        (_NOW, subject),
-    )
+    return connection
+
+
+def test_retired_outbox_rows_migrate_once_without_data_loss() -> None:
+    connection = _retired_outbox_connection()
+    for changed_at in (_NOW, _LATER):
+        connection.execute(
+            """
+            insert into guard_live_request_outbox (
+              local_request_id, changed_at, oauth_source, oauth_subject_hash,
+              workspace_id, machine_id, machine_installation_id
+            ) values ('request-1', ?, 'default', 'subject-1',
+                      'workspace-1', 'machine-1', 'installation-1')
+            """,
+            (changed_at,),
+        )
 
     ensure_review_event_outbox_schema(connection, _LATER)
+    connection.execute("delete from sync_state where state_key = 'guard_review_outbox_events_migrated'")
+    ensure_review_event_outbox_schema(connection, _LATER)
 
-    row = connection.execute("select * from guard_review_outbox_events").fetchone()
-    assert row is not None
-    assert row["event_type"] == "review.request.snapshot_migrated"
-    assert row["request_sequence"] == 1
-    assert row["binding_status"] == "quarantined"
-    assert row["quarantine_reason"] == "legacy_request_snapshot_missing"
-    assert row["payload_hash"] == review_event_payload_digest(
-        str(row["payload_json"]),
-        oauth_source=row["oauth_source"],
-        oauth_subject_hash=row["oauth_subject_hash"],
-        workspace_id=row["workspace_id"],
-        machine_id=row["machine_id"],
-        machine_installation_id=row["machine_installation_id"],
-    )
-    old_triggers = connection.execute(
-        "select name from sqlite_master where type = 'trigger' and name like 'guard_live_request_outbox_%'"
-    ).fetchall()
-    assert old_triggers == []
-
-
-def test_migration_prioritizes_missing_source_snapshot_over_incomplete_identity() -> None:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    connection.execute(
-        "create table sync_state (state_key text primary key, payload_json text not null, updated_at text not null)"
-    )
-    connection.execute(
-        """
-        create table approval_requests (
-          request_id text primary key, created_at text not null, last_seen_at text,
-          resolved_at text, status text not null, resolution_action text,
-          resolution_scope text, reason text, oauth_source text
+    rows = connection.execute("select * from guard_review_outbox_events order by request_sequence").fetchall()
+    assert [(row["local_request_id"], row["request_sequence"]) for row in rows] == [
+        ("request-1", 1),
+        ("request-1", 2),
+    ]
+    assert all(row["quarantine_reason"] == "retired_request_snapshot_missing" for row in rows)
+    assert all(
+        row["payload_hash"]
+        == review_event_payload_digest(
+            str(row["payload_json"]),
+            oauth_source=row["oauth_source"],
+            oauth_subject_hash=row["oauth_subject_hash"],
+            workspace_id=row["workspace_id"],
+            machine_id=row["machine_id"],
+            machine_installation_id=row["machine_installation_id"],
         )
-        """
+        for row in rows
     )
-    connection.execute(
-        """
-        create table guard_live_request_outbox (
-          sequence integer primary key autoincrement, local_request_id text not null,
-          changed_at text not null, oauth_source text, oauth_subject_hash text,
-          workspace_id text, machine_id text, machine_installation_id text,
-          attempt_count integer not null default 0, next_attempt_at text, last_error text
-        )
-        """
+    assert (
+        connection.execute(
+            "select 1 from sqlite_master where type = 'table' and name = 'guard_live_request_outbox'"
+        ).fetchone()
+        is None
     )
+    assert (
+        connection.execute(
+            "select 1 from sync_state where state_key = 'guard_review_outbox_events_migrated'"
+        ).fetchone()
+        is not None
+    )
+
+
+def test_retired_outbox_incomplete_identity_stays_quarantined() -> None:
+    connection = _retired_outbox_connection()
     connection.execute(
-        """
-        insert into guard_live_request_outbox (local_request_id, changed_at, oauth_source)
-        values ('request-1', ?, 'default')
-        """,
-        (_NOW,),
+        "insert into guard_live_request_outbox (local_request_id, changed_at, oauth_source) values (?, ?, ?)",
+        ("request-1", _NOW, "default"),
     )
 
     ensure_review_event_outbox_schema(connection, _LATER)
@@ -467,95 +452,5 @@ def test_migration_prioritizes_missing_source_snapshot_over_incomplete_identity(
     assert row is not None
     assert (row["binding_status"], row["quarantine_reason"]) == (
         "quarantined",
-        "legacy_request_snapshot_missing",
-    )
-
-
-def test_daemon_managed_store_detects_and_migrates_current_schema(tmp_path) -> None:
-    guard_home = tmp_path / "guard"
-    store = GuardStore(guard_home)
-    binding = _connect(store)
-    store.add_approval_request(_request("request-1"), _NOW)
-    with store._connect() as connection:
-        event = connection.execute("select * from guard_review_outbox_events").fetchone()
-        assert event is not None
-    with sqlite3.connect(store.path) as connection:
-        connection.execute("drop trigger guard_review_outbox_after_insert")
-        connection.execute("drop trigger guard_review_outbox_after_update")
-        connection.execute("drop table guard_review_outbox_cursors")
-        connection.execute("drop table guard_review_outbox_events")
-        connection.execute("drop table guard_review_outbox_request_sequences")
-        connection.execute("delete from schema_migrations where version = 25")
-        connection.execute("delete from sync_state where state_key = 'guard_review_outbox_events_migrated_v2'")
-        connection.execute(
-            """
-            create table guard_review_outbox_request_sequences (
-              local_request_id text primary key,
-              last_sequence integer not null,
-              updated_at text not null
-            )
-            """
-        )
-        connection.execute(
-            """
-            create table guard_live_request_outbox (
-              sequence integer primary key autoincrement, local_request_id text not null,
-              changed_at text not null, oauth_source text, oauth_subject_hash text,
-              workspace_id text, machine_id text, machine_installation_id text,
-              attempt_count integer not null default 0, next_attempt_at text, last_error text
-            )
-            """
-        )
-        connection.execute(
-            """
-            insert into guard_live_request_outbox (
-              local_request_id, changed_at, oauth_source, oauth_subject_hash,
-              workspace_id, machine_id, machine_installation_id
-            ) values ('request-1', ?, 'default', ?, ?, ?, ?)
-            """,
-            (
-                _NOW,
-                binding["oauth_subject_hash"],
-                binding["workspace_id"],
-                binding["machine_id"],
-                binding["machine_installation_id"],
-            ),
-        )
-
-    migrated = GuardStore(guard_home, daemon_managed_schema=True)
-
-    rows = migrated.list_ready_live_request_outbox(now=_NOW, limit=10, **binding)
-    assert [(row["event_type"], row["local_request_id"]) for row in rows] == [
-        ("review.request.snapshot_migrated", "request-1")
-    ]
-    payload = json.loads(str(rows[0]["payload_json"]))
-    snapshot = payload["requestSnapshot"]
-    assert set(snapshot) == set(REVIEW_REQUEST_SNAPSHOT_COLUMNS)
-    assert snapshot["harness"] == "codex"
-    assert snapshot["policy_action"] == "require-reapproval"
-    assert snapshot["artifact_id"] == "codex:project:request-1"
-    with migrated._connect() as connection:
-        assert connection.execute("select 1 from schema_migrations where version = 25").fetchone() is not None
-        sequence_columns = {
-            str(row["name"])
-            for row in connection.execute("pragma table_info(guard_review_outbox_request_sequences)").fetchall()
-        }
-        assert {
-            "oauth_source",
-            "oauth_subject_hash",
-            "workspace_id",
-            "machine_id",
-            "machine_installation_id",
-        } <= sequence_columns
-        connection.execute("update guard_review_outbox_events set payload_hash = 'legacy-digest'")
-        connection.execute("delete from schema_migrations where version = 25")
-
-    upgraded = GuardStore(guard_home, daemon_managed_schema=True)
-    upgraded_rows = upgraded.list_ready_live_request_outbox(now=_NOW, limit=10, **binding)
-    assert len(upgraded_rows) == 1
-    upgraded_event = upgraded_rows[0]
-    assert upgraded_event["payload_hash"] == review_event_payload_digest(
-        str(upgraded_event["payload_json"]),
-        oauth_source="default",
-        **binding,
+        "retired_request_snapshot_missing",
     )

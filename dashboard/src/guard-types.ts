@@ -333,7 +333,7 @@ export type GuardQueueResolutionResult = {
   resolution_summary: string;
   retry_hint: string | null;
   copy: GuardQueueResolutionCopy | null;
-  codex_resume?: GuardCodexResumeResult | null;
+  codexResume?: GuardCodexResumeResult | null;
 };
 
 export type GuardRuntimeState = {

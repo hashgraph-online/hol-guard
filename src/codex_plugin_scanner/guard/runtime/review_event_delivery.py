@@ -18,12 +18,24 @@ _WIRE_EVENT_TYPES = {
     "review.request.created": "request_created",
     "review.request.refreshed": "request_created",
     "review.request.resolved": "request_resolved",
-    "review.request.snapshot_migrated": "request_created",
     "review.request.snapshot_requeued": "request_created",
+    "review.continuation.resumed": "continuation_resumed",
+    "review.continuation.already_resumed": "continuation_already_resumed",
+    "review.continuation.manual_retry_required": "continuation_manual_retry_required",
+    "review.continuation.blocked_not_resumed": "continuation_blocked_not_resumed",
+    "review.continuation.unsupported": "continuation_unsupported",
+    "review.continuation.failed": "continuation_failed",
 }
+_CONTINUATION_EVENT_TYPES = frozenset(
+    event_type for event_type in _WIRE_EVENT_TYPES if event_type.startswith("review.continuation.")
+)
+_CONTINUATION_STATUSES = frozenset(
+    event_type.removeprefix("review.continuation.") for event_type in _CONTINUATION_EVENT_TYPES
+)
 _SNAPSHOT_JSON_FIELDS = (
     "action_envelope_json",
     "browser_intent_json",
+    "continuation_snapshot_json",
     "changed_fields_json",
     "decision_v2_json",
     "risk_signals_json",
@@ -61,6 +73,7 @@ class StoredReviewEventError(ValueError):
 
 @dataclass(frozen=True)
 class StoredReviewEvent:
+    continuation_result: dict[str, object] | None
     event_id: str
     event_type: str
     payload: dict[str, object]
@@ -98,7 +111,8 @@ def _decode_snapshot(payload: dict[str, object]) -> dict[str, object]:
     )
     expected = set(REVIEW_REQUEST_SNAPSHOT_COLUMNS)
     actual = set(snapshot)
-    if missing := sorted(expected - actual):
+    optional_legacy_fields = {"continuation_snapshot_json"}
+    if missing := sorted(expected - actual - optional_legacy_fields):
         raise StoredReviewEventError(
             "payload_snapshot_incomplete",
             f"Stored Review event snapshot is missing canonical fields: {', '.join(missing)}.",
@@ -108,6 +122,8 @@ def _decode_snapshot(payload: dict[str, object]) -> dict[str, object]:
             "payload_snapshot_unexpected_fields",
             f"Stored Review event snapshot has unexpected fields: {', '.join(unexpected)}.",
         )
+    for field in optional_legacy_fields:
+        snapshot.setdefault(field, None)
     invalid = [
         field
         for field in _REQUIRED_NONEMPTY_SNAPSHOT_FIELDS
@@ -130,6 +146,53 @@ def _decode_snapshot(payload: dict[str, object]) -> dict[str, object]:
                 f"Stored Review event snapshot field {field} is invalid JSON.",
             ) from error
     return snapshot
+
+
+def _decode_continuation_result(payload: dict[str, object], *, event_type: str) -> dict[str, object] | None:
+    raw_result = payload.get("continuationResult")
+    if event_type not in _CONTINUATION_EVENT_TYPES:
+        if raw_result is not None:
+            raise StoredReviewEventError(
+                "payload_continuation_unexpected",
+                "Stored Review request event contains unexpected continuation evidence.",
+            )
+        return None
+    result = _object(
+        raw_result,
+        reason="payload_continuation_missing",
+        message="Stored Review continuation event has no terminal result.",
+    )
+    expected_fields = {
+        "action",
+        "capability",
+        "completedAt",
+        "correlationId",
+        "evidenceId",
+        "reason",
+        "status",
+    }
+    if set(result) != expected_fields:
+        raise StoredReviewEventError(
+            "payload_continuation_invalid",
+            "Stored Review continuation result fields are invalid.",
+        )
+    status = result.get("status")
+    if status not in _CONTINUATION_STATUSES or event_type != f"review.continuation.{status}":
+        raise StoredReviewEventError(
+            "payload_continuation_invalid",
+            "Stored Review continuation status does not match its event.",
+        )
+    if result.get("action") not in {"allow_once", "block"}:
+        raise StoredReviewEventError("payload_continuation_invalid", "Stored Review continuation action is invalid.")
+    if any(
+        not isinstance(result.get(field), str) or not str(result[field]).strip()
+        for field in expected_fields - {"action", "status"}
+    ):
+        raise StoredReviewEventError(
+            "payload_continuation_invalid",
+            "Stored Review continuation result is incomplete.",
+        )
+    return result
 
 
 def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
@@ -184,6 +247,7 @@ def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
             "Stored Review event OAuth source does not match its delivery binding.",
         )
     snapshot = _decode_snapshot(payload)
+    continuation_result = _decode_continuation_result(payload, event_type=event_type)
     if snapshot["request_id"] != local_request_id:
         raise StoredReviewEventError(
             "payload_snapshot_request_mismatch",
@@ -200,6 +264,7 @@ def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
     if not isinstance(stream_sequence, int) or not isinstance(request_sequence, int) or not isinstance(event_id, str):
         raise StoredReviewEventError("payload_metadata_mismatch", "Stored Review event sequence metadata is invalid.")
     return StoredReviewEvent(
+        continuation_result=continuation_result,
         event_id=event_id,
         event_type=event_type,
         payload=payload,

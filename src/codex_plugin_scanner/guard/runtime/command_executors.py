@@ -6,18 +6,9 @@ import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TypeGuard
 
-from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..approval_resolution import require_resolvable_approval_request
-from ..approval_scope_support import (
-    APPROVAL_SCOPE_CONTRACT_VERSION,
-    IneligibleApprovalScopeError,
-    request_scope_contract,
-    resolve_request_scope_selection,
-)
 from ..cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
@@ -28,8 +19,8 @@ from ..cli.update_commands import (
     build_guard_update_status_payload,
     run_guard_update,
 )
-from ..codex_resume import ResumeNotSupportedError, defer_request_resume_to_live_hook, retry_request_resume
 from ..config import load_guard_config
+from ..continuation_runtime import continue_request_after_application
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
     build_workspace_audit_payload,
@@ -37,19 +28,7 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
-from ..memory_decision_outbox import enqueue_memory_decision_event
-from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision
 from ..package_shim_status import record_package_shim_audit_result
-from ..review_contracts import (
-    GuardReviewContractError,
-    guard_review_oauth_metadata,
-    normalize_remote_approval_decision,
-    validate_decision_memory_bundle_target,
-    validate_remote_approval_request_binding,
-    validated_decision_memory_bundle,
-    validated_remote_approval_envelope,
-)
-from ..review_memory_ack import build_decision_memory_ack
 from ..shims import (
     activate_package_shims,
     package_shim_status,
@@ -57,12 +36,12 @@ from ..shims import (
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
-from . import local_request_snapshots
-from .live_request_repair import execute_live_request_sync_repair
-
-_GUARD_REVIEW_MEMORY_REGISTRY_SYNC_KEY = "guard_review_memory_registry"
-_GUARD_REVIEW_MEMORY_VERSION_SYNC_KEY = "guard_review_memory_policy_version"
-_GUARD_REVIEW_MEMORY_ACK_SYNC_KEY = "guard_review_memory_last_ack"
+from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
+from .exact_cloud_review_executor import execute_exact_cloud_review_operation
+from .review_policy_memory_executor import (
+    REVIEW_POLICY_MEMORY_OPERATION,
+    execute_review_policy_memory,
+)
 
 PACKAGE_SHIM_OPERATIONS: tuple[str, ...] = (
     "guard.packageShims.status",
@@ -81,21 +60,15 @@ APP_OPERATIONS: tuple[str, ...] = (
     "guard.app.update",
     "guard.app.updateCheck",
 )
-APPROVAL_OPERATIONS: tuple[str, ...] = (
-    "guard.approval.resolve",
-    "guard.localRequests.snapshot",
-)
-LIVE_REQUEST_OPERATIONS: tuple[str, ...] = ("guard.liveRequests.reassignQuarantined",)
+EXACT_CLOUD_REVIEW_OPERATIONS: tuple[str, ...] = (EXACT_CLOUD_REVIEW_OPERATION,)
+POLICY_MEMORY_OPERATIONS: tuple[str, ...] = (REVIEW_POLICY_MEMORY_OPERATION,)
 SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (
     *PACKAGE_SHIM_OPERATIONS,
     *APP_OPERATIONS,
-    *APPROVAL_OPERATIONS,
-    *LIVE_REQUEST_OPERATIONS,
+    *EXACT_CLOUD_REVIEW_OPERATIONS,
+    *POLICY_MEMORY_OPERATIONS,
 )
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
-LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
-LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = local_request_snapshots.LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT
-LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = local_request_snapshots.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
 
 
 def execute_guard_command_job(
@@ -125,18 +98,16 @@ def execute_guard_command_job(
                 store=store,
                 generated_at=generated_at,
             )
-        if operation in APPROVAL_OPERATIONS:
-            return _execute_approval_operation(
-                operation,
-                job=job,
+        if operation in EXACT_CLOUD_REVIEW_OPERATIONS:
+            return execute_exact_cloud_review_operation(
                 payload=payload,
                 store=store,
                 generated_at=generated_at,
+                resume_after_approval=_resume_after_remote_approval,
             )
-        if operation in LIVE_REQUEST_OPERATIONS:
-            return execute_live_request_sync_repair(
-                payload,
-                store=store,
+        if operation in POLICY_MEMORY_OPERATIONS:
+            return _result(
+                execute_review_policy_memory(payload, store=store, generated_at=generated_at),
                 generated_at=generated_at,
             )
     except ValueError as error:
@@ -304,266 +275,6 @@ def _execute_app_update_check(*, context: HarnessContext, generated_at: str) -> 
     return build_guard_update_status_payload(guard_home=context.guard_home)
 
 
-def _execute_approval_operation(
-    operation: str,
-    *,
-    job: dict[str, object],
-    payload: dict[str, object],
-    store: GuardStore,
-    generated_at: str,
-) -> dict[str, object]:
-    if operation == "guard.localRequests.snapshot":
-        return _result(_local_request_snapshot_payload(store), generated_at=generated_at)
-    if operation != "guard.approval.resolve":
-        return {
-            "failureCode": "unsupported_operation",
-            "failureMessage": f"Unsupported approval operation: {operation}",
-        }
-    action = _optional_string(payload.get("action"))
-    local_request_id = _target_string(payload, "localRequestId", "local_request_id") or _target_string(
-        job,
-        "localRequestId",
-        "local_request_id",
-    )
-    normalized_outer_action = normalize_remote_approval_decision(action)
-    if action != "policy_sync" and normalized_outer_action is None:
-        raise ValueError("invalid_approval_payload")
-    if action == "policy_sync":
-        return _execute_policy_sync(payload, store=store, generated_at=generated_at)
-    if local_request_id is None:
-        raise ValueError("invalid_approval_payload")
-    remote_approval = _payload_mapping(payload.get("remoteApproval") or payload.get("remote_approval"))
-    if not remote_approval:
-        raise ValueError("missing_remote_approval")
-    request_row = store.get_approval_request(local_request_id)
-    if not isinstance(request_row, dict):
-        return _result(
-            {
-                "action": normalized_outer_action or action,
-                "localRequestId": local_request_id,
-                "daemonAckStatus": "not_resolved",
-                "status": "not_resolved",
-            },
-            generated_at=generated_at,
-        )
-    oauth = guard_review_oauth_metadata(store)
-    _validate_approval_resolve_target(
-        job=job,
-        payload=payload,
-        oauth=oauth,
-        request_row=request_row,
-        local_request_id=local_request_id,
-    )
-    envelope = validated_remote_approval_envelope(
-        remote_approval,
-        store=store,
-        admitted_at=job.get("createdAt"),
-    )
-    require_resolvable_approval_request(request_row)
-    validate_remote_approval_request_binding(
-        envelope=envelope,
-        request_row=request_row,
-        oauth=oauth,
-        store=store,
-    )
-    require_resolvable_approval_request(request_row)
-    request_policy_action = _optional_string(request_row.get("policy_action"))
-    envelope_decision = _optional_string(envelope.get("decision"))
-    resolution_action = normalize_remote_approval_decision(envelope_decision)
-    if resolution_action is None:
-        raise ValueError("invalid_remote_approval_decision")
-    if normalized_outer_action != resolution_action:
-        raise ValueError("remote_approval_decision_mismatch")
-    contract = request_scope_contract(request_row)
-    resolution_scope = _optional_string(envelope.get("scope"))
-    if request_policy_action not in {"review", "require-reapproval"} or resolution_scope not in DECISION_SCOPE_VALUES:
-        raise ValueError("remote_approval_not_permitted")
-    try:
-        scope_selection = resolve_request_scope_selection(
-            request_row,
-            action=resolution_action,
-            requested_scope=resolution_scope,
-            contract_version=APPROVAL_SCOPE_CONTRACT_VERSION,
-            contract_digest=contract.digest,
-        )
-    except IneligibleApprovalScopeError as error:
-        raise ValueError("remote_approval_not_permitted") from error
-    receipt_id = _optional_string(envelope.get("receiptId"))
-    if receipt_id is None:
-        raise ValueError("invalid_remote_approval_receipt")
-    envelope_decision = _optional_string(envelope.get("decision"))
-    resolution_action = normalize_remote_approval_decision(envelope_decision)
-    if resolution_action is None:
-        raise ValueError("invalid_remote_approval_decision")
-    if normalized_outer_action != resolution_action:
-        raise ValueError("remote_approval_decision_mismatch")
-    if not store.claim_remote_once_receipt(
-        receipt_id,
-        request_id=local_request_id,
-        claimed_at=generated_at,
-    ):
-        raise ValueError("remote_approval_replayed")
-    resolution_scope = scope_selection.applied_scope
-    try:
-        result = store.resolve_request_with_signed_remote_result(
-            local_request_id,
-            resolution_action=resolution_action,
-            resolution_scope=resolution_scope,
-            reason=_optional_string(payload.get("reason")) or "Guard Cloud signed remote approval",
-            resolved_at=generated_at,
-        )
-    except Exception:
-        store.release_remote_once_receipt(receipt_id)
-        raise
-    if result.get("resolved") is not True:
-        store.release_remote_once_receipt(receipt_id)
-    resolved = result.get("resolved") is True
-    if resolved:
-        enqueue_memory_decision_event(
-            store,
-            request={**request_row, "source_receipt_id": receipt_id},
-            action=resolution_action,
-            scope=resolution_scope,
-            resolved_at=generated_at,
-            source="cloud_review",
-        )
-    resume_metadata = (
-        _resume_after_remote_approval(
-            store=store,
-            request_row=request_row,
-            request_id=local_request_id,
-            action=resolution_action,
-            now=generated_at,
-        )
-        if resolved
-        else {}
-    )
-    response_data: dict[str, object] = {
-        "action": resolution_action,
-        "daemonAckStatus": (
-            "resolved"
-            if resolved and _remote_resume_confirmed(resume_metadata, resolution_action)
-            else "resolved_unconfirmed"
-            if resolved
-            else "not_resolved"
-        ),
-        "localRequestId": local_request_id,
-        "remoteDecision": resolution_action,
-        "resolution": _remote_resolution_metadata(result),
-        "status": "completed" if resolved else "not_resolved",
-    }
-    response_data.update(resume_metadata)
-    return _result(
-        response_data,
-        generated_at=generated_at,
-    )
-
-
-def _remote_resume_confirmed(resume_metadata: dict[str, object], action: str) -> bool:
-    status = _optional_string(resume_metadata.get("resumeStatus"))
-    if status in {"already_sent", "blocked", "not_applicable", "resumed", "sent"}:
-        return True
-    if action != "block" or status != "skipped":
-        return False
-    detail = resume_metadata.get("codexResume") or resume_metadata.get("harnessResume")
-    return isinstance(detail, dict) and detail.get("reason") == "blocked_not_resumed"
-
-
-def _target_string(mapping: dict[str, object], *keys: str) -> str | None:
-    for key in keys:
-        value = _optional_string(mapping.get(key))
-        if value is not None:
-            return value
-    return None
-
-
-def _validate_approval_resolve_target(
-    *,
-    job: dict[str, object],
-    payload: dict[str, object],
-    oauth: object,
-    request_row: dict[str, object],
-    local_request_id: str,
-) -> None:
-    expected_request_id = _optional_string(request_row.get("request_id"))
-    if expected_request_id != local_request_id:
-        raise GuardReviewContractError("approval_target_request_mismatch")
-    _validate_target_field(
-        job,
-        payload,
-        keys=("targetGrantId", "target_grant_id", "grantId", "grant_id"),
-        expected=getattr(oauth, "grant_id", None),
-        failure_code="approval_target_grant_mismatch",
-        require_expected=True,
-    )
-    _validate_target_field(
-        job,
-        payload,
-        keys=("targetRuntimeGrantId", "target_runtime_grant_id", "runtimeGrantId", "runtime_grant_id"),
-        expected=getattr(oauth, "runtime_id", None),
-        failure_code="approval_target_runtime_grant_mismatch",
-        require_expected=False,
-    )
-    _validate_target_field(
-        job,
-        payload,
-        keys=("workspaceId", "workspace_id"),
-        expected=getattr(oauth, "workspace_id", None),
-        failure_code="approval_target_workspace_mismatch",
-        require_expected=True,
-    )
-    _validate_target_field(
-        job,
-        payload,
-        keys=("localRequestId", "local_request_id"),
-        expected=local_request_id,
-        failure_code="approval_target_local_request_mismatch",
-        require_expected=True,
-    )
-
-
-def _validate_target_field(
-    job: dict[str, object],
-    payload: dict[str, object],
-    *,
-    keys: tuple[str, ...],
-    expected: object,
-    failure_code: str,
-    require_expected: bool,
-) -> None:
-    expected_value = _optional_string(expected)
-    if expected_value is None and not require_expected:
-        return
-    for source in (job, payload):
-        for key in keys:
-            value = _optional_string(source.get(key))
-            if value is not None and value != expected_value:
-                raise GuardReviewContractError(failure_code)
-
-
-def _remote_resolution_metadata(result: dict[str, object]) -> dict[str, object]:
-    resolved = result.get("resolved") is True
-    metadata: dict[str, object] = {
-        "resolved": resolved,
-        "status": "resolved" if resolved else "not_resolved",
-    }
-    error = _optional_string(result.get("error"))
-    if error is not None:
-        metadata["error"] = error
-        metadata["status"] = error
-    resolved_request = result.get("resolved_request")
-    if isinstance(resolved_request, dict):
-        request_id = _optional_string(resolved_request.get("request_id"))
-        if request_id is not None:
-            metadata["localRequestId"] = request_id
-    duplicate_ids = result.get("resolved_duplicate_ids")
-    if isinstance(duplicate_ids, list):
-        metadata["resolvedDuplicateIds"] = [
-            item for item in (_optional_string(value) for value in duplicate_ids) if item is not None
-        ]
-    return metadata
-
-
 def _resume_after_remote_approval(
     *,
     store: GuardStore,
@@ -573,42 +284,15 @@ def _resume_after_remote_approval(
     now: str,
 ) -> dict[str, object]:
     harness = _optional_string(request_row.get("harness"))
-    if harness not in {"codex", "pi", "omp", "grok"}:
-        return {
-            "resumeStatus": "not_applicable",
-            "harnessResume": {
-                "harness": harness or "unknown",
-                "status": "not_applicable",
-                "reason": "harness_has_no_resumable_operation",
-            },
-        }
     if harness == "codex" and action in {"allow", "block"}:
-        codex_resume = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
-        if codex_resume is None:
+        continuation = _resume_codex_request(store=store, request_id=request_id, action=action, now=now)
+        if continuation is None:
             return {}
-        safe = safe_resume_metadata(codex_resume)
-        payload: dict[str, object] = {
-            "codexResume": safe,
-            "codex_resume": safe,
-            "resumeStatus": safe.get("status"),
-        }
-        completed_at = safe.get("completedAt") or safe.get("sentAt")
-        if completed_at is not None:
-            payload["resumeCompletedAt"] = completed_at
-        return payload
+        return _continuation_resume_metadata(continuation, detail_key="codexResume")
     harness_resume = resume_harness_operation(store, request_id=request_id, action=action, now=now)
     if harness_resume is None:
         return {}
-    safe_harness_resume = safe_resume_metadata(harness_resume)
-    payload = {
-        "harnessResume": safe_harness_resume,
-        "harness_resume": safe_harness_resume,
-        "resumeStatus": safe_harness_resume.get("status"),
-    }
-    completed_at = safe_harness_resume.get("completedAt")
-    if completed_at is not None:
-        payload["resumeCompletedAt"] = completed_at
-    return payload
+    return _continuation_resume_metadata(harness_resume, detail_key="harnessResume")
 
 
 def _resume_codex_request(
@@ -618,165 +302,45 @@ def _resume_codex_request(
     action: str,
     now: str,
 ) -> dict[str, object] | None:
+    request = store.get_approval_request(request_id)
+    if not isinstance(request, dict):
+        return None
     try:
-        codex_resume = defer_request_resume_to_live_hook(
+        continuation = continue_request_after_application(
             store,
-            request_id=request_id,
+            request_row=request,
             action=action,
             now=now,
         )
-        if codex_resume is None:
-            codex_resume = retry_request_resume(
-                store,
-                request_id=request_id,
-                now=now,
-            )
-        return codex_resume
-    except ResumeNotSupportedError:
-        return {
-            "status": "skipped",
-            "reason": "resume_not_supported",
-            "message": "This Codex request does not expose a supported resume target.",
-        }
+        return continuation
     except ValueError as error:
         return {
-            "status": "failed",
-            "reason": str(error) or "resume_failed",
-            "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
+            "codexResume": {
+                "reason": str(error) or "resume_failed",
+                "status": "failed",
+                "message": "HOL Guard could not resume the Codex request after applying the remote decision.",
+            },
+            "continuationReason": str(error) or "resume_failed",
+            "continuationStatus": "failed",
         }
 
 
-def _execute_policy_sync(
-    payload: dict[str, object],
-    *,
-    store: GuardStore,
-    generated_at: str,
-) -> dict[str, object]:
-    bundle_payload = _payload_mapping(payload.get("decisionMemoryBundle") or payload.get("decision_memory_bundle"))
-    if not bundle_payload:
-        raise ValueError("missing_decision_memory_bundle")
-    oauth = guard_review_oauth_metadata(store)
-    bundle = validated_decision_memory_bundle(bundle_payload, store=store)
-    validate_decision_memory_bundle_target(
-        bundle=bundle,
-        oauth=oauth,
-        last_policy_version=_stored_review_memory_policy_version(store),
-    )
-    registry = _stored_review_memory_registry(store)
-    revocations = bundle.get("revocations")
-    for revoked_rule_id in revocations if isinstance(revocations, list) else []:
-        revoked_key = _optional_string(revoked_rule_id)
-        if revoked_key is not None:
-            registry.pop(revoked_key, None)
-    rejected_rule_ids: list[str] = []
-    applied_rule_count = 0
-    rules = bundle.get("memoryRules")
-    for rule in rules if isinstance(rules, list) else []:
-        if not isinstance(rule, dict):
-            raise ValueError("invalid_decision_memory_rule")
-        rule_id = _optional_string(rule.get("ruleId"))
-        if rule_id is None:
-            raise ValueError("invalid_decision_memory_rule")
-        try:
-            decision = _decision_from_memory_rule(bundle=bundle, rule=rule)
-        except GuardReviewContractError:
-            rejected_rule_ids.append(rule_id)
-            continue
-        registry[rule_id] = {
-            "decision": decision.to_dict(),
-            "ruleId": rule_id,
-        }
-        applied_rule_count += 1
-    store.replace_remote_policies(
-        [
-            *_existing_non_review_remote_policies(store),
-            *[_decision_from_registry_entry(entry) for entry in registry.values()],
-        ],
-        generated_at,
-        remote_write_authorized=True,
-    )
-    store.set_sync_payload(
-        _GUARD_REVIEW_MEMORY_REGISTRY_SYNC_KEY,
-        list(registry.values()),
-        generated_at,
-    )
-    ack_status = "accepted" if not rejected_rule_ids else "rejected"
-    if ack_status == "accepted":
-        store.set_sync_payload(
-            _GUARD_REVIEW_MEMORY_VERSION_SYNC_KEY,
-            {"policyVersion": _optional_string(bundle.get("policyVersion"))},
-            generated_at,
-        )
-    ack = build_decision_memory_ack(
-        bundle=bundle,
-        oauth=oauth,
-        status=ack_status,
-        applied_rule_count=applied_rule_count,
-        reason=None if not rejected_rule_ids else "decision_memory_rule_rejected",
-        rejected_rule_ids=rejected_rule_ids,
-    )
-    store.set_sync_payload(_GUARD_REVIEW_MEMORY_ACK_SYNC_KEY, ack, generated_at)
-    return _result(
-        {
-            "action": "policy_sync",
-            "bundleHash": _optional_string(bundle.get("bundleHash")),
-            "bundleVersion": _optional_string(bundle.get("bundleVersion")),
-            "decisionMemoryAck": ack,
-            "localRequestId": _optional_string(payload.get("localRequestId")),
-            "status": str(ack["status"]),
-        },
-        generated_at=generated_at,
-    )
-
-
-def _local_policy_scope(scope: str | None) -> DecisionScope:
-    """Map Cloud policy scopes onto the narrower local policy model."""
-    if scope in {"workspace", "team", "policy", "machine", "project"}:
-        return "workspace"
-    if scope == "item":
-        return "artifact"
-    return "artifact"
-
-
-def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
-    return isinstance(value, str) and value in DECISION_SCOPE_VALUES
-
-
-def _local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
-    return local_request_snapshots.local_request_snapshot_items(store)
-
-
-def _local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
-    local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
-    local_request_snapshots.LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT
-    local_request_snapshots.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
-    return local_request_snapshots.local_request_snapshot_payload(store)
-
-
-def _local_request_snapshot_items_for_status(
-    store: GuardStore,
-    *,
-    status: str,
-    limit: int,
-) -> tuple[list[dict[str, object]], bool]:
-    return local_request_snapshots._local_request_snapshot_items_for_status(
-        store,
-        status=status,
-        limit=limit,
-    )
-
-
-def _local_request_snapshot_byte_capped_items(
-    items: list[dict[str, object]],
-    *,
-    max_bytes: int,
-    existing_items: list[dict[str, object]] | None = None,
-) -> tuple[list[dict[str, object]], bool]:
-    return local_request_snapshots._local_request_snapshot_byte_capped_items(
-        items,
-        max_bytes=max_bytes,
-        existing_items=existing_items,
-    )
+def _continuation_resume_metadata(continuation: dict[str, object], *, detail_key: str) -> dict[str, object]:
+    detail = continuation.get(detail_key)
+    safe = safe_resume_metadata(detail) if isinstance(detail, dict) else {}
+    status = _optional_string(continuation.get("continuationStatus"))
+    if status is None:
+        raise ValueError("continuation_status_missing")
+    payload: dict[str, object] = {
+        "continuationReason": _optional_string(continuation.get("continuationReason")),
+        "continuationStatus": status,
+    }
+    if safe:
+        payload[detail_key] = safe
+    completed_at = _optional_string(continuation.get("continuationCompletedAt"))
+    if completed_at is not None:
+        payload["continuationCompletedAt"] = completed_at
+    return payload
 
 
 def _package_shim_context(
@@ -802,131 +366,6 @@ def _package_shim_context(
         home_dir=base_context.home_dir,
         workspace_dir=workspace_dir or base_context.workspace_dir,
         guard_home=base_context.guard_home,
-    )
-
-
-def _payload_mapping(value: object) -> dict[str, object]:
-    return dict(value) if isinstance(value, dict) else {}
-
-
-def _stored_review_memory_policy_version(store: GuardStore) -> str | None:
-    payload = store.get_sync_payload(_GUARD_REVIEW_MEMORY_VERSION_SYNC_KEY)
-    if not isinstance(payload, dict):
-        return None
-    return _optional_string(payload.get("policyVersion"))
-
-
-def _stored_review_memory_registry(store: GuardStore) -> dict[str, dict[str, object]]:
-    payload = store.get_sync_payload(_GUARD_REVIEW_MEMORY_REGISTRY_SYNC_KEY)
-    if not isinstance(payload, list):
-        return {}
-    registry: dict[str, dict[str, object]] = {}
-    for item in payload:
-        if not isinstance(item, dict):
-            continue
-        rule_id = _optional_string(item.get("ruleId"))
-        decision = item.get("decision")
-        if rule_id is None or not isinstance(decision, dict):
-            continue
-        registry[rule_id] = {"decision": dict(decision), "ruleId": rule_id}
-    return registry
-
-
-def _existing_non_review_remote_policies(store: GuardStore) -> list[PolicyDecision]:
-    decisions: list[PolicyDecision] = []
-    for item in store.list_policy_decisions():
-        if item.get("source") in {"cloud-signed-memory"}:
-            continue
-        if item.get("source") != "policy-bundle":
-            continue
-        scope = _optional_string(item.get("scope"))
-        action = _optional_string(item.get("action"))
-        harness = _optional_string(item.get("harness"))
-        if scope is None or action is None or harness is None:
-            continue
-        if not _is_decision_scope(scope) or not _is_guard_action(action):
-            continue
-        decisions.append(
-            PolicyDecision(
-                harness=harness,
-                scope=scope,
-                action=action,
-                artifact_id=_optional_string(item.get("artifact_id")),
-                artifact_hash=_optional_string(item.get("artifact_hash")),
-                workspace=_optional_string(item.get("workspace")),
-                publisher=_optional_string(item.get("publisher")),
-                reason=_optional_string(item.get("reason")),
-                owner=_optional_string(item.get("owner")),
-                source=str(item.get("source") or "cloud-sync"),
-                expires_at=_optional_string(item.get("expires_at")),
-            )
-        )
-    return decisions
-
-
-def _decision_from_registry_entry(entry: dict[str, object]) -> PolicyDecision:
-    decision = entry.get("decision")
-    if not isinstance(decision, dict):
-        raise ValueError("invalid_decision_memory_registry")
-    harness = _optional_string(decision.get("harness"))
-    scope = _optional_string(decision.get("scope"))
-    action = _optional_string(decision.get("action"))
-    if harness is None or scope is None or action is None:
-        raise ValueError("invalid_decision_memory_registry")
-    if not _is_decision_scope(scope) or not _is_guard_action(action):
-        raise ValueError("invalid_decision_memory_registry")
-    return PolicyDecision(
-        harness=harness,
-        scope=scope,
-        action=action,
-        artifact_id=_optional_string(decision.get("artifact_id")),
-        artifact_hash=_optional_string(decision.get("artifact_hash")),
-        workspace=_optional_string(decision.get("workspace")),
-        publisher=_optional_string(decision.get("publisher")),
-        reason=_optional_string(decision.get("reason")),
-        owner=_optional_string(decision.get("owner")),
-        source=str(decision.get("source") or "cloud-signed-memory"),
-        expires_at=_optional_string(decision.get("expires_at")),
-    )
-
-
-def _decision_from_memory_rule(
-    *,
-    bundle: dict[str, object],
-    rule: dict[str, object],
-) -> PolicyDecision:
-    harness = _optional_string(rule.get("harnessId"))
-    artifact_id = _optional_string(rule.get("artifactId"))
-    action = _optional_string(rule.get("action"))
-    scope_value = _optional_string(rule.get("scope"))
-    if harness is None or artifact_id is None or action is None or scope_value is None:
-        raise GuardReviewContractError("invalid_decision_memory_rule")
-    if not _is_guard_action(action):
-        raise GuardReviewContractError("invalid_decision_memory_rule")
-    if action == "allow" and scope_value not in {"artifact", "workspace"}:
-        raise GuardReviewContractError("decision_memory_allow_scope_unsupported")
-    scope = _local_policy_scope(scope_value)
-    target = rule.get("target")
-    target_payload = target if isinstance(target, dict) else {}
-    workspace_ids = target_payload.get("workspaceIds")
-    workspace = _optional_string(bundle.get("workspaceId"))
-    if scope == "workspace" and isinstance(workspace_ids, list):
-        workspace = next(
-            (candidate for candidate in (_optional_string(item) for item in workspace_ids) if candidate is not None),
-            workspace,
-        )
-    return PolicyDecision(
-        harness=harness,
-        scope=scope,
-        action=action,
-        artifact_id=artifact_id,
-        artifact_hash=_optional_string(rule.get("artifactHash")),
-        workspace=workspace if scope == "workspace" else None,
-        publisher=None,
-        reason=_optional_string(rule.get("reason")) or "Guard Cloud signed decision memory sync",
-        owner=None,
-        source="cloud-signed-memory",
-        expires_at=_optional_string(rule.get("expiresAt")),
     )
 
 

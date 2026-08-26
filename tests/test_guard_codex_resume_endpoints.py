@@ -12,6 +12,7 @@ import pytest
 from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
 from codex_plugin_scanner.guard import codex_resume as codex_resume_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -126,6 +127,10 @@ def _seed_codex_operation(
         metadata["hook_event_name"] = hook_event_name
     if waits_for_browser_approval is not None:
         metadata["codex_hook_waits_for_browser_approval"] = waits_for_browser_approval
+        if waits_for_browser_approval:
+            process_identity = current_process_identity()
+            assert process_identity is not None
+            metadata["codex_browser_wait_process"] = process_identity
     if browser_wait_deadline_at is not None:
         metadata["codex_browser_wait_deadline_at"] = browser_wait_deadline_at
     store.upsert_guard_operation(
@@ -139,30 +144,6 @@ def _seed_codex_operation(
         metadata=metadata,
         now="2026-05-19T10:00:00+00:00",
     )
-
-
-def test_codex_approve_without_resume_binding_returns_honest_manual_fallback(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-manual"), "2026-05-19T10:00:00+00:00")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-
-    try:
-        payload = _post_json(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/requests/req-manual/approve",
-            {"scope": "artifact", "reason": "reviewed"},
-        )
-    finally:
-        daemon.stop()
-
-    assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "skipped"
-    assert payload["codex_resume"]["supported"] is False
-    assert payload["codex_resume"]["strategy"] == "manual-only"
-    assert "could not find the original Codex chat" in payload["resolution_summary"]
-    assert "approval is now saved" in payload["copy"]["body"]
 
 
 def test_codex_block_does_not_resume_codex_thread(
@@ -201,9 +182,9 @@ def test_codex_block_does_not_resume_codex_thread(
     finally:
         daemon.stop()
 
-    assert payload["codex_resume"]["status"] == "skipped"
-    assert payload["codex_resume"]["reason"] == "blocked_not_resumed"
-    assert payload["codex_resume"]["supported"] is False
+    assert payload["codexResume"]["status"] == "skipped"
+    assert payload["codexResume"]["reason"] == "blocked_not_resumed"
+    assert payload["codexResume"]["supported"] is False
     assert captured_payloads == []
 
 
@@ -245,8 +226,8 @@ def test_codex_block_with_missing_socket_does_not_start_headless_resume(
     finally:
         daemon.stop()
 
-    assert blocked["codex_resume"]["status"] == "skipped"
-    assert blocked["codex_resume"]["reason"] == "blocked_not_resumed"
+    assert blocked["codexResume"]["status"] == "skipped"
+    assert blocked["codexResume"]["reason"] == "blocked_not_resumed"
     assert retried["status"] == "skipped"
     assert retried["reason"] == "blocked_not_resumed"
 
@@ -281,9 +262,9 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "pending"
-    assert payload["codex_resume"]["reason"] == "live_hook_waiting"
-    assert "original Codex action continue" in payload["codex_resume"]["message"]
+    assert payload["codexResume"]["status"] == "pending"
+    assert payload["codexResume"]["reason"] == "live_hook_waiting"
+    assert "original Codex action continue" in payload["codexResume"]["message"]
 
 
 def test_codex_approve_stale_live_hook_wait_requires_app_server_socket(
@@ -322,10 +303,10 @@ def test_codex_approve_stale_live_hook_wait_requires_app_server_socket(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["reason"] == "socket_not_available"
-    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
-    assert "original chat" in payload["codex_resume"]["message"]
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["reason"] == "socket_not_available"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
+    assert "original chat" in payload["codexResume"]["message"]
 
 
 def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
@@ -358,9 +339,9 @@ def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "skipped"
-    assert payload["codex_resume"]["reason"] == "blocked_not_resumed"
-    assert payload["codex_resume"]["supported"] is False
+    assert payload["codexResume"]["status"] == "skipped"
+    assert payload["codexResume"]["reason"] == "blocked_not_resumed"
+    assert payload["codexResume"]["supported"] is False
 
 
 def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
@@ -398,7 +379,7 @@ def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
     finally:
         daemon.stop()
 
-    assert approved["codex_resume"]["status"] == "pending"
+    assert approved["codexResume"]["status"] == "pending"
     assert retried["status"] == "failed"
     assert retried["reason"] == "socket_not_available"
     assert retried["strategy"] == "codex-app-server-thread"
@@ -503,7 +484,7 @@ def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_prese
     finally:
         daemon.stop()
 
-    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["codexResume"]["status"] == "sent"
     prompt = captured_payloads[3]["params"]["input"][0]["text"]
     assert "HOL Guard approved request `req-allow-command` for this exact command:" in prompt
     assert "python - <<'PY'" in prompt
@@ -661,7 +642,7 @@ def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_mi
             "/v1/requests/req-retry/approve",
             {"scope": "artifact", "reason": "reviewed"},
         )
-        assert initial["codex_resume"]["reason"] == "socket_not_available"
+        assert initial["codexResume"]["reason"] == "socket_not_available"
 
         retried = _post_json(
             daemon.port,
@@ -762,10 +743,10 @@ def test_codex_approve_fails_without_app_server_socket_and_never_starts_exec_res
     finally:
         daemon.stop()
 
-    assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["reason"] == "socket_not_available"
-    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
-    assert "original chat" in payload["codex_resume"]["message"]
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["reason"] == "socket_not_available"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
+    assert "original chat" in payload["codexResume"]["message"]
 
 
 def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
@@ -812,8 +793,8 @@ def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
     finally:
         daemon.stop()
 
-    assert payload["codex_resume"]["status"] == "sent"
-    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert payload["codexResume"]["status"] == "sent"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
     assert send_calls == 1
 
 
@@ -847,9 +828,9 @@ def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["reason"] == "socket_not_available"
-    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["reason"] == "socket_not_available"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
 
 
 def test_codex_approve_returns_app_server_failure_after_transport_error_reason(
@@ -892,6 +873,6 @@ def test_codex_approve_returns_app_server_failure_after_transport_error_reason(
     finally:
         daemon.stop()
 
-    assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
-    assert payload["codex_resume"]["reason"] == "ConnectionRefusedError"
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
+    assert payload["codexResume"]["reason"] == "ConnectionRefusedError"

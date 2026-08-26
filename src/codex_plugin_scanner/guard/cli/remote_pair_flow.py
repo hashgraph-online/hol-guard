@@ -357,7 +357,7 @@ def run_guard_remote_pair_command(
             refresh_token=token_result.refresh_token,
             dpop_key_material=dpop_key_material,
             grant_id=token_result.grant_id,
-            machine_id=token_result.machine_id or installation_id,
+            **token_result.target_binding(machine_fallback=installation_id),
             supply_chain_entitlement=token_result.supply_chain_entitlement,
             workspace_id=token_result.workspace_id,
             runtime_id=runtime,

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
+import pytest
+
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
-from codex_plugin_scanner.guard.runtime.live_request_repair import live_request_sync_repair_status
+from codex_plugin_scanner.guard.runtime.cloud_review_repair import (
+    cloud_review_sync_repair_status,
+    execute_cloud_review_sync_repair,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 _OUTBOX_TABLE = "guard_review_outbox_events"
@@ -76,7 +79,7 @@ def test_repair_status_exposes_only_actionable_binding_metadata(tmp_path: Path) 
     store.add_approval_request(_request("request-1"), _NOW)
     _replace_binding_with_stale_identity(store, "request-1")
 
-    status = live_request_sync_repair_status(store, now=_NOW)
+    status = cloud_review_sync_repair_status(store, now=_NOW)
 
     assert status == {
         "bindingState": "identity_mismatch",
@@ -103,21 +106,10 @@ def test_cloud_repair_rebinds_only_the_confirmed_source_and_workspace(tmp_path: 
             ("workspace-other", "request-other"),
         )
 
-    result = execute_guard_command_job(
-        {
-            "operation": "guard.liveRequests.reassignQuarantined",
-            "payload": {
-                "source": "default",
-                "workspaceId": "workspace-1",
-            },
-        },
-        context=HarnessContext(
-            home_dir=tmp_path,
-            workspace_dir=tmp_path,
-            guard_home=store.guard_home,
-        ),
+    result = execute_cloud_review_sync_repair(
+        {"source": "default", "workspaceId": "workspace-1"},
         store=store,
-        now=lambda: _NOW,
+        generated_at=_NOW,
     )
 
     data = result["data"]
@@ -145,21 +137,9 @@ def test_cloud_repair_rebinds_only_the_confirmed_source_and_workspace(tmp_path: 
 def test_cloud_repair_rejects_a_different_workspace(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
 
-    result = execute_guard_command_job(
-        {
-            "operation": "guard.liveRequests.reassignQuarantined",
-            "payload": {
-                "source": "default",
-                "workspaceId": "workspace-other",
-            },
-        },
-        context=HarnessContext(
-            home_dir=tmp_path,
-            workspace_dir=tmp_path,
-            guard_home=store.guard_home,
-        ),
-        store=store,
-        now=lambda: _NOW,
-    )
-
-    assert result["failureCode"] == "approved_workspace_mismatch"
+    with pytest.raises(ValueError, match="approved_workspace_mismatch"):
+        execute_cloud_review_sync_repair(
+            {"source": "default", "workspaceId": "workspace-other"},
+            store=store,
+            generated_at=_NOW,
+        )

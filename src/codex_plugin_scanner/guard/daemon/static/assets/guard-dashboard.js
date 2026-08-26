@@ -17044,7 +17044,7 @@ function normalizeQueueResolution(payload) {
     resolution_summary: typeof payload.resolution_summary === "string" ? payload.resolution_summary : "",
     retry_hint: isStringOrNull(payload.retry_hint) ? payload.retry_hint : null,
     copy: normalizeQueueCopy(payload.copy),
-    codex_resume: normalizeCodexResume(payload.codex_resume)
+    codexResume: normalizeCodexResume(payload.codexResume)
   };
 }
 function queueSearchParams(input) {
@@ -17912,7 +17912,7 @@ async function resolveRequestWithQueueResult(input) {
       resolution_summary: "Decision saved.",
       retry_hint: null,
       copy: null,
-      codex_resume: null
+      codexResume: null
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
@@ -19642,6 +19642,64 @@ function GuardModalLayer({
     overlayRoot
   );
 }
+function GuardUpdateChannelSummary(props) {
+  let versionContent = /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 flex-1", "aria-hidden": "true" });
+  if (props.version) {
+    versionContent = /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "p",
+      {
+        className: "min-w-0 truncate font-mono text-[10px] leading-4 text-brand-dark/70",
+        "aria-label": `Guard version ${props.version}`,
+        children: [
+          "v",
+          props.version
+        ]
+      }
+    );
+  }
+  let channelAction;
+  if (props.useAlpha) {
+    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "inline-flex min-w-0 shrink-0 items-center gap-1.5",
+        role: "status",
+        "aria-label": "Alpha updates enabled",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold leading-4 text-brand-blue", children: "Alpha updates" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onManage,
+              disabled: props.busy,
+              "aria-label": "Manage alpha updates",
+              title: "Manage alpha updates",
+              className: "rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+              children: "Manage"
+            }
+          )
+        ]
+      }
+    );
+  } else {
+    channelAction = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onManage,
+        disabled: props.busy,
+        className: "shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
+        children: "Try alpha updates"
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+    versionContent,
+    channelAction
+  ] });
+}
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
@@ -19755,56 +19813,25 @@ function GuardUpdatePanel(props) {
   const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
     setAlphaApprovalTotpCode(event.target.value);
   }, []);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
-    props.onSetUpdateChannel ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-      version ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "p",
-        {
-          className: "min-w-0 truncate font-mono text-[10px] leading-4 text-brand-dark/70",
-          "aria-label": `Guard version ${version}`,
-          children: [
-            "v",
-            version
-          ]
-        }
-      ) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 flex-1", "aria-hidden": "true" }),
-      useAlpha ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "div",
-        {
-          className: "inline-flex min-w-0 shrink-0 items-center gap-1.5",
-          role: "status",
-          "aria-label": "Alpha updates enabled",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3 w-3 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold leading-4 text-brand-blue", children: "Alpha updates" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                onClick: handleOpenAlphaModal,
-                disabled: busy,
-                "aria-label": "Manage alpha updates",
-                title: "Manage alpha updates",
-                className: "rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-                children: "Manage"
-              }
-            )
-          ]
-        }
-      ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: handleOpenAlphaModal,
-          disabled: busy,
-          className: "shrink-0 rounded-sm text-[11px] font-medium leading-4 text-brand-blue guard-quiet-link focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 disabled:cursor-not-allowed disabled:opacity-60",
-          children: "Try alpha updates"
-        }
-      )
-    ] }) : version ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version}`, children: [
+  let updateChannelSummary = null;
+  if (props.onSetUpdateChannel) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardUpdateChannelSummary,
+      {
+        version,
+        useAlpha,
+        busy,
+        onManage: handleOpenAlphaModal
+      }
+    );
+  } else if (version) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version}`, children: [
       "v",
       version
-    ] }) : null,
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
+    updateChannelSummary,
     props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
     helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
     showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -31295,7 +31322,7 @@ function App() {
         throw error;
       });
       const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
-      const resume = result.codex_resume ?? null;
+      const resume = result.codexResume ?? null;
       setCodexResume(resume);
       setResolvedRequestId(resume !== null ? payload.requestId : null);
       if (nextId !== null) {

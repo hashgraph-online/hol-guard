@@ -739,7 +739,7 @@ export function App() {
         throw error;
       });
       const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
-      const resume = result.codex_resume ?? null;
+      const resume = result.codexResume ?? null;
       setCodexResume(resume);
       setResolvedRequestId(resume !== null ? payload.requestId : null);
       if (nextId !== null) {

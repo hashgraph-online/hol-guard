@@ -261,11 +261,11 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     remote_policy = _coerce_payload_dict(policy_defaults if isinstance(policy_defaults, dict) else None)
     policy_bundle_last_error = _coerce_payload_dict(store.get_sync_payload("policy_bundle_last_error"))
     headless_sync_summary = _coerce_payload_dict(store.get_sync_payload("headless_app_sync_summary"))
-    live_request_sync_state = _coerce_payload_dict(store.get_sync_payload("guard_live_request_sync_state"))
+    cloud_review_sync_state = _coerce_payload_dict(store.get_sync_payload("guard_cloud_review_sync_state"))
     cloud_auth_expired = (
         policy_bundle_last_error.get("reason") == "auth_expired"
         or headless_sync_summary.get("status") == "auth_expired"
-        or live_request_sync_state.get("state") == "auth_expired"
+        or cloud_review_sync_state.get("state") == "auth_expired"
     )
     oauth_repair_required = oauth_repair_required or cloud_auth_expired
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
