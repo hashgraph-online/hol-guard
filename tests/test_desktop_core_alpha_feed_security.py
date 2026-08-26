@@ -131,9 +131,16 @@ def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
 
 def test_frozen_sidecar_copies_cloud_review_package_data() -> None:
     text = workflow_text()
-    assert "codex_plugin_scanner/guard/contracts/data/guard-cloud-review" in text
-    assert "contracts/guard-cloud-review/v2/contract.json" in text
-    assert "docs/guard/contracts/guard-cloud-review.md" in text
+    copies = (
+        'cp "$SOURCE/contracts/guard-cloud-review/v2/contract.json" "$DATA_ROOT/v2/contract.json"',
+        'cp "$SOURCE/contracts/guard-cloud-review/v2/command-result.json" "$DATA_ROOT/v2/command-result.json"',
+        'cp "$SOURCE/contracts/guard-cloud-review/v2/fixtures.json" "$DATA_ROOT/v2/fixtures.json"',
+        'cp "$SOURCE/docs/guard/contracts/guard-cloud-review.md" "$DATA_ROOT/guard-cloud-review.md"',
+    )
+    assert 'DATA_ROOT="$SOURCE/src/codex_plugin_scanner/guard/contracts/data/guard-cloud-review"' in text
+    assert 'mkdir -p "$DATA_ROOT/v2"' in text
+    for command in copies:
+        assert command in text
 
 
 def test_existing_asset_set_is_all_or_nothing(tmp_path: Path, capsys) -> None:
