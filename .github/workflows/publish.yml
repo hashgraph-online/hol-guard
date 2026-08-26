@@ -442,6 +442,7 @@ jobs:
             runtime: rust/target/aarch64-apple-darwin/release/hol-guard-runtime
           - runner: windows-latest
             platform_tag: win_amd64
+            rustflags: -C link-arg=/Brepro
             target: x86_64-pc-windows-msvc
             runtime: rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe
     steps:
@@ -479,6 +480,7 @@ jobs:
         env:
           HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
           HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
           RUST_TARGET: ${{ matrix.target }}
           RUNTIME: ${{ matrix.runtime }}
         run: |
