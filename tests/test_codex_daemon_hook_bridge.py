@@ -98,7 +98,6 @@ def test_bridge_keeps_inline_browser_wait_within_consumer_limit(
         "current_process_identity",
         lambda: {"pid": 4102, "startToken": "fixture-start"},
     )
-
     payload = json.loads(
         bridge._with_browser_wait_process(
             '{"hook_event_name":"PreToolUse"}',
