@@ -40,10 +40,7 @@ def _normalized_inverse_pairs(
 
     if any(not positive.strip() or not negative.strip() for positive, negative in pairs):
         raise ValueError("Inverse flag pairs cannot contain blank option names")
-    normalized_pairs = tuple(
-        (positive.strip().lower(), negative.strip().lower())
-        for positive, negative in pairs
-    )
+    normalized_pairs = tuple((positive.strip().lower(), negative.strip().lower()) for positive, negative in pairs)
     inverse_names = [name for pair in normalized_pairs for name in pair]
     if len(inverse_names) != len(set(inverse_names)):
         raise ValueError("Inverse flag pairs cannot reuse an option name")
@@ -129,9 +126,7 @@ class ExecutablePathSetMatcher:
             field_name="Options with values",
         )
         normalized_inverse_pairs = _normalized_inverse_pairs(self.inverse_flag_pairs)
-        normalized_required_option_values = _normalized_required_option_values(
-            self.required_option_values
-        )
+        normalized_required_option_values = _normalized_required_option_values(self.required_option_values)
         if normalized_required_flags & normalized_forbidden_flags:
             raise ValueError("A matcher flag cannot be both required and forbidden")
 

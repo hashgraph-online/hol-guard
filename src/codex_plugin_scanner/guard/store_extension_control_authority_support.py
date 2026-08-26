@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import sqlite3
 import sys
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,7 +26,12 @@ from .runtime.extension_control_authority import (
     anchor_to_json,
     layers_from_json,
 )
-from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
+from .runtime.extension_control_contract import (
+    ControlLayerKind,
+    ControlState,
+    ExtensionControl,
+    ExtensionControlLayer,
+)
 from .runtime.extension_control_resolver import compose_control_layers
 from .store_base import (
     EncryptedFileSecretStore,
@@ -41,6 +46,21 @@ _ANCHOR_REF_SUFFIX = ":anchor"
 _MAX_TRANSITION_ID_LENGTH = 256
 _MAX_CONTROLS_PER_LAYER = 512
 _MAX_SERIALIZED_LAYERS_BYTES = 256 * 1024
+
+
+def preserve_migrated_extension_control(
+    control: ExtensionControl,
+    *,
+    previous_manifest: Mapping[str, str],
+    current_manifest: Mapping[str, str],
+) -> bool:
+    """Keep disabled controls and unchanged/unknown enabled allows across catalog upgrades."""
+
+    key_name = f"{control.target.kind.value}:{control.target.target_id}"
+    if key_name not in current_manifest:
+        return False
+    previous_fingerprint = previous_manifest.get(key_name)
+    return control.state is ControlState.DISABLED or previous_fingerprint in {None, current_manifest[key_name]}
 
 
 class _ExtensionControlAuthoritySupportMixin:

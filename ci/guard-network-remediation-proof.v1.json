@@ -1,0 +1,279 @@
+{
+  "schema_version": 1,
+  "program": "hol-guard-network-isolation-remediation",
+  "repository": "hashgraph-online/hol-guard",
+  "target_branch": "release/3.0",
+  "task_range": {
+    "first": "REM-121",
+    "last": "REM-139",
+    "count": 19
+  },
+  "closure": {
+    "ready": false,
+    "release_authorized": false,
+    "verdict": "not-ready",
+    "reason": "The proof pass confirms truthful non-advertisement, but installed selective-egress, privileged Linux, integrated isolated-runtime, and synchronized Cloud enforcement evidence remain incomplete."
+  },
+  "privacy": {
+    "raw_domain_storage": false,
+    "prohibited_fields": [
+      "raw_hostname",
+      "raw_url",
+      "raw_command",
+      "raw_prompt",
+      "raw_output",
+      "raw_payload",
+      "raw_secret",
+      "local_path",
+      "personal_identifier"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "REM-121",
+      "title": "Run real bypass matrix",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_network_policy_evaluator.py",
+        "tests/test_guard_network_destination_correlator.py",
+        "tests/test_guard_linux_tcp_enforcement.py",
+        "tests/test_guard_linux_udp_dns_enforcement.py"
+      ],
+      "blockers": [
+        "No installed production provider currently exercises the matrix at a live enforcement boundary."
+      ]
+    },
+    {
+      "id": "REM-122",
+      "title": "Run secret exfiltration matrix",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_harness_smoke.py",
+        "tests/test_guard_risk.py",
+        "tests/test_guard_containment_executor.py"
+      ],
+      "blockers": [
+        "Detector and containment coverage is present, but selective network enforcement is not installed end to end."
+      ]
+    },
+    {
+      "id": "REM-123",
+      "title": "Run harness matrix",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_harness_contracts.py",
+        "tests/test_guard_phase04_harness_ux.py",
+        "tests/test_guard_phase07_harness_coverage_matrix.py"
+      ],
+      "blockers": [
+        "Harness contracts do not prove a live attached network provider for every supported harness."
+      ]
+    },
+    {
+      "id": "REM-124",
+      "title": "Run benign developer experience corpus",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_compound_developer_inspection.py",
+        "tests/test_guard_compound_readonly_auto_allow.py",
+        "tests/test_guard_trusted_local_tools.py"
+      ],
+      "blockers": [
+        "The benign corpus is not yet measured against the integrated network runtime because that runtime is unavailable."
+      ]
+    },
+    {
+      "id": "REM-125",
+      "title": "Prove approval-spam resistance",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_approval_store_dedup.py",
+        "tests/test_guard_approval_reuse.py",
+        "tests/test_guard_network_grant_engine.py"
+      ],
+      "blockers": [
+        "Network grant issuance remains a reference authority rather than an exact approval-receipt-bound production path."
+      ]
+    },
+    {
+      "id": "REM-126",
+      "title": "Run recovery chaos",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_network_supervisor.py",
+        "tests/test_guard_daemon_recovery_resilience.py",
+        "tests/test_guard_provider_recovery.py"
+      ],
+      "blockers": [
+        "Recovery tests do not operate a packaged network provider or reconcile live kernel state."
+      ]
+    },
+    {
+      "id": "REM-127",
+      "title": "Verify installed artifacts",
+      "outcome": "blocked",
+      "complete": false,
+      "evidence": [
+        ".github/workflows/guard-network-remediation-proof.yml",
+        "tests/test_guard_network_capability_reachability.py"
+      ],
+      "blockers": [
+        "The Python wheel can be built and inspected, but no signed installed selective-egress helper is reachable from the public runtime."
+      ]
+    },
+    {
+      "id": "REM-128",
+      "title": "Run Linux privileged matrix",
+      "outcome": "blocked",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_linux_tcp_enforcement.py",
+        "tests/test_guard_linux_udp_dns_enforcement.py",
+        "tests/test_guard_linux_network_observer.py"
+      ],
+      "blockers": [
+        "Current Linux modules lower and evaluate reference artifacts but do not attach a production cgroup enforcement program."
+      ]
+    },
+    {
+      "id": "REM-129",
+      "title": "Run gVisor, container, and Kubernetes matrix",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        ".github/workflows/guard-gvisor-reference.yml",
+        "tests/test_guard_gvisor_reference_runtime.py",
+        "tests/test_guard_container_network_plan.py",
+        "tests/test_guard_kubernetes_runtime.py"
+      ],
+      "blockers": [
+        "Reference runtime and object validation exist, but no installed production workload launcher establishes achieved protection."
+      ]
+    },
+    {
+      "id": "REM-130",
+      "title": "Run privacy scan",
+      "outcome": "passed",
+      "complete": true,
+      "evidence": [
+        "scripts/guard_network_remediation_proof.py",
+        "tests/test_guard_network_remediation_proof.py"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "REM-131",
+      "title": "Run performance and resource matrix",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_linux_performance_acceptance.py",
+        "tests/test_guard_daemon_perf.py"
+      ],
+      "blockers": [
+        "Reference evaluation budgets are measured, but installed provider attach, event-loss, and repair budgets are not available."
+      ]
+    },
+    {
+      "id": "REM-132",
+      "title": "Run supply-chain drills",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        "tests/test_guard_linux_artifact_lifecycle.py",
+        "tests/test_privileged_workflow_policy.py",
+        "tests/test_guard_gvisor_reference_runtime.py"
+      ],
+      "blockers": [
+        "Reference artifact validation is covered, but there is no release-installed network helper to revoke, repair, or remove."
+      ]
+    },
+    {
+      "id": "REM-133",
+      "title": "Prove production reachability",
+      "outcome": "passed",
+      "complete": true,
+      "evidence": [
+        "ci/guard-network-capability-reachability.v1.json",
+        "tests/test_guard_network_capability_reachability.py"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "REM-134",
+      "title": "Reconcile test sustainability",
+      "outcome": "passed",
+      "complete": true,
+      "evidence": [
+        "tests/test_guard_network_remediation_proof.py",
+        "scripts/guard_network_remediation_proof.py"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "REM-135",
+      "title": "Complete final review loops",
+      "outcome": "partial",
+      "complete": false,
+      "evidence": [
+        ".github/workflows/guard-network-remediation-proof.yml"
+      ],
+      "blockers": [
+        "Review-loop completion is recorded only after the synchronized pull requests have no actionable unresolved findings."
+      ]
+    },
+    {
+      "id": "REM-136",
+      "title": "Produce alpha-readiness report",
+      "outcome": "passed",
+      "complete": true,
+      "evidence": [
+        "docs/guard/network-remediation-readiness.md",
+        "ci/guard-network-remediation-proof.v1.json"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "REM-137",
+      "title": "Verify private-artifact hygiene",
+      "outcome": "passed",
+      "complete": true,
+      "evidence": [
+        "scripts/guard_network_remediation_proof.py",
+        "tests/test_guard_network_remediation_proof.py"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "REM-138",
+      "title": "Stop before release",
+      "outcome": "passed",
+      "complete": true,
+      "evidence": [
+        "docs/guard/network-remediation-readiness.md"
+      ],
+      "blockers": []
+    },
+    {
+      "id": "REM-139",
+      "title": "Close remediation only from evidence",
+      "outcome": "not-ready",
+      "complete": false,
+      "evidence": [
+        "ci/guard-network-remediation-proof.v1.json",
+        "docs/guard/network-remediation-readiness.md"
+      ],
+      "blockers": [
+        "Installed Linux selective egress is not production-reachable.",
+        "Privileged live enforcement and independent-observer matrices are incomplete.",
+        "The synchronized Guard Cloud network-policy and fleet-truth path is not proven."
+      ]
+    }
+  ]
+}

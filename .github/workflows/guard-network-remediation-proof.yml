@@ -1,0 +1,89 @@
+name: Guard network remediation proof
+
+on:
+  pull_request:
+    branches:
+      - release/3.0
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guard-network-remediation-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.28"
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Format proof implementation
+        run: uv run --frozen ruff format scripts/guard_network_remediation_proof.py tests/test_guard_network_remediation_proof.py
+      - name: Validate proof record
+        run: uv run --frozen python scripts/guard_network_remediation_proof.py --output proof-report.json
+      - name: Confirm readiness gate fails closed
+        run: |
+          if uv run --frozen python scripts/guard_network_remediation_proof.py --require-ready; then
+            echo "readiness gate unexpectedly passed" >&2
+            exit 1
+          fi
+      - name: Run proof and reachability tests
+        run: >-
+          uv run --frozen pytest -q
+          tests/test_guard_network_remediation_proof.py
+          tests/test_guard_network_capability_reachability.py
+          tests/test_guard_network_policy_contract.py
+          tests/test_guard_network_policy_evaluator.py
+          tests/test_guard_network_destination_correlator.py
+          tests/test_guard_network_grant_engine.py
+          tests/test_guard_network_process_lifecycle.py
+          tests/test_guard_network_supervisor.py
+          tests/test_guard_network_backend_registry.py
+          tests/test_guard_linux_tcp_enforcement.py
+          tests/test_guard_linux_udp_dns_enforcement.py
+          tests/test_guard_linux_network_observer.py
+          tests/test_guard_containment_executor.py
+          tests/test_guard_gvisor_reference_runtime.py
+          tests/test_guard_container_network_plan.py
+          tests/test_guard_oci_isolation_provider.py
+          --tb=short
+      - name: Lint proof implementation
+        run: uv run --frozen ruff check scripts/guard_network_remediation_proof.py tests/test_guard_network_remediation_proof.py
+      - name: Build wheel
+        run: uv build --wheel --out-dir dist
+      - name: Inspect installed wheel
+        run: |
+          uv venv --python 3.12 .proof-venv
+          uv pip install --python .proof-venv/bin/python dist/*.whl
+          .proof-venv/bin/python -c 'from codex_plugin_scanner.version import __version__; assert __version__.startswith("3.0.0a")'
+          .proof-venv/bin/hol-guard --version
+      - name: Upload formatted proof source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: guard-network-remediation-formatted-${{ github.sha }}
+          path: |
+            scripts/guard_network_remediation_proof.py
+            tests/test_guard_network_remediation_proof.py
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload bounded proof report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: guard-network-remediation-proof-${{ github.sha }}
+          path: proof-report.json
+          if-no-files-found: error
+          retention-days: 14

@@ -437,10 +437,9 @@ class _ApplyingStore:
         assert catalog_digest == self.current_view.catalog_digest
         return self.current_view
 
-    def read_extension_control_authority_for_registry(
-        self,
-        _registry: object,
-    ) -> ExtensionControlAuthorityView:
+    def read_extension_control_authority_for_registry(self, _registry: object, **kwargs: object) -> ExtensionControlAuthorityView:
+        if kwargs.get("include_managed_controls") is False:
+            return self.current_view
         base_layers = (
             tuple(layer for layer in self.current_view.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
             if self.managed_layers
