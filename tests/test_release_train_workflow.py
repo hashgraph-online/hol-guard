@@ -478,36 +478,36 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
     )
     assert '"$remote_alpha_tag_sha" != "$SOURCE_SHA"' in alpha_pypi_run
 
-    release_run = next(
+    alpha_run = next(
         step["run"]
         for step in jobs["release-alpha"]["steps"]
         if step.get("name") == "Create discoverable alpha prerelease"
     )
-    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in release_run
-    assert '-f ref="refs/tags/${tag}"' in release_run
-    assert 'remote_tag_sha" != "$SOURCE_SHA"' in release_run
-    assert 'gh release view "$tag" --json isDraft,isPrerelease' in release_run
-    assert 'gh release download "$tag"' in release_run
-    assert 'cmp --silent "$local_file"' in release_run
-    assert "mapfile -d '' local_files" in release_run and "remote_files" not in release_run
-    assert 'gh attestation verify "$remote_file"' in release_run
-    assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in release_run
-    assert "--verify-tag" in release_run
+    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in alpha_run
+    assert '-f ref="refs/tags/${tag}"' in alpha_run
+    assert 'remote_tag_sha" != "$SOURCE_SHA"' in alpha_run
+    assert 'gh release view "$tag" --json isDraft,isPrerelease' in alpha_run
+    assert 'gh release download "$tag"' in alpha_run and "verify_release_asset_inventory.py" in alpha_run
+    assert 'cmp --silent "$local_file"' in alpha_run
+    assert '"$existing_dir" dist "$VERSION"' in alpha_run
+    assert "mapfile -d '' local_files" in alpha_run
+    assert 'gh attestation verify "$remote_file"' in alpha_run and '--bundle "$bundle"' in alpha_run
+    assert '--source-digest "$SOURCE_SHA"' in alpha_run and "--verify-tag" in alpha_run
 
-    main_run = next(
+    stable_run = next(
         step["run"] for step in jobs["release-main"]["steps"] if step.get("name") == "Create discoverable main release"
     )
-    assert 'tag="v${VERSION}"' in main_run
-    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in main_run
-    assert '-f sha="$SOURCE_SHA"' in main_run
-    assert 'remote_tag_sha" != "$SOURCE_SHA"' in main_run
-    assert 'gh release view "$tag" --json isDraft,isPrerelease' in main_run
-    assert "Existing stable release is a draft or prerelease" in main_run and "remote_files" not in main_run
-    assert 'remote_guard_files=("$existing_dir"/hol_guard-*)' in main_run
-    assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in main_run
-    assert 'gh attestation verify "$remote_file"' in main_run
-    assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in main_run
-    assert "--verify-tag" in main_run
+    assert 'tag="v${VERSION}"' in stable_run
+    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in stable_run
+    assert '-f sha="$SOURCE_SHA"' in stable_run
+    assert 'remote_tag_sha" != "$SOURCE_SHA"' in stable_run
+    assert 'gh release view "$tag" --json isDraft,isPrerelease' in stable_run
+    assert "Existing stable release is a draft or prerelease" in stable_run
+    assert "remote_guard_files=" in stable_run and "verify_release_asset_inventory.py" in stable_run
+    assert '[[ "${#remote_guard_files[@]}" -gt 0 ]]' in stable_run
+    assert 'gh attestation verify "$remote_file"' in stable_run
+    assert '--bundle "$bundle" --source-digest "$SOURCE_SHA"' in stable_run
+    assert "--verify-tag" in stable_run and '"$existing_dir" dist "$VERSION"' in stable_run
 
 
 def test_release_3x_alpha_branches_remain_alpha_while_main_is_stable() -> None:
