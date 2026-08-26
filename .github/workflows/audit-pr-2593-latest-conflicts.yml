@@ -1,0 +1,42 @@
+name: Audit PR 2593 latest release conflicts
+
+on:
+  push:
+    branches:
+      - chore/reconcile-main-into-release-3.0
+    paths:
+      - .github/workflows/audit-pr-2593-latest-conflicts.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the pull request branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Audit merge conflicts against release/3.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin release/3.0
+          set +e
+          git merge --no-ff --no-commit origin/release/3.0
+          merge_status=$?
+          set -e
+          echo "merge_status=$merge_status"
+          echo "conflict_files_begin"
+          git diff --name-only --diff-filter=U
+          echo "conflict_files_end"
+          while IFS= read -r path; do
+            [[ -n "$path" ]] || continue
+            echo "conflict_context_begin:$path"
+            git diff --cc -- "$path" | sed -n '1,260p'
+            echo "conflict_context_end:$path"
+          done < <(git diff --name-only --diff-filter=U)
+          exit "$merge_status"
