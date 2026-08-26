@@ -36,6 +36,7 @@ def test_production_list_discovers_ensures_and_matches_mcp_continuity_identity(
     assert len(servers) == 1
     service = LocalCliApiService(store=store)
     monkeypatch.setattr(service, "_discovered_servers", lambda: servers)
+    _ = service._observe_harness_mcp_servers()
     first_list = service.list_items()
     item = first_list["items"][0]
     assert (item["cli_id"], item["identity_hash"], item["server_identity_hash"], item["surface"]) == (

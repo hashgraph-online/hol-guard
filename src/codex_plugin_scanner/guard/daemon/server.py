@@ -2125,10 +2125,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(history, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path == "/v1/local-clis":
-            self._write_json(
-                self._daemon_server().local_cli_api.list_items(),
-                extra_headers={"Cache-Control": "no-store"},
-            )
+            try:
+                payload = self._daemon_server().local_cli_api.list_items()
+            except Exception:
+                self._write_json(
+                    {
+                        "error": "local_cli_unavailable",
+                        "message": "Guard could not load custom extensions.",
+                    },
+                    status=500,
+                    extra_headers={"Cache-Control": "no-store"},
+                )
+                return
+            self._write_json(payload, extra_headers={"Cache-Control": "no-store"})
             return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()

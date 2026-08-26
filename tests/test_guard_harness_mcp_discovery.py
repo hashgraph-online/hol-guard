@@ -190,6 +190,9 @@ def test_list_items_observes_without_probing_or_incrementing(tmp_path: Path, mon
         _discover,
     )
     service = LocalCliApiService(store=GuardStore(home))
+    unread = service.list_items()
+    assert unread["items"] == []
+    _ = service._observe_harness_mcp_servers()
     first = service.list_items()
     second = service.list_items()
     items = first["items"]
@@ -279,6 +282,7 @@ def test_recognize_reuses_harness_identity(tmp_path: Path, monkeypatch) -> None:
     )
     store = GuardStore(home)
     service = LocalCliApiService(store=store)
+    _ = service._observe_harness_mcp_servers()
     listed = service.list_items()
     listed_items = listed["items"]
     assert isinstance(listed_items, list)
@@ -345,6 +349,7 @@ def test_recognize_cli_id_uses_live_launch_command(tmp_path: Path, monkeypatch) 
         _probe,
     )
     service = LocalCliApiService(store=GuardStore(home))
+    _ = service._observe_harness_mcp_servers()
     listed = service.list_items()
     listed_item = listed["items"][0]
     assert isinstance(listed_item, dict)
