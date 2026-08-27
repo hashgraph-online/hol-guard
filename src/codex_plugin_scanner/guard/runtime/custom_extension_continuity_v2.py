@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 from ..store_custom_extension_continuity import CustomExtensionContinuityMutation
@@ -35,6 +36,31 @@ _ITEM_FIELDS = frozenset({"identityHash", "deviceIdentityHashes", "state"})
 _HEX = frozenset("0123456789abcdef")
 
 
+@dataclass(frozen=True, slots=True)
+class _V2Preflight:
+    authority_revision: int
+    observation: dict[str, object]
+    digest: str
+    previous: object
+    revision: int
+    device_hash: str
+    binding: Mapping[str, str]
+    same_context: bool
+    stale: bool
+    local_items: Mapping[str, dict[str, object]]
+    local_by_scoped_identity: Mapping[str, list[dict[str, object]]]
+    removals_raw: object
+    removals: Mapping[str, object]
+
+
+@dataclass(slots=True)
+class _V2Plan:
+    authority_updates: list[_AuthorityUpdate]
+    statuses: dict[str, dict[str, object]]
+    events: list[tuple[str, Mapping[str, object]]]
+    observation_preconditions: dict[str, object]
+
+
 def prepare_v2_continuity(
     store: GuardStore,
     value: object,
@@ -45,6 +71,31 @@ def prepare_v2_continuity(
 ) -> tuple[CustomExtensionContinuityMutation, dict[str, object]]:
     """Plan exact v2 writes while capturing every optimistic precondition."""
 
+    preflight = _preflight_v2(store, value, workspace_id=workspace_id, device_id=device_id, now=now)
+    plan = _plan_projection_items(store, preflight, workspace_id=workspace_id)
+    if not preflight.same_context and isinstance(preflight.previous, dict):
+        _plan_context_cleanup(
+            store,
+            previous=preflight.previous,
+            local_items=preflight.local_items,
+            removals=preflight.removals,
+            protected_cli_ids=set(plan.statuses),
+            authority_updates=plan.authority_updates,
+            observation_preconditions=plan.observation_preconditions,
+            events=plan.events,
+        )
+    state = _state_payload(preflight, statuses=plan.statuses)
+    return _mutation(preflight, plan, state=state, now=now), state
+
+
+def _preflight_v2(
+    store: GuardStore,
+    value: object,
+    *,
+    workspace_id: str,
+    device_id: str,
+    now: str,
+) -> _V2Preflight:
     authority_revision = store.read_local_cli_revision()
     observation = _parse_observation(value)
     digest = hashlib.sha256(
@@ -77,46 +128,66 @@ def prepare_v2_continuity(
             local_by_scoped_identity[_workspace_identity_hash(workspace_id, identity_hash)].append(local)
     removals_raw = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY)
     removals = dict(removals_raw) if isinstance(removals_raw, dict) else {}
-    authority_updates: list[_AuthorityUpdate] = []
-    statuses: dict[str, dict[str, object]] = {}
-    events: list[tuple[str, Mapping[str, object]]] = []
-    observation_preconditions: dict[str, object] = {}
-    for item in cast(list[dict[str, object]], observation["items"]):
-        if device_hash not in cast(list[str], item["deviceIdentityHashes"]):
+    return _V2Preflight(
+        authority_revision,
+        observation,
+        digest,
+        previous,
+        revision,
+        device_hash,
+        binding,
+        same_context,
+        stale,
+        local_items,
+        local_by_scoped_identity,
+        removals_raw,
+        removals,
+    )
+
+
+def _plan_projection_items(store: GuardStore, preflight: _V2Preflight, *, workspace_id: str) -> _V2Plan:
+    plan = _V2Plan([], {}, [], {})
+    for item in cast(list[dict[str, object]], preflight.observation["items"]):
+        if preflight.device_hash not in cast(list[str], item["deviceIdentityHashes"]):
             continue
         scoped_identity = cast(str, item["identityHash"])
-        matches = list(local_by_scoped_identity.get(scoped_identity, ()))
+        matches = list(preflight.local_by_scoped_identity.get(scoped_identity, ()))
         if not matches:
             matches = [
-                local_items[cli_id]
-                for cli_id in _prior_local_items(previous, scoped_identity=scoped_identity)
-                if cli_id in local_items
+                preflight.local_items[cli_id]
+                for cli_id in _prior_local_items(preflight.previous, scoped_identity=scoped_identity)
+                if cli_id in preflight.local_items
             ]
         if not matches:
-            evidence = _evidence(scoped_identity, revision, "pending_observation", "local_identity_not_observed")
-            statuses[scoped_identity] = evidence
-            events.append(("custom_extension_continuity/pending_observation", evidence))
+            evidence = _evidence(
+                scoped_identity,
+                preflight.revision,
+                "pending_observation",
+                "local_identity_not_observed",
+            )
+            plan.statuses[scoped_identity] = evidence
+            plan.events.append(("custom_extension_continuity/pending_observation", evidence))
             continue
         for local in matches:
             cli_id = cast(str, local["cli_id"])
             raw_identity_hash = local.get("identity_hash")
             status, reason = "pending_observation", "local_identity_not_observed"
             if isinstance(raw_identity_hash, str):
-                observation_preconditions[cli_id] = _observation_precondition(local)
-            if stale:
+                plan.observation_preconditions[cli_id] = _observation_precondition(local)
+            if preflight.stale:
                 status, reason = "stale", "cloud_observation_expired"
             elif not isinstance(raw_identity_hash, str):
                 pass
             elif _workspace_identity_hash(workspace_id, raw_identity_hash) != scoped_identity:
                 status, reason = "changed_identity", "identity_mismatch"
             elif _local_override_matches(
-                removals.get(cli_id),
+                preflight.removals.get(cli_id),
                 identity_hash=raw_identity_hash,
-                cloud_revision=revision,
+                cloud_revision=preflight.revision,
             ):
                 status, reason = "locally_overridden", "local_authority_preserved"
             elif item["state"] == "removed":
-                authority_updates.append(_AuthorityUpdate(_identity_from_local(local), "unset", {}))
+                plan.authority_updates.append(_AuthorityUpdate(_identity_from_local(local), "unset", {}))
                 status, reason = "removed", "signed_cloud_tombstone"
             else:
                 update = _plan_exact_settings(
@@ -125,52 +196,53 @@ def prepare_v2_continuity(
                     settings={"state": item["state"], "commands": {}},
                 )
                 if update is not None:
-                    authority_updates.append(update)
+                    plan.authority_updates.append(update)
                 status, reason = "applied", "same_scoped_identity"
-            evidence = _evidence(scoped_identity, revision, status, reason)
+            evidence = _evidence(scoped_identity, preflight.revision, status, reason)
             if isinstance(raw_identity_hash, str):
                 evidence["local_identity_hash"] = raw_identity_hash
-            statuses[cli_id] = evidence
-            events.append((f"custom_extension_continuity/{status}", evidence))
-    if not same_context and isinstance(previous, dict):
-        _plan_context_cleanup(
-            store,
-            previous=previous,
-            local_items=local_items,
-            removals=removals,
-            protected_cli_ids=set(statuses),
-            authority_updates=authority_updates,
-            observation_preconditions=observation_preconditions,
-            events=events,
-        )
-    state_payload: dict[str, object] = {
+            plan.statuses[cli_id] = evidence
+            plan.events.append((f"custom_extension_continuity/{status}", evidence))
+    return plan
+
+
+def _state_payload(preflight: _V2Preflight, *, statuses: Mapping[str, object]) -> dict[str, object]:
+    return {
         "schema_version": CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2,
-        "cloud_revision": revision,
-        "observed_at": observation["observedAt"],
-        "expires_at": observation["expiresAt"],
-        "stale": stale,
-        "observation_digest": digest,
-        "binding": binding,
+        "cloud_revision": preflight.revision,
+        "observed_at": preflight.observation["observedAt"],
+        "expires_at": preflight.observation["expiresAt"],
+        "stale": preflight.stale,
+        "observation_digest": preflight.digest,
+        "binding": preflight.binding,
         "items": statuses,
     }
-    sync_payloads: dict[str, Mapping[str, object]] = {CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: state_payload}
-    if not stale:
-        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY] = state_payload
-    mutation = CustomExtensionContinuityMutation(
-        expected_revision=authority_revision,
-        authority_updates=tuple((item.identity, item.state, item.commands) for item in authority_updates),
+
+
+def _mutation(
+    preflight: _V2Preflight,
+    plan: _V2Plan,
+    *,
+    state: dict[str, object],
+    now: str,
+) -> CustomExtensionContinuityMutation:
+    sync_payloads: dict[str, Mapping[str, object]] = {CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: state}
+    if not preflight.stale:
+        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY] = state
+    return CustomExtensionContinuityMutation(
+        expected_revision=preflight.authority_revision,
+        authority_updates=tuple((item.identity, item.state, item.commands) for item in plan.authority_updates),
         sync_payloads=sync_payloads,
-        events=tuple(events),
+        events=tuple(plan.events),
         updated_at=now,
         sync_preconditions={
-            CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: previous,
-            CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: removals_raw,
+            CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: preflight.previous,
+            CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: preflight.removals_raw,
         },
-        observation_preconditions=observation_preconditions,
+        observation_preconditions=plan.observation_preconditions,
         requires_protected_extension_authority=True,
         required_negotiated_capability="custom-extension-continuity.v2",
     )
-    return mutation, state_payload
 
 
 def _plan_context_cleanup(

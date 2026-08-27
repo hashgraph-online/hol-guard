@@ -45,9 +45,7 @@ from ..cloud_exceptions import (
 )
 from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig
 from ..edge_events import build_runtime_session_event
-from ..managed_controls.feature_flags import ManagedControlsFeatureFlags
-from ..managed_controls_policy_bundle import parsed_managed_controls_from_validated_policy_bundle
-from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
+from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
 from ..models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
@@ -104,7 +102,6 @@ from .approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
 )
-from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from .composition_rules import compose_action_from_signals
 from .decisions import (
     AUTHORITATIVE_DECISION_INCONSISTENT,
@@ -121,16 +118,19 @@ from .extension_catalog_handshake import (
 from .extension_catalog_handshake import (
     validate_extension_catalog_sync_response as _validate_extension_catalog_sync_response,
 )
-from .extension_catalog_sync import (
-    MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
-    build_builtin_extension_catalog_wire,
-)
+from .extension_catalog_sync import build_builtin_extension_catalog_wire
 from .extension_control_authority import ExtensionControlAuthorityView
 from .local_runtime_fallbacks import best_effort_access_token, local_receipt_redaction_level
 from .managed_controls_sync import (
     apply_custom_extension_continuity_from_sync,
-    extension_authority_is_protected,
+    effective_managed_controls_for_activation,
     validated_managed_controls_candidate,
+)
+from .managed_controls_sync import (
+    managed_controls_lkg_capabilities as _managed_controls_lkg_capabilities,  # noqa: F401
+)
+from .managed_controls_sync import (
+    managed_controls_negotiated_capabilities as _managed_controls_negotiated_capabilities,
 )
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
@@ -2455,39 +2455,6 @@ def _policy_bundle_rejection_payload(reason: str | None) -> dict[str, object]:
     return payload
 
 
-def _managed_controls_negotiated_capabilities(
-    store: GuardStore,
-    sync_payload: dict[str, object] | None,
-) -> frozenset[str]:
-    """Return only capabilities explicitly confirmed by the current sync contract."""
-
-    raw: object = None
-    if isinstance(sync_payload, dict):
-        raw = sync_payload.get("managedControlsCapabilities")
-        if raw is None:
-            raw = sync_payload.get("negotiatedManagedControlsCapabilities")
-    if not isinstance(raw, list) or any(not isinstance(item, str) for item in raw):
-        return frozenset()
-    flags = ManagedControlsFeatureFlags.from_environment()
-    enabled = frozenset(flags.runtime_capabilities(protected_authority=extension_authority_is_protected(store)))
-    return frozenset(cast(list[str], raw)).intersection(MANAGED_CONTROLS_RUNTIME_CAPABILITIES).intersection(enabled)
-
-
-def _managed_controls_lkg_capabilities(
-    store: GuardStore,
-    policy_bundle: dict[str, object],
-) -> frozenset[str]:
-    """Use cached negotiation only for the exact authenticated LKG activation."""
-
-    flags = ManagedControlsFeatureFlags.from_environment()
-    enabled = frozenset(flags.runtime_capabilities(protected_authority=extension_authority_is_protected(store)))
-    return (
-        store.managed_controls_lkg_capabilities(policy_bundle)
-        .intersection(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
-        .intersection(enabled)
-    )
-
-
 def _build_canonical_policy_bundle_decisions(
     policy_bundle: dict[str, object],
     *,
@@ -3126,28 +3093,20 @@ def sync_receipts(
             effective_policy_bundle = activation_bundle
             trusted_policy_bundle_keys = activation_keys
             if activation_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                if (
-                    validated_policy_bundle is not None
-                    and activation_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
-                ):
-                    effective_managed_controls = candidate_managed_controls
-                    effective_managed_capabilities = candidate_managed_capabilities
-                else:
-                    effective_managed_capabilities = _managed_controls_lkg_capabilities(store, activation_bundle)
-                    try:
-                        parsed_managed_controls = parsed_managed_controls_from_validated_policy_bundle(
-                            activation_bundle,
-                            registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-                            negotiated_capabilities=effective_managed_capabilities,
-                        )
-                        effective_managed_controls = (
-                            parsed_managed_controls if parsed_managed_controls.has_extension_semantics else None
-                        )
-                    except ManagedControlsPolicyError as error:
-                        activation_last_error = _policy_bundle_rejection_payload(error.code)
-                        store.add_event("policy_bundle/rejected", activation_last_error, now)
-                        effective_policy_bundle = None
-                        retain_existing_policy_authority = True
+                effective_managed_controls, effective_managed_capabilities, managed_error = (
+                    effective_managed_controls_for_activation(
+                        store,
+                        activation_bundle,
+                        validated_policy_bundle=validated_policy_bundle,
+                        candidate=candidate_managed_controls,
+                        candidate_capabilities=candidate_managed_capabilities,
+                    )
+                )
+                if managed_error is not None:
+                    activation_last_error = _policy_bundle_rejection_payload(managed_error)
+                    store.add_event("policy_bundle/rejected", activation_last_error, now)
+                    effective_policy_bundle = None
+                    retain_existing_policy_authority = True
     if effective_policy_bundle is None:
         if not retain_existing_policy_authority:
             store.clear_policy_bundle_authority(

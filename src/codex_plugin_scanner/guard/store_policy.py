@@ -30,9 +30,12 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from .runtime.extension_control_contract import ControlLayerKind
-from .store_custom_extension_continuity import (
-    CustomExtensionContinuityMutation,
-    apply_custom_extension_continuity_mutation_locked,
+from .store_custom_extension_continuity import CustomExtensionContinuityMutation
+from .store_policy_activation_preflight import (
+    apply_continuity_rejection,
+    continuity_activation_rejection,
+    encoded_policy_activation_payloads,
+    policy_checkpoint_rejection,
 )
 
 if TYPE_CHECKING:
@@ -881,8 +884,7 @@ class StorePolicyMixin:
 
         The cached bundle is itself enforcement authority because policy
         defaults are read directly from it.  It must therefore become current
-        in the same SQLite transaction as every materialized decision,
-        bundle-derived exception, acknowledgement, and trust checkpoint.
+        in one transaction with every materialized decision, exception, acknowledgement, and trust checkpoint.
         Preparing and JSON-encoding all inputs before the write transaction
         also guarantees malformed rule expiry or payload data cannot leave a
         partially activated bundle behind.
@@ -904,26 +906,17 @@ class StorePolicyMixin:
             approval_gate_grant=approval_gate_grant,
             remote_write_authorized=remote_write_authorized,
         )
-        from .policy_bundle_parser import policy_bundle_acceptance_checkpoint
-
-        normalized_checkpoint = policy_bundle_acceptance_checkpoint(dict(policy_bundle))
-        if dict(policy_bundle_checkpoint) != normalized_checkpoint:
-            return reject("policy_bundle_checkpoint_mismatch")
-        state_payloads: dict[str, object] = {
-            "cloud_exceptions": [dict(item) for item in cloud_exceptions],
-            "policy": {},
-            "policy_bundle": dict(policy_bundle),
-            "policy_bundle_ack": dict(policy_bundle_ack),
-            "policy_bundle_acceptance_checkpoint": normalized_checkpoint,
-            "policy_bundle_keyring": dict(policy_bundle_keyring),
-            "policy_bundle_last_error": dict(policy_bundle_last_error or {}),
-            "team_policy_pack": {},
-        }
-        if update_last_good:
-            state_payloads["policy_bundle_last_good"] = dict(policy_bundle)
-        encoded_payloads = {
-            state_key: json.dumps(payload, allow_nan=False) for state_key, payload in state_payloads.items()
-        }
+        payload_rejection, encoded_payloads = encoded_policy_activation_payloads(
+            policy_bundle,
+            policy_bundle_keyring,
+            cloud_exceptions,
+            policy_bundle_ack,
+            policy_bundle_checkpoint,
+            policy_bundle_last_error,
+            update_last_good=update_last_good,
+        )
+        if payload_rejection is not None:
+            return reject(payload_rejection)
         from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
         with self._extension_control_authority_lock(), self._connect() as connection:
@@ -931,19 +924,13 @@ class StorePolicyMixin:
             managed_base_authority = self._read_extension_control_authority_locked(
                 BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
             )
-            if (
-                custom_extension_continuity is not None
-                and custom_extension_continuity.requires_protected_extension_authority
-                and managed_base_authority.health is not AuthorityHealth.PROTECTED
-            ):
-                return reject("custom_extension_continuity_authority_unprotected", connection)
-            if (
-                custom_extension_continuity is not None
-                and custom_extension_continuity.required_negotiated_capability is not None
-                and custom_extension_continuity.required_negotiated_capability
-                not in managed_controls_negotiated_capabilities
-            ):
-                return reject("custom_extension_continuity_capability_not_negotiated", connection)
+            continuity_rejection = continuity_activation_rejection(
+                custom_extension_continuity,
+                protected_authority=managed_base_authority.health is AuthorityHealth.PROTECTED,
+                negotiated_capabilities=managed_controls_negotiated_capabilities,
+            )
+            if continuity_rejection is not None:
+                return reject(continuity_rejection, connection)
             authority_row = connection.execute(
                 "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
             ).fetchone()
@@ -965,21 +952,9 @@ class StorePolicyMixin:
                 managed_authority_key = self._authority_key(required=True)
                 if managed_authority_key is None:
                     return reject("managed_controls_authority_key_unavailable", connection)
-            checkpoint_row = connection.execute(
-                "select payload_json from sync_state where state_key = ?",
-                ("policy_bundle_acceptance_checkpoint",),
-            ).fetchone()
-            if checkpoint_row is not None:
-                try:
-                    existing_checkpoint = json.loads(str(checkpoint_row["payload_json"]))
-                except json.JSONDecodeError:
-                    return reject("policy_bundle_checkpoint_invalid", connection)
-                if not isinstance(existing_checkpoint, dict) or not existing_checkpoint:
-                    return reject("policy_bundle_checkpoint_invalid", connection)
-                from .policy_bundle_parser import policy_bundle_is_version_downgrade
-
-                if policy_bundle_is_version_downgrade(existing_checkpoint, dict(policy_bundle)):
-                    return reject("bundle_version_downgrade", connection)
+            checkpoint_rejection = policy_checkpoint_rejection(connection, policy_bundle)
+            if checkpoint_rejection is not None:
+                return reject(checkpoint_rejection, connection)
             active_row = connection.execute(
                 "select payload_json from sync_state where state_key = ?",
                 (MANAGED_CONTROLS_ACTIVE_STATE_KEY,),
@@ -1110,15 +1085,13 @@ class StorePolicyMixin:
                     )
                 except (json.JSONDecodeError, TypeError, ValueError):
                     return reject("managed_controls_delivery_ack_invalid", connection)
-            if custom_extension_continuity is not None:
-                try:
-                    _ = apply_custom_extension_continuity_mutation_locked(
-                        connection,
-                        custom_extension_continuity,
-                        boundary=self._custom_extension_continuity_transaction_boundary,
-                    )
-                except ValueError:
-                    return reject("custom_extension_continuity_changed_during_activation", connection)
+            continuity_rejection = apply_continuity_rejection(
+                connection,
+                custom_extension_continuity,
+                boundary=self._custom_extension_continuity_transaction_boundary,
+            )
+            if continuity_rejection is not None:
+                return reject(continuity_rejection, connection)
             self._replace_remote_policy_rows_locked(connection, rows)
             for state_key, payload_json in encoded_payloads.items():
                 connection.execute(
