@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import time
 from pathlib import Path
 
 import pytest
@@ -93,8 +94,14 @@ def test_daemon_records_ready_and_clean_stop_without_sqlite_dependency(tmp_path:
     daemon.start()
     daemon.stop()
 
-    events = load_daemon_lifecycle_events(store.guard_home)
-    lifecycle = [(event["event"], event.get("reason")) for event in events]
+    deadline = time.monotonic() + 2.0
+    while True:
+        events = load_daemon_lifecycle_events(store.guard_home)
+        lifecycle = [(event["event"], event.get("reason")) for event in events]
+        if lifecycle[-1:] == [("stopped", "requested_shutdown")] or time.monotonic() >= deadline:
+            break
+        time.sleep(0.01)
+
     assert lifecycle == [
         ("start_requested", None),
         ("ready", None),
