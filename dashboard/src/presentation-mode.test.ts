@@ -39,6 +39,16 @@ assert.equal(
   "unknown_presentation_mode_fell_back_to_everyday",
 );
 assert.equal(resolvePresentationMode({ value: "future", schemaVersion: 99 }).value, "everyday");
+assert.deepEqual(resolvePresentationMode({ value: "future", schemaVersion: 99, cloudProfile: "technical" }), {
+  value: "technical",
+  source: "cloud-profile",
+  explicit: false,
+  writable: true,
+  schemaVersion: 1,
+  revision: 0,
+  diagnostic: null,
+});
+assert.equal(resolvePresentationMode({ value: "future", cloudProfile: "technical" }).value, "technical");
 assert.equal(resolvePresentationMode({ readError: true }).source, "read-error");
 assert.equal(defaultTechnicalDisclosure("everyday").open, false);
 assert.equal(defaultTechnicalDisclosure("technical").open, true);
