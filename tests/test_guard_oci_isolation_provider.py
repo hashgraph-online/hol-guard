@@ -583,6 +583,129 @@ class TestPlanSuccess:
                 bundle_root=tmp_path,
             )
 
+    def test_absolute_bind_outside_bundle_cannot_claim_os_isolation(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        tmp_path,
+    ):
+        bundle_root = tmp_path / "bundle"
+        bundle_root.mkdir()
+        (bundle_root / "rootfs").mkdir()
+        outside_source = tmp_path / "outside"
+        outside_source.mkdir()
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": outside_source.as_posix(),
+                "options": ["ro"],
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="required boundary"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                bundle_spec=bundle,
+                bundle_root=bundle_root,
+            )
+
+    def test_absolute_bind_inside_bundle_can_claim_os_isolation(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        tmp_path,
+    ):
+        (tmp_path / "rootfs").mkdir()
+        inside_source = tmp_path / "input"
+        inside_source.mkdir()
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": inside_source.as_posix(),
+                "options": ["ro"],
+            }
+        ]
+
+        lease = provider.plan(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle_spec=bundle,
+            bundle_root=tmp_path,
+        )
+
+        assert len(lease.plan_digest) == 64
+
+    @pytest.mark.parametrize("mount_type", ["", "none"])
+    def test_path_shaped_mount_without_bind_marker_is_refused(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        mount_type,
+    ):
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/host-etc",
+                "type": mount_type,
+                "source": "/etc",
+                "options": ["ro"],
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="forbidden"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=bundle,
+            )
+
+    def test_bundle_root_changes_plan_digest(self, provider, decision_context, minimal_bundle, tmp_path):
+        first_root = tmp_path / "first"
+        second_root = tmp_path / "second"
+        (first_root / "rootfs").mkdir(parents=True)
+        (second_root / "rootfs").mkdir(parents=True)
+
+        first = provider.plan(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle_spec=minimal_bundle,
+            bundle_root=first_root,
+        )
+        second = provider.plan(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle_spec=minimal_bundle,
+            bundle_root=second_root,
+        )
+
+        assert first.plan_digest != second.plan_digest
+
+    @pytest.mark.parametrize("malformed_value", [object(), float("nan")])
+    def test_digest_rejects_malformed_recognized_field_as_plan_error(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        malformed_value,
+    ):
+        bundle = dict(minimal_bundle)
+        bundle["hostname"] = malformed_value
+
+        with pytest.raises(ProviderPlanError, match="malformed OCI bundle digest input"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=bundle,
+            )
+
     def test_deterministic_digest(self, provider, decision_context, minimal_bundle):
         l1 = provider.plan(
             decision_context,

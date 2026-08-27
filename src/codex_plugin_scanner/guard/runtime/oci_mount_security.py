@@ -12,6 +12,14 @@ def is_oci_bind_mount(mount_type: str, options: Collection[str]) -> bool:
     return mount_type == "bind" or "bind" in options or "rbind" in options
 
 
+def is_oci_host_path_mount(mount_type: str, options: Collection[str], source: str) -> bool:
+    """Recognize explicit binds and path-shaped mounts without a filesystem type."""
+
+    return is_oci_bind_mount(mount_type, options) or (
+        mount_type in ("", "none") and source.startswith(("/", "./", "../"))
+    )
+
+
 def normalize_oci_bind_source(source: str) -> tuple[str, bool]:
     """Return a lexical POSIX path and whether it escapes a bundle-relative root."""
     normalized = posixpath.normpath(source)
@@ -62,10 +70,15 @@ def resolve_oci_bind_source(source: str, *, bundle_root: str | Path | None) -> s
     if not source or escapes_bundle:
         raise ValueError("OCI bind source must not traverse outside the bundle")
     if source.startswith("/"):
+        if bundle_root is None:
+            raise ValueError("absolute OCI bind source containment requires an authoritative bundle root")
         try:
-            return Path(normalized).resolve(strict=True).as_posix()
-        except (OSError, RuntimeError) as error:
-            raise ValueError("OCI bind source must resolve to an existing path") from error
+            resolved_root = Path(bundle_root).resolve(strict=True)
+            resolved_source = Path(normalized).resolve(strict=True)
+            resolved_source.relative_to(resolved_root)
+            return resolved_source.as_posix()
+        except (OSError, RuntimeError, ValueError) as error:
+            raise ValueError("absolute OCI bind source must resolve inside the authoritative bundle root") from error
     return resolve_oci_bundle_path(
         normalized,
         bundle_root=bundle_root,

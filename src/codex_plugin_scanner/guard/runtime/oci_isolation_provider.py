@@ -38,7 +38,7 @@ from codex_plugin_scanner.guard.runtime.isolation_provider import (
     validate_provider_plan_inputs,
 )
 from codex_plugin_scanner.guard.runtime.oci_mount_security import (
-    is_oci_bind_mount,
+    is_oci_host_path_mount,
     match_forbidden_oci_path,
     normalize_oci_bind_source,
     require_oci_bundle_relative_path,
@@ -211,6 +211,7 @@ class OCIMountEvidence:
     output_mounts: tuple[str, ...] = ()
     forbidden_bind_sources: tuple[str, ...] = ()
     unverified_bind_sources: tuple[str, ...] = ()
+    resolved_bind_sources: tuple[str, ...] = ()
     world_writable_binds: tuple[str, ...] = ()
 
 
@@ -242,6 +243,7 @@ class OCIRootFSEvidence:
     readonly: bool = False
     absolute: bool = False
     containment_verified: bool = False
+    resolved_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -549,8 +551,9 @@ def _read_rootfs(spec: dict[str, object], *, bundle_root: str | Path | None = No
         readonly = False
     abs_path = PurePosixPath(path).is_absolute()
     containment_verified = False
+    resolved_path = ""
     try:
-        resolve_oci_bundle_path(
+        resolved_path = resolve_oci_bundle_path(
             path,
             bundle_root=bundle_root,
             label="OCI rootfs path",
@@ -564,6 +567,7 @@ def _read_rootfs(spec: dict[str, object], *, bundle_root: str | Path | None = No
         readonly=readonly,
         absolute=abs_path,
         containment_verified=containment_verified,
+        resolved_path=resolved_path,
     )
 
 
@@ -729,6 +733,7 @@ def _read_mounts(
     output_mounts: list[str] = []
     forbidden_sources: list[str] = []
     unverified_sources: list[str] = []
+    resolved_sources: list[str] = []
     world_writable: list[str] = []
 
     readonly_rootfs = False
@@ -746,7 +751,7 @@ def _read_mounts(
         typ = raw_type if isinstance(raw_type, str) else ""
         raw_options = mount.get("options")
         options = (raw_options,) if isinstance(raw_options, str) else _string_tuple(raw_options)
-        is_bind = is_oci_bind_mount(typ, options)
+        is_bind = is_oci_host_path_mount(typ, options, src)
 
         # Rootfs mount (no source, destination=/)
         if not is_bind and src == "" and dst == "/":
@@ -762,6 +767,7 @@ def _read_mounts(
             try:
                 resolved_src = resolve_oci_bind_source(src, bundle_root=bundle_root)
                 source_verified = True
+                resolved_sources.append(resolved_src)
             except ValueError:
                 pass
             is_forbidden = escapes_bundle or any(
@@ -796,6 +802,7 @@ def _read_mounts(
         output_mounts=tuple(output_mounts),
         forbidden_bind_sources=tuple(forbidden_sources),
         unverified_bind_sources=tuple(unverified_sources),
+        resolved_bind_sources=tuple(resolved_sources),
         world_writable_binds=tuple(world_writable),
     )
 
@@ -977,14 +984,21 @@ class OCIIsolationProvider:
                 raise ProviderPlanError("required boundary is unavailable on this host")
 
         # Compute deterministic plan digest
-        spec_fields: dict[str, object] = {
-            "context_digest": context.context_digest,
-            "minimum_boundary": minimum_boundary.value,
-            "bundle_digest": _compute_bundle_digest(bundle),
-            "bundle_version": evidence.bundle_version,
-            "violations_count": len(violations),
-        }
-        plan_digest = framed_digest("guard.oci-plan.v1", spec_fields)
+        try:
+            canonical_bundle_root = Path(bundle_root).resolve(strict=True).as_posix() if bundle_root is not None else ""
+            spec_fields: dict[str, object] = {
+                "context_digest": context.context_digest,
+                "minimum_boundary": minimum_boundary.value,
+                "bundle_digest": _compute_bundle_digest(bundle),
+                "bundle_version": evidence.bundle_version,
+                "bundle_root": canonical_bundle_root,
+                "rootfs_resolved_path": evidence.rootfs.resolved_path,
+                "resolved_bind_sources": evidence.mounts.resolved_bind_sources,
+                "violations_count": len(violations),
+            }
+            plan_digest = framed_digest("guard.oci-plan.v1", spec_fields)
+        except (OSError, RuntimeError, ValueError) as error:
+            raise ProviderPlanError("malformed OCI bundle digest input") from error
 
         return ExecutionLease(
             plan_digest=plan_digest,

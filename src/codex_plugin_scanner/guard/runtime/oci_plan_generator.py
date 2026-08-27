@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
 )
 from codex_plugin_scanner.guard.runtime.isolation_provider import ProviderPlanError
 from codex_plugin_scanner.guard.runtime.oci_mount_security import (
-    is_oci_bind_mount,
+    is_oci_host_path_mount,
     match_forbidden_oci_path,
     normalize_oci_bind_source,
     require_oci_bundle_relative_path,
@@ -151,6 +151,7 @@ class OCIPlanMount:
     mount_type: str
     readonly: bool
     source: str = ""
+    resolved_source: str = ""
     options: tuple[str, ...] = ()
     classification: str = "unclassified"  # "host", "secret", "output", "system"
 
@@ -426,7 +427,9 @@ def _analyze_mounts(
             violations.append("mount:not-object")
             continue
         dst, typ, readonly, src, options = _classify_mount(mount)
-        is_bind = is_oci_bind_mount(typ, options)
+        is_bind = is_oci_host_path_mount(typ, options, src)
+        resolved_src = ""
+        source_verified = False
 
         # Skip rootfs mount (destination=/, no source)
         if dst == "/" and not is_bind and not src and (typ == "" or typ == "none"):
@@ -505,6 +508,7 @@ def _analyze_mounts(
                 mount_type=typ or "unknown",
                 readonly=readonly,
                 source=src,
+                resolved_source=resolved_src if source_verified else "",
                 options=tuple(options),
                 classification=classification,
             )
@@ -769,6 +773,8 @@ def _build_digest_fields(
     mounts: tuple[OCIPlanMount, ...] = (),
     capabilities: tuple[str, ...] = (),
     rootfs_path: str = "",
+    bundle_root: str = "",
+    rootfs_resolved_path: str = "",
 ) -> dict[str, object]:
     """Build deterministic field mapping for plan digest."""
     return {
@@ -796,6 +802,7 @@ def _build_digest_fields(
                 mount.mount_type,
                 mount.readonly,
                 mount.source,
+                mount.resolved_source,
                 mount.options,
                 mount.classification,
             )
@@ -803,6 +810,8 @@ def _build_digest_fields(
         ),
         "capabilities": capabilities,
         "rootfs_path": rootfs_path,
+        "bundle_root": bundle_root,
+        "rootfs_resolved_path": rootfs_resolved_path,
     }
 
 
@@ -910,6 +919,7 @@ class OCIPlanGenerator:
         # --- Analyze rootfs ---
         rootfs_path, rootfs_readonly = _analyze_rootfs(rootfs or {})
         rootfs_path_valid = False
+        rootfs_resolved_path = ""
         if rootfs_path:
             try:
                 require_oci_bundle_relative_path(rootfs_path, label="OCI rootfs path")
@@ -920,7 +930,7 @@ class OCIPlanGenerator:
                 mount_violations.append("rootfs-containment-unverified")
             if rootfs_path_valid:
                 try:
-                    resolve_oci_bundle_path(
+                    rootfs_resolved_path = resolve_oci_bundle_path(
                         rootfs_path,
                         bundle_root=bundle_root,
                         label="OCI rootfs path",
@@ -1008,25 +1018,31 @@ class OCIPlanGenerator:
             violation_entries.append(OCIPlanViolation(code=code, description=description, severity=severity))
 
         # --- Compute deterministic plan digest ---
-        digest_fields = _build_digest_fields(
-            bundle_version=version,
-            minimum_boundary=minimum_boundary,
-            available_boundary=available_boundary,
-            namespace=namespace,
-            network=network,
-            seccomp_profile=seccomp_profile,
-            seccomp_enforced=seccomp_enforced,
-            lsm_enabled=lsm_enabled,
-            cgroup_v2=cgroup_v2,
-            rootfs_readonly=rootfs_readonly,
-            non_root=non_root,
-            violations_count=len(all_violations_codes),
-            forbidden_capabilities_count=len(dangerous_caps),
-            mounts=tuple(plan_mounts),
-            capabilities=tuple(all_caps),
-            rootfs_path=rootfs_path,
-        )
-        plan_digest = _plan_digest(digest_fields)
+        try:
+            canonical_bundle_root = Path(bundle_root).resolve(strict=True).as_posix() if bundle_root is not None else ""
+            digest_fields = _build_digest_fields(
+                bundle_version=version,
+                minimum_boundary=minimum_boundary,
+                available_boundary=available_boundary,
+                namespace=namespace,
+                network=network,
+                seccomp_profile=seccomp_profile,
+                seccomp_enforced=seccomp_enforced,
+                lsm_enabled=lsm_enabled,
+                cgroup_v2=cgroup_v2,
+                rootfs_readonly=rootfs_readonly,
+                non_root=non_root,
+                violations_count=len(all_violations_codes),
+                forbidden_capabilities_count=len(dangerous_caps),
+                mounts=tuple(plan_mounts),
+                capabilities=tuple(all_caps),
+                rootfs_path=rootfs_path,
+                bundle_root=canonical_bundle_root,
+                rootfs_resolved_path=rootfs_resolved_path,
+            )
+            plan_digest = _plan_digest(digest_fields)
+        except (OSError, RuntimeError, ValueError) as error:
+            raise ProviderPlanError("malformed OCI plan digest input") from error
 
         # --- Build input/output structures ---
         inputs: list[OCIPlanInput] = []

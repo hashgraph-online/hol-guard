@@ -885,6 +885,108 @@ class TestPlanGeneration:
                 bundle_root=tmp_path,
             )
 
+    def test_absolute_bind_outside_bundle_cannot_claim_os_isolation(
+        self,
+        decision_context,
+        good_bundle,
+        tmp_path,
+    ):
+        bundle_root = tmp_path / "bundle"
+        bundle_root.mkdir()
+        (bundle_root / "rootfs").mkdir()
+        outside_source = tmp_path / "outside"
+        outside_source.mkdir()
+        bundle = dict(good_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": outside_source.as_posix(),
+                "options": ["ro"],
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="not achievable"):
+            OCIPlanGenerator.generate(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                bundle=bundle,
+                bundle_root=bundle_root,
+            )
+
+    def test_absolute_bind_inside_bundle_can_claim_os_isolation(
+        self,
+        decision_context,
+        good_bundle,
+        tmp_path,
+    ):
+        (tmp_path / "rootfs").mkdir()
+        inside_source = tmp_path / "input"
+        inside_source.mkdir()
+        bundle = dict(good_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": inside_source.as_posix(),
+                "options": ["ro"],
+            }
+        ]
+
+        plan = OCIPlanGenerator.generate(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle=bundle,
+            bundle_root=tmp_path,
+        )
+
+        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
+
+    @pytest.mark.parametrize("mount_type", ["", "none"])
+    def test_path_shaped_mount_without_bind_marker_is_refused(
+        self,
+        decision_context,
+        good_bundle,
+        mount_type,
+    ):
+        bundle = dict(good_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/host-etc",
+                "type": mount_type,
+                "source": "/etc",
+                "options": ["ro"],
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="forbidden"):
+            OCIPlanGenerator.generate(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle=bundle,
+            )
+
+    def test_bundle_root_changes_plan_digest(self, decision_context, good_bundle, tmp_path):
+        first_root = tmp_path / "first"
+        second_root = tmp_path / "second"
+        (first_root / "rootfs").mkdir(parents=True)
+        (second_root / "rootfs").mkdir(parents=True)
+
+        first = OCIPlanGenerator.generate(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle=good_bundle,
+            bundle_root=first_root,
+        )
+        second = OCIPlanGenerator.generate(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle=good_bundle,
+            bundle_root=second_root,
+        )
+
+        assert first.plan_digest != second.plan_digest
+
     def test_plan_digest_deterministic(self, decision_context, good_bundle):
         plan1 = OCIPlanGenerator.generate(
             decision_context,
