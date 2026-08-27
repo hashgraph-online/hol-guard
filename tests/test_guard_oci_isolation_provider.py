@@ -667,6 +667,65 @@ class TestPlanSuccess:
                 bundle_spec=bundle,
             )
 
+    @pytest.mark.parametrize(
+        ("mount_type", "options"),
+        [("bind", []), ("none", ["bind"]), ("", ["rbind"])],
+    )
+    def test_empty_explicit_bind_source_is_refused(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        mount_type,
+        options,
+    ):
+        bundle = dict(minimal_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": mount_type,
+                "source": "",
+                "options": options,
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="forbidden"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=bundle,
+            )
+
+    def test_malformed_bundle_root_is_plan_error(self, provider, decision_context, minimal_bundle):
+        with pytest.raises(ProviderPlanError, match="bundle_root"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=minimal_bundle,
+                bundle_root=object(),
+            )
+
+    @pytest.mark.parametrize("root_kind", ["file", "missing"])
+    def test_non_directory_bundle_root_is_plan_error(
+        self,
+        provider,
+        decision_context,
+        minimal_bundle,
+        tmp_path,
+        root_kind,
+    ):
+        bundle_root = tmp_path / root_kind
+        if root_kind == "file":
+            bundle_root.write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(ProviderPlanError, match="existing directory"):
+            provider.plan(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle_spec=minimal_bundle,
+                bundle_root=bundle_root,
+            )
+
     def test_bundle_root_changes_plan_digest(self, provider, decision_context, minimal_bundle, tmp_path):
         first_root = tmp_path / "first"
         second_root = tmp_path / "second"

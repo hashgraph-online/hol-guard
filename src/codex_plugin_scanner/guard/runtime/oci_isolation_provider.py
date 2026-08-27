@@ -44,6 +44,7 @@ from codex_plugin_scanner.guard.runtime.oci_mount_security import (
     require_oci_bundle_relative_path,
     resolve_oci_bind_source,
     resolve_oci_bundle_path,
+    resolve_oci_bundle_root,
 )
 
 _PROVIDE_KIND: Final = "oci-isolation"
@@ -753,6 +754,10 @@ def _read_mounts(
         options = (raw_options,) if isinstance(raw_options, str) else _string_tuple(raw_options)
         is_bind = is_oci_host_path_mount(typ, options, src)
 
+        if is_bind and not src:
+            forbidden_sources.append("<empty-bind-source>")
+            continue
+
         # Rootfs mount (no source, destination=/)
         if not is_bind and src == "" and dst == "/":
             if "readonly" in options or "ro" in options:
@@ -924,6 +929,10 @@ class OCIIsolationProvider:
         """
         if not isinstance(context, DecisionContext):
             raise ProviderPlanError("context must be a DecisionContext")
+        try:
+            bundle_root = resolve_oci_bundle_root(bundle_root)
+        except ValueError as error:
+            raise ProviderPlanError(str(error)) from error
         validate_provider_plan_inputs(input_paths, declared_outputs)
 
         # Boundary enforcement

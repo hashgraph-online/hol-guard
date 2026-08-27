@@ -942,6 +942,63 @@ class TestPlanGeneration:
 
         assert plan.available_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
 
+    def test_verified_bind_source_remains_canonical_after_symlink_swap(
+        self,
+        decision_context,
+        good_bundle,
+        tmp_path,
+    ):
+        (tmp_path / "rootfs").mkdir()
+        inside_source = tmp_path / "inside"
+        inside_source.mkdir()
+        source_link = tmp_path / "source-link"
+        source_link.symlink_to(inside_source, target_is_directory=True)
+        bundle = dict(good_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": "source-link",
+                "options": ["ro"],
+            }
+        ]
+
+        plan = OCIPlanGenerator.generate(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle=bundle,
+            bundle_root=tmp_path,
+        )
+        source_link.unlink()
+        source_link.symlink_to("/etc", target_is_directory=True)
+
+        assert plan.mounts[0].source == inside_source.as_posix()
+        assert plan.inputs[0].source == inside_source.as_posix()
+
+    def test_verified_rootfs_remains_canonical_after_symlink_swap(
+        self,
+        decision_context,
+        good_bundle,
+        tmp_path,
+    ):
+        inside_rootfs = tmp_path / "inside-rootfs"
+        inside_rootfs.mkdir()
+        rootfs_link = tmp_path / "rootfs-link"
+        rootfs_link.symlink_to(inside_rootfs, target_is_directory=True)
+        bundle = dict(good_bundle)
+        bundle["root"] = {"path": "rootfs-link", "readonly": True}
+
+        plan = OCIPlanGenerator.generate(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle=bundle,
+            bundle_root=tmp_path,
+        )
+        rootfs_link.unlink()
+        rootfs_link.symlink_to("/etc", target_is_directory=True)
+
+        assert plan.rootfs_path == inside_rootfs.as_posix()
+
     @pytest.mark.parametrize("mount_type", ["", "none"])
     def test_path_shaped_mount_without_bind_marker_is_refused(
         self,
@@ -964,6 +1021,63 @@ class TestPlanGeneration:
                 decision_context,
                 GuardExecutionAssuranceBoundary.OBSERVED_HOST,
                 bundle=bundle,
+            )
+
+    @pytest.mark.parametrize(
+        ("mount_type", "options"),
+        [("bind", []), ("none", ["bind"]), ("", ["rbind"])],
+    )
+    def test_empty_explicit_bind_source_is_refused(
+        self,
+        decision_context,
+        good_bundle,
+        mount_type,
+        options,
+    ):
+        bundle = dict(good_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": mount_type,
+                "source": "",
+                "options": options,
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="forbidden"):
+            OCIPlanGenerator.generate(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle=bundle,
+            )
+
+    def test_malformed_bundle_root_is_plan_error(self, decision_context, good_bundle):
+        with pytest.raises(ProviderPlanError, match="bundle_root"):
+            OCIPlanGenerator.generate(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle=good_bundle,
+                bundle_root=object(),
+            )
+
+    @pytest.mark.parametrize("root_kind", ["file", "missing"])
+    def test_non_directory_bundle_root_is_plan_error(
+        self,
+        decision_context,
+        good_bundle,
+        tmp_path,
+        root_kind,
+    ):
+        bundle_root = tmp_path / root_kind
+        if root_kind == "file":
+            bundle_root.write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(ProviderPlanError, match="existing directory"):
+            OCIPlanGenerator.generate(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle=good_bundle,
+                bundle_root=bundle_root,
             )
 
     def test_bundle_root_changes_plan_digest(self, decision_context, good_bundle, tmp_path):

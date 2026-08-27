@@ -20,6 +20,22 @@ def is_oci_host_path_mount(mount_type: str, options: Collection[str], source: st
     )
 
 
+def resolve_oci_bundle_root(bundle_root: object) -> Path | None:
+    """Return an existing authoritative bundle directory."""
+
+    if bundle_root is None:
+        return None
+    if not isinstance(bundle_root, (str, Path)):
+        raise ValueError("OCI bundle_root must be a string or Path")
+    try:
+        resolved_root = Path(bundle_root).resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("OCI bundle_root must resolve to an existing directory") from error
+    if not resolved_root.is_dir():
+        raise ValueError("OCI bundle_root must resolve to an existing directory")
+    return resolved_root
+
+
 def normalize_oci_bind_source(source: str) -> tuple[str, bool]:
     """Return a lexical POSIX path and whether it escapes a bundle-relative root."""
     normalized = posixpath.normpath(source)

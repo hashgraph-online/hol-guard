@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.runtime.oci_mount_security import (
     require_oci_bundle_relative_path,
     resolve_oci_bind_source,
     resolve_oci_bundle_path,
+    resolve_oci_bundle_root,
 )
 
 # --- Forbidden / hostile input constants ---
@@ -447,7 +448,12 @@ def _analyze_mounts(
             continue
 
         # Host bind mount detection
-        if is_bind and src:
+        if is_bind and not src:
+            violations.append("malformed-bind-source:empty")
+            has_forbidden = True
+            has_hostile = True
+            classification = "forbidden"
+        elif is_bind:
             normalized_src, escapes_bundle = normalize_oci_bind_source(src)
             resolved_src = normalized_src
             source_verified = not verify_sources
@@ -507,7 +513,7 @@ def _analyze_mounts(
                 container_path=dst,
                 mount_type=typ or "unknown",
                 readonly=readonly,
-                source=src,
+                source=resolved_src if source_verified else src,
                 resolved_source=resolved_src if source_verified else "",
                 options=tuple(options),
                 classification=classification,
@@ -855,6 +861,10 @@ class OCIPlanGenerator:
         """
         if not isinstance(context, DecisionContext):
             raise ProviderPlanError("context must be a DecisionContext")
+        try:
+            bundle_root = resolve_oci_bundle_root(bundle_root)
+        except ValueError as error:
+            raise ProviderPlanError(str(error)) from error
 
         bundle_map = _object_map(bundle)
         if bundle_map is None:
@@ -1096,7 +1106,7 @@ class OCIPlanGenerator:
             lsm_profile=lsm_profile,
             cgroup_v2=cgroup_v2,
             cgroup_path=cgroup_path,
-            rootfs_path=rootfs_path,
+            rootfs_path=rootfs_resolved_path or rootfs_path,
             rootfs_readonly=rootfs_readonly,
             non_root=non_root,
             violations=tuple(violation_entries),
