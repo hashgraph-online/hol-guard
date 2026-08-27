@@ -17,14 +17,17 @@ if TYPE_CHECKING:
 
 CUSTOM_EXTENSION_CONTINUITY_FIELD = "x-hol-custom-extension-continuity"
 CUSTOM_EXTENSION_CONTINUITY_SCHEMA = "guard.custom-extension-continuity.v1"
+CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2 = "guard.custom-extension-continuity.v2"
 CUSTOM_EXTENSION_CONTINUITY_STATE_KEY = "custom_extension_continuity"
 CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY = "custom_extension_continuity_last_good"
 CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY = "custom_extension_continuity_local_removals"
 
 _MAX_ITEMS = 100
+_MAX_DEVICE_BINDINGS_PER_ITEM = 1
 _ITEM_FIELDS = frozenset({"cliId", "identityHash", "settings"})
 _SETTINGS_FIELDS = frozenset({"state", "commands"})
 _TOP_LEVEL_FIELDS = frozenset({"schemaVersion", "revision", "observedAt", "expiresAt", "items"})
+_V2_ITEM_FIELDS = frozenset({"identityHash", "deviceIdentityHashes", "state"})
 _HEX = frozenset("0123456789abcdef")
 
 
@@ -56,6 +59,7 @@ def apply_verified_custom_extension_continuity(
     store: GuardStore,
     validated_policy_bundle: Mapping[str, object],
     *,
+    device_id: str | None = None,
     now: str,
 ) -> dict[str, object]:
     """Consume continuity only after the production caller verified the bundle signature."""
@@ -64,7 +68,20 @@ def apply_verified_custom_extension_continuity(
     if not isinstance(payload, Mapping):
         raise CustomExtensionContinuityError("verified policy bundle payload is missing")
     if payload.get(CUSTOM_EXTENSION_CONTINUITY_FIELD) is None:
-        return _mark_cloud_removed(store, now=now)
+        previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
+        return dict(previous) if isinstance(previous, dict) else {}
+    continuity = payload[CUSTOM_EXTENSION_CONTINUITY_FIELD]
+    if isinstance(continuity, dict) and continuity.get("schemaVersion") == CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2:
+        workspace_id = validated_policy_bundle.get("workspaceId")
+        if not isinstance(workspace_id, str) or not workspace_id or device_id is None:
+            raise CustomExtensionContinuityError("v2 continuity requires workspace and device binding")
+        return _apply_v2(
+            store,
+            continuity,
+            device_id=device_id,
+            workspace_id=workspace_id,
+            now=now,
+        )
     preflight = _preflight(store, payload=payload, now=now)
     statuses: dict[str, dict[str, object]] = {}
     authority_updates: list[_AuthorityUpdate] = []
@@ -147,6 +164,115 @@ def apply_verified_custom_extension_continuity(
     except ValueError as error:
         raise CustomExtensionContinuityError("local continuity authority changed during apply") from error
     return state
+
+
+def _apply_v2(
+    store: GuardStore,
+    value: object,
+    *,
+    device_id: str,
+    workspace_id: str,
+    now: str,
+) -> dict[str, object]:
+    observation = _parse_v2_observation(value)
+    digest = hashlib.sha256(
+        json.dumps(observation, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()
+    previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
+    revision = cast(int, observation["revision"])
+    _require_monotonic_observation(previous, revision=revision, digest=digest)
+    stale = _timestamp(cast(str, observation["expiresAt"]), "expiry") <= _timestamp(now, "current time")
+    device_hash = _scoped_device_identity_hash(workspace_id, device_id)
+    local_items = {
+        str(item["cli_id"]): item
+        for item in store.list_local_cli_items()
+        if isinstance(item.get("cli_id"), str)
+    }
+    local_by_scoped_identity = {
+        _scoped_workspace_identity_hash(workspace_id, cast(str, item["identity_hash"])): item
+        for item in local_items.values()
+        if isinstance(item.get("identity_hash"), str)
+    }
+    removals_raw = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY)
+    removals = dict(removals_raw) if isinstance(removals_raw, dict) else {}
+    authority_updates: list[_AuthorityUpdate] = []
+    statuses: dict[str, dict[str, object]] = {}
+    events: list[tuple[str, Mapping[str, object]]] = []
+    observation_preconditions: dict[str, object] = {}
+    for item in cast(list[dict[str, object]], observation["items"]):
+        if device_hash not in cast(list[str], item["deviceIdentityHashes"]):
+            continue
+        scoped_identity = cast(str, item["identityHash"])
+        local = local_by_scoped_identity.get(scoped_identity)
+        prior_local = _prior_local_item(previous, scoped_identity=scoped_identity)
+        if local is None and prior_local is not None:
+            local = local_items.get(prior_local)
+        cli_id = cast(str, local["cli_id"]) if local is not None else scoped_identity
+        raw_identity_hash = local.get("identity_hash") if local is not None else None
+        state = cast(str, item["state"])
+        status = "pending_observation"
+        reason = "local_identity_not_observed"
+        if stale:
+            status, reason = "stale", "cloud_observation_expired"
+        elif local is not None and isinstance(raw_identity_hash, str):
+            observation_preconditions[cli_id] = _observation_precondition(local)
+            local_override = removals.get(cli_id)
+            if _local_override_matches(
+                local_override,
+                identity_hash=raw_identity_hash,
+                cloud_revision=revision,
+            ):
+                status, reason = "locally_overridden", "local_authority_preserved"
+            elif state == "removed":
+                authority_updates.append(_AuthorityUpdate(_identity_from_local(local), "unset", {}))
+                status, reason = "removed", "signed_cloud_tombstone"
+            elif _scoped_workspace_identity_hash(workspace_id, raw_identity_hash) != scoped_identity:
+                status, reason = "changed_identity", "identity_mismatch"
+            else:
+                update = _plan_exact_settings(
+                    store,
+                    local=local,
+                    settings={"state": state, "commands": {}},
+                )
+                if update is not None:
+                    authority_updates.append(update)
+                status, reason = "applied", "same_scoped_identity"
+        evidence: dict[str, object] = {
+            "workspace_identity_hash": scoped_identity,
+            "cloud_revision": revision,
+            "status": status,
+            "reason": reason,
+        }
+        statuses[cli_id] = evidence
+        events.append((f"custom_extension_continuity/{status}", evidence))
+    state_payload: dict[str, object] = {
+        "schema_version": CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2,
+        "cloud_revision": revision,
+        "observed_at": observation["observedAt"],
+        "expires_at": observation["expiresAt"],
+        "stale": stale,
+        "observation_digest": digest,
+        "items": statuses,
+    }
+    sync_payloads = {CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: state_payload}
+    if not stale:
+        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY] = state_payload
+    try:
+        _ = store.apply_custom_extension_continuity_transaction(
+            expected_revision=store.read_local_cli_revision(),
+            authority_updates=[(item.identity, item.state, item.commands) for item in authority_updates],
+            sync_payloads=sync_payloads,
+            events=events,
+            updated_at=now,
+            sync_preconditions={
+                CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: previous,
+                CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: removals_raw,
+            },
+            observation_preconditions=observation_preconditions,
+        )
+    except ValueError as error:
+        raise CustomExtensionContinuityError("local continuity authority changed during apply") from error
+    return state_payload
 
 
 def _preflight(
@@ -335,6 +461,91 @@ def _parse_observation(value: object) -> dict[str, object]:
         seen.add(cli_id)
         items.append({"cliId": cli_id, "identityHash": identity_hash, "settings": _settings(raw_item.get("settings"))})
     return {**value, "items": items}
+
+
+def _parse_v2_observation(value: object) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != _TOP_LEVEL_FIELDS:
+        raise CustomExtensionContinuityError("continuity observation contains unsupported fields")
+    if value.get("schemaVersion") != CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2:
+        raise CustomExtensionContinuityError("unsupported continuity observation schema")
+    revision = value.get("revision")
+    if type(revision) is not int or cast(int, revision) < 1:
+        raise CustomExtensionContinuityError("continuity revision must be positive")
+    observed_at = value.get("observedAt")
+    expires_at = value.get("expiresAt")
+    if not isinstance(observed_at, str) or not isinstance(expires_at, str):
+        raise CustomExtensionContinuityError("continuity timestamps are required")
+    if _timestamp(expires_at, "expiry") <= _timestamp(observed_at, "observation"):
+        raise CustomExtensionContinuityError("continuity expiry must follow observation")
+    raw_items = value.get("items")
+    if not isinstance(raw_items, list) or len(raw_items) > _MAX_ITEMS:
+        raise CustomExtensionContinuityError("continuity item limit exceeded")
+    items: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict) or set(raw_item) != _V2_ITEM_FIELDS:
+            raise CustomExtensionContinuityError("continuity item contains unsupported fields")
+        identity_hash = raw_item.get("identityHash")
+        if not _sha256(identity_hash) or cast(str, identity_hash) in seen:
+            raise CustomExtensionContinuityError("invalid or duplicate continuity identity")
+        device_hashes = raw_item.get("deviceIdentityHashes")
+        if (
+            not isinstance(device_hashes, list)
+            or not device_hashes
+            or len(device_hashes) > _MAX_DEVICE_BINDINGS_PER_ITEM
+            or any(not _sha256(item) for item in device_hashes)
+            or len(set(cast(list[str], device_hashes))) != len(device_hashes)
+        ):
+            raise CustomExtensionContinuityError("invalid continuity device binding")
+        state = raw_item.get("state")
+        if state not in {"allowed", "blocked", "removed"}:
+            raise CustomExtensionContinuityError("invalid continuity setting")
+        seen.add(cast(str, identity_hash))
+        items.append(
+            {
+                "identityHash": identity_hash,
+                "deviceIdentityHashes": sorted(cast(list[str], device_hashes)),
+                "state": state,
+            }
+        )
+    return {**value, "items": sorted(items, key=lambda item: cast(str, item["identityHash"]))}
+
+
+def _sha256(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(character in _HEX for character in value)
+
+
+def _scoped_workspace_identity_hash(workspace_id: str, local_identity_hash: str) -> str:
+    material = f"{CUSTOM_EXTENSION_CONTINUITY_SCHEMA}:{workspace_id}:{local_identity_hash}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _scoped_device_identity_hash(workspace_id: str, device_id: str) -> str:
+    material = f"{CUSTOM_EXTENSION_CONTINUITY_SCHEMA}:device:{workspace_id}:{device_id}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _prior_local_item(previous: object, *, scoped_identity: str) -> str | None:
+    if not isinstance(previous, dict) or not isinstance(previous.get("items"), dict):
+        return None
+    for cli_id, item in cast(dict[str, object], previous["items"]).items():
+        if isinstance(item, dict) and item.get("workspace_identity_hash") == scoped_identity:
+            return cli_id
+    return None
+
+
+def _identity_from_local(local: dict[str, object]) -> UnlistedCliIdentity:
+    kind = local.get("kind")
+    if kind not in {"executable", "script"}:
+        raise CustomExtensionContinuityError("local continuity identity kind is invalid")
+    return UnlistedCliIdentity(
+        cli_id=cast(str, local["cli_id"]),
+        name=cast(str, local["name"]),
+        kind=cast(LocalCliKind, kind),
+        identity_hash=cast(str, local["identity_hash"]),
+        example_label=cast(str, local["example_label"]),
+        interpreter_name=cast(str | None, local.get("interpreter_name")),
+    )
 
 
 def _settings(value: object) -> dict[str, object]:

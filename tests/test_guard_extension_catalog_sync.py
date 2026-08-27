@@ -363,6 +363,7 @@ def test_production_runtime_session_defaults_to_legacy_without_touching_local_au
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
+        "GUARD_EXTENSION_FIRST_CONTROLS_UI",
     ):
         monkeypatch.delenv(name, raising=False)
     store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
@@ -402,6 +403,7 @@ def test_production_runtime_session_advertises_only_enabled_protected_capabiliti
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
+        "GUARD_EXTENSION_FIRST_CONTROLS_UI",
     ):
         monkeypatch.setenv(name, "true")
     store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
@@ -424,13 +426,21 @@ def test_production_runtime_session_advertises_only_enabled_protected_capabiliti
                 "extension-control-layer.v1",
                 "policy-extension-targets.v1",
                 "managed-controls-atomic-apply.v1",
+                "custom-extension-continuity.v2",
             },
         ),
         (
             "GUARD_POLICY_EXTENSION_TARGETS_V1",
-            {"policy-extension-targets.v1", "managed-controls-atomic-apply.v1"},
+            {
+                "policy-extension-targets.v1",
+                "managed-controls-atomic-apply.v1",
+                "custom-extension-continuity.v2",
+            },
         ),
-        ("GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1", {"managed-controls-atomic-apply.v1"}),
+        (
+            "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
+            {"managed-controls-atomic-apply.v1", "custom-extension-continuity.v2"},
+        ),
     ),
 )
 def test_production_runtime_session_downgrades_each_capability_independently(
@@ -443,6 +453,7 @@ def test_production_runtime_session_downgrades_each_capability_independently(
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
+        "GUARD_EXTENSION_FIRST_CONTROLS_UI",
     ):
         monkeypatch.setenv(name, "true")
     monkeypatch.setenv(disabled_flag, "false")

@@ -112,6 +112,7 @@ def apply_custom_extension_continuity_from_sync(
     store: GuardStore,
     policy_bundle: Mapping[str, object],
     *,
+    device_id: str,
     now: str,
 ) -> None:
     """Apply signed continuity when enabled and audit bounded refusals."""
@@ -119,13 +120,14 @@ def apply_custom_extension_continuity_from_sync(
     if not ManagedControlsFeatureFlags.from_environment().allows_custom_extension_continuity():
         return
     try:
-        apply_verified_custom_extension_continuity(store, policy_bundle, now=now)
+        apply_verified_custom_extension_continuity(store, policy_bundle, device_id=device_id, now=now)
     except CustomExtensionContinuityError as error:
         store.add_event(
             "custom_extension_continuity/refused",
             {"status": "refused", "reason": str(error)},
             now,
         )
+        raise
 
 
 def _authority_posture(

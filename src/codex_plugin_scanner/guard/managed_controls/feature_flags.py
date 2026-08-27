@@ -16,6 +16,7 @@ _RUNTIME_CAPABILITIES = (
     "extension-control-layer.v1",
     "policy-extension-targets.v1",
     "managed-controls-atomic-apply.v1",
+    "custom-extension-continuity.v2",
 )
 
 
@@ -61,6 +62,8 @@ class ManagedControlsFeatureFlags:
         capabilities.append(_RUNTIME_CAPABILITIES[2])
         if self.atomic_apply:
             capabilities.append(_RUNTIME_CAPABILITIES[3])
+            if self.extension_first_controls_ui:
+                capabilities.append(_RUNTIME_CAPABILITIES[4])
         return tuple(capabilities)
 
     def allows_custom_extension_continuity(self) -> bool:

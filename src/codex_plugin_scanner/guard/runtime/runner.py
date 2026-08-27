@@ -3187,6 +3187,12 @@ def sync_receipts(
             policy_bundle_ack=policy_bundle_ack,
         )
         try:
+            apply_custom_extension_continuity_from_sync(
+                store,
+                effective_policy_bundle,
+                device_id=device_id,
+                now=now,
+            )
             activated, activation_rejection_reason = activate_with_reason(
                 store.apply_policy_bundle_authority,
                 list(remote_decisions),
@@ -3213,7 +3219,6 @@ def sync_receipts(
                 persist_activation_rejection(store, activation_last_error, now)
             else:
                 remote_policies_stored = len(remote_decisions)
-                apply_custom_extension_continuity_from_sync(store, effective_policy_bundle, now=now)
                 if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
                     canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
                     if isinstance(canonical_last_good, dict) and canonical_last_good.get(
