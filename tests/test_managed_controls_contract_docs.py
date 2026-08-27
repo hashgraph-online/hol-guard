@@ -44,6 +44,9 @@ MANAGED_CONTROLS_DOCS = (
     ROOT / "docs" / "guard" / "managed-controls-rollback-runbook.md",
     ROOT / "docs" / "guard" / "managed-controls-release-notes.md",
 )
+MANAGED_CONTROLS_CLOUD_BOUNDARY_DOCS = tuple(
+    sorted((ROOT / "docs" / "guard").glob("managed-controls*.md"))
+)
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 EXTENSION_CONTROL_API_PATH = (
     ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
@@ -275,8 +278,9 @@ def test_managed_controls_user_and_operator_documentation_is_complete() -> None:
         r"corresponding (?:Guard )?Cloud PR|Cloud PR lands|Cloud implementation ships",
         re.IGNORECASE,
     )
-    for name, document in documents.items():
-        assert stale_cloud_boundary.search(document) is None, f"stale Cloud boundary in {name}"
+    for path in MANAGED_CONTROLS_CLOUD_BOUNDARY_DOCS:
+        document = path.read_text(encoding="utf-8")
+        assert stale_cloud_boundary.search(document) is None, f"stale Cloud boundary in {path.name}"
 
 
 def test_managed_controls_documentation_uses_only_resolvable_local_links() -> None:
