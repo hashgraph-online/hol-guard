@@ -2893,6 +2893,8 @@ def sync_receipts(
         store,
         existing_policy_bundle_payload,
     )
+    runtime_session_summary = store.get_sync_payload("runtime_session_summary")
+    delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
     if policy_bundle_field_provided:
         policy_bundle_rejection_reason: str | None
         if policy_bundle_field_malformed or policy_bundle_payload is None:
@@ -2923,8 +2925,6 @@ def sync_receipts(
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "bundle_version_downgrade"
         candidate_managed_capabilities = _managed_controls_negotiated_capabilities(store, policy_bundle_sync_payload)
-        runtime_session_summary = store.get_sync_payload("runtime_session_summary")
-        delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
         (
             validated_policy_bundle,
             candidate_managed_controls,
@@ -3148,7 +3148,7 @@ def sync_receipts(
             custom_extension_continuity = apply_custom_extension_continuity_from_sync(
                 store,
                 effective_policy_bundle,
-                device_id=device_id,
+                device_id=delivery_device_id,
                 negotiated_capabilities=effective_managed_capabilities,
                 now=now,
             )
