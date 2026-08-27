@@ -622,7 +622,7 @@
     "tests/test_guard_bulk_allow_once.py": 632,
     "tests/test_guard_cisco_runtime_cli.py": 745,
     "tests/test_guard_claude_adapter.py": 720,
-    "tests/test_guard_cli.py": 10103,
+    "tests/test_guard_cli.py": 10115,
     "tests/test_guard_cloud_local_sync.py": 1262,
     "tests/test_guard_cloud_review_sync.py": 742,
     "tests/test_guard_codex_browser_authority.py": 710,

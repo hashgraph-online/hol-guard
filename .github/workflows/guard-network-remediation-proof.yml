@@ -69,7 +69,9 @@ jobs:
         run: |
           uv venv --python 3.12 .proof-venv
           uv pip install --python .proof-venv/bin/python dist/*.whl
-          .proof-venv/bin/python -c 'from codex_plugin_scanner.version import __version__; assert __version__.startswith("3.0.0a")'
+          EXPECTED_VERSION=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          INSTALLED_VERSION=$(.proof-venv/bin/python -c 'from importlib.metadata import version; print(version("hol-guard"))')
+          test "$INSTALLED_VERSION" = "$EXPECTED_VERSION"
           .proof-venv/bin/hol-guard --version
       - name: Upload formatted proof source
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
