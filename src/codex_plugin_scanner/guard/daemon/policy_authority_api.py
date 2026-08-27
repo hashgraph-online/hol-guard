@@ -34,9 +34,7 @@ def resolve_policy_decision(
     ignored_integrity = lookup.get("ignored_local_integrity")
     return {
         "decision": dict(decision) if isinstance(decision, Mapping) else None,
-        "ignored_local_integrity": (
-            dict(ignored_integrity) if isinstance(ignored_integrity, Mapping) else None
-        ),
+        "ignored_local_integrity": (dict(ignored_integrity) if isinstance(ignored_integrity, Mapping) else None),
         "authority_revision": lookup.get("authority_revision"),
     }
 

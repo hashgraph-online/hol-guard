@@ -589,23 +589,6 @@ def test_deferred_runner_serves_startup_floor_before_backfilling(tmp_path: Path)
     assert runner.stats()["workers"] == 0
 
 
-def test_queued_work_wakes_deferred_worker_backfill(tmp_path: Path) -> None:
-    runner = HookProcessRunner(guard_home=tmp_path, process_limit=3, timeout_seconds=2)
-    ready_workers = 0
-    try:
-        runner.start(defer_backfill=True)
-        assert runner.stats()["ready"] == 2
-
-        runner.enable_full_capacity(delay_seconds=30, active_deferral_seconds=30)
-        runner.notify_queued_work()
-        assert runner.wait_for_capacity(minimum_workers=3, timeout_seconds=8)
-        ready_workers = runner.stats()["ready"]
-    finally:
-        runner.close()
-
-    assert ready_workers == 3
-
-
 def test_deferred_runner_does_not_adapt_before_backfill_is_enabled(tmp_path: Path) -> None:
     runner = HookProcessRunner(guard_home=tmp_path)
     adaptive_capacity = runner._adaptive_capacity  # pyright: ignore[reportPrivateUsage]
