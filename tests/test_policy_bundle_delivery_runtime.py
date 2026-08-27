@@ -26,6 +26,8 @@ _VECTOR_PATH = (
     Path(__file__).resolve().parents[1]
     / "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json"
 )
+_GUARD_RELEASE_CATALOG_DIGEST = "9e17eb067fd824f79fe5bfba44294c4c104e56240279a841ac9c2a6bd0592b53"
+_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:0bc7d88175c7019d6eedde22d122f0506b27c846682184fc4d99faad2c0ae458"
 
 
 class _Response:
@@ -61,9 +63,9 @@ def _bundle() -> dict[str, object]:
 def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
     vector_path = _VECTOR_PATH.with_name("extension-projection-digest-vector.json")
     vector = json.loads(vector_path.read_text())
-    expected = "sha256:0bc7d88175c7019d6eedde22d122f0506b27c846682184fc4d99faad2c0ae458"
 
-    assert vector["expectedExtensionProjectionDigest"] == expected
+    assert vector["catalogDigest"] == _GUARD_RELEASE_CATALOG_DIGEST
+    assert vector["expectedExtensionProjectionDigest"] == _GUARD_RELEASE_PROJECTION_DIGEST
     assert (
         vector["catalogDigest"]
         == runner.build_builtin_extension_catalog_wire(
@@ -83,7 +85,7 @@ def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
             parse_managed_bundle(_bundle()),
             catalog_digest=vector["catalogDigest"],
         )
-        == expected
+        == _GUARD_RELEASE_PROJECTION_DIGEST
     )
 
 
