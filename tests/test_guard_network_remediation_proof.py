@@ -21,6 +21,7 @@ def test_network_remediation_proof_compares_the_exact_installed_version() -> Non
     workflow = _WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert 'test "$INSTALLED_VERSION" = "$EXPECTED_VERSION"' in workflow
+    assert "EXPECTED_VERSION=$(uv run --frozen python" in workflow
     assert "3.0.0a" not in workflow
 
 
