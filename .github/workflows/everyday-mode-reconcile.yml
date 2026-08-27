@@ -31,7 +31,29 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin release/3.0
-          git merge --no-edit -X ours origin/release/3.0
+          set +e
+          git merge --no-commit -X ours origin/release/3.0
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            git diff --name-only --diff-filter=U > /tmp/conflicts.txt
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              if git ls-files -u -- "$path" | awk '$3 == 2 {found=1} END{exit !found}'; then
+                git checkout --ours -- "$path"
+                git add "$path"
+              else
+                git rm --ignore-unmatch "$path"
+              fi
+            done < /tmp/conflicts.txt
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              git status --short
+              exit 1
+            fi
+          fi
+          if ! git diff --cached --quiet || [ -f .git/MERGE_HEAD ]; then
+            git commit --no-edit
+          fi
       - name: Remove one-shot workflow
         shell: bash
         run: git rm .github/workflows/everyday-mode-reconcile.yml
