@@ -44,6 +44,14 @@ def _append_terminal_review_event(
     resume_update: dict[str, object],
     now: str,
 ) -> None:
+    effect_key = sha256(f"{evidence_id}\0review.outbox.terminal".encode()).hexdigest()
+    inserted = connection.execute(
+        """insert or ignore into guard_continuation_effects
+           (effect_key, request_id, evidence_id, event_name, created_at) values (?, ?, ?, ?, ?)""",
+        (effect_key, request_id, evidence_id, "review.outbox.terminal", now),
+    )
+    if not inserted.rowcount:
+        return
     status = resume_update.get("continuation_status")
     capability = resume_update.get("continuation_capability")
     reason = resume_update.get("continuation_reason")

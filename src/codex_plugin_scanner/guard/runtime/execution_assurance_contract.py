@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -85,18 +86,28 @@ def _require_positive_int(value: object, label: str) -> int:
     return value
 
 
-def _frame_scalar(value: object) -> str | bool | int | list[object]:
-    """Normalize a scalar/container item to a JSON-serializable, stable form."""
+def _frame_scalar(value: object) -> object:
+    """Normalize supported JSON-shaped values to a canonical stable form."""
 
-    if isinstance(value, str):
+    if value is None or isinstance(value, str):
         return value
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
         return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("digest fields require finite floats")
+        return value
     if isinstance(value, (tuple, list)):
         return [_frame_scalar(item) for item in cast(Iterable[object], value)]
-    return repr(value)
+    if isinstance(value, Mapping):
+        keys = list(value)
+        if not all(isinstance(key, str) for key in keys):
+            raise ValueError("digest field mappings require string keys")
+        string_keys = cast(list[str], keys)
+        return {key: _frame_scalar(value[key]) for key in sorted(string_keys)}
+    raise ValueError(f"unsupported digest field type: {type(value).__name__}")
 
 
 def framed_digest(domain: str, fields: Mapping[str, object]) -> str:
@@ -113,20 +124,12 @@ def framed_digest(domain: str, fields: Mapping[str, object]) -> str:
         key_bytes = key.encode("utf-8")
         digest.update(len(key_bytes).to_bytes(8, "big"))
         digest.update(key_bytes)
-        raw = fields[key]
-        if isinstance(raw, str):
-            value = raw.encode("utf-8")
-        elif isinstance(raw, bool):
-            value = b"true" if raw else b"false"
-        elif isinstance(raw, int):
-            value = str(raw).encode("utf-8")
-        elif isinstance(raw, (tuple, list)):
-            # The fields mapping is intentionally untyped; cast narrows the
-            # isinstance-guarded union once for iteration.
-            items = cast(Iterable[object], raw)
-            value = json.dumps([_frame_scalar(item) for item in items], separators=(",", ":")).encode("utf-8")
-        else:
-            value = repr(raw).encode("utf-8")
+        value = json.dumps(
+            _frame_scalar(fields[key]),
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
         digest.update(len(value).to_bytes(8, "big"))
         digest.update(value)
     return digest.hexdigest()

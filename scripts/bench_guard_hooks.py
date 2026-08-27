@@ -184,7 +184,7 @@ def _setup_cases(tmp: Path, workspace: Path) -> dict[str, HookReviewRequest]:
     # secret-early: secret at byte ~100
     secret_content = 'x = 1;\nconst credential = "BENCH_FIXTURE_CREDENTIAL_VALUE";\n' + "y = 2;\n" * 100
     secret_file = workspace / "src" / "secret.ts"
-    secret_file.write_text(secret_content)
+    secret_file.write_text(secret_content)  # codeql[py/clear-text-storage-sensitive-data] Synthetic test fixture.
     cases["secret-early"] = _make_request(
         harness="pi",
         event_name="PostToolUse",

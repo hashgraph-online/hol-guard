@@ -138,6 +138,12 @@ def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
     assert '-name "hol_guard-${CORE_VERSION}-*.whl"' not in text
 
 
+def test_frozen_sidecar_stages_cloud_review_package_data() -> None:
+    text = workflow_text()
+    assert "python3 -I scripts/release/stage_guard_cloud_review_artifacts.py" in text
+    assert '--source-root "$SOURCE"' in text
+
+
 def test_existing_asset_set_is_all_or_nothing(tmp_path: Path, capsys) -> None:
     namespace = runpy.run_path(str(TOOL))
     assets = tmp_path / "assets.txt"

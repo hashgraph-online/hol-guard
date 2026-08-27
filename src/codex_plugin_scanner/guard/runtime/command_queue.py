@@ -8,6 +8,7 @@ from typing import Any
 
 from ...version import __version__  # noqa: F401 - public compatibility export
 from ..adapters.base import HarnessContext
+from ..review_verification_keyring import review_verification_keyring_ready
 from ..store import GuardStore
 from .auto_update import maybe_auto_update
 from .command_capability import (
@@ -95,6 +96,13 @@ def command_queue_operations(store: GuardStore) -> tuple[str, ...]:
         operation for operation in command_capability_operations(store) if operation != EXACT_CLOUD_REVIEW_OPERATION
     )
     return generic + tuple(operation for operation in exact_cloud_review_operations(store) if operation not in generic)
+
+
+def lease_ready_operations(store: GuardStore) -> tuple[str, ...]:
+    operations = command_queue_operations(store)
+    if review_verification_keyring_ready(store):
+        return operations
+    return tuple(operation for operation in operations if operation != EXACT_CLOUD_REVIEW_OPERATION)
 
 
 def command_queue_enabled(store: GuardStore | None = None, environ: dict[str, str] | None = None) -> bool:
@@ -195,7 +203,7 @@ def _lease_next_job(
     *,
     state: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
-    operations = command_queue_operations(store)
+    operations = lease_ready_operations(store)
     exact_route_failure: Callable[[urllib.error.HTTPError], None] | None = None
     exact_route_success: Callable[[], None] | None = None
     if state is not None:

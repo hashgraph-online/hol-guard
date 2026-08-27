@@ -112,7 +112,7 @@ def test_macos_supervisor_rejects_modified_loaded_job(
     assert result.reason_code == reason
 
 
-def test_macos_supervisor_accepts_idle_loaded_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_macos_supervisor_accepts_idle_periodic_loaded_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = default_machine_paths(system_name="Darwin")
     loaded = _launchctl_print(paths).replace("state = running", "state = not running")
     monkeypatch.setattr(
@@ -123,6 +123,7 @@ def test_macos_supervisor_accepts_idle_loaded_job(tmp_path: Path, monkeypatch: p
 
     result = supervisor.verify_machine_supervisor(paths, system_name="Darwin", macos_plist_path=_macos_plist(tmp_path))
 
+    assert result.healthy
     assert result.reason_code == "supervisor_running"
 
 

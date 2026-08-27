@@ -2,7 +2,7 @@
 
 This runbook covers the HOL Guard Local side of Extension-First Managed Controls on `release/3.0`.
 
-The gates below are release-contract requirements, not evidence that the corresponding Guard Cloud author/sign/deploy workflow is shipped. Keep Cloud Managed Controls deployment disabled until that PR lands and its composed UI/API evidence satisfies the applicable gates. See the [Cloud availability boundary](managed-controls-cloud-operator-guide.md).
+The Guard Cloud workflow is implemented behind independent staged controls. Keep each stage disabled until the composed Local and Cloud evidence below passes for the target environment. See the [Cloud operator boundary](managed-controls-cloud-operator-guide.md).
 
 ## Required gates
 
@@ -16,10 +16,11 @@ The gates below are release-contract requirements, not evidence that the corresp
 8. Exclude unsupported or catalog-mismatched clients from rollout.
 9. Keep Emergency Lockdown and managed blocks non-weakenable.
 10. Confirm local blocks still tighten Cloud permits.
-11. Verify custom Extension copy remains local-only until continuity is real.
+11. Verify custom Extension copy reflects the actual continuity stage and that continuity defaults off.
 12. Run adversarial, privacy, accessibility, and performance checks.
 13. Complete and record the independent review required by the
     [Managed Controls threat model](managed-controls-threat-model.md).
+14. Verify the target environment enables only the reviewed rollout stage and retains every kill switch.
 
 From the repository root, run:
 

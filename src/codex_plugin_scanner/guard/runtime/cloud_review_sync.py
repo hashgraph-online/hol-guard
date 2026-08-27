@@ -1,19 +1,22 @@
 """Durable, independent synchronization for local Guard approval requests."""
 
+import json
 import logging
-import os
-import threading
 import urllib.error
-from contextlib import suppress
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from ..mdm.user_health import run_user_health_cadence, user_health_report_due
 from ..review_contracts import (
     GuardReviewContractError,
     guard_review_oauth_metadata,
 )
 from ..store import GuardStore
+from .cloud_review_batching import (
+    CloudReviewBatchLimits,
+    CloudReviewEventTooLargeError,
+    next_review_batch_limits,
+    persisted_review_batch_limits,
+    select_review_event_batch,
+)
 from .cloud_review_event_delivery import (
     CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     post_review_events,
@@ -28,11 +31,8 @@ from .oauth_request_retry import request_after_oauth_refresh
 
 _LOGGER = logging.getLogger(__name__)
 
-CLOUD_REVIEW_SYNC_BATCH_SIZE = 1
 CLOUD_REVIEW_SYNC_MAX_BATCHES = 200
 CLOUD_REVIEW_SYNC_STATE_KEY = "guard_cloud_review_sync_state"
-DEFAULT_POLL_INTERVAL_SECONDS = 0.1
-DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 
 __all__ = [
     "CloudReviewSyncWorker",
@@ -70,6 +70,110 @@ def _load_sync_state(store: GuardStore) -> dict[str, object]:
 
 def _save_sync_state(store: GuardStore, state: dict[str, object]) -> None:
     store.set_sync_payload(_cloud_review_sync_state_key(store), state, _now())
+
+
+def _batch_binding_key(binding: dict[str, str]) -> str:
+    return json.dumps(
+        [binding[key] for key in ("oauth_subject_hash", "workspace_id", "machine_id", "machine_installation_id")],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+
+
+def _prepare_sync_batch_state(
+    store: GuardStore,
+    delivery_binding: dict[str, str],
+) -> tuple[dict[str, object], str, CloudReviewBatchLimits]:
+    state = _load_sync_state(store)
+    binding_key = _batch_binding_key(delivery_binding)
+    limits = persisted_review_batch_limits(state, binding_key)
+    state.update({"state": "syncing", "last_sync_attempt_at": _now(), "last_error": None})
+    _save_sync_state(store, state)
+    return state, binding_key, limits
+
+
+def _persist_sync_batch_limits(
+    store: GuardStore,
+    state: dict[str, object],
+    binding_key: str,
+    limits: CloudReviewBatchLimits,
+) -> None:
+    state.update(
+        {
+            "batch_binding_key": binding_key,
+            "batch_events": limits.events,
+            "batch_max_bytes": limits.bytes,
+            "batch_event_cap": limits.event_cap,
+        }
+    )
+    _save_sync_state(store, state)
+
+
+def _select_or_quarantine_sync_batch(
+    store: GuardStore,
+    events: list[dict[str, object]],
+    sequences: list[int],
+    limits: CloudReviewBatchLimits,
+    delivery_binding: dict[str, str],
+) -> tuple[list[dict[str, object]], list[int], int, list[str]]:
+    try:
+        selected = select_review_event_batch(events, limits)
+    except CloudReviewEventTooLargeError as error:
+        message = _redacted_error(error)
+        store.quarantine_review_event(
+            sequences[0],
+            reason="event_exceeds_upload_limit",
+            error=message,
+            **delivery_binding,
+        )
+        return [], [], 1, [message]
+    return selected, sequences[: len(selected)], 0, []
+
+
+def _sync_result(
+    *,
+    accepted: int,
+    rejected: int,
+    errors: list[str],
+    batches: int,
+    outbox: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "synced": accepted,
+        "rejected": rejected,
+        "errors": errors[:5],
+        "cursor": None,
+        "batches": batches,
+        "outbox": outbox,
+        "next_attempt_at": outbox.get("next_attempt_at"),
+    }
+
+
+def _complete_sync_state(
+    store: GuardStore,
+    state: dict[str, object],
+    delivery_binding: dict[str, str],
+    *,
+    accepted: int,
+    rejected: int,
+    errors: list[str],
+) -> tuple[str, dict[str, object]]:
+    completed_at = _now()
+    outbox_status = store.review_event_outbox_status(now=completed_at, **delivery_binding)
+    state.update(
+        {
+            "state": "idle",
+            "last_sync_at": completed_at,
+            "last_success_at": completed_at,
+            "synced_count": accepted,
+            "rejected_count": rejected,
+            "last_error": errors[0] if errors else None,
+            "outbox_depth": outbox_status["depth"],
+            "outbox_oldest_changed_at": outbox_status["oldest_changed_at"],
+        }
+    )
+    _save_sync_state(store, state)
+    return completed_at, outbox_status
 
 
 def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
@@ -147,18 +251,9 @@ def sync_cloud_review_events_once(
     }
     store.refresh_review_event_outbox_binding_for_identity(**delivery_binding)
 
-    state = _load_sync_state(store)
-    state.update(
-        {
-            "state": "syncing",
-            "last_sync_attempt_at": _now(),
-            "last_error": None,
-        }
-    )
-    _save_sync_state(store, state)
+    state, batch_binding_key, batch_limits = _prepare_sync_batch_state(store, delivery_binding)
 
-    total_accepted = 0
-    total_rejected = 0
+    total_accepted = total_rejected = 0
     all_errors: list[str] = []
     batches = 0
 
@@ -167,7 +262,7 @@ def sync_cloud_review_events_once(
             newest_first = batches % 10 != 9
             outbox_rows = store.list_ready_review_events(
                 now=_now(),
-                limit=CLOUD_REVIEW_SYNC_BATCH_SIZE,
+                limit=batch_limits.events,
                 **delivery_binding,
                 newest_first=newest_first,
             )
@@ -194,6 +289,16 @@ def sync_cloud_review_events_once(
                 sequence, event = projected
                 sequences.append(sequence)
                 events.append(event)
+            events, sequences, local_rejected, local_errors = _select_or_quarantine_sync_batch(
+                store,
+                events,
+                sequences,
+                batch_limits,
+                delivery_binding,
+            )
+            total_rejected += local_rejected
+            all_errors.extend(local_errors)
+            batches += local_rejected
             if not events:
                 continue
             try:
@@ -214,6 +319,8 @@ def sync_cloud_review_events_once(
             total_accepted += accepted
             total_rejected += rejected
             batches += 1
+            batch_limits = next_review_batch_limits(batch_limits, response)
+            _persist_sync_batch_limits(store, state, batch_binding_key, batch_limits)
 
             errors = response.get("errors")
             if isinstance(errors, list):
@@ -277,24 +384,14 @@ def sync_cloud_review_events_once(
                 break
             store.acknowledge_review_events(sequences, **delivery_binding)
 
-        completed_at = _now()
-        outbox_status = store.review_event_outbox_status(
-            now=completed_at,
-            **delivery_binding,
+        _, outbox_status = _complete_sync_state(
+            store,
+            state,
+            delivery_binding,
+            accepted=total_accepted,
+            rejected=total_rejected,
+            errors=all_errors,
         )
-        state.update(
-            {
-                "state": "idle",
-                "last_sync_at": completed_at,
-                "last_success_at": completed_at,
-                "synced_count": total_accepted,
-                "rejected_count": total_rejected,
-                "last_error": all_errors[0] if all_errors else None,
-                "outbox_depth": outbox_status["depth"],
-                "outbox_oldest_changed_at": outbox_status["oldest_changed_at"],
-            }
-        )
-        _save_sync_state(store, state)
 
         outbox_depth = outbox_status["depth"]
         if not isinstance(outbox_depth, int):
@@ -306,14 +403,13 @@ def sync_cloud_review_events_once(
             batches,
             outbox_depth,
         )
-        return {
-            "synced": total_accepted,
-            "rejected": total_rejected,
-            "errors": all_errors[:5],
-            "cursor": None,
-            "batches": batches,
-            "outbox": outbox_status,
-        }
+        return _sync_result(
+            accepted=total_accepted,
+            rejected=total_rejected,
+            errors=all_errors,
+            batches=batches,
+            outbox=outbox_status,
+        )
     except urllib.error.HTTPError as error:
         error_message = f"HTTP {error.code}: {error.reason}"
         state.update(
@@ -373,126 +469,8 @@ def cloud_review_sync_status(store: GuardStore) -> dict[str, object]:
     }
 
 
-@dataclass
-class CloudReviewSyncWorker:
-    """Background worker for Cloud Review event outbox sync."""
-
-    thread: threading.Thread
-    stop_event: threading.Event
-
-
-def start_cloud_sync_sync_worker(
-    store: GuardStore,
-    existing: CloudReviewSyncWorker | None = None,
-    *,
-    poll_interval: float | None = None,
-    error_backoff: float | None = None,
-) -> CloudReviewSyncWorker | None:
-    """Start the independent Cloud Review event worker at daemon startup.
-
-    Runs continuously syncing the outbox to cloud regardless of whether the
-    command-queue lease path is active. Offline preservation ensures local
-    enforcement continues while outbox buffers.
-    """
-    if existing is not None and existing.thread.is_alive() and not existing.stop_event.is_set():
-        return existing
-    if existing is not None and existing.thread.is_alive():
-        existing.thread.join(timeout=1.0)
-        if existing.thread.is_alive():
-            raise RuntimeError("Previous Cloud Review sync worker did not stop.")
-
-    profile = store.get_cloud_sync_profile()
-    if not isinstance(profile, dict) or not profile.get("workspace_id") or not profile.get("sync_url"):
-        return None
-    stop_event = threading.Event()
-    poll_interval = poll_interval or float(
-        os.environ.get(
-            "GUARD_CLOUD_REVIEW_POLL_INTERVAL",
-            str(DEFAULT_POLL_INTERVAL_SECONDS),
-        )
-    )
-    error_backoff = error_backoff or float(
-        os.environ.get(
-            "GUARD_CLOUD_REVIEW_ERROR_BACKOFF",
-            str(DEFAULT_ERROR_BACKOFF_SECONDS),
-        )
-    )
-
-    thread = threading.Thread(
-        target=_cloud_sync_sync_loop,
-        kwargs={
-            "store": store,
-            "stop_event": stop_event,
-            "poll_interval": poll_interval,
-            "error_backoff": error_backoff,
-        },
-        daemon=True,
-        name="hol-guard-cloud-review-sync",
-    )
-    thread.start()
-    return CloudReviewSyncWorker(thread=thread, stop_event=stop_event)
-
-
-def stop_cloud_sync_sync_worker(
-    worker: CloudReviewSyncWorker | None,
-) -> CloudReviewSyncWorker | None:
-    """Signal a Cloud Review sync worker and wait briefly for shutdown."""
-    if worker is None:
-        return None
-    worker.stop_event.set()
-    worker.thread.join(timeout=1.0)
-    return worker if worker.thread.is_alive() else None
-
-
-def _cloud_sync_sync_loop(
-    store: GuardStore,
-    stop_event: threading.Event,
-    *,
-    poll_interval: float,
-    error_backoff: float,
-) -> None:
-    """Main loop for the independent Cloud Review sync worker."""
-    from .runner import (
-        GuardSyncAuthorizationExpiredError,
-        GuardSyncNotConfiguredError,
-    )
-
-    error_streak = 0
-    while not stop_event.is_set():
-        try:
-            auth_context = _resolve_cloud_review_sync_auth_context(store)
-            result = sync_cloud_review_events_once(store, auth_context)
-            with suppress(OSError, PermissionError, RuntimeError, ValueError):
-                if user_health_report_due(store.guard_home):
-                    run_user_health_cadence(store.guard_home)
-            synced = result.get("synced", 0)
-            if isinstance(synced, int) and synced > 0:
-                error_streak = 0
-                continue
-        except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
-            error_streak += 1
-            state = _load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": _redacted_error(error),
-                    "last_error_at": _now(),
-                }
-            )
-            _save_sync_state(store, state)
-        except Exception as error:
-            error_streak += 1
-            _LOGGER.exception("Unexpected error in Cloud Review sync loop")
-            state = _load_sync_state(store)
-            state.update(
-                {
-                    "state": "error",
-                    "last_error": _redacted_error(error),
-                    "last_error_at": _now(),
-                }
-            )
-            _save_sync_state(store, state)
-
-        wait = min(error_backoff, poll_interval * (2 ** min(error_streak, 10))) if error_streak else poll_interval
-        if stop_event.wait(wait):
-            return
+from .cloud_review_sync_worker import (  # noqa: E402
+    CloudReviewSyncWorker,
+    start_cloud_sync_sync_worker,
+    stop_cloud_sync_sync_worker,
+)

@@ -627,6 +627,19 @@ class StorePolicyIntegrityAdminMixin:
         current_time = _now()
         conditions: list[str] = []
         params: list[object] = []
+        if artifact_id is not None and decision_ids is None:
+            from .store_policy_list import remembered_artifact_decision_ids
+
+            sibling_ids = remembered_artifact_decision_ids(
+                self.list_policy_decisions(harness),
+                artifact_id=artifact_id,
+            )
+            if sibling_ids:
+                decision_ids = sibling_ids
+                artifact_id = None
+                artifact_hash = None
+                artifact_id_is_null = False
+                artifact_hash_is_null = False
         if decision_ids is not None:
             if not decision_ids:
                 return 0

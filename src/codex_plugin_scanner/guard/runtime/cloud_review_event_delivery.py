@@ -55,14 +55,26 @@ def post_review_events(
     response = _post_json(
         auth_context,
         path=_EVENTS_PATH,
-        payload={
-            "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
-            "firstSequence": sequences[0],
-            "lastSequence": sequences[-1],
-            "events": events,
-        },
+        payload=_review_events_payload(events),
     )
     return _normalize_response(response, events=events, sequences=sequences)
+
+
+def encoded_review_events_payload(events: list[dict[str, object]]) -> bytes:
+    """Encode exactly the request body used by the Cloud Review endpoint."""
+    return json.dumps(_review_events_payload(events), separators=(",", ":")).encode("utf-8")
+
+
+def _review_events_payload(events: list[dict[str, object]]) -> dict[str, object]:
+    sequences = [_positive_sequence(event) for event in events]
+    if not sequences:
+        raise CloudReviewEventProtocolError("A Review event batch cannot be empty.")
+    return {
+        "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
+        "firstSequence": sequences[0],
+        "lastSequence": sequences[-1],
+        "events": events,
+    }
 
 
 def _positive_sequence(event: dict[str, object]) -> int:
@@ -124,17 +136,28 @@ def _normalize_response(
         raise CloudReviewEventProtocolError(
             "Guard Cloud Review acknowledgement counts are inconsistent. Retry after updating HOL Guard."
         )
-    return {
+    normalized_response: dict[str, object] = {
         "accepted": accepted_count,
         "rejected": len(events) - accepted_count,
         "perEventResults": normalized,
         "acknowledgedThrough": acknowledged_through,
         "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     }
+    for field in ("maxBatchEvents", "maxBatchBytes"):
+        value = response.get(field)
+        if value is None:
+            continue
+        if type(value) is not int or value <= 0:
+            raise CloudReviewEventProtocolError(
+                "Guard Cloud Review returned an invalid batch limit. Update HOL Guard before retrying."
+            )
+        normalized_response[field] = value
+    return normalized_response
 
 
 __all__ = [
     "CLOUD_REVIEW_EVENT_PROTOCOL_VERSION",
     "CloudReviewEventProtocolError",
+    "encoded_review_events_payload",
     "post_review_events",
 ]

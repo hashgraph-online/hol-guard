@@ -80,7 +80,7 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
     transaction_expired = _request("exact-transaction-expired")
     capability_expired = _request("exact-capability-expired")
     for request in (accepted, rejected, invalid_decision, transaction_expired, capability_expired):
-        _add_request(store, request)
+        store.add_approval_request(request, current.isoformat())
     enable_exact_cloud_review(store, now=current.isoformat(), ttl_seconds=600)
     # Stay well inside the local request lifetime so this assertion isolates
     # the remote receipt's exact expiry boundary.

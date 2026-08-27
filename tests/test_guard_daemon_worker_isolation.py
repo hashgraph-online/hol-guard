@@ -11,6 +11,12 @@ from codex_plugin_scanner.guard.daemon import server as guard_daemon_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+@pytest.fixture(autouse=True)
+def _skip_unrelated_hook_worker_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard_daemon_module.HookProcessRunner, "start", lambda _self, **_: None)
+    monkeypatch.setattr(guard_daemon_module.HookProcessRunner, "require_initial_capacity", lambda _self: None)
+
+
 @pytest.mark.daemon_headless_refresh
 def test_daemon_headless_refresh_stops_cleanly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")

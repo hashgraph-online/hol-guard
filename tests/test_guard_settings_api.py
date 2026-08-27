@@ -10,9 +10,11 @@ from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard import config as config_module
 from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action, update_guard_settings
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicy, ManagedPolicyState
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
 from codex_plugin_scanner.guard.runtime.runner import (
     _CLOUD_REVIEW_PRIVACY_PROJECTION_MARKER,
@@ -23,6 +25,94 @@ from codex_plugin_scanner.guard.runtime.runner import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 _LIVE_OUTBOX_TABLE = "guard_review_outbox_events"
+
+
+def test_existing_cloud_sync_does_not_block_switching_to_watch_only(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+    (guard_home / "config.toml").write_text('sync = true\nmode = "prompt"\n', encoding="utf-8")
+    _store, daemon = _with_daemon(guard_home)
+    try:
+        status, payload = _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"mode": "observe", "sync": True}},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["settings"]["mode"] == "observe"
+    assert payload["settings"]["sync"] is True
+
+
+def test_managed_mode_floor_cannot_fake_watch_only_transition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+    (guard_home / "config.toml").write_text('sync = true\nmode = "observe"\n', encoding="utf-8")
+    managed_state = ManagedPolicyState(
+        status="active",
+        source="fixture",
+        policy=ManagedPolicy(
+            schema_version="guard-managed-policy.v1",
+            settings={"mode": "prompt"},
+            locked_settings=frozenset(),
+        ),
+    )
+    monkeypatch.setattr(config_module, "load_managed_policy", lambda: managed_state)
+    _store, daemon = _with_daemon(guard_home)
+    try:
+        status, payload = _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"mode": "observe", "sync": True, "desktop_notifications": False}},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["message"] == "Cloud sync requires a paid team plan."
+
+
+def test_managed_sync_cannot_be_persisted_by_watch_only_transition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+    (guard_home / "config.toml").write_text('mode = "prompt"\n', encoding="utf-8")
+    managed_state = ManagedPolicyState(
+        status="active",
+        source="fixture",
+        policy=ManagedPolicy(
+            schema_version="guard-managed-policy.v1",
+            settings={"sync": True},
+            locked_settings=frozenset(),
+        ),
+    )
+    monkeypatch.setattr(config_module, "load_managed_policy", lambda: managed_state)
+    _store, daemon = _with_daemon(guard_home)
+    try:
+        status, payload = _json_request(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/settings",
+            method="POST",
+            payload={"settings": {"mode": "observe", "sync": True}},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["message"] == "Cloud sync requires a paid team plan."
+    assert "sync = true" not in (guard_home / "config.toml").read_text(encoding="utf-8")
 
 
 def _json_request(

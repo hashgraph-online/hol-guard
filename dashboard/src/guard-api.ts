@@ -78,7 +78,10 @@ import type {
   GuardUpdateStatus,
   GuardUpdateVersionCheck,
   DecisionScope,
+  GuardApprovalResolutionInput,
+  RiskSignalV2,
   RiskSignalV2Category,
+  RiskSignalV2RedactionLevel,
   RiskSignalV2Severity,
 } from "./guard-types";
 import {
@@ -223,6 +226,20 @@ async function requestErrorMessage(response: Response, fallback: string): Promis
     return fallback;
   }
   return fallback;
+}
+
+export class GuardRequestResolutionError extends Error {
+  readonly status: number;
+  readonly payload: Record<string, unknown> | null;
+
+  constructor(status: number, payload: Record<string, unknown> | null, fallback: string) {
+    const error = typeof payload?.["error"] === "string" ? payload["error"] : null;
+    const message = typeof payload?.["message"] === "string" ? payload["message"] : null;
+    super(message?.trim() || (error?.trim() ? `${error} (${status})` : fallback));
+    this.name = "GuardRequestResolutionError";
+    this.status = status;
+    this.payload = payload;
+  }
 }
 
 export class GuardHarnessActionError extends Error {
@@ -2865,15 +2882,7 @@ function fetchGuardApi(input: RequestInfo, init?: RequestInit): Promise<Response
   return fetchWithGuardAuth(input, init);
 }
 
-export async function resolveRequest(input: {
-  requestId: string;
-  action: "allow" | "block";
-  scope: DecisionScope;
-  workspace?: string;
-  reason: string;
-  scope_contract_version?: string;
-  scope_contract_digest?: string;
-}): Promise<void> {
+export async function resolveRequest(input: GuardApprovalResolutionInput): Promise<void> {
   await resolveRequestWithQueueResult(input);
 }
 
@@ -2984,18 +2993,9 @@ export async function disableApprovalGateTotp(
   });
 }
 
-export async function resolveRequestWithQueueResult(input: {
-  requestId: string;
-  action: "allow" | "block";
-  scope: DecisionScope;
-  workspace?: string;
-  reason: string;
-  approval_password?: string;
-  approval_totp_code?: string;
-  approval_gate_use_cooldown?: boolean;
-  scope_contract_version?: string;
-  scope_contract_digest?: string;
-}): Promise<GuardQueueResolutionResult> {
+export async function resolveRequestWithQueueResult(
+  input: GuardApprovalResolutionInput,
+): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
     return {
       resolved: true,
@@ -3030,6 +3030,15 @@ export async function resolveRequestWithQueueResult(input: {
       ...(input.scope_contract_digest !== undefined
         ? { scope_contract_digest: input.scope_contract_digest }
         : {}),
+      ...(input.persist_policy !== undefined ? { persist_policy: input.persist_policy } : {}),
+      ...(input.mcp_grant_target !== undefined ? { mcp_grant_target: input.mcp_grant_target } : {}),
+      ...(input.mcp_grant_duration !== undefined ? { mcp_grant_duration: input.mcp_grant_duration } : {}),
+      ...(input.local_tool_grant_target !== undefined
+        ? { local_tool_grant_target: input.local_tool_grant_target }
+        : {}),
+      ...(input.local_tool_grant_duration !== undefined
+        ? { local_tool_grant_duration: input.local_tool_grant_duration }
+        : {}),
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
       ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})
@@ -3037,7 +3046,18 @@ export async function resolveRequestWithQueueResult(input: {
   });
   const response = await fetchGuardApi(path, init());
   if (!response.ok) {
-    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
+    let payload: Record<string, unknown> | null = null;
+    try {
+      const candidate: unknown = await response.clone().json();
+      payload = isRecord(candidate) ? candidate : null;
+    } catch {
+      payload = null;
+    }
+    throw new GuardRequestResolutionError(
+      response.status,
+      payload,
+      await requestErrorMessage(response, `Request failed with ${response.status}`),
+    );
   }
   const payload = (await response.json()) as QueueResolutionPayload;
   return normalizeQueueResolution(payload);

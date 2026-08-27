@@ -22,6 +22,7 @@ from .sqlite_profile import (
 from .sqlite_recovery import (
     FATAL_SQLITE_ERROR_MARKERS,
     SQLITE_IO_ERROR_MARKER,
+    restore_readable_sqlite_store,
     sqlite_store_is_proven_unusable,
 )
 
@@ -184,6 +185,7 @@ class StoreConnectionSchemaMixin:
     _startup_prefetched_policy_integrity_repair_failed = False
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
     _storage_gate_local: ClassVar[threading.local] = threading.local()
+    _last_sqlite_recovery = "skipped"
 
     def _current_thread_owns_storage_recovery(self) -> bool:
         return getattr(self._storage_recovery_local, "owner", None) == id(self)
@@ -264,6 +266,7 @@ class StoreConnectionSchemaMixin:
         *,
         failed_identity: tuple[int, int] | None = None,
     ) -> bool:
+        self._last_sqlite_recovery = "skipped"
         is_io_error = SQLITE_IO_ERROR_MARKER in str(error).lower()
         if (
             not isinstance(error, sqlite3.DatabaseError)
@@ -286,6 +289,7 @@ class StoreConnectionSchemaMixin:
             except OSError:
                 current_identity = None
             if current_identity != failed_identity:
+                self._last_sqlite_recovery = "replaced"
                 return True
 
             if not self._store_is_proven_unusable(error):
@@ -293,19 +297,24 @@ class StoreConnectionSchemaMixin:
 
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
             quarantine_id = f"{stamp}-{uuid4().hex[:8]}"
+            quarantined = self.guard_home / f"guard.db.corrupt-{quarantine_id}"
             for suffix in ("", "-wal", "-shm"):
                 source = Path(f"{self.path}{suffix}")
                 if not source.exists() or source.is_symlink():
                     continue
-                destination = self.guard_home / f"guard.db.corrupt-{quarantine_id}{suffix}"
-                source.replace(destination)
+                source.replace(self.guard_home / f"{quarantined.name}{suffix}")
             _store_logger.error(
                 "Guard quarantined an unusable SQLite store after a fatal storage error: %s",
                 type(error).__name__,
             )
             self._storage_recovery_local.owner = id(self)
             try:
-                self._initialize_schema()
+                if restore_readable_sqlite_store(destination=self.path, quarantined=quarantined):
+                    self._last_sqlite_recovery = "restored"
+                    _store_logger.error("Guard restored the quarantined SQLite store after it still opened cleanly.")
+                else:
+                    self._initialize_schema()
+                    self._last_sqlite_recovery = "reinitialized"
             finally:
                 self._storage_recovery_local.owner = None
             return True
@@ -336,12 +345,15 @@ class StoreConnectionSchemaMixin:
             with self._connect_once() as connection:
                 yield connection
             return
+        yielded = False
         fatal_error: sqlite3.DatabaseError | None = None
         failed_identity: tuple[int, int] | None = None
         with self._hold_storage_gate(exclusive=False):
             try:
                 with self._connect_once() as connection:
+                    yielded = True
                     yield connection
+                return
             except sqlite3.DatabaseError as error:
                 fatal_error = error
                 try:
@@ -349,9 +361,15 @@ class StoreConnectionSchemaMixin:
                     failed_identity = failed_stat.st_dev, failed_stat.st_ino
                 except OSError:
                     failed_identity = None
-        if fatal_error is not None:
-            self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+                if yielded:
+                    raise
+        if fatal_error is None:
+            return
+        recovered = self._recover_fatal_sqlite_store(fatal_error, failed_identity=failed_identity)
+        if not recovered and not sqlite_error_is_busy_locked(fatal_error):
             raise fatal_error
+        with self._hold_storage_gate(exclusive=False), self._connect_once() as connection:
+            yield connection
 
     @contextmanager
     def _connect_once(self) -> Iterator[sqlite3.Connection]:
@@ -382,13 +400,12 @@ class StoreConnectionSchemaMixin:
             # thrash the default 2 MiB cache.
             connection.execute(f"pragma cache_size=-{SQLITE_CACHE_SIZE_KIB}")
             connection.execute(f"pragma mmap_size={SQLITE_MMAP_SIZE_BYTES}")
+            initial_changes = connection.total_changes
             yield connection
             store_review_event_outbox_schema.finalize_review_event_payload_hashes(connection)
-            commit_started = time.monotonic()
-            try:
-                connection.commit()
-            finally:
-                profiler.record_commit((time.monotonic() - commit_started) * 1000)
+            outbox_generation = store_review_event_outbox_schema.commit_review_event_transaction(
+                connection, initial_changes, profiler.record_commit
+            )
             notification = self._take_policy_integrity_state_notification(connection)
         except sqlite3.OperationalError as error:
             database_failed = True
@@ -411,6 +428,7 @@ class StoreConnectionSchemaMixin:
                     "Guard store slow transaction (%.0fms); consider indexing hot query paths.",
                     elapsed_ms,
                 )
+        store_review_event_outbox_schema.notify_review_event_wake(self.path, outbox_generation)
         if notification is not None:
             self._publish_policy_integrity_state_notification(notification)
 
@@ -976,7 +994,7 @@ class StoreConnectionSchemaMixin:
             ensure_command_activity_maintenance_schema(connection, applied_at=_now())
             ensure_command_activity_api_schema(connection, applied_at=_now())
             ensure_evidence_schema(connection)
-            ensure_extension_control_authority_schema(connection)
+            ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)
             ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
@@ -1109,9 +1127,8 @@ class StoreConnectionSchemaMixin:
 
     def _initialize_policy_integrity(self) -> None:
         if getattr(self, "_prime_policy_integrity_on_initialize", True):
-            # Prime policy-integrity secrets outside the SQLite transaction. Some
-            # credential-store lookups can block long enough to stall other Guard
-            # processes if initialization still holds the writer lock.
+            # Prime secrets outside the transaction so credential-store lookups
+            # cannot stall other Guard processes while holding the writer lock.
             self._startup_prefetched_policy_integrity_secret_material = self._policy_integrity_secret_material(
                 create=False
             )
@@ -1162,6 +1179,7 @@ class StoreConnectionSchemaMixin:
                         row is not None
                         and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
                         and storage_row is not None
+                        and "oauth_source" in approval_columns
                         and required_approval_columns <= approval_columns
                     )
                 finally:

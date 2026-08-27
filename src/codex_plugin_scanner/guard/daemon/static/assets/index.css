@@ -5485,16 +5485,6 @@
       }
     }
 
-    .hover\:bg-brand-blue\/10:hover {
-      background-color: var(--brand-blue);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:bg-brand-blue\/10:hover {
-        background-color: color-mix(in oklab, var(--brand-blue) 10%, transparent);
-      }
-    }
-
     .hover\:bg-brand-blue\/20:hover {
       background-color: var(--brand-blue);
     }
@@ -6867,7 +6857,22 @@ body {
   line-height: 1.4;
 }
 
+.guard-quiet-link {
+  text-underline-offset: 3px;
+  transition: text-decoration-thickness .15s var(--ease-out-quart);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+}
+
+.guard-quiet-link:hover {
+  text-decoration-thickness: 1.5px;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .guard-quiet-link {
+    transition: none;
+  }
+
   .guard-tab-enter {
     animation: none;
   }

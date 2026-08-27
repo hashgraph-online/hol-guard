@@ -592,7 +592,9 @@ def _run_guard_policies_command(
             return 1
         _emit("policies", payload, getattr(args, "json", False))
         return 0
-    policy_items = store.list_policy_decisions(getattr(args, "harness", None))
+    from ..store_policy_list import list_remembered_policy_decisions
+
+    policy_items = list_remembered_policy_decisions(store, getattr(args, "harness", None))
     items = _filter_policy_items(policy_items, active_only=True)
     _emit("policies", {"generated_at": _now(), "items": items}, getattr(args, "json", False))
     return 0

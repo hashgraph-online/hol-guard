@@ -12,7 +12,9 @@ class Ecosystem(str, Enum):
 
     CODEX = "codex"
     CLAUDE = "claude"
+    DEEPSEEK_HARNESS = "deepseek-harness"
     GEMINI = "gemini"
+    KIMI = "kimi"
     OPENCODE = "opencode"
 
 

@@ -107,6 +107,32 @@
       }
     },
     {
+      "name": "continuation-failed-after-rejected-binding",
+      "result": {
+        "contractVersion": "guard-cloud-review-v2",
+        "correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab",
+        "observedAt": "2026-08-23T18:03:00Z",
+        "request": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-08", "reviewRequestId": "review-request-08", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "receiptId": "receipt-08", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-08", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "status": "rejected_binding", "reason": "local binding changed", "completedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a12-1234-7abc-8def-0123456789ab", "resultId": "continuation-08", "capability": "retry-only", "status": "failed", "reason": "local binding changed", "completedAt": "2026-08-23T18:03:00Z"}
+      }
+    },
+    {
+      "name": "continuation-failed-after-rejected-stale",
+      "result": {
+        "contractVersion": "guard-cloud-review-v2",
+        "correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab",
+        "observedAt": "2026-08-23T18:03:00Z",
+        "request": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "localRequestId": "local-request-09", "reviewRequestId": "review-request-09", "kind": "reviewable_pause", "status": "pending", "visibilityStatus": "visible"},
+        "decision": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "receiptId": "receipt-09", "outcome": "allow_once", "status": "recorded", "recordedAt": "2026-08-23T18:00:00Z"},
+        "delivery": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "commandJobId": "command-job-09", "status": "applied", "leasedAt": "2026-08-23T18:01:00Z", "completedAt": "2026-08-23T18:02:00Z"},
+        "application": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "status": "rejected_stale", "reason": "local request is stale", "completedAt": "2026-08-23T18:02:00Z"},
+        "continuation": {"correlationId": "gcr_018f0a13-1234-7abc-8def-0123456789ab", "resultId": "continuation-09", "capability": "retry-only", "status": "failed", "reason": "local request is stale", "completedAt": "2026-08-23T18:03:00Z"}
+      }
+    },
+    {
       "name": "continuation-not-applicable-without-local-application",
       "result": {
         "contractVersion": "guard-cloud-review-v2",

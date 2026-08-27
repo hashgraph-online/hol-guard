@@ -563,7 +563,7 @@
                 "ifPath": "/continuation/status",
                 "ifValue": "failed",
                 "thenPath": "/application/status",
-                "thenValues": ["failed_terminal", "applied"]
+                "thenValues": ["failed_terminal", "rejected_binding", "rejected_stale", "applied"]
             },
             {
                 "id": "blocked-continuation-requires-block-decision",
@@ -580,11 +580,11 @@
             "artifacts": {
                 "commandResult": {
                     "path": "contracts/guard-cloud-review/v2/command-result.json",
-          "sha256": "1554a8d3e8d8e127dcc30515ba626400ffda664e8ff45f91c8ae0162194e6334"
+                    "sha256": "6e093ce91e5ec581aad04ec2f9451ee768a9caca6eda8429e2741d7312f47cfd"
                 },
                 "fixtures": {
                     "path": "contracts/guard-cloud-review/v2/fixtures.json",
-                    "sha256": "3f8ae64c2185c6137314f26f44dedf68f54e7b14a9473d80c1783685dabb6909"
+                    "sha256": "be97fc36f2f19a023d2121bf9a74a8e5b04662c7a03b87190f03885e689cb5f9"
                 },
                 "publicDocumentation": {
                     "path": "docs/guard/contracts/guard-cloud-review.md",

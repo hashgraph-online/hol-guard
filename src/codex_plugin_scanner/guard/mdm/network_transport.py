@@ -126,9 +126,19 @@ def request_url(request: str | urllib.request.Request) -> str:
 
 
 def validate_destination(url: str, policy: ManagedNetworkPolicy) -> None:
-    hostname = (urllib.parse.urlsplit(url).hostname or "").lower()
+    hostname = _canonical_hostname(urllib.parse.urlsplit(url).hostname or "")
     if not policy.allow_public_registries and hostname in _PUBLIC_REGISTRIES:
         raise ManagedNetworkError("managed_public_registry_disabled")
+
+
+def _canonical_hostname(hostname: str) -> str:
+    """Return a comparison-safe DNS hostname, accepting one root-label dot."""
+
+    rooted = hostname[:-1] if hostname.endswith(".") else hostname
+    try:
+        return rooted.encode("idna").decode("ascii").lower()
+    except UnicodeError as error:
+        raise ManagedNetworkError("managed_destination_invalid") from error
 
 
 def validated_proxy_url(value: str, *, require_https: bool, reason_code: str) -> str:
@@ -290,10 +300,22 @@ def managed_urlopen(
 
 
 class _ManagedHTTPAdapter(HTTPAdapter):
-    def __init__(self, context: ssl.SSLContext | None, proxy_authorization: str | None) -> None:
+    def __init__(
+        self,
+        context: ssl.SSLContext | None,
+        proxy_authorization: str | None,
+        policy: ManagedNetworkPolicy,
+    ) -> None:
         self._managed_context = context
         self._proxy_authorization = proxy_authorization
+        self._managed_policy = policy
         super().__init__()
+
+    def add_headers(self, request: requests.PreparedRequest, **kwargs: object) -> None:
+        del kwargs
+        if request.url is None:
+            raise ManagedNetworkError("managed_destination_missing")
+        validate_destination(request.url, self._managed_policy)
 
     def init_poolmanager(
         self,
@@ -336,9 +358,8 @@ def managed_requests_session(policy: ManagedNetworkPolicy | None = None) -> requ
             credentials = load_proxy_credentials(selected)
             if credentials is not None:
                 proxy_authorization = basic_proxy_authorization(credentials)
-    if context is not None or proxy_authorization is not None:
-        session.mount("http://", _ManagedHTTPAdapter(context, proxy_authorization))
-        session.mount("https://", _ManagedHTTPAdapter(context, proxy_authorization))
+    session.mount("http://", _ManagedHTTPAdapter(context, proxy_authorization, resolved))
+    session.mount("https://", _ManagedHTTPAdapter(context, proxy_authorization, resolved))
     session.verify = True
     return session
 

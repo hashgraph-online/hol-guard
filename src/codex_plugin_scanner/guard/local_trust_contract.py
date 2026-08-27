@@ -223,11 +223,12 @@ def run_trust_backend_check(
     *,
     timeout_seconds: float,
     timeout_result: _TrustResult,
+    startup_timeout_seconds: float | None = None,
     on_error: Callable[[BaseException], _TrustResult] | None = None,
 ) -> _TrustResult:
     """Run side-effect-free passive backend work under a contained timeout."""
 
-    if timeout_seconds <= 0:
+    if timeout_seconds <= 0 or (startup_timeout_seconds is not None and startup_timeout_seconds <= 0):
         return timeout_result
     try:
         context = multiprocessing.get_context("spawn")
@@ -256,7 +257,8 @@ def run_trust_backend_check(
             if on_error is None:
                 return timeout_result
             return on_error(error)
-        spawn_timeout = min(_TRUST_BACKEND_SPAWN_TIMEOUT_SECONDS, timeout_seconds * 3)
+        startup_timeout = timeout_seconds * 3 if startup_timeout_seconds is None else startup_timeout_seconds
+        spawn_timeout = min(_TRUST_BACKEND_SPAWN_TIMEOUT_SECONDS, max(0.0, startup_timeout))
         spawn_deadline = time.monotonic() + spawn_timeout
         while not Path(ready_path).exists() and process.is_alive() and time.monotonic() < spawn_deadline:
             time.sleep(0.005)

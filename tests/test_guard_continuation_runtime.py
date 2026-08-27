@@ -230,6 +230,13 @@ def test_dead_codex_hook_terminalizes_to_manual_retry_after_daemon_recovery(tmp_
     assert payload["continuationReason"] == "manual_retry_required"
     assert replay["continuationEvidenceId"] == payload["continuationEvidenceId"]
     assert len(store.list_events(event_name="review.continuation.manual_retry_required")) == 1
+    with store._connect() as connection:
+        terminal_outbox_count = connection.execute(
+            """select count(*) from guard_review_outbox_events
+               where local_request_id = ? and event_type = ?""",
+            ("request-codex-dead", "review.continuation.manual_retry_required"),
+        ).fetchone()[0]
+    assert terminal_outbox_count == 1
 
 
 def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

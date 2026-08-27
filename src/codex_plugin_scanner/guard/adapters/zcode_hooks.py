@@ -45,6 +45,7 @@ def _canonical_zcode_event_name(raw_event: str) -> str:
         "pretooluse": "PreToolUse",
         "userpromptsubmit": "UserPromptSubmit",
         "posttooluse": "PostToolUse",
+        "posttoolusefailure": "PostToolUseFailure",
         "sessionstart": "SessionStart",
         "notification": "Notification",
         "permissionrequest": "PermissionRequest",

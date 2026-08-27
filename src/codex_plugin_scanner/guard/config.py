@@ -726,18 +726,30 @@ def update_guard_settings(
         next_payload.get("security_level", current_config.security_level),
     )
     next_payload = _sync_protection_posture_payload(next_payload, current_config, payload)
+    effective_next_payload = next_payload
     if current_config.managed_policy is not None:
-        composed = apply_managed_policy(next_payload, current_config.managed_policy)
+        effective_next_payload = apply_managed_policy(next_payload, current_config.managed_policy)
         missing = object()
         weakened = [
             key
             for key in current_config.managed_locked_settings
             if (requested := _nested_setting_value(next_payload, key, missing)) is not missing
-            and _nested_setting_value(composed, key, missing) != requested
+            and _nested_setting_value(effective_next_payload, key, missing) != requested
         ]
         if weakened:
             raise ValueError(f"Managed policy locks prevent weakening: {', '.join(sorted(weakened))}")
-    if next_payload.get("sync") is True and current.get("sync") is not True and not cloud_sync_entitled:
+    preserving_existing_sync = (
+        current.get("sync") is True
+        and current_config.sync is True
+        and next_payload.get("sync") is True
+        and (payload.get("mode") != "observe" or effective_next_payload.get("mode") == "observe")
+    )
+    if (
+        next_payload.get("sync") is True
+        and payload.get("sync") is True
+        and not cloud_sync_entitled
+        and not preserving_existing_sync
+    ):
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)

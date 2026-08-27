@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from time import monotonic
 from typing import Final
 from uuid import uuid4
 
 from .review_event_integrity import review_event_payload_digest
+from .review_event_wake import review_event_wake_signal
 from .store_review_event_outbox_upgrade import ensure_review_event_outbox_upgrade
+from .store_review_event_wake_schema import (
+    review_event_outbox_generation,
+    review_event_wake_schema_statements,
+)
 
 # pyright: reportAny=false, reportUnusedCallResult=false
 
@@ -68,6 +75,26 @@ REVIEW_REQUEST_SNAPSHOT_COLUMNS: Final = (
     "created_at",
     "resolved_at",
 )
+
+
+def commit_review_event_transaction(
+    connection: sqlite3.Connection,
+    initial_changes: int,
+    record_commit: Callable[[float], None],
+) -> int | None:
+    """Commit durably and return the outbox generation only after writes."""
+    started = monotonic()
+    try:
+        connection.commit()
+    finally:
+        record_commit((monotonic() - started) * 1000)
+    return review_event_outbox_generation(connection) if connection.total_changes > initial_changes else None
+
+
+def notify_review_event_wake(database_path: Path, outbox_generation: int | None) -> None:
+    """Publish a wake hint only after a transaction commits changes."""
+    if outbox_generation is not None:
+        review_event_wake_signal(database_path).notify_if_outbox_changed(outbox_generation)
 
 
 def finalize_review_event_payload_hashes(connection: sqlite3.Connection) -> None:
@@ -319,6 +346,7 @@ def review_event_outbox_schema_statements() -> tuple[str, ...]:
           select raise(abort, 'approval OAuth source is immutable');
         end
         """,
+        *review_event_wake_schema_statements(),
     )
 
 
@@ -445,6 +473,9 @@ def _migrate_retired_outbox(connection: sqlite3.Connection, now: str) -> None:
 
 
 def ensure_review_event_outbox_schema(connection: sqlite3.Connection, now: str) -> None:
+    approval_columns = {str(row["name"]) for row in connection.execute("pragma table_info(approval_requests)")}
+    if "oauth_source" not in approval_columns:
+        connection.execute("alter table approval_requests add column oauth_source text")
     for statement in review_event_outbox_schema_statements():
         connection.execute(statement)
     ensure_review_event_outbox_upgrade(connection, migration_version=REVIEW_EVENT_OUTBOX_MIGRATION_VERSION)

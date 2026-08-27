@@ -255,6 +255,35 @@ def test_unresolved_context_uses_process_ephemeral_keyed_identity() -> None:
     assert "FIRST_UNKNOWN" not in first
 
 
+def test_inline_path_assignment_uses_supplied_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supplied_bin = tmp_path / "supplied-bin"
+    ambient_bin = tmp_path / "ambient-bin"
+    fallback_bin = tmp_path / "fallback-bin"
+    for directory in (supplied_bin, ambient_bin, fallback_bin):
+        directory.mkdir()
+    supplied_npx = supplied_bin / "npx"
+    supplied_npx.write_text("#!/bin/sh\n", encoding="utf-8")
+    supplied_npx.chmod(0o755)
+    ambient_npx = ambient_bin / "npx"
+    ambient_npx.write_text("#!/bin/sh\n", encoding="utf-8")
+    ambient_npx.chmod(0o755)
+    monkeypatch.setenv("MANAGER_BIN", str(ambient_bin))
+
+    intent = parse_package_intent(
+        "PATH=$MANAGER_BIN:$PATH npx -y fixture@latest",
+        workspace=tmp_path,
+        environment={"MANAGER_BIN": str(supplied_bin), "PATH": str(fallback_bin)},
+    )
+
+    assert intent is not None
+    manager = intent.local_executions[0].manager
+    assert manager is not None
+    assert manager.resolved_path == str(supplied_npx.resolve())
+
+
 def test_parse_package_intent_reviews_declared_local_test_runner_execution(tmp_path: Path) -> None:
     _write_text(tmp_path / "package.json", '{"name":"demo","devDependencies":{"vitest":"^4.1.8"}}\n')
     _write_text(tmp_path / "bun.lock", '"vitest": "4.1.8"\n')

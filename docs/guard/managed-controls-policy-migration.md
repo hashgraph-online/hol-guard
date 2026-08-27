@@ -2,7 +2,7 @@
 
 HOL Guard 3.0 preserves existing `GuardPolicy` documents, `/policy` routes, remembered rules, and policy bundle names. The Local runtime can validate namespaced Extension fields without requiring a destructive rewrite. Unmapped legacy rules remain advanced contextual rules.
 
-Start with [ADR 0011](adr/0011-extension-first-managed-controls.md), the [glossary](managed-controls-glossary.md), and [Policy Extension fields v1](policy-extension-fields-v1.md). These are Local/product contracts, not proof of a shipped Cloud migration workflow.
+Start with [ADR 0011](adr/0011-extension-first-managed-controls.md), the [glossary](managed-controls-glossary.md), and [Policy Extension fields v1](policy-extension-fields-v1.md). These are product contracts; deployment still requires the authenticated composed workflow.
 
 ## Prepare locally
 
@@ -43,14 +43,22 @@ hol-guard policy diff ./guard-policy-backup.yaml
 
 These commands validate and compare the same provenance-inclusive canonical contextual policy document exported above. `policy diff` exits nonzero when semantic changes exist. Review additions, removals, broadened rules, action changes, scopes, and conflicts. Do not compare a provenance-redacted export to the active provenance-inclusive policy because redaction-only differences are not migration changes.
 
-They do not prove semantic validation, negotiation, signing, or deployability of Managed Controls Extension fields. The current Local CLI has no supported operator command that validates a proposed Cloud Control Set end to end. Do not add or activate those fields through this workflow.
+They do not prove semantic validation, negotiation, signing, or deployability of Managed Controls Extension fields. The Local CLI has no supported operator command that validates a proposed Cloud Control Set end to end. Do not add or activate those fields through this local-file workflow.
 
 Local policy import remains behind an explicit feature gate and approval. This guide does not enable or bypass it.
 
-## Cloud migration availability gate
+## Migrate through Guard Cloud
 
-Stop after Local backup, classification notes, canonical-policy validation, and diff unless the corresponding Guard Cloud Managed Controls PR has landed and its executable author/simulate/review/sign/deploy path has been verified against this release. The current Local target does not document that Cloud workflow.
+Continue only in a target environment where the Managed Controls read-model, authoring, and compilation stages are enabled and the intended devices have fresh authenticated compatibility evidence.
 
-After that Cloud implementation ships, update this guide with its exact UI/API, authenticated compatibility evidence, canary acknowledgement, and rollback procedure. Until then, keep existing policies authoritative and Local protection active; do not claim migration completion.
+1. Open `/guard/controls` and create a Control Set.
+2. Map only exact Extension or permission identities. Leave ambiguous legacy rules under **Advanced**.
+3. Review the compatibility report and explicitly exclude unsupported, stale, missing, or catalog-mismatched devices; never remove targets to force compatibility.
+4. Run simulation and require zero broadening before publication.
+5. Obtain the required distinct eligible review and preserve the reason and evidence.
+6. When delivery and enforcement stages are enabled, create a canary cohort, complete step-up, and verify exact acknowledgement and effective-digest evidence.
+7. Expand only after the threshold passes. Preserve the original policy and last-known-good state until the observation window and rollback exercise complete.
+
+Existing policies remain authoritative until their new Control Set version is acknowledged. Local protection stays active throughout migration.
 
 See [Local Guard vs Guard Cloud](local-vs-cloud.md) and the [Cloud availability boundary](managed-controls-cloud-operator-guide.md).

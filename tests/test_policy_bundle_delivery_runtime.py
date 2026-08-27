@@ -61,7 +61,7 @@ def _bundle() -> dict[str, object]:
 def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
     vector_path = _VECTOR_PATH.with_name("extension-projection-digest-vector.json")
     vector = json.loads(vector_path.read_text())
-    expected = "sha256:21220752f168283f047c0b6982c6ff4dc88558a5324c8ed223771e4304c8c808"
+    expected = "sha256:0bc7d88175c7019d6eedde22d122f0506b27c846682184fc4d99faad2c0ae458"
 
     assert vector["expectedExtensionProjectionDigest"] == expected
     assert (

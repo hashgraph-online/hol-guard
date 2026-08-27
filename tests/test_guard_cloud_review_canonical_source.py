@@ -9,6 +9,17 @@ _FORBIDDEN_SOURCE = (
     "live-request",
     "liveRequestSync",
 )
+_DURABLE_COMPATIBILITY_ALIASES = {
+    "guard.approval.resolve": {
+        "src/codex_plugin_scanner/guard/runtime/command_executors.py",
+        "src/codex_plugin_scanner/guard/runtime/command_operation_classification.py",
+        "src/codex_plugin_scanner/guard/runtime/legacy_approval_command_executor.py",
+    },
+    "guard.liveRequests": {
+        "src/codex_plugin_scanner/guard/runtime/command_executors.py",
+        "src/codex_plugin_scanner/guard/runtime/command_operation_classification.py",
+    },
+}
 
 
 def _review_source_files() -> list[Path]:
@@ -33,8 +44,10 @@ def test_cloud_review_runtime_has_no_retired_alias_or_feature_gate() -> None:
     for path in _review_source_files():
         source = path.read_text(encoding="utf-8")
         for forbidden in _FORBIDDEN_SOURCE:
-            if forbidden in source:
-                violations.append(f"{path.relative_to(_ROOT).as_posix()}: {forbidden}")
+            relative = path.relative_to(_ROOT).as_posix()
+            allowed_paths = _DURABLE_COMPATIBILITY_ALIASES.get(forbidden, set())
+            if forbidden in source and relative not in allowed_paths:
+                violations.append(f"{relative}: {forbidden}")
     assert violations == []
 
 

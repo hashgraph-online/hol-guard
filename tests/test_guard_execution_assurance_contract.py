@@ -81,6 +81,37 @@ class TestFramedDigest:
         # ("ab","c") must not equal ("a","bc") under length framing.
         assert framed_digest("d", {"x": "ab", "y": "c"}) != framed_digest("d", {"x": "a", "y": "bc"})
 
+    def test_nested_mappings_are_order_independent(self) -> None:
+        first = {"outer": {"b": [2, {"d": None, "c": 1.5}], "a": True}}
+        second = {"outer": {"a": True, "b": [2, {"c": 1.5, "d": None}]}}
+
+        assert framed_digest("d", first) == framed_digest("d", second)
+
+    @pytest.mark.parametrize(
+        ("left", "right"),
+        [
+            (None, "null"),
+            (True, "true"),
+            (1, "1"),
+            (1.5, "1.5"),
+        ],
+    )
+    def test_scalar_types_cannot_alias(self, left: object, right: object) -> None:
+        assert framed_digest("d", {"value": left}) != framed_digest("d", {"value": right})
+
+    @pytest.mark.parametrize("value", [{"unsafe"}, ["safe", {"unsafe"}]])
+    def test_unsupported_values_fail_closed(self, value: object) -> None:
+        with pytest.raises(ValueError, match="unsupported digest field type: set"):
+            framed_digest("d", {"value": value})
+
+    def test_unsupported_values_never_call_repr(self) -> None:
+        class ReprSentinel:
+            def __repr__(self) -> str:
+                raise AssertionError("repr must not influence a security digest")
+
+        with pytest.raises(ValueError, match="unsupported digest field type: ReprSentinel"):
+            framed_digest("d", {"value": [ReprSentinel()]})
+
 
 class TestProviderIdentity:
     def test_thumbprint_stable(self) -> None:

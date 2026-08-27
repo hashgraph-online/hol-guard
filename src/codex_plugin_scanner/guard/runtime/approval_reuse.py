@@ -3,9 +3,10 @@
 A saved approval is evidence that an exact, previously reviewed request may
 proceed. It is not a policy input and therefore cannot lower a newly computed
 ``sandbox-required`` or ``block`` action. A newly issued local approval may
-satisfy the exact ``require-reapproval`` request that created it; durable saved
-policy may satisfy only ``review``. This module keeps both exceptions explicit
-and independently testable.
+satisfy the exact ``require-reapproval`` request that created it. A durable
+exact-action approval may also satisfy an identical request when the caller has
+independently verified its retained, integrity-bound authority. This module
+keeps both exceptions explicit and independently testable.
 """
 
 from __future__ import annotations
@@ -97,6 +98,7 @@ def evaluate_approval_reuse(
     saved_decision_present: bool | None = None,
     validation_reason: ApprovalReuseValidationFailure | None = None,
     fresh_local_approval: bool = False,
+    durable_exact_approval: bool = False,
 ) -> ApprovalReuseDecision:
     """Compose a recomputed action with saved approval evidence.
 
@@ -107,6 +109,10 @@ def evaluate_approval_reuse(
     ``fresh_local_approval`` identifies short-lived, integrity-bound authority
     created by the user's immediately preceding review. Persistent policy must
     never set it.
+
+    ``durable_exact_approval`` identifies a retained, non-expiring approval-gate
+    allow whose exact context token and integrity were verified by the caller.
+    Broader saved policy and manually-authored policy must never set it.
     """
 
     current = normalize_guard_action_result(current_action, unknown_action="block")
@@ -186,7 +192,11 @@ def evaluate_approval_reuse(
             current=current,
             saved=saved,
         )
-    if current.action == "require-reapproval" and fresh_local_approval and saved.action == "allow":
+    if (
+        current.action == "require-reapproval"
+        and (fresh_local_approval or durable_exact_approval)
+        and saved.action == "allow"
+    ):
         return _decision(
             action="allow",
             status="accepted",

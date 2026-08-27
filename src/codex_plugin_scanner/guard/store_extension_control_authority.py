@@ -111,10 +111,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         self._extension_control_last_catalog_digest = catalog_digest
         try:
             with self._extension_control_authority_lock():
-                view = self._read_extension_control_authority_locked(
-                    catalog_digest,
-                    migration_registry=registry,
-                )
+                self._require_compatible_extension_control_schema()
+                view = self._read_extension_control_authority_locked(catalog_digest, migration_registry=registry)
                 if view.health is AuthorityHealth.PROTECTED:
                     key = self._authority_key(required=True)
                     assert key is not None
@@ -699,7 +697,8 @@ class StoreExtensionControlAuthorityMixin(_ExtensionControlAuthorityTransitionMi
         migration_registry: CommandSafetyExtensionRegistry | None = None,
     ) -> ExtensionControlAuthorityView:
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            if not ensure_extension_control_authority_schema(connection, require_compatible=False):
+                return self._degraded_view(catalog_digest)
             row = connection.execute(
                 "select * from extension_control_authority_snapshot where singleton = 1"
             ).fetchone()

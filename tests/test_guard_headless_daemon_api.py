@@ -414,6 +414,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
     assert isinstance(oauth_payload, dict)
     oauth_payload["credentials_sha256"] = "pbkdf2-sha256$" + ("0" * 64)
     store.set_sync_payload("oauth_local_credentials", oauth_payload, "2026-06-05T01:40:00+00:00")
+    callback_allowed = threading.Event()
 
     class _FakeSession:
         authorize_url = "https://hol.org/mock-authorize"
@@ -430,6 +431,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         )()
 
         def wait_for_callback(self, _timeout_seconds: float):
+            assert callback_allowed.wait(timeout=10), "status poll did not observe the active connect flow"
             return type("Callback", (), {"code": "auth-code-1"})()
 
         def close(self) -> None:
@@ -477,7 +479,14 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
     connect_started = threading.Event()
     connect_finalized = threading.Event()
     connect_failure_details: list[str] = []
+    refresh_calls_during_connect: list[bool] = []
     set_guard_cloud_connect_state = daemon_server._set_guard_cloud_connect_state
+    resolve_entitlement_with_refresh = daemon_server.resolve_package_firewall_entitlement_with_refresh
+
+    def track_entitlement_refresh(store: GuardStore) -> dict[str, object]:
+        if connect_started.is_set() and not connect_finalized.is_set():
+            refresh_calls_during_connect.append(True)
+        return resolve_entitlement_with_refresh(store)
 
     def set_state_and_signal(
         server: daemon_server._GuardDaemonHttpServer,
@@ -497,6 +506,11 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             connect_finalized.set()
 
     monkeypatch.setattr(daemon_server, "_set_guard_cloud_connect_state", set_state_and_signal)
+    monkeypatch.setattr(
+        daemon_server,
+        "resolve_package_firewall_entitlement_with_refresh",
+        track_entitlement_refresh,
+    )
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -529,6 +543,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
             assert connect_flow["state"] in {"idle", "running"}
             if connect_flow["state"] == "running":
                 assert connect_flow["authorize_url"] == "https://hol.org/mock-authorize"
+        callback_allowed.set()
         assert connect_finalized.wait(timeout=30), "Guard Cloud connect did not finalize repaired credentials"
         assert not connect_failure_details, f"Guard Cloud connect failed: {connect_failure_details[0]}"
         deadline = time.monotonic() + 30
@@ -552,6 +567,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         assert refreshed["entitlement"]["allowed"] is True
         assert refreshed["entitlement"]["reason"] == "paid_oauth_entitlement_active"
         assert refreshed["connect_flow"] is None
+        assert refresh_calls_during_connect == []
         latest_connect_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
         assert isinstance(latest_connect_state, dict)
         assert latest_connect_state["milestone"] == "first_sync_pending"
@@ -559,6 +575,67 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         daemon.stop()
 
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
+
+
+def test_supply_chain_entitlement_refresh_serializes_connect_admission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    refresh_started = threading.Event()
+    refresh_allowed = threading.Event()
+    connect_admitted = threading.Event()
+
+    def blocking_refresh(_store: GuardStore) -> dict[str, object]:
+        refresh_started.set()
+        assert refresh_allowed.wait(timeout=10), "connect admission did not remain serialized with refresh"
+        return {"allowed": False, "reason": "guard_cloud_connect_required"}
+
+    monkeypatch.setattr(
+        daemon_server,
+        "resolve_package_firewall_entitlement_with_refresh",
+        blocking_refresh,
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status_result: list[tuple[int, dict[str, object]]] = []
+
+        def read_status() -> None:
+            status_result.append(
+                _read_json_response(
+                    _request(
+                        daemon.port,
+                        "/v1/supply-chain/package-shims",
+                        method="GET",
+                        token=token,
+                    )
+                )
+            )
+
+        status_thread = threading.Thread(target=read_status, daemon=True)
+        status_thread.start()
+        assert refresh_started.wait(timeout=10), "entitlement refresh did not start"
+
+        def begin_connect() -> None:
+            daemon_server._begin_guard_cloud_connect_state(
+                daemon._server,
+                {"state": "starting", "request_id": "connect-1"},
+            )
+            connect_admitted.set()
+
+        connect_thread = threading.Thread(target=begin_connect, daemon=True)
+        connect_thread.start()
+        assert not connect_admitted.wait(timeout=0.2)
+        refresh_allowed.set()
+        status_thread.join(timeout=10)
+        connect_thread.join(timeout=10)
+        assert status_result[0][0] == 200
+        assert connect_admitted.is_set()
+    finally:
+        refresh_allowed.set()
+        daemon.stop()
 
 
 def test_guard_cloud_connect_starts_local_browser_flow_for_insights_share(

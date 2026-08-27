@@ -36,6 +36,7 @@ from .review_oauth_binding import (
     GuardReviewOAuthMetadata,
     guard_review_oauth_metadata,  # noqa: F401 - compatibility re-export
 )
+from .review_verification_keyring import REVIEW_VERIFICATION_KEYRING_SYNC_KEY
 from .stable_digest import sha256_content_digest
 from .stable_json import stable_json_serialize
 
@@ -49,7 +50,6 @@ _REMOTE_APPROVAL_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _DECISION_MEMORY_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
 _CLAIM_HASH_EXCLUDED_KEYS = ("claimHash", "exactReviewCapability", "recommendedScope")
 _SIGNED_PAYLOAD_STRIP_KEYS = ("payloadHash", "signature", "signatureAlgorithm", "verificationKeys", "bundleHash")
-_GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY = "guard_review_verification_keyring"
 
 RemoteApprovalDecision = Literal["allow", "block"]
 
@@ -121,7 +121,7 @@ def _anchored_review_verification_keys(store) -> tuple[PolicyBundleVerificationK
     return merge_policy_bundle_trusted_keys(
         policy_bundle_keys_from_supply_chain_keyring(store.get_sync_payload("supply_chain_bundle_keyring")),
         safe_load_policy_bundle_verification_keys(store.get_sync_payload("policy_bundle_keyring")),
-        safe_load_policy_bundle_verification_keys(store.get_sync_payload(_GUARD_REVIEW_VERIFICATION_KEYRING_SYNC_KEY)),
+        safe_load_policy_bundle_verification_keys(store.get_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY)),
     )
 
 

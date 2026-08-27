@@ -13,6 +13,7 @@ from .dpop_key_binding import verified_dpop_jwk_thumbprint
 from .runtime.time_support import parse_utc_timestamp
 from .store_approvals import get_approval_request as load_approval_request
 from .store_approvals import resolve_one_request_only as persist_one_resolution
+from .store_approvals import resolve_request_with_queue_result as persist_queue_resolution
 from .store_local_once_authority import persist_local_once_approval
 
 _CAPABILITY_KEY = "guard_exact_cloud_review_capability"
@@ -121,6 +122,76 @@ class StoreExactCloudReviewMixin:
                 (receipt_id,),
             ).fetchone()
         return row is not None
+
+    def resolve_request_with_signed_remote_compat_result(
+        self: _ConnectionOwner,
+        request_id: str,
+        *,
+        receipt_id: str,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str,
+        resolved_at: str,
+    ) -> dict[str, object]:
+        """Atomically claim a durable compatibility receipt and resolve its queue item.
+
+        A worker may retry after losing the first response. The same receipt and
+        identical terminal decision therefore returns the persisted resolution;
+        reuse for any other request or decision remains a replay failure.
+        """
+
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            claimed = connection.execute(
+                "select request_id from guard_exact_cloud_review_receipts where receipt_id = ?",
+                (receipt_id,),
+            ).fetchone()
+            current = load_approval_request(connection, request_id)
+            if claimed is not None:
+                same_request = str(claimed["request_id"]) == request_id
+                same_decision = (
+                    current is not None
+                    and current.get("status") == "resolved"
+                    and current.get("resolution_action") == resolution_action
+                    and current.get("resolution_scope") == resolution_scope
+                )
+                if same_request and same_decision:
+                    return {
+                        "replayed": True,
+                        "resolved": True,
+                        "resolved_request": current,
+                        "resolved_duplicate_ids": [],
+                    }
+                return {
+                    "error": "remote_approval_replayed",
+                    "replayed": True,
+                    "resolved": False,
+                }
+            if current is None:
+                return {"error": "not_found", "replayed": False, "resolved": False}
+            require_resolvable_approval_request(current)
+            connection.execute(
+                """
+                insert into guard_exact_cloud_review_receipts (receipt_id, request_id, claimed_at)
+                values (?, ?, ?)
+                """,
+                (receipt_id, request_id, resolved_at),
+            )
+            result = persist_queue_resolution(
+                connection,
+                request_id,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+            if result.get("resolved") is not True:
+                connection.execute(
+                    "delete from guard_exact_cloud_review_receipts where receipt_id = ?",
+                    (receipt_id,),
+                )
+            result["replayed"] = False
+            return result
 
     def resolve_one_request_with_signed_remote_exact_result(
         self: _ConnectionOwner,

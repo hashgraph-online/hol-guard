@@ -36,6 +36,7 @@ from .store_exact_cloud_review import StoreExactCloudReviewMixin
 from .store_inventory import StoreInventoryMixin
 from .store_policy_document import StorePolicyDocumentMixin
 from .store_review_event_outbox import StoreReviewEventOutboxMixin
+from .store_review_policy_memory import StoreReviewPolicyMemoryMixin
 from .store_oauth import StoreOAuthConnectMixin
 from .store_portable_project_memory import StorePortableProjectMemoryMixin
 from .store_policy import StorePolicyMixin
@@ -79,6 +80,7 @@ class GuardStore(
     StoreInventoryMixin,
     StorePortableProjectMemoryMixin,
     StorePolicyMixin,
+    StoreReviewPolicyMemoryMixin,
     StorePolicyIntegrityAdminMixin,
     StoreCloudEventsMixin,
     StoreReceiptsRuntimeMixin,

@@ -2,14 +2,16 @@
 
 ZCode is z.ai's local AI coding harness. Its CLI app config lives under
 ``~/.zcode/cli/config.json`` and is Claude-Code-shaped: an ``mcp`` section, a
-``plugins`` section, and an optional ``hooks`` section that follows Claude
-Code's hook group schema. Plugins are cached under
+``plugins`` section, and an optional ``hooks`` section whose event groups are
+nested under ``hooks.events`` (current ZCode rejects the legacy flat
+``hooks.<Event>`` layout and fails to load the entire config file, so Guard
+migrates legacy groups on install). Plugins are cached under
 ``~/.zcode/cli/plugins/cache/<marketplace>/<plugin>/<version>/``.
 
 This adapter discovers MCP servers, enabled plugins, plugin manifests and
 provenance, plugin hooks, skills, commands, and marketplaces; installs
 Guard-managed ``PreToolUse`` and ``UserPromptSubmit`` hooks into the CLI
-config ``hooks`` section (idempotently, without touching ``mcp`` or
+config ``hooks.events`` section (idempotently, without touching ``mcp`` or
 ``plugins``); and routes ZCode hook events through the shared Guard runtime.
 """
 
@@ -39,16 +41,21 @@ from .zcode_config import (
     ZCODE_CLI_DIR,
     ZCODE_DIR,
     ZCODE_ENV_HINTS,
+    ZCODE_HOOK_EVENT_NAMES,
+    ZCODE_HOOKS_EVENTS_KEY,
     ZCODE_MARKETPLACE_FILE,
     ZCODE_PLUGIN_CACHE_DIR,
     ZCODE_PLUGIN_MANIFEST_DIR,
     ZCODE_PLUGIN_MANIFEST_FILE,
     ZCODE_PLUGIN_MARKETPLACES_DIR,
     ZCODE_PRETOOL_MATCHERS,
+    ZCODE_V2_CONFIG_FILE,
+    ZCODE_V2_DIR,
     append_cli_config_artifacts,
     append_found_path,
     append_marketplace_artifacts,
     append_plugin_manifest_artifacts,
+    dedupe_hook_entries,
     is_guard_managed_hook_command,
 )
 
@@ -145,6 +152,12 @@ class ZCodeHarnessAdapter(HarnessAdapter):
                     config_path=config_path,
                     scope=scope,
                 )
+
+        # Current ZCode desktop builds keep provider/app state under ~/.zcode/v2;
+        # its presence marks an install even before the CLI config exists.
+        v2_config = self._zcode_home_dir(context) / ZCODE_V2_DIR / ZCODE_V2_CONFIG_FILE
+        if v2_config.is_file():
+            append_found_path(found_paths, v2_config)
 
         for plugins_root, scope in self._plugins_candidates(context):
             if not plugins_root.is_dir():
@@ -323,8 +336,9 @@ class ZCodeHarnessAdapter(HarnessAdapter):
             "config_path": str(config_path),
             **shim_manifest,
             "notes": [
-                "Guard hook entries added to ~/.zcode/cli/config.json under the hooks section",
+                "Guard hook entries added to ~/.zcode/cli/config.json under the hooks.events section",
                 "User mcp, plugins, and any pre-existing hooks were preserved",
+                "Legacy flat hook groups were migrated into hooks.events for current ZCode",
                 *shim_notes,
             ],
         }
@@ -370,11 +384,18 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         }
 
     def _sync_managed_hook_groups(self, hooks: dict[str, object], managed_command: str) -> None:
-        """Reconcile Guard-managed PreToolUse and UserPromptSubmit hook groups."""
+        """Reconcile Guard-managed PreToolUse and UserPromptSubmit hook groups.
 
-        pretool_raw = hooks.get("PreToolUse")
+        Guard only writes the ``hooks.events`` layout; legacy flat ``hooks.<Event>``
+        groups (whether Guard-managed leftovers or user entries written by older
+        ZCode builds) are folded into ``events`` first because current ZCode
+        rejects the legacy keys and fails to load the whole config file.
+        """
+
+        events = self._migrate_legacy_hook_events(hooks)
+        pretool_raw = events.get("PreToolUse")
         pretool_entries = self._prune_managed_entries(pretool_raw if isinstance(pretool_raw, list) else [])
-        prompt_raw = hooks.get("UserPromptSubmit")
+        prompt_raw = events.get("UserPromptSubmit")
         prompt_entries = self._prune_managed_entries(prompt_raw if isinstance(prompt_raw, list) else [])
         pretool_handler: dict[str, object] = {
             "type": "command",
@@ -389,13 +410,53 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         for matcher in ZCODE_PRETOOL_MATCHERS:
             pretool_entries = _merge_hook_entry(pretool_entries, matcher, pretool_handler)
         prompt_entries = _merge_hook_entry(prompt_entries, None, prompt_handler)
-        hooks["PreToolUse"] = pretool_entries
-        hooks["UserPromptSubmit"] = prompt_entries
+        events["PreToolUse"] = pretool_entries
+        events["UserPromptSubmit"] = prompt_entries
+
+    @staticmethod
+    def _migrate_legacy_hook_events(hooks: dict[str, object]) -> dict[str, object]:
+        """Fold legacy flat ``hooks.<Event>`` groups into the ``events`` mapping.
+
+        User settings keys beside ``events`` (``enabled``, ``timeoutMs``,
+        ``maxOutputBytes``) are preserved untouched, and legacy entries that
+        already exist in ``events`` are not duplicated. Returns the events
+        mapping, stored back onto ``hooks`` by the caller.
+        """
+
+        events_value = hooks.get(ZCODE_HOOKS_EVENTS_KEY)
+        events: dict[str, object] = dict(events_value) if isinstance(events_value, dict) else {}
+        for event_name, entries in list(hooks.items()):
+            if event_name == ZCODE_HOOKS_EVENTS_KEY or event_name not in ZCODE_HOOK_EVENT_NAMES:
+                continue
+            if not isinstance(entries, list):
+                continue
+            existing = events.get(event_name)
+            merged = list(existing) if isinstance(existing, list) else []
+            merged.extend(entries)
+            events[event_name] = dedupe_hook_entries(merged)
+            hooks.pop(event_name, None)
+        hooks[ZCODE_HOOKS_EVENTS_KEY] = events
+        return events
 
     def _prune_managed_hook_groups(self, hooks: dict[str, object]) -> None:
-        for event_name in ("PreToolUse", "UserPromptSubmit"):
+        events_value = hooks.get(ZCODE_HOOKS_EVENTS_KEY)
+        if isinstance(events_value, dict):
+            for event_name in list(events_value):
+                entries = events_value.get(event_name)
+                remaining = self._prune_managed_entries(entries if isinstance(entries, list) else [])
+                if remaining:
+                    events_value[event_name] = remaining
+                else:
+                    events_value.pop(event_name, None)
+            if not events_value:
+                hooks.pop(ZCODE_HOOKS_EVENTS_KEY, None)
+        # Legacy flat groups from older Guard installs are pruned too, but user
+        # entries in them are left exactly where the user put them.
+        for event_name in list(hooks):
             entries = hooks.get(event_name)
-            remaining = self._prune_managed_entries(entries if isinstance(entries, list) else [])
+            if event_name == ZCODE_HOOKS_EVENTS_KEY or not isinstance(entries, list):
+                continue
+            remaining = self._prune_managed_entries(entries)
             if remaining:
                 hooks[event_name] = remaining
             else:

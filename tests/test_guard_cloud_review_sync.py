@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import cloud_review_sync as cloud_review_sync_module
+from codex_plugin_scanner.guard.runtime import cloud_review_sync_worker
 from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import (
     CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     _resolve_sync_url,
@@ -26,6 +27,7 @@ class Store:
 
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
+        self.path = guard_home / "guard.db"
         self._payloads: dict[str, object] = {}
 
     def get_sync_payload(self, key: str) -> object | None:
@@ -57,8 +59,6 @@ class Store:
 
 
 class TestIndependentWorker:
-    """start_cloud_sync_sync_worker creates a thread; stop_cloud_sync_sync_worker signals it."""
-
     def test_worker_owns_live_review_sync(
         self,
         tmp_path: Path,
@@ -68,11 +68,21 @@ class TestIndependentWorker:
         calls: list[tuple[str, dict[str, object]]] = []
 
         class StopAfterOneIteration:
-            def is_set(self) -> bool:
-                return False
+            stopped = False
 
-            def wait(self, _timeout: float) -> bool:
-                return True
+            def is_set(self) -> bool:
+                return self.stopped
+
+        class StopAfterOneWait:
+            def generation(self) -> int:
+                return 0
+
+            def wait(self, generation: int, timeout: float) -> int:
+                del generation, timeout
+                stop.stopped = True
+                return 0
+
+        stop = StopAfterOneIteration()
 
         monkeypatch.setattr(
             cloud_review_sync_module,
@@ -85,9 +95,10 @@ class TestIndependentWorker:
             lambda _store, auth: calls.append(("review", auth)) or {"synced": 0},
         )
 
-        cloud_review_sync_module._cloud_sync_sync_loop(
+        cloud_review_sync_worker._cloud_sync_sync_loop(
             store,
-            StopAfterOneIteration(),
+            stop,
+            StopAfterOneWait(),
             poll_interval=1,
             error_backoff=1,
         )
@@ -118,7 +129,7 @@ class TestIndependentWorker:
         def fake_thread(*args: object, **kwargs: object) -> FakeThread:
             return created_thread
 
-        monkeypatch.setattr("codex_plugin_scanner.guard.runtime.cloud_review_sync.threading.Thread", fake_thread)
+        monkeypatch.setattr(cloud_review_sync_worker.threading, "Thread", fake_thread)
         worker = start_cloud_sync_sync_worker(store)
         assert worker is not None
         assert worker.thread is created_thread
@@ -160,11 +171,11 @@ class TestIndependentWorker:
             return created_thread
 
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.runtime.cloud_review_sync.threading.Thread",
+            "codex_plugin_scanner.guard.runtime.cloud_review_sync_worker.threading.Thread",
             fake_thread,
         )
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.runtime.cloud_review_sync.threading.Event",
+            "codex_plugin_scanner.guard.runtime.cloud_review_sync_worker.threading.Event",
             lambda: created_event,
         )
 
@@ -208,7 +219,6 @@ class TestIndependentWorker:
         assert start_cloud_sync_sync_worker(store) is None
 
     def test_start_worker_with_existing_stopped_thread(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Existing worker with stopped thread → replaced with new worker."""
         store = Store(tmp_path)
 
         class FakeThread:
@@ -227,7 +237,7 @@ class TestIndependentWorker:
 
         existing = type("Worker", (), {"thread": FakeThread(), "stop_event": FakeEvent()})()
         monkeypatch.delenv("GUARD_CLOUD_REVIEW_POLL_INTERVAL", raising=False)
-        monkeypatch.setattr(cloud_review_sync_module.threading, "Thread", FakeThread)
+        monkeypatch.setattr(cloud_review_sync_worker.threading, "Thread", FakeThread)
 
         new_worker = start_cloud_sync_sync_worker(store, existing=existing)  # type: ignore[arg-type]
         assert new_worker is not existing
@@ -236,14 +246,7 @@ class TestIndependentWorker:
         assert stop_cloud_sync_sync_worker(None) is None
 
 
-# ---------------------------------------------------------------------------
-# Contract: cloud_review_sync_status before dedicated cloud sync
-# ---------------------------------------------------------------------------
-
-
 class TestSyncStatus:
-    """cloud_review_sync_status returns the current status dict."""
-
     def test_status_returns_protocol_version(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.store import GuardStore
 
@@ -704,11 +707,6 @@ def test_canonical_transport_posts_structured_event_content(
     assert captured_body["protocolVersion"] == CLOUD_REVIEW_EVENT_PROTOCOL_VERSION
     assert captured_body["events"] == [event]
     assert response["accepted"] == 1
-
-
-# ---------------------------------------------------------------------------
-# Contract: _resolve_sync_url derives the Cloud Review endpoint from receipt sync URL
-# ---------------------------------------------------------------------------
 
 
 class TestResolveSyncUrl:

@@ -1,5 +1,9 @@
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardReceipt, PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore, _runtime_scoped_exact_match_key
+from codex_plugin_scanner.guard.store_policy_list import (
+    collapse_duplicate_artifact_policy_rows,
+    list_remembered_policy_decisions,
+)
 
 
 def _store(tmp_path) -> GuardStore:
@@ -442,3 +446,125 @@ def test_list_policy_decisions_keeps_inventory_context_with_global_policy(tmp_pa
 
     items = {str(item["artifact_id"]): item for item in store.list_policy_decisions()}
     assert items["codex:project:package-request:mixed1"]["remembered_command"] == "pnpm install --frozen-lockfile"
+
+
+def test_list_policy_decisions_collapses_duplicate_npx_once_rules(tmp_path) -> None:
+    store = _store(tmp_path)
+    command = "npx execute @modelcontextprotocol/server-memory"
+    for index in range(5):
+        artifact_id = f"guard-cli:runtime:npx:{index}"
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-npx-{index}",
+                timestamp=f"2026-08-24T21:0{index}:00+00:00",
+                harness="guard-cli",
+                artifact_id=artifact_id,
+                artifact_hash=f"npxhash{index}abcdef1234567890abcdef1234567890abcdef12",
+                policy_decision="allow",
+                capabilities_summary="Launch MCP server",
+                changed_capabilities=("runtime",),
+                provenance_summary="approval-gate once",
+                artifact_name=command,
+                source_scope="/srv/projects/sample-guard",
+            )
+        )
+        store.upsert_policy(
+            PolicyDecision(
+                harness="guard-cli",
+                scope="artifact",
+                action="allow",
+                artifact_id=artifact_id,
+                artifact_hash=f"npxhash{index}abcdef1234567890abcdef1234567890abcdef12",
+                reason="approved in review",
+                source="local",
+            ),
+            f"2026-08-24T21:0{index}:00+00:00",
+        )
+
+    stored = store.list_policy_decisions("guard-cli")
+    assert len(stored) == 5
+    items = list_remembered_policy_decisions(store, "guard-cli")
+    assert len(items) == 1
+    assert items[0]["remembered_command"] == command
+    assert items[0]["artifact_id"] == "guard-cli:runtime:npx:4"
+
+
+def test_clear_displayed_artifact_rule_removes_collapsed_siblings(tmp_path) -> None:
+    store = _store(tmp_path)
+    command = "npx execute @modelcontextprotocol/server-memory"
+    for index in range(3):
+        artifact_id = f"guard-cli:runtime:npx:{index}"
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-clear-{index}",
+                timestamp=f"2026-08-24T21:1{index}:00+00:00",
+                harness="guard-cli",
+                artifact_id=artifact_id,
+                artifact_hash=f"clearhash{index}abcdef1234567890abcdef1234567890abcdef12",
+                policy_decision="allow",
+                capabilities_summary="Launch MCP server",
+                changed_capabilities=("runtime",),
+                provenance_summary="approval-gate once",
+                artifact_name=command,
+                source_scope="/srv/projects/sample-guard",
+            )
+        )
+        store.upsert_policy(
+            PolicyDecision(
+                harness="guard-cli",
+                scope="artifact",
+                action="allow",
+                artifact_id=artifact_id,
+                artifact_hash=f"clearhash{index}abcdef1234567890abcdef1234567890abcdef12",
+                reason="approved in review",
+                source="local",
+            ),
+            f"2026-08-24T21:1{index}:00+00:00",
+        )
+
+    displayed = list_remembered_policy_decisions(store, "guard-cli")
+    assert len(displayed) == 1
+    cleared = store.clear_policy_decisions(
+        "guard-cli",
+        scope="artifact",
+        artifact_id=str(displayed[0]["artifact_id"]),
+        artifact_hash=str(displayed[0].get("artifact_hash") or ""),
+    )
+    assert cleared == 3
+    assert store.list_policy_decisions("guard-cli") == []
+
+
+def test_collapse_duplicate_artifact_policy_rows_keeps_newest() -> None:
+    collapsed = collapse_duplicate_artifact_policy_rows(
+        [
+            {
+                "decision_id": 1,
+                "harness": "guard-cli",
+                "scope": "artifact",
+                "action": "allow",
+                "source": "approval-gate",
+                "remembered_command": "npx execute @modelcontextprotocol/server-memory",
+                "artifact_id": "old",
+                "updated_at": "2026-08-24T21:00:00+00:00",
+            },
+            {
+                "decision_id": 2,
+                "harness": "guard-cli",
+                "scope": "artifact",
+                "action": "allow",
+                "source": "approval-gate",
+                "remembered_command": "npx execute @modelcontextprotocol/server-memory",
+                "artifact_id": "new",
+                "updated_at": "2026-08-24T22:00:00+00:00",
+            },
+            {
+                "decision_id": 3,
+                "harness": "guard-cli",
+                "scope": "workspace",
+                "action": "allow",
+                "source": "local",
+                "artifact_id": "workspace-rule",
+            },
+        ]
+    )
+    assert [item["artifact_id"] for item in collapsed] == ["new", "workspace-rule"]
