@@ -30,6 +30,10 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from .runtime.extension_control_contract import ControlLayerKind
+from .store_custom_extension_continuity import (
+    CustomExtensionContinuityMutation,
+    apply_custom_extension_continuity_mutation_locked,
+)
 
 if TYPE_CHECKING:
     from .managed_controls_policy_fields import ParsedManagedControlsPolicy
@@ -868,6 +872,7 @@ class StorePolicyMixin:
         managed_controls_negotiated_capabilities: frozenset[str] = frozenset(),
         managed_controls_delivery: Mapping[str, object] | None = None,
         managed_controls_publish: (Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None) = None,
+        custom_extension_continuity: CustomExtensionContinuityMutation | None = None,
         raise_on_rejection: bool = False,
         approval_gate_grant: ApprovalGateGrant | None = None,
         remote_write_authorized: bool = False,
@@ -926,6 +931,19 @@ class StorePolicyMixin:
             managed_base_authority = self._read_extension_control_authority_locked(
                 BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
             )
+            if (
+                custom_extension_continuity is not None
+                and custom_extension_continuity.requires_protected_extension_authority
+                and managed_base_authority.health is not AuthorityHealth.PROTECTED
+            ):
+                return reject("custom_extension_continuity_authority_unprotected", connection)
+            if (
+                custom_extension_continuity is not None
+                and custom_extension_continuity.required_negotiated_capability is not None
+                and custom_extension_continuity.required_negotiated_capability
+                not in managed_controls_negotiated_capabilities
+            ):
+                return reject("custom_extension_continuity_capability_not_negotiated", connection)
             authority_row = connection.execute(
                 "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
             ).fetchone()
@@ -1092,6 +1110,15 @@ class StorePolicyMixin:
                     )
                 except (json.JSONDecodeError, TypeError, ValueError):
                     return reject("managed_controls_delivery_ack_invalid", connection)
+            if custom_extension_continuity is not None:
+                try:
+                    _ = apply_custom_extension_continuity_mutation_locked(
+                        connection,
+                        custom_extension_continuity,
+                        boundary=self._custom_extension_continuity_transaction_boundary,
+                    )
+                except ValueError:
+                    return reject("custom_extension_continuity_changed_during_activation", connection)
             self._replace_remote_policy_rows_locked(connection, rows)
             for state_key, payload_json in encoded_payloads.items():
                 connection.execute(

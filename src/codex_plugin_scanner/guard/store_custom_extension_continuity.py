@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .runtime.local_cli_commands import (
@@ -15,6 +16,21 @@ from .runtime.local_cli_commands import (
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .store_local_cli_schema import ensure_local_cli_schema
+
+
+@dataclass(frozen=True, slots=True)
+class CustomExtensionContinuityMutation:
+    """Preflighted continuity writes that may join policy activation."""
+
+    expected_revision: int
+    authority_updates: tuple[tuple[UnlistedCliIdentity, str, Mapping[str, LocalCliCommandState]], ...]
+    sync_payloads: Mapping[str, Mapping[str, object]]
+    events: tuple[tuple[str, Mapping[str, object]], ...]
+    updated_at: str
+    sync_preconditions: Mapping[str, object]
+    observation_preconditions: Mapping[str, object]
+    requires_protected_extension_authority: bool = False
+    required_negotiated_capability: str | None = None
 
 
 class StoreCustomExtensionContinuityMixin:
@@ -35,33 +51,57 @@ class StoreCustomExtensionContinuityMixin:
     ) -> int:
         """Commit exact local authority, continuity state, and receipts together."""
 
-        _validate_authority_updates(authority_updates)
+        mutation = CustomExtensionContinuityMutation(
+            expected_revision=expected_revision,
+            authority_updates=tuple(authority_updates),
+            sync_payloads=sync_payloads,
+            events=tuple(events),
+            updated_at=updated_at,
+            sync_preconditions=sync_preconditions or {},
+            observation_preconditions=observation_preconditions or {},
+        )
         with self._connect() as connection:
             _ = connection.execute("begin immediate")
-            ensure_local_cli_schema(connection)
-            current_revision = _authority_revision(connection)
-            if current_revision != expected_revision:
-                raise ValueError("local_cli_revision_conflict")
-            _require_sync_preconditions(connection, sync_preconditions or {})
-            _require_observation_preconditions(connection, observation_preconditions or {})
-            for identity, state, command_states in authority_updates:
-                current_revision = _write_local_cli_grant(
-                    connection,
-                    identity=identity,
-                    state=state,
-                    current_revision=current_revision,
-                    updated_at=updated_at,
-                    command_states=command_states,
-                )
-            self._custom_extension_continuity_transaction_boundary("after_authority")
-            _write_sync_payloads(connection, sync_payloads, updated_at=updated_at)
-            self._custom_extension_continuity_transaction_boundary("after_sync_state")
-            _write_events(connection, events, occurred_at=updated_at)
-            self._custom_extension_continuity_transaction_boundary("after_event")
-        return current_revision
+            return apply_custom_extension_continuity_mutation_locked(
+                connection,
+                mutation,
+                boundary=self._custom_extension_continuity_transaction_boundary,
+            )
 
     def _custom_extension_continuity_transaction_boundary(self, _stage: str) -> None:
         """Fault-injection seam; production deliberately performs no work here."""
+
+
+def apply_custom_extension_continuity_mutation_locked(
+    connection: sqlite3.Connection,
+    mutation: CustomExtensionContinuityMutation,
+    *,
+    boundary: Callable[[str], None] = lambda _stage: None,
+) -> int:
+    """Apply a preflighted mutation inside an existing immediate transaction."""
+
+    _validate_authority_updates(mutation.authority_updates)
+    ensure_local_cli_schema(connection)
+    current_revision = _authority_revision(connection)
+    if current_revision != mutation.expected_revision:
+        raise ValueError("local_cli_revision_conflict")
+    _require_sync_preconditions(connection, mutation.sync_preconditions)
+    _require_observation_preconditions(connection, mutation.observation_preconditions)
+    for identity, state, command_states in mutation.authority_updates:
+        current_revision = _write_local_cli_grant(
+            connection,
+            identity=identity,
+            state=state,
+            current_revision=current_revision,
+            updated_at=mutation.updated_at,
+            command_states=command_states,
+        )
+    boundary("after_authority")
+    _write_sync_payloads(connection, mutation.sync_payloads, updated_at=mutation.updated_at)
+    boundary("after_sync_state")
+    _write_events(connection, mutation.events, occurred_at=mutation.updated_at)
+    boundary("after_event")
+    return current_revision
 
 
 def _validate_authority_updates(

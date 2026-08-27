@@ -3127,8 +3127,7 @@ def sync_receipts(
             trusted_policy_bundle_keys = activation_keys
             if activation_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
                 if (
-                    candidate_managed_controls is not None
-                    and validated_policy_bundle is not None
+                    validated_policy_bundle is not None
                     and activation_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
                 ):
                     effective_managed_controls = candidate_managed_controls
@@ -3187,10 +3186,11 @@ def sync_receipts(
             policy_bundle_ack=policy_bundle_ack,
         )
         try:
-            apply_custom_extension_continuity_from_sync(
+            custom_extension_continuity = apply_custom_extension_continuity_from_sync(
                 store,
                 effective_policy_bundle,
                 device_id=device_id,
+                negotiated_capabilities=effective_managed_capabilities,
                 now=now,
             )
             activated, activation_rejection_reason = activate_with_reason(
@@ -3211,6 +3211,7 @@ def sync_receipts(
                 managed_controls_negotiated_capabilities=effective_managed_capabilities,
                 managed_controls_delivery=validated_policy_bundle_delivery,
                 managed_controls_publish=managed_controls_publish,
+                custom_extension_continuity=custom_extension_continuity,
                 remote_write_authorized=True,
             )
             if activated is None:
