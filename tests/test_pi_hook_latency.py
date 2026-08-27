@@ -131,6 +131,7 @@ def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     monkeypatch.setattr(_daemon_internals(daemon).hook_process_runner, "review", fake_review)
     daemon.start()
+    _daemon_internals(daemon).runtime_hook_process_scheduler.set_active_limit(2)
     first_result: list[dict[str, object]] = []
 
     def run_first() -> None:
@@ -149,7 +150,6 @@ def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
         release_first.set()
         first_thread.join(timeout=3)
         daemon.stop()
-
     assert second_result == {"decision": "allow"}
     assert first_result == [{"decision": "allow"}]
 

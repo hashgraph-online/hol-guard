@@ -4,11 +4,13 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.cloud_review_repair import (
     cloud_review_sync_repair_status,
     execute_cloud_review_sync_repair,
 )
+from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
 from codex_plugin_scanner.guard.store import GuardStore
 
 _OUTBOX_TABLE = "guard_review_outbox_events"
@@ -132,6 +134,24 @@ def test_cloud_repair_rebinds_only_the_confirmed_source_and_workspace(tmp_path: 
         ("request-current", "workspace-1", "machine-current"),
         ("request-other", "workspace-other", "machine-stale"),
     ]
+
+
+def test_legacy_live_request_repair_job_uses_migrated_review_outbox(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    store.add_approval_request(_request("request-legacy-job"), _NOW)
+    _replace_binding_with_stale_identity(store, "request-legacy-job")
+
+    result = execute_guard_command_job(
+        {
+            "operation": "guard.liveRequests.reassignQuarantined",
+            "payload": {"source": "default", "workspaceId": "workspace-1"},
+        },
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=store.guard_home),
+        store=store,
+        now=lambda: _NOW,
+    )
+
+    assert result["data"]["reassignedCount"] == 1
 
 
 def test_cloud_repair_rejects_a_different_workspace(tmp_path: Path) -> None:

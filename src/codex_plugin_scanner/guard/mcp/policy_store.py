@@ -18,6 +18,7 @@ from typing import Literal, Protocol
 
 from .policy_errors import PolicyToolError
 from .policy_schemas import PolicyImportMode, generate_request_id, hash_idempotency_key
+from .policy_time import utc_now_iso as _now_iso
 
 PolicyRequestStatus = Literal["pending", "applied", "declined", "expired", "failed"]
 _VALID_REQUEST_STATUSES = frozenset({"pending", "applied", "declined", "expired", "failed"})
@@ -79,10 +80,6 @@ def ensure_mcp_policy_request_schema(connection: sqlite3.Connection) -> None:
     connection.execute(_MCP_POLICY_REQUEST_SCHEMA)
     for statement in _MCP_POLICY_REQUEST_INDEXES:
         connection.execute(statement)
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _now() -> datetime:

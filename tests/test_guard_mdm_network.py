@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from requests import Request
 from requests.certs import where as requests_ca_bundle
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
@@ -163,6 +164,15 @@ def test_disabled_public_registry_fails_before_network() -> None:
     policy = ManagedNetworkPolicy(allow_public_registries=False)
     with pytest.raises(ManagedNetworkError, match="managed_public_registry_disabled"):
         managed_urlopen("https://pypi.org/pypi/hol-guard/json", timeout=1, policy=policy)
+
+    session = managed_requests_session(policy)
+    prepared = session.prepare_request(Request("POST", "https://pypi.org/legacy/"))
+    with pytest.raises(ManagedNetworkError, match="managed_public_registry_disabled"):
+        session.adapters["https://"].add_headers(prepared)
+
+    rooted = session.prepare_request(Request("GET", "https://PYPI.ORG./simple/hol-guard/"))
+    with pytest.raises(ManagedNetworkError, match="managed_public_registry_disabled"):
+        session.adapters["https://"].add_headers(rooted)
 
 
 def test_blocked_public_registry_diagnostic_is_stable_and_offline() -> None:

@@ -357,7 +357,7 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
         config = load_guard_config(store.guard_home)
         if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
             return config.receipt_redaction_level
-    except Exception:
+    except (OSError, ValueError):
         pass
     return "full"
 

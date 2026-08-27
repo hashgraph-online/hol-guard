@@ -4,9 +4,23 @@ import threading
 import time
 from pathlib import Path
 from typing import cast
+from unittest.mock import MagicMock
+
+import pytest
 
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookWorkerSlot
+
+
+def test_initial_capacity_is_mandatory_before_daemon_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = HookProcessRunner(process_limit=1)
+    wait_for_capacity = MagicMock(return_value=False)
+    monkeypatch.setattr(runner, "wait_for_capacity", wait_for_capacity)
+
+    with pytest.raises(RuntimeError, match="did not become ready"):
+        runner.require_initial_capacity()
+
+    wait_for_capacity.assert_called_once_with(minimum_workers=1, timeout_seconds=14.0)
 
 
 def test_adaptive_deferred_start_returns_before_startup_floor_is_ready(monkeypatch, tmp_path: Path) -> None:

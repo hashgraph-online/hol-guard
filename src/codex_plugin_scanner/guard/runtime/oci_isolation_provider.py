@@ -16,7 +16,7 @@ import hashlib
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Final, cast
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
@@ -39,7 +39,7 @@ from codex_plugin_scanner.guard.runtime.isolation_provider import (
 )
 
 _PROVIDE_KIND: Final = "oci-isolation"
-_SIGNING_IDENTITY: Final = "guard-oci-unsigned"
+_SIGNING_IDENTITY: Final = "guard-oci-builtin"
 _TRUST_DOMAIN: Final = "guard.oci"
 
 # OCI features mapped to atomic guarantees.
@@ -803,7 +803,7 @@ class OCIIsolationProvider:
         return ProviderIdentity(
             provider_kind=_PROVIDE_KIND,
             implementation_version=self._version,
-            binary_or_image_digest="0" * 64,
+            binary_or_image_digest=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             signing_identity=_SIGNING_IDENTITY,
             trust_domain=_TRUST_DOMAIN,
         )

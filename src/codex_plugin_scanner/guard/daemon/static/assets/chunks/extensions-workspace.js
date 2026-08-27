@@ -5535,13 +5535,31 @@ function deriveProtectionStatus(effective) {
       };
   }
 }
+function summarizeProtectionChange(change) {
+  if ("globalLockdown" in change) {
+    if (change.globalLockdown) {
+      return { current: "Off", requested: "Active", title: "Enable Emergency Lockdown" };
+    }
+    return { current: "Active", requested: "Off", title: "Disable Emergency Lockdown" };
+  }
+  if (change.enabled) {
+    return {
+      current: "Blocked",
+      requested: "Allowed within Guard safety rules",
+      title: `Permit ${change.extension.name}`
+    };
+  }
+  return {
+    current: "Allowed",
+    requested: "Blocked",
+    title: `Block ${change.extension.name}`
+  };
+}
 function ReviewModal(props) {
   const [password, setPassword] = reactExports.useState("");
   const [totp, setTotp] = reactExports.useState("");
   const dialogRef = useModalDialog(props.onCancel, !props.busy);
-  const title = "globalLockdown" in props.change ? `${props.change.globalLockdown ? "Enable" : "Disable"} Emergency Lockdown` : `${props.change.enabled ? "Permit" : "Block"} ${props.change.extension.name}`;
-  const current = "globalLockdown" in props.change ? props.change.globalLockdown ? "Off" : "Active" : props.change.enabled ? "Blocked" : "Allowed";
-  const requested = "globalLockdown" in props.change ? props.change.globalLockdown ? "Active" : "Off" : props.change.enabled ? "Allowed within Guard safety rules" : "Blocked";
+  const { current, requested, title } = summarizeProtectionChange(props.change);
   const handlePassword = reactExports.useCallback((event) => {
     setPassword(event.target.value);
   }, []);

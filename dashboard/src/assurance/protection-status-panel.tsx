@@ -66,18 +66,15 @@ export function ProtectionStatusPanel({
 
   const HeaderIcon =
     worst === "active" ? HiMiniShieldCheck : HiMiniExclamationTriangle;
-  const headerIconClass =
-    worst === "active"
-      ? "text-brand-green"
-      : worst === "degraded"
-        ? "text-amber-600"
-        : "text-red-600";
-  const headerBorder =
-    worst === "active"
-      ? "border-brand-green/20 bg-brand-green/[0.04]"
-      : worst === "degraded"
-        ? "border-amber-200 bg-amber-50/60"
-        : "border-red-200 bg-red-50/60";
+  let headerIconClass = "text-red-600";
+  let headerBorder = "border-red-200 bg-red-50/60";
+  if (worst === "active") {
+    headerIconClass = "text-brand-green";
+    headerBorder = "border-brand-green/20 bg-brand-green/[0.04]";
+  } else if (worst === "degraded") {
+    headerIconClass = "text-amber-600";
+    headerBorder = "border-amber-200 bg-amber-50/60";
+  }
 
   return (
     <section

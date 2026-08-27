@@ -445,6 +445,9 @@ def _migrate_retired_outbox(connection: sqlite3.Connection, now: str) -> None:
 
 
 def ensure_review_event_outbox_schema(connection: sqlite3.Connection, now: str) -> None:
+    approval_columns = {str(row["name"]) for row in connection.execute("pragma table_info(approval_requests)")}
+    if "oauth_source" not in approval_columns:
+        connection.execute("alter table approval_requests add column oauth_source text")
     for statement in review_event_outbox_schema_statements():
         connection.execute(statement)
     ensure_review_event_outbox_upgrade(connection, migration_version=REVIEW_EVENT_OUTBOX_MIGRATION_VERSION)

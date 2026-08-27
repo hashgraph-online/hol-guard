@@ -1127,9 +1127,8 @@ class StoreConnectionSchemaMixin:
 
     def _initialize_policy_integrity(self) -> None:
         if getattr(self, "_prime_policy_integrity_on_initialize", True):
-            # Prime policy-integrity secrets outside the SQLite transaction. Some
-            # credential-store lookups can block long enough to stall other Guard
-            # processes if initialization still holds the writer lock.
+            # Prime secrets outside the transaction so credential-store lookups
+            # cannot stall other Guard processes while holding the writer lock.
             self._startup_prefetched_policy_integrity_secret_material = self._policy_integrity_secret_material(
                 create=False
             )
@@ -1180,6 +1179,7 @@ class StoreConnectionSchemaMixin:
                         row is not None
                         and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
                         and storage_row is not None
+                        and "oauth_source" in approval_columns
                         and required_approval_columns <= approval_columns
                     )
                 finally:

@@ -10,6 +10,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -152,7 +153,7 @@ class WebhookBackend(NotificationBackend):
 
 
 def _managed_post(url: str, *, payload: Mapping[str, object], timeout: int) -> requests.Response:
-    return managed_requests_session().post(url, json=payload, timeout=timeout)
+    return managed_requests_session().post(url, json=deepcopy(payload), timeout=timeout)
 
 
 def _parse_pending_request(data: dict[str, Any]) -> PendingRequest | None:
@@ -172,7 +173,7 @@ def _parse_pending_request(data: dict[str, Any]) -> PendingRequest | None:
             risk_summary=risk,
             created_at=data.get("created_at", ""),
         )
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError):
         return None
 
 

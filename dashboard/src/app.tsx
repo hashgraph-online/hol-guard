@@ -37,21 +37,21 @@ import { ProtectionRepairFlowError } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
 
-const HomeWorkspace = lazyWorkspace(() => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace(() => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
-const ExtensionsWorkspace = lazyWorkspace(() =>
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
+const ExtensionsWorkspace = lazyWorkspace("extensions-workspace", () =>
   import("./extensions-workspace").then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
-const SupplyChainHubWorkspace = lazyWorkspace(() =>
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => import("./help-modal").then((m) => ({ default: m.HelpModal })));
+const SupplyChainHubWorkspace = lazyWorkspace("supply-chain-hub-workspace", () =>
   import("./supply-chain-hub-workspace").then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
-const PolicyWorkspacePage = lazyWorkspace(() =>
+const PolicyWorkspacePage = lazyWorkspace("policy-workspace-page", () =>
   import("./policy-workspace-page").then((m) => ({ default: m.PolicyWorkspacePage }))
 );
-const AboutWorkspace = lazyWorkspace(() =>
+const AboutWorkspace = lazyWorkspace("about-workspace", () =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
 );
 

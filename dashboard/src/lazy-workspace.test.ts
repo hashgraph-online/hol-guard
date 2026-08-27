@@ -53,8 +53,43 @@ const ok = { default: "workspace" };
   assert(loaded === ok, "successful loads return the module");
   assert(
     storage.getItem(CHUNK_RELOAD_STORAGE_KEY) === "1",
-    "successful parent loads keep the one-shot flag so a nested child failure cannot reload forever",
+    "successful parent loads retain the prior failure scope for nested imports",
   );
+}
+
+{
+  const storage = memoryStorage();
+  let reloads = 0;
+  const genericFailure = async () => {
+    throw new TypeError("Importing a module script failed.");
+  };
+  try {
+    await loadWorkspaceModule(genericFailure, {
+      moduleId: "policy-workspace",
+      storage,
+      wait: async () => undefined,
+      reload: () => {
+        reloads += 1;
+        throw new Error("dashboard-reload");
+      },
+    });
+  } catch (error) {
+    assert(error instanceof Error && error.message === "dashboard-reload", "first generic failure reloads");
+  }
+  try {
+    await loadWorkspaceModule(genericFailure, {
+      moduleId: "audit-workspace",
+      storage,
+      wait: async () => undefined,
+      reload: () => {
+        reloads += 1;
+        throw new Error("dashboard-reload");
+      },
+    });
+  } catch (error) {
+    assert(error instanceof Error && error.message === "dashboard-reload", "another module receives its own retry");
+  }
+  assert(reloads === 2, "generic browser errors are scoped by stable module identity");
 }
 
 {
@@ -89,12 +124,18 @@ const ok = { default: "workspace" };
   }
   assert(waited === CHUNK_RELOAD_DELAY_MS, "chunk recovery waits before reload so the daemon can return");
   assert(reloads === 1, "first chunk failure reloads the dashboard once");
-  assert(storage.getItem(CHUNK_RELOAD_STORAGE_KEY) === "1", "first chunk failure records the reload flag");
+  assert(
+    storage.getItem(CHUNK_RELOAD_STORAGE_KEY)?.includes("extensions-workspace.js") === true,
+    "first chunk failure records its scoped fingerprint",
+  );
 }
 
 {
   const storage = memoryStorage();
-  storage.setItem(CHUNK_RELOAD_STORAGE_KEY, "1");
+  storage.setItem(
+    CHUNK_RELOAD_STORAGE_KEY,
+    "anonymous-workspace-module:Failed to fetch dynamically imported module: http://127.0.0.1:5474/assets/chunks/extensions-workspace.js",
+  );
   let reloads = 0;
   try {
     await loadWorkspaceModule(
@@ -115,6 +156,35 @@ const ok = { default: "workspace" };
     assert(isChunkLoadError(error), "second chunk failure rethrows the module load error");
   }
   assert(reloads === 0, "a second chunk failure does not loop reloads");
+}
+
+{
+  const storage = memoryStorage();
+  storage.setItem(
+    CHUNK_RELOAD_STORAGE_KEY,
+    "anonymous-workspace-module:Failed to fetch dynamically imported module: http://127.0.0.1:5474/assets/chunks/extensions-v1.js",
+  );
+  let reloads = 0;
+  try {
+    await loadWorkspaceModule(
+      async () => {
+        throw new TypeError(
+          "Failed to fetch dynamically imported module: http://127.0.0.1:5474/assets/chunks/extensions-v2.js",
+        );
+      },
+      {
+        storage,
+        wait: async () => undefined,
+        reload: () => {
+          reloads += 1;
+          throw new Error("dashboard-reload");
+        },
+      },
+    );
+  } catch (error) {
+    assert(error instanceof Error && error.message === "dashboard-reload", "a later deployment can recover");
+  }
+  assert(reloads === 1, "a different chunk failure receives a fresh reload attempt");
 }
 
 {

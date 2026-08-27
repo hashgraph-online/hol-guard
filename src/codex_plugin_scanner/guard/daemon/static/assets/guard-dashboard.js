@@ -30272,10 +30272,12 @@ async function loadWorkspaceModule(loader, options = {}) {
       throw error;
     }
     const storage = options.storage;
-    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === "1") {
+    const failureMessage = error instanceof Error ? error.message : String(error);
+    const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
+    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
       throw error;
     }
-    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, "1")) {
+    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
       throw error;
     }
     const wait = options.wait ?? defaultWait;
@@ -30287,9 +30289,9 @@ async function loadWorkspaceModule(loader, options = {}) {
     });
   }
 }
-function lazyWorkspace(loader) {
+function lazyWorkspace(moduleId, loader) {
   const load = async () => {
-    const module = await loadWorkspaceModule(loader, { storage: browserSessionStorage() });
+    const module = await loadWorkspaceModule(loader, { moduleId, storage: browserSessionStorage() });
     return { default: module.default };
   };
   return reactExports.lazy(load);
@@ -30479,6 +30481,7 @@ function WatchProtectionBanner(props) {
   );
 }
 const McpPolicyRequestPanel = lazyWorkspace(
+  "mcp-policy-request-panel",
   () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
@@ -30772,21 +30775,25 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4,2]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
+  "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([6,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
+  "supply-chain-hub-workspace",
   () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([9,7]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
+  "policy-workspace-page",
   () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
+  "about-workspace",
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 function LazyFallback() {

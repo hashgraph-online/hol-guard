@@ -14,6 +14,13 @@ from datetime import datetime, timedelta, timezone
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..stable_digest import sha256_content_digest
 from ..store import GuardStore
+from .command_operation_classification import (
+    LOCAL_CONFIRMATION_COMMAND_OPERATIONS,
+    POLICY_MEMORY_COMMAND_OPERATIONS,
+    READ_ONLY_COMMAND_OPERATIONS,
+    REMOTE_STEP_UP_COMMAND_OPERATIONS,
+    STATE_CHANGING_COMMAND_OPERATIONS,
+)
 from .time_support import parse_utc_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
@@ -26,32 +33,6 @@ COMMAND_CAPABILITY_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
 COMMAND_REPLAY_MAX_ITEMS = 512
 COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
-READ_ONLY_COMMAND_OPERATIONS: tuple[str, ...] = (
-    "guard.packageShims.status",
-    "guard.packageShims.test",
-    "guard.packageShims.audit",
-    "guard.app.status",
-    "guard.app.updateCheck",
-)
-LOCAL_CONFIRMATION_COMMAND_OPERATIONS: frozenset[str] = frozenset(
-    {
-        "guard.packageShims.remove",
-        "guard.app.remove",
-    }
-)
-STATE_CHANGING_COMMAND_OPERATIONS: frozenset[str] = frozenset(
-    {
-        "guard.packageShims.repair",
-        "guard.packageShims.sync",
-        "guard.packageShims.install",
-        "guard.app.repair",
-        "guard.app.connect",
-        "guard.app.update",
-        "guard.review.syncPolicyMemory",
-    }
-)
-POLICY_MEMORY_COMMAND_OPERATIONS: frozenset[str] = frozenset({"guard.review.syncPolicyMemory"})
-REMOTE_STEP_UP_COMMAND_OPERATIONS: frozenset[str] = frozenset()
 
 
 class CommandCapabilityError(ValueError):

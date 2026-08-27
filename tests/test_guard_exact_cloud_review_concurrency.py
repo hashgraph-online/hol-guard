@@ -30,6 +30,68 @@ from tests.guard_exact_cloud_review_support import (
 )
 
 
+def test_compat_receipt_resolution_is_atomic_and_idempotent(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("compat-atomic-retry")
+    _add_request(store, request)
+
+    first = store.resolve_request_with_signed_remote_compat_result(
+        request.request_id,
+        receipt_id="compat-receipt-1",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="signed compatibility decision",
+        resolved_at="2026-08-26T12:00:00+00:00",
+    )
+    retry = store.resolve_request_with_signed_remote_compat_result(
+        request.request_id,
+        receipt_id="compat-receipt-1",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="signed compatibility decision",
+        resolved_at="2026-08-26T12:00:01+00:00",
+    )
+
+    assert first["resolved"] is True
+    assert first["replayed"] is False
+    assert retry["resolved"] is True
+    assert retry["replayed"] is True
+    assert store.has_exact_cloud_review_receipt("compat-receipt-1") is True
+
+
+def test_compat_receipt_reuse_for_different_request_fails_closed(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    first_request = _request("compat-first")
+    second_request = _request("compat-second")
+    _add_request(store, first_request)
+    _add_request(store, second_request)
+    assert (
+        store.resolve_request_with_signed_remote_compat_result(
+            first_request.request_id,
+            receipt_id="compat-receipt-reused",
+            resolution_action="block",
+            resolution_scope="artifact",
+            reason="signed compatibility decision",
+            resolved_at="2026-08-26T12:00:00+00:00",
+        )["resolved"]
+        is True
+    )
+
+    replay = store.resolve_request_with_signed_remote_compat_result(
+        second_request.request_id,
+        receipt_id="compat-receipt-reused",
+        resolution_action="block",
+        resolution_scope="artifact",
+        reason="signed compatibility decision",
+        resolved_at="2026-08-26T12:00:01+00:00",
+    )
+
+    assert replay == {"error": "remote_approval_replayed", "replayed": True, "resolved": False}
+    pending = store.get_approval_request(second_request.request_id)
+    assert pending is not None
+    assert pending["status"] == "pending"
+
+
 def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from ..approval_gate import ApprovalGateGrant
@@ -31,16 +30,13 @@ from .policy_store import (
     PendingPolicyRequest,
     StageRequestInput,
 )
+from .policy_time import utc_now_iso as _now_iso
 
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.store import GuardStore
 
 _POLICY_IMPORT_FLAG = "HOL_GUARD_POLICY_YAML_IMPORT"
 _MCP_POLICY_WRITE_FLAG = "HOL_GUARD_MCP_POLICY_WRITE"
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _safe_int(value: object) -> int:

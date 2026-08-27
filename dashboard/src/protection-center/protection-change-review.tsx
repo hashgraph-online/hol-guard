@@ -13,6 +13,33 @@ import { useModalDialog } from "../use-modal-dialog";
 type ExtensionMutationTarget = Pick<ExtensionCatalogItem, "extension_id" | "name">;
 export type ProtectionPendingChange = { extension: ExtensionMutationTarget; enabled: boolean } | { globalLockdown: boolean };
 
+type ProtectionChangeSummary = {
+  current: string;
+  requested: string;
+  title: string;
+};
+
+function summarizeProtectionChange(change: ProtectionPendingChange): ProtectionChangeSummary {
+  if ("globalLockdown" in change) {
+    if (change.globalLockdown) {
+      return { current: "Off", requested: "Active", title: "Enable Emergency Lockdown" };
+    }
+    return { current: "Active", requested: "Off", title: "Disable Emergency Lockdown" };
+  }
+  if (change.enabled) {
+    return {
+      current: "Blocked",
+      requested: "Allowed within Guard safety rules",
+      title: `Permit ${change.extension.name}`,
+    };
+  }
+  return {
+    current: "Allowed",
+    requested: "Blocked",
+    title: `Block ${change.extension.name}`,
+  };
+}
+
 export function ReviewModal(props: {
   change: ProtectionPendingChange;
   busy: boolean;
@@ -24,15 +51,7 @@ export function ReviewModal(props: {
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
   const dialogRef = useModalDialog<HTMLFormElement>(props.onCancel, !props.busy);
-  const title = "globalLockdown" in props.change
-    ? `${props.change.globalLockdown ? "Enable" : "Disable"} Emergency Lockdown`
-    : `${props.change.enabled ? "Permit" : "Block"} ${props.change.extension.name}`;
-  const current = "globalLockdown" in props.change
-    ? props.change.globalLockdown ? "Off" : "Active"
-    : props.change.enabled ? "Blocked" : "Allowed";
-  const requested = "globalLockdown" in props.change
-    ? props.change.globalLockdown ? "Active" : "Off"
-    : props.change.enabled ? "Allowed within Guard safety rules" : "Blocked";
+  const { current, requested, title } = summarizeProtectionChange(props.change);
   const handlePassword = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setPassword(event.target.value);
   }, []);

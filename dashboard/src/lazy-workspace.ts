@@ -7,6 +7,7 @@ export type WorkspaceModuleLoader<T> = () => Promise<T>;
 
 export type LoadWorkspaceModuleOptions = {
   delayMs?: number;
+  moduleId?: string;
   reload?: () => void;
   storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   wait?: (ms: number) => Promise<void>;
@@ -80,11 +81,15 @@ export async function loadWorkspaceModule<T>(
       throw error;
     }
     const storage = options.storage;
-    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === "1") {
+    const failureMessage = error instanceof Error ? error.message : String(error);
+    const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
+    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
       throw error;
     }
-    // Keep this flag for the tab so a nested child chunk cannot reload forever after a parent load succeeds.
-    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, "1")) {
+    // Scope the marker to this exact stale chunk failure. The same document and
+    // chunk set cannot loop, while a later deployment with a different failed
+    // chunk retains its one recovery attempt in the same tab.
+    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
       throw error;
     }
     const wait = options.wait ?? defaultWait;
@@ -99,10 +104,11 @@ export async function loadWorkspaceModule<T>(
 }
 
 export function lazyWorkspace<T extends FunctionComponent<never>>(
+  moduleId: string,
   loader: WorkspaceModuleLoader<{ default: T }>,
 ): LazyExoticComponent<FunctionComponent<Parameters<T>[0]>> {
   const load = async (): Promise<{ default: FunctionComponent<Parameters<T>[0]> }> => {
-    const module = await loadWorkspaceModule(loader, { storage: browserSessionStorage() });
+    const module = await loadWorkspaceModule(loader, { moduleId, storage: browserSessionStorage() });
     return { default: module.default };
   };
   return lazy(load);

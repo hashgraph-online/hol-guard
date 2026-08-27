@@ -25,7 +25,7 @@ import { useGuardUpdate } from "./guard-update-panel";
 import { updateSettings } from "./guard-api";
 import { WatchProtectionBanner } from "./watch-protection-banner";
 
-const McpPolicyRequestPanel = lazyWorkspace(() =>
+const McpPolicyRequestPanel = lazyWorkspace("mcp-policy-request-panel", () =>
   import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
 );
 

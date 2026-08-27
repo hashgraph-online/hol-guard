@@ -4237,6 +4237,7 @@ function PolicyExceptionsToolbar({
   ] });
 }
 const PolicyWorkspace = lazyWorkspace(
+  "policy-workspace",
   () => __vitePreload(() => Promise.resolve().then(() => policyWorkspace), true ? void 0 : void 0).then((module) => ({ default: module.PolicyWorkspace }))
 );
 function PolicyFallback() {
