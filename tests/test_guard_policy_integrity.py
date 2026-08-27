@@ -63,6 +63,8 @@ from codex_plugin_scanner.guard.store import (
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
+_TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS = 1.0
+_TRUST_BACKEND_CORRUPT_RESULT_STARTUP_TIMEOUT_SECONDS = 10.0
 
 
 @pytest.fixture(autouse=True)
@@ -359,6 +361,30 @@ def test_trust_backend_timeout_returns_degraded_result_without_waiting() -> None
     assert time.monotonic() - started < 0.5
 
 
+@pytest.mark.parametrize("startup_timeout_seconds", (0.0, -1.0))
+def test_trust_backend_check_does_not_spawn_for_nonpositive_startup_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    startup_timeout_seconds: float,
+) -> None:
+    calls: list[str | None] = []
+
+    def unexpected_get_context(method: str | None = None):
+        calls.append(method)
+        raise AssertionError("non-positive startup timeout must not spawn a worker")
+
+    monkeypatch.setattr(local_trust_contract_module.multiprocessing, "get_context", unexpected_get_context)
+
+    result = run_trust_backend_check(
+        _protected_trust_result,
+        timeout_seconds=1.0,
+        timeout_result={"mode": "degraded"},
+        startup_timeout_seconds=startup_timeout_seconds,
+    )
+
+    assert result == {"mode": "degraded"}
+    assert calls == []
+
+
 def test_trust_backend_timeout_contains_late_side_effects(tmp_path: Path) -> None:
     marker_path = tmp_path / "late-side-effect"
 
@@ -455,8 +481,9 @@ def test_trust_backend_check_handles_corrupt_result_file(
 
     result = run_trust_backend_check(
         _protected_trust_result,
-        timeout_seconds=1.0,
+        timeout_seconds=_TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS,
         timeout_result={"mode": "degraded"},
+        startup_timeout_seconds=_TRUST_BACKEND_CORRUPT_RESULT_STARTUP_TIMEOUT_SECONDS,
         on_error=lambda error: {
             "mode": "degraded",
             "error": error.__class__.__name__,
@@ -478,8 +505,9 @@ def test_trust_backend_check_rejects_malformed_result_payload(
 
     result = run_trust_backend_check(
         _protected_trust_result,
-        timeout_seconds=1.0,
+        timeout_seconds=_TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS,
         timeout_result={"mode": "degraded"},
+        startup_timeout_seconds=_TRUST_BACKEND_CORRUPT_RESULT_STARTUP_TIMEOUT_SECONDS,
         on_error=lambda error: {
             "mode": "degraded",
             "error": error.__class__.__name__,
@@ -501,8 +529,9 @@ def test_trust_backend_check_rejects_list_result_payload(
 
     result = run_trust_backend_check(
         _protected_trust_result,
-        timeout_seconds=1.0,
+        timeout_seconds=_TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS,
         timeout_result={"mode": "degraded"},
+        startup_timeout_seconds=_TRUST_BACKEND_CORRUPT_RESULT_STARTUP_TIMEOUT_SECONDS,
         on_error=lambda error: {
             "mode": "degraded",
             "error": error.__class__.__name__,
@@ -515,6 +544,75 @@ def test_trust_backend_check_rejects_list_result_payload(
         "error": "TrustBackendCorruptResultError",
         "reason": POLICY_INTEGRITY_REASON_BACKEND_CORRUPT,
     }
+
+
+def test_trust_backend_check_separates_startup_and_runtime_timeouts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleep_delays: list[float] = []
+    join_timeouts: list[float | None] = []
+    monotonic_values = iter((100.0, 103.5))
+
+    class FakeProcess:
+        def __init__(self, args: tuple[str, str, str]) -> None:
+            self.ready_path = Path(args[1])
+            self.result_path = Path(args[2])
+            self.is_running = True
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return self.is_running
+
+        def join(self, timeout: float | None = None) -> None:
+            join_timeouts.append(timeout)
+            self.is_running = False
+
+        def terminate(self) -> None:
+            self.is_running = False
+
+        def kill(self) -> None:
+            self.is_running = False
+
+    processes: list[FakeProcess] = []
+
+    class FakeContext:
+        def process(self, *, target: object, args: tuple[str, str, str]) -> FakeProcess:
+            del target
+            process = FakeProcess(args)
+            processes.append(process)
+            return process
+
+    FakeContext.Process = FakeContext.process
+
+    def fake_get_context(method: str | None = None) -> FakeContext:
+        assert method == "spawn"
+        return FakeContext()
+
+    def fake_monotonic() -> float:
+        return next(monotonic_values)
+
+    def mark_worker_ready(delay_seconds: float) -> None:
+        sleep_delays.append(delay_seconds)
+        process = processes[0]
+        process.result_path.write_bytes(pickle.dumps((True, {"mode": "protected"})))
+        process.ready_path.touch()
+
+    monkeypatch.setattr(local_trust_contract_module.multiprocessing, "get_context", fake_get_context)
+    monkeypatch.setattr(local_trust_contract_module.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(local_trust_contract_module.time, "sleep", mark_worker_ready)
+
+    result = run_trust_backend_check(
+        _protected_trust_result,
+        timeout_seconds=_TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS,
+        timeout_result={"mode": "degraded"},
+        startup_timeout_seconds=_TRUST_BACKEND_CORRUPT_RESULT_STARTUP_TIMEOUT_SECONDS,
+    )
+
+    assert result == {"mode": "protected"}
+    assert sleep_delays == [0.005]
+    assert join_timeouts == [_TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS]
 
 
 def test_trust_backend_result_loader_preserves_permission_denied() -> None:

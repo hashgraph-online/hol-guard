@@ -688,7 +688,7 @@
     "tests/test_guard_phase05_approval_memory.py": 1467,
     "tests/test_guard_phase06_workspace_audit.py": 851,
     "tests/test_guard_policy_bundle_browser_scopes.py": 512,
-    "tests/test_guard_policy_integrity.py": 3803,
+    "tests/test_guard_policy_integrity.py": 3901,
     "tests/test_guard_product_flow.py": 950,
     "tests/test_guard_protect.py": 1287,
     "tests/test_guard_python_supply_chain_heuristics_phase12.py": 549,
