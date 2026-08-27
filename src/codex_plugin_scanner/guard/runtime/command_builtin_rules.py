@@ -48,6 +48,7 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "git index inspection": ("local_secret_read",),
     "git workspace command": ("destructive_shell", "network_egress"),
     "git read command": ("local_secret_read",),
+    "skill sunset configuration audit command": ("local_secret_read",),
     "system destructive command": ("destructive_shell",),
     "windows destructive command": ("destructive_shell",),
     "kubernetes destructive command": ("destructive_shell", "network_egress"),

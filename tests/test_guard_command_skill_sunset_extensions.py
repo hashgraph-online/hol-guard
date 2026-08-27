@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.command_extensions import (
+    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    risk_classes_for_command_action,
+)
 from codex_plugin_scanner.guard.runtime.command_inspection import inspect_command
 
 _ACTION_CLASS = "Skill Sunset configuration audit command"
@@ -75,3 +78,7 @@ def test_skill_sunset_extension_publishes_canonical_cli_reference() -> None:
     assert extension is not None
     assert extension.reference_urls == ("https://github.com/ooocooc/open-skill-sunset/blob/main/src/cli.js",)
     assert {rule.rule_id for rule in extension.rules} == {_RULE_ID}
+
+
+def test_skill_sunset_audit_action_publishes_runtime_risk_class() -> None:
+    assert risk_classes_for_command_action(_ACTION_CLASS) == ("local_secret_read",)
