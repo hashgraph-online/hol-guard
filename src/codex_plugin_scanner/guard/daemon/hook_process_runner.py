@@ -177,6 +177,19 @@ class HookProcessRunner:
             )
         self._recovery_event.set()
 
+    def notify_queued_work(self) -> None:
+        """Wake deferred worker backfill when a hook is waiting for capacity."""
+
+        with self._state_lock:
+            if self._closed or not self._started:
+                return
+            now = time.monotonic()
+            if self._backfill_not_before > now:
+                self._backfill_not_before = now
+            if self._backfill_force_after > now:
+                self._backfill_force_after = now
+        self._recovery_event.set()
+
     def review(
         self,
         *,

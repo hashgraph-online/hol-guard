@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_supply_chain import _resolve_stored_package_policy_override
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
@@ -76,7 +75,6 @@ def _review_evaluation() -> PackageRequestEvaluation:
 
 def test_package_reuses_native_signed_policy_through_running_daemon(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
@@ -117,7 +115,6 @@ def test_package_reuses_native_signed_policy_through_running_daemon(
     )
     one_shot_store = _OneShotStore(guard_home)
 
-    monkeypatch.setattr(HookProcessRunner, "notify_queued_work", lambda _self: None, raising=False)
     daemon = GuardDaemonServer(daemon_store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -165,10 +162,8 @@ def test_package_stays_blocked_when_native_authority_daemon_is_unavailable(tmp_p
 
 def test_policy_authority_route_rejects_unauthenticated_clients(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    monkeypatch.setattr(HookProcessRunner, "notify_queued_work", lambda _self: None, raising=False)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     request = urllib.request.Request(
