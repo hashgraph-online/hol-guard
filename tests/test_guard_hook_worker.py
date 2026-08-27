@@ -229,18 +229,18 @@ class TestHookWorkerMalformedPayload:
 
 
 class TestHookWorkerException:
-    def test_worker_exception_returns_deny_block(
+    def test_native_exception_returns_deny_block(
         self, store: GuardStore, workspace: Path, home_dir: Path, guard_home: Path, monkeypatch
     ) -> None:
-        # Create a worker with a broken engine inner method.
-        # The engine's review() catches exceptions and returns deny/block.
         worker = HookWorker(store=store)
 
-        def broken_review_inner(request, *, start):
-            raise RuntimeError("engine crashed")
+        def broken_native(*args, **kwargs):
+            raise RuntimeError("native runtime crashed")
 
-        monkeypatch.setattr(worker.engine, "_review_inner", broken_review_inner)
-
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+            broken_native,
+        )
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Read",
@@ -261,10 +261,9 @@ class TestHookWorkerException:
             workspace=workspace,
         )
 
-        # The engine's exception handler returns deny/block
         assert result["decision"] == "deny"
         assert result["model_output_action"] == "block"
-        assert result["reason_code"] == "engine_exception"
+        assert result["reason_code"] == "native_post_tool_unavailable"
 
 
 class TestHookWorkerNonPostTool:

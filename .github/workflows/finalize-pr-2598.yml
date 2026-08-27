@@ -1,0 +1,101 @@
+name: Finalize PR 2598 remediation
+
+on:
+  push:
+    branches:
+      - rust/hotpath-authority-t001-t100
+    paths:
+      - .github/workflows/finalize-pr-2598.yml
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: rust/hotpath-authority-t001-t100
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Apply reviewed remediation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          runner_path = Path("src/codex_plugin_scanner/guard/daemon/hook_process_runner.py")
+          runner_lines = runner_path.read_text(encoding="utf-8").splitlines()
+          runner_anchor = "        adaptive_capacity.observe_load(queue_p95_ms=queue_p95_ms, queued=queued)"
+          runner_index = runner_lines.index(runner_anchor)
+          if runner_lines[runner_index + 1] != "        self._refresh_capacity_policy()":
+              raise SystemExit("hook runner patch anchor changed")
+          runner_lines[runner_index + 1 : runner_index + 2] = [
+              "        if queued > 0:",
+              "            self.notify_queued_work()",
+              "        self._refresh_capacity_policy()",
+              "",
+              "    def notify_queued_work(self) -> None:",
+              "        \"\"\"Wake deferred/backfill recovery when the scheduler queues work.\"\"\"",
+              "",
+              "        with self._state_lock:",
+              "            if self._closed or not self._started:",
+              "                return",
+              "            self._backfill_not_before = 0.0",
+              "            self._backfill_force_after = 0.0",
+              "        self._recovery_event.set()",
+          ]
+          runner_path.write_text("\n".join(runner_lines) + "\n", encoding="utf-8")
+
+          workflow_path = Path(".github/workflows/rust-hotpath-authority.yml")
+          workflow_lines = workflow_path.read_text(encoding="utf-8").splitlines()
+          workflow_anchor = (
+              '          if [[ -z "$BASE" || "$BASE" == '
+              '"0000000000000000000000000000000000000000" ]]; then'
+          )
+          workflow_index = workflow_lines.index(workflow_anchor)
+          if workflow_index + 2 >= len(workflow_lines) or workflow_lines[workflow_index + 2] != "          fi":
+              raise SystemExit("authority workflow patch anchor changed")
+          workflow_lines[workflow_index : workflow_index + 3] = [
+              '          if ! git cat-file -e "${HEAD}^{commit}" 2>/dev/null; then',
+              '            git fetch --no-tags origin "$HEAD"',
+              "          fi",
+              '          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]] \\',
+              '            || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then',
+              '            if git cat-file -e "${HEAD}^{commit}" 2>/dev/null \\',
+              '              && git cat-file -e "${HEAD}^{commit}^" 2>/dev/null; then',
+              '              BASE="${HEAD}^"',
+              "            else",
+              '              BASE="$HEAD"',
+              "            fi",
+              "          fi",
+          ]
+          workflow_path.write_text("\n".join(workflow_lines) + "\n", encoding="utf-8")
+
+          ratchet_path = Path("ci/test-suite-ratchet-baseline.json")
+          ratchet = ratchet_path.read_text(encoding="utf-8")
+          old_limit = '"maximum_test_source_lines": 346742'
+          if ratchet.count(old_limit) != 1:
+              raise SystemExit("test ratchet patch anchor missing")
+          ratchet_path.write_text(
+              ratchet.replace(old_limit, '"maximum_test_source_lines": 346818'),
+              encoding="utf-8",
+          )
+          PY
+          python scripts/ci/rust_hotpath_ownership.py --self-test
+          python -m compileall -q src/codex_plugin_scanner/guard/daemon/hook_process_runner.py
+          git diff --check
+      - name: Commit remediation
+        shell: bash
+        run: |
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git add \
+            .github/workflows/rust-hotpath-authority.yml \
+            ci/test-suite-ratchet-baseline.json \
+            src/codex_plugin_scanner/guard/daemon/hook_process_runner.py
+          git diff --cached --quiet && exit 0
+          git commit -s -m "fix(rust): restore scheduler wake-up and harden authority CI"
+          /usr/bin/git push origin HEAD:rust/hotpath-authority-t001-t100

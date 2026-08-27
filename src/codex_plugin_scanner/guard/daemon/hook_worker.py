@@ -1,22 +1,15 @@
-"""Daemon-resident hook worker for fast hook review.
+"""Daemon-resident native hook worker.
 
-This worker avoids Python startup/import cost and avoids calling the
-CLI path for normal daemon hooks. It builds a ``HookReviewRequest``
-from the HTTP payload and calls the configured local decision backend.
-
-Security:
-- Never lets unreviewed tool output reach the model.
-- Never falls back to legacy CLI after a worker exception for a
-  request that supplied only ``guard_source_ref`` without full output.
-- Never calls ``run_guard_command()``.
-- Native authority is limited to PostToolUse and falls back to Python on
-  any unavailable, incompatible, timeout, transport, or invalid-response case.
+The supported PostToolUse decision path is Rust-authoritative. Python builds the
+bounded transport envelope and maps the already-completed native decision to a
+harness response. It does not run a Python scanner, classifier, or evaluator,
+and native failure produces a deterministic fail-safe result rather than a
+Python decision fallback.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, final
 
@@ -25,14 +18,17 @@ from ..cli.commands_support_command_activity import (
     record_post_hook_command_activity_best_effort,
 )
 from ..config import load_guard_config
-from ..native_runtime import native_mode, review_post_tool_native
-from ..runtime.hook_content_scanner import ContentScanner
-from ..runtime.hook_decision_cache import HookDecisionCache
-from ..runtime.hook_review_engine import HookReviewEngine
+from ..native_route_metrics import (
+    attach_native_decision_receipt,
+    native_decision_receipt,
+    record_native_decision,
+)
+from ..native_runtime import review_post_tool_native
 from ..runtime.hook_review_types import (
     HookOutputSummary,
     HookPayloadKind,
     HookReviewRequest,
+    HookReviewResponse,
     HookSourceFileRef,
 )
 
@@ -60,32 +56,23 @@ def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
 
 
 class HookWorkerUnsupported(RuntimeError):  # noqa: N818
-    """Raised when the worker cannot handle a request (caller falls back to CLI)."""
+    """Raised when the native worker does not own an event surface."""
 
 
 @final
 class HookWorker:
-    """Resident hook review worker for the daemon."""
+    """Resident Rust-authoritative hook review worker."""
 
     def __init__(self, *, store: GuardStore, activity_writer: CommandActivityWriter | None = None):
         self.store = store
         self.guard_home = store.guard_home
         self.activity_writer = activity_writer
-        self.scanner = ContentScanner()
-        self.cache = HookDecisionCache(store)
+        # The daemon server owns aggregate failure accounting through this
+        # recorder. It is observability only and never participates in a hook
+        # decision or provides a Python evaluator fallback.
         from .hook_metrics import HookMetricsRecorder
 
         self.metrics = HookMetricsRecorder()
-        self.engine = HookReviewEngine(
-            store=store,
-            scanner=self.scanner,
-            cache=self.cache,
-            config_loader=self._load_config,
-            metrics=self.metrics,
-        )
-
-    def _load_config(self, guard_home: Path, workspace: Path | None):
-        return load_guard_config(guard_home, workspace=workspace)
 
     def review_http_payload(
         self,
@@ -98,17 +85,10 @@ class HookWorker:
         workspace: Path | None,
         deadline: float | None = None,
     ) -> dict[str, object]:
-        """Review a hook HTTP payload and return harness JSON.
-
-        ``off`` keeps the Python engine authoritative. ``shadow`` evaluates
-        Python first and exercises native only as non-authoritative evidence.
-        ``auto`` and ``force`` try the native runtime first and invoke Python
-        only when native cannot produce a valid local result.
-        """
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
         if event_name != "PostToolUse":
-            raise HookWorkerUnsupported(f"fast path only supports PostToolUse, got event={event_name}")
+            raise HookWorkerUnsupported(f"native worker does not own event={event_name}")
 
         request = self._request_from_payload(
             payload,
@@ -119,25 +99,35 @@ class HookWorker:
             workspace=workspace,
             deadline=deadline,
         )
-        mode = native_mode()
-        if mode in {"auto", "force"}:
-            config = self._load_config(guard_home, workspace)
-            response = review_post_tool_native(
-                request,
-                observe_mode=config.mode == "observe",
+        observe_mode = self._observe_mode(guard_home=guard_home, workspace=workspace)
+        try:
+            response = review_post_tool_native(request, observe_mode=observe_mode)
+        except Exception:
+            response = None
+        if response is None:
+            response = HookReviewResponse(
+                decision="deny",
+                reason="HOL Guard could not complete local Rust review safely.",
+                model_output_action="block",
+                notice="warning",
+                reason_code="native_post_tool_unavailable",
+                policy_action="block",
             )
-            if response is None:
-                response = self.engine.review(request)
+            receipt = native_decision_receipt(
+                backend="native_fail_safe",
+                transport="unavailable",
+                decision_core="native_unavailable_fail_safe",
+                reason_code=response.reason_code,
+            )
         else:
-            response = self.engine.review(request)
-            if mode == "shadow":
-                # Shadow evidence is explicitly non-authoritative. No native
-                # failure may replace or discard the completed Python result.
-                with suppress(Exception):
-                    _ = review_post_tool_native(
-                        request,
-                        observe_mode=response.observe_mode,
-                    )
+            receipt = native_decision_receipt(
+                backend="rust_native",
+                transport="resident_or_oneshot",
+                decision_core="rust_post_tool_v1",
+                reason_code=response.reason_code,
+            )
+        response = attach_native_decision_receipt(response, receipt)
+        record_native_decision(event_name, harness, receipt, guard_home=guard_home)
 
         succeeded = hook_post_succeeded(event_name, payload)
         if self.activity_writer is not None:
@@ -157,6 +147,16 @@ class HookWorker:
                 succeeded=succeeded,
             )
         return _harness_json_from_review_response(harness, event_name, response)
+
+    @staticmethod
+    def _observe_mode(*, guard_home: Path, workspace: Path | None) -> bool:
+        """Read product posture without introducing an alternate evaluator."""
+
+        try:
+            return load_guard_config(guard_home, workspace=workspace).mode == "observe"
+        except (OSError, RuntimeError, TypeError, ValueError):
+            # Configuration uncertainty may never weaken native enforcement.
+            return False
 
     def _runtime_harness(self, params: Mapping[str, list[str]]) -> str | None:
         values = params.get("runtime-harness", [])
@@ -183,6 +183,9 @@ class HookWorker:
         config_path = payload.get("config_path")
         if not isinstance(config_path, str):
             config_path = None
+        request_id = payload.get("request_id")
+        if not isinstance(request_id, str):
+            request_id = None
         return HookReviewRequest(
             harness=harness,
             event_name=event_name,
@@ -197,6 +200,7 @@ class HookWorker:
             output_summary=output_summary,
             source_ref=source_ref,
             deadline_monotonic=deadline,
+            request_id=request_id,
         )
 
     def _hook_event_name(self, payload: Mapping[str, object]) -> str:
@@ -290,8 +294,8 @@ def post_tool_native_block_response(
 def post_tool_fail_safe_response(
     harness: str,
     *,
-    reason: str = "HOL Guard could not complete local hook review safely.",
-    reason_code: str = "daemon_worker_exception",
+    reason: str = "HOL Guard could not complete local Rust hook review safely.",
+    reason_code: str = "native_worker_failure",
 ) -> dict[str, object]:
     if _canonical_hook_harness(harness) in {"pi", "omp"}:
         return {
@@ -307,26 +311,20 @@ def post_tool_fail_safe_response(
 def _harness_json_from_review_response(
     harness: str,
     event_name: str,
-    response: object,
+    response: HookReviewResponse,
 ) -> dict[str, object]:
-    to_harness_json = getattr(response, "to_harness_json", None)
-    payload = to_harness_json() if callable(to_harness_json) else {}
-    if not isinstance(payload, dict):
-        payload = {}
+    payload = response.to_harness_json()
     if event_name != "PostToolUse":
         return payload
     if _canonical_hook_harness(harness) in {"pi", "omp"}:
         return payload
-    decision = str(payload.get("decision") or "")
-    model_output_action = str(payload.get("model_output_action") or "")
-    if decision == "allow" and model_output_action == "allow_original":
+    if response.decision == "allow" and response.model_output_action == "allow_original":
         return {
             "policy_action": "allow",
             "hookSpecificOutput": {"hookEventName": event_name},
         }
-    reason = str(payload.get("reason") or "HOL Guard blocked this tool output because it could not be proven safe.")
-    reason_code = str(payload.get("reason_code") or "fast_path_block")
-    return post_tool_native_block_response(reason=reason, reason_code=reason_code)
+    reason = response.reason or "HOL Guard blocked this tool output because it could not be proven safe."
+    return post_tool_native_block_response(reason=reason, reason_code=response.reason_code)
 
 
 __all__ = [
@@ -334,4 +332,5 @@ __all__ = [
     "HookWorkerUnsupported",
     "post_tool_fail_safe_response",
     "post_tool_native_block_response",
+    "runtime_hook_event_name",
 ]

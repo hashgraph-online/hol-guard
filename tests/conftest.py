@@ -256,7 +256,7 @@ _FAKE_SYSTEM_KEYRING_DISABLED_FILES = {
 @pytest.fixture(autouse=True)
 def _policy_integrity_keyring_for_selected_tests(
     request: pytest.FixtureRequest,
-    install_fake_system_keyring,
+    install_fake_system_keyring: Callable[[], _FakeSystemKeyringModule],
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -291,3 +291,80 @@ def seed_connected_oauth_without_entitlement() -> Callable[[object], None]:
         )
 
     return _seed
+
+
+# RUST_AUTHORITY_NATIVE_TEST_FIXTURE
+_RUST_AUTHORITY_TEST_FUNCTIONS = frozenset(
+    {
+        "test_hook_runner_large_response_uses_bounded_pipe_transfer",
+        "test_hook_runner_propagates_runtime_context",
+        "test_hook_runner_rejects_forged_request_id",
+        "test_server_handles_worker_timeout",
+        "test_server_storm_mix_preserves_non_hanging_results",
+    }
+)
+_RUST_AUTHORITY_RUNTIME: Path | None = None
+_RUST_AUTHORITY_RUNTIME_LOCK = threading.Lock()
+
+
+def _compiled_rust_authority_runtime() -> Path:
+    """Build one real native runtime for tests that exercise the authority boundary."""
+
+    import subprocess
+
+    global _RUST_AUTHORITY_RUNTIME
+    with _RUST_AUTHORITY_RUNTIME_LOCK:
+        if _RUST_AUTHORITY_RUNTIME is not None and _RUST_AUTHORITY_RUNTIME.is_file():
+            return _RUST_AUTHORITY_RUNTIME
+        root = Path(__file__).resolve().parents[1]
+        environment = dict(os.environ)
+        environment["HOL_GUARD_BUILD_SHA"] = "0" * 40
+        subprocess.run(
+            [
+                "cargo",
+                "build",
+                "--manifest-path",
+                str(root / "rust" / "Cargo.toml"),
+                "--locked",
+                "--release",
+                "-p",
+                "hol-guard-runtime",
+            ],
+            cwd=root,
+            env=environment,
+            check=True,
+        )
+        executable = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
+        runtime = root / "rust" / "target" / "release" / executable
+        if not runtime.is_file():
+            raise RuntimeError("compiled HOL Guard Rust runtime is missing")
+        _RUST_AUTHORITY_RUNTIME = runtime
+        return runtime
+
+
+@pytest.fixture(autouse=True)
+def _use_compiled_rust_authority_runtime(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    """Use the real Rust binary only for tests whose contract requires it."""
+
+    raw_path = getattr(request.node, "path", getattr(request.node, "fspath", ""))
+    file_name = Path(str(raw_path)).name
+    function_name = getattr(request.node, "originalname", None) or request.node.name.split("[")[0]
+    requires_native = file_name == "test_guard_hook_worker.py" or function_name in _RUST_AUTHORITY_TEST_FUNCTIONS
+    if not requires_native:
+        yield
+        return
+    runtime = _compiled_rust_authority_runtime()
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
+    from codex_plugin_scanner.guard import native_runtime as native_runtime_module
+    from codex_plugin_scanner.guard import native_runtime_resident as native_runtime_resident_module
+
+    native_runtime_module._capabilities_for_identity.cache_clear()  # pyright: ignore[reportPrivateUsage]
+    native_runtime_resident_module.close_resident_native_runtimes()
+    try:
+        yield
+    finally:
+        native_runtime_resident_module.close_resident_native_runtimes()

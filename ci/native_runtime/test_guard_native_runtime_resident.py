@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import stat
 import sys
@@ -10,6 +11,12 @@ import pytest
 
 import codex_plugin_scanner.guard.native_runtime_resident as resident
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.native_route_metrics import (
+    flush_native_route_metrics_report_for_tests,
+    native_route_metrics_report_path,
+    native_route_metrics_snapshot,
+    reset_native_route_metrics_for_tests,
+)
 from codex_plugin_scanner.guard.native_runtime_resident import (
     close_resident_native_runtimes,
     resident_native_request,
@@ -29,7 +36,6 @@ import hashlib
 import hmac
 import socket
 import sys
-import tempfile
 
 REQUEST_MAGIC = b'HGR2'
 RESPONSE_MAGIC = b'HGS2'
@@ -173,121 +179,138 @@ def _allow_response(reason_code: str) -> HookReviewResponse:
     )
 
 
-def test_hook_worker_auto_is_native_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _review(worker: HookWorker, store: GuardStore, tmp_path: Path) -> dict[str, object]:
+    return worker.review_http_payload(
+        payload={"hook_event_name": "PostToolUse", "tool_response": "clean output"},
+        params={},
+        default_harness="claude-code",
+        home_dir=tmp_path,
+        guard_home=store.guard_home,
+        workspace=tmp_path,
+    )
+
+
+def test_hook_worker_is_rust_authoritative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     worker = HookWorker(store=store)
     native_calls = 0
+    reset_native_route_metrics_for_tests()
 
     def fake_native(*args: object, **kwargs: object) -> HookReviewResponse:
         nonlocal native_calls
         native_calls += 1
         return _allow_response("native_allow")
 
-    def fail_python(*args: object, **kwargs: object) -> HookReviewResponse:
-        raise AssertionError("Python engine should not run after an authoritative native result")
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native", fake_native)
-    monkeypatch.setattr(worker.engine, "review", fail_python)
-
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PostToolUse", "tool_response": "clean output"},
-        params={},
-        default_harness="claude-code",
-        home_dir=tmp_path,
-        guard_home=store.guard_home,
-        workspace=tmp_path,
-    )
+    result = _review(worker, store, tmp_path)
     assert native_calls == 1
     assert result == {"policy_action": "allow", "hookSpecificOutput": {"hookEventName": "PostToolUse"}}
+    metrics = native_route_metrics_snapshot()
+    assert metrics["rust_decisions"] == 1
+    assert metrics["native_fail_safe_outcomes"] == 0
+    assert metrics["python_decisions"] == 0
+    assert metrics["python_decision_fallback_share"] == 0.0
+    assert flush_native_route_metrics_report_for_tests()
+    report_path = native_route_metrics_report_path(store.guard_home)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["rust_decisions"] == 1
+    assert report["python_decisions"] == 0
+    assert stat.S_IMODE(report_path.stat().st_mode) == 0o600
 
 
-def test_hook_worker_auto_falls_back_to_python(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_hook_worker_native_unavailable_fails_safe_without_python(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     worker = HookWorker(store=store)
-    python_calls = 0
-
-    def fake_python(*args: object, **kwargs: object) -> HookReviewResponse:
-        nonlocal python_calls
-        python_calls += 1
-        return _allow_response("python_fallback")
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
+    reset_native_route_metrics_for_tests()
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
         lambda *args, **kwargs: None,
     )
-    monkeypatch.setattr(worker.engine, "review", fake_python)
 
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PostToolUse", "tool_response": "clean output"},
-        params={},
-        default_harness="claude-code",
-        home_dir=tmp_path,
-        guard_home=store.guard_home,
-        workspace=tmp_path,
-    )
-    assert python_calls == 1
-    assert result["policy_action"] == "allow"
+    result = _review(worker, store, tmp_path)
+    assert result["policy_action"] == "block"
+    assert result["model_output_action"] == "block"
+    assert result["reason_code"] == "native_post_tool_unavailable"
+    metrics = native_route_metrics_snapshot()
+    assert metrics["rust_decisions"] == 0
+    assert metrics["native_fail_safe_outcomes"] == 1
+    assert metrics["rust_decision_share"] == 0.0
+    assert metrics["python_decisions"] == 0
 
 
-def test_hook_worker_shadow_keeps_python_authoritative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_hook_worker_native_deny_is_authoritative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     worker = HookWorker(store=store)
-    native_calls = 0
-    python_calls = 0
-
-    def fake_python(*args: object, **kwargs: object) -> HookReviewResponse:
-        nonlocal python_calls
-        python_calls += 1
-        return _allow_response("python_authoritative")
-
-    def fake_native(*args: object, **kwargs: object) -> HookReviewResponse:
-        nonlocal native_calls
-        native_calls += 1
-        return HookReviewResponse(
+    reset_native_route_metrics_for_tests()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        lambda *args, **kwargs: HookReviewResponse(
             decision="deny",
-            reason="native mismatch",
+            reason="native block",
             model_output_action="block",
             notice="warning",
             reason_code="native_deny",
-        )
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "shadow")
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native", fake_native)
-    monkeypatch.setattr(worker.engine, "review", fake_python)
-
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PostToolUse", "tool_response": "clean output"},
-        params={},
-        default_harness="claude-code",
-        home_dir=tmp_path,
-        guard_home=store.guard_home,
-        workspace=tmp_path,
+            policy_action="block",
+        ),
     )
-    assert python_calls == 1
-    assert native_calls == 1
-    assert result["policy_action"] == "allow"
+
+    result = _review(worker, store, tmp_path)
+    assert result["policy_action"] == "block"
+    assert result["reason_code"] == "native_deny"
+    metrics = native_route_metrics_snapshot()
+    assert metrics["rust_decisions"] == 1
+    assert metrics["native_fail_safe_outcomes"] == 0
+    assert metrics["python_decisions"] == 0
 
 
-def test_hook_worker_shadow_ignores_native_exception(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_hook_worker_native_exception_fails_safe_without_python(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     worker = HookWorker(store=store)
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "shadow")
-    monkeypatch.setattr(worker.engine, "review", lambda *args, **kwargs: _allow_response("python_authoritative"))
+    reset_native_route_metrics_for_tests()
 
     def fail_native(*args: object, **kwargs: object) -> HookReviewResponse:
         raise RuntimeError("synthetic native failure")
 
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native", fail_native)
+    result = _review(worker, store, tmp_path)
+    assert result["policy_action"] == "block"
+    assert result["reason_code"] == "native_post_tool_unavailable"
+    metrics = native_route_metrics_snapshot()
+    assert metrics["rust_decisions"] == 0
+    assert metrics["native_fail_safe_outcomes"] == 1
+    assert metrics["python_decisions"] == 0
+
+
+def test_hook_worker_native_off_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_native_route_metrics_for_tests()
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    worker = HookWorker(store=store)
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
+    monkeypatch.delenv("HOL_GUARD_NATIVE_BINARY", raising=False)
 
     result = worker.review_http_payload(
-        payload={"hook_event_name": "PostToolUse", "tool_response": "clean output"},
+        payload={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_response": [{"type": "text", "text": "safe output"}],
+        },
         params={},
-        default_harness="claude-code",
+        default_harness="pi",
         home_dir=tmp_path,
-        guard_home=store.guard_home,
+        guard_home=guard_home,
         workspace=tmp_path,
     )
-    assert result == {"policy_action": "allow", "hookSpecificOutput": {"hookEventName": "PostToolUse"}}
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "native_post_tool_unavailable"
+    snapshot = native_route_metrics_snapshot()
+    assert snapshot["rust_decisions"] == 0
+    assert snapshot["native_fail_safe_outcomes"] == 1
+    assert snapshot["python_decisions"] == 0

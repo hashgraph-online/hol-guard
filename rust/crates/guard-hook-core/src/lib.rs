@@ -15,6 +15,10 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+mod target_paths;
+
+use target_paths::{envelope_target, envelope_targets};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractedOutput {
     pub text: String,
@@ -158,21 +162,6 @@ fn source_ref(payload: &Value) -> Option<HookSourceFileRefV1> {
     payload
         .get("guard_source_ref")
         .and_then(|value| serde_json::from_value(value.clone()).ok())
-}
-
-fn envelope_target(payload: &Value) -> Option<String> {
-    let input = payload
-        .get("tool_input")
-        .or_else(|| payload.get("toolInput"))?
-        .as_object()?;
-    for key in ["file_path", "path", "filePath"] {
-        if let Some(value) = input.get(key).and_then(Value::as_str) {
-            if !value.trim().is_empty() {
-                return Some(value.to_owned());
-            }
-        }
-    }
-    None
 }
 
 fn sha256_text(text: &str) -> String {
@@ -355,8 +344,10 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             "HOL Guard could not complete local hook review safely.",
         );
     }
-    let local_content = envelope_target(&request.payload)
-        .is_some_and(|path| local_samples_should_be_unsuppressed(&path));
+    let targets = envelope_targets(&request.payload);
+    let local_content = targets
+        .iter()
+        .any(|path| local_samples_should_be_unsuppressed(path));
     if extracted.truncated {
         let excerpt: String = extracted
             .text
