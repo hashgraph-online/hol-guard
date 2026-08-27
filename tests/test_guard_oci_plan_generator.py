@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.isolation_provider import ProviderPlanEr
 from codex_plugin_scanner.guard.runtime.oci_plan_generator import (
     OCIExecutionPlan,
     OCIPlanGenerator,
+    OCIPlanNetwork,
     _analyze_capabilities,
     _analyze_cgroup,
     _analyze_lsm,
@@ -239,6 +240,54 @@ class TestMountAnalysis:
         assert has_forbidden is True
         assert has_hostile is True
         assert any("forbidden-mount-source" in v for v in violations)
+
+    @pytest.mark.parametrize(
+        ("source", "mount_type", "options"),
+        [
+            ("../etc", "bind", []),
+            ("foo/../../etc", "none", ["bind"]),
+            ("/tmp/../etc", "none", ["rbind"]),
+            ("//etc", "bind", []),
+        ],
+    )
+    def test_normalized_and_option_defined_bind_sources_are_forbidden(
+        self,
+        source,
+        mount_type,
+        options,
+    ):
+        mounts, violations, has_forbidden, has_hostile = _analyze_mounts(
+            [
+                {
+                    "destination": "/mnt/input",
+                    "type": mount_type,
+                    "source": source,
+                    "options": options,
+                },
+            ]
+        )
+
+        assert mounts[0].classification == "forbidden"
+        assert has_forbidden is True
+        assert has_hostile is True
+        assert any("forbidden-mount-source" in violation for violation in violations)
+
+    def test_safe_bundle_relative_bind_source_remains_supported(self):
+        mounts, violations, has_forbidden, has_hostile = _analyze_mounts(
+            [
+                {
+                    "destination": "/mnt/input",
+                    "type": "none",
+                    "source": "data",
+                    "options": ["rbind", "ro"],
+                },
+            ]
+        )
+
+        assert mounts[0].classification == "host"
+        assert violations == []
+        assert has_forbidden is False
+        assert has_hostile is False
 
     def test_forbidden_socket(self):
         _mounts, violations, _, has_hostile = _analyze_mounts(
@@ -631,8 +680,7 @@ class TestGuaranteeMapping:
 class TestPlanDigest:
     def test_digest_deterministic(self):
         ns = _parse_namespaces([{"type": "pid"}])
-        net = MagicMock()
-        net.mode = "default"
+        net = OCIPlanNetwork(mode="default")
         fields = _build_digest_fields(
             bundle_version="1.0.2",
             minimum_boundary=GuardExecutionAssuranceBoundary.OBSERVED_HOST,
@@ -655,8 +703,7 @@ class TestPlanDigest:
 
     def test_digest_differs_on_boundary(self):
         ns = _parse_namespaces([{"type": "pid"}])
-        net = MagicMock()
-        net.mode = "default"
+        net = OCIPlanNetwork(mode="default")
         fields1 = _build_digest_fields(
             bundle_version="1.0.2",
             minimum_boundary=GuardExecutionAssuranceBoundary.OBSERVED_HOST,
@@ -691,8 +738,7 @@ class TestPlanDigest:
 
     def test_digest_differs_on_violations(self):
         ns = _parse_namespaces([{"type": "pid"}])
-        net = MagicMock()
-        net.mode = "default"
+        net = OCIPlanNetwork(mode="default")
         fields1 = _build_digest_fields(
             bundle_version="1.0.2",
             minimum_boundary=GuardExecutionAssuranceBoundary.OBSERVED_HOST,
@@ -727,8 +773,7 @@ class TestPlanDigest:
 
     def test_digest_includes_mount_and_capability_detail(self):
         ns = _parse_namespaces([{"type": "pid"}])
-        net = MagicMock()
-        net.mode = "default"
+        net = OCIPlanNetwork(mode="default")
         common = {
             "bundle_version": "1.0.2",
             "minimum_boundary": GuardExecutionAssuranceBoundary.OBSERVED_HOST,
@@ -769,11 +814,13 @@ class TestPlanDigest:
 
 
 class TestPlanGeneration:
-    def test_successful_plan(self, decision_context, good_bundle):
+    def test_successful_plan(self, decision_context, good_bundle, tmp_path):
+        (tmp_path / "rootfs").mkdir()
         plan = OCIPlanGenerator.generate(
             decision_context,
             GuardExecutionAssuranceBoundary.OBSERVED_HOST,
             bundle=good_bundle,
+            bundle_root=tmp_path,
         )
         assert isinstance(plan, OCIExecutionPlan)
         assert plan.bundle_version == "1.0.2"
@@ -781,6 +828,62 @@ class TestPlanGeneration:
         assert plan.boundary_lowered is False
         assert len(plan.enforced_guarantees) > 0
         assert len(plan.denied_guarantees) == 2  # KERNEL_HARDWARE, TENANT
+
+    def test_os_isolated_plan_requires_verified_bundle_paths(self, decision_context, good_bundle, tmp_path):
+        (tmp_path / "rootfs").mkdir()
+
+        plan = OCIPlanGenerator.generate(
+            decision_context,
+            GuardExecutionAssuranceBoundary.OS_ISOLATED,
+            bundle=good_bundle,
+            bundle_root=tmp_path,
+        )
+
+        assert plan.available_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
+
+    @pytest.mark.parametrize("rootfs_path", ["/", "../rootfs", "rootfs/../../etc"])
+    def test_rootfs_escape_refused(self, decision_context, good_bundle, rootfs_path):
+        bundle = dict(good_bundle)
+        bundle["root"] = {"path": rootfs_path, "readonly": True}
+
+        with pytest.raises(ProviderPlanError, match="bundle-relative"):
+            OCIPlanGenerator.generate(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                bundle=bundle,
+            )
+
+    def test_lifecycle_hooks_refused(self, decision_context, good_bundle):
+        bundle = dict(good_bundle)
+        bundle["hooks"] = {"prestart": [{"path": "/bin/true"}]}
+
+        with pytest.raises(ProviderPlanError, match="hooks"):
+            OCIPlanGenerator.generate(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OBSERVED_HOST,
+                bundle=bundle,
+            )
+
+    def test_symlinked_bind_source_cannot_claim_os_isolation(self, decision_context, good_bundle, tmp_path):
+        (tmp_path / "rootfs").mkdir()
+        (tmp_path / "link-to-etc").symlink_to("/etc", target_is_directory=True)
+        bundle = dict(good_bundle)
+        bundle["mounts"] = [
+            {
+                "destination": "/mnt/input",
+                "type": "bind",
+                "source": "link-to-etc",
+                "options": ["ro"],
+            }
+        ]
+
+        with pytest.raises(ProviderPlanError, match="not achievable"):
+            OCIPlanGenerator.generate(
+                decision_context,
+                GuardExecutionAssuranceBoundary.OS_ISOLATED,
+                bundle=bundle,
+                bundle_root=tmp_path,
+            )
 
     def test_plan_digest_deterministic(self, decision_context, good_bundle):
         plan1 = OCIPlanGenerator.generate(

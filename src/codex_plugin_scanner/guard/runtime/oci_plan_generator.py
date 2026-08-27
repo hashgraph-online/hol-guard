@@ -10,7 +10,7 @@ Deterministic output: identical specs always produce identical plan digests.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Final, cast
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
@@ -21,6 +21,14 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     framed_digest,
 )
 from codex_plugin_scanner.guard.runtime.isolation_provider import ProviderPlanError
+from codex_plugin_scanner.guard.runtime.oci_mount_security import (
+    is_oci_bind_mount,
+    match_forbidden_oci_path,
+    normalize_oci_bind_source,
+    require_oci_bundle_relative_path,
+    resolve_oci_bind_source,
+    resolve_oci_bundle_path,
+)
 
 # --- Forbidden / hostile input constants ---
 
@@ -397,6 +405,9 @@ def _classify_mount(
 
 def _analyze_mounts(
     mounts_list: list[object],
+    *,
+    bundle_root: str | Path | None = None,
+    verify_sources: bool = False,
 ) -> tuple[
     list[OCIPlanMount],
     list[str],  # violations codes
@@ -415,9 +426,10 @@ def _analyze_mounts(
             violations.append("mount:not-object")
             continue
         dst, typ, readonly, src, options = _classify_mount(mount)
+        is_bind = is_oci_bind_mount(typ, options)
 
         # Skip rootfs mount (destination=/, no source)
-        if dst == "/" and (typ == "" or typ == "none"):
+        if dst == "/" and not is_bind and not src and (typ == "" or typ == "none"):
             classification = "system"
             plan_mounts.append(
                 OCIPlanMount(
@@ -432,13 +444,26 @@ def _analyze_mounts(
             continue
 
         # Host bind mount detection
-        if typ == "bind" or (not typ and src and (src.startswith("/") or src.startswith("./"))):
-            forbidden_match = _is_forbidden_path(src)
-            socket_match = _is_forbidden_socket(src)
+        if is_bind and src:
+            normalized_src, escapes_bundle = normalize_oci_bind_source(src)
+            resolved_src = normalized_src
+            source_verified = not verify_sources
+            if verify_sources:
+                try:
+                    resolved_src = resolve_oci_bind_source(src, bundle_root=bundle_root)
+                    source_verified = True
+                except ValueError:
+                    source_verified = False
+            forbidden_match = match_forbidden_oci_path(normalized_src, _FORBIDDEN_MOUNT_SOURCES)
+            if forbidden_match is None:
+                forbidden_match = match_forbidden_oci_path(resolved_src, _FORBIDDEN_MOUNT_SOURCES)
+            socket_match = match_forbidden_oci_path(normalized_src, _FORBIDDEN_SOCKETS)
+            if socket_match is None:
+                socket_match = match_forbidden_oci_path(resolved_src, _FORBIDDEN_SOCKETS)
             guard_match = _is_guard_state_path(dst)
 
-            if forbidden_match:
-                violations.append(f"forbidden-mount-source:{forbidden_match}")
+            if escapes_bundle or forbidden_match:
+                violations.append(f"forbidden-mount-source:{src}")
                 has_forbidden = True
                 has_hostile = True
                 classification = "forbidden"
@@ -460,6 +485,9 @@ def _analyze_mounts(
                     classification = "output"
                 else:
                     classification = "host"
+
+                if not source_verified:
+                    violations.append(f"unverified-mount-source:{src}")
 
                 # Check for world-writable
                 for opt in options:
@@ -796,6 +824,7 @@ class OCIPlanGenerator:
         rootfs: dict[str, object] | None = None,
         process: dict[str, object] | None = None,
         linux: dict[str, object] | None = None,
+        bundle_root: str | Path | None = None,
     ) -> OCIExecutionPlan:
         """Generate an execution plan from an OCI bundle spec.
 
@@ -806,6 +835,8 @@ class OCIPlanGenerator:
             rootfs: Optional rootfs override.
             process: Optional process override.
             linux: Optional linux spec override.
+            bundle_root: Authoritative OCI bundle directory used to prove
+                rootfs and relative bind-source containment.
 
         Returns:
             A fully validated ``OCIExecutionPlan``.
@@ -820,6 +851,9 @@ class OCIPlanGenerator:
         if bundle_map is None:
             raise ProviderPlanError("bundle must be a dict")
         bundle = bundle_map
+        hooks = bundle.get("hooks")
+        if hooks not in (None, {}):
+            raise ProviderPlanError("OCI lifecycle hooks are unsupported")
         rootfs = rootfs or _object_map(bundle.get("root")) or {}
         process = process or _object_map(bundle.get("process")) or {}
         linux = linux or _object_map(bundle.get("linux")) or {}
@@ -835,7 +869,11 @@ class OCIPlanGenerator:
 
         # --- Analyze mounts ---
         mounts_list = _object_list(bundle.get("mounts")) or []
-        plan_mounts, mount_violations, has_forbidden_mounts, has_hostile_mounts = _analyze_mounts(mounts_list)
+        plan_mounts, mount_violations, has_forbidden_mounts, has_hostile_mounts = _analyze_mounts(
+            mounts_list,
+            bundle_root=bundle_root,
+            verify_sources=True,
+        )
 
         # --- Analyze capabilities ---
         caps_spec = _object_map(linux.get("capabilities")) or {}
@@ -871,6 +909,27 @@ class OCIPlanGenerator:
 
         # --- Analyze rootfs ---
         rootfs_path, rootfs_readonly = _analyze_rootfs(rootfs or {})
+        rootfs_path_valid = False
+        if rootfs_path:
+            try:
+                require_oci_bundle_relative_path(rootfs_path, label="OCI rootfs path")
+                rootfs_path_valid = True
+            except ValueError as error:
+                if minimum_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED:
+                    raise ProviderPlanError(str(error)) from error
+                mount_violations.append("rootfs-containment-unverified")
+            if rootfs_path_valid:
+                try:
+                    resolve_oci_bundle_path(
+                        rootfs_path,
+                        bundle_root=bundle_root,
+                        label="OCI rootfs path",
+                        require_directory=True,
+                    )
+                except ValueError:
+                    mount_violations.append("rootfs-containment-unverified")
+        else:
+            mount_violations.append("rootfs-containment-unverified")
 
         # --- Analyze user ---
         _, _, non_root = _analyze_user(process)
