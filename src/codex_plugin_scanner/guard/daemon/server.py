@@ -2694,6 +2694,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/policy/decisions":
             self._handle_policy_upsert(payload)
             return
+        if parsed.path == "/v1/policy/resolve":
+            self._handle_policy_resolve(payload)
+            return
+        if parsed.path == "/v1/policy/claim":
+            self._handle_policy_claim(payload)
+            return
         if parsed.path == "/v1/policy/clear":
             self._handle_policy_clear(payload)
             return
@@ -7403,6 +7409,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json({"saved": True, "decision": record})
 
+    def _handle_policy_resolve(self, payload: dict[str, object]) -> None:
+        from .policy_authority_api import PolicyAuthorityApiError, resolve_policy_decision
+
+        try:
+            result = resolve_policy_decision(self.server.store, payload, now=_now())  # type: ignore[attr-defined]
+        except PolicyAuthorityApiError as error:
+            self._write_json({"error": str(error)}, status=400)
+            return
+        self._write_json(result, extra_headers={"Cache-Control": "no-store"})
+
+    def _handle_policy_claim(self, payload: dict[str, object]) -> None:
+        from .policy_authority_api import PolicyAuthorityApiError, claim_policy_decision
+
+        try:
+            result = claim_policy_decision(self.server.store, payload, now=_now())  # type: ignore[attr-defined]
+        except PolicyAuthorityApiError as error:
+            self._write_json({"error": str(error)}, status=400)
+            return
+        self._write_json(result, status=200 if result["claimed"] else 409)
+
     @staticmethod
     def _optional_string(value: object) -> str | None:
         if isinstance(value, str) and value.strip():
@@ -7645,6 +7671,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/connect/result",
             "/v1/operations/block",
             "/v1/policy/decisions",
+            "/v1/policy/resolve",
+            "/v1/policy/claim",
             "/v1/policy/cloud-exceptions",
             "/v1/policy/cloud-exception-requests",
             "/v1/policy/clear",

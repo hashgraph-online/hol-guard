@@ -187,6 +187,13 @@ class GuardSurfaceDaemonClient:
             raise GuardDaemonRequestError("Guard daemon returned invalid containment health")
         return value
 
+    def resolve_policy_decision(self, payload: dict[str, object]) -> dict[str, object]:
+        return self._post("/v1/policy/resolve", payload)
+
+    def claim_policy_decision(self, payload: dict[str, object]) -> bool:
+        response = self._post("/v1/policy/claim", payload)
+        return response.get("claimed") is True
+
     def _get(self, path: str, *, timeout: float) -> dict[str, object]:
         request = urllib.request.Request(
             f"{self.daemon_url}{path}",
@@ -271,4 +278,14 @@ def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClie
         auth_token = load_guard_daemon_auth_token(guard_home)
     if daemon_url is None or auth_token is None:
         raise RuntimeError(f"Guard daemon state is incomplete for {guard_home}.")
+    return GuardSurfaceDaemonClient(daemon_url, auth_token)
+
+
+def load_running_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
+    """Load the current daemon authority without starting or repairing a daemon."""
+
+    daemon_url = load_guard_daemon_url(guard_home)
+    auth_token = load_guard_daemon_auth_token(guard_home)
+    if daemon_url is None or auth_token is None:
+        raise GuardDaemonTransportError("Guard daemon authority is unavailable")
     return GuardSurfaceDaemonClient(daemon_url, auth_token)

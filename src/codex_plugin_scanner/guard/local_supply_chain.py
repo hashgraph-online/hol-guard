@@ -2175,6 +2175,7 @@ def _resolve_stored_package_policy_override(
     )
     decision = None
     ignored_integrity = None
+    daemon_authority = None
     policy_workspaces = _package_policy_workspace_candidates(
         artifact=artifact,
         artifact_hash=artifact_hash,
@@ -2197,6 +2198,28 @@ def _resolve_stored_package_policy_override(
             break
         if ignored_integrity is not None:
             break
+    if not isinstance(decision, dict) and ignored_integrity is not None:
+        try:
+            from .daemon.client import load_running_guard_surface_daemon_client
+
+            daemon_authority = load_running_guard_surface_daemon_client(store.guard_home)
+            for policy_workspace in policy_workspaces:
+                daemon_lookup = daemon_authority.resolve_policy_decision(
+                    {
+                        "harness": artifact.harness,
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_hash": artifact_hash,
+                        "workspace": policy_workspace,
+                        "publisher": artifact.publisher,
+                    }
+                )
+                daemon_decision = daemon_lookup.get("decision")
+                if isinstance(daemon_decision, dict):
+                    decision = daemon_decision
+                    ignored_integrity = None
+                    break
+        except (OSError, RuntimeError, ValueError):
+            daemon_authority = None
     diagnosed_reason: ApprovalReuseValidationFailure | None = None
     if not isinstance(decision, dict) and ignored_integrity is None:
         for policy_workspace in policy_workspaces:
@@ -2258,7 +2281,12 @@ def _resolve_stored_package_policy_override(
             claim_disposition = cast(_PackageApprovalClaimDisposition, raw_disposition)
     claim_succeeded = True
     if claim_saved_approval and reuse.should_claim and isinstance(decision, dict):
-        if legacy_local_approval:
+        if daemon_authority is not None:
+            try:
+                claim_succeeded = daemon_authority.claim_policy_decision({"decision": decision})
+            except (OSError, RuntimeError, ValueError):
+                claim_succeeded = False
+        elif legacy_local_approval:
             approval_id = decision.get("approval_id")
             assert isinstance(approval_id, str)
             claim_succeeded = store.claim_local_once_approval(
