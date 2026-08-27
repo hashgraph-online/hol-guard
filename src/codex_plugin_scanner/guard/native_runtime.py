@@ -526,6 +526,45 @@ def _identity_key(status: NativeRuntimeStatus) -> str:
     return status.identity.sha256 if status.identity is not None else _UNAVAILABLE_IDENTITY
 
 
+def native_resident_operation(
+    *,
+    operation: str,
+    request: object,
+    guard_home: Path,
+    timeout_seconds: float = 1.0,
+) -> dict[str, object] | None:
+    """Send one bounded authenticated control-plane operation to Rust."""
+
+    status = native_runtime_status()
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or _RESIDENT_PROTOCOL_FEATURE not in status.capabilities.features
+    ):
+        return None
+    envelope = {"operation": operation, "request": request}
+    encoded = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    if len(encoded) > _MAX_REQUEST_BYTES:
+        return None
+    output = resident_native_request(
+        executable=status.identity.path,
+        identity_sha256=status.identity.sha256,
+        guard_home=guard_home,
+        environment=_isolated_environment(),
+        payload=encoded,
+        timeout_seconds=max(0.05, min(9.0, timeout_seconds)),
+    )
+    if output is None:
+        return None
+    try:
+        payload = json.loads(output)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def native_runtime_health(guard_home: Path) -> NativeRuntimeHealthSnapshot:
     status = native_runtime_status()
     return native_runtime_health_snapshot(_identity_key(status), guard_home)
@@ -535,13 +574,14 @@ def review_post_tool_native(
     request: HookReviewRequest,
     *,
     observe_mode: bool,
+    policy_snapshot_digest: str | None = None,
 ) -> HookReviewResponse | None:
     """Review PostToolUse with resident Rust, then one bounded Rust recovery.
 
-    Native failure is reported as ``None`` so the currently supported Python
-    reference backend remains authoritative until the dedicated cutover gate.
-    The native one-shot path is globally bounded and never used as overflow
-    capacity after an explicit resident overload response.
+    ``None`` means native authority could not complete. The caller must fail
+    closed; it must never substitute a Python semantic evaluator. The one-shot
+    path is globally bounded and is not used as overflow capacity after an
+    explicit resident overload response.
     """
 
     status = native_runtime_status()
@@ -566,6 +606,7 @@ def review_post_tool_native(
         "guard_home": str(request.guard_home),
         "source_ref_external_allowed": request.source_ref_external_allowed,
         "observe_mode": observe_mode,
+        "policy_snapshot_digest": policy_snapshot_digest,
         "deadline_budget_ms": _deadline_budget_ms(request),
     }
     input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
@@ -578,7 +619,11 @@ def review_post_tool_native(
     )
 
     resident_output = None
-    if status.capabilities is not None and _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
+    if (
+        policy_snapshot_digest is not None
+        and status.capabilities is not None
+        and _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features
+    ):
         resident_output = resident_native_request(
             executable=status.identity.path,
             identity_sha256=status.identity.sha256,

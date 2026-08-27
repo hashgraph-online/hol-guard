@@ -15,6 +15,10 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+mod target_paths;
+
+use target_paths::{envelope_target, envelope_targets};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractedOutput {
     pub text: String,
@@ -160,21 +164,6 @@ fn source_ref(payload: &Value) -> Option<HookSourceFileRefV1> {
         .and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 
-fn envelope_target(payload: &Value) -> Option<String> {
-    let input = payload
-        .get("tool_input")
-        .or_else(|| payload.get("toolInput"))?
-        .as_object()?;
-    for key in ["file_path", "path", "filePath"] {
-        if let Some(value) = input.get(key).and_then(Value::as_str) {
-            if !value.trim().is_empty() {
-                return Some(value.to_owned());
-            }
-        }
-    }
-    None
-}
-
 fn sha256_text(text: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(text.as_bytes());
@@ -195,9 +184,58 @@ fn output_equivalent(text: &str, output_sha256: &str, output_chars: i64) -> bool
     false
 }
 
-fn local_samples_should_be_unsuppressed(path: &str) -> bool {
-    let normalized = path.replace('\\', "/").to_ascii_lowercase();
-    let parts: Vec<&str> = normalized.split('/').collect();
+fn local_samples_should_be_unsuppressed(path: &str, cwd: Option<&Path>) -> bool {
+    let raw = path.trim();
+    if raw.is_empty() {
+        return true;
+    }
+    let slash_normalized = raw.replace('\\', "/");
+    let bytes = slash_normalized.as_bytes();
+    let has_windows_drive = bytes.len() >= 3
+        && bytes[1] == b':'
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[2] == b'/';
+    let is_absolute = slash_normalized.starts_with('/') || has_windows_drive;
+    let context_path = if !is_absolute {
+        slash_normalized
+    } else if let Some(cwd) = cwd {
+        if !has_windows_drive {
+            match Path::new(raw).strip_prefix(cwd) {
+                Ok(relative) if !relative.as_os_str().is_empty() => {
+                    relative.to_string_lossy().replace('\\', "/")
+                }
+                _ => Path::new(raw)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| slash_normalized.clone()),
+            }
+        } else {
+            let cwd_normalized = cwd.to_string_lossy().replace('\\', "/");
+            let path_lower = slash_normalized.to_ascii_lowercase();
+            let cwd_lower = cwd_normalized.trim_end_matches('/').to_ascii_lowercase();
+            let prefix = format!("{cwd_lower}/");
+            if path_lower.starts_with(&prefix) {
+                slash_normalized[prefix.len()..].to_owned()
+            } else {
+                slash_normalized
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&slash_normalized)
+                    .to_owned()
+            }
+        }
+    } else {
+        slash_normalized
+            .rsplit('/')
+            .next()
+            .unwrap_or(&slash_normalized)
+            .to_owned()
+    };
+    let normalized = context_path.to_ascii_lowercase();
+    let parts: Vec<&str> = normalized.split('/').filter(|part| !part.is_empty()).collect();
+    if parts.iter().any(|part| *part == "..") {
+        return true;
+    }
     let docs = [
         "__fixtures__",
         "__tests__",
@@ -314,7 +352,7 @@ fn review_source(
     }
     let scan = scan_text(
         text,
-        local_samples_should_be_unsuppressed(&source.path),
+        local_samples_should_be_unsuppressed(&source.path, Some(cwd)),
         true,
         MAX_SCAN_BYTES,
         deadline(request),
@@ -355,8 +393,10 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             "HOL Guard could not complete local hook review safely.",
         );
     }
-    let local_content = envelope_target(&request.payload)
-        .is_some_and(|path| local_samples_should_be_unsuppressed(&path));
+    let targets = envelope_targets(&request.payload);
+    let local_content = targets
+        .iter()
+        .any(|path| local_samples_should_be_unsuppressed(path, request.cwd.as_deref().map(Path::new)));
     if extracted.truncated {
         let excerpt: String = extracted
             .text
@@ -441,6 +481,7 @@ mod tests {
             guard_home: "/tmp/guard".into(),
             source_ref_external_allowed: false,
             observe_mode: false,
+            policy_snapshot_digest: None,
             deadline_budget_ms: Some(750),
         }
     }
@@ -478,4 +519,33 @@ mod tests {
         ));
         assert_eq!(response.reason_code, "output_secret_match");
     }
+
+    #[test]
+    fn external_absolute_docs_component_does_not_suppress_local_scanning() {
+        assert!(local_samples_should_be_unsuppressed(
+            "/tmp/docs/secret.py",
+            Some(Path::new("/workspace")),
+        ));
+    }
+
+    #[test]
+    fn in_workspace_docs_component_suppresses_sample_retry() {
+        assert!(!local_samples_should_be_unsuppressed(
+            "/workspace/docs/example.py",
+            Some(Path::new("/workspace")),
+        ));
+    }
+
+    #[test]
+    fn external_array_target_keeps_sample_assignment_protected() {
+        let mut request = request(json!({
+            "tool_input": {"file_paths": ["/tmp/docs/secret.py"]},
+            "tool_response": "api_key = \"test-example-value-here\"",
+        }));
+        request.cwd = Some("/workspace".into());
+        let response = review_post_tool(&request);
+        assert_eq!(response.decision, "deny");
+        assert_eq!(response.reason_code, "output_secret_match");
+    }
+
 }

@@ -39,6 +39,7 @@ class _ResidentHookRequest:
     home_dir: Path
     guard_home: Path
     workspace: Path | None
+    policy_epoch: int
     claim_saved_approval: bool
     claimed_saved_allow_hash: str | None
     claimed_trusted_request_override: bool
@@ -213,6 +214,8 @@ def _run_resident_hook_request(
     if configured_guard_home is not None and parsed.guard_home != Path(configured_guard_home):
         return {"payload": None, "reason_code": "daemon_hook_process_guard_home_mismatch"}
     store_key = str(parsed.guard_home)
+    workspace_key = str(parsed.workspace.expanduser().absolute()) if parsed.workspace is not None else ""
+    worker_key = f"{store_key}\0{workspace_key}"
     store = stores.get(store_key)
     if store is None:
         store = GuardStore(
@@ -230,10 +233,14 @@ def _run_resident_hook_request(
     )
     event_name = parsed.payload.get("hook_event_name", parsed.payload.get("event"))
     if event_name == "PostToolUse":
-        worker = hook_workers.get(store_key)
+        worker = hook_workers.get(worker_key)
         if worker is None:
-            worker = HookWorker(store=store)
-            hook_workers[store_key] = worker
+            worker = HookWorker(
+                store=store,
+                workspace=parsed.workspace,
+                policy_epoch=parsed.policy_epoch,
+            )
+            hook_workers[worker_key] = worker
         try:
             worker_payload = worker.review_http_payload(
                 payload=parsed.payload,
@@ -242,6 +249,7 @@ def _run_resident_hook_request(
                 home_dir=parsed.home_dir,
                 guard_home=parsed.guard_home,
                 workspace=parsed.workspace,
+                policy_epoch=parsed.policy_epoch,
             )
         except HookWorkerUnsupported:
             pass
@@ -289,6 +297,7 @@ def _coerce_resident_hook_request(request: dict[str, object]) -> _ResidentHookRe
     home_value = request.get("home_dir")
     guard_home_value = request.get("guard_home")
     workspace_value = request.get("workspace")
+    policy_epoch = request.get("policy_epoch", 0)
     claim_saved_approval = request.get("claim_saved_approval", True)
     claimed_saved_allow_hash = request.get("claimed_saved_allow_hash")
     claimed_trusted_request_override = request.get("claimed_trusted_request_override", False)
@@ -299,6 +308,8 @@ def _coerce_resident_hook_request(request: dict[str, object]) -> _ResidentHookRe
     if not isinstance(home_value, str) or not isinstance(guard_home_value, str):
         return None
     if workspace_value is not None and not isinstance(workspace_value, str):
+        return None
+    if not isinstance(policy_epoch, int) or isinstance(policy_epoch, bool) or policy_epoch < 0:
         return None
     if not isinstance(claim_saved_approval, bool) or not isinstance(claimed_trusted_request_override, bool):
         return None
@@ -312,6 +323,7 @@ def _coerce_resident_hook_request(request: dict[str, object]) -> _ResidentHookRe
         home_dir=Path(home_value),
         guard_home=Path(guard_home_value).resolve(strict=False),
         workspace=Path(workspace_value) if isinstance(workspace_value, str) else None,
+        policy_epoch=policy_epoch,
         claim_saved_approval=claim_saved_approval,
         claimed_saved_allow_hash=claimed_saved_allow_hash,
         claimed_trusted_request_override=claimed_trusted_request_override,

@@ -48,6 +48,8 @@ pub struct NativeHookRequestV1 {
     #[serde(default)]
     pub observe_mode: bool,
     #[serde(default)]
+    pub policy_snapshot_digest: Option<String>,
+    #[serde(default)]
     pub deadline_budget_ms: Option<u64>,
 }
 

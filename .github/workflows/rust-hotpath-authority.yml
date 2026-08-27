@@ -1,0 +1,490 @@
+name: Rust hot-path authority
+
+on:
+  pull_request:
+    branches: [release/3.0]
+  push:
+    branches:
+      - release/3.0
+      - "rust/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-hotpath-authority-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ownership:
+    name: Ownership classification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      rust: ${{ steps.classify.outputs.rust }}
+      resident_integration: ${{ steps.classify.outputs.resident_integration }}
+      pretool_integration: ${{ steps.classify.outputs.pretool_integration }}
+      all_harness: ${{ steps.classify.outputs.all_harness }}
+      command_differential: ${{ steps.classify.outputs.command_differential }}
+      transport_faults: ${{ steps.classify.outputs.transport_faults }}
+      performance: ${{ steps.classify.outputs.performance }}
+      native_release: ${{ steps.classify.outputs.native_release }}
+      installed_wheel: ${{ steps.classify.outputs.installed_wheel }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Self-test ownership validator
+        run: python scripts/ci/rust_hotpath_ownership.py --self-test
+      - name: Classify merge-base diff
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          if ! git cat-file -e "${HEAD}^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$HEAD"
+          fi
+          if [[ -z "$BASE" || "$BASE" == "0000000000000000000000000000000000000000" ]] \
+            || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            BASE="${HEAD}^"
+          fi
+          python scripts/ci/rust_hotpath_ownership.py \
+            --base "$BASE" \
+            --head "$HEAD" \
+            --report rust-hotpath-ownership-report.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: rust-hotpath-ownership-report
+          path: rust-hotpath-ownership-report.json
+          if-no-files-found: error
+
+  rust_core:
+    name: Rust workspace and release binary
+    needs: ownership
+    if: needs.ownership.outputs.rust == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+      - name: Verify workspace and build release runtime
+        working-directory: rust
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          cargo metadata --locked --format-version 1 --no-deps >/dev/null
+          cargo fmt --all --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace --all-targets
+          cargo build --locked --release -p hol-guard-runtime
+          target/release/hol-guard-runtime self-test --json
+      - name: Upload compiled runtime for independent integration
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-authority-runtime-linux
+          path: rust/target/release/hol-guard-runtime
+          if-no-files-found: error
+          retention-days: 1
+
+  resident_integration:
+    name: Real resident integration
+    needs: ownership
+    if: needs.ownership.outputs.resident_integration == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build version-matched release runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          export HOL_GUARD_PACKAGE_VERSION="$(uv run --no-sync python scripts/sync_repo_version.py --check)"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+      - name: Run one-shot and authenticated resident integration
+        run: |
+          uv run --no-sync python scripts/integration/rust_authority_integration.py \
+            --runtime rust/target/release/hol-guard-runtime \
+            --json rust-authority-integration.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: rust-authority-integration
+          path: rust-authority-integration.json
+          if-no-files-found: error
+
+  all_harness:
+    name: All-harness Rust integration
+    needs: ownership
+    if: needs.ownership.outputs.all_harness == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build version-matched release runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          export HOL_GUARD_PACKAGE_VERSION="$(uv run --no-sync python scripts/sync_repo_version.py --check)"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+      - name: Exercise every supported PostToolUse harness through Rust
+        run: |
+          uv run --no-sync python scripts/integration/rust_all_harness_integration.py \
+            --runtime rust/target/release/hol-guard-runtime \
+            --json rust-all-harness-integration.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: rust-all-harness-integration
+          path: rust-all-harness-integration.json
+          if-no-files-found: error
+
+  pretool_integration:
+    name: Native PreTool command-model integration
+    needs: ownership
+    if: needs.ownership.outputs.pretool_integration == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build native command model
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+      - name: Exercise exact and uncertain native command paths
+        env:
+          RUNTIME: rust/target/release/hol-guard-runtime
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          runtime = os.environ["RUNTIME"]
+          exact = subprocess.run(
+              [runtime, "command-model", "--stdin"],
+              input=json.dumps({
+                  "command": "echo hello",
+                  "dialect": "posix",
+                  "transport": "shell_string",
+                  "extraction_provenance": "guard-shell",
+              }).encode(),
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              check=True,
+          )
+          exact_payload = json.loads(exact.stdout)
+          assert exact_payload["confidence"] == "exact"
+          assert exact_payload["segments"][0]["executable"] == "echo"
+
+          uncertain = subprocess.run(
+              [runtime, "command-model", "--stdin"],
+              input=json.dumps({
+                  "command": "sh -c 'rm -rf /'",
+                  "dialect": "posix",
+                  "transport": "shell_string",
+                  "extraction_provenance": "guard-shell",
+              }).encode(),
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              check=True,
+          )
+          uncertain_payload = json.loads(uncertain.stdout)
+          assert uncertain_payload["confidence"] == "uncertain"
+          assert uncertain_payload["segments"] == []
+          PY
+
+  command_differential:
+    name: Rust/Python command differential
+    needs: ownership
+    if: needs.ownership.outputs.command_differential == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build version-matched runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          export HOL_GUARD_PACKAGE_VERSION="$(uv run --no-sync python scripts/sync_repo_version.py --check)"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+      - name: Run command-model differential integration
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: uv run --no-sync pytest ci/native_runtime/test_command_model_differential.py --tb=short
+
+  transport_faults:
+    name: Resident transport fault integration
+    needs: ownership
+    if: needs.ownership.outputs.transport_faults == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build release runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+      - name: Exercise authenticated framing faults
+        run: |
+          python scripts/integration/rust_authority_integration.py \
+            --runtime rust/target/release/hol-guard-runtime \
+            --faults \
+            --json rust-transport-faults.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: rust-transport-faults
+          path: rust-transport-faults.json
+          if-no-files-found: error
+
+  performance:
+    name: Native performance gate
+    needs: ownership
+    if: needs.ownership.outputs.performance == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build version-matched runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          export HOL_GUARD_PACKAGE_VERSION="$(uv run --no-sync python scripts/sync_repo_version.py --check)"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+      - name: Enforce release performance budgets
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          uv run --no-sync python scripts/bench_guard_native_release_gate.py \
+            --runtime "$HOL_GUARD_NATIVE_BINARY" \
+            --warm-iterations 100 \
+            --cold-iterations 3 \
+            --json native-performance.json \
+            --enforce
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: rust-native-performance
+          path: native-performance.json
+          if-no-files-found: error
+
+  native_release:
+    name: Native release contracts
+    needs: ownership
+    if: needs.ownership.outputs.native_release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Validate native publication contracts
+        run: |
+          uv run --no-sync python scripts/verify_native_runtime_release.py --help >/dev/null
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py --help >/dev/null
+          uv run --no-sync pytest ci/native_runtime/test_native_runtime_release.py --tb=short
+
+  installed_wheel:
+    name: Installed native wheel integration
+    needs: ownership
+    if: needs.ownership.outputs.installed_wheel == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          save-cache: false
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install Rust and musl toolchains
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Build pure Python wheel
+        run: uv run --no-sync python -m build --wheel --outdir pure-dist
+      - name: Build static native runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release \
+            --target x86_64-unknown-linux-musl -p hol-guard-runtime
+          runtime="rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime"
+          LDD_OUTPUT=$(ldd "$runtime" 2>&1 || true)
+          if ! grep -Eq 'not a dynamic executable|statically linked' <<< "$LDD_OUTPUT"; then
+            printf '%s\n' "$LDD_OUTPUT" >&2
+            exit 1
+          fi
+          "$runtime" self-test --json
+      - name: Assemble, install, and probe native wheel
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          runtime="rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime"
+          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir native-dist \
+            --version "$VERSION" \
+            --platform-tag manylinux_2_17_x86_64 \
+            --target x86_64-unknown-linux-musl \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST"
+          uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
+          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY
+          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: rust-installed-native-wheel
+          path: native-dist/*.whl
+          if-no-files-found: error
+
+  authority_summary:
+    name: Rust authority summary
+    if: always()
+    needs:
+      - ownership
+      - rust_core
+      - resident_integration
+      - all_harness
+      - pretool_integration
+      - command_differential
+      - transport_faults
+      - performance
+      - native_release
+      - installed_wheel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Enforce every selected authority job
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.ownership.result }}" = "success"
+          if [[ "${{ needs.ownership.outputs.rust }}" == "true" ]]; then test "${{ needs.rust_core.result }}" = "success"; fi
+          if [[ "${{ needs.ownership.outputs.resident_integration }}" == "true" ]]; then test "${{ needs.resident_integration.result }}" = "success"; fi
+          if [[ "${{ needs.ownership.outputs.all_harness }}" == "true" ]]; then test "${{ needs.all_harness.result }}" = "success"; fi
+          if [[ "${{ needs.ownership.outputs.pretool_integration }}" == "true" ]]; then test "${{ needs.pretool_integration.result }}" = "success"; fi
+          if [[ "${{ needs.ownership.outputs.command_differential }}" == "true" ]]; then test "${{ needs.command_differential.result }}" = "success"; fi
+          if [[ "${{ needs.ownership.outputs.transport_faults }}" == "true" ]]; then test "${{ needs.transport_faults.result }}" = "success"; fi
+          if [[ "${{ needs.ownership.outputs.performance }}" == "true" ]]; then test "${{ needs.performance.result }}" = "success"; fi
+          if [[ "${{ needs.ownership.outputs.native_release }}" == "true" ]]; then test "${{ needs.native_release.result }}" = "success"; fi
+          if [[ "${{ needs.ownership.outputs.installed_wheel }}" == "true" ]]; then test "${{ needs.installed_wheel.result }}" = "success"; fi

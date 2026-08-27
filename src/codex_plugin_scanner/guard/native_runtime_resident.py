@@ -186,7 +186,11 @@ class _ResidentService:
             payload = json.loads(response)
         except (UnicodeDecodeError, json.JSONDecodeError):
             return False
-        return payload == {"status": "ready", "protocol_version": 2}
+        return (
+    isinstance(payload, dict)
+    and payload.get("status") == "ready"
+    and payload.get("protocol_version") == 2
+)
 
     def _run(
         self,

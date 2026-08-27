@@ -99,6 +99,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "serde",
+ "serde_json",
  "sha2",
  "thiserror",
 ]
@@ -152,6 +153,7 @@ dependencies = [
  "guard-command",
  "guard-contracts",
  "guard-hook-core",
+ "guard-policy-snapshot",
  "guard-rule-contract",
  "serde",
  "serde_json",

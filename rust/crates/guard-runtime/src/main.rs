@@ -8,11 +8,14 @@ use guard_contracts::{
     MAX_NATIVE_RESPONSE_BYTES, NATIVE_PROTOCOL_VERSION,
 };
 use guard_hook_core::review_post_tool;
+use guard_policy_snapshot::{
+    canonical_digest, validate as validate_policy_snapshot, PolicySnapshotV2,
+};
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -60,7 +63,80 @@ const PARENT_LIVENESS_FD_ENV: &str = "HOL_GUARD_PARENT_LIVENESS_FD";
 #[serde(tag = "operation", content = "request", rename_all = "snake_case")]
 enum ResidentOperationV1 {
     CommandModel(CommandModelRequestV1),
+    InstallPolicy(PolicySnapshotV2),
+    PolicyStatus(Value),
     Health(Value),
+}
+
+const MAX_RESIDENT_POLICY_SNAPSHOTS: usize = 128;
+
+#[derive(Default)]
+struct ResidentPolicyState {
+    snapshots: HashMap<String, PolicySnapshotV2>,
+    latest_digest: Option<String>,
+    latest_generation: u64,
+    latest_by_scope: HashMap<String, (u64, String)>,
+}
+
+impl ResidentPolicyState {
+    fn install(&mut self, snapshot: PolicySnapshotV2) -> Result<String, String> {
+        let minimum_generation = self
+            .latest_by_scope
+            .get(&snapshot.scope_digest)
+            .map(|(generation, _)| *generation)
+            .unwrap_or(0);
+        validate_policy_snapshot(
+            &snapshot,
+            minimum_generation,
+            &guard_rule_contract::rule_digest(),
+        )
+        .map_err(|error| error.to_string())?;
+        let digest = canonical_digest(&snapshot).map_err(|error| error.to_string())?;
+        if let Some((generation, existing_digest)) =
+            self.latest_by_scope.get(&snapshot.scope_digest)
+        {
+            if *generation == snapshot.generation && existing_digest != &digest {
+                return Err("snapshot_generation_reused".into());
+            }
+        }
+        if let Some(existing) = self.snapshots.get(&digest) {
+            if *existing != snapshot {
+                return Err("snapshot_digest_collision".into());
+            }
+        } else {
+            self.snapshots.insert(digest.clone(), snapshot.clone());
+        }
+        self.latest_by_scope.insert(
+            snapshot.scope_digest.clone(),
+            (snapshot.generation, digest.clone()),
+        );
+        if snapshot.generation >= self.latest_generation {
+            self.latest_generation = snapshot.generation;
+            self.latest_digest = Some(digest.clone());
+        }
+        if self.snapshots.len() > MAX_RESIDENT_POLICY_SNAPSHOTS {
+            let protected: HashSet<&str> = self
+                .latest_by_scope
+                .values()
+                .map(|(_, candidate)| candidate.as_str())
+                .collect();
+            let oldest = self
+                .snapshots
+                .iter()
+                .filter(|(candidate, _)| !protected.contains(candidate.as_str()))
+                .min_by_key(|(_, value)| value.generation)
+                .map(|(candidate, _)| candidate.clone());
+            if let Some(oldest) = oldest {
+                self.snapshots.remove(&oldest);
+            }
+        }
+        Ok(digest)
+    }
+
+    fn select(&self, digest: Option<&str>) -> Option<&PolicySnapshotV2> {
+        let selected = digest.or(self.latest_digest.as_deref())?;
+        self.snapshots.get(selected)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -250,6 +326,8 @@ fn capabilities() -> RuntimeCapabilitiesV1 {
         "rule-contract-v2".into(),
         "pre-tool-command-model-shadow-v1".into(),
         "resident-command-model-shadow-v1".into(),
+        "policy-snapshot-v2".into(),
+        "resident-policy-install-v1".into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
@@ -309,7 +387,10 @@ fn evaluate_command_model_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     evaluate_command_model_request(&request)
 }
 
-fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+fn evaluate_resident_bytes(
+    bytes: &[u8],
+    policy_state: &Arc<Mutex<ResidentPolicyState>>,
+) -> Result<Vec<u8>, String> {
     let value = strict_json_value(bytes)?;
     let request: ResidentRequestV1 = serde_json::from_value(value)
         .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
@@ -317,13 +398,56 @@ fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
         ResidentRequestV1::Operation(ResidentOperationV1::CommandModel(request)) => {
             evaluate_command_model_request(&request)
         }
+        ResidentRequestV1::Operation(ResidentOperationV1::InstallPolicy(snapshot)) => {
+            let generation = snapshot.generation;
+            let schema = snapshot.schema.clone();
+            let mut state = policy_state
+                .lock()
+                .map_err(|_| "native_policy_state_poisoned".to_owned())?;
+            let digest = state.install(snapshot)?;
+            encode_response(&serde_json::json!({
+                "status": "installed",
+                "schema": schema,
+                "generation": generation,
+                "snapshot_digest": digest,
+                "snapshot_count": state.snapshots.len(),
+            }))
+        }
+        ResidentRequestV1::Operation(ResidentOperationV1::PolicyStatus(_request)) => {
+            let state = policy_state
+                .lock()
+                .map_err(|_| "native_policy_state_poisoned".to_owned())?;
+            let latest = state.select(None);
+            encode_response(&serde_json::json!({
+                "status": "ready",
+                "generation": latest.map(|snapshot| snapshot.generation),
+                "schema": latest.map(|snapshot| snapshot.schema.as_str()),
+                "snapshot_digest": state.latest_digest.as_deref(),
+                "snapshot_count": state.snapshots.len(),
+            }))
+        }
         ResidentRequestV1::Operation(ResidentOperationV1::Health(_request)) => {
+            let (generation, snapshot_count) = policy_state
+                .lock()
+                .map(|state| (state.latest_generation, state.snapshots.len()))
+                .unwrap_or((0, 0));
             encode_response(&serde_json::json!({
                 "status": "ready",
                 "protocol_version": RESIDENT_PROTOCOL_VERSION,
+                "policy_generation": if generation == 0 { None } else { Some(generation) },
+                "policy_snapshot_count": snapshot_count,
             }))
         }
-        ResidentRequestV1::Hook(request) => encode_response(&review_post_tool(&request)),
+        ResidentRequestV1::Hook(mut request) => {
+            if let Ok(state) = policy_state.lock() {
+                if let Some(snapshot) = state.select(request.policy_snapshot_digest.as_deref()) {
+                    request.observe_mode = snapshot.mode == "observe";
+                } else if request.policy_snapshot_digest.is_some() {
+                    return Err("native_policy_snapshot_not_installed".into());
+                }
+            }
+            encode_response(&review_post_tool(&request))
+        }
     }
 }
 
@@ -491,7 +615,10 @@ fn write_overload(pending: &mut PendingRequest) {
     let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
 }
 
-fn handle_pending_request(mut pending: PendingRequest) {
+fn handle_pending_request(
+    mut pending: PendingRequest,
+    policy_state: &Arc<Mutex<ResidentPolicyState>>,
+) {
     if hardening::request_expired(pending.accepted_at) {
         let response = error_response("native_request_deadline_exceeded", true);
         let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
@@ -508,8 +635,13 @@ fn handle_pending_request(mut pending: PendingRequest) {
         if !constant_time_eq(&digest, &pending.request_digest) {
             error_response("native_request_digest_mismatch", false)
         } else {
-            match catch_unwind(AssertUnwindSafe(|| evaluate_resident_bytes(&request))) {
+            match catch_unwind(AssertUnwindSafe(|| {
+                evaluate_resident_bytes(&request, policy_state)
+            })) {
                 Ok(Ok(response)) => response,
+                Ok(Err(reason)) if reason == "native_policy_snapshot_not_installed" => {
+                    error_response("native_policy_snapshot_not_installed", false)
+                }
                 Ok(Err(_reason)) => error_response("native_request_invalid_json", false),
                 Err(_panic) => error_response("native_runtime_panicked", false),
             }
@@ -542,13 +674,13 @@ where
 }
 
 fn start_resident_workers(token: Arc<[u8; AUTH_TOKEN_BYTES]>) -> SyncSender<BoxedResidentStream> {
+    let policy_state = Arc::new(Mutex::new(ResidentPolicyState::default()));
     let (evaluation_sender, evaluation_receiver) =
         sync_channel::<PendingRequest>(EVALUATION_QUEUE_CAPACITY);
-    spawn_workers(
-        EVALUATION_WORKERS,
-        evaluation_receiver,
-        handle_pending_request,
-    );
+    let evaluation_policy_state = Arc::clone(&policy_state);
+    spawn_workers(EVALUATION_WORKERS, evaluation_receiver, move |pending| {
+        handle_pending_request(pending, &evaluation_policy_state)
+    });
 
     let (authentication_sender, authentication_receiver) =
         sync_channel::<BoxedResidentStream>(AUTH_QUEUE_CAPACITY);
@@ -803,6 +935,49 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    fn policy_snapshot(scope: u8, generation: u64) -> PolicySnapshotV2 {
+        let rule_digest = guard_rule_contract::rule_digest();
+        PolicySnapshotV2 {
+            schema: guard_policy_snapshot::POLICY_SNAPSHOT_SCHEMA.into(),
+            generation,
+            scope_digest: format!("{scope:02x}").repeat(32),
+            policy_digest: "b".repeat(64),
+            config_digest: "c".repeat(64),
+            rule_digest,
+            mode: "enforce".into(),
+            security_level: "balanced".into(),
+            global_lockdown: false,
+            managed_restrictions: Vec::new(),
+            extension_controls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn resident_policy_generations_are_monotonic_per_scope() {
+        let mut state = ResidentPolicyState::default();
+        let first = policy_snapshot(1, 10);
+        let second_scope = policy_snapshot(2, 3);
+        assert!(state.install(first).is_ok());
+        assert!(state.install(second_scope).is_ok());
+
+        let mut downgrade = policy_snapshot(1, 9);
+        downgrade.config_digest = "d".repeat(64);
+        assert_eq!(state.install(downgrade).unwrap_err(), "snapshot_generation_downgrade");
+    }
+
+    #[test]
+    fn resident_policy_selects_exact_workspace_digest() {
+        let mut state = ResidentPolicyState::default();
+        let mut first = policy_snapshot(1, 10);
+        first.mode = "observe".into();
+        let second = policy_snapshot(2, 11);
+        let first_digest = state.install(first).unwrap();
+        let second_digest = state.install(second).unwrap();
+        assert_eq!(state.select(Some(&first_digest)).unwrap().mode, "observe");
+        assert_eq!(state.select(Some(&second_digest)).unwrap().mode, "enforce");
+    }
 
     #[test]
     fn resident_hmac_matches_cross_language_vectors() {

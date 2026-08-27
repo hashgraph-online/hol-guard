@@ -1,0 +1,135 @@
+schema_version = 1
+release_branch = "release/3.0"
+product_default = "rust"
+python_decision_fallback_allowed = false
+
+[thresholds]
+minimum_rust_decision_share = 0.95
+minimum_rust_inspected_byte_share = 0.95
+minimum_resident_share = 0.99
+maximum_python_decision_fallback_share = 0.0
+
+[[surface]]
+id = "post-tool-content-review"
+events = ["PostToolUse"]
+harnesses = ["codex", "claude-code", "copilot", "cursor", "cline", "gemini", "hermes", "openclaw", "opencode", "kimi", "grok", "pi", "omp", "zcode"]
+authority = "rust"
+target_authority = "rust"
+python_authority_allowed = false
+fallback = "native-fail-safe"
+required_jobs = ["rust", "resident-integration", "all-harness"]
+paths = [
+  "rust/crates/guard-contracts/**",
+  "rust/crates/guard-hook-core/**",
+  "rust/crates/guard-rules/**",
+  "rust/crates/guard-scanner/**",
+  "rust/crates/guard-secure-fs/**",
+  "rust/crates/guard-runtime/**",
+  "src/codex_plugin_scanner/guard/native_runtime.py",
+  "src/codex_plugin_scanner/guard/native_runtime_resident.py",
+  "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+  "src/codex_plugin_scanner/guard/native_route_metrics.py",
+  "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+  "src/codex_plugin_scanner/guard/config.py",
+  "src/codex_plugin_scanner/guard/daemon/server.py",
+  "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
+  "src/codex_plugin_scanner/guard/daemon/hook_process_*.py",
+  "src/codex_plugin_scanner/guard/runtime/hook_*.py",
+  "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+  "src/codex_plugin_scanner/guard/adapters/*pretool*.py",
+  "tests/integration/*rust*authority*.py",
+  "scripts/integration/rust_authority_integration.py",
+  "scripts/integration/rust_all_harness_integration.py",
+]
+
+[[surface]]
+id = "pre-tool-command-decision"
+events = ["PreToolUse"]
+harnesses = ["codex", "claude-code", "copilot", "cursor", "cline", "gemini", "hermes", "openclaw", "opencode", "kimi", "grok", "pi", "omp", "zcode"]
+authority = "migration"
+target_authority = "rust"
+python_authority_allowed = false
+fallback = "native-review-or-block"
+required_jobs = ["rust", "resident-integration", "pretool-integration", "command-differential"]
+paths = [
+  "rust/crates/guard-command/**",
+  "rust/crates/guard-policy-snapshot/**",
+  "rust/crates/guard-runtime/**",
+  "src/codex_plugin_scanner/guard/native_pretool.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook_native.py",
+  "src/codex_plugin_scanner/guard/cli/commands_router.py",
+  "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
+  "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_bridge.py",
+  "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
+  "src/codex_plugin_scanner/guard/runtime/command*.py",
+  "tests/integration/*pretool*.py",
+  "scripts/integration/rust_pretool*.py",
+]
+
+[[surface]]
+id = "resident-transport"
+events = ["PreToolUse", "PostToolUse"]
+harnesses = ["all"]
+authority = "hybrid-transport"
+target_authority = "rust-data-plane"
+python_authority_allowed = false
+fallback = "bounded-native-oneshot-or-fail-safe"
+required_jobs = ["resident-integration", "transport-faults", "performance"]
+paths = [
+  "rust/crates/guard-runtime/**",
+  "src/codex_plugin_scanner/guard/native_runtime_resident.py",
+  "src/codex_plugin_scanner/guard/native_runtime_admission.py",
+  "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
+  "src/codex_plugin_scanner/guard/codex_hook_windows_job.py",
+  "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
+  "scripts/integration/rust_authority_integration.py",
+  "scripts/stress_guard_daemon.py",
+]
+
+[[surface]]
+id = "native-packaging"
+events = ["release"]
+harnesses = ["all"]
+authority = "rust-artifact"
+target_authority = "rust-artifact"
+python_authority_allowed = false
+fallback = "none"
+required_jobs = ["native-release", "installed-wheel"]
+paths = [
+  "rust/**",
+  "pyproject.toml",
+  "scripts/verify_native_runtime_release.py",
+  "scripts/build_native_hol_guard_wheel.py",
+  "scripts/sync_repo_version.py",
+  "ci/native_runtime/**",
+  ".github/workflows/native-*.yml",
+  ".github/workflows/publish.yml",
+]
+
+[[surface]]
+id = "migration-governance"
+events = ["repository-change"]
+harnesses = ["all"]
+authority = "ci"
+target_authority = "ci"
+python_authority_allowed = true
+fallback = "none"
+required_jobs = ["ownership"]
+paths = [
+  "ci/rust-hotpath-ownership.toml",
+  "ci/rust-hotpath-ownership-report.json",
+  "scripts/ci/rust_hotpath_ownership.py",
+  ".github/workflows/rust-hotpath-authority.yml",
+  ".github/workflows/rust-*.yml",
+  "docs/guard/rust-data-plane-boundary.md",
+  "docs/guard/rust-hotpath-todo-*.md",
+]
+
+[[waiver]]
+id = "pretool-staged-cutover"
+surface = "pre-tool-command-decision"
+owner = "hashgraph-online"
+issue = "rust-pretool-cutover"
+reason = "The first delivery establishes non-bypassable ownership CI and removes PostToolUse Python fallback; the immediately following delivery completes the native PreToolUse cutover."
+created = "2026-08-26"
+expires = "2026-09-02"

@@ -1,0 +1,50 @@
+name: Temporary batch 1 Clippy remediation
+
+on:
+  push:
+    branches: [rust/authority-t001-t100-final]
+    paths:
+      - ".github/workflows/tmp-batch1-clippy-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: rust/authority-t001-t100-final
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Apply Clippy correction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('rust/crates/guard-hook-core/src/lib.rs')
+          t=p.read_text(encoding='utf-8')
+          old='if parts.iter().any(|part| *part == "..") {'
+          new='if parts.contains(&"..") {'
+          if t.count(old) != 1:
+              raise SystemExit('expected manual contains expression exactly once')
+          p.write_text(t.replace(old,new,1),encoding='utf-8')
+          PY
+          git diff --check
+      - name: Verify Rust workspace
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+      - name: Commit and remove transport workflow
+        run: |
+          git config user.name "Michael Kantor"
+          git config user.email "6068672+kantorcodes@users.noreply.github.com"
+          git rm .github/workflows/tmp-batch1-clippy-fix.yml
+          git add rust/crates/guard-hook-core/src/lib.rs
+          git diff --cached --check
+          git commit -s -m "fix(rust): satisfy hot-path Clippy gate"
+          git push origin HEAD:rust/authority-t001-t100-final

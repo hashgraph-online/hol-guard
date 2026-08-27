@@ -26,8 +26,11 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any, BinaryIO, ClassVar, TypeAlias, TypedDict, TypeGuard, cast
+from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeAlias, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
+
+if TYPE_CHECKING:
+    from .hook_worker import HookWorker
 
 from ...version import __version__
 from ..action_lattice import is_guard_action as _is_guard_action
@@ -615,6 +618,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         )
         self.store.set_policy_integrity_state_listener(self.publish_trust_state)
         self.runtime_hook_evidence_writer = RuntimeHookEvidenceWriter(store=store)
+        self._hook_policy_lock = threading.RLock()
+        self._hook_policy_epoch = 1
+        self._hook_workers: dict[str, tuple[Path | None, "HookWorker"]] = {}
         self._initialize_request_services()
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
@@ -623,7 +629,13 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         from .hook_worker import HookWorker
 
         try:
-            self.hook_worker = HookWorker(store=self.store, activity_writer=self.runtime_hook_evidence_writer)
+            self.hook_worker = HookWorker(
+                store=self.store,
+                activity_writer=self.runtime_hook_evidence_writer,
+                workspace=None,
+                policy_epoch=self._hook_policy_epoch,
+            )
+            self._hook_workers[""] = (None, self.hook_worker)
             self.extension_control_runtime = ExtensionControlRuntime(
                 self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
             )
@@ -661,9 +673,56 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             _ = self.hook_process_runner.close_contained()
             raise
 
+    @staticmethod
+    def _hook_workspace_key(workspace: Path | None) -> str:
+        if workspace is None:
+            return ""
+        try:
+            return str(workspace.expanduser().absolute())
+        except (OSError, RuntimeError, ValueError):
+            return str(workspace)
+
+    def hook_policy_epoch(self) -> int:
+        with self._hook_policy_lock:
+            return self._hook_policy_epoch
+
+    def hook_worker_for_workspace(self, workspace: Path | None) -> "HookWorker":
+        from .hook_worker import HookWorker
+
+        key = self._hook_workspace_key(workspace)
+        with self._hook_policy_lock:
+            entry = self._hook_workers.get(key)
+            if entry is not None:
+                return entry[1]
+            epoch = self._hook_policy_epoch
+            worker = HookWorker(
+                store=self.store,
+                activity_writer=self.runtime_hook_evidence_writer,
+                workspace=workspace,
+                policy_epoch=epoch,
+            )
+            self._hook_workers[key] = (workspace, worker)
+            return worker
+
+    def refresh_hook_worker_policies(self) -> int:
+        """Advance policy authority and refresh every known workspace outside hook evaluation."""
+
+        with self._hook_policy_lock:
+            self._hook_policy_epoch += 1
+            epoch = self._hook_policy_epoch
+            workers = tuple(self._hook_workers.values())
+        for workspace, worker in workers:
+            try:
+                worker.refresh_policy_snapshot(workspace=workspace, policy_epoch=epoch)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                continue
+        return epoch
+
     def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
         view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-        return self.extension_control_runtime.refresh(view)
+        snapshot = self.extension_control_runtime.refresh(view)
+        _ = self.refresh_hook_worker_policies()
+        return snapshot
 
     def process_request(self, request: Any, client_address: Any) -> None:
         request_socket = cast(socket.socket, request)
@@ -4929,6 +4988,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
             return
+        _ = self._daemon_server().refresh_hook_worker_policies()
         self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
 
     def _handle_update_channel(self, payload: dict[str, object]) -> None:
@@ -5011,6 +5071,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
             return
+        _ = self._daemon_server().refresh_hook_worker_policies()
         self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
 
     def _handle_settings_reset(self, payload: dict[str, object]) -> None:
@@ -5036,6 +5097,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)
             return
+        _ = self._daemon_server().refresh_hook_worker_policies()
         self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
 
     def _handle_approval_gate_cooldown_revoke(self, payload: dict[str, object]) -> None:
@@ -5640,6 +5702,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     workspace=workspace,
                     hook_env={},
                     deadline=time.monotonic() + _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS,
+                    policy_epoch=daemon_server.hook_policy_epoch(),
                     claim_saved_approval=False,
                     claimed_saved_allow_hash=claimed_hash,
                     claimed_trusted_request_override=claimed_hash is not None,
@@ -6015,7 +6078,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             try:
                 payload = hydrate_hook_payload_reference(payload)
             except HookPayloadReferenceError as error:
-                self._daemon_server().hook_worker.metrics.record_failure(
+                daemon_server.hook_worker_for_workspace(workspace_path).metrics.record_failure(
                     stage="server",
                     exception_type=type(error).__name__,
                 )
@@ -6096,15 +6159,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
 
         try:
-            worker = self._daemon_server().hook_worker
+            daemon_server = self._daemon_server()
+            workspace_path = Path(workspace) if workspace else None
+            worker = daemon_server.hook_worker_for_workspace(workspace_path)
             return worker.review_http_payload(
                 payload=payload,
                 params=params,
                 default_harness=default_harness,
                 home_dir=Path(home_dir),
                 guard_home=Path(guard_home),
-                workspace=Path(workspace) if workspace else None,
+                workspace=workspace_path,
                 deadline=deadline,
+                policy_epoch=daemon_server.hook_policy_epoch(),
             )
         except HookWorkerUnsupported:
             # Not eligible for fast path — fall back to legacy CLI so
@@ -6114,7 +6180,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except Exception as error:
             # Fail safe: deny/block. Do not fall back to legacy CLI for
             # requests that omitted full output and supplied only guard_source_ref.
-            self._daemon_server().hook_worker.metrics.record_failure(
+            daemon_server = self._daemon_server()
+            workspace_path = Path(workspace) if workspace else None
+            daemon_server.hook_worker_for_workspace(workspace_path).metrics.record_failure(
                 stage="server",
                 exception_type=type(error).__name__,
             )
@@ -6183,6 +6251,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace=workspace_path,
                 hook_env=hook_env,
                 deadline=process_deadline,
+                policy_epoch=daemon_server.hook_policy_epoch(),
             )
         scheduler_stats = daemon_server.runtime_hook_process_scheduler.stats()
         daemon_server.hook_process_runner.observe_load(
