@@ -14,6 +14,14 @@ import pytest
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT_PATH = _REPOSITORY_ROOT / "scripts" / "guard_network_remediation_proof.py"
 _MANIFEST_PATH = _REPOSITORY_ROOT / "ci" / "guard-network-remediation-proof.v1.json"
+_WORKFLOW_PATH = _REPOSITORY_ROOT / ".github" / "workflows" / "guard-network-remediation-proof.yml"
+
+
+def test_network_remediation_proof_compares_the_exact_installed_version() -> None:
+    workflow = _WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert 'test "$INSTALLED_VERSION" = "$EXPECTED_VERSION"' in workflow
+    assert "3.0.0a" not in workflow
 
 
 def _load_module() -> ModuleType:
