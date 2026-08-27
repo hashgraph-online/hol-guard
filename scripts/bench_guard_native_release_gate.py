@@ -22,7 +22,10 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
-from codex_plugin_scanner.guard.native_runtime import review_post_tool_native
+from codex_plugin_scanner.guard.native_runtime import (
+    native_runtime_status,
+    review_post_tool_native,
+)
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
@@ -200,7 +203,22 @@ def _validated_runtime(path: Path) -> Path:
     resolved = lexical.resolve(strict=True)
     if not resolved.is_file():
         raise ValueError("native runtime must be a regular file")
+    _bind_native_runtime(resolved)
     return resolved
+
+
+def _bind_native_runtime(runtime: Path) -> None:
+    os.environ["HOL_GUARD_NATIVE"] = "force"
+    os.environ["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
+
+
+def _readiness_failure(response: object) -> RuntimeError:
+    status = native_runtime_status()
+    return RuntimeError(
+        "Native resident readiness probe failed: "
+        f"reason={status.reason} available={status.available} "
+        f"compatible={status.compatible} decision={getattr(response, 'decision', None)}"
+    )
 
 
 def main() -> int:
@@ -232,7 +250,7 @@ def main() -> int:
             )
             native_readiness_ms = (time.perf_counter() - readiness_started) * 1_000.0
             if readiness_response is None or readiness_response.decision != "allow":
-                raise RuntimeError("Native resident readiness probe failed")
+                raise _readiness_failure(readiness_response)
             python_warm = _bench_python_warm(
                 python_runner,
                 workspace=workspace,

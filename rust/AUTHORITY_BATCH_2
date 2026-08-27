@@ -1,0 +1,3 @@
+HOL Guard release/3.0 Rust PostToolUse authority batch 2.
+
+Requirements: no Python semantic fallback, generation-bound native policy snapshots, real-binary differential and performance gates.

@@ -1,0 +1,70 @@
+name: Rust PostToolUse authority bootstrap
+
+on:
+  push:
+    branches: [fix/rust-authority-batch-2]
+    paths:
+      - ".github/workflows/rust-posttool-authority-bootstrap.yml"
+      - "scripts/ci/bootstrap_rust_posttool_authority.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rust-posttool-authority-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Wait for batch 1 on main and rebase
+        run: |
+          deadline=$((SECONDS + 2400))
+          while true; do
+            git fetch origin main
+            if git show origin/main:src/codex_plugin_scanner/guard/native_pretool.py >/dev/null 2>&1; then
+              break
+            fi
+            if (( SECONDS >= deadline )); then
+              echo "Batch 1 is not merged into main" >&2
+              exit 1
+            fi
+            sleep 30
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rebase origin/main
+          git push --force-with-lease origin HEAD:fix/rust-authority-batch-2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+      - name: Import and verify strongest batch 2 candidate
+        env:
+          BASE_REF: origin/main
+        run: bash scripts/ci/bootstrap_rust_posttool_authority.sh
+      - name: Commit verified implementation
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No verified candidate changed the branch" >&2
+            exit 1
+          fi
+          git add -A
+          git commit -s -m "feat(rust): complete native PostToolUse authority"
+          git push origin HEAD:fix/rust-authority-batch-2

@@ -1,0 +1,54 @@
+name: Rust PostToolUse authority lint fix
+
+on:
+  push:
+    branches: [fix/rust-authority-batch-2]
+    paths:
+      - ".github/workflows/rust-posttool-authority-lint-fix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+      - run: uv sync --frozen --extra dev --python 3.12
+      - run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt
+          rustup default 1.88.0
+          cargo fmt --manifest-path rust/Cargo.toml --all
+          uv run --no-sync ruff format \
+            src/codex_plugin_scanner/guard/native_runtime.py \
+            src/codex_plugin_scanner/guard/daemon/hook_worker.py \
+            scripts/ci/rust_posttool_failclosed_integration.py
+          uv run --no-sync ruff check --fix \
+            src/codex_plugin_scanner/guard/native_runtime.py \
+            src/codex_plugin_scanner/guard/daemon/hook_worker.py \
+            scripts/ci/rust_posttool_failclosed_integration.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/rust-posttool-authority-lint-fix.yml
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -s -m "style(rust): normalize PostToolUse authority bridge"
+            git push origin HEAD:fix/rust-authority-batch-2
+          fi
+      - name: Dispatch merge gate on current head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run rust-authority-batch2-merge-gate.yml --repo hashgraph-online/hol-guard --ref fix/rust-authority-batch-2

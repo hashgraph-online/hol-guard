@@ -253,6 +253,7 @@ fn capabilities() -> RuntimeCapabilitiesV1 {
         "pre-tool-command-model-shadow-v1".into(),
         "resident-command-model-shadow-v1".into(),
         "pre-tool-command-authority-v1".into(),
+        "policy-snapshot-v1".into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
@@ -295,6 +296,9 @@ pub(crate) fn strict_json_value(bytes: &[u8]) -> Result<Value, String> {
 
 fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value = strict_json_value(bytes)?;
+    if value.get("operation").is_none() {
+        oneshot::validate_request_policy_snapshot(&value)?;
+    }
     let request: ResidentRequestV1 = serde_json::from_value(value)
         .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
     match request {

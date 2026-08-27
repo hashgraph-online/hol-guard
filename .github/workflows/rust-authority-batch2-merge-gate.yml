@@ -1,0 +1,187 @@
+name: Rust authority batch 2 merge gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: rust-authority-batch2-merge-gate
+  cancel-in-progress: false
+
+jobs:
+  verify-review-merge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+      - name: Resolve pull request number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number=$(gh pr list --repo hashgraph-online/hol-guard --head fix/rust-authority-batch-2 --base main --state open --json number --jq '.[].number')
+          test "$(printf '%s\n' "$number" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1
+          head=$(gh pr view "$number" --repo hashgraph-online/hol-guard --json headRefOid --jq .headRefOid)
+          test "$head" = "$GITHUB_SHA"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          gh pr edit "$number" --repo hashgraph-online/hol-guard --add-reviewer deep-purple-boots || true
+          gh pr comment "$number" --repo hashgraph-online/hol-guard --body "@coderabbitai review"
+      - name: Require completed batch evidence
+        run: |
+          test "$(grep -c '^- \[x\] T' docs/guard/rust-migration-batch-2-tasks.md)" -eq 98
+          test -f docs/guard/evidence/rust-posttool-authority-batch-2.json
+          test -f docs/guard/evidence/rust-posttool-performance-batch-2.json
+          test -f docs/guard/evidence/rust-posttool-authority-batch-2-review.md
+      - name: Re-run release and adversarial integration gates
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          hook=Path('src/codex_plugin_scanner/guard/daemon/hook_worker.py').read_text()
+          native=Path('src/codex_plugin_scanner/guard/native_runtime.py').read_text()
+          if 'if response is None:\n                response = self.engine.review(request)' in hook:
+              raise SystemExit('Python PostToolUse fallback remains')
+          if 'currently supported Python reference backend remains authoritative' in native:
+              raise SystemExit('Python authority declaration remains')
+          if 'guard-policy-snapshot' not in Path('rust/crates/guard-runtime/Cargo.toml').read_text():
+              raise SystemExit('policy snapshot dependency missing')
+          PY
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          rust/target/release/hol-guard-runtime self-test --json
+          uv run --no-sync python scripts/ci/rust_posttool_failclosed_integration.py \
+            --runtime rust/target/release/hol-guard-runtime \
+            --json /tmp/final-rust-posttool.json
+          HOL_GUARD_NATIVE=force HOL_GUARD_NATIVE_BINARY="$PWD/rust/target/release/hol-guard-runtime" \
+            uv run --no-sync pytest -q \
+              ci/native_runtime/test_guard_native_runtime_binary.py \
+              ci/native_runtime/test_guard_native_runtime_differential.py \
+              ci/native_runtime/test_guard_native_runtime_mutation_differential.py \
+              --tb=short
+          uv run --no-sync python scripts/bench_guard_native_release_gate.py \
+            --runtime rust/target/release/hol-guard-runtime \
+            --warm-iterations 30 --cold-iterations 2 \
+            --json /tmp/final-rust-posttool-performance.json --enforce
+      - name: Wait for peer CI/CD on exact head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, time
+          current=int(os.environ['CURRENT_RUN_ID'])
+          sha=os.environ['HEAD_SHA']
+          deadline=time.monotonic()+2400
+          ignored={'R0 source snapshot','Rust authority batch 2 merge gate'}
+          required={'CI','Security Gates','CodeQL Analysis','Rust PostToolUse authority acceptance'}
+          while True:
+              raw=subprocess.check_output(['gh','api',f'repos/hashgraph-online/hol-guard/actions/runs?head_sha={sha}&per_page=100'],text=True)
+              runs=json.loads(raw).get('workflow_runs',[])
+              peers=[r for r in runs if r.get('id')!=current and r.get('name') not in ignored]
+              bad=[r for r in peers if r.get('status')=='completed' and r.get('conclusion') not in {'success','skipped','neutral'}]
+              if bad:
+                  raise SystemExit('Peer CI failure: '+json.dumps([(r.get('name'),r.get('conclusion')) for r in bad]))
+              success={r.get('name') for r in peers if r.get('status')=='completed' and r.get('conclusion')=='success'}
+              pending=[r for r in peers if r.get('status')!='completed']
+              missing=required-success
+              if not pending and not missing:
+                  break
+              if time.monotonic()>=deadline:
+                  raise SystemExit(f'timed out: pending={[r.get("name") for r in pending]} missing={sorted(missing)}')
+              time.sleep(20)
+          PY
+      - name: Require clean review state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          sleep 60
+          python - <<'PY'
+          import json, os, subprocess
+          number = os.environ["PR_NUMBER"]
+          sha = os.environ["HEAD_SHA"]
+          cursor = None
+          unresolved = 0
+          changes = []
+          while True:
+              after = f', after: "{cursor}"' if cursor else ""
+              query = (
+                  "query { repository(owner:\"hashgraph-online\", name:\"hol-guard\") {"
+                  f" pullRequest(number:{number}) {{ reviewThreads(first:100{after}) {{"
+                  " pageInfo { hasNextPage endCursor } nodes { isResolved } }"
+                  " reviews(last:100) { nodes { state author { login } } } } } } }"
+              )
+              payload = json.loads(subprocess.check_output(
+                  ["gh", "api", "graphql", "-f", f"query={query}"], text=True
+              ))
+              pr = payload["data"]["repository"]["pullRequest"]
+              threads = pr["reviewThreads"]
+              unresolved += sum(1 for node in threads["nodes"] if not node["isResolved"])
+              changes = [
+                  node["author"]["login"]
+                  for node in pr["reviews"]["nodes"]
+                  if node["state"] == "CHANGES_REQUESTED"
+              ]
+              if not threads["pageInfo"]["hasNextPage"]:
+                  break
+              cursor = threads["pageInfo"]["endCursor"]
+          if unresolved:
+              raise SystemExit(f"{unresolved} unresolved review thread(s)")
+          if changes:
+              raise SystemExit("Changes requested: " + ", ".join(changes))
+          checks = json.loads(subprocess.check_output(
+              ["gh", "api", f"repos/hashgraph-online/hol-guard/commits/{sha}/check-runs?per_page=100"],
+              text=True,
+          ))
+          total = int(checks.get("total_count") or 0)
+          runs = checks.get("check_runs") or []
+          if total > len(runs):
+              raise SystemExit("check-runs pagination incomplete")
+          bad = [
+              item.get("name", "unknown")
+              for item in checks.get("check_runs", [])
+              if item.get("conclusion") in {"failure", "timed_out", "cancelled"}
+          ]
+          if bad:
+              raise SystemExit("Failed checks: " + ", ".join(bad))
+          PY
+      - name: Merge reviewed batch into main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo hashgraph-online/hol-guard --body-file docs/guard/evidence/rust-posttool-authority-batch-2-review.md
+          gh pr merge "$PR_NUMBER" --repo hashgraph-online/hol-guard --squash --delete-branch \
+            --match-head-commit "$HEAD_SHA" \
+            --subject "feat(guard): complete Rust runtime authority batch 2" \
+            --body "Supported PostToolUse is Rust-authoritative and fail-closed, native policy snapshots are active, and the batch passed real-binary differential, mutation, performance, CI, Security Gates, CodeQL, and review-thread checks."

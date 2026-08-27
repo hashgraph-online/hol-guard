@@ -1,8 +1,7 @@
 """Trusted bridge from the Python control plane to the native Guard runtime.
 
-The public package remains Python. This module is the only Python entry point
-for discovering and invoking ``hol-guard-runtime``. It never searches PATH,
-never downloads a binary, and never sends hook material to a network service.
+The public package remains Python. This is the only PATH-free local entry
+to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 """
 
 from __future__ import annotations
@@ -19,6 +18,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
+from .native_policy_snapshot import native_policy_snapshot
 from .native_runtime_resident import resident_native_request
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
@@ -538,12 +538,9 @@ def review_post_tool_native(
 ) -> HookReviewResponse | None:
     """Review PostToolUse with resident Rust, then one bounded Rust recovery.
 
-    Native failure is reported as ``None`` so the currently supported Python
-    reference backend remains authoritative until the dedicated cutover gate.
-    The native one-shot path is globally bounded and never used as overflow
-    capacity after an explicit resident overload response.
+    Native failure returns ``None`` so the caller can fail closed without
+    Python re-evaluation. The one-shot path stays globally bounded.
     """
-
     status = native_runtime_status()
     identity_key = _identity_key(status)
     if not status.available or not status.compatible or status.identity is None:
@@ -567,6 +564,9 @@ def review_post_tool_native(
         "source_ref_external_allowed": request.source_ref_external_allowed,
         "observe_mode": observe_mode,
         "deadline_budget_ms": _deadline_budget_ms(request),
+        "policy_snapshot": None
+        if status.capabilities is None
+        else native_policy_snapshot(rule_digest=status.capabilities.rule_digest, observe_mode=observe_mode),
     }
     input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
     encoded = input_text.encode("utf-8")

@@ -9,8 +9,9 @@ Security:
 - Never falls back to legacy CLI after a worker exception for a
   request that supplied only ``guard_source_ref`` without full output.
 - Never calls ``run_guard_command()``.
-- Native PostToolUse tries the runtime first and falls back to Python on
-  any unavailable, incompatible, timeout, transport, or invalid-response case.
+- Native PostToolUse is decided by Rust when the runtime is present or forced.
+  Native failure then fails closed instead of spilling into Python review.
+  Python remains only for ``off``/``shadow`` and for unit tests with no binary.
 - Supported command PreToolUse is decided by Rust. Native failure fails closed.
   Non-command PreToolUse still raises ``HookWorkerUnsupported`` for the CLI path.
 """
@@ -105,8 +106,8 @@ class HookWorker:
 
         ``off`` keeps the Python engine authoritative. ``shadow`` evaluates
         Python first and exercises native only as non-authoritative evidence.
-        ``auto`` and ``force`` try the native runtime first and invoke Python
-        only when native cannot produce a valid local result.
+        ``auto`` and ``force`` try the native runtime first. When native is
+        present or forced and returns no result, PostToolUse fails closed.
         """
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
@@ -137,7 +138,28 @@ class HookWorker:
             raise HookWorkerUnsupported("native PreToolUse runtime is unavailable")
         if event_name != "PostToolUse":
             raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
+        return self._review_post_tool_http(
+            payload,
+            harness=harness,
+            default_harness=default_harness,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+            deadline=deadline,
+        )
 
+    def _review_post_tool_http(
+        self,
+        payload: dict[str, object],
+        *,
+        harness: str,
+        default_harness: str,
+        home_dir: Path,
+        guard_home: Path,
+        workspace: Path | None,
+        deadline: float | None,
+    ) -> dict[str, object]:
+        event_name = "PostToolUse"
         request = self._request_from_payload(
             payload,
             harness=harness,
@@ -148,24 +170,24 @@ class HookWorker:
             deadline=deadline,
         )
         mode = native_mode()
-        if mode in {"auto", "force"}:
+        native_required = mode == "force" or (mode == "auto" and native_runtime_status().available)
+        if native_required:
             config = self._load_config(guard_home, workspace)
             response = review_post_tool_native(
                 request,
                 observe_mode=config.mode == "observe",
             )
             if response is None:
-                response = self.engine.review(request)
+                return post_tool_fail_safe_response(
+                    harness,
+                    reason="HOL Guard could not complete the native local hook review safely.",
+                    reason_code="native_post_tool_unavailable",
+                )
         else:
             response = self.engine.review(request)
             if mode == "shadow":
-                # Shadow evidence is explicitly non-authoritative. No native
-                # failure may replace or discard the completed Python result.
                 with suppress(Exception):
-                    _ = review_post_tool_native(
-                        request,
-                        observe_mode=response.observe_mode,
-                    )
+                    _ = review_post_tool_native(request, observe_mode=response.observe_mode)
 
         succeeded = hook_post_succeeded(event_name, payload)
         if self.activity_writer is not None:
