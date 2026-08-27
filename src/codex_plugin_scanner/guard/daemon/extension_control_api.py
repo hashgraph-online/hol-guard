@@ -144,6 +144,13 @@ class ExtensionControlApiService:
     def recover_authority(self, payload: dict[str, object]) -> dict[str, object]:
         current = self._store.read_extension_control_authority_for_registry(self._registry)
         if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
+            runtime = self._runtime.current()
+            if current.health is AuthorityHealth.PROTECTED and runtime.health is not AuthorityHealth.PROTECTED:
+                if runtime.health in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
+                    _ = self._runtime.replace_after_recovery(current)
+                else:
+                    _ = self._runtime.refresh(current)
+                return self.effective()
             raise ExtensionControlApiError(409, "authority_not_recoverable")
         session_nonce = required_request_string(payload, "session_nonce")
         action = "recover-authority"
@@ -174,7 +181,7 @@ class ExtensionControlApiService:
             raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
         if view.health is not AuthorityHealth.PROTECTED:
             raise ExtensionControlApiError(503, "authority_recovery_incomplete")
-        _ = self._runtime.refresh(view)
+        _ = self._runtime.replace_after_recovery(view)
         return self.effective()
 
     def acknowledge_degraded(self, payload: dict[str, object]) -> dict[str, object]:

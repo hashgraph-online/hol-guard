@@ -226,6 +226,66 @@ def test_authority_recovery_rejects_healthy_authority(tmp_path: Path) -> None:
     assert denied.value.code == "authority_not_recoverable"
 
 
+def test_authority_recovery_refreshes_stale_runtime_after_store_already_recovered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    protected = ExtensionControlAuthorityView(
+        AuthorityHealth.PROTECTED,
+        4,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    stale = replace(protected, health=AuthorityHealth.RECOVERY_REQUIRED)
+    service = ExtensionControlApiService(
+        store=store,
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        runtime=ExtensionControlRuntime(stale),
+    )
+    recovery_calls: list[object] = []
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: protected)
+    monkeypatch.setattr(
+        store,
+        "recover_extension_control_authority",
+        lambda **kwargs: recovery_calls.append(kwargs) or protected,
+    )
+
+    effective = service.recover_authority({"session_nonce": "nonce"})
+
+    assert effective["health"] == AuthorityHealth.PROTECTED.value
+    assert service.effective()["health"] == AuthorityHealth.PROTECTED.value
+    assert recovery_calls == []
+
+
+def test_authority_recovery_can_install_lower_recovered_revision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    damaged = ExtensionControlAuthorityView(
+        AuthorityHealth.RECOVERY_REQUIRED,
+        9,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    recovered = replace(damaged, health=AuthorityHealth.PROTECTED, revision=4)
+    service = ExtensionControlApiService(
+        store=store,
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        runtime=ExtensionControlRuntime(damaged),
+    )
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: damaged)
+    monkeypatch.setattr(store, "recover_extension_control_authority", lambda **_kwargs: recovered)
+    monkeypatch.setattr(extension_control_api_module, "require_extension_control", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(extension_control_api_module, "consume_extension_control_grant", lambda *_args, **_kwargs: None)
+
+    effective = service.recover_authority({"approval_password": "secret", "session_nonce": "nonce"})
+
+    assert effective["health"] == AuthorityHealth.PROTECTED.value
+    assert effective["revision"] == 4
+
+
 def test_authority_recovery_never_reports_success_while_still_tampered(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

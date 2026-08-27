@@ -99,6 +99,20 @@ class ExtensionControlRuntime:
         with self._lock:
             return self._install_candidate_locked(candidate)
 
+    def replace_after_recovery(self, view: ExtensionControlAuthorityView) -> ExtensionControlRuntimeSnapshot:
+        """Install authenticated recovered authority without retaining a poisoned revision floor."""
+
+        candidate = ExtensionControlRuntimeSnapshot.from_authority_view(view)
+        with self._lock:
+            if self._snapshot.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
+                raise ValueError("extension control runtime is not awaiting recovery")
+            if candidate.health is not AuthorityHealth.PROTECTED:
+                raise ValueError("extension control runtime recovery is not protected")
+            self._highest_protected_revision = (candidate.revision, candidate.managed_revision)
+            self._highest_protected_digest = candidate.effective_digest
+            self._snapshot = candidate
+            return candidate
+
     def publish_after_commit(
         self,
         view: ExtensionControlAuthorityView,
