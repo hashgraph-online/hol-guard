@@ -130,6 +130,52 @@ def _select_or_quarantine_sync_batch(
     return selected, sequences[: len(selected)], 0, []
 
 
+def _sync_result(
+    *,
+    accepted: int,
+    rejected: int,
+    errors: list[str],
+    batches: int,
+    outbox: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "synced": accepted,
+        "rejected": rejected,
+        "errors": errors[:5],
+        "cursor": None,
+        "batches": batches,
+        "outbox": outbox,
+        "next_attempt_at": outbox.get("next_attempt_at"),
+    }
+
+
+def _complete_sync_state(
+    store: GuardStore,
+    state: dict[str, object],
+    delivery_binding: dict[str, str],
+    *,
+    accepted: int,
+    rejected: int,
+    errors: list[str],
+) -> tuple[str, dict[str, object]]:
+    completed_at = _now()
+    outbox_status = store.review_event_outbox_status(now=completed_at, **delivery_binding)
+    state.update(
+        {
+            "state": "idle",
+            "last_sync_at": completed_at,
+            "last_success_at": completed_at,
+            "synced_count": accepted,
+            "rejected_count": rejected,
+            "last_error": errors[0] if errors else None,
+            "outbox_depth": outbox_status["depth"],
+            "outbox_oldest_changed_at": outbox_status["oldest_changed_at"],
+        }
+    )
+    _save_sync_state(store, state)
+    return completed_at, outbox_status
+
+
 def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
     """Return whether Cloud already owns a newer authoritative request state.
 
@@ -338,24 +384,14 @@ def sync_cloud_review_events_once(
                 break
             store.acknowledge_review_events(sequences, **delivery_binding)
 
-        completed_at = _now()
-        outbox_status = store.review_event_outbox_status(
-            now=completed_at,
-            **delivery_binding,
+        _, outbox_status = _complete_sync_state(
+            store,
+            state,
+            delivery_binding,
+            accepted=total_accepted,
+            rejected=total_rejected,
+            errors=all_errors,
         )
-        state.update(
-            {
-                "state": "idle",
-                "last_sync_at": completed_at,
-                "last_success_at": completed_at,
-                "synced_count": total_accepted,
-                "rejected_count": total_rejected,
-                "last_error": all_errors[0] if all_errors else None,
-                "outbox_depth": outbox_status["depth"],
-                "outbox_oldest_changed_at": outbox_status["oldest_changed_at"],
-            }
-        )
-        _save_sync_state(store, state)
 
         outbox_depth = outbox_status["depth"]
         if not isinstance(outbox_depth, int):
@@ -367,15 +403,13 @@ def sync_cloud_review_events_once(
             batches,
             outbox_depth,
         )
-        return {
-            "synced": total_accepted,
-            "rejected": total_rejected,
-            "errors": all_errors[:5],
-            "cursor": None,
-            "batches": batches,
-            "outbox": outbox_status,
-            "next_attempt_at": outbox_status.get("next_attempt_at"),
-        }
+        return _sync_result(
+            accepted=total_accepted,
+            rejected=total_rejected,
+            errors=all_errors,
+            batches=batches,
+            outbox=outbox_status,
+        )
     except urllib.error.HTTPError as error:
         error_message = f"HTTP {error.code}: {error.reason}"
         state.update(

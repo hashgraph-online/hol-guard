@@ -55,6 +55,18 @@ def test_adaptive_deferred_start_returns_before_startup_floor_is_ready(monkeypat
     assert runner.close_contained()
 
 
+def test_queued_work_releases_deferred_backfill() -> None:
+    runner = HookProcessRunner()
+    runner._backfill_not_before = time.monotonic() + 30  # pyright: ignore[reportPrivateUsage]
+    runner._backfill_force_after = time.monotonic() + 35  # pyright: ignore[reportPrivateUsage]
+
+    runner.notify_queued_work()
+
+    assert runner._backfill_not_before == 0.0  # pyright: ignore[reportPrivateUsage]
+    assert runner._backfill_force_after == 0.0  # pyright: ignore[reportPrivateUsage]
+    assert runner._recovery_event.is_set()  # pyright: ignore[reportPrivateUsage]
+
+
 def test_close_waits_for_inflight_spawn_thread_and_leaves_no_runner_threads(
     monkeypatch,
     tmp_path: Path,

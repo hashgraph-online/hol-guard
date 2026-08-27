@@ -3267,9 +3267,6 @@ def sync_receipts(
     if review_verification_keys_payload is not None:
         if cloud_workspace_id is None:
             raise RuntimeError("review_verification_keys_workspace_missing")
-        # The first authenticated sync may advertise Review keys alongside the
-        # signed policy bundle that anchors their public-key material. Admit the
-        # purpose-scoped keys only after that policy authority commits.
         review_verification_keys = validated_review_verification_keys_from_sync(
             review_verification_keys_payload,
             store=store,
