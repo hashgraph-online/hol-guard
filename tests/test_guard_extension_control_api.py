@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 import hashlib
 import hmac
 import json
@@ -284,6 +285,77 @@ def test_authority_recovery_can_install_lower_recovered_revision(
 
     assert effective["health"] == AuthorityHealth.PROTECTED.value
     assert effective["revision"] == 4
+
+
+def test_authority_recovery_marks_stale_protected_runtime_fail_safe_before_reset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    damaged = ExtensionControlAuthorityView(
+        AuthorityHealth.RECOVERY_REQUIRED,
+        9,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    recovered = replace(damaged, health=AuthorityHealth.PROTECTED, revision=4)
+    runtime = ExtensionControlRuntime(replace(damaged, health=AuthorityHealth.PROTECTED))
+    service = ExtensionControlApiService(
+        store=store,
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        runtime=runtime,
+    )
+    observed_runtime_health: list[AuthorityHealth] = []
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: damaged)
+    monkeypatch.setattr(
+        store,
+        "recover_extension_control_authority",
+        lambda **_kwargs: observed_runtime_health.append(runtime.current().health) or recovered,
+    )
+    monkeypatch.setattr(extension_control_api_module, "require_extension_control", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(extension_control_api_module, "consume_extension_control_grant", lambda *_args, **_kwargs: None)
+
+    effective = service.recover_authority({"approval_password": "secret", "session_nonce": "nonce"})
+
+    assert observed_runtime_health == [AuthorityHealth.RECOVERY_REQUIRED]
+    assert effective["health"] == AuthorityHealth.PROTECTED.value
+    assert effective["revision"] == 4
+
+
+def test_concurrent_authority_recovery_is_idempotent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    damaged = ExtensionControlAuthorityView(
+        AuthorityHealth.RECOVERY_REQUIRED,
+        9,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    recovered = replace(damaged, health=AuthorityHealth.PROTECTED, revision=4)
+    service = ExtensionControlApiService(
+        store=store,
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        runtime=ExtensionControlRuntime(damaged),
+    )
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: damaged)
+    monkeypatch.setattr(store, "recover_extension_control_authority", lambda **_kwargs: recovered)
+    monkeypatch.setattr(extension_control_api_module, "require_extension_control", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(extension_control_api_module, "consume_extension_control_grant", lambda *_args, **_kwargs: None)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(
+            executor.map(
+                lambda index: service.recover_authority(
+                    {"approval_password": "secret", "session_nonce": f"nonce-{index}"}
+                ),
+                range(32),
+            )
+        )
+
+    assert {result["health"] for result in results} == {AuthorityHealth.PROTECTED.value}
+    assert {result["revision"] for result in results} == {4}
 
 
 def test_authority_recovery_never_reports_success_while_still_tampered(

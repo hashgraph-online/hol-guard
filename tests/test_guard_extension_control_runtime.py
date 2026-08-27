@@ -112,6 +112,9 @@ def test_recovery_replacement_allows_rollback_only_from_recovery_state() -> None
 
     assert recovered.health is AuthorityHealth.PROTECTED
     assert recovered.revision == 4
+    assert runtime.replace_after_recovery(_view(4, state=ControlState.ENABLED)) is recovered
+    with pytest.raises(ValueError, match="not awaiting recovery"):
+        runtime.replace_after_recovery(_view(4, state=ControlState.DISABLED))
     with pytest.raises(ValueError, match="move backwards"):
         runtime.refresh(_view(3, state=ControlState.ENABLED))
 

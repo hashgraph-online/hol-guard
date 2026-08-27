@@ -104,6 +104,11 @@ class ExtensionControlRuntime:
 
         candidate = ExtensionControlRuntimeSnapshot.from_authority_view(view)
         with self._lock:
+            if (
+                self._snapshot.health is AuthorityHealth.PROTECTED
+                and self._snapshot.effective_digest == candidate.effective_digest
+            ):
+                return self._snapshot
             if self._snapshot.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
                 raise ValueError("extension control runtime is not awaiting recovery")
             if candidate.health is not AuthorityHealth.PROTECTED:
