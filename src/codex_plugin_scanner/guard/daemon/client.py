@@ -14,6 +14,7 @@ from .manager import (
     ensure_guard_daemon,
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
+    load_running_guard_daemon_identity,
 )
 
 
@@ -284,8 +285,8 @@ def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClie
 def load_running_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
     """Load the current daemon authority without starting or repairing a daemon."""
 
-    daemon_url = load_guard_daemon_url(guard_home)
-    auth_token = load_guard_daemon_auth_token(guard_home)
-    if daemon_url is None or auth_token is None:
+    identity = load_running_guard_daemon_identity(guard_home)
+    if identity is None:
         raise GuardDaemonTransportError("Guard daemon authority is unavailable")
+    daemon_url, auth_token = identity
     return GuardSurfaceDaemonClient(daemon_url, auth_token)

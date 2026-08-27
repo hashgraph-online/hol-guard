@@ -1009,12 +1009,32 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
     return _live_guard_daemon_url(guard_home, require_current_runtime=True)
 
 
+def load_running_guard_daemon_identity(guard_home: Path) -> tuple[str, str] | None:
+    """Return one validated live daemon URL/token generation."""
+
+    return _live_guard_daemon_identity(guard_home, require_current_runtime=True)
+
+
 def _live_guard_daemon_url(
     guard_home: Path,
     *,
     require_current_runtime: bool = True,
     expected_pid: int | None = None,
 ) -> str | None:
+    identity = _live_guard_daemon_identity(
+        guard_home,
+        require_current_runtime=require_current_runtime,
+        expected_pid=expected_pid,
+    )
+    return identity[0] if identity is not None else None
+
+
+def _live_guard_daemon_identity(
+    guard_home: Path,
+    *,
+    require_current_runtime: bool = True,
+    expected_pid: int | None = None,
+) -> tuple[str, str] | None:
     identity = _load_authenticated_daemon_identity(guard_home)
     if identity is None:
         return None
@@ -1041,11 +1061,11 @@ def _live_guard_daemon_url(
     except (OSError, ValueError, urllib.error.URLError):
         return None
     if _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
-        return url
+        return url, auth_token
     # In-process or wrapped daemons may not expose a command line we can bind
     # back to guard_home, so fall back to authenticated detailed health.
     if _daemon_healthz_details_match_guard_home(url, guard_home, auth_token=auth_token):
-        return url
+        return url, auth_token
     return None
 
 

@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import client as daemon_client_module
+from codex_plugin_scanner.guard.daemon.client import load_running_guard_surface_daemon_client
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_supply_chain import _resolve_stored_package_policy_override
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
@@ -179,3 +181,22 @@ def test_policy_authority_route_rejects_unauthenticated_clients(
         daemon.stop()
 
     assert error.value.code == 401
+
+
+def test_running_authority_client_uses_one_validated_daemon_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[Path] = []
+
+    def load_identity(guard_home: Path) -> tuple[str, str]:
+        calls.append(guard_home)
+        return "http://127.0.0.1:4321", "generation-token"
+
+    monkeypatch.setattr(daemon_client_module, "load_running_guard_daemon_identity", load_identity)
+
+    client = load_running_guard_surface_daemon_client(tmp_path)
+
+    assert calls == [tmp_path]
+    assert client.daemon_url == "http://127.0.0.1:4321"
+    assert client.auth_token == "generation-token"

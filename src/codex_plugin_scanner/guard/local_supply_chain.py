@@ -2199,27 +2199,20 @@ def _resolve_stored_package_policy_override(
         if ignored_integrity is not None:
             break
     if not isinstance(decision, dict) and ignored_integrity is not None:
-        try:
-            from .daemon.client import load_running_guard_surface_daemon_client
+        from .daemon.policy_authority_client import resolve_package_policy
 
-            daemon_authority = load_running_guard_surface_daemon_client(store.guard_home)
-            for policy_workspace in policy_workspaces:
-                daemon_lookup = daemon_authority.resolve_policy_decision(
-                    {
-                        "harness": artifact.harness,
-                        "artifact_id": artifact.artifact_id,
-                        "artifact_hash": artifact_hash,
-                        "workspace": policy_workspace,
-                        "publisher": artifact.publisher,
-                    }
-                )
-                daemon_decision = daemon_lookup.get("decision")
-                if isinstance(daemon_decision, dict):
-                    decision = daemon_decision
-                    ignored_integrity = None
-                    break
-        except (OSError, RuntimeError, ValueError):
-            daemon_authority = None
+        daemon_resolution = resolve_package_policy(
+            guard_home=store.guard_home,
+            harness=artifact.harness,
+            artifact_id=artifact.artifact_id,
+            artifact_hash=artifact_hash,
+            workspaces=policy_workspaces,
+            publisher=artifact.publisher,
+        )
+        daemon_authority = daemon_resolution.authority
+        if daemon_resolution.decision is not None:
+            decision = daemon_resolution.decision
+            ignored_integrity = None
     diagnosed_reason: ApprovalReuseValidationFailure | None = None
     if not isinstance(decision, dict) and ignored_integrity is None:
         for policy_workspace in policy_workspaces:
@@ -2282,10 +2275,9 @@ def _resolve_stored_package_policy_override(
     claim_succeeded = True
     if claim_saved_approval and reuse.should_claim and isinstance(decision, dict):
         if daemon_authority is not None:
-            try:
-                claim_succeeded = daemon_authority.claim_policy_decision({"decision": decision})
-            except (OSError, RuntimeError, ValueError):
-                claim_succeeded = False
+            from .daemon.policy_authority_client import claim_package_policy
+
+            claim_succeeded = claim_package_policy(daemon_authority, decision)
         elif legacy_local_approval:
             approval_id = decision.get("approval_id")
             assert isinstance(approval_id, str)
