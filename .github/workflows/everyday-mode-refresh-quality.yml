@@ -1,0 +1,50 @@
+name: Everyday Mode refresh quality baseline
+
+on:
+  push:
+    branches:
+      - feat/everyday-mode-001-100
+
+permissions:
+  contents: write
+
+concurrency:
+  group: everyday-mode-refresh-quality
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/everyday-mode-001-100
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Refresh and verify reviewed quality baseline
+        run: |
+          set -euo pipefail
+          uv run --no-sync python scripts/ci/code_quality_audit.py --root . --baseline ci/code-quality-baseline.json --write-baseline --json-output code-quality-audit.json
+          uv run --no-sync python scripts/ci/code_quality_audit.py --root . --baseline ci/code-quality-baseline.json --json-output code-quality-audit.json
+      - name: Remove one-shot workflow and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/everyday-mode-refresh-quality.yml
+          git add ci/code-quality-baseline.json
+          git commit -m "ci: refresh Everyday Mode quality ratchet"
+          git push origin HEAD:feat/everyday-mode-001-100
