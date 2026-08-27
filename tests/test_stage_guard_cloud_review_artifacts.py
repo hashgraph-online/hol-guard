@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT_PATH = Path("scripts/release/stage_guard_cloud_review_artifacts.py")
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts/release/stage_guard_cloud_review_artifacts.py"
 SPEC = importlib.util.spec_from_file_location("stage_guard_cloud_review_artifacts", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)

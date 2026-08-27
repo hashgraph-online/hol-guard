@@ -318,7 +318,7 @@ jobs:
               *) echo "Version stamping changed an unexpected Core file: $changed_path" >&2; exit 1 ;;
             esac
           done < <(git -C "$SOURCE" diff --name-only)
-          python3 -I "$SOURCE/scripts/release/stage_guard_cloud_review_artifacts.py" \
+          python3 -I scripts/release/stage_guard_cloud_review_artifacts.py \
             --source-root "$SOURCE"
           (
             cd "$SOURCE"
