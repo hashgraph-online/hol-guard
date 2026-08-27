@@ -19,7 +19,7 @@ def test_source_distribution_and_package_versions_match():
     pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
     pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
     source_version = pyproject["project"]["version"]
-    assert source_version == package_version == "3.0.0a0"
+    assert source_version == package_version == "3.0.0"
     try:
         installed_version = distribution_version("hol-guard")
     except PackageNotFoundError:

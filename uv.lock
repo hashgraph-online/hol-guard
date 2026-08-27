@@ -1174,7 +1174,7 @@ wheels = [
 
 [[package]]
 name = "hol-guard"
-version = "3.0.0a0"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "cisco-ai-skill-scanner" },
