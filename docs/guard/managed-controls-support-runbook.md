@@ -1,6 +1,6 @@
 # Managed Controls support runbook
 
-Use this runbook for Local Extension settings and for pre-release Managed Controls contract reports. Cloud authoring/deployment support begins only after the corresponding Guard Cloud PR lands and publishes a tested operator surface.
+Use this runbook for Local Extension settings and for staged Guard Cloud Managed Controls authoring, compatibility, delivery, acknowledgement, drift, and rollback reports.
 
 ## Preserve the boundary
 
@@ -40,7 +40,7 @@ See [Command Activity privacy](command-activity-privacy.md) and [privacy-safe ou
 |---|---|---|
 | Local blocking and approvals work; Cloud is unavailable | Cloud availability only | Keep Local protection active. |
 | Local and expected catalog digests differ | Digest mismatch | Follow [catalog-mismatch recovery](managed-controls-catalog-mismatch-recovery.md). |
-| Digest matches but capability/schema evidence is absent | Compatibility unproven | Keep Cloud deployment disabled; obtain authenticated runtime-session evidence after the Cloud PR ships. |
+| Digest matches but capability/schema evidence is absent | Compatibility unproven | Keep the device excluded; obtain fresh authenticated runtime-session evidence. |
 | Local bundle rejection reason reports signature, hash, workspace, expiry, schema, or rollback failure | Invalid bundle | Follow the [invalid-bundle incident runbook](managed-controls-invalid-bundle-incident-runbook.md). |
 | Local settings authority is tampered or recovery-required | Local integrity | Use approval-bound Settings integrity repair; never edit persistence directly. |
 | Legacy rules do not map exactly | Migration incomplete | Preserve them and follow the [migration guide](managed-controls-policy-migration.md). |
@@ -49,4 +49,4 @@ See [Command Activity privacy](command-activity-privacy.md) and [privacy-safe ou
 
 Escalate equal-version catalog divergence to release engineering; signature, trust-anchor, wrong-workspace, replay, or rollback rejection to security incident response; and local authority tamper to Local runtime owners. Do not repair by deleting caches, databases, keyrings, or receipts.
 
-State which evidence was observed and which was unavailable. Do not close a Cloud Managed Controls case as deployed, acknowledged, compatible, or rolled back until the shipped Cloud implementation provides the corresponding authenticated evidence.
+State which evidence was observed and which was unavailable. Do not close a Cloud Managed Controls case as deployed, acknowledged, compatible, or rolled back until the target environment provides the corresponding authenticated runtime and rollout evidence.

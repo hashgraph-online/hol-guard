@@ -1,8 +1,8 @@
 # Managed Controls release notes
 
-## Release/3.0 documentation status
+## Release/3.0 availability status
 
-This documentation change is not a Cloud Managed Controls availability announcement. The corresponding Guard Cloud author/simulate/review/sign/deploy/acknowledgement/drift/rollback PR has not yet landed in the evidence reviewed for this target.
+Guard Cloud now includes Extension-first Control Set authoring, simulation, review, signing, staged rollout, acknowledgement, drift, pause, emergency stop, and monotonic rollback. These stages are independently controlled and default fail-closed; availability must be verified in the target environment.
 
 ### Confirmed Local behavior
 
@@ -13,11 +13,16 @@ This documentation change is not a Cloud Managed Controls availability announcem
 - Invalid or incompatible candidates fail closed and do not silently discard Extension semantics.
 - Local device-settings history prepares a current-revision draft and retains the normal proof-bound apply flow.
 
-### Not yet documented as shipped
+### Guard Cloud behavior
 
-Do not represent Guard Cloud Control Set authoring, simulation, review, signing, staged rollout, acknowledgement, drift, or rollback as available until the corresponding Cloud PR lands and its exact UI/API passes composed release verification.
+- `/guard/controls` is the canonical **Managed controls** surface; `/guard/policy` remains an alias.
+- Extension and permission targets are the default authoring path, with raw matcher rules isolated under **Advanced**.
+- Publication requires compatibility and successful persisted simulation; managed rollout requires distinct eligible review, authorization, and step-up.
+- Delivery is cohort-based and exposes exact acknowledgement, drift, pause, emergency-stop, and rollback evidence.
+- Unsupported, stale, or catalog-mismatched clients are excluded without silently weakening Extension semantics.
+- Custom Extension continuity is separately controlled and excludes source paths, code, arbitrary commands, and raw private content.
 
-[ADR 0011](adr/0011-extension-first-managed-controls.md), the [Managed Controls glossary](managed-controls-glossary.md), and [Policy Extension fields v1](policy-extension-fields-v1.md) define intended product and Local wire contracts. They are not Cloud delivery evidence.
+[ADR 0011](adr/0011-extension-first-managed-controls.md), the [Managed Controls glossary](managed-controls-glossary.md), and [Policy Extension fields v1](policy-extension-fields-v1.md) define the product and wire contracts. Authenticated composed runtime and rollout evidence remains required for a deployment claim.
 
 ### Local safety boundary
 

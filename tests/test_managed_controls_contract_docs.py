@@ -222,10 +222,13 @@ def test_managed_controls_user_and_operator_documentation_is_complete() -> None:
     assert "command-activity-privacy.md" in local_guide
 
     operator_guide = documents["managed-controls-cloud-operator-guide.md"]
-    assert "does not provide or verify an executable Cloud Managed Controls" in operator_guide
+    assert "Guard Cloud operator surface" in operator_guide
+    assert "Use **Managed controls** at `/guard/controls`" in operator_guide
+    assert "Code presence alone does not prove" in operator_guide
+    assert "guard.controls.publish" in operator_guide
     assert "release-3-0-cloud-control-inventory.md" not in operator_guide
     assert "historical branch pin" in operator_guide
-    assert "These projections do not prove Cloud negotiation" in operator_guide
+    assert "These projections prove device-local state only" in operator_guide
 
     mismatch = documents["managed-controls-catalog-mismatch-recovery.md"]
     assert "digest-only observation" in mismatch
@@ -241,7 +244,8 @@ def test_managed_controls_user_and_operator_documentation_is_complete() -> None:
     assert "hol-guard policy diff" in migration
     assert "Unmapped legacy rules remain" in migration
     assert "no supported operator command that validates a proposed Cloud Control Set" in migration
-    assert "Stop after Local backup" in migration
+    assert "Migrate through Guard Cloud" in migration
+    assert "Run simulation and require zero broadening" in migration
 
     support = documents["managed-controls-support-runbook.md"]
     assert "set -o pipefail" in support
@@ -253,16 +257,26 @@ def test_managed_controls_user_and_operator_documentation_is_complete() -> None:
     assert "deliberately discards every scope identifier key" in support
 
     invalid_bundle = documents["managed-controls-invalid-bundle-incident-runbook.md"]
-    assert "does not provide a Cloud Managed Controls author/sign/deploy repair API" in invalid_bundle
-    assert "keep Managed Controls Cloud delivery disabled" in invalid_bundle
+    assert "Correct the source Control Set" in invalid_bundle
+    assert "Keep the failed candidate inactive" in invalid_bundle
 
     rollback = documents["managed-controls-rollback-runbook.md"]
-    assert "does not provide or verify an executable Cloud Managed Controls rollback UI/API" in rollback
+    assert "Guard Cloud Control Set rollback" in rollback
+    assert "exact current candidate bundle hash and version" in rollback
     assert "Available Local device-settings restore" in rollback
 
     release_notes = documents["managed-controls-release-notes.md"]
+    assert "Guard Cloud now includes Extension-first Control Set authoring" in release_notes
+    assert "default fail-closed" in release_notes
     for path in MANAGED_CONTROLS_DOCS[:-1]:
         assert path.name in release_notes
+
+    stale_cloud_boundary = re.compile(
+        r"corresponding (?:Guard )?Cloud PR|Cloud PR lands|Cloud implementation ships",
+        re.IGNORECASE,
+    )
+    for name, document in documents.items():
+        assert stale_cloud_boundary.search(document) is None, f"stale Cloud boundary in {name}"
 
 
 def test_managed_controls_documentation_uses_only_resolvable_local_links() -> None:

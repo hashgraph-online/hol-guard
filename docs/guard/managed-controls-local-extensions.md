@@ -1,6 +1,6 @@
 # Local Extensions and protection settings
 
-Local Extensions describe the tools and capabilities HOL Guard protects on this device. They remain available without Guard Cloud, a subscription, or a network connection. The product contract reserves Control Sets for future Cloud coordination, but the corresponding Cloud author/sign/deploy workflow is not shipped by this Local documentation change. Local Guard remains the enforcement authority.
+Local Extensions describe the tools and capabilities HOL Guard protects on this device. They remain available without Guard Cloud, a subscription, or a network connection. Guard Cloud Control Sets can coordinate supported devices when their rollout stages are enabled, but Local Guard remains the enforcement authority.
 
 For canonical terms and authority rules, see the [Managed Controls glossary](managed-controls-glossary.md) and [ADR 0011](adr/0011-extension-first-managed-controls.md). The authenticated local API and presentation boundary are documented in [Protection Center](protection-center.md).
 
@@ -41,7 +41,7 @@ A device setting can preserve or tighten protection. It cannot lower an immutabl
 
 The complete vocabulary is in the [glossary](managed-controls-glossary.md). Precedence and mutation semantics are in [ADR 0004](adr/0004-extension-control-center-semantics.md).
 
-These source labels and Local parser support do not prove that the Cloud Managed Controls authoring/deployment surface is available. See the [Cloud availability boundary](managed-controls-cloud-operator-guide.md).
+These source labels prove the effective Local authority source. Verify Cloud stage availability, compatibility, rollout, and acknowledgement separately through the [Cloud operator boundary](managed-controls-cloud-operator-guide.md).
 
 ## Privacy
 

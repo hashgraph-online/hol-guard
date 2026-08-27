@@ -1,8 +1,8 @@
 # Guard Cloud Managed Controls availability and operator boundary
 
-This document separates the HOL Guard 3.0 Local contract from Cloud functionality that is not yet shipped by the corresponding Guard Cloud Managed Controls PR.
+This document defines the boundary between HOL Guard 3.0 Local enforcement and the staged Guard Cloud Managed Controls workflow. The Cloud implementation is shipped behind independent read-model, authoring, compilation, delivery, enforcement, and custom-continuity controls. Code presence alone does not prove that every stage is enabled in a particular environment.
 
-[ADR 0011](adr/0011-extension-first-managed-controls.md) and the [Managed Controls glossary](managed-controls-glossary.md) define the intended product model. [Policy Extension fields v1](policy-extension-fields-v1.md) defines fields the Local runtime can validate. These contracts do not prove that a Cloud authoring, simulation, review, signing, deployment, acknowledgement, drift, or rollback UI/API is available.
+[ADR 0011](adr/0011-extension-first-managed-controls.md) and the [Managed Controls glossary](managed-controls-glossary.md) define the product model. [Policy Extension fields v1](policy-extension-fields-v1.md) defines fields the Local runtime validates. Operators must still verify the enabled stages and authenticated runtime evidence in the target environment.
 
 ## Current release/3.0 Local boundary
 
@@ -24,33 +24,31 @@ hol-guard command controls status | jq -e '{revision, catalog_digest, health}'
 hol-guard command controls list | jq -e '{schema_version, control_schema_version, catalog_digest}'
 ```
 
-These projections do not prove Cloud negotiation, assignment, delivery, acknowledgement, or deployment.
+These projections prove device-local state only. Cloud compatibility requires authenticated runtime-session capability, schema, catalog-digest, authority-revision, and effective-projection evidence.
 
-## Cloud availability boundary
+## Guard Cloud operator surface
 
-This release/3.0 repository does not provide or verify an executable Cloud Managed Controls author/sign/deploy workflow. Do not use an old route inventory, a historical branch pin, internal service names, or generic policy routes as evidence that the Managed Controls Cloud workflow is current or shipped.
+Use **Managed controls** at `/guard/controls`. `/guard/policy` remains a compatibility alias. The Control Set detail surface shows targets, authority, scope, reviewer requirements, canonical version and hash, compatibility, rollout, acknowledgement, rollback, and audit evidence.
 
-Until the corresponding Guard Cloud PR lands and its exact UI/API is tested against this Local target:
+The composed operator workflow is:
 
-- keep Managed Controls Cloud deployment disabled;
-- do not publish operator steps for authoring, signing, canarying, pausing, or rolling back a Control Set;
-- do not claim a device is compatible from the local CLI alone;
-- do not treat the ADR or wire-field parser as delivery evidence;
-- continue to use Local Extensions and existing policy behavior without implying that local safety requires Cloud.
+1. Create a Control Set from an Extension or permission target. Keep raw matcher rules in **Advanced**.
+2. Select personal-shared, workspace-shared, or, where entitled and authorized, managed-restrictive authority.
+3. Resolve every compatibility exclusion and complete a successful persisted simulation.
+4. Obtain approval from a distinct eligible owner or administrator when the Control Set requires review.
+5. Create ordered cohorts with a minimum acknowledgement threshold and complete the management step-up challenge.
+6. Start the canary and verify the exact bundle identity, catalog digest, policy and authority revisions, effective projection digest, acknowledgement ratio, and drift state before expanding.
+7. Pause or emergency-stop on mismatch or failure. Rollback requires a reason, step-up authorization, and the exact current candidate identity; it creates a new monotonic publication instead of replaying an old bundle.
 
-## Documentation gate after the Cloud PR lands
+Publishing and rollout require an authenticated workspace actor with the corresponding read/write permissions; managed rollout commands additionally require `guard.controls.publish`. Managed-restrictive controls remain limited to Extension disable, permission disable, and global lockdown.
 
-Before replacing this boundary with executable Cloud instructions, validate and document from the composed release:
+## Availability and compatibility gate
 
-1. the exact customer-visible Managed controls route and authorized roles;
-2. the exact author, validate, simulate, review, sign, deploy, pause, and rollback operations;
-3. the runtime-session/catalog evidence consumed for capability, schema, and digest compatibility;
-4. exclusion behavior for missing capability, unsupported schema, and catalog mismatch;
-5. canary acknowledgement and effective-digest evidence;
-6. workspace isolation, signing authority, monotonic revision, and audit behavior;
-7. real failure and rollback recovery through the shipped UI/API.
+Before authoring, verify the read-model and authoring stages are enabled. Before publication, verify compilation is enabled. Before rollout, verify delivery and enforcement are enabled. Custom Extension continuity is a separate opt-in stage and defaults off.
 
-Add links only to current, versioned, public operator/API documentation produced by that implementation. Never document credentials, private infrastructure, or direct database/cache mutation.
+Treat a device as eligible only when the authenticated runtime session reports the required capability markers, supported control schema, and the expected catalog digest. Missing capability, unsupported schema, stale posture, or catalog mismatch excludes the device; the compiler and delivery path never silently remove an Extension target. Do not use an old route inventory, a historical branch pin, source availability, or the local CLI alone as deployment evidence.
+
+Never document credentials, private infrastructure, direct database/cache mutation, or unredacted runtime payloads.
 
 ## Local safety remains independent
 

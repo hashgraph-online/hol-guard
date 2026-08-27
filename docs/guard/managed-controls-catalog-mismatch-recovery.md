@@ -17,7 +17,7 @@ hol-guard command controls list | jq -e '{schema_version, control_schema_version
 
 `command controls status` does not advertise negotiated capabilities or schema compatibility. `connect status` also does not prove them. The Local catalog endpoint supplies a catalog digest and local control schema; capability negotiation requires the bounded `managedControlsCapabilities`, `extensionControlSchemaVersions`, and `extensionCatalogDigest` evidence carried by the runtime-session sync contract.
 
-The current repository does not expose that negotiated runtime-session evidence through a supported Local operator command. Until the corresponding Cloud implementation provides and validates it, record the mismatch as digest-only observation and keep Managed Controls Cloud deployment blocked.
+The Local CLI does not expose that negotiated runtime-session evidence through a supported operator command. Record the local side as a digest-only observation and use the authenticated Guard Cloud device and rollout views for the negotiated evidence.
 
 ## Diagnose without mutation
 
@@ -33,7 +33,7 @@ Do not attach raw commands, local paths, environment values, credentials, daemon
 
 ## Recover
 
-1. Keep the affected device out of Managed Controls rollout. If no shipped Cloud rollout surface exists, keep the feature disabled rather than inventing pause or reassign operations.
+1. Keep the affected device out of Managed Controls rollout. Pause the affected cohort if its configured acknowledgement or compatibility threshold can no longer be met.
 2. Confirm the expected digest was built from the intended released Local catalog.
 3. If the device is behind and user-managed, preview the supported update with `hol-guard update --dry-run --json`. Managed installations must use their approved MDM update policy.
 4. Do not delete local state, authority data, trusted keyrings, or last-known-good material.
