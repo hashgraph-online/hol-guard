@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .command_errd_extensions import ERRD_COMMAND_RULES
 from .command_backup_extensions import BACKUP_COMMAND_RULES
 from .command_cloud_extensions import CLOUD_COMMAND_RULES
 from .command_database_extensions import DATABASE_COMMAND_RULES
@@ -480,6 +481,7 @@ BUILT_IN_COMMAND_RULES = (
     *REMOTE_COMMAND_RULES,
     *DATABASE_COMMAND_RULES,
     *SEARCH_MESSAGING_COMMAND_RULES,
+    *ERRD_COMMAND_RULES,
 )
 
 _RULES_BY_EXTENSION: dict[str, tuple[CommandSafetyRule, ...]] = {}
