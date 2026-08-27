@@ -199,11 +199,6 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(
     assert advertisement["localRequestId"] == request["request_id"]
     assert advertisement["sourceClaimHash"] == claim["claimHash"]
 
-    monkeypatch.setattr(
-        command_queue,
-        "_cloud_review_sync_repair_status",
-        lambda _store: {"status": "repair_required"},
-    )
     lease = command_queue._lease_payload(store, operations=(EXACT_CLOUD_REVIEW_OPERATION,))
     assert "localRequestsSnapshot" not in lease
     assert lease["protocolVersion"] == EXACT_CLOUD_REVIEW_PROTOCOL_VERSION

@@ -25,6 +25,11 @@ from codex_plugin_scanner.guard.store import GuardStore
 NOW = "2026-08-24T12:00:00+00:00"
 
 
+def test_retired_approval_executor_source_is_absent() -> None:
+    runtime = Path(__file__).resolve().parents[1] / "src" / "codex_plugin_scanner" / "guard" / "runtime"
+    assert not (runtime / "legacy_approval_command_executor.py").exists()
+
+
 def _live_codex_wait_metadata() -> dict[str, object]:
     identity = current_process_identity()
     assert identity is not None

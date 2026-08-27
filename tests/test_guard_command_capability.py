@@ -188,6 +188,29 @@ def test_every_supported_operation_has_one_local_side_effect_classification() ->
     assert not (set(READ_ONLY_COMMAND_OPERATIONS) & set(STATE_CHANGING_COMMAND_OPERATIONS))
 
 
+def test_retired_cloud_review_operations_are_not_advertised_or_authorizable(tmp_path: Path) -> None:
+    retired_operations = (
+        "guard.approval.resolve",
+        "guard.localRequests.snapshot",
+        "guard.liveRequests.reassignQuarantined",
+    )
+    classified = (
+        set(READ_ONLY_COMMAND_OPERATIONS)
+        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
+        | set(STATE_CHANGING_COMMAND_OPERATIONS)
+    )
+    assert not (set(retired_operations) & set(SUPPORTED_COMMAND_OPERATIONS))
+    assert not (set(retired_operations) & classified)
+
+    store = _connected_store(tmp_path)
+    _issue(store, "guard.packageShims.status")
+    for index, operation in enumerate(retired_operations):
+        job = _job(store, job_id=f"retired-job-{index}")
+        job["operation"] = operation
+        with pytest.raises(CommandCapabilityError, match="command_operation_unsupported"):
+            authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+
+
 def test_policy_memory_capability_requires_its_own_local_confirmation(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     _issue(store, "guard.review.syncPolicyMemory")
