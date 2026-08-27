@@ -56,14 +56,17 @@ def prepare_v1_continuity(
         elif local.get("identity_hash") != identity_hash:
             status, reason = "changed_identity", "identity_mismatch"
         else:
-            overrides_changed = _plan_matched_item(
-                store,
-                cli_id=cli_id,
-                local=local,
-                settings=settings,
-                remaining_overrides=remaining_overrides,
-                authority_updates=authority_updates,
-            ) or overrides_changed
+            overrides_changed = (
+                _plan_matched_item(
+                    store,
+                    cli_id=cli_id,
+                    local=local,
+                    settings=settings,
+                    remaining_overrides=remaining_overrides,
+                    authority_updates=authority_updates,
+                )
+                or overrides_changed
+            )
             status, reason = "applied", "same_identity"
         evidence: dict[str, object] = {
             "cli_id": cli_id,

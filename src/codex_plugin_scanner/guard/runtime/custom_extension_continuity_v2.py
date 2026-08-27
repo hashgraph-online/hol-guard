@@ -117,9 +117,7 @@ def _preflight_v2(
         raise CustomExtensionContinuityError("prior v2 continuity binding is unavailable")
     stale = _timestamp(cast(str, observation["expiresAt"]), "expiry") <= _timestamp(now, "current time")
     local_items = {
-        str(item["cli_id"]): item
-        for item in store.list_local_cli_items()
-        if isinstance(item.get("cli_id"), str)
+        str(item["cli_id"]): item for item in store.list_local_cli_items() if isinstance(item.get("cli_id"), str)
     }
     local_by_scoped_identity: dict[str, list[dict[str, object]]] = defaultdict(list)
     for local in local_items.values():

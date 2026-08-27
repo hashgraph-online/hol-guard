@@ -47,9 +47,8 @@ def effective_managed_controls_for_activation(
 ) -> tuple[ParsedManagedControlsPolicy | None, frozenset[str], str | None]:
     """Resolve current-candidate or authenticated LKG managed semantics."""
 
-    if (
-        validated_policy_bundle is not None
-        and activation_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
+    if validated_policy_bundle is not None and activation_bundle.get("bundleHash") == validated_policy_bundle.get(
+        "bundleHash"
     ):
         return candidate, candidate_capabilities, None
     capabilities = managed_controls_lkg_capabilities(store, activation_bundle)
