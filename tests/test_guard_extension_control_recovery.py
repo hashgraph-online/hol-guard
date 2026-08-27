@@ -79,14 +79,23 @@ def test_recovery_can_install_lower_recovered_revision(
     assert effective["revision"] == 4
 
 
-def test_recovery_marks_stale_protected_runtime_fail_safe_before_reset(
+@pytest.mark.parametrize(
+    "runtime_health",
+    (
+        AuthorityHealth.PROTECTED,
+        AuthorityHealth.UNENROLLED,
+        AuthorityHealth.DEGRADED_UNACKNOWLEDGED,
+    ),
+)
+def test_recovery_marks_runtime_fail_safe_before_reset(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    runtime_health: AuthorityHealth,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     damaged = _view(AuthorityHealth.RECOVERY_REQUIRED, 9)
     recovered = _view(AuthorityHealth.PROTECTED, 4)
-    runtime = ExtensionControlRuntime(_view(AuthorityHealth.PROTECTED, 9))
+    runtime = ExtensionControlRuntime(_view(runtime_health, 9))
     service = ExtensionControlApiService(
         store=store,
         registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,

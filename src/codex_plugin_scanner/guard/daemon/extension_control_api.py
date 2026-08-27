@@ -155,8 +155,7 @@ class ExtensionControlApiService:
                     raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
                 return self.effective()
             raise ExtensionControlApiError(409, "authority_not_recoverable")
-        if self._runtime.current().health is AuthorityHealth.PROTECTED:
-            _ = self._runtime.refresh(current)
+        _ = self._runtime.refresh(current)
         session_nonce = required_request_string(payload, "session_nonce")
         action = "recover-authority"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
