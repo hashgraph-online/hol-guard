@@ -172,9 +172,7 @@ def project_action_explanation(
         recommendation = "Stop it unless you expected this action, or review the retained technical details."
         confidence = "limited"
         uncertainty = [
-            "network_direction_unavailable"
-            if action_type == "network_request"
-            else "semantic_rule_unavailable"
+            "network_direction_unavailable" if action_type == "network_request" else "semantic_rule_unavailable"
         ]
         severity = "high"
     else:
@@ -261,9 +259,7 @@ def project_action_explanation(
         },
         "redaction": {
             "level": (
-                "redacted"
-                if (command_redaction and command_redaction.count) or not technical_available
-                else "none"
+                "redacted" if (command_redaction and command_redaction.count) or not technical_available else "none"
             ),
             "policy_version": ACTION_EXPLANATION_REDACTION_VERSION,
             "omitted_fields": omitted_fields,

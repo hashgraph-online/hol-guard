@@ -704,8 +704,7 @@ def update_guard_settings(
     presentation_preference_keys = {"presentation_mode", "presentation_mode_explicit"}
     supplied_presentation = presentation_keys & payload.keys()
     coerced_presentation: dict[str, object] = {
-        key: _coerce_editable_setting(key, payload[key])
-        for key in supplied_presentation
+        key: _coerce_editable_setting(key, payload[key]) for key in supplied_presentation
     }
     has_presentation_preference = bool(presentation_preference_keys & payload.keys())
     if "presentation_revision" in payload and not has_presentation_preference:
