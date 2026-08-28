@@ -62,7 +62,7 @@ from .update_desktop_apply import (
     finalize_desktop_update_status,
     run_desktop_managed_update,
 )
-from .update_desktop_core import is_desktop_managed_runtime, pypi_desktop_core_versions
+from .update_desktop_core import is_desktop_managed_runtime
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
 from .update_subprocess import (
@@ -2940,11 +2940,7 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
     }
     if trusted_failure_reason is not None:
         payload["reason_code"] = trusted_failure_reason
-    return finalize_desktop_update_status(
-        payload,
-        candidates=pypi_desktop_core_versions(_last_pypi_payload, include_alpha=include_alpha),
-        include_alpha=include_alpha,
-    )
+    return finalize_desktop_update_status(payload, pypi_payload=_last_pypi_payload)
 
 
 def _status_installed_distribution(

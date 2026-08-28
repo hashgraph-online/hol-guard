@@ -98,14 +98,15 @@ def desktop_core_apply_failure_message(reason_code: str) -> str:
 def finalize_desktop_update_status(
     payload: dict[str, object],
     *,
-    candidates: list[str],
-    include_alpha: bool,
+    pypi_payload: object,
 ) -> dict[str, object]:
     if payload.get("installer") != "desktop":
         return payload
     version_check = payload.get("version_check")
     if not isinstance(version_check, dict):
         return payload
+    include_alpha = payload.get("release_channel") == "alpha"
+    candidates = pypi_desktop_core_versions(pypi_payload, include_alpha=include_alpha)
     current_version = str(payload.get("current_version") or "")
     refined = refine_desktop_version_check(
         current_version,

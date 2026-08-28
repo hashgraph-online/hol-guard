@@ -1,5 +1,4 @@
 name: Publish Desktop Core stable feed
-
 on:
   pull_request:
     paths:
@@ -20,20 +19,16 @@ on:
     inputs:
       core_version:
         description: Optional exact published stable Core version to backfill
-        required: false
         type: string
   workflow_run:
     workflows: ["Publish to PyPI"]
     types: [completed]
     branches: [main]
-
 permissions:
   contents: read
-
 concurrency:
   group: desktop-core-stable-feed
   cancel-in-progress: false
-
 jobs:
   validate:
     name: Validate workflow
@@ -55,7 +50,6 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
       - name: Validate workflow syntax
         run: '"$(go env GOPATH)/bin/actionlint" .github/workflows/desktop-core-alpha-feed.yml'
-
   publish-macos-arm64:
     name: Publish signed macOS arm64 Core sidecar
     if: >-
@@ -155,7 +149,6 @@ jobs:
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           git -C "$TRUST_REPO" merge-base --is-ancestor \
             "$SOURCE_SHA" "refs/remotes/origin/${RELEASE_BRANCH}"
-
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern "hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl" \
             --dir "$TRUST_ASSETS"
@@ -292,7 +285,6 @@ jobs:
           import os
           import re
           from pathlib import Path
-
           root = Path(os.environ["RUNNER_TEMP"])
           identity_text = (root / "codesign-identities.txt").read_text(encoding="utf-8")
           matches = re.findall(r'^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"[^"]+"\s*$', identity_text, flags=re.MULTILINE)

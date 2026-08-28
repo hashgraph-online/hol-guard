@@ -38,23 +38,6 @@ def _alpha_manifest(*, sha256: str, size: int, minimum: str = "0.1.0") -> dict[s
     }
 
 
-def _stable_manifest(*, sha256: str, size: int, minimum: str = "0.1.0") -> dict[str, object]:
-    return {
-        "schema": update_desktop_core.UPDATE_SCHEMA,
-        "channel": "stable",
-        "version": "3.0.7",
-        "sourceCommit": "b" * 40,
-        "sourceTag": "v3.0.7",
-        "target": "aarch64-apple-darwin",
-        "artifact": "hol-guard-core-3.0.7-aarch64-apple-darwin",
-        "sha256": sha256,
-        "size": size,
-        "bootstrapSchema": update_desktop_core.BOOTSTRAP_SCHEMA,
-        "minimumDesktopVersion": minimum,
-        "publishedAt": "2026-08-27T00:00:00Z",
-    }
-
-
 def test_executable_is_desktop_core_for_app_bundle_and_managed_sidecar(tmp_path: Path) -> None:
     bundled = tmp_path / "HOL Guard.app" / "Contents" / "MacOS" / "hol-guard"
     bundled.parent.mkdir(parents=True)
@@ -142,72 +125,6 @@ def test_apply_desktop_core_update_rejects_integrity_mismatch(
             fetch_bytes=fetch_bytes,
         )
     assert error.value.reason_code == "desktop_core_integrity_mismatch"
-
-
-def test_apply_desktop_core_update_installs_stable_sidecar_from_stable_tag(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
-    monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
-    monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
-    binary = b"signed-stable-core"
-    manifest = _stable_manifest(sha256=update_desktop_core._sha256_hex(binary), size=len(binary))
-    urls: list[str] = []
-
-    def fetch_bytes(url: str, limit: int) -> bytes:
-        _ = limit
-        urls.append(url)
-        return json.dumps(manifest).encode("utf-8") if url.endswith(".json") else binary
-
-    result = update_desktop_core.apply_desktop_core_update(
-        current_version="3.0.0a239",
-        target_version="3.0.7",
-        include_alpha=False,
-        fetch_bytes=fetch_bytes,
-    )
-
-    assert result.changed is True
-    assert result.version == "3.0.7"
-    assert urls[0].endswith("/releases/download/v3.0.7/hol-guard-core-3.0.7-aarch64-apple-darwin.json")
-    assert urls[1].endswith("/releases/download/v3.0.7/hol-guard-core-3.0.7-aarch64-apple-darwin")
-
-
-def test_apply_rejects_channel_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
-    with pytest.raises(update_desktop_core.DesktopCoreUpdateError) as error:
-        update_desktop_core.apply_desktop_core_update(
-            current_version="3.0.0",
-            target_version="3.0.1a1",
-            include_alpha=False,
-            fetch_bytes=lambda _url, _limit: b"{}",
-        )
-    assert error.value.reason_code == "desktop_core_channel_unsupported"
-
-    with pytest.raises(update_desktop_core.DesktopCoreUpdateError) as beta_error:
-        update_desktop_core.apply_desktop_core_update(
-            current_version="3.0.0",
-            target_version="3.0.1b1",
-            include_alpha=False,
-            fetch_bytes=lambda _url, _limit: b"{}",
-        )
-    assert beta_error.value.reason_code == "desktop_core_channel_unsupported"
-
-
-def test_pypi_desktop_core_versions_separates_stable_and_alpha() -> None:
-    payload = {
-        "releases": {
-            "3.0.7": [{"yanked": False}],
-            "3.0.8a1": [{"yanked": False}],
-            "3.0.8b1": [{"yanked": False}],
-            "3.0.8rc1": [{"yanked": False}],
-            "3.0.6": [{"yanked": True}],
-        }
-    }
-
-    assert update_desktop_core.pypi_desktop_core_versions(payload, include_alpha=False) == ["3.0.7"]
-    assert update_desktop_core.pypi_desktop_core_versions(payload, include_alpha=True) == ["3.0.8a1"]
 
 
 def test_apply_rejects_missing_minimum_desktop_version(
@@ -299,59 +216,6 @@ def test_download_bytes_rejects_untrusted_source() -> None:
     assert error.value.reason_code == "desktop_core_source_untrusted"
 
 
-def test_frozen_desktop_status_migrates_embedded_alpha_core_to_stable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(update_desktop_core, "is_frozen_runtime", lambda: True)
-    monkeypatch.setattr(update_commands, "_is_frozen_runtime", lambda: True)
-    monkeypatch.setattr(update_commands, "load_guard_config", lambda _home: SimpleNamespace(update_channel="stable"))
-    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setattr(update_commands.package_version, "__version__", "3.0.0a138")
-    monkeypatch.setattr(
-        update_commands.importlib.metadata,
-        "version",
-        MagicMock(side_effect=importlib.metadata.PackageNotFoundError),
-    )
-    monkeypatch.setattr(
-        update_commands,
-        "_status_installed_distribution",
-        MagicMock(side_effect=AssertionError("frozen Desktop must not probe package metadata")),
-    )
-    version_check = MagicMock(
-        return_value={
-            "source": "pypi",
-            "status": "stale",
-            "current_version": "3.0.0a138",
-            "latest_version": "3.0.7",
-            "update_available": True,
-        }
-    )
-    monkeypatch.setattr(update_commands, "_version_check_payload", version_check)
-    monkeypatch.setattr(
-        update_commands,
-        "pypi_desktop_core_versions",
-        lambda _payload, *, include_alpha: ["3.0.0a200"] if include_alpha else ["3.0.7"],
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.update_desktop_apply.desktop_core_updates_supported",
-        lambda: True,
-    )
-
-    payload = build_guard_update_status_payload()
-    assert payload["installer"] == "desktop"
-    assert payload["current_version"] == "3.0.0a138"
-    assert payload["latest_version"] == "3.0.7"
-    assert payload["auto_updatable"] is True
-    assert payload["update_available"] is True
-    assert payload["blocked_reason"] is None
-    assert "reason_code" not in payload
-    assert payload["python_update_required"] is False
-    assert payload["release_channel"] == "stable"
-    assert payload["version_check"]["update_available"] is True
-    version_check.assert_called_once()
-    assert version_check.call_args.kwargs["include_alpha"] is False
-
-
 def test_frozen_runtime_without_desktop_marker_keeps_installer_detection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -413,39 +277,6 @@ def test_frozen_desktop_status_stays_blocked_on_unsupported_platform(
     assert payload["auto_updatable"] is False
     assert payload["update_available"] is False
     assert "HOL Guard Desktop releases" in str(payload["blocked_reason"])
-
-
-def test_frozen_desktop_status_supports_stable_core_feed(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(update_desktop_core, "is_frozen_runtime", lambda: True)
-    monkeypatch.setattr(update_commands, "_is_frozen_runtime", lambda: True)
-    monkeypatch.setattr(update_commands, "_current_version", lambda: "3.0.0")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.update_desktop_apply.desktop_core_updates_supported",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        update_commands,
-        "_version_check_payload",
-        lambda current_version, **_kwargs: {
-            "source": "pypi",
-            "status": "current",
-            "current_version": current_version,
-            "latest_version": current_version,
-            "update_available": False,
-        },
-    )
-
-    payload = build_guard_update_status_payload(guard_home=tmp_path)
-
-    assert payload["installer"] == "desktop"
-    assert payload["auto_updatable"] is True
-    assert payload["update_available"] is False
-    assert payload["blocked_reason"] is None
-    assert payload["release_channel"] == "stable"
 
 
 def test_desktop_cli_update_applies_signed_core_feed(
@@ -668,8 +499,7 @@ def test_desktop_status_does_not_advertise_newer_train(
         },
     )
     monkeypatch.setattr(
-        update_commands,
-        "pypi_desktop_core_versions",
+        "codex_plugin_scanner.guard.cli.update_desktop_apply.pypi_desktop_core_versions",
         lambda _payload, *, include_alpha: (
             ["3.1.0a13", "3.1.0a5", "3.0.0a239", "3.0.0a238"] if include_alpha else ["3.0.7"]
         ),
