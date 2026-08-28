@@ -15,7 +15,7 @@ FATAL_SQLITE_ERROR_MARKERS = (
 )
 SQLITE_IO_ERROR_MARKER = "disk i/o error"
 SQLiteStoreProbe = Literal["fatal", "healthy", "io", "unknown"]
-SQLiteFileIdentity = tuple[int, int, int, int]
+SQLiteFileIdentity = tuple[int, int, int, int, int]
 SQLiteStoreIdentity = tuple[SQLiteFileIdentity | None, SQLiteFileIdentity | None, SQLiteFileIdentity | None]
 
 
@@ -59,7 +59,9 @@ def _sqlite_store_identity(path: Path) -> SQLiteStoreIdentity:
         except OSError:
             identities.append(None)
             continue
-        identities.append((metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns))
+        identities.append(
+            (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns)
+        )
     return identities[0], identities[1], identities[2]
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 import threading
 import time
@@ -242,6 +243,35 @@ def test_fatal_error_recovery_rejects_changing_sqlite_sidecars(
         probe_count += 1
         if probe_count == 1:
             wal.write_bytes(b"changed")
+        return "fatal"
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery._probe_sqlite_store", fatal_probe)
+
+    assert (
+        store._store_is_proven_unusable(  # pyright: ignore[reportPrivateUsage]
+            sqlite3.DatabaseError("database disk image is malformed")
+        )
+        is False
+    )
+    assert probe_count == 1
+
+
+def test_fatal_error_recovery_rejects_same_size_sidecar_rewrite_with_restored_mtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    wal = Path(f"{store.path}-wal")
+    wal.write_bytes(b"first")
+    original_stat = wal.stat()
+    probe_count = 0
+
+    def fatal_probe(_path: Path) -> str:
+        nonlocal probe_count
+        probe_count += 1
+        if probe_count == 1:
+            wal.write_bytes(b"other")
+            os.utime(wal, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
         return "fatal"
 
     monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery._probe_sqlite_store", fatal_probe)
