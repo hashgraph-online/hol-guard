@@ -80,7 +80,8 @@ def desktop_core_updates_supported() -> bool:
 
 
 def desktop_core_uses_alpha_channel(current_version: str, *, requested_alpha: bool) -> bool:
-    return requested_alpha or _version_is_prerelease(current_version)
+    _ = current_version
+    return requested_alpha
 
 
 def desktop_core_release_series(version: str) -> tuple[int, int] | None:
@@ -91,7 +92,7 @@ def desktop_core_release_series(version: str) -> tuple[int, int] | None:
     return (parsed.major, parsed.minor)
 
 
-def pypi_alpha_versions(payload: object) -> list[str]:
+def pypi_desktop_core_versions(payload: object, *, include_alpha: bool) -> list[str]:
     if not isinstance(payload, dict):
         return []
     releases = payload.get("releases")
@@ -105,11 +106,15 @@ def pypi_alpha_versions(payload: object) -> list[str]:
             parsed_version = Version(version_text)
         except InvalidVersion:
             continue
-        if parsed_version.pre is None or parsed_version.pre[0] != "a":
+        if not _version_matches_channel(parsed_version, include_alpha=include_alpha):
             continue
         if _release_files_are_available(files):
             versions.append(version_text.strip())
     return versions
+
+
+def pypi_alpha_versions(payload: object) -> list[str]:
+    return pypi_desktop_core_versions(payload, include_alpha=True)
 
 
 def _release_files_are_available(files: object) -> bool:
@@ -118,7 +123,12 @@ def _release_files_are_available(files: object) -> bool:
     return any(isinstance(item, dict) and not item.get("yanked") for item in files)
 
 
-def select_desktop_core_latest(current_version: str, candidates: list[str]) -> str | None:
+def select_desktop_core_latest(
+    current_version: str,
+    candidates: list[str],
+    *,
+    include_alpha: bool = True,
+) -> str | None:
     series = desktop_core_release_series(current_version)
     if series is None:
         return None
@@ -133,7 +143,7 @@ def select_desktop_core_latest(current_version: str, candidates: list[str]) -> s
             continue
         if (parsed.major, parsed.minor) != series:
             continue
-        if parsed.pre is None or parsed.pre[0] != "a":
+        if not _version_matches_channel(parsed, include_alpha=include_alpha):
             continue
         matching.append((parsed, candidate))
     if not matching:
@@ -167,10 +177,14 @@ def apply_desktop_core_update(
             version=current_version,
             changed=False,
         )
-    if not include_alpha and not _version_is_prerelease(target_version):
+    try:
+        parsed_target = Version(target_version)
+    except InvalidVersion as error:
+        raise DesktopCoreUpdateError("desktop_core_channel_unsupported") from error
+    if not _version_matches_channel(parsed_target, include_alpha=include_alpha):
         raise DesktopCoreUpdateError("desktop_core_channel_unsupported")
-    channel = "alpha"
-    tag = f"alpha/v{normalized_target}"
+    channel = "alpha" if include_alpha else "stable"
+    tag = f"alpha/v{normalized_target}" if include_alpha else f"v{normalized_target}"
     artifact = f"hol-guard-core-{normalized_target}-{target}"
 
     def _default_download(url: str, limit: int) -> bytes:
@@ -229,11 +243,10 @@ def executable_is_desktop_core(executable: Path) -> bool:
     return any((parent / sibling).is_file() for sibling in ("hol-guard-desktop", "hol-guard-desktop.exe"))
 
 
-def _version_is_prerelease(value: str) -> bool:
-    try:
-        return Version(value).is_prerelease
-    except InvalidVersion:
-        return False
+def _version_matches_channel(version: Version, *, include_alpha: bool) -> bool:
+    if include_alpha:
+        return version.pre is not None and version.pre[0] == "a"
+    return not version.is_prerelease
 
 
 def _version_is_not_newer(target_version: str, current_version: str) -> bool:
@@ -432,5 +445,6 @@ __all__ = [
     "is_frozen_runtime",
     "platform_target",
     "pypi_alpha_versions",
+    "pypi_desktop_core_versions",
     "select_desktop_core_latest",
 ]

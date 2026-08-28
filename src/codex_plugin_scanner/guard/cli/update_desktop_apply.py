@@ -15,11 +15,10 @@ from .update_desktop_core import (
     apply_desktop_core_update,
     desktop_core_updates_supported,
     desktop_core_uses_alpha_channel,
-    pypi_alpha_versions,
+    pypi_desktop_core_versions,
     select_desktop_core_latest,
 )
 
-_STABLE_CORE_FEED_MESSAGE = "Stable Core updates are not published yet. Switch the update channel to alpha."
 _DAEMON_REFRESH_FAILED = "HOL Guard was updated, but its daemon could not be restarted safely."
 _APPLY_FAILURE_FALLBACK = "HOL Guard could not apply the signed Core update. The installed version stays in place."
 _APPLY_FAILURE_MESSAGES = {
@@ -53,9 +52,7 @@ def desktop_update_status_state(
             "This platform receives Core updates with HOL Guard Desktop releases.",
         )
     include_alpha = desktop_core_uses_alpha_channel(current_version, requested_alpha=requested_alpha)
-    if include_alpha:
-        return True, True, None
-    return False, False, _STABLE_CORE_FEED_MESSAGE
+    return include_alpha, True, None
 
 
 def refine_desktop_version_check(
@@ -63,6 +60,7 @@ def refine_desktop_version_check(
     version_check: dict[str, object],
     *,
     candidates: list[str],
+    include_alpha: bool,
 ) -> dict[str, object]:
     status = str(version_check.get("status") or "")
     source = str(version_check.get("source") or "")
@@ -75,7 +73,7 @@ def refine_desktop_version_check(
     current = current_version.strip()
     if current and current not in known:
         known.append(current)
-    selected = select_desktop_core_latest(current_version, known)
+    selected = select_desktop_core_latest(current_version, known, include_alpha=include_alpha)
     refined = dict(version_check)
     refined["source"] = "desktop_core"
     if selected is None:
@@ -101,6 +99,7 @@ def finalize_desktop_update_status(
     payload: dict[str, object],
     *,
     candidates: list[str],
+    include_alpha: bool,
 ) -> dict[str, object]:
     if payload.get("installer") != "desktop":
         return payload
@@ -112,6 +111,7 @@ def finalize_desktop_update_status(
         current_version,
         version_check,
         candidates=candidates,
+        include_alpha=include_alpha,
     )
     latest_version = refined.get("latest_version")
     payload["version_check"] = refined
@@ -154,7 +154,11 @@ def run_desktop_managed_update(
             network_policy=network_policy,
             include_alpha=include_alpha,
         ),
-        candidates=pypi_alpha_versions(commands._last_pypi_payload),
+        candidates=pypi_desktop_core_versions(
+            commands._last_pypi_payload,
+            include_alpha=include_alpha,
+        ),
+        include_alpha=include_alpha,
     )
     payload["version_check"] = version_check
     already_current = (
@@ -250,9 +254,7 @@ def _desktop_update_preflight(
     payload["current_version"] = current_version
     include_alpha = desktop_core_uses_alpha_channel(current_version, requested_alpha=include_alpha)
     payload["retry_command"] = commands._safe_update_retry_command(None, include_alpha=include_alpha)
-    if not include_alpha:
-        return _blocked_desktop_payload(payload, "desktop_core_channel_unsupported", _STABLE_CORE_FEED_MESSAGE)
-    payload["release_channel"] = "alpha"
+    payload["release_channel"] = "alpha" if include_alpha else "stable"
     return None
 
 
