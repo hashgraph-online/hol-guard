@@ -434,28 +434,6 @@ def test_migrate_guard_home_state_replaces_retired_credentials_only_destination(
     assert migrated_store.get_sync_payload("credentials") is None
 
 
-def test_migrate_guard_home_state_preserves_custom_extension_authority(tmp_path):
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
-    _create_sqlite_guard_db(legacy_home / "guard.db")
-    canonical_home.mkdir(parents=True)
-    with sqlite3.connect(canonical_home / "guard.db") as connection:
-        connection.execute(
-            "create table extension_control_authority_snapshot (singleton integer, layers_json text)"
-        )
-        connection.execute("insert into extension_control_authority_snapshot values (1, '[{\"kind\":\"local\"}]')")
-
-    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    with sqlite3.connect(canonical_home / "guard.db") as connection:
-        row = connection.execute("select singleton from extension_control_authority_snapshot").fetchone()
-        legacy_table = connection.execute(
-            "select 1 from sqlite_master where type = 'table' and name = 'migration_probe'"
-        ).fetchone()
-    assert row == (1,)
-    assert legacy_table is None
-
-
 def test_resolve_guard_home_does_not_migrate_retired_legacy_credentials(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"

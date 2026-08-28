@@ -24,6 +24,7 @@ else:  # pragma: no cover - runtime compatibility
 from .action_lattice import coerce_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
 from .config_preset_support import apply_named_posture_harness_policy
+from .guard_home_state import database_has_custom_extension_state
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
@@ -1338,23 +1339,19 @@ def _guard_home_has_state(path: Path) -> bool:
     entries = list(path.iterdir())
     if not entries:
         return False
-    state_entries = [
-        entry
-        for entry in entries
-        if entry.name
+    if any(
+        entry.name
         not in {
             "guard.db",
             "secrets",
             *GUARD_HOME_METADATA_FILES,
             *NON_MIGRATED_GUARD_RUNTIME_FILES,
         }
-    ]
-    if state_entries:
+        for entry in entries
+    ):
         return True
     secrets_dir = path / "secrets"
-    if secrets_dir.is_dir() and any(
-        entry.name not in {"key.bin", ".key-init.lock"} for entry in secrets_dir.iterdir()
-    ):
+    if secrets_dir.is_dir() and any(entry.name not in {"key.bin", ".key-init.lock"} for entry in secrets_dir.iterdir()):
         return True
     database_path = path / "guard.db"
     if not database_path.is_file():
@@ -1384,20 +1381,9 @@ def _guard_home_has_state(path: Path) -> bool:
                     continue
                 if connection.execute(f"select 1 from {table_name} limit 1").fetchone() is not None:
                     return True
-            if "extension_control_authority_snapshot" in tables:
-                snapshot = connection.execute(
-                    "select layers_json from extension_control_authority_snapshot where singleton = 1"
-                ).fetchone()
-                if snapshot is not None:
-                    try:
-                        layers = json.loads(str(snapshot[0]))
-                    except json.JSONDecodeError:
-                        return True
-                    if isinstance(layers, list) and layers:
-                        return True
+            return database_has_custom_extension_state(connection, tables)
     except sqlite3.Error:
         return True
-    return False
 
 
 def _guard_home_has_sync_credentials(path: Path) -> bool:
