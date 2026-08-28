@@ -15,6 +15,8 @@ FATAL_SQLITE_ERROR_MARKERS = (
 )
 SQLITE_IO_ERROR_MARKER = "disk i/o error"
 SQLiteStoreProbe = Literal["fatal", "healthy", "io", "unknown"]
+SQLiteFileIdentity = tuple[int, int, int, int]
+SQLiteStoreIdentity = tuple[SQLiteFileIdentity | None, SQLiteFileIdentity | None, SQLiteFileIdentity | None]
 
 
 def _sqlite_readonly_uri(path: Path) -> str:
@@ -49,6 +51,18 @@ def _guard_home_accepts_sqlite_write(guard_home: Path) -> bool:
             probe_path.unlink()
 
 
+def _sqlite_store_identity(path: Path) -> SQLiteStoreIdentity:
+    identities: list[SQLiteFileIdentity | None] = []
+    for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
+        try:
+            metadata = candidate.stat()
+        except OSError:
+            identities.append(None)
+            continue
+        identities.append((metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns))
+    return identities[0], identities[1], identities[2]
+
+
 def sqlite_store_is_proven_unusable(
     *,
     path: Path,
@@ -61,14 +75,16 @@ def sqlite_store_is_proven_unusable(
     io_error = SQLITE_IO_ERROR_MARKER in str(error).lower()
     if not fatal_error and not io_error:
         return False
-    state = _probe_sqlite_store(path)
-    if state == "healthy":
+    initial_identity = _sqlite_store_identity(path)
+    first_state = _probe_sqlite_store(path)
+    confirmed_identity = _sqlite_store_identity(path)
+    if initial_identity != confirmed_identity or first_state == "healthy":
         return False
-    if state == "fatal":
-        return True
-    if state != "io" or not _guard_home_accepts_sqlite_write(guard_home):
+    if first_state != "fatal" or not _guard_home_accepts_sqlite_write(guard_home):
         return False
-    return _probe_sqlite_store(path) in {"fatal", "io"}
+    second_state = _probe_sqlite_store(path)
+    final_identity = _sqlite_store_identity(path)
+    return second_state == "fatal" and confirmed_identity == final_identity
 
 
 def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bool:

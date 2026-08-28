@@ -1352,7 +1352,9 @@ def _guard_home_has_state(path: Path) -> bool:
     if state_entries:
         return True
     secrets_dir = path / "secrets"
-    if secrets_dir.is_dir() and any(entry.name != "key.bin" for entry in secrets_dir.iterdir()):
+    if secrets_dir.is_dir() and any(
+        entry.name not in {"key.bin", ".key-init.lock"} for entry in secrets_dir.iterdir()
+    ):
         return True
     database_path = path / "guard.db"
     if not database_path.is_file():
@@ -1382,6 +1384,17 @@ def _guard_home_has_state(path: Path) -> bool:
                     continue
                 if connection.execute(f"select 1 from {table_name} limit 1").fetchone() is not None:
                     return True
+            if "extension_control_authority_snapshot" in tables:
+                snapshot = connection.execute(
+                    "select layers_json from extension_control_authority_snapshot where singleton = 1"
+                ).fetchone()
+                if snapshot is not None:
+                    try:
+                        layers = json.loads(str(snapshot[0]))
+                    except json.JSONDecodeError:
+                        return True
+                    if isinstance(layers, list) and layers:
+                        return True
     except sqlite3.Error:
         return True
     return False
