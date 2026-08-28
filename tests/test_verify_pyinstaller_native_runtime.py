@@ -139,3 +139,9 @@ def test_verifier_rejects_manifest_digest_mismatch(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="digest"):
         module.verify(archive)
+
+
+def test_native_verifier_reuses_signing_team_id() -> None:
+    text = VERIFIER.read_text(encoding="utf-8")
+    assert "def _team_id" not in text
+    assert "signing._team_id(" in text

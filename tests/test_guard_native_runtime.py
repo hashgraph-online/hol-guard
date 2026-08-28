@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -106,6 +107,37 @@ def test_explicit_shadow_runtime_is_validated_without_path_lookup(
     assert status.compatible is True
     assert status.identity is not None
     assert status.identity.path == binary.resolve()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="PyInstaller DATA drops POSIX execute bits")
+def test_bundled_runtime_restores_owner_execute(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"native-runtime")
+    runtime.chmod(0o644)
+    monkeypatch.setattr(native_runtime_module, "_bundled_runtime_candidate", lambda: runtime)
+
+    native_runtime_module._restore_bundled_runtime_execute_bit(runtime)
+
+    assert stat.S_IMODE(runtime.stat().st_mode) & 0o111 == 0o111
+    assert stat.S_IMODE(runtime.stat().st_mode) & 0o022 == 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="PyInstaller DATA drops POSIX execute bits")
+def test_bundled_runtime_skips_world_writable_execute_restore(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"native-runtime")
+    runtime.chmod(0o666)
+    monkeypatch.setattr(native_runtime_module, "_bundled_runtime_candidate", lambda: runtime)
+
+    native_runtime_module._restore_bundled_runtime_execute_bit(runtime)
+
+    assert stat.S_IMODE(runtime.stat().st_mode) & 0o111 == 0
 
 
 def test_override_is_ignored_in_auto_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

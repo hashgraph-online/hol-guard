@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import importlib.util
 import json
-import subprocess
 from pathlib import Path
 
 _SIGNING_PATH = Path(__file__).with_name("verify_pyinstaller_macos_signing.py")
@@ -38,21 +37,6 @@ def _is_native_runtime_entry(name: str) -> bool:
 def _is_native_manifest_entry(name: str) -> bool:
     parts = Path(_posix_name(name)).parts
     return len(parts) >= 2 and parts[-1] == _MANIFEST_NAME and parts[-2] == _NATIVE_PARENT
-
-
-def _team_id(path: Path) -> str:
-    result = subprocess.run(
-        ["codesign", "--display", "--verbose=4", str(path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise ValueError(f"Bundled native runtime is not code signed: {result.stderr.strip()}")
-    for line in result.stderr.splitlines():
-        if line.startswith("TeamIdentifier="):
-            return line.split("=", 1)[1]
-    raise ValueError("Bundled native runtime has no TeamIdentifier")
 
 
 def verify(binary: Path, expected_team_id: str | None = None) -> None:
@@ -98,7 +82,7 @@ def verify(binary: Path, expected_team_id: str | None = None) -> None:
         with tempfile.TemporaryDirectory(prefix="hol-guard-native-runtime-") as tmp:
             extracted = Path(tmp) / Path(runtime_name).name
             extracted.write_bytes(runtime)
-            actual_team_id = _team_id(extracted)
+            actual_team_id = signing._team_id(extracted)
             if actual_team_id != expected_team_id:
                 raise ValueError(
                     f"Bundled native runtime has TeamIdentifier={actual_team_id!r}; expected {expected_team_id!r}"

@@ -289,6 +289,24 @@ def _is_bundled_candidate(candidate: Path) -> bool:
         return False
 
 
+def _restore_bundled_runtime_execute_bit(path: Path) -> None:
+    """PyInstaller DATA extracts without owner execute; spawn still needs it."""
+    if os.name == "nt" or not _is_bundled_candidate(path):
+        return
+    try:
+        metadata = path.lstat()
+        mode = stat.S_IMODE(metadata.st_mode)
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or mode & 0o022 or mode & stat.S_IXUSR:
+            return
+        current_uid = os.getuid() if hasattr(os, "getuid") else None
+        owner = getattr(metadata, "st_uid", current_uid)
+        if current_uid is not None and owner not in {0, current_uid}:
+            return
+        path.chmod(mode | 0o111)
+    except (OSError, RuntimeError, ValueError):
+        return
+
+
 def _isolated_environment() -> dict[str, str]:
     allowed = {
         "COMSPEC",
@@ -394,6 +412,7 @@ def native_runtime_status() -> NativeRuntimeStatus:
             reason="native_disabled",
         )
     for candidate in _runtime_candidates():
+        _restore_bundled_runtime_execute_bit(candidate)
         identity = _validate_binary(candidate)
         if identity is None:
             continue

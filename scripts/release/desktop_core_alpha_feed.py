@@ -67,6 +67,11 @@ def discover_release(tags_file: Path, requested_version: str = "") -> None:
 
 
 def inspect_assets(assets_file: Path, base: str) -> None:
+    """Reuse a complete published Core set. Native bundling is build-only.
+
+    Existing GitHub Core assets are immutable. A complete set is verified as-is
+    and is not rebuilt, so the native runtime verifier runs only on new builds.
+    """
     names = set(assets_file.read_text(encoding="utf-8").splitlines())
     expected = {base, f"{base}.json", f"{base}.attested.json"}
     present = expected & names

@@ -101,6 +101,18 @@ def test_final_verification_checks_reused_and_new_embedded_team_identity() -> No
     verifier = "python3 -I scripts/release/verify_pyinstaller_macos_signing.py"
     assert verifier in run
     assert run.index(verifier) < run.index('if [[ "$MODE" == "build" ]]; then')
+    assert "verify_pyinstaller_native_runtime.py" not in run
+
+
+def test_reused_core_assets_skip_native_runtime_verifier() -> None:
+    steps = _publish_steps()
+    build = next(step for step in steps if step.get("name") == "Build standalone Core executable")
+    verify = next(
+        step for step in steps if step.get("name") == "Verify exact Apple identity, notarization, and Core contract"
+    )
+    assert build.get("if") == "steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'"
+    assert "verify_pyinstaller_native_runtime.py" in str(build.get("run"))
+    assert "verify_pyinstaller_native_runtime.py" not in str(verify.get("run"))
 
 
 def test_verifier_accepts_framework_runtime_symlink(
