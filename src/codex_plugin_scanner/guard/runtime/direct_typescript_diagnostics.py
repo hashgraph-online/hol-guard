@@ -299,7 +299,7 @@ def _safe_typecheck_node_options(value: str) -> bool:
 
 
 def _token_has_shell_dynamics(value: str) -> bool:
-    return any(marker in value for marker in ("$", "`", "<(", ">(", "\x00", "\n"))
+    return any(marker in value for marker in ("$", "`", "<(", ">(", "*", "?", "[", "\x00", "\n"))
 
 
 def _token_is_shell_redirection(value: str) -> bool:
