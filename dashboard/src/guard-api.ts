@@ -90,6 +90,7 @@ import {
   getDemoReceipts,
   getDemoRequest,
   getDemoRequests,
+  demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
 
@@ -2136,7 +2137,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
     return {
       guard_home: "~/.hol-guard",
       config_path: "~/.hol-guard/config.toml",
-      settings: {
+      settings: { ...demoPresentationSettings,
         mode: "prompt",
         security_level: "balanced",
         default_action: "warn",

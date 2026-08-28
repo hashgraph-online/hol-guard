@@ -26,7 +26,11 @@ _KIND_BY_ACTION_TYPE = {
     "file_write": "file_write",
     "file_delete": "file_delete",
     "file_move": "file_move",
-    "network_request": "network_read",
+    # The generic envelope does not carry a trusted direction or body
+    # discriminator. Keep it limited instead of presenting a possible send as
+    # a harmless read; explicit typed network_read/network_send actions retain
+    # their directional semantics.
+    "network_request": "unknown_action",
     "network_read": "network_read",
     "network_send": "network_send",
     "mcp_tool": "mcp_tool",
@@ -41,20 +45,104 @@ _KIND_BY_ACTION_TYPE = {
 }
 
 _COPY_BY_KIND: dict[str, tuple[str, str, str, str, str]] = {
-    "file_read": ("Read a file", "read", "The app can learn information stored in the selected file.", "Confirm the file is expected and does not contain private data you did not intend to share.", "medium"),
-    "file_write": ("Change a file", "change", "Existing file content may be added, replaced, or removed.", "Confirm the target and keep a backup of important work.", "medium"),
-    "file_delete": ("Delete a file or folder", "delete", "Deleted data may be difficult or impossible to recover.", "Confirm the target and back up important work first.", "high"),
-    "file_move": ("Move or rename a file", "move or rename", "Apps or links that expect the previous location may stop working.", "Confirm the source and destination before continuing.", "medium"),
-    "network_read": ("Connect to a website or service", "contact", "The destination can observe request details and return untrusted content.", "Confirm the destination is expected and trusted.", "medium"),
-    "network_send": ("Send data to a website or service", "send data to", "Information can leave this device and may be retained by the destination.", "Confirm the destination and the exact data being sent.", "high"),
-    "mcp_tool": ("Use a connected tool", "use", "The connected tool may act on external accounts, files, or services within its granted capabilities.", "Confirm the tool and requested action are expected.", "medium"),
-    "browser_action": ("Use the browser", "act on", "The action may change a page, account, or information visible in the browser.", "Confirm the page and requested browser action.", "medium"),
-    "prompt_submission": ("Send information to an AI app", "submit", "The submitted information may be processed outside the current local action.", "Review the information before sending it.", "medium"),
-    "package_script": ("Run a project or package script", "run", "The script can change files, start processes, or contact the network.", "Inspect the script definition and run only the expected target.", "medium"),
-    "process_start": ("Start an AI app or process", "start", "The process can use the capabilities granted to it while it runs.", "Confirm the app or process is expected.", "medium"),
-    "system_change": ("Change a system setting", "change", "The change may affect how this device or its protections behave.", "Confirm the setting and expected effect before continuing.", "high"),
-    "extension_change": ("Change a Guard protection", "change", "The change may affect which supported actions Guard detects or interrupts.", "Review the exact protection change before saving it.", "high"),
-    "guard_control_change": ("Change Guard protection", "change", "The change may affect local protection or Guard availability.", "Keep protection enabled unless this change is intentional and understood.", "critical"),
+    "file_read": (
+        "Read a file",
+        "read",
+        "The app can learn information stored in the selected file.",
+        "Confirm the file is expected and does not contain private data you did not intend to share.",
+        "medium",
+    ),
+    "file_write": (
+        "Change a file",
+        "change",
+        "Existing file content may be added, replaced, or removed.",
+        "Confirm the target and keep a backup of important work.",
+        "medium",
+    ),
+    "file_delete": (
+        "Delete a file or folder",
+        "delete",
+        "Deleted data may be difficult or impossible to recover.",
+        "Confirm the target and back up important work first.",
+        "high",
+    ),
+    "file_move": (
+        "Move or rename a file",
+        "move or rename",
+        "Apps or links that expect the previous location may stop working.",
+        "Confirm the source and destination before continuing.",
+        "medium",
+    ),
+    "network_read": (
+        "Connect to a website or service",
+        "contact",
+        "The destination can observe request details and return untrusted content.",
+        "Confirm the destination is expected and trusted.",
+        "medium",
+    ),
+    "network_send": (
+        "Send data to a website or service",
+        "send data to",
+        "Information can leave this device and may be retained by the destination.",
+        "Confirm the destination and the exact data being sent.",
+        "high",
+    ),
+    "mcp_tool": (
+        "Use a connected tool",
+        "use",
+        "The connected tool may act on external accounts, files, or services within its granted capabilities.",
+        "Confirm the tool and requested action are expected.",
+        "medium",
+    ),
+    "browser_action": (
+        "Use the browser",
+        "act on",
+        "The action may change a page, account, or information visible in the browser.",
+        "Confirm the page and requested browser action.",
+        "medium",
+    ),
+    "prompt_submission": (
+        "Send information to an AI app",
+        "submit",
+        "The submitted information may be processed outside the current local action.",
+        "Review the information before sending it.",
+        "medium",
+    ),
+    "package_script": (
+        "Run a project or package script",
+        "run",
+        "The script can change files, start processes, or contact the network.",
+        "Inspect the script definition and run only the expected target.",
+        "medium",
+    ),
+    "process_start": (
+        "Start an AI app or process",
+        "start",
+        "The process can use the capabilities granted to it while it runs.",
+        "Confirm the app or process is expected.",
+        "medium",
+    ),
+    "system_change": (
+        "Change a system setting",
+        "change",
+        "The change may affect how this device or its protections behave.",
+        "Confirm the setting and expected effect before continuing.",
+        "high",
+    ),
+    "extension_change": (
+        "Change a Guard protection",
+        "change",
+        "The change may affect which supported actions Guard detects or interrupts.",
+        "Review the exact protection change before saving it.",
+        "high",
+    ),
+    "guard_control_change": (
+        "Change Guard protection",
+        "change",
+        "The change may affect local protection or Guard availability.",
+        "Keep protection enabled unless this change is intentional and understood.",
+        "critical",
+    ),
 }
 
 
@@ -76,11 +164,18 @@ def project_action_explanation(
     target_kind, target_label = _safe_target(action_envelope, kind)
     if kind == "unknown_action":
         headline = "Run an action Guard could not fully explain"
-        summary = f"{_safe_text(actor_label, 120)} wants to perform an action. Guard could not confirm the exact intent from the retained typed facts."
+        summary = (
+            f"{_safe_text(actor_label, 120)} wants to perform an action. Guard could not confirm the exact "
+            "intent from the retained typed facts."
+        )
         impact = "The action may change files, accounts, services, or other resources."
         recommendation = "Stop it unless you expected this action, or review the retained technical details."
         confidence = "limited"
-        uncertainty = ["semantic_rule_unavailable"]
+        uncertainty = [
+            "network_direction_unavailable"
+            if action_type == "network_request"
+            else "semantic_rule_unavailable"
+        ]
         severity = "high"
     else:
         headline, verb, impact, recommendation, severity = _COPY_BY_KIND[kind]
@@ -126,8 +221,21 @@ def project_action_explanation(
             "recommendation": recommendation,
             "actor_label": _safe_text(actor_label, 120),
             "targets": [{"kind": target_kind, "label": target_label, "scope": None, "sensitivity": "normal"}],
-            "consequences": [{"message_id": f"guard.everyday.{kind}.consequence", "message": impact, "severity": severity, "confirmed": False}],
-            "safer_alternatives": [{"message_id": f"guard.everyday.{kind}.alternative.review", "message": recommendation, "kind": "review"}],
+            "consequences": [
+                {
+                    "message_id": f"guard.everyday.{kind}.consequence",
+                    "message": impact,
+                    "severity": severity,
+                    "confirmed": False,
+                }
+            ],
+            "safer_alternatives": [
+                {
+                    "message_id": f"guard.everyday.{kind}.alternative.review",
+                    "message": recommendation,
+                    "kind": "review",
+                }
+            ],
         },
         "technical": {
             "available": technical_available,
@@ -152,7 +260,11 @@ def project_action_explanation(
             "action_id": _safe_text(action_identity, 512),
         },
         "redaction": {
-            "level": "redacted" if (command_redaction and command_redaction.count) or not technical_available else "none",
+            "level": (
+                "redacted"
+                if (command_redaction and command_redaction.count) or not technical_available
+                else "none"
+            ),
             "policy_version": ACTION_EXPLANATION_REDACTION_VERSION,
             "omitted_fields": omitted_fields,
             "truncated_fields": [],
@@ -168,7 +280,7 @@ def _safe_target(envelope: Mapping[str, object], kind: str) -> tuple[str, str]:
         if paths:
             return "filesystem_item", f"the item named {_basename(paths[0])}"
         return "filesystem_item", "a file or folder Guard could not safely name"
-    if kind.startswith("network_"):
+    if kind.startswith("network_") or _text(envelope.get("action_type")) == "network_request":
         hosts = _strings(envelope.get("network_hosts"))
         return "network_host", f"the service {_safe_text(hosts[0], 253)}" if hosts else "an external service"
     if kind == "mcp_tool":

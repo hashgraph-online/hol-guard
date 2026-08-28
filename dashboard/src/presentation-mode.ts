@@ -66,15 +66,12 @@ export function resolvePresentationMode(input: {
   if (persistedMode !== null) {
     return resolved(persistedMode, "default", false);
   }
-  const diagnostic = unsupportedSchema
-    ? "unsupported_presentation_schema_fell_back_to_everyday"
-    : (
-      input.value !== undefined &&
-      input.value !== null &&
-      input.value !== ""
-    )
-      ? "unknown_presentation_mode_fell_back_to_everyday"
-      : null;
+  let diagnostic: string | null = null;
+  if (unsupportedSchema) {
+    diagnostic = "unsupported_presentation_schema_fell_back_to_everyday";
+  } else if (input.value !== undefined && input.value !== null && input.value !== "") {
+    diagnostic = "unknown_presentation_mode_fell_back_to_everyday";
+  }
   return resolved("everyday", "default", false, diagnostic);
 }
 

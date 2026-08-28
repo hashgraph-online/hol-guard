@@ -57,8 +57,13 @@ def test_command_projection_requires_deliberate_local_exact_disclosure() -> None
 
 
 def test_network_and_mcp_projections_use_typed_targets_only() -> None:
+    network_input = {
+        "action_id": "network:1",
+        "action_type": "network_request",
+        "network_hosts": ["api.example.com"],
+    }
     network = project_action_explanation(
-        {"action_id": "network:1", "action_type": "network_request", "network_hosts": ["api.example.com"]},
+        network_input,
         action_identity="network:1",
         actor_label="Claude Code",
     )
@@ -67,7 +72,9 @@ def test_network_and_mcp_projections_use_typed_targets_only() -> None:
         action_identity="mcp:1",
         actor_label="Codex",
     )
-    assert network is not None and network.kind == "network_read"
-    assert "api.example.com" in network.everyday.summary
+    assert network is not None and network.kind == "unknown_action"
+    assert network.confidence == "limited"
+    assert network.uncertainty_reasons == ("network_direction_unavailable",)
+    assert network.everyday.targets[0].label == f"the service {network_input['network_hosts'][0]}"
     assert mcp is not None and mcp.kind == "mcp_tool"
     assert "github / create_issue" in mcp.everyday.summary

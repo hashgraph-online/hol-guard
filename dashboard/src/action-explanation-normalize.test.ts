@@ -60,6 +60,27 @@ const explanation = {
 };
 
 assert.equal(parseActionExplanation(explanation, "approval:1").error, null);
+assert.notEqual(parseActionExplanation(explanation, "approval:1").explanation, explanation);
 assert.equal(parseActionExplanation(explanation, "approval:2").error, "identity_mismatch");
 assert.equal(parseActionExplanation({ ...explanation, technical: { ...explanation.technical, unavailable_reason: null } }).error, "malformed");
 assert.equal(parseActionExplanation({ ...explanation, schema_version: "future" }).error, "malformed");
+assert.equal(
+  parseActionExplanation({ ...explanation, everyday: { ...explanation.everyday, impact: { unsafe: true } } }).error,
+  "malformed",
+);
+assert.equal(
+  parseActionExplanation({ ...explanation, everyday: { ...explanation.everyday, recommendation: ["Review first."] } }).error,
+  "malformed",
+);
+assert.equal(
+  parseActionExplanation({ ...explanation, technical: { ...explanation.technical, command_display: { raw: "echo" } } }).error,
+  "malformed",
+);
+assert.equal(
+  parseActionExplanation({ ...explanation, everyday: { ...explanation.everyday, targets: [{ kind: "filesystem_item" }] } }).error,
+  "malformed",
+);
+assert.equal(
+  parseActionExplanation({ ...explanation, technical: { ...explanation.technical, segments: [{ executable: null }] } }).error,
+  "malformed",
+);

@@ -696,9 +696,32 @@ def update_guard_settings(
     current = _read_toml(guard_home / "config.toml")
     current_config = load_guard_config(guard_home)
     next_payload = dict(current)
-    presentation_change = bool({"presentation_mode", "presentation_mode_explicit"} & payload.keys())
-    if "presentation_revision" in payload and not presentation_change:
+    presentation_keys = {
+        "presentation_mode",
+        "presentation_mode_explicit",
+        "presentation_schema_version",
+    }
+    presentation_preference_keys = {"presentation_mode", "presentation_mode_explicit"}
+    supplied_presentation = presentation_keys & payload.keys()
+    coerced_presentation: dict[str, object] = {
+        key: _coerce_editable_setting(key, payload[key])
+        for key in supplied_presentation
+    }
+    has_presentation_preference = bool(presentation_preference_keys & payload.keys())
+    if "presentation_revision" in payload and not has_presentation_preference:
         raise ValueError("presentation_revision requires a presentation preference change.")
+    requested_presentation_mode = coerced_presentation.get(
+        "presentation_mode",
+        current_config.presentation_mode,
+    )
+    requested_presentation_explicit = coerced_presentation.get(
+        "presentation_mode_explicit",
+        current_config.presentation_mode_explicit,
+    )
+    presentation_change = has_presentation_preference and (
+        requested_presentation_mode != current_config.presentation_mode
+        or requested_presentation_explicit != current_config.presentation_mode_explicit
+    )
     if presentation_change:
         expected_revision = payload.get("presentation_revision")
         if expected_revision is not None and expected_revision != current_config.presentation_revision:
@@ -713,6 +736,10 @@ def update_guard_settings(
     )
     for key, value in payload.items():
         if key not in EDITABLE_GUARD_SETTING_KEYS:
+            continue
+        if key in presentation_keys:
+            if presentation_change:
+                next_payload[key] = coerced_presentation[key]
             continue
         next_payload[key] = _coerce_editable_setting(key, value)
     if presentation_change:

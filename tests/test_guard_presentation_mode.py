@@ -99,6 +99,31 @@ def test_presentation_only_write_round_trips_and_increments_revision(tmp_path: P
     assert reloaded.presentation_mode == "technical"
 
 
+def test_unrelated_save_does_not_pin_or_advance_presentation(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('density = "advanced"\n', encoding="utf-8")
+    initial = load_guard_config(guard_home)
+
+    update_guard_settings(
+        guard_home,
+        {
+            "telemetry": True,
+            "presentation_mode": initial.presentation_mode,
+            "presentation_mode_explicit": initial.presentation_mode_explicit,
+            "presentation_schema_version": initial.presentation_schema_version,
+            "presentation_revision": initial.presentation_revision,
+        },
+        skip_approval_gate=True,
+    )
+
+    updated = load_guard_config(guard_home)
+    assert updated.presentation_mode == "technical"
+    assert updated.presentation_mode_explicit is True
+    assert updated.presentation_source == "migrated"
+    assert updated.presentation_revision == initial.presentation_revision
+
+
 def test_stale_presentation_revision_rejected(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard"
     update_guard_settings(guard_home, {"presentation_mode": "technical"}, skip_approval_gate=True)
