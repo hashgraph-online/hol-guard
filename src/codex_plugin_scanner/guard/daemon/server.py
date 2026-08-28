@@ -4925,11 +4925,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             proof_input = approval_gate_input_from_mapping(payload)
             if proof_input is not None:
                 gate_input = proof_input
+        presentation_only_keys = {
+            "presentation_mode",
+            "presentation_mode_explicit",
+            "presentation_schema_version",
+            "presentation_revision",
+        }
+        presentation_only = gate_payload is None and bool(settings) and set(settings).issubset(presentation_only_keys)
         try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=gate_input,
+            approval_gate_grant = (
+                None
+                if presentation_only
+                else require_high_risk(
+                    guard_home,
+                    purpose="settings_write",
+                    approval_gate_input=gate_input,
+                )
             )
             if isinstance(gate_payload, dict):
                 validate_approval_gate_settings(
@@ -4944,6 +4955,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 config_settings,
                 approval_gate_grant=approval_gate_grant,
                 cloud_sync_entitled=bool(entitlement.get("allowed")),
+                skip_approval_gate=presentation_only,
             )
             if isinstance(gate_payload, dict):
                 update_approval_gate_settings(

@@ -15675,6 +15675,23 @@ function normalizeSupplyChainRepairResult(result) {
   };
 }
 const now = "2026-04-11T12:00:00Z";
+const demoPresentationSettings = {
+  presentation_mode: "everyday",
+  presentation_mode_explicit: false,
+  presentation_schema_version: 1,
+  presentation_revision: 0,
+  presentation: {
+    value: "everyday",
+    source: "default",
+    explicit: false,
+    writable: true,
+    schema_version: 1,
+    revision: 0,
+    diagnostic: null
+  },
+  presentation_diagnostic: null,
+  receipt_redaction_level: "partial"
+};
 const demoRequests = [
   {
     request_id: "request-env-reader",
@@ -17358,6 +17375,7 @@ async function fetchSettings() {
       guard_home: "~/.hol-guard",
       config_path: "~/.hol-guard/config.toml",
       settings: {
+        ...demoPresentationSettings,
         mode: "prompt",
         security_level: "balanced",
         default_action: "warn",
