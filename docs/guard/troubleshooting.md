@@ -64,7 +64,7 @@
 
 **Check**:
 1. Desktop-managed Core sidecars must include `hol-guard-runtime` next to `runtime-manifest.json` inside the signed Core executable.
-2. `reason_code: "native_pre_tool_unavailable"` means the daemon could not complete native command review. Auto/force still fail closed; they do not fall back to the Python engine.
+2. `reason_code: "native_pre_tool_unavailable"` or `reason_code: "native_post_tool_unavailable"` means the daemon could not complete native command review. Auto/force still fail closed; they do not fall back to the Python engine.
 3. Stale app hook scripts are missing `HOL_GUARD_NATIVE` inherit keys or still pin an older CLI identity.
 
 **Resolution**: Update HOL Guard so Desktop Core is rebuilt from the attested platform wheel, then re-run `hol-guard install cursor` (or the matching harness install) and retry repair. The attested CLI retries only when the daemon reports native unavailability, and that CLI path still requires the bundled runtime.
