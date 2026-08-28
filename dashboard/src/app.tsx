@@ -32,7 +32,7 @@ import { buildClearPayload } from "./clear-policy-payload";
 import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
-import { protectionHealthFor, remainingProtectionRepairParts } from "./protection-health";
+import { protectionHealthFor, remainingProtectionRepairMessage } from "./protection-health";
 import { ProtectionRepairFlowError } from "./protection-repair-flow";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
@@ -886,22 +886,10 @@ export function App() {
     if (remainingHealth.state === "protected") {
       return "Automatic repairs completed. Guard rechecked every protection layer below.";
     }
-    const remainingParts = remainingProtectionRepairParts(remainingHealth);
-    const currentFailedHarnesses = new Set(remainingParts.failedHookHarnesses);
-    const failedHookApps = remainingParts.failedHookHarnesses.map((harness) => harnessDisplayName(harness));
-    const remainingMessages: string[] = [];
-    if (failedHookApps.length > 0) {
-      remainingMessages.push(
-        `${failedHookApps.join(", ")} still ${failedHookApps.length === 1 ? "needs" : "need"} hook repair.`,
-      );
-    }
-    if (remainingParts.evidenceFailed) remainingMessages.push("Command evidence still needs repair.");
-    const remaining = remainingMessages.length > 0
-      ? remainingMessages.join(" ")
-      : "A local protection check still needs attention.";
+    const remaining = remainingProtectionRepairMessage(remainingHealth, harnessDisplayName);
     throw new ProtectionRepairFlowError(
-      `${remaining} Open the repair details below for the exact check.`,
-      [...failedHarnesses].filter((harness) => currentFailedHarnesses.has(harness)),
+      remaining.message,
+      [...failedHarnesses].filter((harness) => remaining.failedHookHarnesses.includes(harness)),
     );
   }, [refreshStateAfterAction]);
 

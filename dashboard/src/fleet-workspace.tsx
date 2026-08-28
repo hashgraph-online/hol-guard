@@ -21,7 +21,7 @@ import { harnessDisplayName } from "./approval-center-utils";
 import {
   SUPPORTED_APPS_BRIEF,
   resolveAppInstallStatus,
-  APP_STATUS_LABELS,
+  APP_STATUS_LABELS, defaultConnectHarness,
 } from "./apps/app-catalog";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
@@ -346,10 +346,10 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
             connectUrl: props.runtime.connect_url,
           }}
           health={protectionHealth}
-          repairHarness={repairHarness}
-          repairHarnesses={repairHarnesses}
+          repairHarness={repairHarness} repairHarnesses={repairHarnesses}
+          connectHarness={defaultConnectHarness(repairHarness, visibleHarnesses)}
           onRepairProtection={props.onRepairProtection}
-          onRepairHarness={props.onRepairHarness}
+          onRepairHarness={props.onRepairHarness ?? props.onConnectHarness}
         />
       ) : null}
 
