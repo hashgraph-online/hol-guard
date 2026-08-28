@@ -38,7 +38,7 @@ def _emit(key: str, value: str | bool) -> None:
     print(f"{key}={value}")
 
 
-def discover_release(tags_file: Path) -> None:
+def discover_release(tags_file: Path, requested_version: str = "") -> None:
     candidates: list[tuple[tuple[int, int], str, str, str]] = []
     for raw in tags_file.read_text(encoding="utf-8").splitlines():
         tag = raw.strip()
@@ -50,6 +50,11 @@ def discover_release(tags_file: Path) -> None:
             continue
         order = (int(match.group(2)), int(match.group(3)))
         candidates.append((order, match.group(1), tag, train))
+    if requested_version:
+        requested = [candidate for candidate in candidates if candidate[1] == requested_version]
+        if not requested:
+            raise SystemExit(f"Requested stable Core {requested_version} is not an eligible published release")
+        candidates = requested
     if not candidates:
         _emit("available", False)
         return
@@ -174,6 +179,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     discover = subparsers.add_parser("discover-release")
     discover.add_argument("--tags", type=Path, required=True)
+    discover.add_argument("--version", default="")
     inspect = subparsers.add_parser("inspect-assets")
     inspect.add_argument("--assets", type=Path, required=True)
     inspect.add_argument("--base", required=True)
@@ -193,7 +199,7 @@ def main() -> int:
     _marker_arguments(validate_marker_parser)
     args = parser.parse_args()
     if args.command == "discover-release":
-        discover_release(args.tags)
+        discover_release(args.tags, args.version)
     elif args.command == "inspect-assets":
         inspect_assets(args.assets, args.base)
     elif args.command == "verify-bootstrap":

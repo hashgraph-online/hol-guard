@@ -7,6 +7,7 @@ import json
 import runpy
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +59,24 @@ def test_release_discovery_ignores_prereleases_and_3_1(tmp_path: Path, capsys) -
     assert "tag=v3.0.7" in output
     assert "branch=main" in output
     assert "3.1" not in output
+
+
+def test_release_discovery_can_backfill_an_exact_stable_version(tmp_path: Path, capsys) -> None:
+    tags = tmp_path / "tags.txt"
+    tags.write_text("v3.0.6\nv3.0.7\n", encoding="utf-8")
+    namespace = runpy.run_path(str(TOOL))
+    namespace["discover_release"](tags, "3.0.6")
+    output = capsys.readouterr().out
+    assert "version=3.0.6" in output
+    assert "tag=v3.0.6" in output
+
+
+def test_release_discovery_rejects_unpublished_or_prerelease_backfill(tmp_path: Path) -> None:
+    tags = tmp_path / "tags.txt"
+    tags.write_text("alpha/v3.0.6a1\nv3.0.7\n", encoding="utf-8")
+    namespace = runpy.run_path(str(TOOL))
+    with pytest.raises(SystemExit, match="not an eligible published release"):
+        namespace["discover_release"](tags, "3.0.6")
 
 
 def test_privileged_feed_is_main_bound_and_pins_candidate_provenance() -> None:

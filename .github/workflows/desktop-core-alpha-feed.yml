@@ -17,6 +17,11 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+    inputs:
+      core_version:
+        description: Optional exact published stable Core version to backfill
+        required: false
+        type: string
   workflow_run:
     workflows: ["Publish to PyPI"]
     types: [completed]
@@ -109,14 +114,18 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          REQUESTED_CORE_VERSION: ${{ inputs.core_version || '' }}
         shell: bash
         run: |
           set -euo pipefail
           gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
             --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
             > "$RUNNER_TEMP/release-tags.txt"
-          python3 -I scripts/release/desktop_core_alpha_feed.py discover-release \
-            --tags "$RUNNER_TEMP/release-tags.txt" >> "$GITHUB_OUTPUT"
+          ARGS=(--tags "$RUNNER_TEMP/release-tags.txt")
+          if [[ -n "$REQUESTED_CORE_VERSION" ]]; then
+            ARGS+=(--version "$REQUESTED_CORE_VERSION")
+          fi
+          python3 -I scripts/release/desktop_core_alpha_feed.py discover-release "${ARGS[@]}" >> "$GITHUB_OUTPUT"
       - name: Stop when no stable Core release is published
         if: steps.release.outputs.available != 'true'
         run: echo "No published stable HOL Guard Core 3.x release is available yet."
