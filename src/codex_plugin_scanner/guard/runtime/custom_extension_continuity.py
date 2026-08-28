@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
 
+from ..store_custom_extension_continuity import CustomExtensionContinuityMutation
 from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommandState, is_local_cli_command_id
 from .local_cli_identity import LocalCliKind, UnlistedCliIdentity, is_local_cli_id
 
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
 CUSTOM_EXTENSION_CONTINUITY_FIELD = "x-hol-custom-extension-continuity"
 CUSTOM_EXTENSION_CONTINUITY_SCHEMA = "guard.custom-extension-continuity.v1"
+CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2 = "guard.custom-extension-continuity.v2"
 CUSTOM_EXTENSION_CONTINUITY_STATE_KEY = "custom_extension_continuity"
 CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY = "custom_extension_continuity_last_good"
 CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY = "custom_extension_continuity_local_removals"
@@ -56,97 +58,66 @@ def apply_verified_custom_extension_continuity(
     store: GuardStore,
     validated_policy_bundle: Mapping[str, object],
     *,
+    device_id: str | None = None,
     now: str,
 ) -> dict[str, object]:
     """Consume continuity only after the production caller verified the bundle signature."""
+
+    mutation, state = prepare_verified_custom_extension_continuity(
+        store,
+        validated_policy_bundle,
+        device_id=device_id,
+        now=now,
+    )
+    if mutation is None:
+        return state
+    try:
+        _ = store.apply_custom_extension_continuity_transaction(
+            expected_revision=mutation.expected_revision,
+            authority_updates=mutation.authority_updates,
+            sync_payloads=mutation.sync_payloads,
+            events=mutation.events,
+            updated_at=mutation.updated_at,
+            sync_preconditions=mutation.sync_preconditions,
+            observation_preconditions=mutation.observation_preconditions,
+        )
+    except ValueError as error:
+        raise CustomExtensionContinuityError("local continuity authority changed during apply") from error
+    return state
+
+
+def prepare_verified_custom_extension_continuity(
+    store: GuardStore,
+    validated_policy_bundle: Mapping[str, object],
+    *,
+    device_id: str | None = None,
+    now: str,
+) -> tuple[CustomExtensionContinuityMutation | None, dict[str, object]]:
+    """Validate and plan continuity without mutating persistent authority."""
 
     payload = validated_policy_bundle.get("payload")
     if not isinstance(payload, Mapping):
         raise CustomExtensionContinuityError("verified policy bundle payload is missing")
     if payload.get(CUSTOM_EXTENSION_CONTINUITY_FIELD) is None:
-        return _mark_cloud_removed(store, now=now)
-    preflight = _preflight(store, payload=payload, now=now)
-    statuses: dict[str, dict[str, object]] = {}
-    authority_updates: list[_AuthorityUpdate] = []
-    events: list[tuple[str, Mapping[str, object]]] = []
-    observation_preconditions: dict[str, object] = {}
-    remaining_overrides = dict(preflight.removals)
-    overrides_changed = False
-    for item in cast(list[dict[str, object]], preflight.observation["items"]):
-        cli_id = cast(str, item["cliId"])
-        identity_hash = cast(str, item["identityHash"])
-        settings = cast(dict[str, object], item["settings"])
-        local = preflight.local_items.get(cli_id)
-        observation_preconditions[cli_id] = _observation_precondition(local)
-        surface = local.get("surface") if local is not None else None
-        observed_count = local.get("observed_count") if local is not None else None
-        status = "pending_observation"
-        reason = "local_identity_not_observed"
-        local_override = preflight.removals.get(cli_id)
-        if preflight.stale:
-            status, reason = "stale", "cloud_observation_expired"
-        elif _local_override_matches(
-            local_override,
-            identity_hash=identity_hash,
-            cloud_revision=preflight.revision,
-        ):
-            if isinstance(local_override, dict) and local_override.get("state") in {"allowed", "blocked"}:
-                status, reason = "locally_overridden", "local_authority_preserved"
-            else:
-                status, reason = "removed", "removed_locally"
-        elif local is None or type(observed_count) is not int or cast(int, observed_count) < 1:
-            status, reason = "pending_observation", "local_identity_not_observed"
-        elif local.get("identity_hash") != identity_hash:
-            status, reason = "changed_identity", "identity_mismatch"
-        else:
-            if cli_id in remaining_overrides:
-                remaining_overrides.pop(cli_id)
-                overrides_changed = True
-            update = _plan_exact_settings(store, local=local, settings=settings)
-            if update is not None:
-                authority_updates.append(update)
-            status, reason = "applied", "same_identity"
-        evidence: dict[str, object] = {
-            "cli_id": cli_id,
-            "identity_hash": identity_hash,
-            "cloud_revision": preflight.revision,
-            "status": status,
-            "reason": reason,
-        }
-        if surface in {"cli", "mcp", "package-scripts"}:
-            evidence["surface"] = surface
-        statuses[cli_id] = evidence
-        events.append((f"custom_extension_continuity/{status}", evidence))
-    state: dict[str, object] = {
-        "schema_version": CUSTOM_EXTENSION_CONTINUITY_SCHEMA,
-        "cloud_revision": preflight.revision,
-        "observed_at": preflight.observation["observedAt"],
-        "expires_at": preflight.observation["expiresAt"],
-        "stale": preflight.stale,
-        "observation_digest": preflight.observation_digest,
-        "items": statuses,
-    }
-    sync_payloads = {CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: state}
-    if not preflight.stale:
-        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY] = state
-    if overrides_changed:
-        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY] = remaining_overrides
-    try:
-        _ = store.apply_custom_extension_continuity_transaction(
-            expected_revision=preflight.authority_revision,
-            authority_updates=[(item.identity, item.state, item.commands) for item in authority_updates],
-            sync_payloads=sync_payloads,
-            events=events,
-            updated_at=now,
-            sync_preconditions={
-                CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: preflight.previous,
-                CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: preflight.removals_raw,
-            },
-            observation_preconditions=observation_preconditions,
+        previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
+        return None, dict(previous) if isinstance(previous, dict) else {}
+    continuity = payload[CUSTOM_EXTENSION_CONTINUITY_FIELD]
+    if isinstance(continuity, dict) and continuity.get("schemaVersion") == CUSTOM_EXTENSION_CONTINUITY_SCHEMA_V2:
+        workspace_id = validated_policy_bundle.get("workspaceId")
+        if not isinstance(workspace_id, str) or not workspace_id or device_id is None:
+            raise CustomExtensionContinuityError("v2 continuity requires workspace and device binding")
+        from .custom_extension_continuity_v2 import prepare_v2_continuity
+
+        return prepare_v2_continuity(
+            store,
+            continuity,
+            device_id=device_id,
+            workspace_id=workspace_id,
+            now=now,
         )
-    except ValueError as error:
-        raise CustomExtensionContinuityError("local continuity authority changed during apply") from error
-    return state
+    from .custom_extension_continuity_v1 import prepare_v1_continuity
+
+    return prepare_v1_continuity(store, payload=payload, now=now)
 
 
 def _preflight(
@@ -335,6 +306,20 @@ def _parse_observation(value: object) -> dict[str, object]:
         seen.add(cli_id)
         items.append({"cliId": cli_id, "identityHash": identity_hash, "settings": _settings(raw_item.get("settings"))})
     return {**value, "items": items}
+
+
+def _identity_from_local(local: dict[str, object]) -> UnlistedCliIdentity:
+    kind = local.get("kind")
+    if kind not in {"executable", "script"}:
+        raise CustomExtensionContinuityError("local continuity identity kind is invalid")
+    return UnlistedCliIdentity(
+        cli_id=cast(str, local["cli_id"]),
+        name=cast(str, local["name"]),
+        kind=cast(LocalCliKind, kind),
+        identity_hash=cast(str, local["identity_hash"]),
+        example_label=cast(str, local["example_label"]),
+        interpreter_name=cast(str | None, local.get("interpreter_name")),
+    )
 
 
 def _settings(value: object) -> dict[str, object]:

@@ -6093,7 +6093,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     ) -> dict[str, object] | None:
         """Try the resident hook worker. Return None to fall back to legacy.
 
-        The worker only handles ``PostToolUse`` with ``guard_source_ref``.
+        The worker handles PostToolUse and supported command PreToolUse.
         ``HookWorkerUnsupported`` means the event is not eligible for the
         fast path — return ``None`` so the caller falls through to the
         legacy CLI path, preserving existing policy/permission checks.
@@ -6120,7 +6120,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         except HookWorkerUnsupported:
             # Not eligible for fast path — fall back to legacy CLI so
-            # PreToolUse/PermissionRequest/PostToolUse-without-source-ref
+            # non-command PreToolUse/PermissionRequest/PostToolUse-without-source-ref
             # still get full policy/permission/approval checks.
             return None
         except Exception as error:

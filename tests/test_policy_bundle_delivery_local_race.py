@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.managed_controls_policy_bundle import signed_clo
 from codex_plugin_scanner.guard.policy_bundle_delivery import effective_projection_digest
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.runtime import runner
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -57,7 +58,7 @@ def test_atomic_activation_rejects_stale_delivery_after_concurrent_local_commit(
     )
     stale_store = GuardStore(guard_home)
     local_store = GuardStore(guard_home)
-    registry = runner.BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     stale_store._bootstrap_extension_control_authority(registry.catalog_digest, key=None)
     base = stale_store.read_extension_control_authority_for_registry(registry)
     runtime = ExtensionControlRuntime(base)

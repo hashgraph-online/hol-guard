@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+pub mod pretool;
 
 use serde::{Deserialize, Serialize};
 
@@ -439,9 +440,8 @@ fn assignment_name(token: &str) -> Option<&str> {
     }
     Some(name)
 }
-
 fn executable_basename(executable: &str) -> &str {
-    executable.rsplit('/').next().unwrap_or(executable)
+    executable.rsplit(['/', '\\']).next().unwrap_or(executable)
 }
 
 fn is_shell_control_keyword(executable: &str) -> bool {

@@ -25,7 +25,8 @@ def test_computes_the_next_alpha_across_all_registry_sources(existing: list[str]
 @pytest.mark.parametrize(
     ("release_train", "existing", "expected"),
     [
-        ("3.0", ["3.0.0a1", "3.0.0a4"], "3.0.0a5"),
+        ("3.0", ["3.0.0", "3.0.0a290"], "3.0.1a1"),
+        ("3.0", ["3.0.0", "3.0.1a1", "3.0.1a4"], "3.0.1a5"),
         ("3.1", ["3.1.0a2"], "3.1.0a3"),
     ],
 )

@@ -10,12 +10,14 @@ GUARD_POLICY_EXTENSION_TARGETS_V1 = "GUARD_POLICY_EXTENSION_TARGETS_V1"
 GUARD_MANAGED_EXTENSION_CONTROLS_V1 = "GUARD_MANAGED_EXTENSION_CONTROLS_V1"
 GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1 = "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1"
 GUARD_EXTENSION_FIRST_CONTROLS_UI = "GUARD_EXTENSION_FIRST_CONTROLS_UI"
+CUSTOM_EXTENSION_CONTINUITY_V2_CAPABILITY = "custom-extension-continuity.v2"
 
 _RUNTIME_CAPABILITIES = (
     "extension-catalog.v1",
     "extension-control-layer.v1",
     "policy-extension-targets.v1",
     "managed-controls-atomic-apply.v1",
+    CUSTOM_EXTENSION_CONTINUITY_V2_CAPABILITY,
 )
 
 
@@ -61,6 +63,8 @@ class ManagedControlsFeatureFlags:
         capabilities.append(_RUNTIME_CAPABILITIES[2])
         if self.atomic_apply:
             capabilities.append(_RUNTIME_CAPABILITIES[3])
+            if self.extension_first_controls_ui:
+                capabilities.append(_RUNTIME_CAPABILITIES[4])
         return tuple(capabilities)
 
     def allows_custom_extension_continuity(self) -> bool:

@@ -13,6 +13,10 @@ from codex_plugin_scanner.guard.policy_bundle_activation import (
 from codex_plugin_scanner.guard.policy_bundle_delivery import effective_projection_digest
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.runtime import runner
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
+    MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import CAPABILITIES, parse_managed_bundle
 from tests.test_guard_runtime import _seed_guard_cloud
@@ -27,7 +31,7 @@ def test_receipt_sync_without_live_runtime_persists_delivery_and_typed_rejection
     bundle = _bundle()
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-managed-controls")
-    registry = runner.BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     store._bootstrap_extension_control_authority(registry.catalog_digest, key=None)
     authority = store.read_extension_control_authority_for_registry(registry)
     wire_digest = runner.build_builtin_extension_catalog_wire(
@@ -95,18 +99,30 @@ def test_receipt_sync_without_live_runtime_persists_delivery_and_typed_rejection
             "receiptsStored": 0,
             "policyBundle": bundle,
             "policyBundleDelivery": delivery,
-            "managedControlsCapabilities": sorted(runner.MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
+            "managedControlsCapabilities": sorted(MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
         },
     )
     runner.sync_receipts(store)
 
     acknowledgement = store.get_sync_payload("policy_bundle_ack")
-    assert store.get_sync_payload("policy_bundle") == bundle
+    assert store.get_sync_payload("policy_bundle") == bundle, store.get_sync_payload("policy_bundle_last_error")
     assert isinstance(acknowledgement, dict)
     assert acknowledgement["deliveryId"] == delivery["deliveryId"]
     assert acknowledgement["status"] == "applied"
     assert acknowledgement["appliedExtensionAuthorityRevision"] == 1
     assert acknowledgement["appliedEffectiveProjectionDigest"] != effective_digest
+    assert store.get_sync_payload("policy_bundle_last_error") == {}
+
+    _stub_sync(
+        monkeypatch,
+        {
+            "syncedAt": "2026-08-25T12:00:02Z",
+            "receiptsStored": 0,
+            "managedControlsCapabilities": sorted(MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
+        },
+    )
+    runner.sync_receipts(store)
+    assert store.get_sync_payload("policy_bundle") == bundle, store.get_sync_payload("policy_bundle_last_error")
     assert store.get_sync_payload("policy_bundle_last_error") == {}
 
     def reject_activation(*_args: object, **_kwargs: object) -> None:

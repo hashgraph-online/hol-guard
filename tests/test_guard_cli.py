@@ -4194,6 +4194,12 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_update_dry_run_emits_planned_command(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "3.0.1a1")
+        monkeypatch.setattr(
+            guard_update_commands_module,
+            "_latest_alpha_version_from_pypi",
+            lambda _current: "3.0.1a2",
+        )
 
         rc = main(["guard", "update", "--home", str(home_dir), "--alpha", "--dry-run", "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -4206,6 +4212,12 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_update_dry_run_skips_guard_store_init(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "3.0.1a1")
+        monkeypatch.setattr(
+            guard_update_commands_module,
+            "_latest_alpha_version_from_pypi",
+            lambda _current: "3.0.1a2",
+        )
         monkeypatch.setattr(
             guard_commands_module,
             "GuardStore",

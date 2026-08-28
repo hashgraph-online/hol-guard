@@ -217,7 +217,7 @@ jobs:
               --argjson tags "$TAG_VERSIONS" \
               '$pypi + $testpypi + $tags | unique')
             mapfile -t SOURCE_ALPHA_TAGS < <(
-              git tag --points-at "$SOURCE_SHA" --list "alpha/v${TRAIN}.0a*" | sed 's#^alpha/v##'
+              git tag --points-at "$SOURCE_SHA" --list "alpha/v${TRAIN}.1a*" | sed 's#^alpha/v##'
             )
             if [[ "${#SOURCE_ALPHA_TAGS[@]}" -gt 1 ]]; then
               echo "Source commit has multiple reserved alpha versions" >&2

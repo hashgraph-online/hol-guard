@@ -17,6 +17,10 @@ from codex_plugin_scanner.guard.policy_bundle_delivery import (
 )
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.runtime import runner
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
+    MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import CAPABILITIES, parse_managed_bundle
@@ -95,6 +99,13 @@ def _stub_sync(monkeypatch: pytest.MonkeyPatch, response: dict[str, object]) -> 
         runner,
         "validate_synced_policy_bundle",
         lambda policy_bundle, *args, **kwargs: (policy_bundle, None, ()),
+    )
+    monkeypatch.setattr(
+        runner,
+        "cached_policy_bundle_validation",
+        lambda _store, policy_bundle: (
+            (policy_bundle, None) if isinstance(policy_bundle, dict) else (None, "invalid_policy_bundle")
+        ),
     )
     monkeypatch.setattr(runner, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
@@ -265,7 +276,7 @@ def test_receipt_sync_atomically_accepts_managed_delivery_and_emits_exact_v2_ack
     bundle = _bundle()
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-managed-controls")
-    registry = runner.BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     store._bootstrap_extension_control_authority(registry.catalog_digest, key=None)
     authority = store.read_extension_control_authority_for_registry(registry)
     runtime = ExtensionControlRuntime(authority)
@@ -313,7 +324,7 @@ def test_receipt_sync_atomically_accepts_managed_delivery_and_emits_exact_v2_ack
             "receiptsStored": 0,
             "policyBundle": bundle,
             "policyBundleDelivery": delivery,
-            "managedControlsCapabilities": sorted(runner.MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
+            "managedControlsCapabilities": sorted(MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
         },
     )
 
@@ -343,7 +354,7 @@ def test_receipt_sync_rejects_managed_bundle_without_delivery_and_makes_no_ack(
     bundle = _bundle()
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-managed-controls")
-    registry = runner.BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     store._bootstrap_extension_control_authority(registry.catalog_digest, key=None)
     authority = store.read_extension_control_authority_for_registry(registry)
     runtime = ExtensionControlRuntime(authority)
@@ -368,7 +379,7 @@ def test_receipt_sync_rejects_managed_bundle_without_delivery_and_makes_no_ack(
             "syncedAt": "2026-08-25T12:00:01Z",
             "receiptsStored": 0,
             "policyBundle": bundle,
-            "managedControlsCapabilities": sorted(runner.MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
+            "managedControlsCapabilities": sorted(MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
         },
     )
 
@@ -384,7 +395,7 @@ def test_atomic_activation_rejects_stale_delivery_after_concurrent_managed_commi
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    registry = runner.BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     store._bootstrap_extension_control_authority(registry.catalog_digest, key=None)
     base = store.read_extension_control_authority_for_registry(registry)
     runtime = ExtensionControlRuntime(base)

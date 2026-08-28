@@ -23,6 +23,7 @@ MANAGED_CONTROLS_RUNTIME_CAPABILITIES = (
     "extension-control-layer.v1",
     "policy-extension-targets.v1",
     "managed-controls-atomic-apply.v1",
+    "custom-extension-continuity.v2",
 )
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")

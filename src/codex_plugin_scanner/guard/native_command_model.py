@@ -1,8 +1,8 @@
 """Shadow-only Python bridge to the native command model.
 
-This module never makes a PreToolUse decision. It exists to exercise and compare
-the native parser through the same version-matched resident runtime used by the
-PostToolUse path. Python remains authoritative until later rollout gates land.
+This module compares the native parser through the same version-matched resident
+runtime used by the PostToolUse path. Command PreToolUse authority lives in the
+Rust runtime and native_pretool transport.
 """
 
 from __future__ import annotations
