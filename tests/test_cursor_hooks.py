@@ -229,6 +229,8 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "daemon-auth-token" in source
     assert '"HOL_GUARD_NATIVE"' in source
     assert '"HOL_GUARD_NATIVE_BINARY"' in source
+    assert "native_pre_tool_unavailable" in source
+    assert "native_post_tool_unavailable" in source
     assert "/v1/hooks/cursor?" in source
     assert '"hook_env"' in source
     assert "subprocess.CompletedProcess(" in source

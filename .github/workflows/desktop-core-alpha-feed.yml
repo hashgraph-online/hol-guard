@@ -5,14 +5,20 @@ on:
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
       - tests/test_desktop_core_alpha_feed_macos_signing.py
+      - tests/test_stage_native_runtime_for_desktop_core.py
+      - tests/test_verify_pyinstaller_native_runtime.py
       - scripts/release/desktop_core_alpha_feed.py
+      - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/verify_pyinstaller_macos_signing.py
+      - scripts/release/verify_pyinstaller_native_runtime.py
   push:
     branches: [main]
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
       - scripts/release/desktop_core_alpha_feed.py
+      - scripts/release/stage_native_runtime_for_desktop_core.py
       - scripts/release/verify_pyinstaller_macos_signing.py
+      - scripts/release/verify_pyinstaller_native_runtime.py
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -173,6 +179,8 @@ jobs:
             --source-digest "$SOURCE_SHA" \
             --source-ref "refs/heads/${RELEASE_BRANCH}" \
             --deny-self-hosted-runners >/dev/null
+          cp "$WHEEL" "$RUNNER_TEMP/attested-macos-arm64.whl"
+          test -f "$RUNNER_TEMP/attested-macos-arm64.whl"
           echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
       - name: Inspect immutable Core asset state
         if: steps.release.outputs.available == 'true'
@@ -321,11 +329,28 @@ jobs:
           done < <(git -C "$SOURCE" diff --name-only)
           python3 -I scripts/release/stage_guard_cloud_review_artifacts.py \
             --source-root "$SOURCE"
+          mkdir -p "$RUNNER_TEMP/native-runtime"
+          python3 -I scripts/release/stage_native_runtime_for_desktop_core.py \
+            --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" \
+            --destination "$RUNNER_TEMP/native-runtime" \
+            --expected-version "$CORE_VERSION" \
+            --expected-target "$RELEASE_TARGET"
+          NATIVE_RUNTIME="$RUNNER_TEMP/native-runtime/hol-guard-runtime"
+          NATIVE_MANIFEST="$RUNNER_TEMP/native-runtime/runtime-manifest.json"
+          test -f "$NATIVE_RUNTIME"
+          test -f "$NATIVE_MANIFEST"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$NATIVE_RUNTIME"
+          codesign --verify --deep --strict --verbose=2 "$NATIVE_RUNTIME"
+          python3 -I scripts/release/stage_native_runtime_for_desktop_core.py \
+            --destination "$RUNNER_TEMP/native-runtime" \
+            --refresh-identity
           (
             cd "$SOURCE"
             uv run --no-sync pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" \
               --clean --noconfirm --onefile --name hol-guard \
               --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+              --add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native" \
+              --add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native" \
               --distpath "$DIST" --workpath "$RUNNER_TEMP/pyinstaller" --specpath "$RUNNER_TEMP/spec" \
               scripts/mdm/hol-guard-entry.py
           )
@@ -333,6 +358,8 @@ jobs:
           ASSET="$DIST/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           chmod 0755 "$BUILT"
           python3 -I scripts/release/verify_pyinstaller_macos_signing.py \
+            --binary "$BUILT" --team-id "$APPLE_TEAM_ID"
+          python3 -I scripts/release/verify_pyinstaller_native_runtime.py \
             --binary "$BUILT" --team-id "$APPLE_TEAM_ID"
           test "$("$BUILT" --version | sed -E 's/^hol-guard[[:space:]]+//')" = "$CORE_VERSION"
           export HOL_GUARD_HOME="$RUNNER_TEMP/smoke-home"
