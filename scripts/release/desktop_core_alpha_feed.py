@@ -1,4 +1,4 @@
-"""Deterministic helpers for the privileged Desktop Core alpha feed workflow."""
+"""Deterministic helpers for the privileged Desktop Core feed workflow."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 MANIFEST_SCHEMA = "hol-guard-core-update.v1"
 MARKER_SCHEMA = "hol-guard-core-attestation.v3"
 SUPPORTED_TRAINS = frozenset({"3.0"})
-_ALPHA_TAG = re.compile(r"^alpha/v(3\.(\d+)\.(\d+)a(\d+))$")
+_STABLE_TAG = re.compile(r"^v(3\.(\d+)\.(\d+))$")
 
 
 def _sha256(path: Path) -> str:
@@ -39,16 +39,16 @@ def _emit(key: str, value: str | bool) -> None:
 
 
 def discover_release(tags_file: Path) -> None:
-    candidates: list[tuple[tuple[int, int, int], str, str, str]] = []
+    candidates: list[tuple[tuple[int, int], str, str, str]] = []
     for raw in tags_file.read_text(encoding="utf-8").splitlines():
         tag = raw.strip()
-        match = _ALPHA_TAG.fullmatch(tag)
+        match = _STABLE_TAG.fullmatch(tag)
         if match is None:
             continue
         train = f"3.{match.group(2)}"
         if train not in SUPPORTED_TRAINS:
             continue
-        order = (int(match.group(2)), int(match.group(3)), int(match.group(4)))
+        order = (int(match.group(2)), int(match.group(3)))
         candidates.append((order, match.group(1), tag, train))
     if not candidates:
         _emit("available", False)
@@ -58,7 +58,7 @@ def discover_release(tags_file: Path) -> None:
     _emit("version", version)
     _emit("tag", tag)
     _emit("train", train)
-    _emit("branch", f"release/{train}")
+    _emit("branch", "main")
 
 
 def inspect_assets(assets_file: Path, base: str) -> None:
@@ -86,7 +86,7 @@ def _manifest_expected(
 ) -> dict[str, object]:
     return {
         "schema": MANIFEST_SCHEMA,
-        "channel": "alpha",
+        "channel": "stable",
         "version": version,
         "sourceCommit": source_commit,
         "sourceTag": source_tag,

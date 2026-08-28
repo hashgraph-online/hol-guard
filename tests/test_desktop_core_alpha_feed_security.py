@@ -1,4 +1,4 @@
-"""Security contracts for the privileged Desktop Core alpha feed."""
+"""Security contracts for the privileged Desktop Core stable feed."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def publish_job() -> dict[str, object]:
     return job
 
 
-def test_feed_is_release_3_0_only_and_wakes_after_publisher() -> None:
+def test_feed_is_stable_3_0_only_and_wakes_after_main_publisher() -> None:
     text = workflow_text()
     namespace = runpy.run_path(str(TOOL))
     trusted_push = """push:
@@ -43,20 +43,20 @@ def test_feed_is_release_3_0_only_and_wakes_after_publisher() -> None:
       - scripts/release/desktop_core_alpha_feed.py"""
     assert namespace["SUPPORTED_TRAINS"] == {"3.0"}
     assert trusted_push in text
-    assert "branches: [release/3.0]" in text
+    assert "branches: [main]" in text
     assert 'workflows: ["Publish to PyPI"]' in text
     assert "workflow_run.conclusion == 'success'" in text
 
 
-def test_release_discovery_ignores_3_1(tmp_path: Path, capsys) -> None:
+def test_release_discovery_ignores_prereleases_and_3_1(tmp_path: Path, capsys) -> None:
     tags = tmp_path / "tags.txt"
-    tags.write_text("alpha/v3.0.0a26\nalpha/v3.1.0a99\nalpha/v3.0.0a27\n", encoding="utf-8")
+    tags.write_text("alpha/v3.0.7a1\nv3.1.0\nv3.0.6\nv3.0.7\n", encoding="utf-8")
     namespace = runpy.run_path(str(TOOL))
     namespace["discover_release"](tags)
     output = capsys.readouterr().out
-    assert "version=3.0.0a27" in output
-    assert "tag=alpha/v3.0.0a27" in output
-    assert "branch=release/3.0" in output
+    assert "version=3.0.7" in output
+    assert "tag=v3.0.7" in output
+    assert "branch=main" in output
     assert "3.1" not in output
 
 
@@ -163,14 +163,15 @@ def test_manifest_and_marker_bind_source_and_hashes(tmp_path: Path) -> None:
     marker = Path(f"{base}.attested.json")
     base.write_bytes(b"binary")
     common = dict(
-        version="3.0.0a27",
+        version="3.0.7",
         source_commit="a" * 40,
-        source_tag="alpha/v3.0.0a27",
+        source_tag="v3.0.7",
         target="aarch64-apple-darwin",
-        minimum_desktop_version="0.1.0-alpha.0",
+        minimum_desktop_version="0.1.0-beta.0",
     )
     namespace["create_manifest"](base, manifest, **common)
     namespace["validate_manifest"](base, manifest, **common)
+    assert json.loads(manifest.read_text(encoding="utf-8"))["channel"] == "stable"
     marker_common = {key: common[key] for key in ("version", "source_commit", "source_tag", "target")}
     marker_common.update(apple_signing_identity="Developer ID Application: HOL", apple_team_id="TEAMID")
     namespace["create_marker"](base, marker, workflow_run="123", **marker_common)

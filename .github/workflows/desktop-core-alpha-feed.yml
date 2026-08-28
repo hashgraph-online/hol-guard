@@ -1,4 +1,4 @@
-name: Publish Desktop Core alpha feed
+name: Publish Desktop Core stable feed
 
 on:
   pull_request:
@@ -20,13 +20,13 @@ on:
   workflow_run:
     workflows: ["Publish to PyPI"]
     types: [completed]
-    branches: [release/3.0]
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-core-alpha-feed
+  group: desktop-core-stable-feed
   cancel-in-progress: false
 
 jobs:
@@ -66,7 +66,7 @@ jobs:
       attestations: write
     env:
       RELEASE_TARGET: aarch64-apple-darwin
-      MINIMUM_DESKTOP_VERSION: 0.1.0-alpha.0
+      MINIMUM_DESKTOP_VERSION: 0.1.0-beta.0
     steps:
       - name: Require trusted main workflow invocation
         shell: bash
@@ -105,7 +105,7 @@ jobs:
           test -n "$APPLE_ID"
           test -n "$APPLE_PASSWORD"
           test -n "$APPLE_TEAM_ID"
-      - name: Discover newest published Core 3.x alpha
+      - name: Discover newest published stable Core 3.x release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -113,13 +113,13 @@ jobs:
         run: |
           set -euo pipefail
           gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | select(.draft == false and .prerelease == true) | .tag_name' \
+            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
             > "$RUNNER_TEMP/release-tags.txt"
           python3 -I scripts/release/desktop_core_alpha_feed.py discover-release \
             --tags "$RUNNER_TEMP/release-tags.txt" >> "$GITHUB_OUTPUT"
-      - name: Stop when no Core alpha is published
+      - name: Stop when no stable Core release is published
         if: steps.release.outputs.available != 'true'
-        run: echo "No published HOL Guard Core 3.x alpha release is available yet."
+        run: echo "No published stable HOL Guard Core 3.x release is available yet."
       - name: Authorize exact Core source with release provenance
         if: steps.release.outputs.available == 'true'
         id: source
