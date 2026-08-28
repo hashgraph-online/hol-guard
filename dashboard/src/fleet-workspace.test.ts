@@ -1,4 +1,5 @@
 import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
 import { isHarnessDetectedItems, resolveDetectedAppStatus, visibleHarnessesFor } from "./harness-detection";
@@ -14,6 +15,18 @@ const targetedRepairError = new ProtectionRepairFlowError("App hooks need repair
 assert(
   targetedRepairError.failedHarnesses.length === 2,
   "repair failures retain every app needed for the next actions",
+);
+assert(
+  defaultConnectHarness(undefined, []) === "codex",
+  "empty fleet still opens a supported app from Connect an app",
+);
+assert(
+  defaultConnectHarness(undefined, ["grok", "claude-code"]) === "grok",
+  "observed apps keep their own connect target",
+);
+assert(
+  defaultConnectHarness("grok", []) === "grok",
+  "empty managed installs still connect the first visible fleet app",
 );
 
 const noProtectionHealth = {

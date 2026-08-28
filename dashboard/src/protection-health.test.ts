@@ -8,6 +8,7 @@ import {
   protectionHeadlineFor,
   protectionHealthFor,
   protectionPresentationState,
+  remainingProtectionRepairMessage,
   remainingProtectionRepairParts,
   unavailableProtectionHealth,
 } from "./protection-health";
@@ -187,10 +188,12 @@ const fleetSource = readFileSync(new URL("./fleet-workspace.tsx", import.meta.ur
 const harnessDetectionSource = readFileSync(new URL("./harness-detection.ts", import.meta.url), "utf8");
 const reviewStatesSource = readFileSync(new URL("./review-states.tsx", import.meta.url), "utf8");
 const homeSource = readFileSync(new URL("./home-dashboard.tsx", import.meta.url), "utf8");
+const protectionHealthSource = readFileSync(new URL("./protection-health.ts", import.meta.url), "utf8");
 assert.match(appSource, /const handleRepairProtection = useCallback/);
 assert.match(appSource, /onRepairProtection=\{handleRepairProtection\}/);
-assert.match(appSource, /remainingProtectionRepairParts\(remainingHealth\)/);
-assert.match(appSource, /Command evidence still needs repair/);
+assert.match(readFileSync(new URL("./protection-repair-flow.ts", import.meta.url), "utf8"), /remainingProtectionRepairMessage\(remainingHealth, input\.displayName\)/);
+assert.match(protectionHealthSource, /Command evidence still needs repair/);
+assert.match(protectionHealthSource, /Connect an AI app to start local protection/);
 assert.doesNotMatch(appSource, /app\.checks\.some\(\(check\) => check\.status === "fail"\)/);
 
 const evidenceOnlyHealth = normalizeProtectionHealth({
@@ -214,6 +217,7 @@ const evidenceOnlyHealth = normalizeProtectionHealth({
 assert.deepEqual(remainingProtectionRepairParts(evidenceOnlyHealth), {
   failedHookHarnesses: [],
   evidenceFailed: true,
+  needsConnectedApp: false,
 });
 
 const evidenceUnknown = checks();
@@ -250,12 +254,30 @@ const hookFailureHealth = normalizeProtectionHealth({
 assert.deepEqual(remainingProtectionRepairParts(hookFailureHealth), {
   failedHookHarnesses: ["grok"],
   evidenceFailed: false,
+  needsConnectedApp: false,
 });
+const noManagedChecks = checks();
+noManagedChecks[PROTECTION_CHECK_IDS.indexOf("harness_hooks")] = {
+  check_id: "harness_hooks",
+  status: "fail",
+  reason_code: "no_managed_harness",
+};
+assert.deepEqual(remainingProtectionRepairParts(normalizeProtectionHealth(payload(noManagedChecks))), {
+  failedHookHarnesses: [],
+  evidenceFailed: false,
+  needsConnectedApp: true,
+});
+assert.match(
+  remainingProtectionRepairMessage(normalizeProtectionHealth(payload(noManagedChecks)), (harness) => harness).message,
+  /Connect an AI app to start local protection/,
+);
 assert.match(appDetailSource, /Install state" value=\{active \? "Installed"/);
 assert.match(appDetailSource, /protectionHealthFor\(runtime, harness\)/);
 assert.match(appDetailSource, /useProtectionPresentationState\(appProtection\)/);
 assert.match(fleetSource, /useProtectionPresentationState\(protectionHealth\)/);
 assert.match(fleetSource, /resolveDetectedAppStatus\(install, appProtection,/);
+assert.match(fleetSource, /onRepairHarness=\{props\.onRepairHarness \?\? props\.onConnectHarness\}/);
+assert.match(readFileSync(new URL("./fleet-protection-recovery.tsx", import.meta.url), "utf8"), /defaultConnectHarness\(props\.repairHarness, props\.repairHarnesses\)/);
 assert.match(harnessDetectionSource, /hookCheck\?\.status === "fail"/);
 assert.match(reviewStatesSource, /useProtectionPresentationState\(protectionHealth\)/);
 assert.match(reviewStatesSource, /protectedAppsCount = protectionHealth\.apps\.filter/);

@@ -12,6 +12,7 @@ _DETECTION_ASSET = (
 _AUTHORITATIVE_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-workspace.tsx"
 _DETECTION_SOURCE = Path(__file__).parents[1] / "dashboard/src/harness-detection.ts"
 _RECOVERY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery.tsx"
+_COPY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-copy.ts"
 
 
 def _source() -> str:
@@ -21,7 +22,7 @@ def _source() -> str:
 def _authoritative_source() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (_AUTHORITATIVE_SOURCE, _DETECTION_SOURCE, _RECOVERY_SOURCE)
+        for path in (_AUTHORITATIVE_SOURCE, _DETECTION_SOURCE, _RECOVERY_SOURCE, _COPY_SOURCE)
     )
 
 
@@ -30,9 +31,13 @@ def test_repair_message_does_not_blame_apps_for_shared_evidence_failure() -> Non
     health_source = Path(__file__).parents[1].joinpath("dashboard/src/protection-health.ts").read_text(
         encoding="utf-8"
     )
+    flow_source = Path(__file__).parents[1].joinpath("dashboard/src/protection-repair-flow.ts").read_text(
+        encoding="utf-8"
+    )
     assert "remainingProtectionRepairParts" in health_source
-    assert "remainingProtectionRepairParts(remainingHealth)" in app_source
-    assert "Command evidence still needs repair." in app_source
+    assert "remainingProtectionRepairMessage(remainingHealth, input.displayName)" in flow_source
+    assert "Command evidence still needs repair." in health_source
+    assert "Connect an AI app to start local protection." in health_source
     assert 'app.checks.some((check) => check.status === "fail")' not in app_source
 
 
@@ -45,6 +50,7 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
     assert "View repair details" in source
     assert "Needs repair" in source
     assert "Repair protection" in source
+    assert "Connect an app" in authoritative_source
     assert "Repair failed checks" not in source
     assert "Open diagnostics" not in source
     assert "Guard could not confirm integrity protection yet." not in source
