@@ -29,6 +29,22 @@ from codex_plugin_scanner.guard.runtime.approval_context import build_approval_c
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def teardown_module() -> None:
+    """Reset facade overrides propagated into lazily imported CLI modules."""
+
+    from codex_plugin_scanner.guard.approvals import queue_blocked_approvals, wait_for_approval_requests
+    from codex_plugin_scanner.guard.cli.commands_support import _sync_namespace
+    from codex_plugin_scanner.guard.daemon.manager import ensure_guard_daemon
+
+    _sync_namespace(
+        {
+            "ensure_guard_daemon": ensure_guard_daemon,
+            "queue_blocked_approvals": queue_blocked_approvals,
+            "wait_for_approval_requests": wait_for_approval_requests,
+        }
+    )
+
+
 def _context_token() -> str:
     return build_approval_context_token(
         identity={"artifact_id": "codex:project:Bash"},

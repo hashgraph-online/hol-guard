@@ -27,6 +27,11 @@ from .config_preset_support import apply_named_posture_harness_policy
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
+from .presentation_mode import (
+    PRESENTATION_SCHEMA_VERSION,
+    coerce_persisted_presentation_mode,
+    coerce_presentation_mode_write,
+)
 from .protection_posture import (
     DEFAULT_PROTECTION_POSTURE,
     DEFAULT_WATCH_AUTO_REVERT_HOURS,
@@ -257,6 +262,9 @@ SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
 EDITABLE_GUARD_SETTING_KEYS = frozenset(
     {
         "mode",
+        "presentation_mode",
+        "presentation_mode_explicit",
+        "presentation_schema_version",
         "protection_posture",
         "protection_posture_explicit",
         "watch_auto_revert_hours",
@@ -288,6 +296,13 @@ BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
     {
         "mode",
+        "presentation_mode",
+        "presentation_mode_explicit",
+        "presentation_schema_version",
+        "presentation_revision",
+        "presentation_density",
+        "display_density",
+        "density",
         "protection_posture",
         "watch_auto_revert_hours",
         "default_action",
@@ -365,6 +380,12 @@ class GuardConfig:
     guard_home: Path
     workspace: Path | None
     mode: GuardMode = "prompt"
+    presentation_mode: str = "everyday"
+    presentation_mode_explicit: bool = False
+    presentation_schema_version: int = PRESENTATION_SCHEMA_VERSION
+    presentation_revision: int = 0
+    presentation_source: str = "default"
+    presentation_diagnostic: str | None = None
     protection_posture: str = DEFAULT_PROTECTION_POSTURE
     protection_posture_explicit: bool = False
     watch_auto_revert_hours: int = DEFAULT_WATCH_AUTO_REVERT_HOURS
@@ -513,10 +534,30 @@ def load_guard_config(
     else:
         loaded_posture = derive_protection_posture(loaded_mode, loaded_security_level)
         posture_explicit = False
+    legacy_presentation_value = next(
+        (
+            merged.get(key)
+            for key in ("presentation_mode", "presentation_density", "display_density", "density")
+            if merged.get(key) is not None
+        ),
+        None,
+    )
+    persisted_presentation = coerce_persisted_presentation_mode(
+        legacy_presentation_value,
+        explicit=merged.get("presentation_mode_explicit", legacy_presentation_value is not None),
+        schema_version=merged.get("presentation_schema_version", PRESENTATION_SCHEMA_VERSION),
+    )
+    presentation_revision = _coerce_loaded_non_negative_int(merged.get("presentation_revision"), 0)
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
         mode=("observe" if loaded_posture == "watch" else loaded_mode),
+        presentation_mode=persisted_presentation.value,
+        presentation_mode_explicit=persisted_presentation.explicit,
+        presentation_schema_version=persisted_presentation.schema_version,
+        presentation_revision=presentation_revision,
+        presentation_source=persisted_presentation.source,
+        presentation_diagnostic=persisted_presentation.diagnostic,
         protection_posture=loaded_posture,
         protection_posture_explicit=posture_explicit,
         watch_auto_revert_hours=coerce_watch_auto_revert_hours(merged.get("watch_auto_revert_hours")),
@@ -595,6 +636,20 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
 
     return {
         "mode": config.mode,
+        "presentation_mode": config.presentation_mode,
+        "presentation_mode_explicit": config.presentation_mode_explicit,
+        "presentation_schema_version": config.presentation_schema_version,
+        "presentation_revision": config.presentation_revision,
+        "presentation": {
+            "value": config.presentation_mode,
+            "source": config.presentation_source,
+            "explicit": config.presentation_mode_explicit,
+            "writable": True,
+            "schema_version": config.presentation_schema_version,
+            "revision": config.presentation_revision,
+            "diagnostic": config.presentation_diagnostic,
+        },
+        "presentation_diagnostic": config.presentation_diagnostic,
         "protection_posture": config.protection_posture,
         "protection_posture_explicit": config.protection_posture_explicit,
         "watch_auto_revert_hours": config.watch_auto_revert_hours,
@@ -641,6 +696,13 @@ def update_guard_settings(
     current = _read_toml(guard_home / "config.toml")
     current_config = load_guard_config(guard_home)
     next_payload = dict(current)
+    presentation_change = bool({"presentation_mode", "presentation_mode_explicit"} & payload.keys())
+    if "presentation_revision" in payload and not presentation_change:
+        raise ValueError("presentation_revision requires a presentation preference change.")
+    if presentation_change:
+        expected_revision = payload.get("presentation_revision")
+        if expected_revision is not None and expected_revision != current_config.presentation_revision:
+            raise ValueError("Presentation preference changed on another surface. Reload settings and try again.")
     switching_to_custom_without_overrides = (
         payload.get("security_level") == "custom" and not {"risk_actions", "harness_risk_actions"} & payload.keys()
     )
@@ -653,6 +715,10 @@ def update_guard_settings(
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue
         next_payload[key] = _coerce_editable_setting(key, value)
+    if presentation_change:
+        next_payload["presentation_mode_explicit"] = True
+        next_payload["presentation_schema_version"] = PRESENTATION_SCHEMA_VERSION
+        next_payload["presentation_revision"] = current_config.presentation_revision + 1
     incoming_selected_posture = _incoming_selects_protection_posture(
         payload,
         current_config,
@@ -738,6 +804,16 @@ def reset_guard_settings(
 
 
 def _coerce_editable_setting(key: str, value: object) -> object:
+    if key == "presentation_mode":
+        return coerce_presentation_mode_write(value)
+    if key == "presentation_mode_explicit":
+        if isinstance(value, bool):
+            return value
+        raise ValueError("presentation_mode_explicit must be true or false.")
+    if key == "presentation_schema_version":
+        if value == PRESENTATION_SCHEMA_VERSION:
+            return value
+        raise ValueError("Unsupported presentation schema version.")
     if key == "mode":
         if isinstance(value, str) and value in VALID_GUARD_MODES:
             return value
