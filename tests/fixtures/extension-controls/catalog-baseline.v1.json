@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "7fd8f8affd5163d1b8b307e6253e3f0184b3ac239ab0b0eb5142a1e69b496220",
+  "catalog_digest": "314a667e41658da893588cecaf114c453f0d4fb4fe3c7cc0f3e6d6770283b188",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -21,7 +21,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 60,
+  "extension_count": 61,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -55,6 +55,7 @@
     "command.kubernetes-operations",
     "command.kubernetes-secrets",
     "command.load-balancer",
+    "command.macscope",
     "command.messaging.kafka",
     "command.messaging.nats",
     "command.messaging.rabbitmq",
@@ -87,7 +88,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 158,
+  "permission_count": 161,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -186,6 +187,9 @@
     "command.kubernetes-operations.permission.helm-uninstall": "helm uninstall",
     "command.kubernetes-secrets.permission.secret-read": "kubectl get secret db-credentials -o yaml",
     "command.load-balancer.permission.delete": "aws elbv2 delete-load-balancer",
+    "command.macscope.permission.experimental-feature-writes": "MacScopeMCPServer --allow-experimental-feature-writes",
+    "command.macscope.permission.feature-writes": "MacScopeMCPServer --allow-feature-writes",
+    "command.macscope.permission.utility-writes": "MacScopeMCPServer --allow-utility-writes",
     "command.messaging.kafka.permission.delete": "kafka-topics --delete",
     "command.messaging.nats.permission.delete": "nats str rm ORDERS",
     "command.messaging.rabbitmq.permission.delete": "rabbitmqctl delete_queue jobs",
@@ -418,6 +422,9 @@
     "command.kubernetes-operations.permission.helm-uninstall",
     "command.kubernetes-secrets.permission.secret-read",
     "command.load-balancer.permission.delete",
+    "command.macscope.permission.experimental-feature-writes",
+    "command.macscope.permission.feature-writes",
+    "command.macscope.permission.utility-writes",
     "command.messaging.kafka.permission.delete",
     "command.messaging.nats.permission.delete",
     "command.messaging.rabbitmq.permission.delete",
@@ -490,7 +497,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 146,
+  "rule_count": 149,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -585,6 +592,9 @@
     "command.kubernetes-operations.helm-uninstall",
     "command.kubernetes-secrets.secret-read",
     "command.load-balancer.delete",
+    "command.macscope.feature-writes",
+    "command.macscope.experimental-feature-writes",
+    "command.macscope.utility-writes",
     "command.messaging.kafka.delete",
     "command.messaging.nats.delete",
     "command.messaging.rabbitmq.delete",
