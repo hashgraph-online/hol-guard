@@ -1,0 +1,16 @@
+{
+  "compatibilityAliases": {},
+  "downgradePolicy": "exclude-unsupported",
+  "readerFirst": true,
+  "requiredForFleetDelivery": [
+    "guard.fleet-extension-configuration.v1",
+    "guard.managed-control-assignment.v1",
+    "guard.custom-extension-definition.v2",
+    "guard.custom-extension-configuration.v2",
+    "guard.catalog-semantic-fingerprint.v2",
+    "guard.managed-controls-composite-apply.v2",
+    "guard.managed-controls-signed-delivery.v2"
+  ],
+  "schemaVersion": "guard.managed-controls.capabilities.v2",
+  "semanticLossAllowed": false
+}

@@ -1,0 +1,34 @@
+name: Export FEC branch source
+
+on:
+  push:
+    branches:
+      - feat/fec-001-100-r32-remediation
+    paths:
+      - .github/workflows/fec-source-export.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Create source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --output="$RUNNER_TEMP/hol-guard-fec-source.tgz" HEAD
+      - name: Upload source archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hol-guard-fec-source-${{ github.sha }}
+          path: ${{ runner.temp }}/hol-guard-fec-source.tgz
+          if-no-files-found: error
+          retention-days: 1

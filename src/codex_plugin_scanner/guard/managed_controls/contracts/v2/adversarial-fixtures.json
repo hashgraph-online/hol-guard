@@ -1,0 +1,192 @@
+{
+  "cases": [
+    {
+      "contract": "fleetExtensionConfiguration",
+      "expectedError": "fec_unknown_field",
+      "id": "unknown-top-level",
+      "patch": {
+        "unexpected": true
+      }
+    },
+    {
+      "contract": "fleetExtensionConfiguration",
+      "expectedError": "fec_unknown_field",
+      "id": "unknown-nested-target",
+      "mutation": {
+        "key": "sourcePath",
+        "path": [
+          "entries",
+          0,
+          "target"
+        ],
+        "type": "nested-add",
+        "value": "/private/path"
+      }
+    },
+    {
+      "contract": "fleetExtensionConfiguration",
+      "expectedError": "fec_managed_weaken_forbidden",
+      "id": "managed-permit",
+      "replace": {
+        "entries": [
+          {
+            "authorityMode": "managed-restrictive",
+            "availability": "enabled",
+            "contextualOutcome": "permit",
+            "entryId": "entry.bad",
+            "source": "explicit",
+            "target": {
+              "extensionId": "command.shell",
+              "kind": "extension"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "contract": "fleetExtensionConfiguration",
+      "expectedError": "fec_managed_weaken_forbidden",
+      "id": "managed-custom-extension",
+      "replace": {
+        "entries": [
+          {
+            "authorityMode": "managed-restrictive",
+            "availability": "disabled",
+            "contextualOutcome": "block",
+            "entryId": "entry.custom.bad",
+            "source": "explicit",
+            "target": {
+              "definitionId": "ced_01j5example00000001",
+              "kind": "custom-extension"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "contract": "fleetExtensionConfiguration",
+      "duplicatePath": "entries[0]",
+      "expectedError": "fec_duplicate_entry",
+      "id": "duplicate-entry"
+    },
+    {
+      "contract": "fleetExtensionConfiguration",
+      "expectedError": "fec_missing_field",
+      "id": "missing-name",
+      "removePath": [
+        "name"
+      ]
+    },
+    {
+      "contract": "fleetExtensionConfiguration",
+      "expectedError": "fec_invalid_timestamp",
+      "id": "offset-timestamp",
+      "replace": {
+        "createdAt": "2026-08-27T12:00:00+00:00"
+      }
+    },
+    {
+      "contract": "fleetExtensionConfiguration",
+      "expectedError": "fec_limit_exceeded",
+      "id": "utf8-description-overflow",
+      "replace": {
+        "description": "🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪🧪"
+      }
+    },
+    {
+      "contract": "assignment",
+      "expectedError": "fec_conflicting_entry",
+      "id": "assignment-no-future-enrollment",
+      "replace": {
+        "continuousEnrollment": false
+      }
+    },
+    {
+      "contract": "assignment",
+      "expectedError": "fec_conflicting_entry",
+      "id": "assignment-selector-conflict",
+      "replace": {
+        "selector": {
+          "deviceIds": [
+            "device.alpha"
+          ],
+          "memberIds": [
+            "member.alpha"
+          ],
+          "mode": "selected-members"
+        }
+      }
+    },
+    {
+      "contract": "assignment",
+      "expectedError": "fec_assignment_empty",
+      "id": "assignment-selector-empty",
+      "replace": {
+        "selector": {
+          "memberIds": [],
+          "mode": "selected-members"
+        }
+      }
+    },
+    {
+      "contract": "customExtensionDefinition",
+      "expectedError": "fec_missing_field",
+      "id": "custom-unreviewed-trusted",
+      "mutation": {
+        "path": [
+          "variants",
+          0
+        ],
+        "type": "nested-replace",
+        "value": {
+          "identityEvidenceDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "platforms": [
+            "linux"
+          ],
+          "reviewState": "trusted",
+          "semanticFingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "variantId": "cev_01j5example00000001"
+        }
+      }
+    },
+    {
+      "contract": "customExtensionDefinition",
+      "expectedError": "fec_unknown_field",
+      "id": "custom-raw-path",
+      "patch": {
+        "sourcePath": "/Users/example/tool"
+      }
+    },
+    {
+      "contract": "customExtensionConfiguration",
+      "expectedError": "fec_limit_exceeded",
+      "id": "custom-empty-variants",
+      "replace": {
+        "allowedVariantIds": []
+      }
+    },
+    {
+      "contract": "customExtensionConfiguration",
+      "expectedError": "fec_conflicting_entry",
+      "id": "custom-invalid-binding",
+      "replace": {
+        "bindingMode": "best-effort"
+      }
+    },
+    {
+      "contract": "catalogSemantics",
+      "duplicatePath": "extensions[0]",
+      "expectedError": "fec_duplicate_entry",
+      "id": "catalog-duplicate-extension"
+    },
+    {
+      "contract": "catalogSemantics",
+      "expectedError": "fec_unsupported_capability",
+      "id": "unsupported-schema",
+      "replace": {
+        "schemaVersion": "guard.catalog-semantic-fingerprint.v9"
+      }
+    }
+  ],
+  "schemaVersion": "guard.managed-controls.adversarial-fixtures.v2"
+}

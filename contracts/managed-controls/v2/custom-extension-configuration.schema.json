@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "commandSetting": {
+      "additionalProperties": false,
+      "properties": {
+        "commandId": {
+          "maxLength": 68,
+          "minLength": 12,
+          "pattern": "^cec_[a-z0-9]{8,64}$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 68
+        },
+        "state": {
+          "enum": [
+            "inherit",
+            "allow",
+            "block"
+          ]
+        }
+      },
+      "required": [
+        "commandId",
+        "state"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hol.org/contracts/managed-controls/v2/guard.custom-extension-configuration.v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "allowedVariantIds": {
+      "items": {
+        "maxLength": 68,
+        "minLength": 20,
+        "pattern": "^cev_[a-z0-9]{16,64}$",
+        "type": "string",
+        "x-hol-maxUtf8Bytes": 68
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "bindingMode": {
+      "const": "exact-approved-variant",
+      "default": "exact-approved-variant"
+    },
+    "commands": {
+      "items": {
+        "$ref": "#/$defs/commandSetting"
+      },
+      "maxItems": 256,
+      "type": "array"
+    },
+    "configurationId": {
+      "maxLength": 72,
+      "minLength": 24,
+      "pattern": "^cec_cfg_[a-z0-9]{16,64}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 72
+    },
+    "createdAt": {
+      "format": "date-time",
+      "maxLength": 24,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 24
+    },
+    "createdBy": {
+      "maxLength": 128,
+      "minLength": 5,
+      "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 128
+    },
+    "defaultState": {
+      "enum": [
+        "allowed",
+        "blocked"
+      ]
+    },
+    "definitionId": {
+      "maxLength": 68,
+      "minLength": 20,
+      "pattern": "^ced_[a-z0-9]{16,64}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 68
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "schemaVersion": {
+      "const": "guard.custom-extension-configuration.v2"
+    },
+    "workspaceId": {
+      "format": "uuid",
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 36
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "configurationId",
+    "workspaceId",
+    "definitionId",
+    "revision",
+    "defaultState",
+    "commands",
+    "allowedVariantIds",
+    "bindingMode",
+    "createdAt",
+    "createdBy"
+  ],
+  "title": "HOL Guard Custom Extension configuration v2",
+  "type": "object"
+}

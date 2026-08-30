@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "extensionId": {
+          "maxLength": 128,
+          "minLength": 5,
+          "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 128
+        },
+        "permissions": {
+          "items": {
+            "$ref": "#/$defs/permission"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "semanticFingerprint": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 71
+        }
+      },
+      "required": [
+        "extensionId",
+        "semanticFingerprint",
+        "required",
+        "permissions"
+      ],
+      "type": "object"
+    },
+    "permission": {
+      "additionalProperties": false,
+      "properties": {
+        "configurable": {
+          "type": "boolean"
+        },
+        "delegatedProtection": {
+          "anyOf": [
+            {
+              "const": "package-firewall"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "permissionId": {
+          "maxLength": 128,
+          "minLength": 5,
+          "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 128
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "semanticFingerprint": {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 71
+        }
+      },
+      "required": [
+        "permissionId",
+        "semanticFingerprint",
+        "configurable",
+        "required"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hol.org/contracts/managed-controls/v2/guard.catalog-semantic-fingerprint.v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9._-]*$",
+        "type": "string",
+        "x-hol-maxUtf8Bytes": 128
+      },
+      "maxItems": 64,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "catalogDigest": {
+      "maxLength": 71,
+      "minLength": 71,
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 71
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "maxItems": 512,
+      "type": "array"
+    },
+    "fingerprintVersion": {
+      "const": "hol.guard.extension-semantics.v2"
+    },
+    "schemaVersion": {
+      "const": "guard.catalog-semantic-fingerprint.v2"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "catalogDigest",
+    "fingerprintVersion",
+    "extensions",
+    "capabilities"
+  ],
+  "title": "HOL Guard catalog semantic fingerprints v2",
+  "type": "object"
+}
