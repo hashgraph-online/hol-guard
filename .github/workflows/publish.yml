@@ -27,7 +27,7 @@ on:
   push:
     branches: [main, release/3.0]
   pull_request:
-    branches: [main, release/3.0]
+    branches: [main, release/3.0, release/3.2]
     types: [opened, synchronize, reopened, labeled]
 
 permissions:
