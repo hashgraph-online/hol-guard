@@ -29,6 +29,7 @@ from ..cli.commands_support_command_activity import (
 )
 from ..config import load_guard_config
 from ..native_pretool import review_pre_tool_native
+from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import native_mode, native_runtime_status, review_post_tool_native
 from ..runtime.hook_content_scanner import ContentScanner
 from ..runtime.hook_decision_cache import HookDecisionCache
@@ -129,6 +130,9 @@ class HookWorker:
             if native is not None:
                 action = str(native.get("minimum_action") or "")
                 if action == "review":
+                    # Native established the minimum floor, but the CLI approval
+                    # path still owns the terminal semantic decision.
+                    record_python_semantic_hook_route()
                     raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
                 return _harness_json_from_native_pre_tool(harness, native)
             status = native_runtime_status()

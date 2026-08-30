@@ -3,22 +3,8 @@ name: Native wheel CI
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "rust/**"
-      - "scripts/build_native_hol_guard_wheel.py"
-      - "ci/native_runtime/test_native_hol_guard_wheel.py"
-      - "ci/native_runtime/probe_native_default_auto.py"
-      - "src/codex_plugin_scanner/guard/native_runtime.py"
-      - ".github/workflows/native-wheel-ci.yml"
   push:
     branches: [main]
-    paths:
-      - "rust/**"
-      - "scripts/build_native_hol_guard_wheel.py"
-      - "ci/native_runtime/test_native_hol_guard_wheel.py"
-      - "ci/native_runtime/probe_native_default_auto.py"
-      - "src/codex_plugin_scanner/guard/native_runtime.py"
-      - ".github/workflows/native-wheel-ci.yml"
   workflow_dispatch:
 
 permissions:
@@ -89,12 +75,14 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST"
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
-          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY
-          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py
+          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH
+          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: hol-guard-native-wheel-linux-x64
-          path: native-dist/*.whl
+          path: |
+            native-dist/*.whl
+            native-default-auto.json
           if-no-files-found: error
 
   macos:
@@ -158,12 +146,14 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST"
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
-          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY
-          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py
+          unset HOL_GUARD_NATIVE HOL_GUARD_NATIVE_BINARY HOL_GUARD_HOOK_FAST_PATH
+          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: hol-guard-native-wheel-${{ matrix.target }}
-          path: native-dist/*.whl
+          path: |
+            native-dist/*.whl
+            native-default-auto.json
           if-no-files-found: error
 
   windows-x64:
@@ -218,9 +208,12 @@ jobs:
           uv pip install --python .venv\Scripts\python.exe --no-deps --force-reinstall $wheel
           Remove-Item Env:HOL_GUARD_NATIVE -ErrorAction SilentlyContinue
           Remove-Item Env:HOL_GUARD_NATIVE_BINARY -ErrorAction SilentlyContinue
-          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py
+          Remove-Item Env:HOL_GUARD_HOOK_FAST_PATH -ErrorAction SilentlyContinue
+          uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: hol-guard-native-wheel-windows-x64
-          path: native-dist/*.whl
+          path: |
+            native-dist/*.whl
+            native-default-auto.json
           if-no-files-found: error

@@ -9,6 +9,7 @@ import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime_module
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_environment
+from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_status,
@@ -24,6 +25,11 @@ def test_native_mode_defaults_auto(monkeypatch: pytest.MonkeyPatch) -> None:
     status = native_runtime_status()
     assert status.mode == "auto"
     assert status.reason == "native_unavailable"
+
+
+def test_hook_fast_path_defaults_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
+    assert hook_fast_path_enabled() is True
 
 
 def test_isolated_hook_environment_keeps_native_mode_and_drops_loaders(tmp_path: Path) -> None:

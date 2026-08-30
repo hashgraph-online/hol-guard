@@ -173,7 +173,7 @@ Healthy backend selection remains invisible. The safe-corpus false-pause rate mu
 
 ## Dead Python cleanup
 
-Maintain `docs/guard/contracts/rust-native-capability-ownership.v1.json`.
+Maintain `docs/guard/contracts/hook-data-plane-ownership.v2.json`.
 
 For every capability, classify Python code as:
 
