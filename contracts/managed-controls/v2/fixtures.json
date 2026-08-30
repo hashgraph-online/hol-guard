@@ -1,0 +1,163 @@
+{
+  "assignment": {
+    "assignmentId": "mca_01j5example00000001",
+    "configurationVersionDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "continuousEnrollment": true,
+    "createdAt": "2026-08-27T12:00:00Z",
+    "createdBy": "user.admin",
+    "effectiveFrom": "2026-08-27T12:05:00Z",
+    "exclusions": [
+      {
+        "kind": "device",
+        "reason": "Scheduled maintenance",
+        "targetId": "device.maintenance"
+      }
+    ],
+    "expiresAt": null,
+    "revision": 1,
+    "schemaVersion": "guard.managed-control-assignment.v1",
+    "selector": {
+      "mode": "all-active-devices"
+    },
+    "workspaceId": "11111111-1111-4111-8111-111111111111"
+  },
+  "catalogSemantics": {
+    "capabilities": [
+      "guard.fleet-extension-configuration.v1",
+      "guard.managed-control-assignment.v1",
+      "guard.custom-extension-definition.v2",
+      "guard.custom-extension-configuration.v2",
+      "guard.catalog-semantic-fingerprint.v2",
+      "guard.managed-controls-composite-apply.v2",
+      "guard.managed-controls-signed-delivery.v2"
+    ],
+    "catalogDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "extensions": [
+      {
+        "extensionId": "command.git",
+        "permissions": [
+          {
+            "configurable": true,
+            "delegatedProtection": null,
+            "permissionId": "command.git.permission.force-push",
+            "required": false,
+            "semanticFingerprint": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+          }
+        ],
+        "required": false,
+        "semanticFingerprint": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      }
+    ],
+    "fingerprintVersion": "hol.guard.extension-semantics.v2",
+    "schemaVersion": "guard.catalog-semantic-fingerprint.v2"
+  },
+  "customExtensionConfiguration": {
+    "allowedVariantIds": [
+      "cev_01j5example00000001"
+    ],
+    "bindingMode": "exact-approved-variant",
+    "commands": [
+      {
+        "commandId": "cec_deployprod",
+        "state": "allow"
+      }
+    ],
+    "configurationId": "cec_cfg_01j5example00000001",
+    "createdAt": "2026-08-27T12:00:00Z",
+    "createdBy": "user.admin",
+    "defaultState": "blocked",
+    "definitionId": "ced_01j5example00000001",
+    "revision": 1,
+    "schemaVersion": "guard.custom-extension-configuration.v2",
+    "workspaceId": "11111111-1111-4111-8111-111111111111"
+  },
+  "customExtensionDefinition": {
+    "commands": [
+      {
+        "commandId": "cec_deployprod",
+        "label": "Deploy production",
+        "semanticFingerprint": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "createdAt": "2026-08-27T12:00:00Z",
+    "createdBy": "user.admin",
+    "definitionId": "ced_01j5example00000001",
+    "displayName": "Internal deploy CLI",
+    "opaqueIdentity": "cei_01j5example0000000000000000000001",
+    "retiredAt": null,
+    "revision": 1,
+    "schemaVersion": "guard.custom-extension-definition.v2",
+    "surface": "cli",
+    "variants": [
+      {
+        "identityEvidenceDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "platforms": [
+          "linux",
+          "macos"
+        ],
+        "reviewState": "trusted",
+        "reviewedAt": "2026-08-27T12:00:00Z",
+        "reviewedBy": "user.reviewer",
+        "semanticFingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "variantId": "cev_01j5example00000001"
+      }
+    ],
+    "workspaceId": "11111111-1111-4111-8111-111111111111"
+  },
+  "digests": {
+    "assignment": "sha256:c3d48c4e2fd1c34618d059d7ac9a80634d6a08de5c330b904c636e8292e7d863",
+    "catalogSemantics": "sha256:4d7cdad904de193733de0c985447fef303f70f1174da42a69c355dfa75f67573",
+    "customExtensionConfiguration": "sha256:c674942f98e95ac1cfac755290dd529f4ae3fc25db2a61ed9dbeb812a121edbc",
+    "customExtensionDefinition": "sha256:57e2f6d588f3218213f556b0f42ee51a2fc28cc4cf6c3d69348c12ca13e5c2a8",
+    "fleetExtensionConfiguration": "sha256:a212d9968e3d13a3aca50eeba817484015b09c17f90390bf7f223508a162a303"
+  },
+  "fleetExtensionConfiguration": {
+    "configurationId": "fec_01j5example00000001",
+    "createdAt": "2026-08-27T12:00:00Z",
+    "createdBy": "user.admin",
+    "description": "Shared fleet Extension posture.",
+    "entries": [
+      {
+        "authorityMode": "managed-restrictive",
+        "availability": "inherit",
+        "contextualOutcome": "block",
+        "entryId": "entry.git.force-push",
+        "source": "explicit",
+        "target": {
+          "extensionId": "command.git",
+          "kind": "permission",
+          "permissionId": "command.git.permission.force-push"
+        }
+      },
+      {
+        "authorityMode": "workspace-shared",
+        "availability": "enabled",
+        "contextualOutcome": "review",
+        "entryId": "entry.shell",
+        "source": "explicit",
+        "target": {
+          "extensionId": "command.shell",
+          "kind": "extension"
+        }
+      },
+      {
+        "authorityMode": "workspace-shared",
+        "availability": "inherit",
+        "contextualOutcome": "review",
+        "entryId": "entry.custom.deploy",
+        "source": "explicit",
+        "target": {
+          "commandId": "cec_deployprod",
+          "definitionId": "ced_01j5example00000001",
+          "kind": "custom-command"
+        }
+      }
+    ],
+    "name": "Engineering baseline",
+    "previousVersionDigest": null,
+    "revision": 1,
+    "schemaVersion": "guard.fleet-extension-configuration.v1",
+    "workspaceId": "11111111-1111-4111-8111-111111111111"
+  },
+  "schemaVersion": "guard.managed-controls.fixtures.v2"
+}

@@ -1,0 +1,282 @@
+{
+  "$defs": {
+    "entry": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "authorityMode": {
+                "const": "managed-restrictive"
+              }
+            },
+            "required": [
+              "authorityMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "availability": {
+                "enum": [
+                  "inherit",
+                  "disabled"
+                ]
+              },
+              "contextualOutcome": {
+                "enum": [
+                  "inherit",
+                  "block"
+                ]
+              },
+              "target": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/target",
+                    "description": "Runtime semantic validation additionally restricts managed targets to built-ins."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "authorityMode": {
+          "enum": [
+            "workspace-shared",
+            "managed-restrictive"
+          ]
+        },
+        "availability": {
+          "enum": [
+            "inherit",
+            "enabled",
+            "disabled"
+          ]
+        },
+        "contextualOutcome": {
+          "enum": [
+            "inherit",
+            "permit",
+            "review",
+            "block",
+            "observe"
+          ]
+        },
+        "entryId": {
+          "maxLength": 128,
+          "minLength": 5,
+          "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 128
+        },
+        "source": {
+          "default": "explicit",
+          "enum": [
+            "explicit",
+            "bulk-default",
+            "migration"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        }
+      },
+      "required": [
+        "entryId",
+        "target",
+        "authorityMode",
+        "availability",
+        "contextualOutcome"
+      ],
+      "type": "object"
+    },
+    "target": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "extensionId": {
+              "maxLength": 128,
+              "minLength": 5,
+              "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+              "type": "string",
+              "x-hol-maxUtf8Bytes": 128
+            },
+            "kind": {
+              "const": "extension"
+            }
+          },
+          "required": [
+            "kind",
+            "extensionId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "extensionId": {
+              "maxLength": 128,
+              "minLength": 5,
+              "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+              "type": "string",
+              "x-hol-maxUtf8Bytes": 128
+            },
+            "kind": {
+              "const": "permission"
+            },
+            "permissionId": {
+              "maxLength": 128,
+              "minLength": 5,
+              "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+              "type": "string",
+              "x-hol-maxUtf8Bytes": 128
+            }
+          },
+          "required": [
+            "kind",
+            "extensionId",
+            "permissionId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "definitionId": {
+              "maxLength": 68,
+              "minLength": 20,
+              "pattern": "^ced_[a-z0-9]{16,64}$",
+              "type": "string",
+              "x-hol-maxUtf8Bytes": 68
+            },
+            "kind": {
+              "const": "custom-extension"
+            }
+          },
+          "required": [
+            "kind",
+            "definitionId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "commandId": {
+              "maxLength": 68,
+              "minLength": 12,
+              "pattern": "^cec_[a-z0-9]{8,64}$",
+              "type": "string",
+              "x-hol-maxUtf8Bytes": 68
+            },
+            "definitionId": {
+              "maxLength": 68,
+              "minLength": 20,
+              "pattern": "^ced_[a-z0-9]{16,64}$",
+              "type": "string",
+              "x-hol-maxUtf8Bytes": 68
+            },
+            "kind": {
+              "const": "custom-command"
+            }
+          },
+          "required": [
+            "kind",
+            "definitionId",
+            "commandId"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$id": "https://hol.org/contracts/managed-controls/v2/guard.fleet-extension-configuration.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "configurationId": {
+      "maxLength": 68,
+      "minLength": 20,
+      "pattern": "^fec_[a-z0-9]{16,64}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 68
+    },
+    "createdAt": {
+      "format": "date-time",
+      "maxLength": 24,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 24
+    },
+    "createdBy": {
+      "maxLength": 128,
+      "minLength": 5,
+      "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 128
+    },
+    "description": {
+      "maxLength": 1024,
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 1024
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/entry"
+      },
+      "maxItems": 512,
+      "type": "array"
+    },
+    "name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 128
+    },
+    "previousVersionDigest": {
+      "anyOf": [
+        {
+          "maxLength": 71,
+          "minLength": 71,
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 71
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "schemaVersion": {
+      "const": "guard.fleet-extension-configuration.v1"
+    },
+    "workspaceId": {
+      "format": "uuid",
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 36
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "configurationId",
+    "workspaceId",
+    "revision",
+    "name",
+    "entries",
+    "createdAt",
+    "createdBy"
+  ],
+  "title": "HOL Guard fleet Extension configuration v1",
+  "type": "object"
+}

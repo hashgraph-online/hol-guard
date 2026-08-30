@@ -1,0 +1,93 @@
+{
+  "errors": [
+    {
+      "code": "fec_invalid_json",
+      "message": "The fleet configuration payload is not valid JSON."
+    },
+    {
+      "code": "fec_unknown_field",
+      "message": "The fleet configuration contains an unsupported field."
+    },
+    {
+      "code": "fec_missing_field",
+      "message": "The fleet configuration is missing a required field."
+    },
+    {
+      "code": "fec_limit_exceeded",
+      "message": "The fleet configuration exceeds a supported limit."
+    },
+    {
+      "code": "fec_invalid_identifier",
+      "message": "A fleet configuration identifier is invalid."
+    },
+    {
+      "code": "fec_invalid_timestamp",
+      "message": "A fleet configuration timestamp is not canonical UTC."
+    },
+    {
+      "code": "fec_duplicate_entry",
+      "message": "The fleet configuration contains a duplicate logical entry."
+    },
+    {
+      "code": "fec_conflicting_entry",
+      "message": "The fleet configuration contains conflicting authority."
+    },
+    {
+      "code": "fec_managed_weaken_forbidden",
+      "message": "Managed restrictive authority cannot weaken protection."
+    },
+    {
+      "code": "fec_unsupported_capability",
+      "message": "The device does not support required fleet configuration semantics."
+    },
+    {
+      "code": "fec_catalog_mismatch",
+      "message": "The device catalog does not match the signed configuration projection."
+    },
+    {
+      "code": "fec_semantic_mismatch",
+      "message": "The Extension meaning changed and requires a new simulation."
+    },
+    {
+      "code": "fec_identity_unbound",
+      "message": "The portable Custom Extension is not bound to an approved local identity."
+    },
+    {
+      "code": "fec_identity_changed",
+      "message": "The local Custom Extension identity changed after approval."
+    },
+    {
+      "code": "fec_revision_stale",
+      "message": "The requested revision is older than current authority."
+    },
+    {
+      "code": "fec_equivocation",
+      "message": "The same revision was observed with different canonical content."
+    },
+    {
+      "code": "fec_replay_rejected",
+      "message": "The signed delivery is not valid for this workspace, device, or session."
+    },
+    {
+      "code": "fec_expired",
+      "message": "The signed delivery expired before it could be applied."
+    },
+    {
+      "code": "fec_signature_rejected",
+      "message": "The signed delivery was not produced by a trusted active signer."
+    },
+    {
+      "code": "fec_partial_apply_rejected",
+      "message": "The composite configuration could not be applied atomically."
+    },
+    {
+      "code": "fec_assignment_empty",
+      "message": "The assignment currently resolves to no eligible targets."
+    },
+    {
+      "code": "fec_version_tenant_binding_rejected",
+      "message": "The configuration version is not bound to the requested workspace aggregate."
+    }
+  ],
+  "schemaVersion": "guard.managed-controls.errors.v2"
+}

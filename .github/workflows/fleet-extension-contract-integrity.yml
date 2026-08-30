@@ -1,0 +1,110 @@
+name: Fleet Extension contract integrity
+
+on:
+  pull_request:
+    branches:
+      - release/3.2
+    paths:
+      - 'contracts/managed-controls/v2/**'
+      - 'src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py'
+      - 'src/codex_plugin_scanner/guard/managed_controls/contracts/**'
+      - 'tests/managed_controls/test_fleet_contracts_v2.py'
+      - 'pyproject.toml'
+      - '.github/workflows/fleet-extension-contract-integrity.yml'
+  push:
+    branches:
+      - release/3.2
+      - feat/fec-001-100-r32-remediation
+    paths:
+      - 'contracts/managed-controls/v2/**'
+      - 'src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py'
+      - 'src/codex_plugin_scanner/guard/managed_controls/contracts/**'
+      - 'tests/managed_controls/test_fleet_contracts_v2.py'
+      - 'pyproject.toml'
+      - '.github/workflows/fleet-extension-contract-integrity.yml'
+  schedule:
+    - cron: '47 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fleet-extension-contract-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out HOL Guard
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.10.9'
+          enable-cache: true
+      - name: Install locked development environment
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Run focused Fleet Extension tests
+        run: uv run pytest -q tests/managed_controls/test_fleet_contracts_v2.py
+      - name: Run complete Managed Controls tests
+        run: uv run pytest -q tests/managed_controls
+      - name: Lint Fleet Extension implementation
+        run: >-
+          uv run ruff check
+          src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py
+          tests/managed_controls/test_fleet_contracts_v2.py
+      - name: Verify Fleet Extension formatting
+        run: >-
+          uv run ruff format --check
+          src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py
+          tests/managed_controls/test_fleet_contracts_v2.py
+      - name: Verify root and packaged resource bytes
+        run: >-
+          uv run python -c
+          "from codex_plugin_scanner.guard.managed_controls.fleet_contracts import verify_packaged_contract_manifest; print(verify_packaged_contract_manifest())"
+
+  verify-installed-wheel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out HOL Guard
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.10.9'
+          enable-cache: true
+      - name: Build wheel
+        run: |
+          set -euo pipefail
+          uv build --wheel
+      - name: Install wheel outside source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv venv /tmp/fec-wheel --python 3.12
+          uv pip install --python /tmp/fec-wheel/bin/python dist/*.whl
+          cd /tmp
+          /tmp/fec-wheel/bin/python - <<'PY'
+          from codex_plugin_scanner.guard.managed_controls.fleet_contracts import (
+              fleet_contract_digest,
+              load_shared_fleet_fixtures,
+              verify_packaged_contract_manifest,
+          )
+
+          verified = verify_packaged_contract_manifest()
+          fixtures = load_shared_fleet_fixtures()
+          assert verified
+          assert fleet_contract_digest(
+              'fleetExtensionConfiguration',
+              fixtures['fleetExtensionConfiguration'],
+          ) == fixtures['digests']['fleetExtensionConfiguration']
+          print({'verified_files': len(verified), 'digest': fixtures['digests']['fleetExtensionConfiguration']})
+          PY

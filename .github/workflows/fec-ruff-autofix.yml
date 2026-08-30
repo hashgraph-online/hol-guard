@@ -1,0 +1,60 @@
+name: Finalize Fleet Extension reader formatting
+
+on:
+  push:
+    branches:
+      - feat/fec-001-100-r32-remediation
+    paths:
+      - '.github/workflows/fec-ruff-autofix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.10.9'
+          enable-cache: true
+      - name: Apply Ruff fixes and formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --extra dev --python 3.12
+          uv run ruff check --fix --unsafe-fixes \
+            src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py \
+            tests/managed_controls/test_fleet_contracts_v2.py
+          uv run ruff format \
+            src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py \
+            tests/managed_controls/test_fleet_contracts_v2.py
+          uv run ruff check \
+            src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py \
+            tests/managed_controls/test_fleet_contracts_v2.py
+          uv run ruff format --check \
+            src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py \
+            tests/managed_controls/test_fleet_contracts_v2.py
+      - name: Commit formatted source and remove temporary workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/fec-ruff-autofix.yml
+          if test -f .github/workflows/fec-source-export.yml; then
+            git rm .github/workflows/fec-source-export.yml
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/codex_plugin_scanner/guard/managed_controls/fleet_contracts.py \
+            tests/managed_controls/test_fleet_contracts_v2.py
+          git commit -m 'style(guard): finalize Fleet Extension reader'
+          git push origin HEAD:${GITHUB_REF_NAME}

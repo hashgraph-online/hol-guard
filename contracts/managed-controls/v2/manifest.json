@@ -1,0 +1,59 @@
+{
+  "files": [
+    {
+      "bytes": 6226,
+      "path": "adversarial-fixtures.json",
+      "sha256": "e6a1059575e70218bbcdc2f7c80f35202b4919f2b581c18f8092522111c55b0d"
+    },
+    {
+      "bytes": 552,
+      "path": "capabilities.json",
+      "sha256": "2923f0646fce98b400a9a66ea62e5889aece288283219a19eda444fb3a6c4a36"
+    },
+    {
+      "bytes": 3091,
+      "path": "catalog-semantic-fingerprint.schema.json",
+      "sha256": "1ad6766aef2e9b74a117ddbc64575768518b29ae026f16104c1ba40728c186a2"
+    },
+    {
+      "bytes": 2920,
+      "path": "custom-extension-configuration.schema.json",
+      "sha256": "126e596b5ace14b631cea9869347d50f170091e8418fca428f0f26d183a79fea"
+    },
+    {
+      "bytes": 6479,
+      "path": "custom-extension-definition.schema.json",
+      "sha256": "766ebd028ab7b54071d3b033567cca78328ea4e6c0244c7ea6a843694e26b146"
+    },
+    {
+      "bytes": 2955,
+      "path": "error-codes.json",
+      "sha256": "fd63351784222d4533220f2bcc29a666b174797a70f3a1ca8c3df0241409080d"
+    },
+    {
+      "bytes": 5726,
+      "path": "fixtures.json",
+      "sha256": "40e276d3bd5cf2e349c26c5cf7b5a59a038c1bbe3111e6218b2276230e07bdb5"
+    },
+    {
+      "bytes": 6938,
+      "path": "fleet-extension-configuration.schema.json",
+      "sha256": "6c09f7191162f481f41079281ac51dc7acfb53d337018c6e60d45417497f44c6"
+    },
+    {
+      "bytes": 517,
+      "path": "limits.json",
+      "sha256": "cc8f2dcea9476a3fedd0ccc9871a51a405283f970baaf8cc7b1e909efdcba898"
+    },
+    {
+      "bytes": 6935,
+      "path": "managed-control-assignment.schema.json",
+      "sha256": "923d996931a8cc911d2c61cbe36cb6bf3efc88d299130b7575e402e8b6793005"
+    }
+  ],
+  "schemaVersion": "guard.managed-controls.contract-manifest.v2",
+  "targetBranches": {
+    "cloud": "main",
+    "core": "release/3.2"
+  }
+}

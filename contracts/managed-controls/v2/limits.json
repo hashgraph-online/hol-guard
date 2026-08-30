@@ -1,0 +1,18 @@
+{
+  "maxAssignmentsPerConfiguration": 128,
+  "maxCapabilities": 64,
+  "maxCommandsPerDefinition": 256,
+  "maxConfigurationEntries": 512,
+  "maxCustomDefinitions": 128,
+  "maxDescriptionBytes": 1024,
+  "maxDisplayNameBytes": 128,
+  "maxExclusions": 256,
+  "maxIdentifierBytes": 128,
+  "maxMetadataEntries": 32,
+  "maxPayloadBytes": 524288,
+  "maxReasonBytes": 512,
+  "maxRevision": 9007199254740991,
+  "maxSelectorValues": 512,
+  "maxVariantsPerDefinition": 32,
+  "schemaVersion": "guard.managed-controls.limits.v2"
+}

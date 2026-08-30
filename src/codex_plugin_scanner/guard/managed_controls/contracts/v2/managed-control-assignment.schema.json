@@ -1,0 +1,275 @@
+{
+  "$defs": {
+    "exclusion": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "member",
+            "device",
+            "agent"
+          ]
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 512
+        },
+        "targetId": {
+          "maxLength": 128,
+          "minLength": 5,
+          "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 128
+        }
+      },
+      "required": [
+        "kind",
+        "targetId",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "selector": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "all-active-devices"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "memberIds": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 5,
+                "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+                "type": "string",
+                "x-hol-maxUtf8Bytes": 128
+              },
+              "maxItems": 512,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "mode": {
+              "const": "selected-members"
+            }
+          },
+          "required": [
+            "mode",
+            "memberIds"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "deviceIds": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 5,
+                "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+                "type": "string",
+                "x-hol-maxUtf8Bytes": 128
+              },
+              "maxItems": 512,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "mode": {
+              "const": "selected-devices"
+            }
+          },
+          "required": [
+            "mode",
+            "deviceIds"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "agentIds": {
+              "items": {
+                "maxLength": 128,
+                "minLength": 5,
+                "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+                "type": "string",
+                "x-hol-maxUtf8Bytes": 128
+              },
+              "maxItems": 512,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "mode": {
+              "const": "supported-agents"
+            }
+          },
+          "required": [
+            "mode",
+            "agentIds"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "directoryQueryId": {
+              "maxLength": 128,
+              "minLength": 5,
+              "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+              "type": "string",
+              "x-hol-maxUtf8Bytes": 128
+            },
+            "mode": {
+              "const": "directory-query"
+            }
+          },
+          "required": [
+            "mode",
+            "directoryQueryId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "deviceTags": {
+              "items": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9._:-]*$",
+                "type": "string",
+                "x-hol-maxUtf8Bytes": 64
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "mode": {
+              "const": "device-tags"
+            }
+          },
+          "required": [
+            "mode",
+            "deviceTags"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$id": "https://hol.org/contracts/managed-controls/v2/guard.managed-control-assignment.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assignmentId": {
+      "maxLength": 68,
+      "minLength": 20,
+      "pattern": "^mca_[a-z0-9]{16,64}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 68
+    },
+    "configurationVersionDigest": {
+      "maxLength": 71,
+      "minLength": 71,
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 71
+    },
+    "continuousEnrollment": {
+      "const": true
+    },
+    "createdAt": {
+      "format": "date-time",
+      "maxLength": 24,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 24
+    },
+    "createdBy": {
+      "maxLength": 128,
+      "minLength": 5,
+      "pattern": "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+)*$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 128
+    },
+    "effectiveFrom": {
+      "format": "date-time",
+      "maxLength": 24,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 24
+    },
+    "exclusions": {
+      "items": {
+        "$ref": "#/$defs/exclusion"
+      },
+      "maxItems": 256,
+      "type": "array"
+    },
+    "expiresAt": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "maxLength": 24,
+          "minLength": 20,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$",
+          "type": "string",
+          "x-hol-maxUtf8Bytes": 24
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "schemaVersion": {
+      "const": "guard.managed-control-assignment.v1"
+    },
+    "selector": {
+      "$ref": "#/$defs/selector"
+    },
+    "workspaceId": {
+      "format": "uuid",
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string",
+      "x-hol-maxUtf8Bytes": 36
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "assignmentId",
+    "workspaceId",
+    "configurationVersionDigest",
+    "revision",
+    "selector",
+    "exclusions",
+    "continuousEnrollment",
+    "createdAt",
+    "createdBy"
+  ],
+  "title": "HOL Guard managed control assignment v1",
+  "type": "object"
+}
