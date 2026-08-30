@@ -9,6 +9,7 @@ from typing import Any
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import native_mode
 from ..store import GuardStore
 from .commands_hook_source_ref import _try_source_ref_fast_path
@@ -72,6 +73,9 @@ def try_native_or_source_ref_hook(
     if native_result is not None:
         _emit("hook", native_result, getattr(args, "json", False))
         return 0
+    # Any path beyond native authority is a Python terminal semantic path.
+    # Preserve that final provenance even when Python asks Rust for a floor.
+    record_python_semantic_hook_route()
     return _try_source_ref_fast_path(
         args,
         config=config,

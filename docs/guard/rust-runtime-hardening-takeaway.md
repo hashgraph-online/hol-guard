@@ -23,7 +23,7 @@ Primary specifications:
 - `docs/guard/adr/0008-native-resident-protocol-and-admission.md`
 - `docs/guard/adr/0009-native-and-daemon-critical-failure.md`
 - `docs/guard/rust-runtime-threat-model-delta.md`
-- `docs/guard/contracts/rust-native-capability-ownership.v1.json`
+- `docs/guard/contracts/hook-data-plane-ownership.v2.json`
 - `docs/guard/contracts/rust-native-fail-safe-matrix.v1.json`
 - `docs/guard/contracts/rust-emergency-safe-profile.v1.json`
 - `docs/guard/contracts/rust-native-reason-codes.v1.json`

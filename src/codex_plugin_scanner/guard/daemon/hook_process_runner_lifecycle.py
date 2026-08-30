@@ -12,7 +12,7 @@ from contextlib import suppress
 
 from .hook_process_capacity import AdaptiveHookProcessCapacity, process_tree_rss_bytes
 from .hook_process_metrics import increment_bounded_metric
-from .hook_process_worker import HookWorkerSlot, retire_worker_slot, worker_retirement_thread
+from .hook_process_worker import HookProcessReview, HookWorkerSlot, retire_worker_slot, worker_retirement_thread
 
 _HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
 
@@ -41,6 +41,7 @@ class HookProcessRunnerLifecycleMixin:
     _restarts: int
     _decisions: dict[str, int]
     _reason_codes: dict[str, int]
+    _routes: dict[str, int]
     wait_for_capacity: Callable[..., bool]
 
     def require_initial_capacity(self) -> None:
@@ -142,6 +143,15 @@ class HookProcessRunnerLifecycleMixin:
             increment_bounded_metric(self._reason_codes, reason_code)
         finally:
             self._metrics_lock.release()
+
+    def _record_route_metric(self, route: object) -> None:
+        with self._metrics_lock:
+            increment_bounded_metric(self._routes, route)
+
+    def _terminal_failed_review(self, route: object, reason_code: object) -> HookProcessReview:
+        self._record_route_metric(route)
+        reason = reason_code if isinstance(reason_code, str) else "daemon_hook_process_failed"
+        return HookProcessReview(None, reason)
 
     def _retire_slot(self, slot: HookWorkerSlot, *, graceful: bool = False) -> bool:
         contained = retire_worker_slot(slot, graceful=graceful)

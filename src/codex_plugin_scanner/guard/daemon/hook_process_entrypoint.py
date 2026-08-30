@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
+from ..native_route_receipt import native_hook_route, reset_native_hook_route
 from ..sqlite_profile import sqlite_error_is_busy_locked
 from .hook_process_protocol import (
     applied_hook_environment,
@@ -210,6 +211,7 @@ def _run_resident_hook_request(
     parsed = _coerce_resident_hook_request(request)
     if parsed is None:
         return {"payload": None, "reason_code": "daemon_hook_process_invalid_request"}
+    reset_native_hook_route()
     if configured_guard_home is not None and parsed.guard_home != Path(configured_guard_home):
         return {"payload": None, "reason_code": "daemon_hook_process_guard_home_mismatch"}
     store_key = str(parsed.guard_home)
@@ -246,7 +248,11 @@ def _run_resident_hook_request(
         except HookWorkerUnsupported:
             pass
         else:
-            return {"payload": worker_payload, "reason_code": None}
+            return {
+                "payload": worker_payload,
+                "reason_code": None,
+                "route": _current_decision_route(),
+            }
     with applied_hook_environment(request):
         config = overlay_synced_guard_policy(
             load_guard_config(parsed.guard_home, workspace=parsed.workspace),
@@ -265,7 +271,7 @@ def _run_resident_hook_request(
             event_file=None,
             json=True,
         )
-        return capture_hook_command(
+        response = capture_hook_command(
             lambda output: _run_guard_hook_command(
                 args,
                 guard_home=parsed.guard_home,
@@ -281,6 +287,20 @@ def _run_resident_hook_request(
                 _claimed_approval_request_id=parsed.claimed_approval_request_id,
             )
         )
+        response["route"] = _current_decision_route()
+        return response
+
+
+def _native_mode_requires_rust() -> bool:
+    from ..native_runtime import native_mode
+
+    return native_mode() in {"auto", "force"}
+
+
+def _current_decision_route() -> str:
+    if not _native_mode_requires_rust():
+        return "python_semantic"
+    return native_hook_route() or "python_semantic"
 
 
 def _coerce_resident_hook_request(request: dict[str, object]) -> _ResidentHookRequest | None:

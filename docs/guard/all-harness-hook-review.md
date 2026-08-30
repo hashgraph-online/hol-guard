@@ -94,7 +94,7 @@ action floor, rescan supported `PostToolUse` output as an authoritative
 fallback, or synthesize an allow after native failure.
 
 The permanent ownership contract is recorded in
-`ci/rust-authority-ownership.v1.json` and enforced by
+`docs/guard/contracts/hook-data-plane-ownership.v2.json` and enforced by
 `.github/workflows/rust-authority-ownership.yml`.
 
 ## Why Not Server-Side Source Ref Synthesis?
