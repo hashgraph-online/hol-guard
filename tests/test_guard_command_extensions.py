@@ -753,6 +753,7 @@ def test_explicit_git_force_push_permission_allows_matcher_owned_rule(tmp_path: 
         "explicitly_enabled_permission_ids": ["command.git.permission.force-push"],
     }
 
+
 def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Path) -> None:
     command = "gh pr merge 5115 --repo example/project --squash --auto"
     request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
