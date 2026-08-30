@@ -884,9 +884,9 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
     )
 
     def with_config_policy(action: GuardAction) -> GuardAction:
-        # Artifact/publisher/harness settings are more-specific resolutions of
-        # the global default, not additional inputs.  Scanner/risk results are
-        # independent and therefore remain a floor even for an exact allow.
+        # Artifact/publisher/harness settings are more-specific than the global
+        # default. An explicitly enabled catalog permission already accepted the
+        # command's cataloged risks, so global risk_actions must not re-raise them.
         current_config_action = (
             configured_override
             if configured_override is not None
@@ -900,6 +900,8 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         actions = (action, current_config_action, effective_command_floor)
         return most_restrictive_guard_action(*(item for item in actions if item is not None))
 
+    if explicit_permission_allow:
+        return with_config_policy(command_action_floor or "allow")
     risk_classes = _runtime_artifact_risk_classes(artifact)
     has_configured_risk_action = any(
         _resolve_configured_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes
@@ -917,8 +919,6 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         ]
         if resolved_actions:
             return with_config_policy(most_restrictive_guard_action(*resolved_actions))
-    if explicit_permission_allow:
-        return with_config_policy(command_action_floor or "allow")
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
     if (
         guard_default_action == "sandbox-required" and pytest_restricted_sandbox
