@@ -248,8 +248,26 @@ def prune_foreign_guard_codex_hook_groups(
     return pruned
 
 
+def install_managed_codex_hook_groups(
+    hooks: dict[str, object],
+    managed_groups: Mapping[str, dict[str, object]],
+    *,
+    current_guard_home: Path,
+) -> None:
+    for event_name, managed_group in managed_groups.items():
+        existing = hooks.get(event_name)
+        hooks[event_name] = [
+            *prune_foreign_guard_codex_hook_groups(
+                existing if isinstance(existing, list) else [],
+                current_guard_home=current_guard_home,
+            ),
+            managed_group,
+        ]
+
+
 __all__ = [
     "exact_legacy_hook_bindings",
+    "install_managed_codex_hook_groups",
     "is_foreign_guard_codex_hook_group",
     "prune_foreign_guard_codex_hook_groups",
     "remove_manifest_bound_hook_events",
