@@ -1295,7 +1295,7 @@ def _version_check_payload(
         compatible_version = _latest_compatible_release_version(
             current_version,
             runtime_python,
-            alpha_only=include_alpha,
+            include_alpha=include_alpha,
         )
         if compatible_version is not None:
             return {
@@ -1320,7 +1320,9 @@ def _version_check_payload(
             "required_python": _format_python_requirements(required_python_requirements),
             "runtime_python": runtime_python,
         }
-    reserved_alpha = _newest_reserved_alpha_version(latest_pypi=latest_version) if include_alpha else None
+    reserved_alpha = (
+        _newest_reserved_alpha_version(latest_pypi=_latest_published_alpha_version()) if include_alpha else None
+    )
     return {
         "source": "pypi",
         **({"release_channel": "alpha"} if include_alpha else {}),
@@ -1367,14 +1369,38 @@ def _latest_version_from_pypi() -> str | None:
 
 
 def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
-    """Return the newest non-yanked alpha on PyPI, including newer majors.
+    """Return the newest non-yanked stable or alpha release on PyPI.
 
-    ``current_version`` is retained for call-site compatibility. Alpha channel
-    intentionally tracks the global newest alpha so ``hol-guard update --alpha``
-    can move installs across major lines (for example 2.x stable -> 3.0.0aN).
+    ``current_version`` is retained for call-site compatibility. Opting into
+    alpha releases widens the candidate set; it must not hide a newer stable
+    release after an alpha train graduates.
     """
     _ = current_version
     _ = _latest_version_from_pypi()
+    payload = _last_pypi_payload
+    if not isinstance(payload, dict):
+        return None
+    releases = payload.get("releases")
+    if not isinstance(releases, dict):
+        return None
+    candidates: list[tuple[Version, str]] = []
+    for version_text, files in releases.items():
+        if not isinstance(version_text, str) or not version_text.strip():
+            continue
+        try:
+            parsed_version = Version(version_text)
+        except InvalidVersion:
+            continue
+        if parsed_version.is_prerelease and (parsed_version.pre is None or parsed_version.pre[0] != "a"):
+            continue
+        if _release_has_non_yanked_file(files):
+            candidates.append((parsed_version, version_text.strip()))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda candidate: candidate[0])[1]
+
+
+def _latest_published_alpha_version() -> str | None:
     payload = _last_pypi_payload
     if not isinstance(payload, dict):
         return None
@@ -1519,7 +1545,7 @@ def _latest_compatible_release_version(
     current_version: str,
     runtime_python: str,
     *,
-    alpha_only: bool = False,
+    include_alpha: bool = False,
 ) -> str | None:
     payload = _last_pypi_payload
     if not isinstance(payload, dict):
@@ -1535,7 +1561,9 @@ def _latest_compatible_release_version(
             parsed_version = Version(version_text)
         except InvalidVersion:
             continue
-        if alpha_only and (parsed_version.pre is None or parsed_version.pre[0] != "a"):
+        if parsed_version.is_prerelease and (
+            not include_alpha or parsed_version.pre is None or parsed_version.pre[0] != "a"
+        ):
             continue
         if _is_newer_version(version_text, current_version) is not True:
             continue
@@ -1546,10 +1574,7 @@ def _latest_compatible_release_version(
             candidates.append((parsed_version, version_text.strip()))
     if not candidates:
         return None
-    if alpha_only:
-        return max(candidates, key=lambda candidate: candidate[0])[1]
-    stable_candidates = [candidate for candidate in candidates if not candidate[0].is_prerelease]
-    return max(stable_candidates or candidates, key=lambda candidate: candidate[0])[1]
+    return max(candidates, key=lambda candidate: candidate[0])[1]
 
 
 def _release_has_non_yanked_file(files: object) -> bool:
