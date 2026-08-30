@@ -432,7 +432,7 @@
     "dashboard/src/app.tsx": 1106,
     "dashboard/src/approval-center-primitives.tsx": 1049,
     "dashboard/src/approval-center-utils.ts": 901,
-    "dashboard/src/apps/app-detail-workspace.tsx": 1935,
+    "dashboard/src/apps/app-detail-workspace.tsx": 1975,
     "dashboard/src/audit-workspace.tsx": 705,
     "dashboard/src/evidence/evidence-activity-heatmap.tsx": 527,
     "dashboard/src/fleet-workspace.tsx": 531,
