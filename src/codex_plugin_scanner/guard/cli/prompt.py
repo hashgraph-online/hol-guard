@@ -62,7 +62,7 @@ def resolve_interactive_decisions(
     review_items = [
         artifact
         for artifact in prompt_artifacts
-        if artifact.policy_action in {"warn", "review", "require-reapproval", "block"}
+        if artifact.policy_action in {"review", "require-reapproval", "block"}
     ]
     if not review_items:
         evaluation["blocked"] = False

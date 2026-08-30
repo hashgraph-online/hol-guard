@@ -1941,6 +1941,91 @@ def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monke
     assert store.list_receipts(limit=5) == []
 
 
+def test_warn_artifact_is_not_prompted_alongside_a_review_artifact(tmp_path: Path) -> None:
+    """A ``warn`` artifact must never open its own review prompt.
+
+    ``warn`` is not a blocking action (see ``_BLOCKING_ACTIONS`` in
+    ``runtime/decisions.py`` and the accepted-vs-not-applicable branches of
+    ``evaluate_approval_reuse``), so a saved allow rule correctly leaves it as
+    ``not-applicable`` -- there is nothing for the rule to unblock. Before this
+    fix, ``resolve_interactive_decisions`` still swept every ``warn`` artifact
+    into its review-prompt list whenever *any other* artifact in the same run
+    was genuinely blocking, forcing a prompt that no saved rule could ever
+    satisfy.
+    """
+    store = _store(tmp_path)
+
+    review_artifact = guard_prompt_module.PromptArtifact(
+        harness="hermes",
+        artifact_id="hermes:skill:apple:reminders",
+        artifact_name="reminders",
+        artifact_hash="hash-review",
+        policy_action="review",
+        changed_fields=("runtime_tool_call",),
+        provenance_summary="global artifact",
+        recommendation="review",
+        publisher=None,
+        config_path="/root/.hermes/skills/apple/reminders/SKILL.md",
+        source_scope="global",
+        artifact_type="tool_action_request",
+        command=None,
+        transport=None,
+        metadata={},
+        current_snapshot=None,
+        removed=False,
+    )
+    warn_artifact = guard_prompt_module.PromptArtifact(
+        harness="hermes",
+        artifact_id="hermes:skill:apple:apple-notes",
+        artifact_name="apple-notes",
+        artifact_hash="hash-warn",
+        policy_action="warn",
+        changed_fields=("first_seen",),
+        provenance_summary="global artifact defined at /root/.hermes/skills/apple/apple-notes/SKILL.md",
+        recommendation="warn",
+        publisher=None,
+        config_path="/root/.hermes/skills/apple/apple-notes/SKILL.md",
+        source_scope="global",
+        artifact_type="skill",
+        command=None,
+        transport=None,
+        metadata={},
+        current_snapshot=None,
+        removed=False,
+    )
+    evaluation = {
+        "blocked": True,
+        "artifacts": [
+            {"artifact_id": review_artifact.artifact_id, "policy_action": "review"},
+            {"artifact_id": warn_artifact.artifact_id, "policy_action": "warn"},
+        ],
+    }
+
+    prompt_calls = 0
+
+    def _input(_prompt: str) -> str:
+        nonlocal prompt_calls
+        prompt_calls += 1
+        assert prompt_calls == 1, "the warn artifact must not open a second review prompt"
+        return "1"
+
+    resolved = guard_prompt_module.resolve_interactive_decisions(
+        store,
+        evaluation,
+        [review_artifact, warn_artifact],
+        workspace=None,
+        now="2026-08-30T00:00:00+00:00",
+        console=Console(file=io.StringIO(), force_terminal=False),
+        input_func=_input,
+    )
+
+    assert prompt_calls == 1
+    payloads = {item["artifact_id"]: item for item in resolved["artifacts"]}
+    assert payloads[review_artifact.artifact_id]["policy_action"] == "allow"
+    assert payloads[warn_artifact.artifact_id]["policy_action"] == "warn"
+    assert "user_override" not in payloads[warn_artifact.artifact_id]
+
+
 def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
