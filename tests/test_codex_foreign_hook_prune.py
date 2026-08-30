@@ -7,7 +7,10 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.codex_hook_registration import is_foreign_guard_codex_hook_group
+from codex_plugin_scanner.guard.codex_hook_registration import (
+    is_foreign_guard_codex_hook_group,
+    prune_foreign_guard_codex_hook_groups,
+)
 
 
 def _command_group(command: str) -> dict[str, object]:
@@ -56,6 +59,44 @@ def test_quoted_same_home_path_with_spaces_is_not_foreign(tmp_path: Path) -> Non
         f"--guard-home {shlex.quote(str(current))}"
     )
     assert is_foreign_guard_codex_hook_group(group, current_guard_home=current) is False
+
+
+def test_mixed_home_group_keeps_current_handler_only(tmp_path: Path) -> None:
+    current = tmp_path / "guard-home"
+    current.mkdir()
+    foreign = tmp_path / "pytest-of-user" / "guard-home"
+    mixed = {
+        "matcher": "Bash",
+        "hooks": [
+            {
+                "type": "command",
+                "command": (
+                    "python -m codex_plugin_scanner.cli guard hook --harness codex "
+                    f"--guard-home {current}"
+                ),
+            },
+            {
+                "type": "command",
+                "command": (
+                    "python -m codex_plugin_scanner.cli guard hook --harness codex "
+                    f"--guard-home {foreign}"
+                ),
+            },
+        ],
+    }
+    pruned = prune_foreign_guard_codex_hook_groups([mixed], current_guard_home=current)
+    assert len(pruned) == 1
+    remaining = pruned[0]
+    assert isinstance(remaining, dict)
+    handlers = remaining.get("hooks")
+    assert isinstance(handlers, list)
+    assert len(handlers) == 1
+    handler = handlers[0]
+    assert isinstance(handler, dict)
+    command = handler.get("command")
+    assert isinstance(command, str)
+    assert str(current) in command
+    assert "pytest-of-user" not in command
 
 
 def test_install_config_hooks_drops_foreign_home_and_keeps_other_hooks(tmp_path: Path) -> None:

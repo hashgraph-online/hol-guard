@@ -53,7 +53,7 @@ from ..codex_hook_manifest import (
 )
 from ..codex_hook_registration import (
     exact_legacy_hook_bindings,
-    is_foreign_guard_codex_hook_group,
+    prune_foreign_guard_codex_hook_groups,
 )
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
@@ -1671,14 +1671,10 @@ class CodexHarnessAdapter(HarnessAdapter):
         cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
         for event_name, managed_group in _managed_hook_groups(context).items():
             existing_groups = cleaned_hooks.get(event_name)
-            kept_groups = [
-                group
-                for group in (existing_groups if isinstance(existing_groups, list) else [])
-                if not is_foreign_guard_codex_hook_group(
-                    group,
-                    current_guard_home=context.guard_home,
-                )
-            ]
+            kept_groups = prune_foreign_guard_codex_hook_groups(
+                existing_groups if isinstance(existing_groups, list) else [],
+                current_guard_home=context.guard_home,
+            )
             cleaned_hooks[event_name] = [
                 *kept_groups,
                 managed_group,

@@ -216,8 +216,41 @@ def is_foreign_guard_codex_hook_group(group: object, *, current_guard_home: Path
     return all(_resolved_guard_home(home) != current for home in extracted)
 
 
+def prune_foreign_guard_codex_hook_groups(
+    groups: Sequence[object],
+    *,
+    current_guard_home: Path,
+) -> list[object]:
+    """Drop foreign Guard handlers while keeping current-home and non-Guard hooks."""
+
+    pruned: list[object] = []
+    for group in groups:
+        if not isinstance(group, Mapping):
+            pruned.append(group)
+            continue
+        handlers = group.get("hooks")
+        if isinstance(handlers, list) and handlers:
+            kept_handlers: list[object] = []
+            for handler in handlers:
+                probe = {"hooks": [handler]} if isinstance(handler, Mapping) else handler
+                if is_foreign_guard_codex_hook_group(probe, current_guard_home=current_guard_home):
+                    continue
+                kept_handlers.append(handler)
+            if not kept_handlers:
+                continue
+            updated = dict(group)
+            updated["hooks"] = kept_handlers
+            pruned.append(updated)
+            continue
+        if is_foreign_guard_codex_hook_group(group, current_guard_home=current_guard_home):
+            continue
+        pruned.append(group)
+    return pruned
+
+
 __all__ = [
     "exact_legacy_hook_bindings",
     "is_foreign_guard_codex_hook_group",
+    "prune_foreign_guard_codex_hook_groups",
     "remove_manifest_bound_hook_events",
 ]
