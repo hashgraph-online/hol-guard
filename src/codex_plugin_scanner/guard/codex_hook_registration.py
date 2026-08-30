@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -10,12 +11,6 @@ from pathlib import Path
 from .codex_hook_file_integrity import split_hook_command
 from .codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
 
-_GUARD_CODEX_HOOK_MARKERS = (
-    "codex_daemon_hook_bridge.py",
-    "hol-guard hook",
-    "codex_plugin_scanner.cli",
-)
-_GUARD_HOME_FLAG_RE = re.compile(r"--guard-home(?:\s+|=)(\S+)")
 _STATE_PATH_RE = re.compile(r'"state_path"\s*:\s*"([^"]+)"')
 _GUARD_HOME_QUERY_RE = re.compile(r"guard-home=([^&\"'\s]+)")
 
@@ -133,8 +128,24 @@ def _hook_group_command_blob(group: object) -> str:
     return "\n".join(parts)
 
 
+def _has_codex_harness(blob: str) -> bool:
+    compact = blob.replace(" ", "")
+    return (
+        "--harness codex" in blob
+        or "--harness=codex" in blob
+        or '"--harness","codex"' in compact
+        or "'--harness','codex'" in compact
+    )
+
+
 def _looks_like_guard_codex_hook(blob: str) -> bool:
-    return any(marker in blob for marker in _GUARD_CODEX_HOOK_MARKERS)
+    if "codex_daemon_hook_bridge.py" in blob:
+        return True
+    if not _has_codex_harness(blob):
+        return False
+    if "hol-guard hook" in blob:
+        return True
+    return "codex_plugin_scanner.cli" in blob and "guard hook" in blob
 
 
 def _normalize_guard_home_path(value: str) -> Path | None:
@@ -144,13 +155,34 @@ def _normalize_guard_home_path(value: str) -> Path | None:
     return Path(stripped).expanduser()
 
 
+def _extract_guard_home_flags(command: str) -> list[Path]:
+    homes: list[Path] = []
+    try:
+        tokens = shlex.split(command, posix=True, comments=False)
+    except ValueError:
+        tokens = command.split()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--guard-home" and index + 1 < len(tokens):
+            parsed = _normalize_guard_home_path(tokens[index + 1])
+            if parsed is not None:
+                homes.append(parsed)
+            index += 2
+            continue
+        if token.startswith("--guard-home="):
+            parsed = _normalize_guard_home_path(token.split("=", 1)[1])
+            if parsed is not None:
+                homes.append(parsed)
+        index += 1
+    return homes
+
+
 def _extract_guard_homes_from_hook_blob(blob: str) -> tuple[Path, ...]:
     decoded = blob.replace('\\"', '"')
     homes: list[Path] = []
-    for match in _GUARD_HOME_FLAG_RE.finditer(decoded):
-        parsed = _normalize_guard_home_path(match.group(1))
-        if parsed is not None:
-            homes.append(parsed)
+    for command in decoded.split("\n"):
+        homes.extend(_extract_guard_home_flags(command))
     for match in _STATE_PATH_RE.finditer(decoded):
         state_path = Path(match.group(1))
         if state_path.name == "daemon-state.json":

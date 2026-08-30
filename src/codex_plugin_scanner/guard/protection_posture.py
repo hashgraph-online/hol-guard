@@ -168,27 +168,6 @@ def protection_is_off(*, posture: str, mode: str) -> bool:
     return posture == "watch" or mode == "observe"
 
 
-def recording_only_from_config_text(text: str) -> bool:
-    """Parse top-level Guard config text for watch/observe recording-only mode."""
-
-    mode = ""
-    posture = ""
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("["):
-            continue
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key == "mode":
-            mode = value
-        elif key == "protection_posture":
-            posture = value
-    return protection_is_off(posture=posture, mode=mode)
-
-
 def protection_status_fields(*, posture: str, mode: str) -> dict[str, object]:
     off = protection_is_off(posture=posture, mode=mode)
     return {

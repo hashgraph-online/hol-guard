@@ -4,10 +4,11 @@ from __future__ import annotations
 
 HOOK_SCRIPT_TEMPLATE_TAIL = """def _recording_only_from_guard_home() -> bool:
     try:
-        from codex_plugin_scanner.guard.protection_posture import recording_only_from_config_text
+        from codex_plugin_scanner.guard.config import load_guard_config
+        from codex_plugin_scanner.guard.protection_posture import protection_is_off
 
-        text = Path(GUARD_HOME).joinpath("config.toml").read_text(encoding="utf-8")
-        return recording_only_from_config_text(text)
+        config = load_guard_config(Path(GUARD_HOME))
+        return protection_is_off(posture=config.protection_posture, mode=config.mode)
     except Exception:
         return False
 

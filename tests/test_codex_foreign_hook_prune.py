@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -38,6 +39,23 @@ def test_same_guard_home_legacy_bridge_is_not_foreign(tmp_path: Path) -> None:
 def test_non_guard_hooks_are_not_foreign() -> None:
     group = _command_group("lean-ctx hook observe")
     assert is_foreign_guard_codex_hook_group(group, current_guard_home=Path("guard-home")) is False
+
+
+def test_unrelated_scanner_cli_hook_is_not_foreign(tmp_path: Path) -> None:
+    current = tmp_path / "guard-home"
+    foreign = tmp_path / "other-home"
+    group = _command_group(f"python -m codex_plugin_scanner.cli scan --guard-home {foreign}")
+    assert is_foreign_guard_codex_hook_group(group, current_guard_home=current) is False
+
+
+def test_quoted_same_home_path_with_spaces_is_not_foreign(tmp_path: Path) -> None:
+    current = tmp_path / "Application Support" / "guard-home"
+    current.mkdir(parents=True)
+    group = _command_group(
+        "python -m codex_plugin_scanner.cli guard hook --harness codex "
+        f"--guard-home {shlex.quote(str(current))}"
+    )
+    assert is_foreign_guard_codex_hook_group(group, current_guard_home=current) is False
 
 
 def test_install_config_hooks_drops_foreign_home_and_keeps_other_hooks(tmp_path: Path) -> None:
