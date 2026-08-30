@@ -104,9 +104,7 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
             else ("allow" if explicit_permission_allow else config.default_action)
         )
         effective_command_floor = (
-            None
-            if action == "sandbox-required" and pytest_restricted_sandbox
-            else command_action_floor
+            None if action == "sandbox-required" and pytest_restricted_sandbox else command_action_floor
         )
         actions = (action, current_config_action, effective_command_floor)
         return most_restrictive_guard_action(*(item for item in actions if item is not None))

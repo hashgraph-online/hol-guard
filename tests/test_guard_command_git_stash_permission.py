@@ -50,8 +50,8 @@ def _permission_layer(permission_id: str, state: ControlState) -> ExtensionContr
     (
         "git stash",
         "git stash push -m wip",
-        "/bin/zsh -lc 'git stash'",
-        "/bin/zsh -lc 'git stash list'",
+        "zsh -lc 'git stash'",
+        "zsh -lc 'git stash list'",
     ),
 )
 def test_explicit_git_stash_permission_allows_wrapped_shell_forms(command: str, tmp_path: Path) -> None:
