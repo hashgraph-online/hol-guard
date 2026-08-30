@@ -203,6 +203,7 @@ class HookProcessStats(TypedDict):
     restarts: int
     decisions: dict[str, int]
     reason_codes: dict[str, int]
+    routes: dict[str, int]
 
 
 @final

@@ -183,8 +183,9 @@ def apply_desktop_core_update(
         raise DesktopCoreUpdateError("desktop_core_channel_unsupported") from error
     if not _version_matches_channel(parsed_target, include_alpha=include_alpha):
         raise DesktopCoreUpdateError("desktop_core_channel_unsupported")
-    channel = "alpha" if include_alpha else "stable"
-    tag = f"alpha/v{normalized_target}" if include_alpha else f"v{normalized_target}"
+    target_is_alpha = parsed_target.pre is not None and parsed_target.pre[0] == "a"
+    channel = "alpha" if target_is_alpha else "stable"
+    tag = f"alpha/v{normalized_target}" if target_is_alpha else f"v{normalized_target}"
     artifact = f"hol-guard-core-{normalized_target}-{target}"
 
     def _default_download(url: str, limit: int) -> bytes:
@@ -244,9 +245,9 @@ def executable_is_desktop_core(executable: Path) -> bool:
 
 
 def _version_matches_channel(version: Version, *, include_alpha: bool) -> bool:
-    if include_alpha:
-        return version.pre is not None and version.pre[0] == "a"
-    return not version.is_prerelease
+    if not version.is_prerelease:
+        return True
+    return include_alpha and version.pre is not None and version.pre[0] == "a"
 
 
 def _version_is_not_newer(target_version: str, current_version: str) -> bool:
