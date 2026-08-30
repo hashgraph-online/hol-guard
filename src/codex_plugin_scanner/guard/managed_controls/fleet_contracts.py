@@ -11,8 +11,7 @@ from importlib.resources import files as resource_files
 from typing import Final, Literal, TypeAlias, cast
 
 from jsonschema import FormatChecker, ValidationError
-from jsonschema.validators import extend
-from jsonschema.validators import Draft202012Validator
+from jsonschema.validators import Draft202012Validator, extend
 
 ContractKind: TypeAlias = Literal[
     "fleetExtensionConfiguration",
@@ -30,8 +29,7 @@ CONTRACT_SCHEMAS: Final[dict[ContractKind, str]] = {
     "catalogSemantics": "guard.catalog-semantic-fingerprint.v2",
 }
 CONTRACT_DOMAINS: Final[dict[ContractKind, bytes]] = {
-    kind: f"hol.guard.{schema.removeprefix('guard.')}\0".encode("utf-8")
-    for kind, schema in CONTRACT_SCHEMAS.items()
+    kind: f"hol.guard.{schema.removeprefix('guard.')}\0".encode() for kind, schema in CONTRACT_SCHEMAS.items()
 }
 REQUIRED_FLEET_CAPABILITIES: Final[frozenset[str]] = frozenset(
     {
@@ -47,9 +45,7 @@ _SCHEMA_FILES: Final[dict[ContractKind, str]] = {
     "customExtensionConfiguration": "custom-extension-configuration.schema.json",
     "catalogSemantics": "catalog-semantic-fingerprint.schema.json",
 }
-_CONTRACT_PACKAGE: Final = resource_files(
-    "codex_plugin_scanner.guard.managed_controls.contracts.v2"
-)
+_CONTRACT_PACKAGE: Final = resource_files("codex_plugin_scanner.guard.managed_controls.contracts.v2")
 _CAPABILITY = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 _MAX_PAYLOAD_BYTES = 524_288
 _SELECTOR_FIELDS: Final[frozenset[str]] = frozenset(
@@ -108,11 +104,15 @@ def _load_schema(kind: ContractKind) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
-def _validate_utf8_bytes(validator: object, maximum: object, instance: object, schema: object) -> Iterable[ValidationError]:
+def _validate_utf8_bytes(
+    validator: object,
+    maximum: object,
+    instance: object,
+    schema: object,
+) -> Iterable[ValidationError]:
     del validator, schema
-    if isinstance(instance, str) and isinstance(maximum, int):
-        if len(instance.encode("utf-8")) > maximum:
-            yield ValidationError("UTF-8 byte limit exceeded", validator="x-hol-maxUtf8Bytes")
+    if isinstance(instance, str) and isinstance(maximum, int) and len(instance.encode("utf-8")) > maximum:
+        yield ValidationError("UTF-8 byte limit exceeded", validator="x-hol-maxUtf8Bytes")
 
 
 FleetDraft202012Validator = extend(
@@ -139,26 +139,22 @@ def _schema_error(errors: Sequence[ValidationError]) -> str:
         return "fec_unknown_field"
     if any(error.validator == "required" for error in flattened):
         return "fec_missing_field"
-    if any(
-        error.validator == "const" and list(error.absolute_path) == ["schemaVersion"]
-        for error in flattened
-    ):
+    if any(error.validator == "const" and list(error.absolute_path) == ["schemaVersion"] for error in flattened):
         return "fec_unsupported_capability"
     if any(
-        error.validator == "const"
-        and _path_key(error) in {"continuousEnrollment", "bindingMode", "fingerprintVersion"}
+        error.validator == "const" and _path_key(error) in {"continuousEnrollment", "bindingMode", "fingerprintVersion"}
         for error in flattened
     ):
         return "fec_conflicting_entry"
     if any(
-        error.validator
-        in {"format", "pattern", "maxLength", "minLength", "x-hol-maxUtf8Bytes"}
+        error.validator in {"format", "pattern", "maxLength", "minLength", "x-hol-maxUtf8Bytes"}
         and _path_key(error) in _TIMESTAMP_FIELDS
         for error in flattened
     ):
         return "fec_invalid_timestamp"
     if any(
-        error.validator in {
+        error.validator
+        in {
             "x-hol-maxUtf8Bytes",
             "maxItems",
             "minItems",
@@ -184,10 +180,7 @@ def _target_key(target: Mapping[str, object]) -> tuple[str, str, str]:
 
 
 def _unique(values: Sequence[object]) -> None:
-    encoded = [
-        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-        for value in values
-    ]
+    encoded = [json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True) for value in values]
     if len(encoded) != len(set(encoded)):
         _fail("fec_duplicate_entry")
 
@@ -211,8 +204,7 @@ def _preclassify(kind: ContractKind, value: object) -> None:
                 if (
                     target_kind not in {"extension", "permission"}
                     or raw_entry.get("availability") == "enabled"
-                    or raw_entry.get("contextualOutcome")
-                    in {"permit", "review", "observe"}
+                    or raw_entry.get("contextualOutcome") in {"permit", "review", "observe"}
                 ):
                     _fail("fec_managed_weaken_forbidden")
     elif kind == "assignment":
@@ -247,7 +239,25 @@ def _preclassify(kind: ContractKind, value: object) -> None:
 def _validate_fleet(value: dict[str, object]) -> None:
     entries = cast(list[dict[str, object]], value["entries"])
     _unique([entry["entryId"] for entry in entries])
-    _unique([_target_key(cast(dict[str, object], entry["target"])) for entry in entries])
+    entries_by_target: dict[tuple[str, str, str], list[dict[str, object]]] = {}
+    for entry in entries:
+        target_key = _target_key(cast(dict[str, object], entry["target"]))
+        entries_by_target.setdefault(target_key, []).append(entry)
+    for grouped_entries in entries_by_target.values():
+        if len(grouped_entries) < 2:
+            continue
+        authority_values = {
+            (
+                entry["authorityMode"],
+                entry["availability"],
+                entry["contextualOutcome"],
+                entry["source"],
+            )
+            for entry in grouped_entries
+        }
+        if len(authority_values) == 1:
+            _fail("fec_duplicate_entry")
+        _fail("fec_conflicting_entry")
     for entry in entries:
         if entry["authorityMode"] != "managed-restrictive":
             continue
@@ -298,9 +308,7 @@ def _validate_custom_definition(value: dict[str, object]) -> None:
     for item in variants:
         platforms = cast(list[str], item["platforms"])
         _unique(platforms)
-        if item["reviewState"] == "trusted" and (
-            not item.get("reviewedAt") or not item.get("reviewedBy")
-        ):
+        if item["reviewState"] == "trusted" and (not item.get("reviewedAt") or not item.get("reviewedBy")):
             _fail("fec_missing_field")
 
 
@@ -308,6 +316,54 @@ def _validate_custom_configuration(value: dict[str, object]) -> None:
     commands = cast(list[dict[str, object]], value["commands"])
     _unique([item["commandId"] for item in commands])
     _unique(cast(list[object], value["allowedVariantIds"]))
+
+
+def validate_custom_extension_binding(
+    definition_value: object,
+    configuration_value: object,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Validate a configuration against the exact portable definition it binds."""
+
+    definition = validate_fleet_contract("customExtensionDefinition", definition_value)
+    configuration = validate_fleet_contract("customExtensionConfiguration", configuration_value)
+    if (
+        definition["workspaceId"] != configuration["workspaceId"]
+        or definition["definitionId"] != configuration["definitionId"]
+    ):
+        _fail("fec_identity_unbound")
+    trusted_variants = {
+        variant["variantId"]
+        for variant in cast(list[dict[str, object]], definition["variants"])
+        if variant["reviewState"] == "trusted"
+    }
+    allowed_variants = set(cast(list[str], configuration["allowedVariantIds"]))
+    definition_commands = {command["commandId"] for command in cast(list[dict[str, object]], definition["commands"])}
+    configured_commands = {command["commandId"] for command in cast(list[dict[str, object]], configuration["commands"])}
+    if not allowed_variants or not allowed_variants <= trusted_variants:
+        _fail("fec_identity_unbound")
+    if not configured_commands <= definition_commands:
+        _fail("fec_identity_unbound")
+    return definition, configuration
+
+
+def validate_fleet_contract_collection(
+    document: Mapping[str, object],
+) -> dict[ContractKind, dict[str, object]]:
+    """Validate every exact Fleet object embedded in a signed policy payload."""
+
+    parsed: dict[ContractKind, dict[str, object]] = {}
+    for kind in CONTRACT_SCHEMAS:
+        if kind in document:
+            parsed[kind] = validate_fleet_contract(kind, document[kind])
+    definition = parsed.get("customExtensionDefinition")
+    configuration = parsed.get("customExtensionConfiguration")
+    if (definition is None) != (configuration is None):
+        _fail("fec_identity_unbound")
+    if definition is not None and configuration is not None:
+        validated_definition, validated_configuration = validate_custom_extension_binding(definition, configuration)
+        parsed["customExtensionDefinition"] = validated_definition
+        parsed["customExtensionConfiguration"] = validated_configuration
+    return parsed
 
 
 def _validate_catalog(value: dict[str, object]) -> None:
@@ -379,20 +435,14 @@ def _sort_contract(kind: ContractKind, value: dict[str, object]) -> dict[str, ob
         exclusions = cast(list[dict[str, object]], normalized["exclusions"])
         exclusions.sort(key=lambda item: (item["kind"], item["targetId"]))
     elif kind == "customExtensionDefinition":
-        cast(list[dict[str, object]], normalized["commands"]).sort(
-            key=lambda item: cast(str, item["commandId"])
-        )
+        cast(list[dict[str, object]], normalized["commands"]).sort(key=lambda item: cast(str, item["commandId"]))
         variants = cast(list[dict[str, object]], normalized["variants"])
         for variant in variants:
             variant["platforms"] = sorted(cast(list[str], variant["platforms"]))
         variants.sort(key=lambda item: cast(str, item["variantId"]))
     elif kind == "customExtensionConfiguration":
-        cast(list[dict[str, object]], normalized["commands"]).sort(
-            key=lambda item: cast(str, item["commandId"])
-        )
-        normalized["allowedVariantIds"] = sorted(
-            cast(list[str], normalized["allowedVariantIds"])
-        )
+        cast(list[dict[str, object]], normalized["commands"]).sort(key=lambda item: cast(str, item["commandId"]))
+        normalized["allowedVariantIds"] = sorted(cast(list[str], normalized["allowedVariantIds"]))
     else:
         extensions = cast(list[dict[str, object]], normalized["extensions"])
         for extension in extensions:
@@ -418,9 +468,7 @@ def canonical_fleet_contract_bytes(kind: ContractKind, value: object) -> bytes:
 
 
 def fleet_contract_digest(kind: ContractKind, value: object) -> str:
-    digest = hashlib.sha256(
-        CONTRACT_DOMAINS[kind] + canonical_fleet_contract_bytes(kind, value)
-    ).hexdigest()
+    digest = hashlib.sha256(CONTRACT_DOMAINS[kind] + canonical_fleet_contract_bytes(kind, value)).hexdigest()
     return f"sha256:{digest}"
 
 
@@ -477,7 +525,7 @@ def _mutation_parent(value: object, path: Sequence[object]) -> tuple[object, obj
         _fail("fec_invalid_json")
     current = value
     for segment in path[:-1]:
-        if isinstance(segment, str) and isinstance(current, dict):
+        if isinstance(segment, str) and isinstance(current, dict):  # noqa: SIM114
             current = current[segment]
         elif isinstance(segment, int) and isinstance(current, list):
             current = current[segment]
@@ -521,7 +569,7 @@ def apply_adversarial_fixture(base: object, case: Mapping[str, object]) -> objec
                 _fail("fec_invalid_json")
             target[nested_key] = deepcopy(mutation.get("value"))
         elif mutation_type == "nested-replace":
-            if isinstance(parent, dict) and isinstance(key, str):
+            if isinstance(parent, dict) and isinstance(key, str):  # noqa: SIM114
                 parent[key] = deepcopy(mutation.get("value"))
             elif isinstance(parent, list) and isinstance(key, int):
                 parent[key] = deepcopy(mutation.get("value"))
@@ -531,11 +579,7 @@ def apply_adversarial_fixture(base: object, case: Mapping[str, object]) -> objec
             _fail("fec_invalid_json")
     duplicate_path = case.get("duplicatePath")
     if duplicate_path == "entries[0]":
-        cast(list[object], value["entries"]).append(
-            deepcopy(cast(list[object], value["entries"])[0])
-        )
+        cast(list[object], value["entries"]).append(deepcopy(cast(list[object], value["entries"])[0]))
     elif duplicate_path == "extensions[0]":
-        cast(list[object], value["extensions"]).append(
-            deepcopy(cast(list[object], value["extensions"])[0])
-        )
+        cast(list[object], value["extensions"]).append(deepcopy(cast(list[object], value["extensions"])[0]))
     return value
