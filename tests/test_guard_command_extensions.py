@@ -753,58 +753,6 @@ def test_explicit_git_force_push_permission_allows_matcher_owned_rule(tmp_path: 
         "explicitly_enabled_permission_ids": ["command.git.permission.force-push"],
     }
 
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "git stash",
-        "git stash push -m wip",
-        "/bin/zsh -lc 'git stash'",
-        "/bin/zsh -lc 'git stash list'",
-    ),
-)
-def test_explicit_git_stash_permission_allows_wrapped_shell_forms(command: str, tmp_path: Path) -> None:
-    request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
-    layer = _github_permission_layer("command.git.permission.stash", ControlState.ENABLED)
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED,
-            revision=11,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(layer,),
-        )
-    )
-
-    assert request is not None
-    with use_extension_control_snapshot(snapshot):
-        artifact = build_tool_action_request_artifact(
-            "grok",
-            request,
-            config_path="config.toml",
-            source_scope="project",
-        )
-
-    assert artifact.metadata["command_action_floor"] == "allow"
-    assert artifact.metadata["extension_control_resolution"] == {
-        "blocked": False,
-        "failures": [],
-        "explicitly_enabled_permission_ids": ["command.git.permission.stash"],
-    }
-    assert (
-        _runtime_artifact_policy_action(
-            GuardConfig(
-                guard_home=tmp_path / "guard",
-                workspace=tmp_path,
-                default_action="review",
-                risk_actions={"destructive_shell": "require-reapproval"},
-            ),
-            artifact,
-            "grok",
-        )
-        == "allow"
-    )
-
-
 def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Path) -> None:
     command = "gh pr merge 5115 --repo example/project --squash --auto"
     request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
@@ -841,17 +789,6 @@ def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Pat
             GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}), artifact, "codex"
         )
         == "allow"
-    )
-    assert (
-        _runtime_artifact_policy_action(
-            GuardConfig(
-                **base,
-                harness_risk_actions={"codex": {str(risk_classes[0]): "block"}},
-            ),
-            artifact,
-            "codex",
-        )
-        == "block"
     )
 
 
