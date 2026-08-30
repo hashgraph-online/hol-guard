@@ -191,6 +191,7 @@ _ESSH_GROUP_EXECUTION = LeadingSubcommandMatcher(
     executables=executable_names("essh"),
     subcommands=("run",),
     options_with_values=_ESSH_GLOBAL_OPTIONS,
+    interleaved_options_with_values=_ESSH_GLOBAL_OPTIONS,
 )
 _ESSH_CACHE_REMOVAL = AnyMatcher(
     matchers=tuple(
@@ -198,6 +199,7 @@ _ESSH_CACHE_REMOVAL = AnyMatcher(
             executables=executable_names("essh"),
             subcommands=subcommands,
             options_with_values=_ESSH_GLOBAL_OPTIONS,
+            interleaved_options_with_values=_ESSH_GLOBAL_OPTIONS,
         )
         for subcommands in (("hosts", "remove"), ("keys", "remove"), ("workspace", "remove"))
     )

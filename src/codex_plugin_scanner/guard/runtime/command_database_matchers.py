@@ -135,6 +135,7 @@ class LeadingSubcommandMatcher:
     options_with_values: frozenset[str] = frozenset()
     forbidden_flags: frozenset[str] = frozenset()
     required_flags_anywhere: frozenset[str] = frozenset()
+    interleaved_options_with_values: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         normalized_executables = frozenset(value.strip().lower() for value in self.executables if value.strip())
@@ -155,6 +156,30 @@ class LeadingSubcommandMatcher:
         object.__setattr__(self, "options_with_values", normalized_options)
         object.__setattr__(self, "forbidden_flags", normalized_forbidden)
         object.__setattr__(self, "required_flags_anywhere", normalized_required)
+        normalized_interleaved = frozenset(
+            _normalize_option_token(value) for value in self.interleaved_options_with_values if value.strip()
+        )
+        object.__setattr__(self, "interleaved_options_with_values", normalized_interleaved)
+
+    def _operands_open_with_subcommands(self, operands: tuple[str, ...]) -> bool:
+        """Match the subcommand chain, skipping declared options between levels."""
+
+        position = 0
+        for expected in self.subcommands:
+            while position < len(operands) and self._is_interleaved_option(operands[position]):
+                token = operands[position]
+                position += 1
+                if "=" not in token:
+                    position += 1
+            if position >= len(operands) or operands[position].lower() != expected:
+                return False
+            position += 1
+        return True
+
+    def _is_interleaved_option(self, token: str) -> bool:
+        if not token.startswith("-") or token == "-":
+            return False
+        return _normalize_option_token(token.split("=", 1)[0]) in self.interleaved_options_with_values
 
     def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
         evidence: list[MatcherEvidence] = []
@@ -165,8 +190,7 @@ class LeadingSubcommandMatcher:
                 segment.arguments,
                 options_with_values=self.options_with_values,
             )
-            lowered_operands = tuple(value.lower() for value in operands)
-            if self.forbidden_flags & leading_flags or lowered_operands[: len(self.subcommands)] != self.subcommands:
+            if self.forbidden_flags & leading_flags or not self._operands_open_with_subcommands(operands):
                 continue
             matched_flags = present_flags(
                 tuple(argument.lower() for argument in segment.arguments),

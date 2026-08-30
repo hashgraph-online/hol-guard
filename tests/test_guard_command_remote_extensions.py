@@ -132,6 +132,31 @@ REMOTE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "essh cache removal command",
         "command.remote.essh.cache-removal",
     ),
+    (
+        "essh hosts --theme dark remove web-1",
+        "essh cache removal command",
+        "command.remote.essh.cache-removal",
+    ),
+    (
+        "essh keys --theme=dark remove deploy-key",
+        "essh cache removal command",
+        "command.remote.essh.cache-removal",
+    ),
+    (
+        "essh workspace --theme=nord remove production",
+        "essh cache removal command",
+        "command.remote.essh.cache-removal",
+    ),
+    (
+        "essh hosts remove --theme dark web-1",
+        "essh cache removal command",
+        "command.remote.essh.cache-removal",
+    ),
+    (
+        "essh run --theme dark web -- uptime",
+        "essh group execution command",
+        "command.remote.essh.group-execution",
+    ),
 )
 
 
@@ -180,6 +205,10 @@ REMOTE_SAFE_COMMANDS: tuple[str, ...] = (
     "essh audit",
     "grep 'essh run web -- uptime' docs",
     "echo essh keys remove deploy-key",
+    "essh hosts --theme dark list",
+    "essh hosts --theme dark add web-1",
+    "essh workspace --theme dark show production",
+    "grep 'essh hosts --theme dark remove web-1' docs",
 )
 
 
@@ -275,3 +304,26 @@ def test_rsync_option_values_cannot_forge_dry_run(tmp_path: Path) -> None:
 
         assert payload["status"] == "review", command
         assert payload["controlling_rule_id"] == "command.remote.rsync.deletion", command
+
+
+def test_leading_subcommand_matcher_ignores_interleaved_options_by_default(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.command_database_matchers import LeadingSubcommandMatcher
+
+    strict = LeadingSubcommandMatcher(
+        executables=frozenset({"remote-admin"}),
+        subcommands=("hosts", "remove"),
+        options_with_values=frozenset({"--theme"}),
+    )
+    tolerant = LeadingSubcommandMatcher(
+        executables=frozenset({"remote-admin"}),
+        subcommands=("hosts", "remove"),
+        options_with_values=frozenset({"--theme"}),
+        interleaved_options_with_values=frozenset({"--theme"}),
+    )
+    interleaved = parse_shell_command("remote-admin hosts --theme dark remove web-1", cwd=tmp_path, home_dir=tmp_path)
+    plain = parse_shell_command("remote-admin hosts remove web-1", cwd=tmp_path, home_dir=tmp_path)
+
+    assert strict.match(interleaved) == ()
+    assert tolerant.match(interleaved)
+    assert strict.match(plain)
+    assert tolerant.match(plain)
