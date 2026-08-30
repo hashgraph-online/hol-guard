@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import multiprocessing
 import os
+import socket
 import stat
 import sys
 import tempfile
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
@@ -21,6 +26,14 @@ from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRespo
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="resident runtime currently uses owner-only Unix sockets")
+
+
+class _ResultQueue(Protocol):
+    def put(self, value: bool) -> None: ...
+
+
+class _ReleaseEvent(Protocol):
+    def wait(self, timeout: float | None = None) -> bool: ...
 
 
 def _fake_runtime(path: Path) -> Path:
@@ -98,6 +111,52 @@ while True:
     return executable
 
 
+def _socket_replacing_fake_runtime(path: Path, starts_path: Path) -> Path:
+    executable = path / "socket-replacing-native-runtime"
+    executable.write_text(
+        _fake_runtime(path)
+        .read_text(encoding="utf-8")
+        .replace(
+            "server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\nserver.bind(socket_path)",
+            (
+                f"with open({str(starts_path)!r}, 'a', encoding='utf-8') as starts:\n"
+                "    starts.write(str(os.getpid()) + '\\n')\n"
+                "try:\n"
+                "    os.unlink(socket_path)\n"
+                "except FileNotFoundError:\n"
+                "    pass\n"
+                "server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n"
+                "server.bind(socket_path)"
+            ),
+        )
+        .replace("import hmac\n", "import hmac\nimport os\n"),
+        encoding="utf-8",
+    )
+    executable.chmod(0o700)
+    return executable
+
+
+def _resident_process_worker(
+    executable: str,
+    guard_home: str,
+    identity: str,
+    result_queue: _ResultQueue,
+    release_event: _ReleaseEvent,
+) -> None:
+    service = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+        executable=Path(executable),
+        identity_sha256=identity,
+        guard_home=Path(guard_home),
+        environment={"HOME": str(Path(guard_home).parent)},
+    )
+    try:
+        response = service.request(b"{}", timeout_seconds=3.0)
+        result_queue.put(response is not None)
+        release_event.wait(5.0)
+    finally:
+        service.close()
+
+
 def test_resident_runtime_reuses_one_contained_service(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(resident, "_START_TIMEOUT_SECONDS", 2.0)
     with tempfile.TemporaryDirectory(prefix="hgr-") as short_tmp:
@@ -140,6 +199,154 @@ def test_resident_runtime_reuses_one_contained_service(monkeypatch: pytest.Monke
             close_resident_native_runtimes()
 
         assert not any((guard_home / "native-runtime").glob("*.sock"))
+
+
+def test_independent_supervisors_do_not_replace_one_live_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(resident, "_START_TIMEOUT_SECONDS", 2.0)
+    with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp") as short_tmp:
+        root = Path(short_tmp)
+        starts_path = root / "starts.log"
+        executable = _socket_replacing_fake_runtime(root, starts_path)
+        guard_home = root / "guard-home"
+        guard_home.mkdir(mode=0o700)
+        identity = "c" * 64
+        environment = {"HOME": str(root)}
+        first = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+            executable=executable,
+            identity_sha256=identity,
+            guard_home=guard_home,
+            environment=environment,
+        )
+        second = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+            executable=executable,
+            identity_sha256=identity,
+            guard_home=guard_home,
+            environment=environment,
+        )
+        try:
+            assert first.request(b"{}", timeout_seconds=3.0) is not None
+            assert second.request(b"{}", timeout_seconds=3.0) is None
+            assert len(starts_path.read_text(encoding="utf-8").splitlines()) == 1
+
+            second.close()
+            socket_path = resident._resident_socket_path(  # pyright: ignore[reportPrivateUsage]
+                guard_home,
+                identity,
+            )
+            assert socket_path is not None and socket_path.exists()
+        finally:
+            second.close()
+            first.close()
+
+        assert not any((guard_home / "native-runtime").glob("*.sock"))
+
+
+def test_spawned_supervisors_share_one_resident_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(resident, "_START_TIMEOUT_SECONDS", 2.0)
+    with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp") as short_tmp:
+        root = Path(short_tmp)
+        starts_path = root / "starts.log"
+        executable = _socket_replacing_fake_runtime(root, starts_path)
+        guard_home = root / "guard-home"
+        guard_home.mkdir(mode=0o700)
+        identity = "e" * 64
+        context = multiprocessing.get_context("spawn")
+        result_queue = context.Queue()
+        release_event = context.Event()
+        processes = [
+            context.Process(
+                target=_resident_process_worker,
+                args=(str(executable), str(guard_home), identity, result_queue, release_event),
+            )
+            for _ in range(4)
+        ]
+        try:
+            for process in processes:
+                process.start()
+            results = [result_queue.get(timeout=10.0) for _ in processes]
+
+            assert results.count(True) == 1
+            assert results.count(False) == 3
+            assert len(starts_path.read_text(encoding="utf-8").splitlines()) == 1
+        finally:
+            release_event.set()
+            for process in processes:
+                process.join(timeout=5.0)
+                if process.is_alive():
+                    process.kill()
+                    process.join(timeout=1.0)
+            result_queue.close()
+            result_queue.join_thread()
+
+        assert all(process.exitcode == 0 for process in processes)
+        assert not any((guard_home / "native-runtime").glob("*.sock"))
+
+
+def test_resident_close_preserves_replacement_socket(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(resident, "_START_TIMEOUT_SECONDS", 2.0)
+    with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp") as short_tmp:
+        root = Path(short_tmp)
+        executable = _fake_runtime(root)
+        guard_home = root / "guard-home"
+        guard_home.mkdir(mode=0o700)
+        identity = "d" * 64
+        service = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+            executable=executable,
+            identity_sha256=identity,
+            guard_home=guard_home,
+            environment={"HOME": str(root)},
+        )
+        replacement = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        owned_path = root / "owned.sock"
+        try:
+            assert service.request(b"{}", timeout_seconds=3.0) is not None
+            socket_path = service.socket_path
+            assert socket_path is not None
+            socket_path.rename(owned_path)
+            replacement.bind(str(socket_path))
+            replacement.listen(1)
+
+            service.close()
+
+            assert socket_path.is_socket()
+        finally:
+            service.close()
+            replacement.close()
+            for path in (owned_path, service.socket_path):
+                if path is not None:
+                    path.unlink(missing_ok=True)
+
+
+def test_start_lock_wait_stays_inside_request_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_start_lock = resident._resident_start_lock  # pyright: ignore[reportPrivateUsage]
+
+    @contextmanager
+    def delayed_lock(_socket_path: Path | None, *, timeout_seconds: float) -> Generator[bool]:
+        time.sleep(timeout_seconds + 0.02)
+        yield True
+
+    monkeypatch.setattr(resident, "_resident_start_lock", delayed_lock)
+    with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp") as short_tmp:
+        root = Path(short_tmp)
+        starts_path = root / "starts.log"
+        executable = _socket_replacing_fake_runtime(root, starts_path)
+        guard_home = root / "guard-home"
+        guard_home.mkdir(mode=0o700)
+        service = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+            executable=executable,
+            identity_sha256="f" * 64,
+            guard_home=guard_home,
+            environment={"HOME": str(root)},
+        )
+        started = time.monotonic()
+        try:
+            assert service.request(b"{}", timeout_seconds=0.05) is None
+        finally:
+            monkeypatch.setattr(resident, "_resident_start_lock", real_start_lock)
+            service.close()
+
+        assert time.monotonic() - started < 0.2
+        assert not starts_path.exists()
 
 
 def test_resident_runtime_falls_back_for_overlong_socket_path(tmp_path: Path) -> None:

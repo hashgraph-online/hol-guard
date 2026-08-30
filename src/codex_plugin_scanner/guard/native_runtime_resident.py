@@ -22,7 +22,8 @@ import socket
 import stat
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
@@ -78,6 +79,7 @@ class _ResidentService:
         self._starts = 0
         self._generation = 0
         self._closed = False
+        self._owned_socket_identity: tuple[int, int] | None = None
 
     @property
     def starts(self) -> int:
@@ -137,48 +139,57 @@ class _ResidentService:
     def _ensure_started(self, *, timeout_seconds: float) -> bool:
         if timeout_seconds <= 0:
             return False
+        deadline = time.monotonic() + timeout_seconds
         health = native_runtime_health_snapshot(self.identity_sha256, self.guard_home)
         if health.circuit_open or health.state in {"integrity_failed", "quarantined"}:
             return False
-        with self._lock:
-            if self._closed:
+        with _resident_start_lock(self.socket_path, timeout_seconds=timeout_seconds) as acquired:
+            if not acquired:
                 return False
-            if os.name == "nt" and self.loopback_address is None:
+            if time.monotonic() >= deadline:
                 return False
-            if os.name != "nt" and self.socket_path is None:
-                return False
-            thread = self._thread
-            if thread is None or not thread.is_alive():
-                stop_event = threading.Event()
-                auth_token = secrets.token_bytes(_AUTH_TOKEN_BYTES)
-                self._stop_event = stop_event
-                self._auth_token = auth_token
-                self._generation += 1
-                generation = self._generation
-                if self._starts == 0:
-                    native_record_starting(self.identity_sha256, self.guard_home)
-                else:
-                    native_record_restart(self.identity_sha256, self.guard_home)
-                thread = threading.Thread(
-                    target=self._run,
-                    args=(stop_event, auth_token, generation),
-                    name="hol-guard-native-runtime",
-                    daemon=True,
-                )
-                self._thread = thread
-                self._starts += 1
-                thread.start()
-        deadline = time.monotonic() + timeout_seconds
-        while time.monotonic() < deadline:
-            if self._transport_accepts_authenticated_connections():
-                return True
             with self._lock:
-                if self._closed or self._thread is not thread or not thread.is_alive():
+                if self._closed:
                     return False
-            time.sleep(0.01)
-        return self._transport_accepts_authenticated_connections()
+                if os.name == "nt" and self.loopback_address is None:
+                    return False
+                if os.name != "nt" and self.socket_path is None:
+                    return False
+                thread = self._thread
+                if thread is None or not thread.is_alive():
+                    if os.name != "nt" and _unix_socket_accepts_connections(self.socket_path):
+                        return False
+                    stop_event = threading.Event()
+                    auth_token = secrets.token_bytes(_AUTH_TOKEN_BYTES)
+                    self._stop_event = stop_event
+                    self._auth_token = auth_token
+                    self._generation += 1
+                    generation = self._generation
+                    if self._starts == 0:
+                        native_record_starting(self.identity_sha256, self.guard_home)
+                    else:
+                        native_record_restart(self.identity_sha256, self.guard_home)
+                    thread = threading.Thread(
+                        target=self._run,
+                        args=(stop_event, auth_token, generation),
+                        name="hol-guard-native-runtime",
+                        daemon=True,
+                    )
+                    self._thread = thread
+                    self._starts += 1
+                    thread.start()
+            while time.monotonic() < deadline:
+                if self._transport_accepts_authenticated_connections():
+                    return True
+                with self._lock:
+                    if self._closed or self._thread is not thread or not thread.is_alive():
+                        return False
+                time.sleep(0.01)
+            return self._transport_accepts_authenticated_connections()
 
     def _transport_accepts_authenticated_connections(self) -> bool:
+        with self._lock:
+            socket_path = self.socket_path
         response = self._send(_HEALTH_REQUEST, timeout_seconds=0.1)
         if response is None:
             return False
@@ -186,7 +197,13 @@ class _ResidentService:
             payload = json.loads(response)
         except (UnicodeDecodeError, json.JSONDecodeError):
             return False
-        return payload == {"status": "ready", "protocol_version": 2}
+        ready = payload == {"status": "ready", "protocol_version": 2}
+        if ready and socket_path is not None:
+            identity = _socket_identity(socket_path)
+            if identity is not None:
+                with self._lock:
+                    self._owned_socket_identity = identity
+        return ready
 
     def _run(
         self,
@@ -248,9 +265,12 @@ class _ResidentService:
             self._stop_event.set()
             thread = self._thread
             self._auth_token = None
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=1.5)
-        _unlink_owned_socket(self.socket_path)
+            owned_socket_identity = self._owned_socket_identity
+        with _resident_start_lock(self.socket_path, timeout_seconds=1.5) as acquired:
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=1.5)
+            if acquired:
+                _unlink_owned_socket(self.socket_path, expected_identity=owned_socket_identity)
         with self._lock:
             if self._thread is thread:
                 self._thread = None
@@ -296,6 +316,79 @@ def _resident_socket_path(guard_home: Path, identity_sha256: str) -> Path | None
     if len(os.fsencode(socket_path)) > _MAX_SOCKET_PATH_BYTES:
         return None
     return socket_path
+
+
+@contextmanager
+def _resident_start_lock(socket_path: Path | None, *, timeout_seconds: float) -> Generator[bool]:
+    if os.name == "nt" or socket_path is None:
+        yield True
+        return
+    import fcntl
+
+    lock_path = socket_path.with_suffix(".start.lock")
+    flags = os.O_CREAT | os.O_RDWR
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(lock_path, flags, 0o600)
+    except OSError:
+        yield False
+        return
+    acquired = False
+    try:
+        try:
+            os.fchmod(descriptor, 0o600)
+        except OSError:
+            yield False
+            return
+        deadline = time.monotonic() + max(0.0, timeout_seconds)
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
+            except OSError:
+                break
+        yield acquired
+    finally:
+        if acquired:
+            with suppress(OSError):
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        with suppress(OSError):
+            os.close(descriptor)
+
+
+def _unix_socket_accepts_connections(socket_path: Path | None) -> bool:
+    if socket_path is None or not hasattr(socket, "AF_UNIX"):
+        return False
+    client: socket.socket | None = None
+    try:
+        metadata = socket_path.lstat()
+        if not stat.S_ISSOCK(metadata.st_mode):
+            return False
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(_AUTH_TIMEOUT_SECONDS)
+        client.connect(str(socket_path))
+        return True
+    except OSError:
+        return False
+    finally:
+        if client is not None:
+            client.close()
+
+
+def _socket_identity(socket_path: Path) -> tuple[int, int] | None:
+    try:
+        metadata = socket_path.lstat()
+    except OSError:
+        return None
+    if not stat.S_ISSOCK(metadata.st_mode):
+        return None
+    return metadata.st_dev, metadata.st_ino
 
 
 def _select_loopback_address() -> tuple[str, int] | None:
@@ -546,12 +639,12 @@ def close_resident_native_runtimes() -> None:
         service.close()
 
 
-def _unlink_owned_socket(socket_path: Path | None) -> None:
-    if socket_path is None:
+def _unlink_owned_socket(socket_path: Path | None, *, expected_identity: tuple[int, int] | None) -> None:
+    if socket_path is None or expected_identity is None:
         return
     try:
         metadata = socket_path.lstat()
-        if stat.S_ISSOCK(metadata.st_mode):
+        if stat.S_ISSOCK(metadata.st_mode) and (metadata.st_dev, metadata.st_ino) == expected_identity:
             socket_path.unlink()
     except FileNotFoundError:
         pass

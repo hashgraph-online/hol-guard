@@ -15,7 +15,7 @@ from ..runtime.shell_command_wrappers import is_trusted_absolute_command_path
 
 _MIN_WORKERS = 2
 _MAX_WORKERS = 16
-_MAX_INITIAL_WORKERS = 8
+_MAX_INITIAL_WORKERS = 2
 _PRESSURE_SECONDS = 10.0
 _IDLE_SECONDS = 300.0
 _SPAWN_INTERVAL_SECONDS = 1.0

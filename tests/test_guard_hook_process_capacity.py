@@ -45,9 +45,9 @@ def _load(
 
 @pytest.mark.parametrize(
     ("cpu_count", "expected"),
-    [(1, 2), (2, 2), (4, 4), (8, 8), (64, 8)],
+    [(1, 2), (2, 2), (4, 2), (8, 2), (64, 2)],
 )
-def test_initial_target_follows_cpu_budget(cpu_count: int, expected: int) -> None:
+def test_initial_target_caps_warm_process_trees(cpu_count: int, expected: int) -> None:
     assert initial_hook_worker_target(cpu_count) == expected
 
 
