@@ -1,19 +1,13 @@
-"""Daemon-resident hook worker for fast hook review.
+"""Daemon-resident hook transport for the Rust Guard data plane.
 
-This worker avoids Python startup/import cost and avoids calling the
-CLI path for normal daemon hooks. It builds a ``HookReviewRequest``
-from the HTTP payload and calls the configured local decision backend.
+The no-environment production path is Rust-authoritative from the raw hook
+edge through the semantic decision and decision-critical PostToolUse I/O.
+Python remains a bounded control plane for route handling, resident lifecycle,
+harness rendering, and best-effort evidence.
 
-Security:
-- Never lets unreviewed tool output reach the model.
-- Never falls back to legacy CLI after a worker exception for a
-  request that supplied only ``guard_source_ref`` without full output.
-- Never calls ``run_guard_command()``.
-- Native PostToolUse is decided by Rust for ``auto``/``force``. Native failure
-  fails closed instead of spilling into Python review. The Python engine is
-  constructed only for ``off``/``shadow``.
-- Supported command PreToolUse is decided by Rust. Native failure fails closed.
-  Non-command PreToolUse still raises ``HookWorkerUnsupported`` for the CLI path.
+Explicit ``off``/``shadow`` modes retain the Python reference evaluator for
+rollback and differential compatibility. Native failure in ``auto``/``force``
+never enters that compatibility evaluator.
 """
 
 from __future__ import annotations
@@ -28,8 +22,8 @@ from ..cli.commands_support_command_activity import (
     record_post_hook_command_activity_best_effort,
 )
 from ..config import load_guard_config
-from ..native_pretool import review_pre_tool_native
-from ..native_runtime import native_mode, native_runtime_status, review_post_tool_native
+from ..native_hook_edge import review_hook_edge_native
+from ..native_runtime import native_mode
 from ..runtime.hook_content_scanner import ContentScanner
 from ..runtime.hook_decision_cache import HookDecisionCache
 from ..runtime.hook_review_engine import HookReviewEngine
@@ -56,6 +50,7 @@ class CommandActivityWriter(Protocol):
 
 
 def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
+    """Best-effort display/fail-safe event label; Rust owns auto-mode extraction."""
     for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
@@ -64,12 +59,12 @@ def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
 
 
 class HookWorkerUnsupported(RuntimeError):  # noqa: N818
-    """Raised when the worker cannot handle a request (caller falls back to CLI)."""
+    """Raised only for explicit compatibility modes and unsupported control events."""
 
 
 @final
 class HookWorker:
-    """Resident hook review worker for the daemon."""
+    """Transport production hooks to Rust and isolate explicit compatibility."""
 
     def __init__(self, *, store: GuardStore, activity_writer: CommandActivityWriter | None = None):
         self.store = store
@@ -82,6 +77,7 @@ class HookWorker:
 
     @property
     def engine(self) -> HookReviewEngine:
+        """Lazy Python reference engine reachable only from explicit off/shadow."""
         if self._engine is None:
             self._engine = HookReviewEngine(
                 store=self.store,
@@ -106,54 +102,60 @@ class HookWorker:
         workspace: Path | None,
         deadline: float | None = None,
     ) -> dict[str, object]:
-        """Review a hook HTTP payload and return harness JSON.
+        """Return Rust authority by default; explicit off/shadow use compatibility."""
 
-        ``off`` keeps the Python engine authoritative. ``shadow`` evaluates
-        Python first and exercises native only as non-authoritative evidence.
-        ``auto`` and ``force`` require the native runtime. When native is
-        unavailable or returns no result, supported PreToolUse and PostToolUse
-        fail closed.
-        """
         harness = self._runtime_harness(params) or default_harness
-        event_name = self._hook_event_name(payload)
-        if event_name == "PreToolUse":
-            command = _pre_tool_command(payload)
-            if command is None:
-                raise HookWorkerUnsupported("fast path PreToolUse requires a command")
-            native = review_pre_tool_native(
-                command,
-                guard_home=guard_home,
-                cwd=workspace,
+        mode = native_mode()
+        if mode in {"off", "shadow"}:
+            return self._review_explicit_python_compatibility(
+                payload,
+                harness=harness,
+                default_harness=default_harness,
                 home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+                deadline=deadline,
+                shadow=mode == "shadow",
             )
-            if native is not None:
-                action = str(native.get("minimum_action") or "")
-                if action == "review":
-                    raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
-                return _harness_json_from_native_pre_tool(harness, native)
-            status = native_runtime_status()
-            if status.mode == "off":
-                raise HookWorkerUnsupported("native PreToolUse runtime is off")
-            if status.mode == "shadow":
-                raise HookWorkerUnsupported("native PreToolUse runtime is unavailable")
+
+        try:
+            config = self._load_config(guard_home, workspace)
+            native = review_hook_edge_native(
+                payload=payload,
+                harness=harness,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+                observe_mode=config.mode == "observe",
+                deadline=deadline,
+            )
+        except Exception:
+            native = None
+        if native is None:
+            event_name = runtime_hook_event_name(payload)
+            if event_name == "PostToolUse":
+                self._record_post_tool_activity(
+                    harness=harness,
+                    payload=payload,
+                    succeeded=hook_post_succeeded(event_name, payload),
+                )
             return post_tool_fail_safe_response(
                 harness,
-                reason="HOL Guard could not complete the native PreToolUse decision safely.",
-                reason_code="native_pre_tool_unavailable",
+                reason="HOL Guard could not complete the native hook decision safely.",
+                reason_code="native_hook_edge_unavailable",
+                event_name=event_name,
             )
-        if event_name != "PostToolUse":
-            raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
-        return self._review_post_tool_http(
-            payload,
-            harness=harness,
-            default_harness=default_harness,
-            home_dir=home_dir,
-            guard_home=guard_home,
-            workspace=workspace,
-            deadline=deadline,
-        )
 
-    def _review_post_tool_http(
+        event_name = str(native.get("event_name") or runtime_hook_event_name(payload))
+        if event_name == "PostToolUse":
+            self._record_post_tool_activity(
+                harness=harness,
+                payload=payload,
+                succeeded=hook_post_succeeded(event_name, payload),
+            )
+        return _harness_json_from_native_edge(harness, native)
+
+    def _review_explicit_python_compatibility(
         self,
         payload: dict[str, object],
         *,
@@ -163,8 +165,15 @@ class HookWorker:
         guard_home: Path,
         workspace: Path | None,
         deadline: float | None,
+        shadow: bool,
     ) -> dict[str, object]:
-        event_name = "PostToolUse"
+        """Run the explicit rollback/reference evaluator, never automatic fallback."""
+
+        event_name = runtime_hook_event_name(payload)
+        if event_name != "PostToolUse":
+            raise HookWorkerUnsupported(
+                f"explicit Python compatibility handles PostToolUse only, got event={event_name}"
+            )
         request = self._request_from_payload(
             payload,
             harness=harness,
@@ -174,31 +183,19 @@ class HookWorker:
             workspace=workspace,
             deadline=deadline,
         )
-        mode = native_mode()
-        native_required = mode in {"auto", "force"}
-        if native_required:
-            config = self._load_config(guard_home, workspace)
-            response = review_post_tool_native(
-                request,
-                observe_mode=config.mode == "observe",
-            )
-            if response is None:
-                self._record_post_tool_activity(
-                    harness=harness,
+        response = self.engine.review(request)
+        if shadow:
+            with suppress(Exception):
+                config = self._load_config(guard_home, workspace)
+                _ = review_hook_edge_native(
                     payload=payload,
-                    succeeded=hook_post_succeeded(event_name, payload),
+                    harness=harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    observe_mode=config.mode == "observe",
+                    deadline=deadline,
                 )
-                return post_tool_fail_safe_response(
-                    harness,
-                    reason="HOL Guard could not complete the native local hook review safely.",
-                    reason_code="native_post_tool_unavailable",
-                )
-        else:
-            response = self.engine.review(request)
-            if mode == "shadow":
-                with suppress(Exception):
-                    _ = review_post_tool_native(request, observe_mode=response.observe_mode)
-
         self._record_post_tool_activity(
             harness=harness,
             payload=payload,
@@ -247,7 +244,9 @@ class HookWorker:
         workspace: Path | None,
         deadline: float | None = None,
     ) -> HookReviewRequest:
-        event_name = self._hook_event_name(payload)
+        """Build a Python reference request only in explicit compatibility mode."""
+
+        event_name = runtime_hook_event_name(payload)
         payload_kind = self._payload_kind(payload)
         output_summary = self._parse_output_summary(payload)
         source_ref = self._parse_source_ref(payload)
@@ -270,9 +269,6 @@ class HookWorker:
             source_ref=source_ref,
             deadline_monotonic=deadline,
         )
-
-    def _hook_event_name(self, payload: Mapping[str, object]) -> str:
-        return runtime_hook_event_name(payload)
 
     def _payload_kind(self, payload: Mapping[str, object]) -> HookPayloadKind:
         if "guard_payload_ref" in payload:
@@ -337,23 +333,17 @@ class HookWorker:
         )
 
 
-def _pre_tool_command(payload: Mapping[str, object]) -> str | None:
-    for candidate in (payload.get("tool_input"), payload.get("arguments"), payload):
-        if not isinstance(candidate, Mapping):
-            continue
-        for key in ("command", "cmd", "shell_command", "shellCommand"):
-            value = candidate.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-    return None
+def _canonical_hook_harness(harness: str) -> str:
+    return harness.strip().lower().replace("_", "-")
 
 
-def _harness_json_from_native_pre_tool(harness: str, response: Mapping[str, object]) -> dict[str, object]:
-    action = response.get("minimum_action")
+def _pre_tool_harness_response(harness: str, response: Mapping[str, object]) -> dict[str, object]:
+    action = str(response.get("minimum_action") or response.get("policy_action") or "block")
     reason = str(response.get("reason") or "HOL Guard requires native review before execution.")
     reason_code = str(response.get("reason_code") or "native_pre_tool_review")
+    canonical = _canonical_hook_harness(harness)
     if action == "allow" and response.get("decision") == "allow":
-        if _canonical_hook_harness(harness) in {"pi", "omp"}:
+        if canonical in {"pi", "omp"}:
             return {
                 "decision": "allow",
                 "policy_action": "allow",
@@ -365,26 +355,78 @@ def _harness_json_from_native_pre_tool(harness: str, response: Mapping[str, obje
             "reason_code": reason_code,
             "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"},
         }
-    if _canonical_hook_harness(harness) in {"pi", "omp"}:
+
+    if canonical in {"pi", "omp"}:
         return {
             "decision": "deny",
             "reason": reason,
             "model_output_action": "block",
             "notice": "warning",
             "reason_code": reason_code,
+            "policy_action": action,
         }
+
+    permission_decision = "deny"
+    if action == "review" and canonical not in {"codex", "kimi", "grok", "zcode"}:
+        permission_decision = "ask"
     return {
+        "policy_action": action,
         "reason_code": reason_code,
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
+            "permissionDecision": permission_decision,
             "permissionDecisionReason": reason,
         },
     }
 
 
-def _canonical_hook_harness(harness: str) -> str:
-    return harness.strip().lower().replace("_", "-")
+def _post_tool_harness_response(harness: str, response: Mapping[str, object]) -> dict[str, object]:
+    canonical = _canonical_hook_harness(harness)
+    payload = {
+        key: value
+        for key, value in response.items()
+        if key
+        in {
+            "decision",
+            "reason",
+            "model_output_action",
+            "reviewed_output_sha256",
+            "reviewed_excerpt",
+            "notice",
+            "reason_code",
+            "policy_action",
+            "observed_policy_action",
+            "observe_mode",
+        }
+    }
+    if canonical in {"pi", "omp"}:
+        return payload
+    decision = str(payload.get("decision") or "")
+    model_output_action = str(payload.get("model_output_action") or "")
+    if decision == "allow" and model_output_action == "allow_original":
+        return {
+            "policy_action": "allow",
+            "reason_code": str(payload.get("reason_code") or "native_post_tool_allow"),
+            "hookSpecificOutput": {"hookEventName": "PostToolUse"},
+        }
+    reason = str(payload.get("reason") or "HOL Guard blocked this tool output because it could not be proven safe.")
+    reason_code = str(payload.get("reason_code") or "native_post_tool_block")
+    return post_tool_native_block_response(reason=reason, reason_code=reason_code)
+
+
+def _harness_json_from_native_edge(harness: str, response: Mapping[str, object]) -> dict[str, object]:
+    event_name = str(response.get("event_name") or "PreToolUse")
+    if event_name == "PreToolUse":
+        return _pre_tool_harness_response(harness, response)
+    if event_name == "PostToolUse":
+        return _post_tool_harness_response(harness, response)
+    reason = str(response.get("reason") or "HOL Guard requires review for this native hook event.")
+    return post_tool_fail_safe_response(
+        harness,
+        reason=reason,
+        reason_code=str(response.get("reason_code") or "native_hook_event_review_required"),
+        event_name=event_name,
+    )
 
 
 def post_tool_native_block_response(
@@ -410,8 +452,20 @@ def post_tool_fail_safe_response(
     *,
     reason: str = "HOL Guard could not complete local hook review safely.",
     reason_code: str = "daemon_worker_exception",
+    event_name: str = "PostToolUse",
 ) -> dict[str, object]:
-    if _canonical_hook_harness(harness) in {"pi", "omp"}:
+    canonical = _canonical_hook_harness(harness)
+    if event_name == "PreToolUse" and canonical not in {"pi", "omp"}:
+        return {
+            "policy_action": "block",
+            "reason_code": reason_code,
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            },
+        }
+    if canonical in {"pi", "omp"}:
         return {
             "decision": "deny",
             "reason": reason,

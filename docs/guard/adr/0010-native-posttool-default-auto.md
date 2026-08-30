@@ -1,23 +1,46 @@
-# ADR 0010: Default eligible PostToolUse review to bundled Rust
+# ADR 0010: Default hook review to bundled Rust data plane
 
 Status: accepted for `main`.
 
 ## Decision
 
-HOL Guard 3.x selects `HOL_GUARD_NATIVE=auto` when the variable is not set. The verified, version-matched Rust runtime is the exclusive semantic authority for supported command `PreToolUse` and `PostToolUse` review on published native wheels.
+HOL Guard 3.x selects native `auto` behavior when `HOL_GUARD_NATIVE` is not set, and the daemon hook fast path is enabled when `HOL_GUARD_HOOK_FAST_PATH` is not set. Published native wheels and Desktop Core sidecars use the verified, version-matched bundled Rust runtime as the semantic authority for supported `PreToolUse` and `PostToolUse` review on that default production path.
 
-Python remains the control plane: authentication, transport, harness rendering, approval continuation, and bounded evidence. It is not a semantic fallback for those supported events. Unsupported `PreToolUse` tools still raise `HookWorkerUnsupported` so the existing CLI path can coordinate policy and approval UX.
+The native boundary begins at the raw hook envelope. Rust extracts the hook event and supported action, performs command classification, PostTool output extraction, source-reference validation, secure source reads, hashing/equivalence checks, and secret scanning. Structurally valid `PreToolUse` actions that are not yet modeled for automatic allow remain inside the Rust authority boundary and return conservative native review instead of automatically escaping to a Python evaluator.
+
+Resident client authentication, request/response framing, digest validation, and local socket/loopback I/O are implemented by the bundled Rust runtime. Python remains a bounded control plane for daemon route authentication, resident lifecycle supervision, policy-snapshot transport, harness response rendering, approval presentation/continuation surfaces, and asynchronous non-authoritative evidence persistence.
 
 ## Security boundary
 
-Automatic selection is limited to the runtime bundled inside the installed `hol-guard` wheel. The runtime must pass executable ownership and permission checks plus manifest bindings for package version, protocol, source/build SHA, rule digest, byte digest, and size. `auto` does not search `PATH`, honor an arbitrary runtime override, download code, or call a network service.
+Automatic runtime selection is limited to the runtime bundled inside the installed `hol-guard` wheel or signed Desktop Core artifact. The runtime must pass executable ownership and permission checks plus manifest bindings for package version, protocol, source/build SHA, rule digest, byte digest, and size. Default `auto` does not search `PATH`, honor an arbitrary runtime override, download decision-time code, or call a network service.
 
-Secret-bearing output remains blocked by the Rust path. Native unavailability, incompatibility, overload, timeout, malformed output, or containment failure fail closed instead of becoming an allow or a Python rescan.
+Secret-bearing output remains blocked by the Rust path. Native unavailability, incompatibility, overload, timeout, malformed output, containment failure, client-authentication failure, framing failure, or digest mismatch fails closed. None of those failures can automatically enter the Python reference evaluator or become an allow.
 
-## Rollback
+## Explicit compatibility settings
 
-`HOL_GUARD_NATIVE=off` is the immediate local and managed rollback. `shadow` keeps Python authoritative while collecting native evidence. `force` requires native even for developer overrides. Invalid or empty values resolve to the product default instead of silently disabling Rust.
+`HOL_GUARD_NATIVE=off` and `shadow` are retained as explicit compatibility/reference modes. They are never selected automatically and are not entered because the Rust runtime failed.
+
+- `off` preserves the Python reference/rollback surface for compatibility and emergency diagnosis.
+- `shadow` preserves Python reference behavior while exercising native evaluation as non-authoritative evidence where supported.
+- `auto`, including the no-environment default, is Rust-authoritative and fails closed on native failure.
+- `force` is Rust-authoritative and remains available for developer validation and explicit runtime overrides.
+- Invalid or empty mode values resolve to the product default instead of silently disabling Rust.
+
+The permanent ownership gate distinguishes this explicit compatibility surface from automatic fallback. Python reference evaluators may remain reachable only after an operator explicitly selects `off` or `shadow`; they may not be reached from `auto`/`force` native failure.
 
 ## Evidence
 
-Source contracts prove default and invalid values select `auto`, explicit `off` disables native execution, and supported auto/force paths fail closed without Python semantic evaluation. Stable main publication uploads the four Tier 1 native wheels plus the pure wheel and sdist. Native-wheel jobs install the real wheel on Linux x64, macOS Intel, macOS Apple Silicon, and Windows x64 with no native environment variable, then prove runtime attestation, clean-output allow, secret-output deny, resident execution, and explicit rollback.
+The permanent ownership contract in `ci/rust-authority-ownership.v1.json` requires:
+
+- no-environment native `auto` selection and enabled hook fast path;
+- Rust semantic authority for supported PreToolUse and PostToolUse on `auto`/`force`;
+- Rust raw hook-edge extraction on the default production path;
+- Rust PostTool decision-critical content/file I/O;
+- Rust resident-client authentication, framing, digest validation, and socket I/O;
+- no automatic Python source-reference or semantic fallback;
+- explicit Python compatibility limited to `off`/`shadow`;
+- fail-closed native failure behavior.
+
+`python scripts/ci/rust_authority_ownership_gate.py --root .` is the executable source-of-truth check for these ownership invariants.
+
+CI builds and lints the complete Rust workspace, runs real-binary PreToolUse/PostToolUse adversarial integration, resident differential and mutation integration, performance gates, and installed native-wheel execution proof. Stable native-wheel and Desktop packaging tests must continue to validate the bundled runtime without requiring native or fast-path environment-variable configuration.

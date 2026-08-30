@@ -93,6 +93,30 @@ fn extract_pre_tool_command(value: &Value) -> Result<String, String> {
     Err("native_pre_tool_command_missing".to_owned())
 }
 
+fn hook_event_name(value: &Value) -> String {
+    if let Some(event_name) = mapping_string(value, "event_name") {
+        return event_name.to_owned();
+    }
+    let payload = value.get("payload").unwrap_or(value);
+    for key in [
+        "event",
+        "eventName",
+        "hook_event_name",
+        "hookEventName",
+        "hook_name",
+        "hookName",
+    ] {
+        if let Some(event_name) = mapping_string(payload, key) {
+            return event_name.to_owned();
+        }
+    }
+    "PreToolUse".to_owned()
+}
+
+fn canonical_harness(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace('_', "-")
+}
+
 pub(crate) fn pre_tool_response(request_id: Option<&str>, decision: PreToolDecisionV1) -> Value {
     serde_json::json!({
         "authority": "rust",
@@ -105,6 +129,116 @@ pub(crate) fn pre_tool_response(request_id: Option<&str>, decision: PreToolDecis
         "explicitly_benign": decision.explicitly_benign,
         "command_model": &decision.command_model,
     })
+}
+
+fn unsupported_pre_tool_response(request_id: Option<&str>) -> Value {
+    serde_json::json!({
+        "authority": "rust",
+        "event_name": "PreToolUse",
+        "request_id": request_id.unwrap_or(""),
+        "decision": "deny",
+        "policy_action": "review",
+        "minimum_action": "review",
+        "reason_code": "native_pre_tool_unsupported_review",
+        "reason": "HOL Guard requires review because the Rust authority could not prove this structured tool action explicitly benign.",
+        "explicitly_benign": false,
+    })
+}
+
+fn unsupported_event_response(event_name: &str, request_id: Option<&str>) -> Value {
+    serde_json::json!({
+        "authority": "rust",
+        "event_name": event_name,
+        "request_id": request_id.unwrap_or(""),
+        "decision": "deny",
+        "policy_action": "review",
+        "minimum_action": "review",
+        "reason_code": "native_hook_event_review_required",
+        "reason": "HOL Guard requires review because this hook event is not part of the native automatic-allow surface.",
+        "explicitly_benign": false,
+    })
+}
+
+pub(crate) fn evaluate_hook_edge_value(mut value: Value) -> Result<Vec<u8>, String> {
+    validate_request_policy_snapshot(&value)?;
+    let event_name = hook_event_name(&value);
+    let request_id = mapping_string(&value, "request_id").map(str::to_owned);
+    match event_name.as_str() {
+        "PreToolUse" => {
+            let command = match extract_pre_tool_command(&value) {
+                Ok(command) => command,
+                Err(reason) if reason == "native_pre_tool_command_missing" => {
+                    return crate::encode_response(&unsupported_pre_tool_response(
+                        request_id.as_deref(),
+                    ));
+                }
+                Err(reason) => return Err(reason),
+            };
+            let request = CommandModelRequestV1 {
+                command,
+                dialect: mapping_string(&value, "dialect")
+                    .unwrap_or("posix")
+                    .to_owned(),
+                transport: mapping_string(&value, "transport")
+                    .unwrap_or("shell_string")
+                    .to_owned(),
+                extraction_provenance: mapping_string(&value, "extraction_provenance")
+                    .unwrap_or("guard-shell")
+                    .to_owned(),
+            };
+            let decision = evaluate_pre_tool(&request)?;
+            let mut response = pre_tool_response(request_id.as_deref(), decision);
+            if let Some(object) = response.as_object_mut() {
+                object.insert("event_name".to_owned(), Value::String(event_name));
+            }
+            crate::encode_response(&response)
+        }
+        "PostToolUse" => {
+            let object = value
+                .as_object_mut()
+                .ok_or_else(|| "native_hook_edge_invalid_json".to_owned())?;
+            object.insert(
+                "event_name".to_owned(),
+                Value::String("PostToolUse".to_owned()),
+            );
+            if object
+                .get("source_ref_external_allowed")
+                .and_then(Value::as_bool)
+                .is_none()
+            {
+                let harness = object
+                    .get("harness")
+                    .and_then(Value::as_str)
+                    .map(canonical_harness)
+                    .unwrap_or_default();
+                object.insert(
+                    "source_ref_external_allowed".to_owned(),
+                    Value::Bool(matches!(harness.as_str(), "pi" | "omp")),
+                );
+            }
+            let request: NativeHookRequestV1 = serde_json::from_value(value)
+                .map_err(|_| "native_hook_edge_invalid_json".to_owned())?;
+            let mut response = serde_json::to_value(review_post_tool(&request))
+                .map_err(|_| "native_response_encode_failed".to_owned())?;
+            if let Some(object) = response.as_object_mut() {
+                object.insert("authority".to_owned(), Value::String("rust".to_owned()));
+                object.insert(
+                    "event_name".to_owned(),
+                    Value::String("PostToolUse".to_owned()),
+                );
+            }
+            crate::encode_response(&response)
+        }
+        _ => crate::encode_response(&unsupported_event_response(
+            &event_name,
+            request_id.as_deref(),
+        )),
+    }
+}
+
+pub(crate) fn evaluate_hook_edge_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let value = crate::strict_json_value(bytes)?;
+    evaluate_hook_edge_value(value)
 }
 
 pub(crate) fn evaluate_hook_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -215,5 +349,47 @@ mod tests {
         let low = ratchet_min_policy_generation(5);
         assert_eq!(low.unwrap_err(), "native_policy_snapshot_stale");
         MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn hook_edge_keeps_pre_tool_command_extraction_in_rust() {
+        let request = json!({
+            "protocol_version": NATIVE_PROTOCOL_VERSION,
+            "harness": "claude-code",
+            "payload": {
+                "eventName": "PreToolUse",
+                "tool_input": {"command": "pwd"}
+            },
+            "home_dir": "/tmp",
+            "guard_home": "/tmp/.hol-guard"
+        });
+        let encoded = evaluate_hook_edge_value(request).expect("native hook edge");
+        let response: Value = serde_json::from_slice(&encoded).expect("response json");
+        assert_eq!(response["authority"], "rust");
+        assert_eq!(response["event_name"], "PreToolUse");
+        assert_eq!(response["decision"], "allow");
+    }
+
+    #[test]
+    fn hook_edge_reviews_non_command_pre_tool_without_python_escape() {
+        let request = json!({
+            "protocol_version": NATIVE_PROTOCOL_VERSION,
+            "harness": "claude-code",
+            "payload": {
+                "eventName": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "README.md"}
+            },
+            "home_dir": "/tmp",
+            "guard_home": "/tmp/.hol-guard"
+        });
+        let encoded = evaluate_hook_edge_value(request).expect("native hook edge");
+        let response: Value = serde_json::from_slice(&encoded).expect("response json");
+        assert_eq!(response["authority"], "rust");
+        assert_eq!(response["minimum_action"], "review");
+        assert_eq!(
+            response["reason_code"],
+            "native_pre_tool_unsupported_review"
+        );
     }
 }

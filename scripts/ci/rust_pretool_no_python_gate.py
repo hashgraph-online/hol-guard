@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Prove supported command PreToolUse authority is native, with Python as transport only."""
+"""Prove default PreToolUse authority is Rust with no automatic Python fallback."""
 
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 from pathlib import Path
 from typing import Final
@@ -23,6 +24,17 @@ def required_tokens(path: Path, tokens: tuple[str, ...]) -> list[str]:
     return [f"{path.as_posix()} missing {token}" for token in tokens if token not in source]
 
 
+def function_source(path: Path, name: str) -> str:
+    source = read(path)
+    tree = ast.parse(source, filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            segment = ast.get_source_segment(source, node)
+            if segment is not None:
+                return segment
+    raise RuntimeError(f"missing function {path}:{name}")
+
+
 def run(root: Path) -> dict[str, object]:
     failures: list[str] = []
     failures.extend(
@@ -37,48 +49,64 @@ def run(root: Path) -> dict[str, object]:
             (
                 "pre-tool-command-authority-v1",
                 'command == "pre-tool"',
-                "PreToolUse(CommandModelRequestV1)",
+                '"hook-edge-v2"',
+                "HookEdge(Value)",
             ),
         )
     )
     failures.extend(
         required_tokens(
             root / "rust/crates/guard-runtime/src/oneshot.rs",
-            ("fn evaluate_pre_tool_bytes", "pre_tool_response", "evaluate_pre_tool_request"),
-        )
-    )
-    command_bridge = root / "src/codex_plugin_scanner/guard/native_pretool.py"
-    failures.extend(
-        required_tokens(
-            command_bridge,
             (
-                "def review_pre_tool_native(",
-                '"pre-tool"',
-                '"operation": "pre_tool_use"',
-                "def native_pre_tool_policy_floor(",
+                "fn evaluate_pre_tool_bytes",
+                "pre_tool_response",
+                "evaluate_pre_tool_request",
+                "evaluate_hook_edge_value",
+                "extract_pre_tool_command",
+                "native_pre_tool_unsupported_review",
             ),
         )
     )
-    bridge_source = read(command_bridge)
-    if "Python remains authoritative" in read(root / "src/codex_plugin_scanner/guard/native_command_model.py"):
-        failures.append("native_command_model.py still describes Python as authoritative")
-    if "Python remains authoritative" in bridge_source:
-        failures.append(f"{command_bridge.as_posix()} still describes Python as authoritative")
-    review_start = bridge_source.find("def review_pre_tool_native(")
-    review_end = bridge_source.find("\ndef native_pre_tool_policy_floor(", review_start)
-    review_body = bridge_source[review_start:review_end] if review_start >= 0 and review_end > review_start else ""
-    if "evaluate_command(" in review_body:
-        failures.append("review_pre_tool_native invokes the Python command evaluator")
-    failures.extend(
-        required_tokens(
-            root / "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
-            (
-                "from ..native_pretool import review_pre_tool_native",
-                'if event_name == "PreToolUse":',
-                "native_pre_tool_unavailable",
-            ),
-        )
-    )
+
+    worker_path = root / "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+    worker = read(worker_path)
+    production = function_source(worker_path, "review_http_payload")
+    compatibility = function_source(worker_path, "_review_explicit_python_compatibility")
+    for required in ("review_hook_edge_native", 'mode in {"off", "shadow"}', "native_hook_edge_unavailable"):
+        if required not in production:
+            failures.append(f"default HookWorker PreTool contract missing {required}")
+    if "self.engine.review(" in production or "_request_from_payload(" in production:
+        failures.append("default HookWorker path invokes Python semantic evaluation")
+    if "HookWorkerUnsupported" in production:
+        failures.append("default HookWorker path can escape Rust authority")
+    if 'event_name != "PostToolUse"' not in compatibility:
+        failures.append("explicit Python compatibility is not bounded away from PreToolUse")
+    if "review_pre_tool_native" in worker or "_pre_tool_command(" in worker:
+        failures.append("HookWorker retains superseded Python-side PreTool parsing")
+
+    edge = root / "src/codex_plugin_scanner/guard/native_hook_edge.py"
+    edge_source = read(edge)
+    for required in ('"operation": "hook_edge"', '"hook-edge", "--stdin"', "review_hook_edge_native"):
+        if required not in edge_source:
+            failures.append(f"{edge.as_posix()} missing {required}")
+    for forbidden in ("evaluate_command(", "HookReviewEngine", "review_pre_tool_native("):
+        if forbidden in edge_source:
+            failures.append(f"native hook edge bridge invokes Python PreTool semantics: {forbidden}")
+
+    cli_path = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py"
+    native_route = function_source(cli_path, "try_native_hook_authority")
+    compatibility_route = function_source(cli_path, "try_native_or_source_ref_hook")
+    if 'native_mode() not in {"auto", "force"}' not in native_route:
+        failures.append("CLI does not restrict Python compatibility to explicit off/shadow")
+    if "HookWorker(store=store).review_http_payload(" not in native_route:
+        failures.append("CLI auto/force PreTool route does not terminate at Rust HookWorker")
+    if "except" in native_route:
+        failures.append("CLI auto/force PreTool route catches native failures for fallback")
+    if "_try_source_ref_fast_path" not in compatibility_route:
+        failures.append("explicit source-ref compatibility route is missing")
+    if "native_result is not None" not in compatibility_route:
+        failures.append("native PreTool result is not terminal before compatibility")
+
     result = {
         "schema": SCHEMA,
         "status": "passed" if not failures else "failed",

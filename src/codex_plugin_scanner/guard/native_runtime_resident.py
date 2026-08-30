@@ -6,8 +6,9 @@ platform also performs mutual HMAC authentication with a fresh per-child
 256-bit secret delivered only through inherited stdin.
 
 Protocol v2 binds each response to a random request identifier and the exact
-request/response bytes. Client admission is non-blocking so resident overload
-cannot amplify into Python thread or process growth.
+request/response bytes. The production client authentication, framing, digest
+validation, and socket I/O execute inside the bundled Rust runtime; Python owns
+only bounded resident lifecycle supervision and asynchronous control-plane state.
 """
 
 from __future__ import annotations
@@ -108,31 +109,51 @@ class _ResidentService:
             return self.socket_path is not None
 
     def _send(self, payload: bytes, *, timeout_seconds: float) -> bytes | None:
+        """Send bytes through the Rust resident client, not Python socket framing."""
         with self._lock:
             if self._closed:
                 return None
             loopback_address = self.loopback_address
             auth_token = self._auth_token
             socket_path = self.socket_path
-        if auth_token is None:
+        if auth_token is None or timeout_seconds <= 0:
+            return None
+        try:
+            payload_text = payload.decode("utf-8")
+        except UnicodeDecodeError:
             return None
         if os.name == "nt":
             if loopback_address is None:
                 return None
-            return _send_authenticated_loopback_request(
-                loopback_address,
-                auth_token,
-                payload,
-                timeout_seconds=timeout_seconds,
+            host, port = loopback_address
+            command = (
+                str(self.executable),
+                "resident-client",
+                "--tcp-loopback",
+                f"{host}:{port}",
+                "--stdin",
             )
-        if socket_path is None:
-            return None
-        return _send_authenticated_unix_request(
-            socket_path,
-            auth_token,
-            payload,
+        else:
+            if socket_path is None:
+                return None
+            command = (
+                str(self.executable),
+                "resident-client",
+                "--socket",
+                str(socket_path),
+                "--stdin",
+            )
+        result = run_isolated_hook_process(
+            command,
+            input_text=f"{auth_token.hex()}\n{payload_text}",
+            cwd=self.executable.parent,
+            environment=self.environment,
             timeout_seconds=timeout_seconds,
+            output_limit=_MAX_RESPONSE_BYTES,
         )
+        if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
+            return None
+        return result.stdout.rstrip("\n").encode("utf-8")
 
     def _ensure_started(self, *, timeout_seconds: float) -> bool:
         if timeout_seconds <= 0:

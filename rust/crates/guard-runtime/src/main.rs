@@ -2,6 +2,7 @@
 
 mod hardening;
 mod oneshot;
+mod resident_client;
 
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
@@ -62,6 +63,7 @@ const PARENT_LIVENESS_FD_ENV: &str = "HOL_GUARD_PARENT_LIVENESS_FD";
 enum ResidentOperationV1 {
     CommandModel(CommandModelRequestV1),
     PreToolUse(CommandModelRequestV1),
+    HookEdge(Value),
     Health(Value),
 }
 
@@ -246,6 +248,8 @@ fn capabilities() -> RuntimeCapabilitiesV1 {
         "oneshot-v1".into(),
         "framed-serve-v1".into(),
         "resident-protocol-v2".into(),
+        "resident-client-v1".into(),
+        "hook-edge-v2".into(),
         "bounded-admission-v2".into(),
         "overload-signal-v1".into(),
         "panic-containment-v1".into(),
@@ -283,6 +287,19 @@ fn read_stdin_bounded() -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+fn read_resident_client_stdin() -> Result<Vec<u8>, String> {
+    let limit = MAX_NATIVE_REQUEST_BYTES + AUTH_TOKEN_BYTES * 2 + 2;
+    let mut bytes = Vec::new();
+    io::stdin()
+        .take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| hardening::read_error(&error, "native_resident_client_read_failed"))?;
+    if bytes.len() > limit {
+        return Err("native_resident_client_input_too_large".to_owned());
+    }
+    Ok(bytes)
+}
+
 pub(crate) fn strict_json_value(bytes: &[u8]) -> Result<Value, String> {
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let value = StrictJsonSeed { depth: 0 }
@@ -307,6 +324,9 @@ fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
         }
         ResidentRequestV1::Operation(ResidentOperationV1::PreToolUse(request)) => {
             oneshot::evaluate_pre_tool_request(&request)
+        }
+        ResidentRequestV1::Operation(ResidentOperationV1::HookEdge(request)) => {
+            oneshot::evaluate_hook_edge_value(request)
         }
         ResidentRequestV1::Operation(ResidentOperationV1::Health(_request)) => {
             encode_response(&serde_json::json!({
@@ -767,6 +787,11 @@ fn run() -> Result<(), String> {
             let response = oneshot::evaluate_hook_bytes(&bytes)?;
             write_bytes_response(&response)
         }
+        [command, flag] if command == "hook-edge" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            let response = oneshot::evaluate_hook_edge_bytes(&bytes)?;
+            write_bytes_response(&response)
+        }
         [command, flag] if command == "command-model" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_command_model_bytes(&bytes)?;
@@ -781,8 +806,24 @@ fn run() -> Result<(), String> {
         [command, flag, address] if command == "serve" && flag == "--tcp-loopback" => {
             serve_loopback(address)
         }
+        [command, transport, path, input_flag]
+            if command == "resident-client" && transport == "--socket" && input_flag == "--stdin" =>
+        {
+            let bytes = read_resident_client_stdin()?;
+            let response = resident_client::request_unix(path, &bytes)?;
+            write_bytes_response(&response)
+        }
+        [command, transport, address, input_flag]
+            if command == "resident-client"
+                && transport == "--tcp-loopback"
+                && input_flag == "--stdin" =>
+        {
+            let bytes = read_resident_client_stdin()?;
+            let response = resident_client::request_loopback(address, &bytes)?;
+            write_bytes_response(&response)
+        }
         _ => Err(
-            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT"
+            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | hook-edge --stdin | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-client --socket PATH --stdin | resident-client --tcp-loopback 127.0.0.1:PORT --stdin"
                 .into(),
         ),
     }
