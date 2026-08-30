@@ -65,6 +65,7 @@ from .update_desktop_apply import (
 from .update_desktop_core import is_desktop_managed_runtime
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
+from .update_release_candidates import newest_pypi_version
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
@@ -1320,9 +1321,8 @@ def _version_check_payload(
             "required_python": _format_python_requirements(required_python_requirements),
             "runtime_python": runtime_python,
         }
-    reserved_alpha = (
-        _newest_reserved_alpha_version(latest_pypi=_latest_published_alpha_version()) if include_alpha else None
-    )
+    published_alpha = newest_pypi_version(_last_pypi_payload, include_stable=False, include_alpha=True)
+    reserved_alpha = _newest_reserved_alpha_version(latest_pypi=published_alpha) if include_alpha else None
     return {
         "source": "pypi",
         **({"release_channel": "alpha"} if include_alpha else {}),
@@ -1369,59 +1369,10 @@ def _latest_version_from_pypi() -> str | None:
 
 
 def _latest_alpha_version_from_pypi(current_version: str) -> str | None:
-    """Return the newest non-yanked stable or alpha release on PyPI.
-
-    ``current_version`` is retained for call-site compatibility. Opting into
-    alpha releases widens the candidate set; it must not hide a newer stable
-    release after an alpha train graduates.
-    """
+    """Return the newest non-yanked stable or alpha release on PyPI."""
     _ = current_version
     _ = _latest_version_from_pypi()
-    payload = _last_pypi_payload
-    if not isinstance(payload, dict):
-        return None
-    releases = payload.get("releases")
-    if not isinstance(releases, dict):
-        return None
-    candidates: list[tuple[Version, str]] = []
-    for version_text, files in releases.items():
-        if not isinstance(version_text, str) or not version_text.strip():
-            continue
-        try:
-            parsed_version = Version(version_text)
-        except InvalidVersion:
-            continue
-        if parsed_version.is_prerelease and (parsed_version.pre is None or parsed_version.pre[0] != "a"):
-            continue
-        if _release_has_non_yanked_file(files):
-            candidates.append((parsed_version, version_text.strip()))
-    if not candidates:
-        return None
-    return max(candidates, key=lambda candidate: candidate[0])[1]
-
-
-def _latest_published_alpha_version() -> str | None:
-    payload = _last_pypi_payload
-    if not isinstance(payload, dict):
-        return None
-    releases = payload.get("releases")
-    if not isinstance(releases, dict):
-        return None
-    candidates: list[tuple[Version, str]] = []
-    for version_text, files in releases.items():
-        if not isinstance(version_text, str) or not version_text.strip():
-            continue
-        try:
-            parsed_version = Version(version_text)
-        except InvalidVersion:
-            continue
-        if parsed_version.pre is None or parsed_version.pre[0] != "a":
-            continue
-        if _release_has_non_yanked_file(files):
-            candidates.append((parsed_version, version_text.strip()))
-    if not candidates:
-        return None
-    return max(candidates, key=lambda candidate: candidate[0])[1]
+    return newest_pypi_version(_last_pypi_payload, include_stable=True, include_alpha=True)
 
 
 def already_current_update_message(version_check: Mapping[str, object] | None) -> str:
