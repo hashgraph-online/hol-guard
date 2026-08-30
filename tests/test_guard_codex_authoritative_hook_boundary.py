@@ -346,7 +346,7 @@ def test_native_pretool_keeps_ordinary_safe_command_prompt_free(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _install_codex(home_dir, workspace_dir, capsys)
-    command = "git status --short"
+    command = "pwd"
     event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",

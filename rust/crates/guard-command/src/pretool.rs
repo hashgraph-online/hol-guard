@@ -118,21 +118,15 @@ fn exact_safe_command(model: &CanonicalCommandV1) -> bool {
         let Some(executable) = segment.executable.as_deref() else {
             return false;
         };
-        if sensitive_command(&segment.text) {
+        if sensitive_command(&segment.text) || !segment.environment_names.is_empty() {
             return false;
         }
-        let basename = executable_basename(executable);
-        match basename {
-            "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" | "stat" => true,
-            "git" => segment.arguments.first().is_some_and(|value| {
-                matches!(
-                    value.as_str(),
-                    "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files"
-                )
-            }),
-            "rg" | "grep" => true,
-            _ => false,
-        }
+        // The v1 native request does not bind a decision to the executable that
+        // the harness will resolve, nor does it carry enough filesystem context
+        // to prove external command identity and argument effects. Keep the
+        // automatic allow surface to argument-free POSIX shell built-ins until
+        // that evidence is part of the authority contract.
+        matches!(executable, "pwd" | "true") && segment.arguments.is_empty()
     })
 }
 
@@ -228,8 +222,16 @@ mod tests {
 
     #[test]
     fn allows_bounded_exact_commands() {
+        for command in ["pwd", "true", "pwd && true"] {
+            let decision = evaluate_pre_tool(&request(command)).unwrap();
+            assert_eq!(decision.decision, "allow", "{command}");
+            assert!(decision.explicitly_benign, "{command}");
+        }
+    }
+
+    #[test]
+    fn reviews_commands_without_bound_identity_and_argument_evidence() {
         for command in [
-            "pwd",
             "whoami",
             "uname -a",
             "git status --short",
@@ -238,10 +240,17 @@ mod tests {
             "rg -n authority src",
             "grep -n authority README.md",
             "stat README.md",
+            "./rg authority src",
+            "/tmp/evil/rg authority src",
+            "rg --pre /tmp/payload authority src",
+            "GIT_EXTERNAL_DIFF=/tmp/payload git diff --ext-diff README.md SECURITY.md",
+            "git diff --output=/tmp/diff",
+            "git log -1 --format=%B --output=$HOME/.zshrc",
         ] {
             let decision = evaluate_pre_tool(&request(command)).unwrap();
-            assert_eq!(decision.decision, "allow", "{command}");
-            assert!(decision.explicitly_benign, "{command}");
+            assert_eq!(decision.decision, "deny", "{command}");
+            assert_eq!(decision.minimum_action, "review", "{command}");
+            assert!(!decision.explicitly_benign, "{command}");
         }
     }
 
