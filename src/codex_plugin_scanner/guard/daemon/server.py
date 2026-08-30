@@ -8077,7 +8077,8 @@ class GuardDaemonServer:
         self._record_lifecycle("shutdown_requested", reason="explicit_stop")
         self._diagnostics.record("daemon_shutdown_requested")
         self._shutdown_started.set()
-        self._server.shutdown()
+        if self._serve_loop_started.is_set():
+            self._server.shutdown()
         self._server.server_close()
         if self._thread is not None:
             self._thread.join(timeout=5)

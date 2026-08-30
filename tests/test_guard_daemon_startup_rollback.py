@@ -39,6 +39,32 @@ def test_daemon_start_preserves_deferred_hook_worker_backfill(
         daemon.stop()
 
 
+def test_stop_after_initial_worker_failure_does_not_shutdown_unstarted_serve_loop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
+    monkeypatch.setattr(
+        daemon._server.hook_process_runner,
+        "require_initial_capacity",
+        lambda: (_ for _ in ()).throw(RuntimeError("injected initial worker failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="injected initial worker failure"):
+        daemon.start()
+
+    def reject_shutdown() -> None:
+        raise AssertionError("shutdown must not wait on an unstarted serve loop")
+
+    monkeypatch.setattr(daemon._server, "shutdown", reject_shutdown)
+    daemon.stop()
+
+    assert daemon._thread is None
+    assert daemon._owner_lock is None
+    assert daemon._server.hook_process_runner.stats()["workers"] == 0
+
+
 def test_daemon_start_waits_for_serve_loop_entry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

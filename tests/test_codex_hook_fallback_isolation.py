@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import cast
 
@@ -28,6 +29,7 @@ from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     run_isolated_hook_process,
 )
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import validate_codex_hook_launch
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 
 
 def _installed_launch(tmp_path: Path) -> tuple[HarnessContext, tuple[str, ...], dict[str, object]]:
@@ -67,6 +69,51 @@ def test_daemon_start_command_keeps_pre_home_argument_compatibility(tmp_path: Pa
     command = isolated_daemon_start_command(sys.executable, tmp_path, tmp_path / "guard")
 
     assert f"home_dir=Path({str(Path.home())!r})" in command[3]
+    assert "schedule_guard_daemon_recovery" in command[3]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX recovery contention regression")
+def test_concurrent_daemon_start_commands_do_not_wait_behind_active_recovery(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    package_root = Path(launch_runtime.__file__).resolve().parents[2]
+    command = isolated_daemon_start_command(sys.executable, package_root, guard_home, home_dir)
+    recovery_token = daemon_manager._claim_guard_daemon_recovery_reservation(  # pyright: ignore[reportPrivateUsage]
+        guard_home
+    )
+    assert recovery_token is not None
+
+    def run_start_command():
+        return run_isolated_hook_process(
+            command,
+            input_text="",
+            cwd=home_dir,
+            environment=isolated_hook_environment(),
+            timeout_seconds=7.0,
+            allow_windows_breakaway=True,
+        )
+
+    try:
+        with (
+            daemon_manager._guard_daemon_recovery_lock(  # pyright: ignore[reportPrivateUsage]
+                guard_home
+            ),
+            ThreadPoolExecutor(max_workers=4) as executor,
+        ):
+            results = list(executor.map(lambda _index: run_start_command(), range(4)))
+    finally:
+        daemon_manager.clear_guard_daemon_recovery_reservation(
+            guard_home,
+            token=recovery_token,
+        )
+
+    diagnostics = [
+        (result.returncode, result.timed_out, result.containment_failed, result.stdout) for result in results
+    ]
+    assert all(result.returncode == 0 for result in results), diagnostics
+    assert all(not result.timed_out for result in results), diagnostics
 
 
 def test_fallback_environment_drops_import_virtualenv_project_and_loader_controls(

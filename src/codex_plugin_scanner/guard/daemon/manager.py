@@ -617,6 +617,7 @@ def schedule_guard_daemon_recovery(
     *,
     home_dir: Path | None = None,
     failure_kind: GuardDaemonHookFailureKind = "authenticated-control-plane-failure",
+    executable: Path | None = None,
 ) -> None:
     """Run classified daemon recovery independently of a bounded hook process."""
 
@@ -634,12 +635,30 @@ def schedule_guard_daemon_recovery(
         return
     try:
         trusted_home = _trusted_daemon_home(home_dir)
-        command = _isolated_python_module_command(
-            "codex_plugin_scanner.guard.daemon.recovery_worker",
-            _trusted_daemon_import_paths(),
-            [str(guard_home), str(trusted_home), failure_kind, recovery_token],
+        if bool(getattr(sys, "frozen", False)) or executable is not None:
+            from ..frozen_runtime_commands import frozen_daemon_recovery_worker_command
+
+            recovery_executable = executable or _trusted_daemon_interpreter()
+            command = list(
+                frozen_daemon_recovery_worker_command(
+                    guard_home,
+                    trusted_home,
+                    failure_kind,
+                    recovery_token,
+                    executable=str(recovery_executable),
+                )
+            )
+        else:
+            command = _isolated_python_module_command(
+                "codex_plugin_scanner.guard.daemon.recovery_worker",
+                _trusted_daemon_import_paths(),
+                [str(guard_home), str(trusted_home), failure_kind, recovery_token],
+            )
+        launcher_env = _daemon_launcher_env(
+            home_dir=trusted_home,
+            guard_home=guard_home,
+            executable=executable,
         )
-        launcher_env = _daemon_launcher_env(home_dir=trusted_home, guard_home=guard_home)
         if os.name == "nt":
             _ = subprocess.Popen(
                 command,

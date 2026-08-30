@@ -356,7 +356,7 @@ def test_main_recovers_missing_daemon_and_retries_hook(
     assert len(set(phase_deadlines)) == 1
     assert len(recovery_commands) == 1
     assert recovery_commands[0][1:3] == ("-I", "-c")
-    assert "recover_guard_daemon_after_hook_failure" in recovery_commands[0][3]
+    assert "schedule_guard_daemon_recovery" in recovery_commands[0][3]
     assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
@@ -441,7 +441,7 @@ def test_recovery_command_preserves_custom_home_and_guard_home(tmp_path: Path) -
     )
 
     assert command[1:3] == ("-I", "-c")
-    assert "recover_guard_daemon_after_hook_failure" in command[3]
+    assert "schedule_guard_daemon_recovery" in command[3]
     assert str(guard_home) in command[3]
     assert str(home_dir) in command[3]
 

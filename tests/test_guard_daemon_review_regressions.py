@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import recovery_worker
 from codex_plugin_scanner.guard.daemon import server as server_module
 
@@ -83,3 +85,44 @@ def test_recovery_worker_clears_its_claim_when_recovery_fails(
         recovery_worker.main()
 
     assert cleared == [(guard_home, "recovery-token")]
+
+
+def test_frozen_recovery_scheduler_spawns_private_worker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    executable = tmp_path / "hol-guard"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    executable.write_bytes(b"frozen")
+    spawned: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(
+        daemon_manager,
+        "_claim_guard_daemon_recovery_reservation",
+        lambda _guard_home: "recovery-token",
+    )
+    monkeypatch.setattr(
+        daemon_manager,
+        "_daemon_launcher_env",
+        lambda **_kwargs: {},
+    )
+
+    def spawn(command: list[str], **kwargs: object) -> object:
+        spawned.append((command, kwargs))
+        return object()
+
+    monkeypatch.setattr(subprocess, "Popen", spawn)
+
+    daemon_manager.schedule_guard_daemon_recovery(
+        guard_home,
+        home_dir=home_dir,
+        failure_kind="transport-failure",
+        executable=executable,
+    )
+
+    assert len(spawned) == 1
+    command, kwargs = spawned[0]
+    assert command[:2] == [str(executable), "--_hol-guard-codex-daemon-recovery-worker"]
+    assert kwargs["start_new_session"] is True

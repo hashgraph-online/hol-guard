@@ -9,9 +9,15 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime
+from codex_plugin_scanner.guard import daemon as daemon_api
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager
+from codex_plugin_scanner.guard.frozen_runtime_commands import (
+    frozen_daemon_recovery_command,
+    frozen_daemon_recovery_worker_command,
+)
 
 
 @pytest.fixture
@@ -58,6 +64,79 @@ def test_source_runtime_does_not_install_frozen_contract() -> None:
     if frozen_codex_runtime.is_frozen_guard_runtime():
         pytest.skip("source-runtime assertion is not meaningful from a frozen test executable")
     assert frozen_codex_runtime.install_frozen_codex_runtime() is False
+
+
+def test_frozen_recovery_command_schedules_one_detached_worker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    scheduled: list[tuple[Path, Path, str, Path]] = []
+
+    def schedule(
+        requested_guard_home: Path,
+        *,
+        home_dir: Path,
+        failure_kind: str,
+        executable: Path,
+    ) -> None:
+        scheduled.append((requested_guard_home, home_dir, failure_kind, executable))
+
+    monkeypatch.setattr(daemon_api, "schedule_guard_daemon_recovery", schedule)
+    monkeypatch.setenv("HOL_GUARD_HOOK_FAILURE_KIND", "transport-failure")
+    command = frozen_daemon_recovery_command(
+        guard_home,
+        home_dir,
+        executable=sys.executable,
+    )
+
+    assert frozen_codex_runtime.run_frozen_internal_command(command) == 0
+    assert scheduled == [
+        (
+            guard_home,
+            home_dir,
+            "transport-failure",
+            Path(sys.executable).expanduser().resolve(strict=True),
+        )
+    ]
+
+
+def test_frozen_recovery_worker_releases_its_reservation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    recovered: list[tuple[Path, Path, str]] = []
+    cleared: list[tuple[Path, str]] = []
+    monkeypatch.setattr(
+        daemon_manager,
+        "recover_guard_daemon_after_hook_failure",
+        lambda requested_guard_home, *, home_dir, failure_kind: recovered.append(
+            (requested_guard_home, home_dir, failure_kind)
+        ),
+    )
+    monkeypatch.setattr(
+        daemon_manager,
+        "clear_guard_daemon_recovery_reservation",
+        lambda requested_guard_home, *, token: cleared.append((requested_guard_home, token)) or True,
+    )
+    command = frozen_daemon_recovery_worker_command(
+        guard_home,
+        home_dir,
+        "overload",
+        "recovery-token",
+        executable=sys.executable,
+    )
+
+    assert frozen_codex_runtime.run_frozen_internal_command(command) == 0
+    assert recovered == [(guard_home, home_dir, "overload")]
+    assert cleared == [(guard_home, "recovery-token")]
 
 
 def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
