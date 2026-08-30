@@ -14,19 +14,12 @@ from .hook_process_capacity import (
     initial_hook_worker_target,
     process_cpu_ratio,
 )
-from .hook_process_protocol import (
-    as_string_object_dict,
-    is_pair,
-)
+from .hook_process_protocol import as_string_object_dict, is_pair
 from .hook_process_request import build_hook_process_review_request, runtime_hook_review_is_idempotent
 from .hook_process_runner_lifecycle import _HOOK_PROCESS_READY_TIMEOUT_SECONDS, HookProcessRunnerLifecycleMixin
 from .hook_process_slot_review import review_hook_worker_slot
 from .hook_process_spawner import hook_worker_became_isolated, hook_worker_became_ready, spawn_hook_worker
-from .hook_process_worker import (
-    HookProcessReview,
-    HookWorkerSlot,
-    worker_retirement_thread,
-)
+from .hook_process_worker import HookProcessReview, HookWorkerSlot, worker_retirement_thread
 
 _HOOK_PROCESS_MAX_LIMIT = 16
 _HOOK_PROCESS_TIMEOUT_SECONDS = 2.8
@@ -99,6 +92,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         self._restarts: int = 0
         self._decisions: dict[str, int] = {}
         self._reason_codes: dict[str, int] = {}
+        self._routes: dict[str, int] = {}
 
     def start(self, *, defer_backfill: bool = False) -> None:
         nonblocking_deferred_start = defer_backfill and self._adaptive_capacity is not None
@@ -311,20 +305,17 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
                     claimed_approval_request_id=claimed_approval_request_id,
                     _transient_not_ready_retries=_transient_not_ready_retries - 1,
                 )
-            return HookProcessReview(
-                None,
-                reason_code if isinstance(reason_code, str) else "daemon_hook_process_failed",
-            )
+            return self._terminal_failed_review(typed_result.get("route"), reason_code)
         typed_response = as_string_object_dict(response)
         if typed_response is None:
             return HookProcessReview(None, "daemon_hook_process_invalid_json")
         if time.monotonic() >= review_deadline:
             return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")
         self._record_response_metrics(typed_response)
-        accepted_review = HookProcessReview(typed_response, None)
+        self._record_route_metric(typed_result.get("route"))
         if time.monotonic() >= review_deadline:
             return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")
-        return accepted_review
+        return HookProcessReview(typed_response, None)
 
     def wait_for_capacity(self, *, minimum_workers: int, timeout_seconds: float) -> bool:
         if not 1 <= minimum_workers <= self._process_limit:
@@ -361,6 +352,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
                 "restarts": self._restarts,
                 "decisions": dict(self._decisions),
                 "reason_codes": dict(self._reason_codes),
+                "routes": dict(self._routes),
             }
 
     def set_capacity_listener(self, listener: Callable[[int], None]) -> None:

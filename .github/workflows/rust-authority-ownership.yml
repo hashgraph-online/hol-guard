@@ -3,28 +3,8 @@ name: Rust authority ownership
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "rust/**"
-      - "src/codex_plugin_scanner/guard/**"
-      - "ci/native_runtime/**"
-      - "scripts/**"
-      - "tests/**"
-      - "docs/guard/**"
-      - ".github/workflows/**"
-      - "pyproject.toml"
-      - "uv.lock"
   push:
     branches: [main]
-    paths:
-      - "rust/**"
-      - "src/codex_plugin_scanner/guard/**"
-      - "ci/native_runtime/**"
-      - "scripts/**"
-      - "tests/**"
-      - "docs/guard/**"
-      - ".github/workflows/**"
-      - "pyproject.toml"
-      - "uv.lock"
   workflow_dispatch:
 
 permissions:
@@ -41,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
@@ -55,9 +36,14 @@ jobs:
           rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
           rustup default 1.88.0
       - name: Enforce permanent source ownership
+        env:
+          OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py \
-            --root . --json rust-authority-ownership.json
+          args=(--root . --json rust-authority-ownership.json)
+          if [[ -n "$OWNERSHIP_BASE_REF" ]]; then
+            args+=(--base-ref "$OWNERSHIP_BASE_REF")
+          fi
+          uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py "${args[@]}"
       - name: Compile and lint complete Rust workspace
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}

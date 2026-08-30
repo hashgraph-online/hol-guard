@@ -12,7 +12,8 @@ Security:
 - Native PostToolUse is decided by Rust for ``auto``/``force``. Native failure
   fails closed instead of spilling into Python review. The Python engine is
   constructed only for ``off``/``shadow``.
-- Supported command PreToolUse is decided by Rust. Native failure fails closed.
+- Supported command PreToolUse is decided by Rust. Native failure fails closed
+  except when protection is off (watch/observe), which records via the CLI path.
   Non-command PreToolUse still raises ``HookWorkerUnsupported`` for the CLI path.
 """
 
@@ -29,7 +30,9 @@ from ..cli.commands_support_command_activity import (
 )
 from ..config import load_guard_config
 from ..native_pretool import review_pre_tool_native
+from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import native_mode, native_runtime_status, review_post_tool_native
+from ..protection_posture import protection_is_off
 from ..runtime.hook_content_scanner import ContentScanner
 from ..runtime.hook_decision_cache import HookDecisionCache
 from ..runtime.hook_review_engine import HookReviewEngine
@@ -120,6 +123,11 @@ class HookWorker:
             command = _pre_tool_command(payload)
             if command is None:
                 raise HookWorkerUnsupported("fast path PreToolUse requires a command")
+            config = self._load_config(guard_home, workspace)
+            recording_only = protection_is_off(
+                posture=config.protection_posture,
+                mode=config.mode,
+            )
             native = review_pre_tool_native(
                 command,
                 guard_home=guard_home,
@@ -128,9 +136,15 @@ class HookWorker:
             )
             if native is not None:
                 action = str(native.get("minimum_action") or "")
-                if action == "review":
+                if action == "review" or (recording_only and action != "allow"):
+                    # Native established the minimum floor, but the CLI approval
+                    # path still owns the terminal semantic decision. Watch/observe
+                    # also records through that path instead of harness deny.
+                    record_python_semantic_hook_route()
                     raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
                 return _harness_json_from_native_pre_tool(harness, native)
+            if recording_only:
+                raise HookWorkerUnsupported("observe PreToolUse uses CLI recording")
             status = native_runtime_status()
             if status.mode == "off":
                 raise HookWorkerUnsupported("native PreToolUse runtime is off")
