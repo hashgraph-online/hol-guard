@@ -17,7 +17,10 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
-from codex_plugin_scanner.guard.native_runtime import review_post_tool_native
+from codex_plugin_scanner.guard.native_runtime import (
+    native_runtime_status,
+    review_post_tool_native,
+)
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
@@ -209,7 +212,13 @@ def _validate_runtime(path: Path) -> Path:
     resolved = path.expanduser().resolve(strict=True)
     if not resolved.is_file() or resolved.is_symlink():
         raise ValueError("native runtime must be a regular non-symlink file")
+    _bind_native_runtime(resolved)
     return resolved
+
+
+def _bind_native_runtime(runtime: Path) -> None:
+    os.environ["HOL_GUARD_NATIVE"] = "force"
+    os.environ["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
 
 
 def main() -> int:

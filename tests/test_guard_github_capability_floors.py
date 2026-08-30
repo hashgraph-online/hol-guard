@@ -227,6 +227,45 @@ def test_pipeline_boundary_preserves_following_github_capability(
     assert assessment.capabilities == capabilities
 
 
+@pytest.mark.parametrize(
+    ("command", "capabilities"),
+    (
+        ("false && true || gh repo delete o/r --yes", ("delete_remote",)),
+        ("true >/missing/path || false || gh repo delete o/r --yes", ("delete_remote",)),
+        ("true>/missing/path || gh repo delete o/r --yes", ("delete_remote",)),
+        ("true && false || gh repo delete o/r --yes", ("delete_remote",)),
+        ("false || gh repo delete o/r --yes", ("delete_remote",)),
+        ("make && gh repo delete o/r --yes", ("delete_remote",)),
+        ("true && gh repo delete o/r --yes", ("delete_remote",)),
+    ),
+)
+def test_left_associative_and_or_does_not_skip_reachable_github_deletes(
+    tmp_path: Path,
+    command: str,
+    capabilities: tuple[GitHubCommandCapability, ...],
+) -> None:
+    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
+
+    assert assessment is not None
+    assert assessment.capabilities == capabilities
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+    assert match is not None
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "false && gh repo delete o/r --yes",
+        "true || gh repo delete o/r --yes",
+        "false && true && gh repo delete o/r --yes",
+    ),
+)
+def test_statically_dead_and_or_skips_github_deletes(tmp_path: Path, command: str) -> None:
+    assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
+
+    assert assessment is None
+
+
 def test_local_write_cannot_mask_remote_secret_capability(tmp_path: Path) -> None:
     assessment = classify_github_shell_capabilities(
         "gh repo set-default o/r; gh secret set TOKEN --body value",

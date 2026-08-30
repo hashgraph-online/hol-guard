@@ -2,7 +2,7 @@ name: Rust runtime performance
 
 on:
   pull_request:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - "rust/**"
       - "scripts/bench_guard_native_full_path.py"
@@ -12,7 +12,7 @@ on:
       - "src/codex_plugin_scanner/guard/daemon/hook_process_*.py"
       - ".github/workflows/rust-runtime-performance.yml"
   push:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - "rust/**"
       - "scripts/bench_guard_native_full_path.py"

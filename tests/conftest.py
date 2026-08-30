@@ -27,6 +27,18 @@ if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
 
 
+@pytest.fixture(autouse=True)
+def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep Python-engine unit tests on explicit ``off`` unless they set a mode.
+
+    Production default remains ``auto``. Native-authority tests monkeypatch
+    ``native_mode`` or delete this variable themselves.
+    """
+
+    if "HOL_GUARD_NATIVE" not in os.environ:
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--validate-test-invariants",

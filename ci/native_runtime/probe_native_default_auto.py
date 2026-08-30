@@ -1,13 +1,22 @@
-"""Installed-wheel proof that eligible PostToolUse uses Rust by default."""
+"""Installed-wheel proof for normalized native hook ingress defaults."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 import codex_plugin_scanner
+from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
+    _daemon_response_once,
+)
+from codex_plugin_scanner.guard.config import hook_fast_path_enabled
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_health,
@@ -18,6 +27,7 @@ from codex_plugin_scanner.guard.native_runtime_resident import (
     close_resident_native_runtimes,
 )
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _request(root: Path, text: str, request_id: str) -> HookReviewRequest:
@@ -61,13 +71,134 @@ def _require(condition: bool, detail: object) -> None:
         raise RuntimeError(f"native_default_auto_probe_failed: {detail}")
 
 
-def main() -> int:
+def _ownership_routes() -> dict[str, dict[str, str]]:
+    path = Path("docs/guard/contracts/hook-data-plane-ownership.v2.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    routes = payload.get("harness_routes") if isinstance(payload, dict) else None
+    if not isinstance(routes, dict):
+        raise RuntimeError("native_default_auto_probe_failed: ownership routes missing")
+    decoded: dict[str, dict[str, str]] = {}
+    for harness, route in routes.items():
+        if not isinstance(harness, str) or not isinstance(route, dict):
+            raise RuntimeError("native_default_auto_probe_failed: ownership route invalid")
+        pre = route.get("pre_tool_use")
+        post = route.get("post_tool_use")
+        if not isinstance(pre, str) or not isinstance(post, str):
+            raise RuntimeError("native_default_auto_probe_failed: ownership route incomplete")
+        decoded[harness] = {"pre_tool_use": pre, "post_tool_use": post}
+    return decoded
+
+
+def _installed_hook_corpus(root: Path) -> dict[str, object]:
+    guard_home = root / "hook-home"
+    workspace = root / "hook-workspace"
+    guard_home.mkdir(mode=0o700)
+    workspace.mkdir(mode=0o700)
+    store = GuardStore(guard_home)
+    daemon = GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+    )
+    reason_codes: dict[str, int] = {}
+
+    route_receipts: list[dict[str, str]] = []
+    routes = _ownership_routes()
+    daemon.start()
+    try:
+        for harness, route in sorted(routes.items()):
+            events: list[tuple[str, dict[str, object]]] = []
+            if route["pre_tool_use"].startswith("installed_"):
+                events.append(
+                    (
+                        "PreToolUse",
+                        {
+                            "hook_event_name": "PreToolUse",
+                            "tool_name": "Bash",
+                            "tool_input": {"command": "printf guard"},
+                        },
+                    )
+                )
+            if route["post_tool_use"].startswith("installed_"):
+                events.append(
+                    (
+                        "PostToolUse",
+                        {
+                            "hook_event_name": "PostToolUse",
+                            "tool_name": "Read",
+                            "tool_response": [{"type": "text", "text": "guard baseline\n"}],
+                        },
+                    )
+                )
+            for event, payload in events:
+                query = urllib.parse.urlencode(
+                    {
+                        "home": str(guard_home),
+                        "workspace": str(workspace),
+                    }
+                )
+                if harness == "codex":
+                    response_payload = _daemon_response_once(
+                        state_path=guard_home / "daemon-state.json",
+                        query=query,
+                        data=json.dumps(payload, separators=(",", ":")),
+                        timeout_seconds=5,
+                    )
+                else:
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
+                        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+                        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+                        method="POST",
+                    )
+                    try:
+                        with urllib.request.urlopen(request, timeout=5) as response:
+                            decoded = json.loads(response.read().decode("utf-8"))
+                            response_payload = decoded if isinstance(decoded, dict) else None
+                    except urllib.error.HTTPError as error:
+                        detail = error.read().decode("utf-8", errors="replace")[:512]
+                        raise RuntimeError(
+                            "installed hook corpus request failed: "
+                            f"harness={harness} event={event} status={error.code} body={detail}"
+                        ) from error
+                if response_payload is None:
+                    raise RuntimeError(f"empty response for {harness} {event}")
+                reason = response_payload.get("reason_code")
+                if isinstance(reason, str):
+                    reason_codes[reason] = reason_codes.get(reason, 0) + 1
+                route_receipts.append({"harness": harness, "event": event, "route": "native_resident"})
+        worker_stats = daemon._server.hook_process_runner.stats()
+    finally:
+        daemon.stop()
+
+    expected = len(route_receipts)
+    observed_routes = worker_stats["routes"]
+    _require(expected > 0, "installed hook corpus is empty")
+    _require(sum(observed_routes.values()) == expected, worker_stats)
+    _require(observed_routes.get("native_resident") == expected, worker_stats)
+    return {
+        "routes": route_receipts,
+        "route_count": expected,
+        "native_resident_decisions": observed_routes.get("native_resident", 0),
+        "native_oneshot_decisions": observed_routes.get("native_oneshot", 0),
+        "python_semantic_decisions": observed_routes.get("python_semantic", 0),
+        "fail_safe_decisions": observed_routes.get("native_fail_safe", 0),
+        "reason_code_counts": reason_codes,
+    }
+
+
+def main(*, json_path: Path | None = None) -> int:
     _require("HOL_GUARD_NATIVE" not in os.environ, "HOL_GUARD_NATIVE must be unset")
     _require(
         "HOL_GUARD_NATIVE_BINARY" not in os.environ,
         "HOL_GUARD_NATIVE_BINARY must be unset",
     )
+    _require(
+        "HOL_GUARD_HOOK_FAST_PATH" not in os.environ,
+        "HOL_GUARD_HOOK_FAST_PATH must be unset",
+    )
     _require(native_mode() == "auto", f"unexpected native mode: {native_mode()}")
+    _require(hook_fast_path_enabled(), "unset fast-path configuration must be enabled")
 
     package_path = Path(codex_plugin_scanner.__file__).resolve()
     source_package = (Path.cwd() / "src" / "codex_plugin_scanner").resolve()
@@ -112,6 +243,7 @@ def main() -> int:
             _require(health.resident_failures == 0, health)
             _require(health.oneshot_failures == 0, health)
             _require(health.starts == 1, health)
+            installed_corpus = _installed_hook_corpus(root)
         finally:
             close_resident_native_runtimes()
 
@@ -124,19 +256,32 @@ def main() -> int:
     finally:
         del os.environ["HOL_GUARD_NATIVE"]
 
-    print(
-        json.dumps(
-            {
-                "default_mode": "auto",
-                "runtime_reason": status.reason,
-                "target": capabilities.target,
-                "rollback": "off",
-            },
-            sort_keys=True,
-        )
-    )
+    receipt = {
+        "schema": "hol-guard.native-default-installed-receipt.v1",
+        "corpus_scope": "normalized_daemon_ingress",
+        "default_mode": "auto",
+        "fast_path": "enabled",
+        "runtime_reason": status.reason,
+        "target": capabilities.target,
+        "rollback": "off",
+        "corpus_decisions": installed_corpus["route_count"],
+        "resident_decisions": installed_corpus["route_count"],
+        "resident_share": 1.0,
+        "oneshot_decisions": 0,
+        "fail_safe_decisions": installed_corpus["fail_safe_decisions"],
+        "python_semantic_decisions": installed_corpus["python_semantic_decisions"],
+        "route_receipts": installed_corpus["routes"],
+        "reason_code_counts": installed_corpus["reason_code_counts"],
+    }
+    rendered = json.dumps(receipt, sort_keys=True)
+    if json_path is not None:
+        json_path.write_text(rendered + "\n", encoding="utf-8")
+    print(rendered)
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--json", type=Path)
+    arguments = parser.parse_args()
+    raise SystemExit(main(json_path=arguments.json))

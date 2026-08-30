@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -65,6 +66,22 @@ class ShimRefreshTest(unittest.TestCase):
             guard_home=self.guard_home,
             managed_installs=[],
         )
+        self.assertEqual(result.refreshed, ())
+        self.assertEqual(result.unchanged, ("kimi",))
+        self.assertEqual(result.errors, ())
+
+    def test_appimage_shell_shim_is_recognized_and_left_unchanged(self) -> None:
+        with mock.patch(
+            "codex_plugin_scanner.guard.shims.sys.executable",
+            "/tmp/.mount_HOLGUARD/usr/lib/hol-guard-core/hol-guard",
+        ):
+            path = self._install("kimi")
+            result = refresh_stale_harness_shims(
+                home_dir=self.home_dir,
+                guard_home=self.guard_home,
+                managed_installs=[],
+            )
+        self.assertTrue(path.read_text(encoding="utf-8").startswith("#!/bin/sh\n# base_command = "))
         self.assertEqual(result.refreshed, ())
         self.assertEqual(result.unchanged, ("kimi",))
         self.assertEqual(result.errors, ())

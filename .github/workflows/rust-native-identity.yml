@@ -8,7 +8,7 @@ on:
       - "scripts/build_native_hol_guard_wheel.py"
       - ".github/workflows/rust-native-identity.yml"
   push:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "ci/native_runtime/test_native_runtime_manifest.py"

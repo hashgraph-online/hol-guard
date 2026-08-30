@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import github_shell_bindings as _bindings
+from . import github_shell_control_flow as _control_flow
 from .github_capability_contract import (
     GitHubCommandAssessment,
     combine_github_assessments,
@@ -124,7 +125,7 @@ def classify_github_shell_capabilities(
     analysis_text = _bindings.normalize_github_lookup_assignments(analysis_text)
     parts = analysis.split_parts(analysis_text)
     pipelines = analysis.pipelines(parts)
-    conditional_pipeline_indexes, definitely_skipped_pipelines = _bindings.pipeline_control_flow(
+    conditional_pipeline_indexes, definitely_skipped_pipelines = _control_flow.pipeline_control_flow(
         parts,
         pipelines,
         primary_command=analysis.primary_command,

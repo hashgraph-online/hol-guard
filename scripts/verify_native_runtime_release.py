@@ -436,7 +436,13 @@ def _parser() -> argparse.ArgumentParser:
             sub.add_argument("--dist-dir", type=Path, required=True)
         if name == "plan-upload":
             sub.add_argument("--output-dir", type=Path, required=True)
-        if name in {"plan-upload", "verify-published"}:
+        if name == "validate-local":
+            sub.add_argument(
+                "--artifact-set",
+                choices=("native", "full"),
+                default="native",
+            )
+        elif name in {"plan-upload", "verify-published"}:
             sub.add_argument(
                 "--artifact-set",
                 choices=("full", "pure"),
@@ -455,7 +461,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "version": _canonical_version(args.version),
             }
         elif args.command == "validate-local":
-            hashes = local_native_hashes(
+            hasher = local_guard_hashes if args.artifact_set == "full" else local_native_hashes
+            hashes = hasher(
                 args.dist_dir,
                 version=args.version,
                 source_sha=args.source_sha,

@@ -59,9 +59,6 @@ from .command_queue_state import (
     clear_exact_route_failure as _clear_exact_route_failure,
 )
 from .command_queue_state import (
-    cloud_review_repair_status as _cloud_review_sync_repair_status,
-)
-from .command_queue_state import (
     command_queue_now as _now,
 )
 from .command_queue_state import (
@@ -136,7 +133,6 @@ def _lease_payload(
         operations=operations,
         wait_ms=wait_ms,
         operation_resolver=command_queue_operations,
-        repair_status_resolver=_cloud_review_sync_repair_status,
     )
 
 

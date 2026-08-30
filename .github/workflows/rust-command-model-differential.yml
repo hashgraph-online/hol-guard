@@ -10,7 +10,7 @@ on:
       - "ci/native_runtime/test_command_model_differential.py"
       - ".github/workflows/rust-command-model-differential.yml"
   push:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - "rust/Cargo.toml"
       - "rust/Cargo.lock"

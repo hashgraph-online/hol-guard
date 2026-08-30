@@ -1,5 +1,6 @@
-import { r as reactExports, j as jsxRuntimeExports, aU as fetchApprovalPage, aV as fetchPolicy, v as guardActionDisposition, p as protectionHealthFor, k as useProtectionPresentationState, aP as HiMiniArrowLeft, c as HiMiniChevronRight, i as harnessDisplayName, q as GuardHero, _ as ProofStrip, aW as HiMiniHome, N as HiMiniBolt, aa as HiMiniAdjustmentsHorizontal, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, w as formatRelativeTime, M as HiMiniExclamationTriangle, aX as guardActionPresentation, P as Badge, aY as DEFAULT_FILTER_STATE, aZ as filterEvidence, a_ as sortEvidence, a$ as computeMetrics, b0 as CommandActivityWorkspace, m as EmptyState, b1 as EvidenceFilterBar, b2 as EvidenceInsightStrip, b3 as EvidenceActionList, b4 as EvidenceActionDetail, K as useFocusTrap, b5 as policyIdentityKey, I as HiMiniCloud, b6 as HiMiniChartBar, ax as Tag, o as HiMiniCheckCircle, a0 as HiMiniXCircle, b7 as runHarnessAction, b8 as GuardHarnessActionError, b9 as HiMiniRocketLaunch, aC as HiMiniArrowPath, ba as HiMiniTrash, bb as clearLabelForScope, bc as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, aV as fetchApprovalPage, aW as fetchPolicy, v as guardActionDisposition, p as protectionHealthFor, k as useProtectionPresentationState, aQ as HiMiniArrowLeft, c as HiMiniChevronRight, i as harnessDisplayName, q as GuardHero, $ as ProofStrip, aX as HiMiniHome, N as HiMiniBolt, ab as HiMiniAdjustmentsHorizontal, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, w as formatRelativeTime, M as HiMiniExclamationTriangle, aY as guardActionPresentation, P as Badge, aZ as DEFAULT_FILTER_STATE, a_ as filterEvidence, a$ as sortEvidence, b0 as computeMetrics, b1 as CommandActivityWorkspace, m as EmptyState, b2 as EvidenceFilterBar, b3 as EvidenceInsightStrip, b4 as EvidenceActionList, b5 as EvidenceActionDetail, K as useFocusTrap, b6 as policyIdentityKey, I as HiMiniCloud, b7 as HiMiniChartBar, ay as Tag, o as HiMiniCheckCircle, a1 as HiMiniXCircle, b8 as runHarnessAction, b9 as GuardHarnessActionError, ba as HiMiniRocketLaunch, aD as HiMiniArrowPath, bb as HiMiniTrash, bc as clearLabelForScope, bd as formatHarnessCommand } from "../guard-dashboard.js";
 import { a as appSetupTarget } from "./harness-setup-target.js";
+import { u as useHarnessDetection, i as isHarnessDetected } from "./harness-detection.js";
 function ActivityModeButton(props) {
   const active = props.mode === props.value;
   const handleClick = reactExports.useCallback(() => props.onChange(props.value), [props.onChange, props.value]);
@@ -139,6 +140,7 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }) {
   );
 }
 function AppDetailWorkspace(props) {
+  const harnessDetection = useHarnessDetection();
   const [activeTab, setActiveTab] = reactExports.useState(readTabFromUrl);
   const [tabDirection, setTabDirection] = reactExports.useState("right");
   const tabRefs = reactExports.useRef({ overview: null, activity: null, settings: null });
@@ -188,7 +190,7 @@ function AppDetailWorkspace(props) {
   }, [loadTabData]);
   const install = runtime.managed_installs?.find((i) => i.harness === harness);
   const isActive = install?.active === true;
-  const isObserved = runtime.items.some((i) => i.harness === harness) || receipts.some((r) => r.harness === harness) || policies.some((p) => p.harness === harness);
+  const isObserved = isHarnessDetected(harnessDetection, harness) || runtime.items.some((i) => i.harness === harness) || receipts.some((r) => r.harness === harness) || policies.some((p) => p.harness === harness);
   const harnessReceipts = reactExports.useMemo(
     () => receipts.filter((r) => r.harness === harness).sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp)),
     [receipts, harness]

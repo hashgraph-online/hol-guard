@@ -1,6 +1,7 @@
-import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as ProtectionRepairFlowError, V as openPackageFirewallAuthorizeFallback, X as activeFailedHarnesses, j as jsxRuntimeExports, Y as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, Z as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, _ as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, $ as HiMiniEye, a0 as HiMiniXCircle, a1 as HiMiniClipboardDocumentCheck, a2 as HiMiniClipboard } from "../guard-dashboard.js";
-import { S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
+import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as remainingProtectionRepairParts, V as ProtectionRepairFlowError, X as openPackageFirewallAuthorizeFallback, Y as activeFailedHarnesses, j as jsxRuntimeExports, Z as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, _ as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, $ as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, a0 as HiMiniEye, a1 as HiMiniXCircle, a2 as HiMiniClipboardDocumentCheck, a3 as HiMiniClipboard } from "../guard-dashboard.js";
+import { d as defaultConnectHarness, S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
+import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
 class CloudRequestTimeoutError extends Error {
   constructor() {
     super("Guard Cloud did not respond within 5 seconds. Try again.");
@@ -89,6 +90,26 @@ async function waitForCloudConnection(initialStatus, {
     status = await withCloudRequestTimeout(fetchStatus, signal);
   }
   return status;
+}
+function recoverySummary(failCount, unknownCount, needsConnectedApp) {
+  if (needsConnectedApp) {
+    return "Connect an AI app to start local protection. Repair cannot finish until at least one app is connected.";
+  }
+  if (failCount === 0) {
+    return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
+  }
+  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
+  let remainingProofs = "";
+  if (unknownCount > 0) {
+    remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
+  }
+  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
+}
+function repairButtonLabel(repairState, needsConnectedApp) {
+  if (repairState?.status === "working") return "Repairing…";
+  if (needsConnectedApp) return "Connect an app";
+  if (repairState?.status === "error") return "Retry repair";
+  return "Repair protection";
 }
 const PROTECTION_CHECK_ACTIONS = {
   harness_hooks: {
@@ -182,22 +203,6 @@ function TargetedRepairButton({
     " repair"
   ] });
 }
-function recoverySummary(failCount, unknownCount) {
-  if (failCount === 0) {
-    return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
-  }
-  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
-  let remainingProofs = "";
-  if (unknownCount > 0) {
-    remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
-  }
-  return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
-}
-function repairButtonLabel(repairState) {
-  if (repairState?.status === "working") return "Repairing…";
-  if (repairState?.status === "error") return "Retry repair";
-  return "Repair protection";
-}
 function cloudConnectPendingMessage(hasAuthorizeUrl, opened) {
   if (!hasAuthorizeUrl) {
     return "Open the secure sign-in link below. This page will update automatically.";
@@ -234,6 +239,7 @@ function FleetProtectionRecovery(props) {
   const gaps = props.health.checks.filter((check) => check.status !== "pass");
   const failCount = gaps.filter((check) => check.status === "fail").length;
   const unknownCount = gaps.length - failCount;
+  const needsConnectedApp = remainingProtectionRepairParts(props.health).needsConnectedApp;
   const cloudPolicyHint = cloudPolicyRecoveryHint(props.cloudPolicy);
   const repairHarnessKey = props.repairHarnesses.join("\0");
   const repairHarnessList = reactExports.useMemo(
@@ -263,9 +269,14 @@ function FleetProtectionRecovery(props) {
       setDetailsOpen(true);
     }
   }, [props.onRepairProtection, props.repairHarnesses]);
+  const connectHarness = props.connectHarness ?? defaultConnectHarness(props.repairHarness, props.repairHarnesses);
   const handleRepairClick = reactExports.useCallback(() => {
+    if (needsConnectedApp && props.onRepairHarness) {
+      props.onRepairHarness(connectHarness);
+      return;
+    }
     void handleRepair();
-  }, [handleRepair]);
+  }, [connectHarness, handleRepair, needsConnectedApp, props.onRepairHarness]);
   const handleDetailsToggle = reactExports.useCallback(() => {
     setDetailsOpen((open) => !open);
   }, []);
@@ -375,9 +386,9 @@ function FleetProtectionRecovery(props) {
               ),
               /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Restore local protection" })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount, needsConnectedApp) })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: repairButtonLabel(repairState) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: repairButtonLabel(repairState, needsConnectedApp) })
         ] }),
         cloudPolicyHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: cloudPolicyHint.title }),
@@ -532,17 +543,6 @@ function repairHarnessesFor(installs, health) {
     )?.checks.some((check) => check.check_id === "harness_hooks" && check.status === "fail") === true).map((install) => install.harness)
   ));
 }
-function resolveAppStatus(install, protectionHealth, hasInventory, hasReceipts) {
-  if (install !== void 0) {
-    const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
-    if (!install.active || hookCheck?.status === "fail") return "needs_repair";
-    if (protectionHealth.state === "protected") return "protected";
-    if (protectionHealth.state === "partial") return "partial";
-    return "needs_repair";
-  }
-  if (!hasInventory && !hasReceipts) return "not_found";
-  return "found_unprotected";
-}
 function toInstallStatus(status) {
   if (status === "protected") return "active";
   if (status === "partial") return "partial";
@@ -613,25 +613,33 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
   );
 }
 function FleetWorkspace(props) {
+  const harnessDetection = useHarnessDetection();
   const harnesses = collectHarnesses(props.runtime);
   const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isConnectableAppHarness(i.harness));
   const activeInstalls = managedInstalls.filter((i) => i.active);
   const inventory = props.inventory.kind === "ready" ? props.inventory.items.filter((i) => isConnectableAppHarness(i.harness)) : [];
-  const visibleHarnesses = Array.from(
-    new Set([
-      ...managedInstalls.map((i) => i.harness),
-      ...harnesses,
-      ...inventory.map((i) => i.harness),
-      ...props.policies.map((p) => p.harness)
-    ].filter(isConnectableAppHarness))
-  ).sort((a, b) => a.localeCompare(b));
+  const detected = detectedHarnesses(harnessDetection);
+  const visibleHarnesses = visibleHarnessesFor({
+    managed: managedInstalls.map((item) => item.harness),
+    observed: harnesses,
+    inventory: inventory.map((item) => item.harness),
+    detected,
+    policies: props.policies.map((item) => item.harness)
+  });
+  const watchedHarnesses = visibleHarnessesFor({
+    managed: managedInstalls.map((item) => item.harness),
+    observed: harnesses,
+    inventory: inventory.map((item) => item.harness),
+    detected,
+    policies: []
+  });
   const runtimeState = props.runtime.runtime_state;
   const protectionHealth = protectionHealthFor(props.runtime);
   const protectionState = useProtectionPresentationState(protectionHealth);
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isConnectableAppHarness));
   const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
     (check) => check.check_id === "harness_hooks" && check.status === "fail"
-  ));
+  )) ?? visibleHarnesses[0];
   const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
@@ -660,7 +668,7 @@ function FleetWorkspace(props) {
         items: [
           { label: "Needs review", value: formatCount(props.runtime.pending_count), tone: props.runtime.pending_count > 0 ? "blue" : "slate" },
           { label: "History", value: formatCount(props.runtime.receipt_count), tone: "purple" },
-          { label: "Watched apps", value: formatCount(activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length), tone: protectionHealth.state === "protected" ? "green" : "slate" },
+          { label: "Watched apps", value: formatCount(watchedHarnesses.length), tone: protectionHealth.state === "protected" ? "green" : "slate" },
           { label: "Runtime", value: runtimeState ? "active" : "offline", tone: runtimeState ? "green" : "slate" }
         ]
       }
@@ -678,7 +686,7 @@ function FleetWorkspace(props) {
         repairHarness,
         repairHarnesses,
         onRepairProtection: props.onRepairProtection,
-        onRepairHarness: props.onRepairHarness
+        onRepairHarness: props.onRepairHarness ?? props.onConnectHarness
       }
     ) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]", children: [
@@ -692,8 +700,9 @@ function FleetWorkspace(props) {
           const harnessInventory = inventory.filter((i) => i.harness === harness && i.present);
           const harnessPolicies = props.policies.filter((p) => p.harness === harness);
           const hasReceipts = receiptHarnesses.has(harness);
+          const isDetected = detected.includes(harness);
           const appProtection = protectionHealthFor(props.runtime, harness);
-          const status = resolveAppStatus(install, appProtection, harnessInventory.length > 0, hasReceipts);
+          const status = resolveDetectedAppStatus(install, appProtection, harnessInventory.length > 0, hasReceipts, isDetected);
           return /* @__PURE__ */ jsxRuntimeExports.jsx(
             AppRow,
             {
@@ -713,7 +722,8 @@ function FleetWorkspace(props) {
             tone: "teach"
           }
         ),
-        props.inventory.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: props.inventory.message }) : null
+        props.inventory.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: props.inventory.message }) : null,
+        harnessDetection.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: harnessDetection.message }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [

@@ -1,8 +1,7 @@
 """Trusted bridge from the Python control plane to the native Guard runtime.
 
-The public package remains Python. This module is the only Python entry point
-for discovering and invoking ``hol-guard-runtime``. It never searches PATH,
-never downloads a binary, and never sends hook material to a network service.
+The public package remains Python. This is the only PATH-free local entry
+to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 """
 
 from __future__ import annotations
@@ -19,6 +18,8 @@ from pathlib import Path
 from typing import Literal, cast
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
+from .native_policy_snapshot import native_policy_snapshot
+from .native_route_receipt import record_native_hook_result
 from .native_runtime_resident import resident_native_request
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
@@ -115,7 +116,7 @@ def native_mode() -> NativeMode:
 
     Explicit ``off`` remains the emergency rollback. Invalid or empty values do
     not silently disable the native safety path; they resolve to the product
-    default and still retain Python fallback when native is unavailable.
+    default. Supported PreToolUse and PostToolUse fail closed when native is unavailable.
     """
 
     raw_value = os.environ.get(_NATIVE_MODE_ENV)
@@ -289,6 +290,24 @@ def _is_bundled_candidate(candidate: Path) -> bool:
         return False
 
 
+def _restore_bundled_runtime_execute_bit(path: Path) -> None:
+    """PyInstaller DATA extracts without owner execute; spawn still needs it."""
+    if os.name == "nt" or not _is_bundled_candidate(path):
+        return
+    try:
+        metadata = path.lstat()
+        mode = stat.S_IMODE(metadata.st_mode)
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or mode & 0o022 or mode & stat.S_IXUSR:
+            return
+        current_uid = os.getuid() if hasattr(os, "getuid") else None
+        owner = getattr(metadata, "st_uid", current_uid)
+        if current_uid is not None and owner not in {0, current_uid}:
+            return
+        path.chmod(mode | 0o111)
+    except (OSError, RuntimeError, ValueError):
+        return
+
+
 def _isolated_environment() -> dict[str, str]:
     allowed = {
         "COMSPEC",
@@ -394,6 +413,7 @@ def native_runtime_status() -> NativeRuntimeStatus:
             reason="native_disabled",
         )
     for candidate in _runtime_candidates():
+        _restore_bundled_runtime_execute_bit(candidate)
         identity = _validate_binary(candidate)
         if identity is None:
             continue
@@ -538,12 +558,9 @@ def review_post_tool_native(
 ) -> HookReviewResponse | None:
     """Review PostToolUse with resident Rust, then one bounded Rust recovery.
 
-    Native failure is reported as ``None`` so the currently supported Python
-    reference backend remains authoritative until the dedicated cutover gate.
-    The native one-shot path is globally bounded and never used as overflow
-    capacity after an explicit resident overload response.
+    Native failure returns ``None`` so the caller can fail closed without
+    Python re-evaluation. The one-shot path stays globally bounded.
     """
-
     status = native_runtime_status()
     identity_key = _identity_key(status)
     if not status.available or not status.compatible or status.identity is None:
@@ -553,7 +570,7 @@ def review_post_tool_native(
                 request.guard_home,
                 reason=status.reason,
             )
-        return None
+        return record_native_hook_result("native_fail_safe", None)
 
     envelope = {
         "protocol_version": _NATIVE_PROTOCOL_VERSION,
@@ -567,11 +584,13 @@ def review_post_tool_native(
         "source_ref_external_allowed": request.source_ref_external_allowed,
         "observe_mode": observe_mode,
         "deadline_budget_ms": _deadline_budget_ms(request),
+        "policy_snapshot": None
+        if status.capabilities is None
+        else native_policy_snapshot(rule_digest=status.capabilities.rule_digest, observe_mode=observe_mode),
     }
     input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
-    encoded = input_text.encode("utf-8")
-    if len(encoded) > _MAX_REQUEST_BYTES:
-        return None
+    if len(encoded := input_text.encode("utf-8")) > _MAX_REQUEST_BYTES:
+        return record_native_hook_result("native_fail_safe", None)
     timeout_seconds = max(
         0.05,
         min(9.0, _deadline_budget_ms(request) / 1_000.0),
@@ -595,11 +614,11 @@ def review_post_tool_native(
         resident_error = _native_error(resident_payload)
         if resident_error == "native_overloaded":
             native_record_overload(status.identity.sha256, request.guard_home)
-            return None
+            return record_native_hook_result("native_fail_safe", None)
         response = _response_from_payload(resident_payload)
         if response is not None:
             native_record_resident_success(status.identity.sha256, request.guard_home)
-            return response
+            return record_native_hook_result("native_resident", response)
         failure_reason = resident_error or "native_resident_invalid_response"
     else:
         failure_reason = (
@@ -618,7 +637,7 @@ def review_post_tool_native(
         request.guard_home,
     ) as acquired:
         if not acquired:
-            return None
+            return record_native_hook_result("native_fail_safe", None)
         output = _run_native_process(
             status.identity.path,
             ("hook", "--stdin"),
@@ -631,7 +650,7 @@ def review_post_tool_native(
                 request.guard_home,
                 reason="native_oneshot_failed",
             )
-            return None
+            return record_native_hook_result("native_fail_safe", None)
         try:
             oneshot_payload = json.loads(output)
         except json.JSONDecodeError:
@@ -643,9 +662,9 @@ def review_post_tool_native(
                 request.guard_home,
                 reason=_native_error(oneshot_payload) or "native_oneshot_invalid_response",
             )
-            return None
+            return record_native_hook_result("native_fail_safe", None)
         native_record_oneshot_success(status.identity.sha256, request.guard_home)
-        return response
+        return record_native_hook_result("native_oneshot", response)
 
 
 def parity_signature(response: HookReviewResponse) -> tuple[object, ...]:

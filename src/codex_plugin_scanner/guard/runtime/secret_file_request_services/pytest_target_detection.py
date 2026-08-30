@@ -147,7 +147,10 @@ def _pytest_args_from_runner_argument_sequence(command_name: str, args: list[str
         if positional_prefix_count:
             positional_prefix_count -= 1
             continue
-        return _pytest_args_from_command_position(args, index)
+        pytest_args = _pytest_args_from_command_position(args, index)
+        if pytest_args is not None:
+            return pytest_args
+        return None
     return None
 
 

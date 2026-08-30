@@ -36,14 +36,11 @@ from ..shims import (
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
-from . import local_request_snapshots
-from .cloud_review_repair import execute_cloud_review_sync_repair
 from .command_payload import mapping as _mapping
 from .command_payload import optional_text as _text
 from .command_payload import result as _command_result
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 from .exact_cloud_review_executor import execute_exact_cloud_review_operation
-from .legacy_approval_command_executor import execute_legacy_approval_operation
 from .review_policy_memory_executor import (
     REVIEW_POLICY_MEMORY_OPERATION,
     execute_review_policy_memory,
@@ -66,25 +63,15 @@ APP_OPERATIONS: tuple[str, ...] = (
     "guard.app.update",
     "guard.app.updateCheck",
 )
-APPROVAL_OPERATIONS: tuple[str, ...] = (
-    "guard.approval.resolve",
-    "guard.localRequests.snapshot",
-)
-LIVE_REQUEST_OPERATIONS: tuple[str, ...] = ("guard.liveRequests.reassignQuarantined",)
 EXACT_CLOUD_REVIEW_OPERATIONS: tuple[str, ...] = (EXACT_CLOUD_REVIEW_OPERATION,)
 POLICY_MEMORY_OPERATIONS: tuple[str, ...] = (REVIEW_POLICY_MEMORY_OPERATION,)
 SUPPORTED_COMMAND_OPERATIONS: tuple[str, ...] = (
     *PACKAGE_SHIM_OPERATIONS,
     *APP_OPERATIONS,
-    *APPROVAL_OPERATIONS,
-    *LIVE_REQUEST_OPERATIONS,
     *EXACT_CLOUD_REVIEW_OPERATIONS,
     *POLICY_MEMORY_OPERATIONS,
 )
 COMMAND_OPERATION_SCHEMA_VERSIONS: dict[str, int] = {operation: 1 for operation in SUPPORTED_COMMAND_OPERATIONS}
-LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT = local_request_snapshots.LOCAL_REQUEST_PENDING_SNAPSHOT_LIMIT
-LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT = local_request_snapshots.LOCAL_REQUEST_RESOLVED_SNAPSHOT_LIMIT
-LOCAL_REQUEST_SNAPSHOT_MAX_BYTES = local_request_snapshots.LOCAL_REQUEST_SNAPSHOT_MAX_BYTES
 
 
 def execute_guard_command_job(
@@ -103,21 +90,6 @@ def execute_guard_command_job(
                 operation,
                 payload=payload,
                 context=context,
-                store=store,
-                generated_at=generated_at,
-            )
-        if operation in APPROVAL_OPERATIONS:
-            return execute_legacy_approval_operation(
-                operation,
-                job=job,
-                payload=payload,
-                store=store,
-                generated_at=generated_at,
-                resume_after_approval=_resume_after_remote_approval,
-            )
-        if operation in LIVE_REQUEST_OPERATIONS:
-            return execute_cloud_review_sync_repair(
-                payload,
                 store=store,
                 generated_at=generated_at,
             )

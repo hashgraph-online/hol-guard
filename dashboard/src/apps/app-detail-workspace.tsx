@@ -51,6 +51,7 @@ import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
 import { CommandActivityWorkspace } from "../command-activity/command-activity-workspace";
 import { protectionHealthFor, useProtectionPresentationState } from "../protection-health";
+import { isHarnessDetected, useHarnessDetection } from "../harness-detection";
 import {
   AppCommandActivityModeTabs,
   type AppActivityMode,
@@ -221,6 +222,7 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }: T
 }
 
 export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
+  const harnessDetection = useHarnessDetection();
   const [activeTab, setActiveTab] = useState<TabKey>(readTabFromUrl);
   const [tabDirection, setTabDirection] = useState<"left" | "right">("right");
   const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({ overview: null, activity: null, settings: null });
@@ -283,10 +285,8 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
 
   const install = runtime.managed_installs?.find((i) => i.harness === harness);
   const isActive = install?.active === true;
-  const isObserved =
-    runtime.items.some((i) => i.harness === harness) ||
-    receipts.some((r) => r.harness === harness) ||
-    policies.some((p) => p.harness === harness);
+  const isObserved = isHarnessDetected(harnessDetection, harness) || runtime.items.some((i) => i.harness === harness)
+    || receipts.some((r) => r.harness === harness) || policies.some((p) => p.harness === harness);
   const present = isActive || isObserved;
 
   const harnessReceipts = useMemo(

@@ -79,7 +79,7 @@ def _sorted_policy_rows(store: GuardStore) -> list[dict[str, object]]:
     return sorted(store.list_policy_decisions(), key=lambda row: str(row["decision_id"]))
 
 
-def _activate_bundle(store: GuardStore, bundle: dict[str, object], now: str) -> bool:
+def _activate_bundle(store: GuardStore, bundle: dict[str, object], now: str) -> dict[str, object] | None:
     device = store.get_device_metadata()
     return store.apply_policy_bundle_authority(
         build_policy_bundle_decisions(

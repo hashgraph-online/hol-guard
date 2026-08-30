@@ -2,7 +2,7 @@ name: Rust daemon edge hardening
 
 on:
   pull_request:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime*.py"
@@ -14,7 +14,7 @@ on:
       - ".github/workflows/rust-daemon-edge-hardening.yml"
       - "docs/guard/rust-daemon-edge-hardening-*.md"
   push:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime*.py"

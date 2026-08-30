@@ -227,30 +227,29 @@ def _verified_capability(store: GuardStore, *, now: str | None = None) -> dict[s
     if capability.get("workspaceId") != workspace_id:
         raise CommandCapabilityError("capability_workspace_mismatch")
     operations = capability.get("operations")
-    if (
-        not isinstance(operations, list)
-        or not operations
-        or not all(isinstance(operation, str) and operation for operation in operations)
-    ):
+    if not isinstance(operations, list) or not operations:
         raise CommandCapabilityError("capability_operations_invalid")
-    if len(operations) != len(set(operations)):
+    validated_operations: list[str] = []
+    for operation in operations:
+        if not isinstance(operation, str) or not operation:
+            raise CommandCapabilityError("capability_operations_invalid")
+        validated_operations.append(operation)
+    if len(validated_operations) != len(set(validated_operations)):
         raise CommandCapabilityError("capability_operations_invalid")
     classified_operations = (
         set(READ_ONLY_COMMAND_OPERATIONS)
         | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
         | set(STATE_CHANGING_COMMAND_OPERATIONS)
     )
-    if any(operation not in classified_operations for operation in operations):
-        raise CommandCapabilityError("capability_operation_unsupported")
+    # Project signed grants onto the current runtime operation set.
+    active_operations = set(validated_operations) & classified_operations
     return {
         **capability,
-        "operations": sorted(operations),
+        "operations": sorted(active_operations),
     }
 
 
 def command_capability_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
-    """Return safe capability state for CLI, daemon, and dashboard surfaces."""
-
     pending_status = [
         {key: item[key] for key in ("id", "operation", "issuer", "expiresAt", "approveCommand") if key in item}
         for item in pending_command_approvals(store, now=now)
@@ -588,6 +587,7 @@ def audit_command_decision(
 
 
 def _audit(store: GuardStore, event_name: str, payload: dict[str, object], now: str) -> None:
+    """Best-effort local audit; never raises."""
     try:
         store.add_event(event_name, payload, now)
     except Exception:

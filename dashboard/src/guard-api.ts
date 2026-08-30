@@ -2878,7 +2878,7 @@ export async function fetchDiff(
   return (await response.json()) as GuardArtifactDiff;
 }
 
-function fetchGuardApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export function fetchGuardApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   return fetchWithGuardAuth(input, init);
 }
 

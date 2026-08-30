@@ -10,7 +10,7 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_mutation_differential.py"
       - ".github/workflows/rust-runtime-mutation-differential.yml"
   push:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"

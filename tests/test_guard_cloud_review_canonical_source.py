@@ -5,21 +5,17 @@ _SOURCE = _ROOT / "src" / "codex_plugin_scanner" / "guard"
 _FORBIDDEN_SOURCE = (
     "GUARD_CLOUD_REVIEW_ENABLED",
     "guard.approval.resolve",
+    "guard.localRequests.snapshot",
     "guard.liveRequests",
     "live-request",
     "liveRequestSync",
+    "daemonAckStatus",
+    "daemonSyncStatus",
+    "resumeStatus",
+    "daemon_ack",
+    "resolved_unconfirmed",
+    "reviewSync",
 )
-_DURABLE_COMPATIBILITY_ALIASES = {
-    "guard.approval.resolve": {
-        "src/codex_plugin_scanner/guard/runtime/command_executors.py",
-        "src/codex_plugin_scanner/guard/runtime/command_operation_classification.py",
-        "src/codex_plugin_scanner/guard/runtime/legacy_approval_command_executor.py",
-    },
-    "guard.liveRequests": {
-        "src/codex_plugin_scanner/guard/runtime/command_executors.py",
-        "src/codex_plugin_scanner/guard/runtime/command_operation_classification.py",
-    },
-}
 
 
 def _review_source_files() -> list[Path]:
@@ -45,10 +41,16 @@ def test_cloud_review_runtime_has_no_retired_alias_or_feature_gate() -> None:
         source = path.read_text(encoding="utf-8")
         for forbidden in _FORBIDDEN_SOURCE:
             relative = path.relative_to(_ROOT).as_posix()
-            allowed_paths = _DURABLE_COMPATIBILITY_ALIASES.get(forbidden, set())
-            if forbidden in source and relative not in allowed_paths:
+            if forbidden in source:
                 violations.append(f"{relative}: {forbidden}")
     assert violations == []
+
+
+def test_retired_cloud_review_executors_are_deleted() -> None:
+    runtime = _SOURCE / "runtime"
+    assert not (runtime / "cloud_review_repair.py").exists()
+    assert not (runtime / "legacy_approval_command_executor.py").exists()
+    assert not (runtime / "legacy_policy_sync_executor.py").exists()
 
 
 def test_retired_sqlite_outbox_exists_only_in_one_time_cutover() -> None:

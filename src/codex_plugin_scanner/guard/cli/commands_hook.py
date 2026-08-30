@@ -46,11 +46,11 @@ from .commands_hook_copilot import (
     _run_hook_copilot_pretool,
 )
 from .commands_hook_generic import _run_hook_generic_payload
+from .commands_hook_native_authority import try_native_or_source_ref_hook
 from .commands_hook_runtime_eval import _evaluate_runtime_artifact_hook
 from .commands_hook_runtime_finish import _finalize_runtime_artifact_hook
 from .commands_hook_runtime_review import _review_runtime_artifact_hook
 from .commands_hook_runtime_state import RuntimeArtifactHookState
-from .commands_hook_source_ref import _try_source_ref_fast_path
 from .commands_parser_helpers import *
 from .commands_support_command_activity import (
     hook_post_succeeded,
@@ -170,10 +170,7 @@ def _run_guard_hook_command(
         return 0
     if args.harness == "copilot":
         runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
-    # Fast path: if the payload contains guard_source_ref, try the hook
-    # review engine before the full runtime artifact path. This avoids
-    # CLI command layering cost for safe source-file reads.
-    source_ref_result = _try_source_ref_fast_path(
+    routed = try_native_or_source_ref_hook(
         args,
         config=config,
         context=context,
@@ -181,8 +178,8 @@ def _run_guard_hook_command(
         runtime_workspace=runtime_workspace,
         store=store,
     )
-    if source_ref_result is not None:
-        return source_ref_result
+    if routed is not None:
+        return routed
     action_envelope = _hook_action_envelope(
         harness=args.harness,
         payload=payload,

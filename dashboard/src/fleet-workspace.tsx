@@ -24,6 +24,13 @@ import {
   APP_STATUS_LABELS,
 } from "./apps/app-catalog";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
+import {
+  detectedHarnesses,
+  resolveDetectedAppStatus,
+  useHarnessDetection,
+  visibleHarnessesFor,
+  type DetectedAppStatus,
+} from "./harness-detection";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
 import {
   FleetProtectionRecovery,
@@ -31,7 +38,6 @@ import {
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
-  GuardProtectionAppHealth,
   GuardProtectionHealth,
   GuardProtectionState,
   GuardReceipt,
@@ -161,8 +167,6 @@ function formatCount(value: number): string {
   return value.toLocaleString();
 }
 
-type AppStatus = "protected" | "partial" | "found_unprotected" | "needs_repair" | "not_found";
-
 export function repairHarnessesFor(
   installs: Array<{ harness: string; active?: boolean }>,
   health: GuardProtectionHealth,
@@ -176,25 +180,7 @@ export function repairHarnessesFor(
   ));
 }
 
-function resolveAppStatus(
-  install: { active?: boolean } | undefined,
-  protectionHealth: GuardProtectionAppHealth,
-  hasInventory: boolean,
-  hasReceipts: boolean
-): AppStatus {
-  if (install !== undefined) {
-    const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
-    if (!install.active || hookCheck?.status === "fail") return "needs_repair";
-    if (protectionHealth.state === "protected") return "protected";
-    if (protectionHealth.state === "partial") return "partial";
-    // Degraded with active hooks is not "partially protected" — treat as repair path.
-    return "needs_repair";
-  }
-  if (!hasInventory && !hasReceipts) return "not_found";
-  return "found_unprotected";
-}
-
-function toInstallStatus(status: AppStatus): ReturnType<typeof resolveAppInstallStatus> {
+function toInstallStatus(status: DetectedAppStatus): ReturnType<typeof resolveAppInstallStatus> {
   if (status === "protected") return "active";
   if (status === "partial") return "partial";
   if (status === "needs_repair") return "partial";
@@ -202,7 +188,7 @@ function toInstallStatus(status: AppStatus): ReturnType<typeof resolveAppInstall
   return "not_installed";
 }
 
-function StatusIcon({ status }: { status: AppStatus }) {
+function StatusIcon({ status }: { status: DetectedAppStatus }) {
   if (status === "protected") return <HiMiniCheckCircle className="h-4 w-4 text-emerald-500" aria-hidden="true" />;
   if (status === "found_unprotected") return <HiMiniEye className="h-4 w-4 text-slate-400" aria-hidden="true" />;
   if (status === "needs_repair") return <HiMiniWrenchScrewdriver className="h-4 w-4 text-brand-purple" aria-hidden="true" />;
@@ -210,7 +196,7 @@ function StatusIcon({ status }: { status: AppStatus }) {
   return <HiMiniExclamationCircle className="h-4 w-4 text-brand-attention" aria-hidden="true" />;
 }
 
-function StatusBadge({ status }: { status: AppStatus }) {
+function StatusBadge({ status }: { status: DetectedAppStatus }) {
   if (status === "partial") return <span className="text-xs font-medium text-brand-blue">Partially protected</span>;
   if (status === "needs_repair") {
     return <span className="text-xs font-medium text-brand-attention">Needs repair</span>;
@@ -225,7 +211,7 @@ function StatusBadge({ status }: { status: AppStatus }) {
 
 type AppRowProps = {
   harness: string;
-  status: AppStatus;
+  status: DetectedAppStatus;
   inventoryCount: number;
   policyCount: number;
   onOpenAppDetail?: (harness: string) => void;
@@ -276,18 +262,26 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
 }
 
 export function FleetWorkspace(props: FleetWorkspaceProps) {
+  const harnessDetection = useHarnessDetection();
   const harnesses = collectHarnesses(props.runtime);
   const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isConnectableAppHarness(i.harness));
   const activeInstalls = managedInstalls.filter((i) => i.active);
   const inventory = props.inventory.kind === "ready" ? props.inventory.items.filter((i) => isConnectableAppHarness(i.harness)) : [];
-  const visibleHarnesses = Array.from(
-    new Set([
-      ...managedInstalls.map((i) => i.harness),
-      ...harnesses,
-      ...inventory.map((i) => i.harness),
-      ...props.policies.map((p) => p.harness),
-    ].filter(isConnectableAppHarness))
-  ).sort((a, b) => a.localeCompare(b));
+  const detected = detectedHarnesses(harnessDetection);
+  const visibleHarnesses = visibleHarnessesFor({
+    managed: managedInstalls.map((item) => item.harness),
+    observed: harnesses,
+    inventory: inventory.map((item) => item.harness),
+    detected,
+    policies: props.policies.map((item) => item.harness),
+  });
+  const watchedHarnesses = visibleHarnessesFor({
+    managed: managedInstalls.map((item) => item.harness),
+    observed: harnesses,
+    inventory: inventory.map((item) => item.harness),
+    detected,
+    policies: [],
+  });
   const runtimeState = props.runtime.runtime_state;
   const protectionHealth = protectionHealthFor(props.runtime);
   const protectionState = useProtectionPresentationState(protectionHealth);
@@ -295,7 +289,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
   const repairHarness = managedInstalls.find((install) => !install.active)?.harness
     ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
       (check) => check.check_id === "harness_hooks" && check.status === "fail"
-    ));
+    )) ?? visibleHarnesses[0];
   const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
@@ -332,7 +326,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
         items={[
           { label: "Needs review", value: formatCount(props.runtime.pending_count), tone: props.runtime.pending_count > 0 ? "blue" : "slate" },
           { label: "History", value: formatCount(props.runtime.receipt_count), tone: "purple" },
-          { label: "Watched apps", value: formatCount(activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length), tone: protectionHealth.state === "protected" ? "green" : "slate" },
+          { label: "Watched apps", value: formatCount(watchedHarnesses.length), tone: protectionHealth.state === "protected" ? "green" : "slate" },
           { label: "Runtime", value: runtimeState ? "active" : "offline", tone: runtimeState ? "green" : "slate" },
         ]}
       />
@@ -349,7 +343,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
           repairHarness={repairHarness}
           repairHarnesses={repairHarnesses}
           onRepairProtection={props.onRepairProtection}
-          onRepairHarness={props.onRepairHarness}
+          onRepairHarness={props.onRepairHarness ?? props.onConnectHarness}
         />
       ) : null}
 
@@ -367,8 +361,9 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
                 const harnessInventory = inventory.filter((i) => i.harness === harness && i.present);
                 const harnessPolicies = props.policies.filter((p) => p.harness === harness);
                 const hasReceipts = receiptHarnesses.has(harness);
+                const isDetected = detected.includes(harness);
                 const appProtection = protectionHealthFor(props.runtime, harness);
-                const status = resolveAppStatus(install, appProtection, harnessInventory.length > 0, hasReceipts);
+                const status = resolveDetectedAppStatus(install, appProtection, harnessInventory.length > 0, hasReceipts, isDetected);
                 return (
                   <AppRow
                     key={harness}
@@ -391,6 +386,9 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
 
           {props.inventory.kind === "error" ? (
             <p className="mt-3 text-xs text-slate-500">{props.inventory.message}</p>
+          ) : null}
+          {harnessDetection.kind === "error" ? (
+            <p className="mt-3 text-xs text-slate-500">{harnessDetection.message}</p>
           ) : null}
         </section>
 

@@ -17,7 +17,10 @@ from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
 )
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_catalog_sync import build_builtin_extension_catalog_wire
+from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
+    MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
+    build_builtin_extension_catalog_wire,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import parse_managed_bundle
@@ -116,7 +119,7 @@ def _sync(
         "harness": "codex",
         "operation": "policy_sync",
         "policy_bundle": json.dumps(bundle),
-        "managedControlsCapabilities": sorted(runner.MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
+        "managedControlsCapabilities": sorted(MANAGED_CONTROLS_RUNTIME_CAPABILITIES),
     }
     if delivery is not None:
         payload["policyBundleDelivery"] = delivery

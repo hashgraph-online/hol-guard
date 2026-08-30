@@ -222,52 +222,6 @@ def conditional_pipeline_connectors(parts: list[str]) -> dict[int, str]:
     return connectors
 
 
-def pipeline_control_flow(
-    parts: list[str],
-    pipelines: list[list[list[str]]],
-    *,
-    primary_command: Callable[[list[str]], tuple[str | None, int | None]],
-) -> tuple[frozenset[int], frozenset[int]]:
-    """Return conditional and statically skipped pipeline indexes."""
-
-    connectors = conditional_pipeline_connectors(parts)
-    skipped: set[int] = set()
-    for pipeline_index, connector in connectors.items():
-        if pipeline_index <= 0 or pipeline_index >= len(pipelines) or not pipelines[pipeline_index - 1]:
-            continue
-        previous_command, _previous_index = primary_command(pipelines[pipeline_index - 1][-1])
-        if (connector == "&&" and previous_command == "false") or (connector == "||" and previous_command == "true"):
-            skipped.add(pipeline_index)
-    conditional = set(connectors)
-    if_stack: list[tuple[bool | None, str | None]] = []
-    for pipeline_index, pipeline in enumerate(pipelines):
-        segment = pipeline[0] if pipeline else []
-        first = segment[0].strip("\"'").lower() if segment else ""
-        if first == "if":
-            condition = segment[1].strip("\"'").lower() if len(segment) > 1 else ""
-            truth = True if condition == "true" else False if condition == "false" else None
-            if_stack.append((truth, None))
-            continue
-        if first == "fi":
-            if if_stack:
-                _ = if_stack.pop()
-            continue
-        if first in {"then", "else", "elif"} and if_stack:
-            truth, _branch = if_stack[-1]
-            if first == "elif":
-                truth = None
-            branch = "else" if first == "else" else "then"
-            if_stack[-1] = (truth, branch)
-        if not if_stack or if_stack[-1][1] is None:
-            continue
-        truth, branch = if_stack[-1]
-        if truth is None:
-            conditional.add(pipeline_index)
-        elif (branch == "then" and not truth) or (branch == "else" and truth):
-            skipped.add(pipeline_index)
-    return frozenset(conditional), frozenset(skipped)
-
-
 def parent_expanded_variable_names(command_text: str) -> frozenset[str]:
     """Return shell variables expanded outside single-quoted text."""
 

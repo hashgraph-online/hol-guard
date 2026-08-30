@@ -6,7 +6,6 @@ READ_ONLY_COMMAND_OPERATIONS: tuple[str, ...] = (
     "guard.packageShims.audit",
     "guard.app.status",
     "guard.app.updateCheck",
-    "guard.localRequests.snapshot",
 )
 LOCAL_CONFIRMATION_COMMAND_OPERATIONS: frozenset[str] = frozenset(
     {
@@ -22,8 +21,6 @@ STATE_CHANGING_COMMAND_OPERATIONS: frozenset[str] = frozenset(
         "guard.app.repair",
         "guard.app.connect",
         "guard.app.update",
-        "guard.approval.resolve",
-        "guard.liveRequests.reassignQuarantined",
         "guard.review.syncPolicyMemory",
     }
 )

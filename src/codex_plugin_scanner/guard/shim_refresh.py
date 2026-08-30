@@ -65,10 +65,11 @@ def _installed_base_command(shim_body: str) -> list[str] | None:
     """Parse the base_command list out of a generated shim, if recognizable."""
 
     for line in shim_body.splitlines():
-        if not line.startswith("base_command = "):
+        prefix = "# base_command = " if line.startswith("# base_command = ") else "base_command = "
+        if not line.startswith(prefix):
             continue
         try:
-            value = ast.literal_eval(line[len("base_command = ") :])
+            value = ast.literal_eval(line[len(prefix) :])
         except (SyntaxError, ValueError):
             return None
         if isinstance(value, list) and all(isinstance(item, str) for item in value):

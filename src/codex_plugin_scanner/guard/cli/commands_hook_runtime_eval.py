@@ -70,7 +70,12 @@ from .commands_hook_github_workflow import (
     github_workflow_approval_evidence,
     prepare_github_workflow_hook_state,
 )
-from .commands_hook_local_cli import local_cli_grant_action
+from .commands_hook_native_floor import (
+    _runtime_package_raw_command,
+    apply_local_grant_then_native_floor,
+    attach_native_pre_tool_floor,
+    runtime_hook_scanner_setup,
+)
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support_hook_state import _load_cursor_native_shell_allowance
@@ -112,24 +117,6 @@ def _cursor_native_saved_approval_hash(
     if approved is None:
         return None
     return _optional_string(approved.get("artifact_hash"))
-
-
-def _runtime_package_raw_command(
-    payload: Mapping[str, object],
-    action_envelope: GuardActionEnvelope | None,
-) -> str | None:
-    for candidate in (
-        payload.get("tool_input"),
-        payload.get("arguments"),
-        payload,
-    ):
-        if not isinstance(candidate, Mapping):
-            continue
-        for key in ("command", "cmd", "shell_command", "shellCommand"):
-            value = candidate.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-    return action_envelope.command if action_envelope is not None else None
 
 
 def _runtime_external_archive_command_matches_executable(raw_command: str | None, executable: str) -> bool:
@@ -457,29 +444,25 @@ def _evaluate_runtime_artifact_hook(
         # Hook payloads are untrusted hints.  They may make a decision stricter,
         # but can never lower current local policy or suppress later scanners.
         current_action_inputs.append(payload_action_normalization.action)
+    native_pre_tool_floor = attach_native_pre_tool_floor(
+        event_name,
+        payload_map,
+        action_envelope,
+        current_action_inputs,
+        guard_home=context.guard_home,
+        cwd=runtime_workspace,
+        home_dir=context.home_dir,
+    )
     policy_action = most_restrictive_guard_action(*current_action_inputs)
     approval_context_policy_action = most_restrictive_guard_action(
         approval_context_config_action,
         *(item for item in current_action_inputs[1:]),
     )
-    changed_capabilities = [runtime_artifact.artifact_type]
-    artifact_metadata = runtime_artifact.metadata if isinstance(runtime_artifact.metadata, dict) else {}
-    raw_shell_cwds = artifact_metadata.get("shell_execution_effective_cwds")
-    shell_context_incomplete = (
-        bool(
-            artifact_metadata.get("shell_execution_context_hash")
-            or artifact_metadata.get("shell_execution_context_hashes")
-        )
-        and artifact_metadata.get("shell_execution_context_complete") is False
-    )
-    scanner_evidence = (
-        _runtime_cisco_scanner_evidence(
-            action_envelope,
-            runtime_workspace=runtime_workspace,
-            raw_shell_cwds=raw_shell_cwds,
-        )
-        if action_envelope is not None and not shell_context_incomplete
-        else ()
+    changed_capabilities, artifact_metadata, scanner_evidence = runtime_hook_scanner_setup(
+        runtime_artifact,
+        action_envelope,
+        runtime_workspace,
+        _runtime_cisco_scanner_evidence,
     )
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
     if action_envelope is not None and isinstance(action_envelope.command, str):
@@ -666,18 +649,17 @@ def _evaluate_runtime_artifact_hook(
         current_policy_action = "allow"
         policy_action = "allow"
         approval_context_policy_action = "allow"
-    granted = local_cli_grant_action(
+    policy_action, current_policy_action, approval_context_policy_action = apply_local_grant_then_native_floor(
         store=store,
         command=raw_runtime_command,
         cwd=runtime_workspace or Path.cwd(),
         home_dir=context.home_dir,
-        current_action=current_policy_action,
+        current_policy_action=current_policy_action,
+        policy_action=policy_action,
+        approval_context_policy_action=approval_context_policy_action,
         grant_allowed=local_grants_allowed,
+        native_floor=native_pre_tool_floor,
     )
-    if granted != current_policy_action:
-        current_policy_action = granted
-        policy_action = granted
-        approval_context_policy_action = granted
     runtime_artifact_hash = _runtime_hook_approval_context_token(
         artifact=approval_context_artifact,
         content_hash=artifact_content_hash,

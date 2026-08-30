@@ -31,6 +31,8 @@ _HOOK_ENVIRONMENT_KEYS = frozenset(
         "COMSPEC",
         "HOME",
         "HOL_GUARD_HOOK_FAILURE_KIND",
+        "HOL_GUARD_NATIVE",
+        "HOL_GUARD_NATIVE_BINARY",
         "LANG",
         "PATH",
         "PATHEXT",
@@ -167,7 +169,7 @@ def isolated_daemon_start_command(
 
 
 def isolated_hook_environment(environment: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Keep only OS, user-home, locale, temp, PATH, and Codex state."""
+    """Keep only OS, user-home, locale, temp, PATH, Codex, and native-mode state."""
 
     source = os.environ if environment is None else environment
     return {

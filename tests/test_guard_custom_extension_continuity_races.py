@@ -135,31 +135,18 @@ def test_concurrent_cloud_revision_wins_over_preflighted_local_removal(
     assert final.read_local_cli_grant(identity.cli_id) is None
 
 
-def test_concurrent_cloud_revision_cannot_be_overwritten_by_cloud_field_removal(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_cloud_field_omission_retains_concurrent_last_known_good(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     identity = _identity()
     _observe(store, identity)
     apply_verified_custom_extension_continuity(store, _bundle(identity), now=_NOW)
     authority_revision = store.read_local_cli_revision()
-    original_transaction = store.apply_custom_extension_continuity_transaction
-    injected = False
-
-    def _commit_cloud_revision_two(**kwargs):
-        nonlocal injected
-        if not injected:
-            injected = True
-            concurrent = GuardStore(guard_home)
-            apply_verified_custom_extension_continuity(concurrent, _bundle(identity, revision=2), now=_NOW)
-            assert concurrent.read_local_cli_revision() == authority_revision
-        return original_transaction(**kwargs)
-
-    monkeypatch.setattr(store, "apply_custom_extension_continuity_transaction", _commit_cloud_revision_two)
-    with pytest.raises(CustomExtensionContinuityError, match="Cloud removal"):
-        apply_verified_custom_extension_continuity(store, {"payload": {}}, now=_NOW)
+    concurrent = GuardStore(guard_home)
+    apply_verified_custom_extension_continuity(concurrent, _bundle(identity, revision=2), now=_NOW)
+    assert concurrent.read_local_cli_revision() == authority_revision
+    retained = apply_verified_custom_extension_continuity(store, {"payload": {}}, now=_NOW)
+    assert retained["cloud_revision"] == 2
 
     restarted = GuardStore(guard_home)
     state = restarted.get_sync_payload("custom_extension_continuity")

@@ -124,6 +124,27 @@ def test_legacy_stored_junk_rows_are_not_suggestable(tmp_path: Path) -> None:
         assert items[name]["suggestable"] is False
 
 
+def test_sourced_helper_in_compound_command_is_observed(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    store = GuardStore(home)
+    helper = tmp_path / "server-access.sh"
+    helper.write_text("#!/bin/sh\necho access\n", encoding="utf-8")
+    helper.chmod(0o755)
+    observe_unlisted_cli(
+        store=store,
+        command=f"source {helper} && ssh -o BatchMode=yes host 'echo ok'",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+    items = store.list_local_cli_items()
+    names = {str(item["name"]) for item in items}
+    assert names == {"server-access.sh"}
+    item = items[0]
+    assert item["suggestable"] is True
+    assert item["state"] == "unset"
+
+
 def test_recognize_explains_screenshot_utilities(tmp_path: Path) -> None:
     _, code, message = recognize_operator_cli("rg pattern", cwd=tmp_path, home_dir=tmp_path)
     assert code == "common_shell_utility"

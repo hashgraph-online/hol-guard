@@ -66,13 +66,29 @@ def reclaimable_extras(payload: Mapping[str, Any]) -> list[tuple[str, str, int]]
     return [(version, filename, size) for _parsed, version, filename, size in extras]
 
 
+def pending_dir_size_bytes(path: Path) -> int:
+    """Sum regular file sizes in a pending upload directory."""
+    if not path.is_dir():
+        raise FileNotFoundError(path)
+    return sum(item.stat().st_size for item in path.iterdir() if item.is_file())
+
+
+def over_project_limit(used_bytes: int, pending_bytes: int = 0) -> bool:
+    return used_bytes + pending_bytes >= PYPI_PROJECT_LIMIT_BYTES
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", help="Optional local PyPI JSON path for offline checks")
     parser.add_argument(
         "--fail-if-over-limit",
         action="store_true",
-        help="Exit 1 when used_bytes is at or over the project limit",
+        help="Exit 1 when used_bytes plus pending-dir size is at or over the project limit",
+    )
+    parser.add_argument(
+        "--pending-dir",
+        type=Path,
+        help="Local distribution directory whose bytes are counted toward the quota",
     )
     args = parser.parse_args(argv)
     if args.payload:
@@ -89,13 +105,21 @@ def main(argv: list[str] | None = None) -> int:
     total = project_size_bytes(payload)
     extras = reclaimable_extras(payload)
     reclaimable = sum(size for _version, _filename, size in extras)
-    over_limit = total >= PYPI_PROJECT_LIMIT_BYTES
+    pending_bytes = 0
+    if args.pending_dir is not None:
+        try:
+            pending_bytes = pending_dir_size_bytes(args.pending_dir)
+        except OSError:
+            print("Pending distribution directory is missing or unreadable.", file=sys.stderr)
+            return 1
+    over_limit = over_project_limit(total, pending_bytes)
     print(
         json.dumps(
             {
                 "project": "hol-guard",
                 "limit_bytes": PYPI_PROJECT_LIMIT_BYTES,
                 "used_bytes": total,
+                "pending_bytes": pending_bytes,
                 "over_limit": over_limit,
                 "reclaimable_bytes": reclaimable,
                 "reclaimable_files": len(extras),

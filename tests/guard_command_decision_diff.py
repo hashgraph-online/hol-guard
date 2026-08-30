@@ -97,6 +97,7 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_contained_write.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "contained_package_script_execution.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "contained_workspace_write_execution.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "durable_harness_launcher.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "package_shim_gate.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "package_shim_frozen.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "shims.py",

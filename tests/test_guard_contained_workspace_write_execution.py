@@ -323,6 +323,9 @@ def test_post_commit_directory_fsync_failure_returns_committed_result(
     (
         (".env", "output.txt"),
         ("source.txt", ".guard/policy.json"),
+        ("source.txt", ".codex/config.toml"),
+        ("source.txt", ".codex/hooks.json"),
+        ("source.txt", ".cursor/mcp.json"),
         ("source.txt", "../outside.txt"),
         ("source.txt", "/tmp/outside.txt"),
     ),

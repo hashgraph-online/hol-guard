@@ -1,34 +1,45 @@
-name: Publish Desktop Core alpha feed
-
+name: Publish Desktop Core stable feed
 on:
   pull_request:
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
       - tests/test_desktop_core_alpha_feed_macos_signing.py
+      - tests/test_stage_native_runtime_for_desktop_core.py
+      - tests/test_verify_pyinstaller_native_runtime.py
+      - tests/test_seal_pyinstaller_native_manifest.py
       - scripts/release/desktop_core_alpha_feed.py
+      - scripts/release/stage_native_runtime_for_desktop_core.py
+      - scripts/release/seal_pyinstaller_native_manifest.py
+      - scripts/release/fix_pyinstaller_macos_exe_headers.py
       - scripts/release/verify_pyinstaller_macos_signing.py
+      - scripts/release/verify_pyinstaller_native_runtime.py
   push:
     branches: [main]
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
       - scripts/release/desktop_core_alpha_feed.py
+      - scripts/release/stage_native_runtime_for_desktop_core.py
+      - scripts/release/seal_pyinstaller_native_manifest.py
+      - scripts/release/fix_pyinstaller_macos_exe_headers.py
       - scripts/release/verify_pyinstaller_macos_signing.py
+      - scripts/release/verify_pyinstaller_native_runtime.py
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+    inputs:
+      core_version:
+        description: Optional exact published stable Core version to backfill
+        type: string
   workflow_run:
     workflows: ["Publish to PyPI"]
     types: [completed]
-    branches: [release/3.0]
-
+    branches: [main]
 permissions:
   contents: read
-
 concurrency:
-  group: desktop-core-alpha-feed
+  group: desktop-core-stable-feed
   cancel-in-progress: false
-
 jobs:
   validate:
     name: Validate workflow
@@ -50,7 +61,6 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
       - name: Validate workflow syntax
         run: '"$(go env GOPATH)/bin/actionlint" .github/workflows/desktop-core-alpha-feed.yml'
-
   publish-macos-arm64:
     name: Publish signed macOS arm64 Core sidecar
     if: >-
@@ -66,7 +76,7 @@ jobs:
       attestations: write
     env:
       RELEASE_TARGET: aarch64-apple-darwin
-      MINIMUM_DESKTOP_VERSION: 0.1.0-alpha.0
+      MINIMUM_DESKTOP_VERSION: 0.1.0-beta.0
     steps:
       - name: Require trusted main workflow invocation
         shell: bash
@@ -105,21 +115,25 @@ jobs:
           test -n "$APPLE_ID"
           test -n "$APPLE_PASSWORD"
           test -n "$APPLE_TEAM_ID"
-      - name: Discover newest published Core 3.x alpha
+      - name: Discover newest published stable Core 3.x release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          REQUESTED_CORE_VERSION: ${{ inputs.core_version || '' }}
         shell: bash
         run: |
           set -euo pipefail
           gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | select(.draft == false and .prerelease == true) | .tag_name' \
+            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
             > "$RUNNER_TEMP/release-tags.txt"
-          python3 -I scripts/release/desktop_core_alpha_feed.py discover-release \
-            --tags "$RUNNER_TEMP/release-tags.txt" >> "$GITHUB_OUTPUT"
-      - name: Stop when no Core alpha is published
+          ARGS=(--tags "$RUNNER_TEMP/release-tags.txt")
+          if [[ -n "$REQUESTED_CORE_VERSION" ]]; then
+            ARGS+=(--version "$REQUESTED_CORE_VERSION")
+          fi
+          python3 -I scripts/release/desktop_core_alpha_feed.py discover-release "${ARGS[@]}" >> "$GITHUB_OUTPUT"
+      - name: Stop when no stable Core release is published
         if: steps.release.outputs.available != 'true'
-        run: echo "No published HOL Guard Core 3.x alpha release is available yet."
+        run: echo "No published stable HOL Guard Core 3.x release is available yet."
       - name: Authorize exact Core source with release provenance
         if: steps.release.outputs.available == 'true'
         id: source
@@ -146,7 +160,6 @@ jobs:
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           git -C "$TRUST_REPO" merge-base --is-ancestor \
             "$SOURCE_SHA" "refs/remotes/origin/${RELEASE_BRANCH}"
-
           gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern "hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl" \
             --dir "$TRUST_ASSETS"
@@ -171,6 +184,8 @@ jobs:
             --source-digest "$SOURCE_SHA" \
             --source-ref "refs/heads/${RELEASE_BRANCH}" \
             --deny-self-hosted-runners >/dev/null
+          cp "$WHEEL" "$RUNNER_TEMP/attested-macos-arm64.whl"
+          test -f "$RUNNER_TEMP/attested-macos-arm64.whl"
           echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
       - name: Inspect immutable Core asset state
         if: steps.release.outputs.available == 'true'
@@ -283,7 +298,6 @@ jobs:
           import os
           import re
           from pathlib import Path
-
           root = Path(os.environ["RUNNER_TEMP"])
           identity_text = (root / "codesign-identities.txt").read_text(encoding="utf-8")
           matches = re.findall(r'^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"[^"]+"\s*$', identity_text, flags=re.MULTILINE)
@@ -320,18 +334,44 @@ jobs:
           done < <(git -C "$SOURCE" diff --name-only)
           python3 -I scripts/release/stage_guard_cloud_review_artifacts.py \
             --source-root "$SOURCE"
+          mkdir -p "$RUNNER_TEMP/native-runtime"
+          python3 -I scripts/release/stage_native_runtime_for_desktop_core.py \
+            --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" \
+            --destination "$RUNNER_TEMP/native-runtime" \
+            --expected-version "$CORE_VERSION" \
+            --expected-target "$RELEASE_TARGET"
+          NATIVE_RUNTIME="$RUNNER_TEMP/native-runtime/hol-guard-runtime"
+          NATIVE_MANIFEST="$RUNNER_TEMP/native-runtime/runtime-manifest.json"
+          test -f "$NATIVE_RUNTIME"
+          test -f "$NATIVE_MANIFEST"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$NATIVE_RUNTIME"
+          codesign --verify --deep --strict --verbose=2 "$NATIVE_RUNTIME"
+          python3 -I scripts/release/stage_native_runtime_for_desktop_core.py \
+            --destination "$RUNNER_TEMP/native-runtime" \
+            --refresh-identity
           (
             cd "$SOURCE"
             uv run --no-sync pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" \
               --clean --noconfirm --onefile --name hol-guard \
               --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+              --add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native" \
+              --add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native" \
               --distpath "$DIST" --workpath "$RUNNER_TEMP/pyinstaller" --specpath "$RUNNER_TEMP/spec" \
               scripts/mdm/hol-guard-entry.py
           )
           BUILT="$DIST/hol-guard"
           ASSET="$DIST/hol-guard-core-${CORE_VERSION}-${RELEASE_TARGET}"
           chmod 0755 "$BUILT"
+          codesign --remove-signature "$BUILT"
+          python3 -I scripts/release/seal_pyinstaller_native_manifest.py \
+            --binary "$BUILT"
+          uv run --directory "$SOURCE" --no-sync python \
+            "$GITHUB_WORKSPACE/scripts/release/fix_pyinstaller_macos_exe_headers.py" \
+            --binary "$BUILT"
+          codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$BUILT"
           python3 -I scripts/release/verify_pyinstaller_macos_signing.py \
+            --binary "$BUILT" --team-id "$APPLE_TEAM_ID"
+          python3 -I scripts/release/verify_pyinstaller_native_runtime.py \
             --binary "$BUILT" --team-id "$APPLE_TEAM_ID"
           test "$("$BUILT" --version | sed -E 's/^hol-guard[[:space:]]+//')" = "$CORE_VERSION"
           export HOL_GUARD_HOME="$RUNNER_TEMP/smoke-home"

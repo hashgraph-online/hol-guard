@@ -246,8 +246,14 @@ def test_terminal_continuation_projects_as_a_distinct_authenticated_event(
     )
     request_row = store.get_approval_request(request.request_id)
     assert request_row is not None
-    waiting = continue_request_after_application(store, request_row=request_row, action="allow_once", now=_NOW)
-    assert waiting["continuationStatus"] == "waiting"
+    waiting = continue_request_after_application(
+        store,
+        request_row=request_row,
+        action="allow_once",
+        now=_NOW,
+        timeout_seconds=30.0,
+    )
+    assert waiting["continuationStatus"] == "waiting", waiting
     completed = record_live_hook_completion(store, request_id=request.request_id, action="allow", now=_LATER)
     assert completed is not None and completed["continuationStatus"] == "resumed"
     captured: list[dict[str, object]] = []

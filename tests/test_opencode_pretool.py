@@ -119,6 +119,8 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     assert "GUARD_HOOK_LAUNCHER" in source
     assert "hookProcessEnv" in source
     assert "GUARD_INHERIT_ENV_KEYS" in source
+    assert '"HOL_GUARD_NATIVE"' in source
+    assert '"HOL_GUARD_NATIVE_BINARY"' in source
     assert "HOL_GUARD_HOOK_ARGV" in source
     assert "assign_current_process_to_windows_hook_job" in source
     assert "HOL_GUARD_WINDOWS_JOB_CONTAINED" in source
