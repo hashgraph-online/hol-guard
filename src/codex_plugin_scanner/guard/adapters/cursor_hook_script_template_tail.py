@@ -2,7 +2,30 @@
 
 from __future__ import annotations
 
-HOOK_SCRIPT_TEMPLATE_TAIL = """def _emit_cursor_response(
+HOOK_SCRIPT_TEMPLATE_TAIL = """def _recording_only_from_guard_home() -> bool:
+    try:
+        from codex_plugin_scanner.guard.protection_posture import recording_only_from_config_text
+
+        text = Path(GUARD_HOME).joinpath("config.toml").read_text(encoding="utf-8")
+        return recording_only_from_config_text(text)
+    except Exception:
+        return False
+
+
+def _cursor_permission(policy_action: str, guard_payload: dict[str, object]) -> str:
+    del guard_payload
+    if _recording_only_from_guard_home():
+        return "allow"
+    if policy_action not in GUARD_ACTIONS:
+        return "deny"
+    if policy_action in {"block", "sandbox-required"}:
+        return "deny"
+    if policy_action in {"require-reapproval", "review"}:
+        return "ask"
+    return "allow"
+
+
+def _emit_cursor_response(
     *,
     hook_event_name: str,
     policy_action: str,
@@ -315,6 +338,9 @@ def main() -> int:
         return 0
     raw_policy_action = guard_payload.get("policy_action")
     if not isinstance(raw_policy_action, str) or raw_policy_action not in GUARD_ACTIONS:
+        if _recording_only_from_guard_home():
+            print(json.dumps({"permission": "allow"}))
+            return 0
         print(
             json.dumps(
                 {

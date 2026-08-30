@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from pathlib import Path
 
 from .codex_hook_file_integrity import split_hook_command
 from .codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
+
+_GUARD_CODEX_HOOK_MARKERS = (
+    "codex_daemon_hook_bridge.py",
+    "hol-guard hook",
+    "codex_plugin_scanner.cli",
+)
+_GUARD_HOME_FLAG_RE = re.compile(r"--guard-home(?:\s+|=)(\S+)")
+_STATE_PATH_RE = re.compile(r'"state_path"\s*:\s*"([^"]+)"')
+_GUARD_HOME_QUERY_RE = re.compile(r"guard-home=([^&\"'\s]+)")
 
 
 def remove_manifest_bound_hook_events(
@@ -105,4 +116,76 @@ def exact_legacy_hook_bindings(
     return bindings
 
 
-__all__ = ["exact_legacy_hook_bindings", "remove_manifest_bound_hook_events"]
+def _hook_group_command_blob(group: object) -> str:
+    if not isinstance(group, Mapping):
+        return ""
+    parts: list[str] = []
+    command = group.get("command")
+    if isinstance(command, str):
+        parts.append(command)
+    hooks = group.get("hooks")
+    if isinstance(hooks, list):
+        for hook in hooks:
+            if isinstance(hook, Mapping):
+                hook_command = hook.get("command")
+                if isinstance(hook_command, str):
+                    parts.append(hook_command)
+    return "\n".join(parts)
+
+
+def _looks_like_guard_codex_hook(blob: str) -> bool:
+    return any(marker in blob for marker in _GUARD_CODEX_HOOK_MARKERS)
+
+
+def _normalize_guard_home_path(value: str) -> Path | None:
+    stripped = value.strip().strip("'\"")
+    if not stripped:
+        return None
+    return Path(stripped).expanduser()
+
+
+def _extract_guard_homes_from_hook_blob(blob: str) -> tuple[Path, ...]:
+    decoded = blob.replace('\\"', '"')
+    homes: list[Path] = []
+    for match in _GUARD_HOME_FLAG_RE.finditer(decoded):
+        parsed = _normalize_guard_home_path(match.group(1))
+        if parsed is not None:
+            homes.append(parsed)
+    for match in _STATE_PATH_RE.finditer(decoded):
+        state_path = Path(match.group(1))
+        if state_path.name == "daemon-state.json":
+            homes.append(state_path.parent)
+    for match in _GUARD_HOME_QUERY_RE.finditer(decoded):
+        token = match.group(1)
+        if token.startswith("/") or token.startswith("~"):
+            parsed = _normalize_guard_home_path(token)
+            if parsed is not None:
+                homes.append(parsed)
+    return tuple(homes)
+
+
+def _resolved_guard_home(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
+def is_foreign_guard_codex_hook_group(group: object, *, current_guard_home: Path) -> bool:
+    """Return True when a Guard Codex hook is bound to a different Guard home."""
+
+    blob = _hook_group_command_blob(group)
+    if not _looks_like_guard_codex_hook(blob):
+        return False
+    extracted = _extract_guard_homes_from_hook_blob(blob)
+    if not extracted:
+        return False
+    current = _resolved_guard_home(current_guard_home.expanduser())
+    return all(_resolved_guard_home(home) != current for home in extracted)
+
+
+__all__ = [
+    "exact_legacy_hook_bindings",
+    "is_foreign_guard_codex_hook_group",
+    "remove_manifest_bound_hook_events",
+]
