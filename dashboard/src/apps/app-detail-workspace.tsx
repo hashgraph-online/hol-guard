@@ -78,6 +78,7 @@ type AppDetailWorkspaceProps = {
   inventory: GuardInventoryItem[];
   requests: GuardApprovalRequest[];
   onGoHome: () => void;
+  onOpenApps?: () => void;
   onOpenRequest: (requestId: string) => void;
   onClearAppPolicies?: (harness: string) => Promise<void>;
   onClearPolicy?: (policy: GuardPolicyDecision) => Promise<void>;
@@ -365,7 +366,7 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
+      <nav className="flex items-center gap-2" aria-label="Breadcrumb">
         <button
           onClick={props.onGoHome}
           className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100"
@@ -374,10 +375,19 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
           Home
         </button>
         <HiMiniChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
-        <span className="text-sm text-muted-foreground">Apps</span>
+        {props.onOpenApps ? (
+          <button
+            onClick={props.onOpenApps}
+            className="rounded-full px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100"
+          >
+            Apps
+          </button>
+        ) : (
+          <span className="text-sm text-muted-foreground">Apps</span>
+        )}
         <HiMiniChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
-        <span className="text-sm font-medium text-brand-dark">{harnessDisplayName(harness)}</span>
-      </div>
+        <span className="text-sm font-medium text-brand-dark" aria-current="page">{harnessDisplayName(harness)}</span>
+      </nav>
 
       <GuardHero
         status={heroStatus}
