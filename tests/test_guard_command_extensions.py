@@ -842,6 +842,17 @@ def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Pat
         )
         == "allow"
     )
+    assert (
+        _runtime_artifact_policy_action(
+            GuardConfig(
+                **base,
+                harness_risk_actions={"codex": {str(risk_classes[0]): "block"}},
+            ),
+            artifact,
+            "codex",
+        )
+        == "block"
+    )
 
 
 def test_explicit_permission_allow_requires_protected_authority(tmp_path: Path) -> None:

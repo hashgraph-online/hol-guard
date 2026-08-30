@@ -900,9 +900,19 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         actions = (action, current_config_action, effective_command_floor)
         return most_restrictive_guard_action(*(item for item in actions if item is not None))
 
-    if explicit_permission_allow:
-        return with_config_policy(command_action_floor or "allow")
     risk_classes = _runtime_artifact_risk_classes(artifact)
+    if explicit_permission_allow:
+        harness_risk_actions: list[GuardAction] = []
+        for risk_class in risk_classes:
+            harness_action = _resolve_harness_risk_action(config, risk_class, harness=canonical_harness)
+            if harness_action is None:
+                continue
+            applied = _apply_explicit_posture_action(config, artifact, risk_class, harness_action)
+            if coerce_guard_action(applied) is not None:
+                harness_risk_actions.append(applied)
+        if harness_risk_actions:
+            return with_config_policy(most_restrictive_guard_action(*harness_risk_actions))
+        return with_config_policy(command_action_floor or "allow")
     has_configured_risk_action = any(
         _resolve_configured_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes
     )
@@ -941,11 +951,21 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
     if guard_default_action is not None:
         return with_config_policy(guard_default_action)
     return with_config_policy(SAFE_CHANGED_HASH_ACTION)
+
+
+def _resolve_harness_risk_action(config: GuardConfig, risk_class: str, *, harness: str) -> str | None:
+    if config.harness_risk_actions is None:
+        return None
+    harness_actions = config.harness_risk_actions.get(harness)
+    if harness_actions is not None and risk_class in harness_actions:
+        return harness_actions[risk_class]
+    return None
+
+
 def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, harness: str) -> str | None:
-    if config.harness_risk_actions is not None:
-        harness_actions = config.harness_risk_actions.get(harness)
-        if harness_actions is not None and risk_class in harness_actions:
-            return harness_actions[risk_class]
+    harness_action = _resolve_harness_risk_action(config, risk_class, harness=harness)
+    if harness_action is not None:
+        return harness_action
     if config.risk_actions is not None and risk_class in config.risk_actions:
         return config.risk_actions[risk_class]
     return None
