@@ -75,6 +75,8 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "sqlite destructive command": ("destructive_shell",),
     "supabase destructive command": ("destructive_shell", "network_egress"),
     "rsync remote shell command": ("execution", "network_egress"),
+    "essh group execution command": ("execution", "network_egress"),
+    "essh cache removal command": ("destructive_shell",),
     **GITHUB_ACTION_RISK_CLASSES,
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(

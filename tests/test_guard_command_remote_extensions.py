@@ -100,6 +100,38 @@ REMOTE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "Rsync remote shell command",
         "command.remote.rsync.remote-shell",
     ),
+    (
+        "essh run web -- sudo systemctl restart api",
+        "essh group execution command",
+        "command.remote.essh.group-execution",
+    ),
+    (
+        "essh --theme dark run web -- uptime",
+        "essh group execution command",
+        "command.remote.essh.group-execution",
+    ),
+    (
+        "essh --theme=dark run web -- uptime",
+        "essh group execution command",
+        "command.remote.essh.group-execution",
+    ),
+    (
+        "essh.exe run web -- uname -a",
+        "essh group execution command",
+        "command.remote.essh.group-execution",
+    ),
+    ("essh hosts remove web-1", "essh cache removal command", "command.remote.essh.cache-removal"),
+    ("essh keys remove deploy-key", "essh cache removal command", "command.remote.essh.cache-removal"),
+    (
+        "essh workspace remove production",
+        "essh cache removal command",
+        "command.remote.essh.cache-removal",
+    ),
+    (
+        "essh.cmd --theme nord keys remove deploy-key",
+        "essh cache removal command",
+        "command.remote.essh.cache-removal",
+    ),
 )
 
 
@@ -135,6 +167,19 @@ REMOTE_SAFE_COMMANDS: tuple[str, ...] = (
     "rsync -av --delete ./out/ host.example:/srv/app/ --no-dry-run -n",
     "grep 'ssh host command|scp source target|rsync --delete' docs",
     "echo ssh host.example uptime",
+    "essh connect web-1",
+    "essh connect remove",
+    "essh hosts list",
+    "essh hosts add web-1",
+    "essh keys list",
+    "essh workspace list",
+    "essh workspace show production",
+    "essh workspace save production web-1 web-2",
+    "essh why web-1",
+    "essh session list",
+    "essh audit",
+    "grep 'essh run web -- uptime' docs",
+    "echo essh keys remove deploy-key",
 )
 
 
@@ -153,7 +198,12 @@ def test_rsync_disabled_preview_aliases_remain_live_execution(tmp_path: Path) ->
 
 
 def test_remote_extensions_publish_official_references() -> None:
-    for extension_id in ("command.remote.ssh", "command.remote.scp", "command.remote.rsync"):
+    for extension_id in (
+        "command.remote.ssh",
+        "command.remote.scp",
+        "command.remote.rsync",
+        "command.remote.essh",
+    ):
         extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(extension_id)
 
         assert extension is not None
@@ -207,6 +257,11 @@ def test_remote_execution_actions_publish_risk_classes() -> None:
         "execution",
         "network_egress",
     )
+    assert risk_classes_for_command_action("essh group execution command") == (
+        "execution",
+        "network_egress",
+    )
+    assert risk_classes_for_command_action("essh cache removal command") == ("destructive_shell",)
 
 
 def test_rsync_option_values_cannot_forge_dry_run(tmp_path: Path) -> None:

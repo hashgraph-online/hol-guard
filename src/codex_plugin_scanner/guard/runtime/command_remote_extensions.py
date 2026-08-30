@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .command_database_matchers import LeadingSubcommandMatcher
 from .command_extension_matchers import executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_rules import (
@@ -185,6 +186,24 @@ _RSYNC_REMOTE_SHELL = AnyMatcher(
 )
 
 
+_ESSH_GLOBAL_OPTIONS = frozenset({"--theme"})
+_ESSH_GROUP_EXECUTION = LeadingSubcommandMatcher(
+    executables=executable_names("essh"),
+    subcommands=("run",),
+    options_with_values=_ESSH_GLOBAL_OPTIONS,
+)
+_ESSH_CACHE_REMOVAL = AnyMatcher(
+    matchers=tuple(
+        LeadingSubcommandMatcher(
+            executables=executable_names("essh"),
+            subcommands=subcommands,
+            options_with_values=_ESSH_GLOBAL_OPTIONS,
+        )
+        for subcommands in (("hosts", "remove"), ("keys", "remove"), ("workspace", "remove"))
+    )
+)
+
+
 def _remote_rule(
     *,
     rule_id: str,
@@ -284,6 +303,33 @@ REMOTE_COMMAND_RULES = (
             ),
         ),
     ),
+    _remote_rule(
+        rule_id="command.remote.essh.group-execution",
+        example_command="essh run web -- sudo systemctl restart api",
+        title="essh host group execution",
+        description="Identifies essh run invocations that execute a command across every host in a group.",
+        matcher=_ESSH_GROUP_EXECUTION,
+        action_class="essh group execution command",
+        safer_alternative=(
+            "Inspect the group membership with essh hosts list and run the command against a single host first."
+        ),
+        severity="critical",
+        risk_classes=("execution", "network_egress"),
+    ),
+    _remote_rule(
+        rule_id="command.remote.essh.cache-removal",
+        example_command="essh keys remove deploy-key",
+        title="essh cached credential and host removal",
+        description="Identifies essh remove verbs that delete cached hosts, keys, or saved workspaces.",
+        matcher=_ESSH_CACHE_REMOVAL,
+        action_class="essh cache removal command",
+        safer_alternative=(
+            "List the cached entry first with essh hosts list, essh keys list, or essh workspace list "
+            "and confirm the name before removing it."
+        ),
+        severity="high",
+        risk_classes=("destructive_shell",),
+    ),
 )
 
 
@@ -314,5 +360,17 @@ REMOTE_COMMAND_EXTENSION_SPECS = (
         risk_classes=("destructive_shell", "execution", "network_egress"),
         safer_alternatives=("Use --dry-run and inspect the itemized change list before applying deletions.",),
         reference_urls=("https://rsync.samba.org/ftp/rsync/rsync.1.html",),
+    ),
+    CommandExtensionSpec(
+        extension_id="command.remote.essh",
+        name="essh group execution and cache removal protection",
+        description=(
+            "Reviews essh invocations that execute commands across a host group or delete cached "
+            "hosts, keys, and workspaces."
+        ),
+        action_classes=("essh group execution command", "essh cache removal command"),
+        risk_classes=("destructive_shell", "execution", "network_egress"),
+        safer_alternatives=("Inspect group membership and cached entries before running or removing anything.",),
+        reference_urls=("https://github.com/matthart1983/essh",),
     ),
 )
