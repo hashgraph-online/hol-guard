@@ -111,6 +111,12 @@ REPO2NB_COMMAND_RULES = (
         safe_variants=(
             safe_flag_variant(
                 _REPO2NB_SYNC,
+                variant_id="dry-run",
+                title="repo2nb sync dry run",
+                flag="--dry-run",
+            ),
+            safe_flag_variant(
+                _REPO2NB_SYNC,
                 variant_id="help",
                 title="repo2nb sync command help",
                 flag="--help",
