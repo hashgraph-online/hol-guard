@@ -6089,12 +6089,12 @@
     }
   }
 
-  @media not all and (min-width: 64rem) {
-    .max-lg\:w-full {
+  @media not all and (min-width: 80rem) {
+    .max-xl\:w-full {
       width: 100%;
     }
 
-    .max-lg\:justify-start {
+    .max-xl\:justify-start {
       justify-content: flex-start;
     }
   }
@@ -6726,8 +6726,16 @@
       grid-template-columns: minmax(0, 1fr) 380px;
     }
 
+    .xl\:flex-row {
+      flex-direction: row;
+    }
+
     .xl\:items-start {
       align-items: flex-start;
+    }
+
+    .xl\:justify-between {
+      justify-content: space-between;
     }
 
     .xl\:self-start {

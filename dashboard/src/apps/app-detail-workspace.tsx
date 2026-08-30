@@ -682,6 +682,13 @@ function AppOverviewTab(props: {
   );
 }
 
+const STATUS_DESCRIPTIONS: Record<"active" | "needs_setup" | "observed" | "unknown", string> = {
+  active: "Guard is actively protecting this app.",
+  needs_setup: "Guard detected this app but it needs setup.",
+  observed: "Guard has seen activity from this app.",
+  unknown: "This app has not been seen yet.",
+};
+
 function AppStatusCard(props: {
   status: "active" | "needs_setup" | "observed" | "unknown";
   totalActions: number;
@@ -698,15 +705,7 @@ function AppStatusCard(props: {
       <div className="flex items-center justify-between gap-3">
         <div>
           <SectionLabel>Status</SectionLabel>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {props.status === "active"
-              ? "Guard is actively protecting this app."
-              : props.status === "needs_setup"
-              ? "Guard detected this app but it needs setup."
-              : props.status === "observed"
-              ? "Guard has seen activity from this app."
-              : "This app has not been seen yet."}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{STATUS_DESCRIPTIONS[props.status]}</p>
         </div>
         <AppStatusBadge status={props.status} />
       </div>
@@ -1528,7 +1527,7 @@ function HarnessSetupPanel(props: {
 
   return (
     <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <SectionLabel>Local harness install</SectionLabel>
           <h3 className="mt-2 text-lg font-semibold text-brand-dark">
@@ -1540,7 +1539,7 @@ function HarnessSetupPanel(props: {
               : "Guard will install the local managed hooks through the daemon. No copied shell command required."}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2 max-lg:w-full max-lg:justify-start">
+        <div className="flex shrink-0 flex-wrap gap-2 max-xl:w-full max-xl:justify-start">
           {!active && (
             <ActionButton onClick={handleConnect} disabled={busy} data-primary="true">
               <HiMiniRocketLaunch className="h-4 w-4" aria-hidden="true" />
