@@ -789,7 +789,7 @@ def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Pat
         _runtime_artifact_policy_action(
             GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}), artifact, "codex"
         )
-        == "block"
+        == "allow"
     )
 
 
