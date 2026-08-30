@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, aV as fetchApprovalPage, aW as fetchPolicy, v as guardActionDisposition, p as protectionHealthFor, k as useProtectionPresentationState, aQ as HiMiniArrowLeft, c as HiMiniChevronRight, i as harnessDisplayName, q as GuardHero, $ as ProofStrip, aX as HiMiniHome, N as HiMiniBolt, ab as HiMiniAdjustmentsHorizontal, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, w as formatRelativeTime, M as HiMiniExclamationTriangle, aY as guardActionPresentation, P as Badge, aZ as DEFAULT_FILTER_STATE, a_ as filterEvidence, a$ as sortEvidence, b0 as computeMetrics, b1 as CommandActivityWorkspace, m as EmptyState, b2 as EvidenceFilterBar, b3 as EvidenceInsightStrip, b4 as EvidenceActionList, b5 as EvidenceActionDetail, K as useFocusTrap, b6 as policyIdentityKey, I as HiMiniCloud, b7 as HiMiniChartBar, ay as Tag, o as HiMiniCheckCircle, a1 as HiMiniXCircle, b8 as runHarnessAction, b9 as GuardHarnessActionError, ba as HiMiniRocketLaunch, aD as HiMiniArrowPath, bb as HiMiniTrash, bc as clearLabelForScope, bd as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, aV as fetchApprovalPage, aW as fetchPolicy, v as guardActionDisposition, p as protectionHealthFor, k as useProtectionPresentationState, aQ as HiMiniArrowLeft, c as HiMiniChevronRight, i as harnessDisplayName, q as GuardHero, $ as ProofStrip, aX as HiMiniHome, N as HiMiniBolt, ab as HiMiniAdjustmentsHorizontal, S as SectionLabel, A as ActionButton, t as HiMiniShieldCheck, w as formatRelativeTime, aY as guardActionPresentation, P as Badge, aZ as DEFAULT_FILTER_STATE, a_ as filterEvidence, a$ as sortEvidence, b0 as computeMetrics, M as HiMiniExclamationTriangle, b1 as CommandActivityWorkspace, m as EmptyState, b2 as EvidenceFilterBar, b3 as EvidenceInsightStrip, b4 as EvidenceActionList, b5 as EvidenceActionDetail, K as useFocusTrap, b6 as policyIdentityKey, I as HiMiniCloud, ay as Tag, o as HiMiniCheckCircle, a1 as HiMiniXCircle, b7 as runHarnessAction, b8 as GuardHarnessActionError, b9 as HiMiniRocketLaunch, aD as HiMiniArrowPath, ba as HiMiniTrash, bb as clearLabelForScope, bc as HiMiniChartBar, bd as formatHarnessCommand } from "../guard-dashboard.js";
 import { a as appSetupTarget } from "./harness-setup-target.js";
 function ActivityModeButton(props) {
   const active = props.mode === props.value;
@@ -416,9 +416,9 @@ function AppOverviewTab(props) {
     inventoryCount: props.harnessInventory.length,
     pendingCount: props.pendingItems.length
   });
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-      showFirstRunGuide && /* @__PURE__ */ jsxRuntimeExports.jsx(
+  if (showFirstRunGuide) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
         FirstRunGuide,
         {
           harness: props.harness,
@@ -427,37 +427,41 @@ function AppOverviewTab(props) {
           onManagedInstallChanged: props.onManagedInstallChanged
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Status" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: props.status === "active" ? "Guard is actively protecting this app." : props.status === "needs_setup" ? "Guard detected this app but it needs setup." : props.status === "observed" ? "Guard has seen activity from this app." : "This app has not been seen yet." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusBadge, { status: props.status })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Total actions", value: props.totalActions }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Allowed", value: props.allowedCount, tone: "green" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Review", value: props.reviewedCount, tone: props.reviewedCount > 0 ? "blue" : "slate" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Blocked", value: props.blockedCount, tone: props.blockedCount > 0 ? "attention" : "slate" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Block rate", value: `${props.blockRate}%`, tone: props.blockRate > 10 ? "attention" : "slate" })
-        ] }),
-        props.harnessReceipts.length >= 5 && /* @__PURE__ */ jsxRuntimeExports.jsx(RiskSnapshot, { receipts: props.harnessReceipts }),
-        props.lastActivity && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-xs text-muted-foreground", children: [
-          "Last activity: ",
-          formatRelativeTime(props.lastActivity)
-        ] }),
-        props.harnessReceipts.length >= 3 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActivitySparkline, { receipts: props.harnessReceipts }),
-        props.blockedCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CloudValueBanner,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AppStatusCard,
           {
-            icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-brand-attention" }),
-            title: "Team alerts available",
-            body: "Cloud would alert your team when Guard blocks actions like this.",
-            cta: { label: "Learn more", href: "https://hol.org/guard/pricing" }
+            status: props.status,
+            totalActions: props.totalActions,
+            allowedCount: props.allowedCount,
+            reviewedCount: props.reviewedCount,
+            blockedCount: props.blockedCount,
+            blockRate: props.blockRate,
+            harnessReceipts: props.harnessReceipts,
+            lastActivity: props.lastActivity,
+            protection: props.protection
           }
-        )
-      ] }),
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppFirewallStatusCard, { protection: props.protection }) })
+      ] })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AppStatusCard,
+        {
+          status: props.status,
+          totalActions: props.totalActions,
+          allowedCount: props.allowedCount,
+          reviewedCount: props.reviewedCount,
+          blockedCount: props.blockedCount,
+          blockRate: props.blockRate,
+          harnessReceipts: props.harnessReceipts,
+          lastActivity: props.lastActivity,
+          protection: props.protection
+        }
+      ),
       props.pendingItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Pending review" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
@@ -487,7 +491,7 @@ function AppOverviewTab(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-      props.harnessReceipts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+      props.harnessReceipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent events" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "What Guard decided recently." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: props.harnessReceipts.slice(0, 5).map((receipt) => {
@@ -511,16 +515,7 @@ function AppOverviewTab(props) {
             receipt.receipt_id
           );
         }) })
-      ] }) : showFirstRunGuide ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What happens next" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: firstRunSteps(props.harness).map((step) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue", children: step.index }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: step.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-muted-foreground", children: step.body })
-          ] })
-        ] }, step.title)) })
-      ] }) : null,
+      ] }),
       props.harnessInventory.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Discovered items" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Tools and plugins Guard found in this app." }),
@@ -538,6 +533,39 @@ function AppOverviewTab(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(AppFirewallStatusCard, { protection: props.protection })
     ] })
+  ] });
+}
+function AppStatusCard(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Status" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: props.status === "active" ? "Guard is actively protecting this app." : props.status === "needs_setup" ? "Guard detected this app but it needs setup." : props.status === "observed" ? "Guard has seen activity from this app." : "This app has not been seen yet." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusBadge, { status: props.status })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Total actions", value: props.totalActions }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Allowed", value: props.allowedCount, tone: "green" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Review", value: props.reviewedCount, tone: props.reviewedCount > 0 ? "blue" : "slate" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Blocked", value: props.blockedCount, tone: props.blockedCount > 0 ? "attention" : "slate" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Block rate", value: `${props.blockRate}%`, tone: props.blockRate > 10 ? "attention" : "slate" })
+    ] }),
+    props.harnessReceipts.length >= 5 && /* @__PURE__ */ jsxRuntimeExports.jsx(RiskSnapshot, { receipts: props.harnessReceipts }),
+    props.lastActivity && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-xs text-muted-foreground", children: [
+      "Last activity: ",
+      formatRelativeTime(props.lastActivity)
+    ] }),
+    props.harnessReceipts.length >= 3 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActivitySparkline, { receipts: props.harnessReceipts }),
+    props.blockedCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CloudValueBanner,
+      {
+        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-brand-attention" }),
+        title: "Team alerts available",
+        body: "Cloud would alert your team when Guard blocks actions like this.",
+        cta: { label: "Learn more", href: "https://hol.org/guard/pricing" }
+      }
+    )
   ] });
 }
 function AppFirewallStatusCard({ protection }) {
@@ -575,36 +603,46 @@ function shouldShowFirstRunGuide(input) {
 }
 function FirstRunGuide(props) {
   const displayName = harnessDisplayName(props.harness);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-[1.35rem] border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.10] via-white to-brand-green/[0.06] shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col justify-between gap-6 p-5 sm:p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(SectionLabel, { children: [
-          "Start protecting ",
-          displayName
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "mt-3 max-w-xl text-2xl font-semibold leading-tight text-brand-dark", children: [
-          "Connect ",
-          displayName,
-          ", restart it once, then let Guard pause risky actions before they run."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground", children: firstRunIntro(props.harness) })
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-[1.35rem] border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.10] via-white to-brand-green/[0.06] shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-5 sm:p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(SectionLabel, { children: [
+        "Start protecting ",
+        displayName
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 sm:grid-cols-3 lg:grid-cols-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "mt-3 max-w-2xl text-2xl font-semibold leading-tight text-brand-dark", children: [
+        "Connect ",
+        displayName,
+        ", restart it once, then let Guard pause risky actions before they run."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground", children: firstRunIntro(props.harness) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-3 sm:grid-cols-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "No terminal copy", value: "Dashboard action" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "Local only", value: "Daemon managed" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "First proof", value: "Appears here" })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-white/70 bg-white/72 p-4 sm:p-5 lg:border-l lg:border-t-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      HarnessSetupPanel,
-      {
-        harness: props.harness,
-        install: props.install,
-        status: props.status,
-        onManagedInstallChanged: props.onManagedInstallChanged
-      }
-    ) })
-  ] }) });
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-0 border-t border-white/70 bg-white/72 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 sm:p-5 lg:border-r lg:border-white/70", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HarnessSetupPanel,
+        {
+          harness: props.harness,
+          install: props.install,
+          status: props.status,
+          onManagedInstallChanged: props.onManagedInstallChanged
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-white/70 bg-brand-blue/[0.03] p-4 sm:p-5 lg:border-t-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What happens next" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-4 space-y-3", children: firstRunSteps(props.harness).map((step) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue", children: step.index }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: step.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-muted-foreground", children: step.body })
+          ] })
+        ] }, step.title)) })
+      ] })
+    ] })
+  ] });
 }
 function GuidePill(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-white/80 bg-white/70 p-3 shadow-sm", children: [
@@ -1154,13 +1192,13 @@ function HarnessSetupPanel(props) {
   const steps = setupStepsFor(currentPlan, active);
   const notes = setupNotesFor(currentPlan);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local harness install" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-lg font-semibold text-brand-dark", children: active ? `${displayName} is managed by Guard` : `Connect ${displayName} from this dashboard` }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm text-muted-foreground", children: active ? "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard." : "Guard will install the local managed hooks through the daemon. No copied shell command required." })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2 max-lg:w-full max-lg:justify-start", children: [
         !active && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleConnect, disabled: busy, "data-primary": "true", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniRocketLaunch, { className: "h-4 w-4", "aria-hidden": "true" }),
           busy && setupState.kind === "loading" && setupState.action === "install" ? "Connecting..." : "Connect app"

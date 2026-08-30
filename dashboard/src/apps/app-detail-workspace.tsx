@@ -548,68 +548,52 @@ function AppOverviewTab(props: {
       pendingCount: props.pendingItems.length,
     });
 
+  // First run is the page's primary task: the activation guide takes the
+  // full content width instead of competing inside a narrow column, and the
+  // setup panel inside it never nests a second column split.
+  if (showFirstRunGuide) {
+    return (
+      <div className="space-y-6">
+        <FirstRunGuide
+          harness={props.harness}
+          install={props.install}
+          status={props.status}
+          onManagedInstallChanged={props.onManagedInstallChanged}
+        />
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AppStatusCard
+            status={props.status}
+            totalActions={props.totalActions}
+            allowedCount={props.allowedCount}
+            reviewedCount={props.reviewedCount}
+            blockedCount={props.blockedCount}
+            blockRate={props.blockRate}
+            harnessReceipts={props.harnessReceipts}
+            lastActivity={props.lastActivity}
+            protection={props.protection}
+          />
+          <div className="space-y-6">
+            <AppFirewallStatusCard protection={props.protection} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
       <section className="space-y-6">
-        {showFirstRunGuide && (
-          <FirstRunGuide
-            harness={props.harness}
-            install={props.install}
-            status={props.status}
-            onManagedInstallChanged={props.onManagedInstallChanged}
-          />
-        )}
-
-        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <SectionLabel>Status</SectionLabel>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {props.status === "active"
-                  ? "Guard is actively protecting this app."
-                  : props.status === "needs_setup"
-                  ? "Guard detected this app but it needs setup."
-                  : props.status === "observed"
-                  ? "Guard has seen activity from this app."
-                  : "This app has not been seen yet."}
-              </p>
-            </div>
-            <AppStatusBadge status={props.status} />
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <StatCard label="Total actions" value={props.totalActions} />
-            <StatCard label="Allowed" value={props.allowedCount} tone="green" />
-            <StatCard label="Review" value={props.reviewedCount} tone={props.reviewedCount > 0 ? "blue" : "slate"} />
-            <StatCard label="Blocked" value={props.blockedCount} tone={props.blockedCount > 0 ? "attention" : "slate"} />
-            <StatCard label="Block rate" value={`${props.blockRate}%`} tone={props.blockRate > 10 ? "attention" : "slate"} />
-          </div>
-
-          {/* Risk snapshot */}
-          {props.harnessReceipts.length >= 5 && (
-            <RiskSnapshot receipts={props.harnessReceipts} />
-          )}
-
-          {props.lastActivity && (
-            <p className="mt-4 text-xs text-muted-foreground">
-              Last activity: {formatRelativeTime(props.lastActivity)}
-            </p>
-          )}
-
-          {/* Activity Sparkline */}
-          {props.harnessReceipts.length >= 3 && (
-            <ActivitySparkline receipts={props.harnessReceipts} />
-          )}
-
-          {props.blockedCount > 0 && (
-            <CloudValueBanner
-              icon={<HiMiniExclamationTriangle className="h-4 w-4 text-brand-attention" />}
-              title="Team alerts available"
-              body="Cloud would alert your team when Guard blocks actions like this."
-              cta={{ label: "Learn more", href: "https://hol.org/guard/pricing" }}
-            />
-          )}
-        </div>
+        <AppStatusCard
+          status={props.status}
+          totalActions={props.totalActions}
+          allowedCount={props.allowedCount}
+          reviewedCount={props.reviewedCount}
+          blockedCount={props.blockedCount}
+          blockRate={props.blockRate}
+          harnessReceipts={props.harnessReceipts}
+          lastActivity={props.lastActivity}
+          protection={props.protection}
+        />
 
         {props.pendingItems.length > 0 && (
           <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5">
@@ -641,7 +625,7 @@ function AppOverviewTab(props: {
       </section>
 
       <section className="space-y-6">
-        {props.harnessReceipts.length > 0 ? (
+        {props.harnessReceipts.length > 0 && (
           <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
             <SectionLabel>Recent events</SectionLabel>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -670,24 +654,7 @@ function AppOverviewTab(props: {
               })}
             </div>
           </div>
-        ) : showFirstRunGuide ? (
-          <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5">
-            <SectionLabel>What happens next</SectionLabel>
-            <div className="mt-4 space-y-3">
-              {firstRunSteps(props.harness).map((step) => (
-                <div key={step.title} className="flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
-                    {step.index}
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-brand-dark">{step.title}</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{step.body}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        )}
 
         {props.harnessInventory.length > 0 && (
           <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
@@ -711,6 +678,65 @@ function AppOverviewTab(props: {
 
         <AppFirewallStatusCard protection={props.protection} />
       </section>
+    </div>
+  );
+}
+
+function AppStatusCard(props: {
+  status: "active" | "needs_setup" | "observed" | "unknown";
+  totalActions: number;
+  allowedCount: number;
+  reviewedCount: number;
+  blockedCount: number;
+  blockRate: number;
+  harnessReceipts: GuardReceipt[];
+  lastActivity: string | null;
+  protection: PackageManagerProtection | undefined;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <SectionLabel>Status</SectionLabel>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {props.status === "active"
+              ? "Guard is actively protecting this app."
+              : props.status === "needs_setup"
+              ? "Guard detected this app but it needs setup."
+              : props.status === "observed"
+              ? "Guard has seen activity from this app."
+              : "This app has not been seen yet."}
+          </p>
+        </div>
+        <AppStatusBadge status={props.status} />
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <StatCard label="Total actions" value={props.totalActions} />
+        <StatCard label="Allowed" value={props.allowedCount} tone="green" />
+        <StatCard label="Review" value={props.reviewedCount} tone={props.reviewedCount > 0 ? "blue" : "slate"} />
+        <StatCard label="Blocked" value={props.blockedCount} tone={props.blockedCount > 0 ? "attention" : "slate"} />
+        <StatCard label="Block rate" value={`${props.blockRate}%`} tone={props.blockRate > 10 ? "attention" : "slate"} />
+      </div>
+
+      {props.harnessReceipts.length >= 5 && <RiskSnapshot receipts={props.harnessReceipts} />}
+
+      {props.lastActivity && (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Last activity: {formatRelativeTime(props.lastActivity)}
+        </p>
+      )}
+
+      {props.harnessReceipts.length >= 3 && <ActivitySparkline receipts={props.harnessReceipts} />}
+
+      {props.blockedCount > 0 && (
+        <CloudValueBanner
+          icon={<HiMiniExclamationTriangle className="h-4 w-4 text-brand-attention" />}
+          title="Team alerts available"
+          body="Cloud would alert your team when Guard blocks actions like this."
+          cta={{ label: "Learn more", href: "https://hol.org/guard/pricing" }}
+        />
+      )}
     </div>
   );
 }
@@ -780,30 +806,44 @@ function FirstRunGuide(props: {
   const displayName = harnessDisplayName(props.harness);
   return (
     <div className="overflow-hidden rounded-[1.35rem] border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.10] via-white to-brand-green/[0.06] shadow-sm">
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-        <div className="flex flex-col justify-between gap-6 p-5 sm:p-6">
-          <div>
-            <SectionLabel>Start protecting {displayName}</SectionLabel>
-            <h2 className="mt-3 max-w-xl text-2xl font-semibold leading-tight text-brand-dark">
-              Connect {displayName}, restart it once, then let Guard pause risky actions before they run.
-            </h2>
-            <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
-              {firstRunIntro(props.harness)}
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <GuidePill label="No terminal copy" value="Dashboard action" />
-            <GuidePill label="Local only" value="Daemon managed" />
-            <GuidePill label="First proof" value="Appears here" />
-          </div>
+      <div className="p-5 sm:p-6">
+        <SectionLabel>Start protecting {displayName}</SectionLabel>
+        <h2 className="mt-3 max-w-2xl text-2xl font-semibold leading-tight text-brand-dark">
+          Connect {displayName}, restart it once, then let Guard pause risky actions before they run.
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          {firstRunIntro(props.harness)}
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <GuidePill label="No terminal copy" value="Dashboard action" />
+          <GuidePill label="Local only" value="Daemon managed" />
+          <GuidePill label="First proof" value="Appears here" />
         </div>
-        <div className="border-t border-white/70 bg-white/72 p-4 sm:p-5 lg:border-l lg:border-t-0">
+      </div>
+      <div className="grid gap-0 border-t border-white/70 bg-white/72 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+        <div className="p-4 sm:p-5 lg:border-r lg:border-white/70">
           <HarnessSetupPanel
             harness={props.harness}
             install={props.install}
             status={props.status}
             onManagedInstallChanged={props.onManagedInstallChanged}
           />
+        </div>
+        <div className="border-t border-white/70 bg-brand-blue/[0.03] p-4 sm:p-5 lg:border-t-0">
+          <SectionLabel>What happens next</SectionLabel>
+          <ol className="mt-4 space-y-3">
+            {firstRunSteps(props.harness).map((step) => (
+              <li key={step.title} className="flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
+                  {step.index}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-brand-dark">{step.title}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{step.body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
       </div>
     </div>
@@ -1488,7 +1528,7 @@ function HarnessSetupPanel(props: {
 
   return (
     <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <SectionLabel>Local harness install</SectionLabel>
           <h3 className="mt-2 text-lg font-semibold text-brand-dark">
@@ -1500,7 +1540,7 @@ function HarnessSetupPanel(props: {
               : "Guard will install the local managed hooks through the daemon. No copied shell command required."}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2 max-lg:w-full max-lg:justify-start">
           {!active && (
             <ActionButton onClick={handleConnect} disabled={busy} data-primary="true">
               <HiMiniRocketLaunch className="h-4 w-4" aria-hidden="true" />
