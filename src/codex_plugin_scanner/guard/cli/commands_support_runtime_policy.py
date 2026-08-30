@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
 
 
-from ..action_lattice import coerce_guard_action, most_restrictive_guard_action, normalize_guard_action
+from ..action_lattice import coerce_guard_action
 from ..models import GuardAction
 from ..proxy._env import _build_scrubbed_env
 from ..runtime.approval_context import (
@@ -36,6 +36,12 @@ from ..store import (
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
+from .commands_support_runtime_artifact_policy import (
+    _resolve_configured_risk_action,
+    _runtime_artifact_command_action_floor,
+    _runtime_artifact_guard_default_action,
+    _runtime_artifact_policy_action,
+)
 
 # Bump when runtime scanner or action-composition semantics change. Product and
 # approval-surface versions deliberately do not participate in this identity.
@@ -866,133 +872,6 @@ def _artifact_writes_launch_agent(artifact: GuardArtifact) -> bool:
     return any(token in lowered for token in ("launch agent", "login item", "launchctl", "cron", "systemd", "launchd"))
 
 
-def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> GuardAction:
-    if _prompt_requires_hard_block(artifact):
-        return "block"
-    canonical_harness = _canonical_harness_name(harness)
-    configured_override = config.resolve_action_override(
-        canonical_harness,
-        artifact.artifact_id,
-        artifact.publisher,
-    )
-    command_action_floor = _runtime_artifact_command_action_floor(artifact)
-    explicit_permission_allow = _runtime_artifact_has_explicit_permission_allow(artifact)
-    pytest_restricted_sandbox = (
-        artifact.metadata.get("action_class") == "pytest repository-code execution"
-        and artifact.metadata.get("reason_code") == "pytest_restricted_profile_required"
-        and isinstance(artifact.metadata.get("restricted_profile_version"), str)
-    )
-
-    def with_config_policy(action: GuardAction) -> GuardAction:
-        # Artifact/publisher/harness settings are more-specific resolutions of
-        # the global default, not additional inputs.  Scanner/risk results are
-        # independent and therefore remain a floor even for an exact allow.
-        current_config_action = (
-            configured_override
-            if configured_override is not None
-            else ("allow" if explicit_permission_allow else config.default_action)
-        )
-        effective_command_floor = (
-            None
-            if action == "sandbox-required" and pytest_restricted_sandbox
-            else command_action_floor
-        )
-        actions = (action, current_config_action, effective_command_floor)
-        return most_restrictive_guard_action(*(item for item in actions if item is not None))
-
-    risk_classes = _runtime_artifact_risk_classes(artifact)
-    has_configured_risk_action = any(
-        _resolve_configured_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes
-    )
-    if has_configured_risk_action:
-        risk_actions = [
-            _resolve_configured_risk_action(config, risk_class, harness=canonical_harness)
-            or resolve_risk_action(config, risk_class, harness=canonical_harness)
-            for risk_class in risk_classes
-        ]
-        resolved_actions = [
-            _apply_explicit_posture_action(config, artifact, risk_class, action)
-            for risk_class, action in zip(risk_classes, risk_actions, strict=True)
-            if coerce_guard_action(action) is not None
-        ]
-        if resolved_actions:
-            return with_config_policy(most_restrictive_guard_action(*resolved_actions))
-    if explicit_permission_allow:
-        return with_config_policy(command_action_floor or "allow")
-    guard_default_action = _runtime_artifact_guard_default_action(artifact)
-    if (
-        guard_default_action == "sandbox-required" and pytest_restricted_sandbox
-    ):
-        return with_config_policy(guard_default_action)
-    risk_actions = [resolve_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes]
-    resolved_actions = [
-        _apply_explicit_posture_action(config, artifact, risk_class, action)
-        for risk_class, action in zip(risk_classes, risk_actions, strict=True)
-        if coerce_guard_action(action) is not None
-    ]
-    if resolved_actions:
-        resolved = most_restrictive_guard_action(*resolved_actions)
-        resolved_with_default = (
-            most_restrictive_guard_action(resolved, guard_default_action)
-            if guard_default_action is not None
-            else resolved
-        )
-        return with_config_policy(resolved_with_default)
-    if guard_default_action is not None:
-        return with_config_policy(guard_default_action)
-    return with_config_policy(SAFE_CHANGED_HASH_ACTION)
-def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, harness: str) -> str | None:
-    if config.harness_risk_actions is not None:
-        harness_actions = config.harness_risk_actions.get(harness)
-        if harness_actions is not None and risk_class in harness_actions:
-            return harness_actions[risk_class]
-    if config.risk_actions is not None and risk_class in config.risk_actions:
-        return config.risk_actions[risk_class]
-    return None
-
-def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> GuardAction | None:
-    value = artifact.metadata.get("guard_default_action")
-    return normalize_guard_action(value, unknown_action="require-reapproval") if value is not None else None
-
-def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardAction | None:
-    if "command_action_floor" not in artifact.metadata:
-        return None
-    return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
-
-
-def _runtime_artifact_has_explicit_permission_allow(artifact: GuardArtifact) -> bool:
-    if _runtime_artifact_command_action_floor(artifact) != "allow":
-        return False
-    resolution = artifact.metadata.get("extension_control_resolution")
-    if not isinstance(resolution, Mapping) or resolution.get("blocked") is not False:
-        return False
-    permission_ids = resolution.get("explicitly_enabled_permission_ids")
-    if (
-        not isinstance(permission_ids, Sequence)
-        or isinstance(permission_ids, str)
-        or not permission_ids
-        or any(not isinstance(item, str) or not item.startswith("command.") for item in permission_ids)
-    ):
-        return False
-    decision = artifact.metadata.get("command_decision_plane")
-    if not isinstance(decision, Mapping) or decision.get("action") != "allow":
-        return False
-    routes = decision.get("proof_routes")
-    reasons = decision.get("controlling_reasons")
-    return (
-        isinstance(routes, Sequence)
-        and not isinstance(routes, str)
-        and "verified" in routes
-        and isinstance(reasons, Sequence)
-        and not isinstance(reasons, str)
-        and any(
-            isinstance(reason, Mapping)
-            and reason.get("source") == "control"
-            and reason.get("reason_code") == "control.explicitly-enabled-permission"
-            for reason in reasons
-        )
-    )
-
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,
     *,
@@ -1186,7 +1065,8 @@ __all__ = [
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
     "_localize_pending_approval_copy", "_native_approval_center_context", "_native_hook_reason",
     "_native_hook_reason_for_harness", "_resolve_configured_risk_action", "_runtime_action_data_flow_signals",
-    "_runtime_artifact_guard_default_action", "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
+    "_runtime_artifact_command_action_floor", "_runtime_artifact_guard_default_action",
+    "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
     "_runtime_data_flow_sink_type", "_runtime_data_flow_summary", "_runtime_detector_perf_payload",
     "_runtime_detector_registry_payload", "_runtime_stored_policy_action", "_strip_cloud_inbox_urls",
     "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail", "_terminal_action_message",
