@@ -118,11 +118,13 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
     )
     original_serve_forever = daemon._serve_forever
     original_request_stop = daemon._server.request_serve_stop
+    original_finish_service = daemon._finish_service_locked
     serve_thread_entered = threading.Event()
     stop_requested = threading.Event()
     release_serve_thread = threading.Event()
     start_errors: list[BaseException] = []
     stop_errors: list[BaseException] = []
+    finish_service_calls = 0
 
     def delayed_serve_forever() -> None:
         serve_thread_entered.set()
@@ -132,6 +134,11 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
     def recording_request_stop() -> None:
         stop_requested.set()
         original_request_stop()
+
+    def recording_finish_service() -> bool:
+        nonlocal finish_service_calls
+        finish_service_calls += 1
+        return original_finish_service()
 
     def start_daemon() -> None:
         try:
@@ -147,6 +154,7 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
 
     monkeypatch.setattr(daemon, "_serve_forever", delayed_serve_forever)
     monkeypatch.setattr(daemon._server, "request_serve_stop", recording_request_stop)
+    monkeypatch.setattr(daemon, "_finish_service_locked", recording_finish_service)
     starter = threading.Thread(target=start_daemon)
     stopper = threading.Thread(target=stop_daemon)
     try:
@@ -165,6 +173,7 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
         assert str(start_errors[0]) == "Guard daemon stopped during startup"
         assert daemon._thread is None
         assert daemon._owner_lock is None
+        assert finish_service_calls == 1
         assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_serve_thread.set()

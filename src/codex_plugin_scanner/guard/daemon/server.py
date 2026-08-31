@@ -7985,6 +7985,7 @@ class GuardDaemonServer:
             raise
         self._shutdown_started = threading.Event()
         self._finish_service_lock = threading.Lock()
+        self._finish_service_completed = False
         self._owner_lock: BinaryIO | None = None
         try:
             self._server = _GuardDaemonHttpServer(
@@ -8052,20 +8053,27 @@ class GuardDaemonServer:
             self._server.hook_process_runner.enable_full_capacity()
         except BaseException as error:
             self._diagnostics.record_exception("daemon_start_thread_failed")
-            serve_thread_contained = True
             serve_thread = self._thread
+            serve_thread_contained = True
             if serve_thread_started and serve_thread is not None:
                 self._server.request_serve_stop()
-                serve_thread.join(timeout=5)
-                serve_thread_contained = not serve_thread.is_alive()
             else:
                 try:
                     self._server.server_close()
                 except Exception:
                     serve_thread_contained = False
+            service_finished = self._finish_service()
+            if serve_thread_started:
+                serve_thread_contained = (
+                    self._join_service_thread(
+                        serve_thread,
+                        deadline=time.monotonic() + 5,
+                    )
+                    is None
+                )
             if serve_thread_contained and self._thread is serve_thread:
                 self._thread = None
-            if not self._finish_service() or not serve_thread_contained:
+            if not service_finished or not serve_thread_contained:
                 add_note = getattr(error, "add_note", None)
                 if callable(add_note):
                     add_note("Guard retained daemon ownership because startup containment was unconfirmed.")
@@ -8083,11 +8091,13 @@ class GuardDaemonServer:
         self._server.request_serve_stop()
         self._server.server_close()
         serve_thread = self._thread
-        if serve_thread is not None:
-            serve_thread.join(timeout=5)
-            if not serve_thread.is_alive() and self._thread is serve_thread:
-                self._thread = None
         _ = self._finish_service()
+        remaining_serve_thread = self._join_service_thread(
+            serve_thread,
+            deadline=time.monotonic() + 5,
+        )
+        if remaining_serve_thread is None and self._thread is serve_thread:
+            self._thread = None
 
     def _begin_service(self) -> None:
         self._record_lifecycle("start_requested")
@@ -8315,7 +8325,12 @@ class GuardDaemonServer:
                     finish_lock = threading.Lock()
                     self._finish_service_lock = finish_lock
         with finish_lock:
-            return self._finish_service_locked()
+            if self._finish_service_completed:
+                return True
+            contained = self._finish_service_locked()
+            if contained:
+                self._finish_service_completed = True
+            return contained
 
     def _finish_service_locked(self) -> bool:
         self._shutdown_started.set()
