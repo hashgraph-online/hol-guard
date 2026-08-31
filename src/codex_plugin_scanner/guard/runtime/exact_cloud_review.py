@@ -155,13 +155,6 @@ def _exact_action(value: object) -> str | None:
     return None
 
 
-def _request_expires_at(request: dict[str, object]) -> datetime | None:
-    """Pending local review requests do not expire. Signed receipts still do."""
-
-    del request
-    return None
-
-
 def _request_is_current(request: dict[str, object], *, now: datetime) -> bool:
     del now
     return str(request.get("status") or "pending") == "pending"

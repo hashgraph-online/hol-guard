@@ -30,7 +30,7 @@ def test_watch_mode_never_denies_review_or_block() -> None:
         assert payload == {"decision": "allow"}, action
 
 
-def test_watch_posture_allows_pretool_even_when_mode_is_enforce(tmp_path: Path) -> None:
+def test_observe_watch_config_allows_pretool_block(tmp_path: Path) -> None:
     guard_home = tmp_path / ".hol-guard"
     store = GuardStore(guard_home)
     config = GuardConfig(

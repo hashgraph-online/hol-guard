@@ -205,11 +205,9 @@ class StoreExactCloudReviewMixin:
         expected_oauth_binding: dict[str, object],
         expected_request: dict[str, object],
         receipt_expires_at: str,
-        request_expires_at: str,
     ) -> dict[str, object]:
         """Claim and apply an exact receipt after rechecking all mutable state."""
 
-        _ = request_expires_at
         local_integrity_key: bytes | None = None
         local_integrity_key_id: str | None = None
         if resolution_action == "allow":
