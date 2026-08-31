@@ -4571,9 +4571,7 @@ def _refresh_guard_oauth_access_token(
                 break
             time.sleep(_OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS)
     if last_error is None:  # pragma: no cover - unreachable when MAX_ATTEMPTS >= 1
-        raise GuardSyncAuthorizationExpiredError(
-            _guard_oauth_reconnect_after_revoked_message()
-        )
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
     raise last_error
 
 
