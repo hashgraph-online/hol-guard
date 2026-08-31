@@ -250,8 +250,8 @@ def main() -> int:
                 iterations=2,
             )
             close_resident_native_runtimes()
+            first_native_started = time.perf_counter()
             with native_policy_snapshot(guard_home) as snapshot:
-                first_native_started = time.perf_counter()
                 first_native = review_post_tool_native(
                     _native_request(workspace=workspace, guard_home=guard_home),
                     observe_mode=False,

@@ -162,6 +162,7 @@ def _copy_pretool_graph_sources(root: Path) -> None:
         "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+        "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py",
     ):
         destination = root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)

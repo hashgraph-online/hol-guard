@@ -2,7 +2,9 @@ use super::policy_store_migration::load_legacy_authority;
 use super::policy_store_persistence::{read_generation_floor, read_private_json};
 use super::*;
 use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac, SnapshotError};
-use std::fs::{self, OpenOptions};
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 

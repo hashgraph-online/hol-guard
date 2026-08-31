@@ -162,6 +162,25 @@ fn covers_prompt_harness_unknown_conflicts_and_bounds() {
 }
 
 #[test]
+fn tool_classification_uses_token_boundaries() {
+    let skill = generic(json!({"toolName": "Skill"}));
+    assert_eq!(skill.action.action_type, PreToolActionTypeV1::Unknown);
+    assert_ne!(skill.minimum_action, "block");
+
+    let formatter = generic(json!({"toolName": "formatter"}));
+    assert_eq!(formatter.action.action_type, PreToolActionTypeV1::Unknown);
+
+    let prototype_edit = generic(json!({"toolName": "prototype_edit"}));
+    assert_eq!(
+        prototype_edit.action.action_type,
+        PreToolActionTypeV1::FileWrite
+    );
+
+    let get_target = generic(json!({"toolName": "get_target"}));
+    assert_eq!(get_target.action.action_type, PreToolActionTypeV1::Unknown);
+}
+
+#[test]
 fn bounds_reject_oversized_payload() {
     let oversized = generic(json!({"prompt": "x".repeat(MAX_COMMAND_BYTES + 1)}));
     assert_eq!(oversized.minimum_action, "block");

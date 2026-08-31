@@ -558,7 +558,7 @@ def review_post_tool_native(
     request: HookReviewRequest,
     *,
     observe_mode: bool,
-    policy_snapshot: Mapping[str, object],
+    policy_snapshot: Mapping[str, object] | None,
 ) -> HookReviewResponse | None:
     """Review PostToolUse through the native Rust client and resident.
 

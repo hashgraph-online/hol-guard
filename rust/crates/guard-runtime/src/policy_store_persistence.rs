@@ -325,7 +325,7 @@ pub(super) fn replace_temporary(temporary: &Path, path: &Path, kind: &str) -> Re
         fs::rename(path, &backup)
             .map_err(|_| format!("native_policy_snapshot_{kind}_replace_failed"))?;
     }
-    if let Err(_) = fs::rename(temporary, path) {
+    if fs::rename(temporary, path).is_err() {
         let _ = fs::rename(&backup, path);
         return Err(format!("native_policy_snapshot_{kind}_replace_failed"));
     }

@@ -321,6 +321,24 @@ fn unknown_post_action_is_review_even_when_default_allows() {
 }
 
 #[test]
+fn unreadable_tool_remains_unknown_under_allow_policy() {
+    let request = post_request(json!({
+        "tool_name": "unreadable_tool",
+        "tool_response": "ok"
+    }));
+    let result = apply_post_tool_policy(
+        &snapshot(policy("allow")),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "deny");
+    assert_eq!(result.policy_action.as_deref(), Some("review"));
+    assert_eq!(result.reason_code, "native_policy_review_required");
+}
+
+#[test]
 fn conflicting_request_selectors_fail_closed() {
     let request = post_request(json!({
         "tool_name": "read_file",

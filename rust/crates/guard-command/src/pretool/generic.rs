@@ -19,9 +19,28 @@ fn compact(value: &str) -> String {
         .collect()
 }
 
+fn tool_tokens(value: &str) -> Vec<String> {
+    value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .map(|token| token.to_ascii_lowercase())
+        .collect()
+}
+
 fn tool_matches(tool: &str, terms: &[&str]) -> bool {
     let normalized = compact(tool);
-    terms.iter().any(|term| normalized.contains(&compact(term)))
+    let tokens = tool_tokens(tool);
+    terms.iter().any(|term| {
+        let normalized_term = compact(term);
+        if normalized == normalized_term {
+            return true;
+        }
+        let term_tokens = tool_tokens(term);
+        !term_tokens.is_empty()
+            && tokens
+                .windows(term_tokens.len())
+                .any(|window| window == term_tokens.as_slice())
+    })
 }
 
 fn is_mcp_tool(tool: &str) -> bool {

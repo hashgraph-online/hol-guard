@@ -251,8 +251,8 @@ def main() -> int:
         try:
             _python_review(python_runner, workspace=workspace, guard_home=guard_home)
             close_resident_native_runtimes()
+            readiness_started = time.perf_counter()
             with native_policy_snapshot(guard_home) as snapshot:
-                readiness_started = time.perf_counter()
                 readiness_response = review_post_tool_native(
                     _request(workspace=workspace, guard_home=guard_home, request_id="native-readiness"),
                     observe_mode=False,

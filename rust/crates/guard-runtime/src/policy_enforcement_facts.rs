@@ -363,13 +363,29 @@ pub(super) fn tool_matches(tool: &str, terms: &[&str]) -> bool {
         .filter(|character| character.is_ascii_alphanumeric())
         .flat_map(char::to_lowercase)
         .collect();
+    let tokens: Vec<String> = tool
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .map(|token| token.to_ascii_lowercase())
+        .collect();
     terms.iter().any(|term| {
-        let term: String = term
+        let normalized_term: String = term
             .chars()
             .filter(|character| character.is_ascii_alphanumeric())
             .flat_map(char::to_lowercase)
             .collect();
-        normalized.contains(&term)
+        if normalized == normalized_term {
+            return true;
+        }
+        let term_tokens: Vec<String> = term
+            .split(|character: char| !character.is_ascii_alphanumeric())
+            .filter(|token| !token.is_empty())
+            .map(|token| token.to_ascii_lowercase())
+            .collect();
+        !term_tokens.is_empty()
+            && tokens
+                .windows(term_tokens.len())
+                .any(|window| window == term_tokens.as_slice())
     })
 }
 

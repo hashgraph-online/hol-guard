@@ -95,6 +95,8 @@ fn test_root(label: &str) -> PathBuf {
     fs::create_dir(&root).unwrap();
     #[cfg(unix)]
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&root, true).unwrap();
     root
 }
 
@@ -104,7 +106,15 @@ fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTES] {
     fs::write(&path, key).unwrap();
     #[cfg(unix)]
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&path, false).unwrap();
     key
+}
+
+fn protect_test_file(path: &Path) {
+    let _ = path;
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(path, false).unwrap();
 }
 
 fn legacy_floor_value(generation: u64, policy_digest: &str, key: &[u8]) -> Value {
@@ -119,22 +129,8 @@ fn legacy_floor_value(generation: u64, policy_digest: &str, key: &[u8]) -> Value
 
 #[test]
 fn missing_snapshot_is_not_ready_but_push_can_install_it() {
-    let root = std::env::temp_dir().join(format!(
-        "hol-guard-policy-store-{}-{}",
-        std::process::id(),
-        now_ms().unwrap()
-    ));
-    fs::create_dir(&root).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let key = [7u8; 32];
-    fs::write(root.join(VERIFIER_KEY_FILE_NAME), key).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(
-        root.join(VERIFIER_KEY_FILE_NAME),
-        std::fs::Permissions::from_mode(0o600),
-    )
-    .unwrap();
+    let root = test_root("missing-snapshot");
+    let key = install_test_key(&root, 7);
     let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
     let snapshot = signed_snapshot(1, &key, &root);
     let request = serde_json::json!({
@@ -153,22 +149,8 @@ fn missing_snapshot_is_not_ready_but_push_can_install_it() {
 
 #[test]
 fn generation_rollback_and_same_generation_mutation_are_rejected() {
-    let root = std::env::temp_dir().join(format!(
-        "hol-guard-policy-store-rollback-{}-{}",
-        std::process::id(),
-        now_ms().unwrap()
-    ));
-    fs::create_dir(&root).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let key = [8u8; 32];
-    fs::write(root.join(VERIFIER_KEY_FILE_NAME), key).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(
-        root.join(VERIFIER_KEY_FILE_NAME),
-        std::fs::Permissions::from_mode(0o600),
-    )
-    .unwrap();
+    let root = test_root("rollback");
+    let key = install_test_key(&root, 8);
     let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
     let first = signed_snapshot(3, &key, &root);
     let first_request = serde_json::json!({
@@ -200,19 +182,8 @@ fn generation_rollback_and_same_generation_mutation_are_rejected() {
 
 #[test]
 fn restart_rehydrates_snapshot_and_hook_validation_uses_memory() {
-    let root = std::env::temp_dir().join(format!(
-        "hol-guard-policy-store-restart-{}-{}",
-        std::process::id(),
-        now_ms().unwrap()
-    ));
-    fs::create_dir(&root).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let key = [9u8; 32];
-    let key_path = root.join(VERIFIER_KEY_FILE_NAME);
-    fs::write(&key_path, key).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let root = test_root("restart");
+    let key = install_test_key(&root, 9);
     let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
     let snapshot = signed_snapshot(4, &key, &root);
     let request = serde_json::json!({
@@ -235,19 +206,8 @@ fn restart_rehydrates_snapshot_and_hook_validation_uses_memory() {
 
 #[test]
 fn restarted_resident_applies_installed_policy_without_request_time_io() {
-    let root = std::env::temp_dir().join(format!(
-        "hol-guard-policy-store-evaluate-{}-{}",
-        std::process::id(),
-        now_ms().unwrap()
-    ));
-    fs::create_dir(&root).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let key = [11u8; 32];
-    let key_path = root.join(VERIFIER_KEY_FILE_NAME);
-    fs::write(&key_path, key).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let root = test_root("evaluate");
+    let key = install_test_key(&root, 11);
     let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
     let snapshot = signed_snapshot_with_policy(1, &key, &root, policy_with_default("block"));
     let snapshot_value = serde_json::to_value(&snapshot).unwrap();
@@ -287,19 +247,8 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
 
 #[test]
 fn authenticated_edge_preserves_clean_default_warning() {
-    let root = std::env::temp_dir().join(format!(
-        "hol-guard-policy-store-warning-edge-{}-{}",
-        std::process::id(),
-        now_ms().unwrap()
-    ));
-    fs::create_dir(&root).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let key = [12u8; 32];
-    let key_path = root.join(VERIFIER_KEY_FILE_NAME);
-    fs::write(&key_path, key).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let root = test_root("warning-edge");
+    let key = install_test_key(&root, 12);
     let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
     let snapshot = signed_snapshot(1, &key, &root);
     store
@@ -379,19 +328,8 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
 
 #[test]
 fn push_rejects_unknown_fields_without_mutating_state() {
-    let root = std::env::temp_dir().join(format!(
-        "hol-guard-policy-store-unknown-{}-{}",
-        std::process::id(),
-        now_ms().unwrap()
-    ));
-    fs::create_dir(&root).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let key = [10u8; 32];
-    let key_path = root.join(VERIFIER_KEY_FILE_NAME);
-    fs::write(&key_path, key).unwrap();
-    #[cfg(unix)]
-    std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let root = test_root("unknown");
+    let key = install_test_key(&root, 10);
     let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
     let snapshot = signed_snapshot(1, &key, &root);
     let request = serde_json::json!({
@@ -419,6 +357,7 @@ fn legacy_snapshot_and_floor_migrate_to_one_authority_record() {
         canonical_json_bytes(&snapshot_value).unwrap(),
     )
     .unwrap();
+    protect_test_file(&root.join(SNAPSHOT_FILE_NAME));
     #[cfg(unix)]
     fs::set_permissions(
         root.join(SNAPSHOT_FILE_NAME),
@@ -431,6 +370,7 @@ fn legacy_snapshot_and_floor_migrate_to_one_authority_record() {
         canonical_json_bytes(&floor_value).unwrap(),
     )
     .unwrap();
+    protect_test_file(&root.join(GENERATION_FLOOR_FILE_NAME));
     #[cfg(unix)]
     fs::set_permissions(
         root.join(GENERATION_FLOOR_FILE_NAME),
@@ -465,6 +405,7 @@ fn floor_only_migration_preserves_generation_and_allows_only_newer_push() {
         canonical_json_bytes(&floor_value).unwrap(),
     )
     .unwrap();
+    protect_test_file(&root.join(GENERATION_FLOOR_FILE_NAME));
     #[cfg(unix)]
     fs::set_permissions(
         root.join(GENERATION_FLOOR_FILE_NAME),
