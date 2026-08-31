@@ -14,7 +14,18 @@ from codex_plugin_scanner.guard.runtime.network_legacy_config import (
     migrate_new_network_domain_action,
 )
 from codex_plugin_scanner.guard.runtime.network_policy_contract import EnforcementGrade
+from codex_plugin_scanner.guard.runtime.network_status_validation import (
+    NetworkStatusSchemaError,
+    validate_network_status,
+)
 from codex_plugin_scanner.guard.runtime.network_supervisor import NetworkSupervisorHealth
+
+__all__ = [
+    "NetworkStatusSchemaError",
+    "build_network_status",
+    "project_network_supervisor_health",
+    "validate_network_status",
+]
 
 
 def _host_platform_family(platform_name: str | None = None) -> PlatformFamily | None:
@@ -67,7 +78,7 @@ def build_network_status(
         )
         active = selected_health is not None and selected_health.permits_enforcement
         effective_grade = (
-            selected_health.effective_grade if selected_health is not None else EnforcementGrade.UNAVAILABLE
+            selected_health.effective_grade if selected_health is not None and active else EnforcementGrade.UNAVAILABLE
         )
         if active:
             active_grade = effective_grade
