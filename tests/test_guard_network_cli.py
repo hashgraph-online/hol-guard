@@ -374,7 +374,7 @@ def test_one_supervisor_cannot_prove_multiple_active_backends() -> None:
         validate_network_status(status)
 
 
-def test_network_status_client_uses_bounded_one_second_deadline(
+def test_network_status_client_uses_fast_status_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
@@ -388,7 +388,7 @@ def test_network_status_client_uses_bounded_one_second_deadline(
 
     client.network_status()
 
-    assert observed == {"path": "/v1/network/status", "timeout": 1.0}
+    assert observed == {"path": "/v1/network/status", "timeout": 0.25}
 
 
 def test_network_status_client_types_timeout_without_leaking_transport_detail(
@@ -397,7 +397,7 @@ def test_network_status_client_types_timeout_without_leaking_transport_detail(
     client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
 
     def timeout(_request: urllib.request.Request, *, timeout: float) -> None:
-        assert timeout == 1.0
+        assert timeout == 0.25
         raise TimeoutError("private operating system detail")
 
     monkeypatch.setattr(urllib.request, "urlopen", timeout)

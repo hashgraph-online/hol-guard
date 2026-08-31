@@ -49,7 +49,7 @@ class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
 
 
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
-_STATUS_REQUEST_TIMEOUT_S: float = 1.0
+_STATUS_REQUEST_TIMEOUT_S: float = 0.25
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
