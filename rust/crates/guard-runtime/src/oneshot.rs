@@ -6,9 +6,15 @@ use guard_contracts::{NativeHookRequestV1, NATIVE_PROTOCOL_VERSION};
 use guard_hook_core::review_post_tool;
 use guard_policy_snapshot::{validate as validate_policy_snapshot, PolicySnapshotV1};
 use serde_json::Value;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
-static MIN_POLICY_GENERATION: AtomicU64 = AtomicU64::new(0);
+#[derive(Clone)]
+struct AcceptedPolicySnapshot {
+    generation: u64,
+    policy_digest: String,
+}
+
+static ACCEPTED_POLICY_SNAPSHOT: Mutex<Option<AcceptedPolicySnapshot>> = Mutex::new(None);
 
 pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), String> {
     let Some(snapshot_value) = value.get("policy_snapshot") else {
@@ -19,33 +25,27 @@ pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), Stri
     }
     let snapshot: PolicySnapshotV1 = serde_json::from_value(snapshot_value.clone())
         .map_err(|_| "native_policy_snapshot_invalid".to_owned())?;
-    let minimum = MIN_POLICY_GENERATION.load(Ordering::Acquire);
+    let mut accepted = ACCEPTED_POLICY_SNAPSHOT
+        .lock()
+        .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
+    let minimum = accepted.as_ref().map_or(1, |current| current.generation);
     validate_policy_snapshot(&snapshot, minimum).map_err(|error| error.to_string())?;
     if snapshot.rule_digest != guard_rule_contract::rule_digest() {
         return Err("native_policy_snapshot_rule_mismatch".to_owned());
     }
-    ratchet_min_policy_generation(snapshot.generation)
-}
-
-fn ratchet_min_policy_generation(generation: u64) -> Result<(), String> {
-    let mut current = MIN_POLICY_GENERATION.load(Ordering::Acquire);
-    loop {
-        if generation < current {
-            return Err("native_policy_snapshot_stale".to_owned());
-        }
-        if generation == current {
+    if let Some(current) = accepted.as_ref() {
+        if snapshot.generation == current.generation {
+            if snapshot.policy_digest != current.policy_digest {
+                return Err("native_policy_snapshot_generation_reused".to_owned());
+            }
             return Ok(());
         }
-        match MIN_POLICY_GENERATION.compare_exchange_weak(
-            current,
-            generation,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        ) {
-            Ok(_) => return Ok(()),
-            Err(actual) => current = actual,
-        }
     }
+    *accepted = Some(AcceptedPolicySnapshot {
+        generation: snapshot.generation,
+        policy_digest: snapshot.policy_digest,
+    });
+    Ok(())
 }
 
 fn mapping_string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -167,8 +167,18 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    fn reset_generation() {
+        *ACCEPTED_POLICY_SNAPSHOT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    }
+
     fn snapshot_value(generation: u64) -> Value {
-        let digest = "a".repeat(64);
+        snapshot_value_with_digest(generation, "a")
+    }
+
+    fn snapshot_value_with_digest(generation: u64, digest_character: &str) -> Value {
+        let digest = digest_character.repeat(64);
         json!({
             "policy_snapshot": {
                 "schema": "hol-guard-native-policy.v1",
@@ -184,36 +194,47 @@ mod tests {
     #[test]
     fn rejects_stale_generation_after_newer_snapshot() {
         let _guard = lock_generation();
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_generation();
         assert!(validate_request_policy_snapshot(&snapshot_value(10)).is_ok());
         let error = validate_request_policy_snapshot(&snapshot_value(5)).unwrap_err();
         assert_eq!(error, "snapshot_generation_downgrade");
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_generation();
     }
 
     #[test]
-    fn ratchet_rejects_stale_generation_when_floor_already_moved() {
+    fn rejects_generation_reuse_for_a_different_policy() {
         let _guard = lock_generation();
-        MIN_POLICY_GENERATION.store(10, Ordering::SeqCst);
-        let error = ratchet_min_policy_generation(5).unwrap_err();
-        assert_eq!(error, "native_policy_snapshot_stale");
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_generation();
+        assert!(validate_request_policy_snapshot(&snapshot_value_with_digest(10, "a")).is_ok());
+        let error =
+            validate_request_policy_snapshot(&snapshot_value_with_digest(10, "b")).unwrap_err();
+        assert_eq!(error, "native_policy_snapshot_generation_reused");
+        reset_generation();
     }
 
     #[test]
     fn concurrent_stale_snapshot_cannot_succeed_after_newer_floor() {
         let _guard = lock_generation();
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_generation();
         let start = Arc::new(Barrier::new(2));
         let high_start = start.clone();
         let high = thread::spawn(move || {
             high_start.wait();
-            ratchet_min_policy_generation(20)
+            validate_request_policy_snapshot(&snapshot_value(20))
         });
         start.wait();
         assert!(high.join().expect("high generation thread").is_ok());
-        let low = ratchet_min_policy_generation(5);
-        assert_eq!(low.unwrap_err(), "native_policy_snapshot_stale");
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        let low = validate_request_policy_snapshot(&snapshot_value(5));
+        assert_eq!(low.unwrap_err(), "snapshot_generation_downgrade");
+        reset_generation();
+    }
+
+    #[test]
+    fn rejects_zero_generation_before_establishing_a_floor() {
+        let _guard = lock_generation();
+        reset_generation();
+        let error = validate_request_policy_snapshot(&snapshot_value(0)).unwrap_err();
+        assert_eq!(error, "snapshot_generation_downgrade");
+        reset_generation();
     }
 }
