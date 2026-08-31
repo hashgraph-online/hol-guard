@@ -578,7 +578,7 @@
     "src/codex_plugin_scanner/guard/runtime/package_intent_common.py": 599,
     "src/codex_plugin_scanner/guard/runtime/package_intent_parser.py": 1783,
     "src/codex_plugin_scanner/guard/runtime/package_manifest_diff.py": 641,
-    "src/codex_plugin_scanner/guard/runtime/runner.py": 6472,
+    "src/codex_plugin_scanner/guard/runtime/runner.py": 6512,
     "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/benign_requests.py": 584,
     "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py": 590,
     "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py": 594,

@@ -4430,7 +4430,7 @@ def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str
         raise GuardSyncEndpointUntrustedError(f"{_guard_sync_reconnect_message()} {error}") from error
 
 
-def _refresh_guard_oauth_access_token(
+def _refresh_guard_oauth_access_token_once(
     *,
     token_endpoint: str,
     client_id: str,
@@ -4534,7 +4534,45 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
 
 
 _OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
+_OAUTH_INVALID_GRANT_MAX_ATTEMPTS = 2
+_OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS = 0.75
 _oauth_binding_metadata_from_access_token = oauth_binding_from_credentials
+
+
+def _refresh_guard_oauth_access_token(
+    *,
+    token_endpoint: str,
+    client_id: str,
+    refresh_token: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+) -> dict[str, object]:
+    """Refresh with bounded invalid_grant tolerance.
+
+    A single invalid_grant can be an edge 4xx or a rotation race resolved
+    server-side without grant revocation; failing once must not declare the
+    local sign-in invalid (which used to trigger credential wipes and stop
+    sync). Retry exactly once after a short delay; a second invalid_grant is
+    treated as genuine revocation and propagates.
+    """
+    last_error: GuardSyncAuthorizationExpiredError | None = None
+    for attempt in range(_OAUTH_INVALID_GRANT_MAX_ATTEMPTS):
+        try:
+            return _refresh_guard_oauth_access_token_once(
+                token_endpoint=token_endpoint,
+                client_id=client_id,
+                refresh_token=refresh_token,
+                dpop_key_material=dpop_key_material,
+            )
+        except GuardSyncAuthorizationExpiredError as error:
+            if str(error) != _guard_oauth_reconnect_after_revoked_message():
+                raise
+            last_error = error
+            if attempt + 1 >= _OAUTH_INVALID_GRANT_MAX_ATTEMPTS:
+                break
+            time.sleep(_OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS)
+    if last_error is None:  # pragma: no cover - unreachable when MAX_ATTEMPTS >= 1
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
+    raise last_error
 
 
 def _persist_recovered_oauth_binding(store: GuardStore, credentials: dict[str, object]) -> bool:
