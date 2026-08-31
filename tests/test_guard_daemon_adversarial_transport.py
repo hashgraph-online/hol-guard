@@ -442,8 +442,10 @@ def test_partial_start_failure_rolls_back_workers_state_and_owner_lock(
         daemon.start()
         assert daemon._thread is not None
         assert daemon._thread.is_alive()
+        assert daemon._finish_service_completed is False
     finally:
         daemon.stop()
+    assert daemon._server.hook_process_runner.stats()["workers"] == 0
 
 
 def test_partial_start_retains_owner_until_worker_containment(

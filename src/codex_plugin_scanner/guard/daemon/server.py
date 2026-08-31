@@ -8100,6 +8100,8 @@ class GuardDaemonServer:
             self._thread = None
 
     def _begin_service(self) -> None:
+        with self._finish_service_lock:
+            self._finish_service_completed = False
         self._record_lifecycle("start_requested")
         if self._is_quarantined():
             if self._aibom_refresh_thread is not None and self._aibom_refresh_thread.is_alive():
