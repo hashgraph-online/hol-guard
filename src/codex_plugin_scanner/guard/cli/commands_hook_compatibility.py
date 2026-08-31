@@ -12,7 +12,6 @@ from ..cli.commands_support_command_activity import (
     record_command_activity_failure_best_effort,
     record_post_hook_command_activity_best_effort,
 )
-from ..runtime.command_activity_cursor import cursor_command_activity_observer_trusted
 from ..store import GuardStore
 from .commands_support_hook_payload import _normalize_hook_payload
 from .commands_support_hook_state import _cursor_conversation_id, _cursor_shell_command_from_payload
@@ -67,10 +66,12 @@ def maybe_handle_cursor_post_tool(
     conversation_id = _cursor_conversation_id(payload)
     cursor_command = _cursor_shell_command_from_payload(payload)
     try:
+        from ..runtime import command_activity_cursor
+
         observer_trusted = bool(
             conversation_id is not None
             and cursor_command is not None
-            and cursor_command_activity_observer_trusted(
+            and command_activity_cursor.cursor_command_activity_observer_trusted(
                 guard_home=context.guard_home,
                 payload=payload,
                 conversation_id=conversation_id,
