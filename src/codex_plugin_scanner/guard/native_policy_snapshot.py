@@ -48,8 +48,16 @@ def _acquire_generation_lock(descriptor: int, *, deadline_monotonic: float | Non
     if os.name != "nt":
         import fcntl
 
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        return
+        deadline = deadline_monotonic if deadline_monotonic is not None else time.monotonic() + 1.0
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except BlockingIOError as error:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise NativePolicySnapshotError("native_policy_generation_lock_timeout") from error
+                time.sleep(min(0.01, remaining))
 
     import msvcrt
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -80,6 +81,26 @@ def test_unchanged_policy_does_not_repeat_durable_writes(tmp_path: Path, monkeyp
 
     assert _snapshot(tmp_path, digest="a" * 64) == first
     assert fsync_calls == 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX flock contract")
+def test_posix_generation_lock_honors_hook_deadline(tmp_path: Path) -> None:
+    import fcntl
+
+    lock_path = tmp_path / "native-policy-generation.lock"
+    lock_path.touch(mode=0o600)
+    lock_path.chmod(0o600)
+    with lock_path.open("w+b") as holder:
+        holder.write(b"0")
+        holder.flush()
+        fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_lock_timeout"):
+            native_policy_snapshot(
+                guard_home=tmp_path,
+                rule_digest="a" * 64,
+                observe_mode=False,
+                deadline_monotonic=time.monotonic() + 0.02,
+            )
 
 
 def test_group_writable_guard_home_is_rejected(tmp_path: Path) -> None:
