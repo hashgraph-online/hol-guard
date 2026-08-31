@@ -105,7 +105,7 @@ def _windows_private_descriptor(directory: bool) -> Iterator[tuple[Any, Any, Any
     kernel32 = _windows_dll("kernel32")
     owner_sid = _windows_owner_sid()
     inheritance = "OICI" if directory else ""
-    sddl = f"D:P(A;{inheritance};FA;;;{owner_sid})(A;{inheritance};FA;;;{_WINDOWS_SYSTEM_SID})"
+    sddl = f"O:{owner_sid}D:P(A;{inheritance};FA;;;{owner_sid})(A;{inheritance};FA;;;{_WINDOWS_SYSTEM_SID})"
     descriptor = ctypes.c_void_p()
     descriptor_size = wintypes.DWORD()
     convert = advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW
