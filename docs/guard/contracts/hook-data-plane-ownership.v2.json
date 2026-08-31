@@ -191,10 +191,11 @@
       "id": "native_edge_launcher",
       "class": "python_transport",
       "paths": [
-        "src/codex_plugin_scanner/guard/native_hook_edge.py"
+        "src/codex_plugin_scanner/guard/native_hook_edge.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py"
       ],
-      "current": "mechanical bounded guard-hook-envelope.v2 serialization, package-bound native invocation, and typed result decoding",
-      "target": "minimal launcher and mechanical serialization only"
+      "current": "mechanical bounded guard-hook-envelope.v2 serialization, package-bound native invocation, typed result decoding, and harness response projection",
+      "target": "minimal launcher, serialization, and response projection only"
     },
     {
       "id": "python_reference_oracle",
