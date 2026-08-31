@@ -17,7 +17,7 @@ STORAGE_CLEARER_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.storage-clearer.cleanup",
     ),
     (
-        "./storage-clearer.sh run A",
+        "bash ./storage-clearer.sh run B",
         "Storage Clearer cleanup command",
         "command.storage-clearer.cleanup",
     ),
@@ -27,7 +27,7 @@ STORAGE_CLEARER_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.storage-clearer.cleanup",
     ),
     (
-        "storage-clearer.sh app-run A",
+        "sh storage-clearer.sh app-run A",
         "Storage Clearer cleanup command",
         "command.storage-clearer.cleanup",
     ),
