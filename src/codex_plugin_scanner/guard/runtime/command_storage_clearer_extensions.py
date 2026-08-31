@@ -11,6 +11,42 @@ from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
 from .command_rules import AnyMatcher, CommandSafetyRule
 
+_SHELL_INLINE_OR_STDIN_OPTIONS = frozenset({"-c", "--command", "-s"})
+_SHELL_OPTIONS_WITH_VALUES = frozenset({"+O", "+o", "-O", "-o", "--init-file", "--rcfile"})
+
+
+def _shell_script_arguments(arguments: tuple[str, ...]) -> tuple[str, ...]:
+    """Return a shell script path and arguments after leading interpreter options."""
+
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--":
+            return arguments[index + 1 :]
+        option = argument.split("=", 1)[0]
+        value_option = next(
+            (
+                candidate
+                for candidate in _SHELL_OPTIONS_WITH_VALUES
+                if argument == candidate
+                or argument.startswith(f"{candidate}=")
+                or (len(candidate) == 2 and argument.startswith(candidate) and len(argument) > 2)
+            ),
+            None,
+        )
+        if value_option is not None:
+            has_attached_value = argument != value_option
+            index += 1 if has_attached_value else 2
+            continue
+        short_flags = argument[1:] if argument.startswith("-") and not argument.startswith("--") else ""
+        if option in _SHELL_INLINE_OR_STDIN_OPTIONS or "c" in short_flags or "s" in short_flags:
+            return ()
+        if argument.startswith(("-", "+")):
+            index += 1
+            continue
+        return arguments[index:]
+    return ()
+
 
 @final
 @dataclass(frozen=True, slots=True)
@@ -27,12 +63,11 @@ class _ShellScriptInvocationMatcher:
             executable = segment.executable
             if executable is None or executable.replace("\\", "/").rsplit("/", 1)[-1].lower() not in self.interpreters:
                 continue
-            arguments = segment.arguments
-            script_index = 1 if arguments[:1] == ("--",) else 0
-            if len(arguments) <= script_index + 1:
+            script_arguments = _shell_script_arguments(segment.arguments)
+            if len(script_arguments) < 2:
                 continue
-            script_name = arguments[script_index].replace("\\", "/").rsplit("/", 1)[-1].lower()
-            subcommand = arguments[script_index + 1].lower()
+            script_name = script_arguments[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+            subcommand = script_arguments[1].lower()
             if script_name != self.script_name or subcommand not in self.subcommands:
                 continue
             evidence.append(

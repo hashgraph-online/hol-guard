@@ -22,6 +22,16 @@ STORAGE_CLEARER_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.storage-clearer.cleanup",
     ),
     (
+        "bash -x ./storage-clearer.sh run B",
+        "Storage Clearer cleanup command",
+        "command.storage-clearer.cleanup",
+    ),
+    (
+        "bash --login ./storage-clearer.sh run B",
+        "Storage Clearer cleanup command",
+        "command.storage-clearer.cleanup",
+    ),
+    (
         "storage-clearer.sh run B",
         "Storage Clearer cleanup command",
         "command.storage-clearer.cleanup",
