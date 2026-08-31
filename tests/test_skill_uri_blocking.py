@@ -3,6 +3,10 @@
 from codex_plugin_scanner.guard.runtime.false_positive_rules import (
     target_is_known_skill_doc_path,
 )
+from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    is_explicitly_benign_native_file_read_request,
+)
+from codex_plugin_scanner.guard.runtime.source_paths import source_path_is_allowed
 
 
 def test_skill_uri_existing(tmp_path):
@@ -55,7 +59,7 @@ def test_resolved_claude_skill_path(tmp_path):
 
 
 def test_resolved_skill_md_path(tmp_path):
-    """Filesystem path through a symlinked skill dir is also blocked."""
+    """The exact skill document may use a harness-managed directory link."""
     home = tmp_path / "home"
     skills_root = home / ".claude" / "skills"
     skills_root.mkdir(parents=True)
@@ -64,7 +68,97 @@ def test_resolved_skill_md_path(tmp_path):
     (real_skill / "SKILL.md").write_text("---\nname: guard-dev-testing\n---\n")
     (skills_root / "guard-dev-testing").symlink_to(real_skill, target_is_directory=True)
 
-    assert target_is_known_skill_doc_path("~/.claude/skills/guard-dev-testing/SKILL.md", home_dir=home) is False
+    assert target_is_known_skill_doc_path("~/.claude/skills/guard-dev-testing/SKILL.md", home_dir=home) is True
+
+
+def test_native_read_allows_one_existing_workspace_source(tmp_path):
+    workspace = tmp_path / "workspace"
+    source = workspace / "src" / "service.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("value = 1\n")
+
+    assert is_explicitly_benign_native_file_read_request(
+        "Read",
+        {"file_path": str(source)},
+        cwd=workspace,
+        home_dir=tmp_path,
+    )
+
+
+def test_native_read_allows_exact_symlinked_skill_document(tmp_path):
+    home = tmp_path / "home"
+    skills_root = home / ".claude" / "skills"
+    skills_root.mkdir(parents=True)
+    real_skill = tmp_path / "guard-dev-testing"
+    real_skill.mkdir()
+    skill_doc = real_skill / "SKILL.md"
+    skill_doc.write_text("# Test skill\n")
+    linked_skill = skills_root / "guard-dev-testing"
+    linked_skill.symlink_to(real_skill, target_is_directory=True)
+
+    assert is_explicitly_benign_native_file_read_request(
+        "Read",
+        {"file_path": str(linked_skill / "SKILL.md")},
+        cwd=tmp_path / "workspace",
+        home_dir=home,
+    )
+
+
+def test_native_read_rejects_ambiguous_missing_and_sensitive_targets(tmp_path):
+    workspace = tmp_path / "workspace"
+    source = workspace / "src" / "service.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("value = 1\n")
+    sensitive = workspace / ".env"
+    sensitive.write_text("SECRET=value\n")
+
+    assert not is_explicitly_benign_native_file_read_request(
+        "Read",
+        {"paths": [str(source), str(sensitive)]},
+        cwd=workspace,
+        home_dir=tmp_path,
+    )
+    assert not is_explicitly_benign_native_file_read_request(
+        "Read",
+        {"file_path": str(workspace / "src" / "missing.py")},
+        cwd=workspace,
+        home_dir=tmp_path,
+    )
+    assert not is_explicitly_benign_native_file_read_request(
+        "Read",
+        {"file_path": str(sensitive)},
+        cwd=workspace,
+        home_dir=tmp_path,
+    )
+    assert not is_explicitly_benign_native_file_read_request(
+        "Write",
+        {"file_path": str(source)},
+        cwd=workspace,
+        home_dir=tmp_path,
+    )
+    assert not is_explicitly_benign_native_file_read_request(
+        "Read",
+        {"metadata": [str(source)], "target": str(sensitive)},
+        cwd=workspace,
+        home_dir=tmp_path,
+    )
+
+
+def test_known_skill_paths_reject_sensitive_glob_and_traversal_targets(tmp_path):
+    home = tmp_path / "home"
+    skill = home / ".claude" / "skills" / "safe"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("# Safe\n")
+    (skill / ".env").write_text("SECRET=value\n")
+    (skill / "notes.md").write_text("notes\n")
+
+    for target in (
+        "~/.claude/skills/safe/.env",
+        "~/.claude/skills/safe/*.md",
+        "~/.claude/skills/safe/../secret.py",
+    ):
+        decision = source_path_is_allowed(target, cwd=tmp_path / "workspace", home_dir=home)
+        assert not decision.allowed
 
 
 def test_skill_uri_absolute_path():

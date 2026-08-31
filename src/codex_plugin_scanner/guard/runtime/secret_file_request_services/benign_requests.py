@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 from pathlib import Path
+from typing import cast
 
 from ...models import GuardArtifact
 from ..command_decision_adapter import effect_decision_to_dict
@@ -26,7 +27,7 @@ from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_sa
 from ..shell_command_wrappers import normalize_transparent_shell_command
 from ..shell_execution_context import model_shell_execution_context
 from .agent_guidance_reads import is_benign_agent_guidance_read
-from .constants_core import _SHELL_TOOL_NAMES
+from .constants_core import _PATH_KEYS, _PATH_LIST_KEYS, _SHELL_TOOL_NAMES
 from .destructive_shell_detection import _shell_command_names_from_parts
 from .developer_routines import (
     _looks_like_safe_cli_metadata_command,
@@ -65,6 +66,39 @@ from .shell_stdin_sources import (
     _printf_stdout_payloads,
 )
 from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command, _split_shell_parts
+
+
+def is_explicitly_benign_native_file_read_request(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> bool:
+    """Recognize one existing, non-sensitive native ``Read`` target."""
+
+    if _normalize_tool_name(tool_name) != "read" or not isinstance(arguments, dict):
+        return False
+    typed_arguments = cast(dict[str, object], arguments)
+    if any(key in typed_arguments for key in _PATH_LIST_KEYS):
+        return False
+    candidates = [
+        value.strip() for key in _PATH_KEYS if isinstance((value := typed_arguments.get(key)), str) and value.strip()
+    ]
+    if len(candidates) != 1:
+        return False
+    target = candidates[0]
+    if not target or any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&", "\x00")):
+        return False
+
+    from ..source_paths import source_path_is_allowed
+
+    decision = source_path_is_allowed(target, cwd=cwd, home_dir=home_dir)
+    resolved = decision.resolved_path
+    try:
+        return decision.allowed and resolved is not None and resolved.is_file()
+    except OSError:
+        return False
 
 
 def is_explicitly_benign_tool_action_request(
@@ -546,5 +580,6 @@ __all__ = [
     "_shell_stdout_uses_local_file",
     "_skip_shell_wrapper_options",
     "build_tool_action_request_artifact",
+    "is_explicitly_benign_native_file_read_request",
     "is_explicitly_benign_tool_action_request",
 ]

@@ -207,6 +207,33 @@ def test_omp_virtual_resource_with_secret_is_blocked(context: Context) -> None:
     assert result["reason_code"] == "output_secret_match"
 
 
+@pytest.mark.parametrize(
+    "uri",
+    ("mcp://hub/describe", "mcp://hub/describe/guard-dev-testing"),
+)
+def test_omp_virtual_resource_with_medium_credential_example_is_allowed(context: Context, uri: str) -> None:
+    result = _review(
+        context,
+        output="secret = get_secret('deployment-config')",
+        uri=uri,
+    )
+
+    assert result["decision"] == "allow"
+    assert result["model_output_action"] == "allow_original"
+    assert result["reason_code"] == "output_scan_allow"
+
+
+def test_ordinary_virtual_resource_with_realistic_medium_credential_is_blocked(context: Context) -> None:
+    result = _review(
+        context,
+        output="credential = 'prod-live-value'",
+        uri="mcp://resource://server/item",
+    )
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "output_secret_match"
+
+
 def test_truncated_omp_virtual_resource_is_not_returned_in_full(context: Context) -> None:
     result = _review(
         context,
@@ -267,6 +294,29 @@ def test_omp_virtual_target_mismatch_is_not_allowed(context: Context) -> None:
 def test_skill_with_secret_is_blocked(context: Context) -> None:
     _, home_dir, *_ = context
     content = "token: ghp_1234567890abcdefghijklmnopqrstuvwxyz\n"
+    _ = _install_skill(home_dir, content)
+
+    result = _review(context, output=content.rstrip("\n"))
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "source_secret_match"
+
+
+def test_skill_with_medium_credential_examples_is_allowed(context: Context) -> None:
+    _, home_dir, *_ = context
+    content = "secret = get_secret('deployment-config')\nsecret['data'] = merged\n"
+    _ = _install_skill(home_dir, content)
+
+    result = _review(context, output=content.rstrip("\n"))
+
+    assert result["decision"] == "allow"
+    assert result["model_output_action"] == "allow_original"
+    assert result["reason_code"] == "source_full_scan_allow"
+
+
+def test_skill_with_generic_credential_object_literal_is_blocked(context: Context) -> None:
+    _, home_dir, *_ = context
+    content = 'api_key = {token: "AIza-realistic-value"}\n'
     _ = _install_skill(home_dir, content)
 
     result = _review(context, output=content.rstrip("\n"))

@@ -70,6 +70,37 @@ def test_codex_source_view_allows_oauth_token_service_source_output(tmp_path: Pa
     assert artifact is None
 
 
+def test_codex_source_view_allows_medium_examples_from_symlinked_skill(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    real_skill = workspace_dir / ".agents" / "skills" / "guard-dev-testing"
+    skill_file = real_skill / "SKILL.md"
+    _write_text(skill_file, "secret = get_secret('deployment-config')\nsecret['data'] = merged\n")
+    linked_skill = home_dir / ".agents" / "skills" / "guard-dev-testing"
+    linked_skill.parent.mkdir(parents=True)
+    linked_skill.symlink_to(real_skill, target_is_directory=True)
+    command = f"sed -n '1,20p' {linked_skill / 'SKILL.md'}"
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=workspace_dir,
+        home_dir=home_dir,
+    )
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": skill_file.read_text(encoding="utf-8")},
+        },
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=workspace_dir,
+        home_dir=home_dir,
+    )
+
+    assert artifact is None
+
+
 def test_codex_source_view_compound_token_stem_stays_non_secret_without_cwd() -> None:
     command = "sed -n '1,20p' src/oauth-token-service.ts"
 

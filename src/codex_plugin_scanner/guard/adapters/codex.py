@@ -195,6 +195,7 @@ _MANAGED_HOOK_TIMEOUT_SECONDS = 30
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
+_CODEX_GUARD_POST_TOOL_MATCHER = "Bash|Read|mcp__.*"
 _SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
 _SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 _AUTHORITATIVE_ENFORCEMENT_BOUNDARY = "codex-native-hooks"
@@ -391,7 +392,7 @@ def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
 
 def _post_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
-        "matcher": "Bash",
+        "matcher": _CODEX_GUARD_POST_TOOL_MATCHER,
         "hooks": [
             _managed_hook_entry(
                 context,

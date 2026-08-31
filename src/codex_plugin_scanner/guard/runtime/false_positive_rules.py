@@ -151,10 +151,21 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
     home = os.path.normpath(str(home_dir or Path.home())).replace("\\", "/")
     for suffix in KNOWN_SKILL_DOC_ROOT_SUFFIXES:
         root = f"{home}/{suffix}"
-        if (normalized == root or normalized.startswith(f"{root}/")) and not _path_has_symlink_component(
-            normalized,
-            root=root,
-        ):
+        if normalized != root and not normalized.startswith(f"{root}/"):
+            continue
+        if not _path_has_symlink_component(normalized, root=root):
+            return True
+        relative_parts = Path(normalized).relative_to(root).parts
+        if len(relative_parts) != 2 or relative_parts[-1] != "SKILL.md":
+            continue
+        candidate_dir = Path(root) / relative_parts[0]
+        candidate_file = candidate_dir / "SKILL.md"
+        try:
+            real_candidate = candidate_dir.resolve(strict=True)
+            real_file = candidate_file.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if candidate_file.is_file() and (real_file == real_candidate or real_candidate in real_file.parents):
             return True
     for suffix in KNOWN_AGENT_DOC_SUFFIXES:
         expected = f"{home}/{suffix}"

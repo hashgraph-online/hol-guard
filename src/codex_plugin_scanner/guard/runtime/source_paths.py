@@ -21,6 +21,7 @@ from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_SENSITIVE_PARTS,
     target_is_known_skill_doc_path,
 )
+from .secret_sensitivity import classify_secret_path
 from .skill_paths import resolve_known_skill_doc_path
 
 SOURCE_CLASSIFIER_VERSION = "source-paths-v1"
@@ -184,8 +185,8 @@ def source_path_is_allowed(
     Decision rules (in order):
     1. Empty target -> reject ``empty_path``.
     2. ``~`` path requires ``home_dir``; otherwise reject.
-    3. Known skill/doc path is allowed.
-    4. Glob characters reject.
+    3. Traversal, glob patterns, and sensitive paths reject.
+    4. Known skill/doc path is allowed.
     5. Absolute paths must be inside ``cwd`` after resolve, unless the caller
        explicitly opts into an existing, source-like external search target.
     6. Relative paths resolve under ``cwd``.
@@ -198,6 +199,14 @@ def source_path_is_allowed(
     stripped = target_str.strip().strip("'\"")
     if not stripped:
         return SourcePathDecision(allowed=False, reason_code="empty_path")
+
+    lexical_parts = tuple(part for part in stripped.replace("\\", "/").split("/") if part)
+    if ".." in lexical_parts:
+        return SourcePathDecision(allowed=False, reason_code="path_traversal")
+    if any(char in stripped for char in ("*", "?", "{", "}")):
+        return SourcePathDecision(allowed=False, reason_code="glob_pattern")
+    if classify_secret_path(stripped, cwd=cwd, home_dir=home_dir) is not None:
+        return SourcePathDecision(allowed=False, reason_code="sensitive_basename")
 
     if target_is_known_skill_doc_path(stripped, home_dir=home_dir):
         resolved = resolve_known_skill_doc_path(stripped, home_dir=home_dir)
@@ -222,9 +231,6 @@ def source_path_is_allowed(
                 )
         except (OSError, RuntimeError):
             pass
-
-    if any(char in stripped for char in ("*", "?", "{", "}")):
-        return SourcePathDecision(allowed=False, reason_code="glob_pattern")
 
     base_dir = (cwd or Path.cwd()).resolve()
     external_path_requested = Path(stripped).is_absolute() or stripped.startswith("~/")
