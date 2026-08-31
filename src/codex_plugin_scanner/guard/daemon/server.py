@@ -5737,6 +5737,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_json({"error": error.code}, status=400)
                 return
 
+        if native_required:
+            prepared_policy = daemon_server.hook_worker.prepare_workspace_policy(
+                Path(workspace) if workspace is not None else None,
+                deadline=hook_deadline.expires_at,
+            )
+            if prepared_policy is None:
+                daemon_server.hook_worker.metrics.record_route("native_fail_safe")
+                self._write_json(
+                    self._runtime_hook_fail_safe_response(
+                        payload,
+                        params,
+                        default_harness=default_harness,
+                        reason="HOL Guard could not prepare the native policy safely.",
+                        reason_code="native_policy_not_ready",
+                        native_authoritative=True,
+                    )
+                )
+                return
+
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         capacity_harness = daemon_server.canonical_hook_capacity_harness(
             (runtime_harness or default_harness).strip().lower().replace("_", "-")

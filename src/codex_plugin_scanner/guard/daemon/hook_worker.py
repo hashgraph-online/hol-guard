@@ -76,6 +76,9 @@ class HookWorkerUnsupported(RuntimeError):  # noqa: N818
     """Raised only for explicit off/shadow compatibility requests."""
 
 
+_NATIVE_POLICY_READY_TIMEOUT_SECONDS = 0.25
+
+
 @final
 class HookWorker:
     """Resident hook review worker for the daemon."""
@@ -117,8 +120,19 @@ class HookWorker:
 
         self.policy_snapshot_publisher.close()
 
-    def _native_policy_snapshot(self, workspace: Path | None = None) -> dict[str, object] | None:
-        """Return only the last resident-ACKed snapshot for native hooks."""
+    def prepare_workspace_policy(
+        self,
+        workspace: Path | None = None,
+        *,
+        deadline: float | None = None,
+    ) -> dict[str, object] | None:
+        """Prepare an ACKed workspace policy before admitting a native hook.
+
+        Workspace overlays are published asynchronously, so the first hook
+        for a workspace must complete this same barrier used by normal hook
+        evaluation. The barrier is always capped at the native readiness
+        budget; a timeout returns ``None`` and callers fail closed.
+        """
 
         if native_mode() not in {"auto", "force", "shadow"}:
             return None
@@ -129,12 +143,22 @@ class HookWorker:
         if native_mode() in {"auto", "force"}:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
-                _ = wait_until_ready(time.monotonic() + 0.25)
+                readiness_deadline = time.monotonic() + _NATIVE_POLICY_READY_TIMEOUT_SECONDS
+                if deadline is not None:
+                    readiness_deadline = min(readiness_deadline, deadline)
+                if not wait_until_ready(readiness_deadline):
+                    return None
         current_snapshot_binding = getattr(self.policy_snapshot_publisher, "current_snapshot_binding", None)
         if callable(current_snapshot_binding):
             snapshot = current_snapshot_binding()
             return snapshot if isinstance(snapshot, dict) else None
-        return self.policy_snapshot_publisher.current_snapshot()
+        snapshot = self.policy_snapshot_publisher.current_snapshot()
+        return snapshot if isinstance(snapshot, dict) else None
+
+    def _native_policy_snapshot(self, workspace: Path | None = None) -> dict[str, object] | None:
+        """Return only the last resident-ACKed snapshot for native hooks."""
+
+        return self.prepare_workspace_policy(workspace)
 
     def review_http_payload(
         self,

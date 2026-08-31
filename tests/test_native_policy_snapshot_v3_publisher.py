@@ -41,6 +41,9 @@ test_snapshot_transaction_recovers_each_persistence_boundary = (
 test_auto_hook_uses_barrier_without_loading_config_per_request = (
     _publisher_tests.test_auto_hook_uses_barrier_without_loading_config_per_request
 )
+test_prepare_workspace_policy_uses_bounded_first_workspace_handshake = (
+    _publisher_tests.test_prepare_workspace_policy_uses_bounded_first_workspace_handshake
+)
 test_publisher_does_not_ack_snapshot_after_concurrent_mutation = (
     _publisher_tests.test_publisher_does_not_ack_snapshot_after_concurrent_mutation
 )
@@ -79,6 +82,7 @@ __all__ = [
     "test_floor_recovery_requires_exact_typed_ack",
     "test_lost_ack_retries_identical_payload",
     "test_policy_merge_never_downgrades_enforcing_posture_to_watch",
+    "test_prepare_workspace_policy_uses_bounded_first_workspace_handshake",
     "test_publisher_does_not_ack_snapshot_after_concurrent_mutation",
     "test_publisher_process_restart_reuses_cached_payload",
     "test_publisher_rejects_mutated_ack_without_opening_barrier",

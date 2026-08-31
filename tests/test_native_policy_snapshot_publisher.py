@@ -225,6 +225,52 @@ def test_auto_hook_uses_barrier_without_loading_config_per_request(
     assert 0 < wait_deadlines[0] - started_at <= 1.0
 
 
+def test_prepare_workspace_policy_uses_bounded_first_workspace_handshake(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+
+    registered: list[Path | None] = []
+    wait_deadlines: list[float] = []
+
+    class _Publisher:
+        def start(self) -> None:
+            return
+
+        def register_workspace(self, workspace: Path | None) -> bool:
+            registered.append(workspace)
+            return True
+
+        def wait_until_ready(self, deadline_monotonic: float) -> bool:
+            wait_deadlines.append(deadline_monotonic)
+            return True
+
+        def current_snapshot_binding(self) -> dict[str, object]:
+            return {
+                "generation": 1,
+                "policy_digest": "a" * 64,
+                "runtime_identity": "b" * 64,
+                "mode": "enforce",
+            }
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
+    monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
+
+    worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    workspace = tmp_path / "workspace"
+    started_at = time.monotonic()
+    binding = worker.prepare_workspace_policy(workspace, deadline=started_at + 0.25)
+
+    assert binding is not None
+    assert registered == [workspace]
+    assert len(wait_deadlines) == 2
+    assert wait_deadlines[-1] <= started_at + 0.25
+
+
 def test_same_generation_retries_reuse_exact_signed_snapshot_bytes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

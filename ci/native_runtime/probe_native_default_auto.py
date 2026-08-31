@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -164,6 +165,19 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     routes = _ownership_routes()
     daemon.start()
     try:
+        readiness_started = time.monotonic()
+        prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
+            workspace,
+            deadline=readiness_started + 0.25,
+        )
+        readiness_elapsed = time.monotonic() - readiness_started
+        _require(
+            prepared_policy is not None and readiness_elapsed <= 0.25,
+            {
+                "elapsed_ms": round(readiness_elapsed * 1_000, 2),
+                "policy_ready": prepared_policy is not None,
+            },
+        )
         for harness, route in sorted(routes.items()):
             events: list[tuple[str, dict[str, object]]] = []
             if route["pre_tool_use"].startswith("installed_"):
@@ -214,6 +228,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     expected = len(route_receipts)
     observed_routes = worker_stats["routes"]
     _require(expected > 0, "installed hook corpus is empty")
+    _require(expected == 21, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
     return {

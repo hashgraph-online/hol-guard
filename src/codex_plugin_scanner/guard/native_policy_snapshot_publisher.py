@@ -346,7 +346,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
 
     def _record_error(self, error: str) -> None:
         safe = error.strip().lower()
-        if not safe or len(safe) > 128 or not all(character.isalnum() or character in "_-" for character in safe):
+        if not safe or len(safe) > 128 or not all(character.isalnum() or character in "_-=,:?" for character in safe):
             safe = "native_policy_snapshot_publish_failed"
         with self._condition:
             self._last_error = safe
