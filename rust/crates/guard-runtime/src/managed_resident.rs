@@ -41,6 +41,22 @@ fn shutdown_requested() -> bool {
     MANAGED_SHUTDOWN_REQUESTED.load(Ordering::Acquire)
 }
 
+fn is_stale_process_identity_error(error: &str) -> bool {
+    #[cfg(windows)]
+    {
+        matches!(
+            error,
+            "native_resident_process_identity_unavailable"
+                | "native_resident_process_identity_mismatch"
+        )
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = error;
+        false
+    }
+}
+
 fn try_states(
     scope: &Path,
     digest: &str,
@@ -68,7 +84,9 @@ fn try_states(
             state.process_id,
         ) {
             Ok(response) => return Ok(Some(response)),
-            Err(error) if error == "native_client_connect_failed" => {}
+            Err(error)
+                if error == "native_client_connect_failed"
+                    || is_stale_process_identity_error(&error) => {}
             Err(_) => return Err("native_resident_live_request_failed".to_owned()),
         }
     }

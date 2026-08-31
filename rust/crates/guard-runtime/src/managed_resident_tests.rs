@@ -15,3 +15,24 @@ fn client_deadline_is_bounded() {
     );
     assert_eq!(client_timeout(br#"{}"#), Duration::from_millis(750));
 }
+
+#[test]
+fn stale_process_identity_errors_are_platform_scoped() {
+    let stale_unavailable =
+        is_stale_process_identity_error("native_resident_process_identity_unavailable");
+    let stale_mismatch =
+        is_stale_process_identity_error("native_resident_process_identity_mismatch");
+    if cfg!(windows) {
+        assert!(stale_unavailable);
+        assert!(stale_mismatch);
+    } else {
+        assert!(!stale_unavailable);
+        assert!(!stale_mismatch);
+    }
+    assert!(!is_stale_process_identity_error(
+        "native_resident_state_mac_invalid"
+    ));
+    assert!(!is_stale_process_identity_error(
+        "native_client_auth_rejected"
+    ));
+}

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import signal
 import socket
@@ -15,6 +16,7 @@ from pathlib import Path
 import pytest
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+_NATIVE_DIAGNOSTIC_RE = re.compile(rb"\bnative_[a-z0-9_]+\b")
 
 
 @pytest.fixture
@@ -92,14 +94,22 @@ def _request(runtime: Path, root: Path, *, command: str = "pwd") -> bytes:
 
 
 def _invoke(runtime: Path, state_dir: Path, request: bytes) -> dict[str, object]:
-    result = subprocess.run(
-        (str(runtime), "hook-client", "--stdin", str(state_dir)),
-        input=request,
-        check=True,
-        capture_output=True,
-        timeout=3,
-    )
-    payload = json.loads(result.stdout)
+    try:
+        result = subprocess.run(
+            (str(runtime), "hook-client", "--stdin", str(state_dir)),
+            input=request,
+            check=False,
+            capture_output=True,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError("native runtime invocation failed: native_client_timed_out") from None
+    if result.returncode != 0:
+        raise AssertionError(f"native runtime invocation failed: {_native_diagnostic(result.stderr)}")
+    try:
+        payload = json.loads(result.stdout)
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        raise AssertionError("native runtime invocation failed: native_client_output_invalid") from None
     assert isinstance(payload, dict)
     return payload
 
@@ -108,10 +118,39 @@ def _state_files(state_dir: Path) -> list[Path]:
     return sorted(state_dir.glob("resident-v3-*/generation-*.json"))
 
 
-def _write_forged_state(runtime: Path, state_dir: Path) -> None:
+def _native_diagnostic(stderr: bytes) -> str:
+    match = _NATIVE_DIAGNOSTIC_RE.search(stderr[:8192])
+    if match is None:
+        return "native_client_process_failed"
+    return match.group().decode("ascii")
+
+
+def _initialize_protected_scope(runtime: Path, state_dir: Path) -> Path:
+    try:
+        result = subprocess.run(
+            (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
+            check=False,
+            capture_output=True,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError("native scope initialization failed: native_resident_stop_timeout") from None
+    if result.returncode == 0:
+        raise AssertionError(
+            "native scope initialization unexpectedly succeeded: "
+            "native_resident_scope_initialization_unexpected_success"
+        )
+    token = _native_diagnostic(result.stderr)
+    assert token == "native_resident_stop_unavailable", f"native scope initialization failed: {token}"
     runtime_digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
     scope = state_dir / f"resident-v3-{runtime_digest[:16]}"
-    scope.mkdir(mode=0o700)
+    assert scope.is_dir()
+    return scope
+
+
+def _write_forged_state(runtime: Path, state_dir: Path) -> None:
+    runtime_digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
+    scope = _initialize_protected_scope(runtime, state_dir)
     token = secrets.token_bytes(32)
     state: dict[str, object] = {
         "schema": "hol-guard-resident-state.v3",
@@ -138,7 +177,11 @@ def _write_forged_state(runtime: Path, state_dir: Path) -> None:
             "created_ms",
         )
     ).encode()
-    state["state_mac"] = hmac.new(token, b"hol-guard-resident-state-v3\x00" + message, hashlib.sha256).hexdigest()
+    state["state_mac"] = hmac.new(
+        token,
+        b"hol-guard-resident-state-v3\x00" + message,
+        hashlib.sha256,
+    ).hexdigest()
     path = scope / "generation-18000000000000000000.json"
     path.write_text(json.dumps(state, separators=(",", ":")), encoding="utf-8")
     path.chmod(0o600)
@@ -396,9 +439,7 @@ def test_native_hook_client_recovers_only_stale_startup_lock(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
-    runtime_digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
-    scope = state_dir / f"resident-v3-{runtime_digest[:16]}"
-    scope.mkdir(mode=0o700)
+    scope = _initialize_protected_scope(runtime, state_dir)
     lock = scope / "startup.lock"
     lock.write_text("stale", encoding="utf-8")
     old = time.time() - 15
