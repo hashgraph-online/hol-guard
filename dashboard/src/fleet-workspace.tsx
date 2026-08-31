@@ -32,9 +32,7 @@ import {
   type DetectedAppStatus,
 } from "./harness-detection";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
-import {
-  FleetProtectionRecovery,
-} from "./fleet-protection-recovery";
+import { FleetProtectionRecovery } from "./fleet-protection-recovery";
 import { NetworkSandboxStatusPanel } from "./network-sandbox-status-panel";
 import type {
   GuardInventoryItem,
@@ -44,7 +42,6 @@ import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
 } from "./guard-types";
-
 type FleetWorkspaceProps = {
   runtime: GuardRuntimeSnapshot;
   policies: GuardPolicyDecision[];

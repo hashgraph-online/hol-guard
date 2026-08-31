@@ -27,8 +27,10 @@ const networkPayload = {
   schema: "guard.network-status.v1",
   host_platform: "linux",
   effective_grade: "destination-enforced",
+  independently_observed_grade: "destination-enforced",
   protection_active: true,
   independently_observed: true,
+  reason_code: "verified-active",
   supervisor: {
     phase: "healthy",
     effective_grade: "destination-enforced",
@@ -36,9 +38,27 @@ const networkPayload = {
     permits_enforcement: true,
     independently_observed: true,
     backend_id: "private-value-is-discarded",
-    backend_digest: "private-value-is-discarded",
+    backend_digest: "c".repeat(64),
+    retry_attempt: 0,
+    next_retry_seconds: 0,
   },
-  backends: [{ backend_id: "private-value-is-discarded" }],
+  backends: [
+    {
+      backend_id: "private-value-is-discarded",
+      platform: "linux",
+      supported: true,
+      installed: true,
+      verified: true,
+      active: true,
+      observed: true,
+      advertised_maximum_grade: "destination-enforced",
+      effective_grade: "destination-enforced",
+      production_ready: true,
+      requires_privilege: true,
+      reason_code: "verified-active",
+      reference_reason_code: "provider-verified",
+    },
+  ],
 };
 const containmentPayload = {
   containment_health: {
@@ -70,6 +90,50 @@ assert.equal(
   }),
   null,
   "active network protection requires an expiry-bound proof",
+);
+assert.equal(normalizeGuardNetworkStatus({ ...networkPayload, independently_observed_grade: undefined }), null);
+assert.equal(normalizeGuardNetworkStatus({ ...networkPayload, backends: [] }), null);
+assert.equal(
+  normalizeGuardNetworkStatus({
+    ...networkPayload,
+    backends: [{ ...networkPayload.backends[0], observed: false }],
+  }),
+  null,
+);
+assert.equal(
+  normalizeGuardNetworkStatus({
+    ...networkPayload,
+    supervisor: { ...networkPayload.supervisor, backend_id: "different-backend" },
+  }),
+  null,
+);
+assert.equal(
+  normalizeGuardNetworkStatus({
+    ...networkPayload,
+    supervisor: { ...networkPayload.supervisor, backend_digest: "not-a-digest" },
+  }),
+  null,
+);
+assert.equal(
+  normalizeGuardNetworkStatus({
+    ...networkPayload,
+    backends: [{ ...networkPayload.backends[0], effective_grade: "deny-all" }],
+  }),
+  null,
+);
+assert.equal(
+  normalizeGuardNetworkStatus({
+    ...networkPayload,
+    backends: [{ ...networkPayload.backends[0], production_ready: false }],
+  }),
+  null,
+);
+assert.equal(
+  normalizeGuardNetworkStatus({
+    ...networkPayload,
+    backends: [networkPayload.backends[0], { ...networkPayload.backends[0], backend_id: "second-backend" }],
+  }),
+  null,
 );
 
 const containment = normalizeGuardContainmentHealth(containmentPayload);
@@ -115,8 +179,17 @@ const unsupportedNetwork = normalizeGuardNetworkStatus({
   ...networkPayload,
   host_platform: "unsupported",
   effective_grade: "unavailable",
+  independently_observed_grade: "unavailable",
   protection_active: false,
   independently_observed: false,
+  backends: [
+    {
+      ...networkPayload.backends[0],
+      active: false,
+      observed: false,
+      effective_grade: "unavailable",
+    },
+  ],
   supervisor: {
     ...networkPayload.supervisor,
     phase: "unavailable",
@@ -124,9 +197,30 @@ const unsupportedNetwork = normalizeGuardNetworkStatus({
     healthy_until_epoch_ms: null,
     permits_enforcement: false,
     independently_observed: false,
+    backend_id: null,
+    backend_digest: null,
   },
 });
 assert(unsupportedNetwork !== null);
+assert(
+  normalizeGuardNetworkStatus({
+    ...networkPayload,
+    effective_grade: "unavailable",
+    independently_observed_grade: "unavailable",
+    protection_active: false,
+    independently_observed: false,
+    supervisor: undefined,
+    backends: [
+      {
+        ...networkPayload.backends[0],
+        active: false,
+        observed: false,
+        effective_grade: "unavailable",
+      },
+    ],
+  }) !== null,
+  "inactive status does not require supervisor proof",
+);
 assert.equal(
   networkPresentationState({ value: unsupportedNetwork, loadState: "stale", refreshing: false }, now),
   "unsupported",
@@ -212,8 +306,9 @@ assert.match(panelMarkup, /Contained-action sandboxing/);
 assert.match(panelMarkup, /Refresh status/);
 assert.equal((panelMarkup.match(/Refresh status/g) ?? []).length, 1, "panel exposes one read-only refresh action");
 
-const apiSource = readFileSync(new URL("./guard-api.ts", import.meta.url), "utf8");
-assert.match(apiSource, /readJson<unknown>\("\/v1\/network\/status", \{\s*cache: "no-store",\s*method: "GET"/);
-assert.match(apiSource, /readJson<unknown>\("\/v1\/runtime\/containment-health", \{\s*cache: "no-store",\s*method: "GET"/);
+const apiSource = readFileSync(new URL("./network-sandbox-api.ts", import.meta.url), "utf8");
+assert.match(apiSource, /readJson<unknown>\(path, \{ cache: "no-store", method: "GET", signal \}\)/);
+assert.match(apiSource, /fetchProof\("\/v1\/network\/status", signal\)/);
+assert.match(apiSource, /fetchProof\("\/v1\/runtime\/containment-health", signal\)/);
 
 console.log("network-sandbox-status.test.tsx: all tests passed");

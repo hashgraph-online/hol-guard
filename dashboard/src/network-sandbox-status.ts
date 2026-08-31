@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchGuardContainmentHealth, fetchGuardNetworkStatus } from "./guard-api";
+import { fetchGuardContainmentHealth, fetchGuardNetworkStatus } from "./network-sandbox-api";
 
 const NETWORK_GRADES = [
   "unavailable",
@@ -12,8 +12,10 @@ const NETWORK_GRADES = [
 ] as const;
 const NETWORK_PHASES = ["healthy", "degraded", "recovering", "unavailable"] as const;
 const HOST_PLATFORMS = ["linux", "macos", "windows", "unsupported"] as const;
+const BACKEND_PLATFORMS = ["linux", "macos", "windows"] as const;
 const CONTAINMENT_BACKENDS = ["unsupported", "macos-sandbox", "linux-bwrap"] as const;
 const SHA256 = /^[0-9a-f]{64}$/;
+const SAFE_IDENTIFIER = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const CONTAINMENT_POLICY_CONTRACT_DIGEST = "8861db0285235c9f06ca2c8443b0899928890cd63ba5d0f9873c9514e4614ee4";
 
 type NetworkGrade = (typeof NETWORK_GRADES)[number];
@@ -94,35 +96,168 @@ function finiteTimestamp(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+type ValidatedNetworkBackend = {
+  backendId: string;
+  effectiveGrade: NetworkGrade;
+  active: boolean;
+  observed: boolean;
+};
+
+function gradeRank(grade: NetworkGrade): number {
+  return NETWORK_GRADES.indexOf(grade);
+}
+
+function validIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 128 && SAFE_IDENTIFIER.test(value);
+}
+
+function normalizeNetworkBackend(value: unknown, hostPlatform: HostPlatform): ValidatedNetworkBackend | null {
+  if (!isRecord(value) || !validIdentifier(value["backend_id"])) return null;
+  const platform = enumValue(value["platform"], BACKEND_PLATFORMS);
+  const advertisedGrade = enumValue(value["advertised_maximum_grade"], NETWORK_GRADES);
+  const effectiveGrade = enumValue(value["effective_grade"], NETWORK_GRADES);
+  const booleanFields = [
+    "supported",
+    "installed",
+    "verified",
+    "active",
+    "observed",
+    "production_ready",
+    "requires_privilege",
+  ] as const;
+  if (
+    platform === null ||
+    advertisedGrade === null ||
+    effectiveGrade === null ||
+    booleanFields.some((field) => exactBoolean(value[field]) === null) ||
+    !validIdentifier(value["reason_code"]) ||
+    !validIdentifier(value["reference_reason_code"])
+  ) {
+    return null;
+  }
+  const installed = value["installed"] === true;
+  const verified = value["verified"] === true;
+  const active = value["active"] === true;
+  if (verified && !installed) return null;
+  if (gradeRank(effectiveGrade) > gradeRank(advertisedGrade)) return null;
+  if (
+    active &&
+    (value["supported"] !== true ||
+      !verified ||
+      value["production_ready"] !== true ||
+      platform !== hostPlatform ||
+      gradeRank(effectiveGrade) < gradeRank("deny-all"))
+  ) {
+    return null;
+  }
+  if (!active && gradeRank(effectiveGrade) >= gradeRank("deny-all")) return null;
+  return {
+    backendId: value["backend_id"],
+    effectiveGrade,
+    active,
+    observed: value["observed"] === true,
+  };
+}
+
+function normalizeNetworkBackends(value: unknown, hostPlatform: HostPlatform): ValidatedNetworkBackend[] | null {
+  if (!Array.isArray(value)) return null;
+  const backends: ValidatedNetworkBackend[] = [];
+  const backendIds = new Set<string>();
+  for (const candidate of value) {
+    const backend = normalizeNetworkBackend(candidate, hostPlatform);
+    if (backend === null || backendIds.has(backend.backendId)) return null;
+    backendIds.add(backend.backendId);
+    backends.push(backend);
+  }
+  return backends;
+}
+
 export function normalizeGuardNetworkStatus(value: unknown): GuardNetworkStatus | null {
   if (!isRecord(value) || value["schema"] !== "guard.network-status.v1") return null;
   const hostPlatform = enumValue(value["host_platform"], HOST_PLATFORMS);
   const effectiveGrade = enumValue(value["effective_grade"], NETWORK_GRADES);
+  const independentlyObservedGrade = enumValue(value["independently_observed_grade"], NETWORK_GRADES);
   const protectionActive = exactBoolean(value["protection_active"]);
   const independentlyObserved = exactBoolean(value["independently_observed"]);
-  const supervisorValue = value["supervisor"];
+  const rawSupervisor = value["supervisor"];
   if (
     hostPlatform === null ||
     effectiveGrade === null ||
+    independentlyObservedGrade === null ||
     protectionActive === null ||
     independentlyObserved === null ||
-    !isRecord(supervisorValue)
+    !validIdentifier(value["reason_code"])
   ) {
     return null;
   }
+  const backends = normalizeNetworkBackends(value["backends"], hostPlatform);
+  if (backends === null) return null;
+  const activeBackends = backends.filter((backend) => backend.active);
+  const observedBackends = backends.filter((backend) => backend.observed);
+  const maximumObservedGrade = observedBackends.reduce<NetworkGrade>(
+    (maximum, backend) => (gradeRank(backend.effectiveGrade) > gradeRank(maximum) ? backend.effectiveGrade : maximum),
+    "unavailable",
+  );
+  let supervisorValue: Record<string, unknown> | null = null;
+  if (isRecord(rawSupervisor)) {
+    supervisorValue = rawSupervisor;
+  } else if (rawSupervisor == null && !protectionActive && !independentlyObserved) {
+    supervisorValue = {
+      phase: "unavailable",
+      effective_grade: "unavailable",
+      healthy_until_epoch_ms: null,
+      permits_enforcement: false,
+      independently_observed: false,
+      backend_id: null,
+      backend_digest: null,
+      retry_attempt: 0,
+      next_retry_seconds: 0,
+    };
+  }
+  if (supervisorValue === null) return null;
   const phase = enumValue(supervisorValue["phase"], NETWORK_PHASES);
   const supervisorGrade = enumValue(supervisorValue["effective_grade"], NETWORK_GRADES);
   const healthyUntilEpochMs = finiteTimestamp(supervisorValue["healthy_until_epoch_ms"]);
   const permitsEnforcement = exactBoolean(supervisorValue["permits_enforcement"]);
   const supervisorObserved = exactBoolean(supervisorValue["independently_observed"]);
-  if (phase === null || supervisorGrade === null || permitsEnforcement === null || supervisorObserved === null) return null;
-  if (supervisorValue["healthy_until_epoch_ms"] !== null && healthyUntilEpochMs === null) return null;
+  const supervisorBackendId = supervisorValue["backend_id"];
+  const supervisorDigest = supervisorValue["backend_digest"];
+  const retryAttempt = supervisorValue["retry_attempt"];
+  const nextRetrySeconds = supervisorValue["next_retry_seconds"];
   if (
+    phase === null ||
+    supervisorGrade === null ||
+    permitsEnforcement === null ||
+    supervisorObserved === null ||
+    (supervisorBackendId !== null && !validIdentifier(supervisorBackendId)) ||
+    (supervisorDigest !== null && (typeof supervisorDigest !== "string" || !SHA256.test(supervisorDigest))) ||
+    typeof retryAttempt !== "number" ||
+    !Number.isInteger(retryAttempt) ||
+    retryAttempt < 0 ||
+    typeof nextRetrySeconds !== "number" ||
+    !Number.isFinite(nextRetrySeconds) ||
+    nextRetrySeconds < 0
+  ) {
+    return null;
+  }
+  if (supervisorValue["healthy_until_epoch_ms"] !== null && healthyUntilEpochMs === null) return null;
+  const expectedPermits = phase === "healthy" && gradeRank(supervisorGrade) >= gradeRank("deny-all");
+  if (
+    protectionActive !== (activeBackends.length > 0) ||
+    (protectionActive && activeBackends.length !== 1) ||
+    (!protectionActive && effectiveGrade !== "unavailable") ||
+    (protectionActive && activeBackends[0]?.effectiveGrade !== effectiveGrade) ||
+    independentlyObserved !== (independentlyObservedGrade !== "unavailable") ||
+    independentlyObserved !== (observedBackends.length > 0) ||
+    independentlyObservedGrade !== maximumObservedGrade ||
+    permitsEnforcement !== expectedPermits ||
     protectionActive !== permitsEnforcement ||
     independentlyObserved !== supervisorObserved ||
     effectiveGrade !== supervisorGrade ||
     (protectionActive && phase !== "healthy") ||
     (protectionActive && healthyUntilEpochMs === null) ||
+    (protectionActive && supervisorDigest === null) ||
+    (protectionActive && activeBackends[0]?.backendId !== supervisorBackendId) ||
     (protectionActive && (effectiveGrade === "unavailable" || effectiveGrade === "observe")) ||
     (hostPlatform === "unsupported" && protectionActive)
   ) {

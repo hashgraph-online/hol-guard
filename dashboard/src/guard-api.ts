@@ -200,7 +200,7 @@ type QueueResolutionPayload = Omit<
   codexResume?: unknown;
 };
 
-async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+export async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetchWithGuardAuth(input, init);
   if (!response.ok) {
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
@@ -2129,22 +2129,6 @@ export async function fetchInventory(): Promise<GuardInventoryItem[]> {
   }
   const payload = await readJson<{ items: RawGuardInventoryItem[] }>("/v1/inventory");
   return normalizeInventory(payload.items);
-}
-
-export async function fetchGuardNetworkStatus(signal?: AbortSignal): Promise<unknown> {
-  return readJson<unknown>("/v1/network/status", {
-    cache: "no-store",
-    method: "GET",
-    signal,
-  });
-}
-
-export async function fetchGuardContainmentHealth(signal?: AbortSignal): Promise<unknown> {
-  return readJson<unknown>("/v1/runtime/containment-health", {
-    cache: "no-store",
-    method: "GET",
-    signal,
-  });
 }
 
 export async function fetchSettings(): Promise<GuardSettingsPayload> {

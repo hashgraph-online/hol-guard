@@ -1,4 +1,4 @@
-import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as remainingProtectionRepairParts, V as ProtectionRepairFlowError, X as openPackageFirewallAuthorizeFallback, Y as activeFailedHarnesses, j as jsxRuntimeExports, Z as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, _ as HiMiniExclamationCircle, $ as fetchGuardContainmentHealth, a0 as fetchGuardNetworkStatus, S as SectionLabel, a1 as HiMiniArrowPath, a2 as HiMiniGlobeAlt, a3 as HiMiniShieldExclamation, M as HiMiniExclamationTriangle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, a4 as ProofStrip, m as EmptyState, c as HiMiniChevronRight, a5 as HiMiniEye, a6 as HiMiniXCircle, a7 as HiMiniClipboardDocumentCheck, a8 as HiMiniClipboard } from "../guard-dashboard.js";
+import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as remainingProtectionRepairParts, V as ProtectionRepairFlowError, X as openPackageFirewallAuthorizeFallback, Y as activeFailedHarnesses, j as jsxRuntimeExports, Z as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, _ as HiMiniExclamationCircle, $ as readJson, S as SectionLabel, a0 as HiMiniArrowPath, a1 as HiMiniGlobeAlt, a2 as HiMiniShieldExclamation, M as HiMiniExclamationTriangle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, a3 as ProofStrip, m as EmptyState, c as HiMiniChevronRight, a4 as HiMiniEye, a5 as HiMiniXCircle, a6 as HiMiniClipboardDocumentCheck, a7 as HiMiniClipboard } from "../guard-dashboard.js";
 import { d as defaultConnectHarness, S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
@@ -463,6 +463,15 @@ function FleetProtectionRecovery(props) {
     }
   );
 }
+function fetchProof(path, signal) {
+  return readJson(path, { cache: "no-store", method: "GET", signal });
+}
+function fetchGuardNetworkStatus(signal) {
+  return fetchProof("/v1/network/status", signal);
+}
+function fetchGuardContainmentHealth(signal) {
+  return fetchProof("/v1/runtime/containment-health", signal);
+}
 const NETWORK_GRADES = [
   "unavailable",
   "observe",
@@ -474,8 +483,10 @@ const NETWORK_GRADES = [
 ];
 const NETWORK_PHASES = ["healthy", "degraded", "recovering", "unavailable"];
 const HOST_PLATFORMS = ["linux", "macos", "windows", "unsupported"];
+const BACKEND_PLATFORMS = ["linux", "macos", "windows"];
 const CONTAINMENT_BACKENDS = ["unsupported", "macos-sandbox", "linux-bwrap"];
 const SHA256 = /^[0-9a-f]{64}$/;
+const SAFE_IDENTIFIER = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const CONTAINMENT_POLICY_CONTRACT_DIGEST = "8861db0285235c9f06ca2c8443b0899928890cd63ba5d0f9873c9514e4614ee4";
 const STATUS_REQUEST_TIMEOUT_MS = 8e3;
 const DEFAULT_STATUS_LOADERS = {
@@ -505,24 +516,108 @@ function finiteTimestamp(value) {
   if (value === null) return null;
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
+function gradeRank(grade) {
+  return NETWORK_GRADES.indexOf(grade);
+}
+function validIdentifier(value) {
+  return typeof value === "string" && value.length <= 128 && SAFE_IDENTIFIER.test(value);
+}
+function normalizeNetworkBackend(value, hostPlatform) {
+  if (!isRecord(value) || !validIdentifier(value["backend_id"])) return null;
+  const platform = enumValue(value["platform"], BACKEND_PLATFORMS);
+  const advertisedGrade = enumValue(value["advertised_maximum_grade"], NETWORK_GRADES);
+  const effectiveGrade = enumValue(value["effective_grade"], NETWORK_GRADES);
+  const booleanFields = [
+    "supported",
+    "installed",
+    "verified",
+    "active",
+    "observed",
+    "production_ready",
+    "requires_privilege"
+  ];
+  if (platform === null || advertisedGrade === null || effectiveGrade === null || booleanFields.some((field) => exactBoolean(value[field]) === null) || !validIdentifier(value["reason_code"]) || !validIdentifier(value["reference_reason_code"])) {
+    return null;
+  }
+  const installed = value["installed"] === true;
+  const verified = value["verified"] === true;
+  const active = value["active"] === true;
+  if (verified && !installed) return null;
+  if (gradeRank(effectiveGrade) > gradeRank(advertisedGrade)) return null;
+  if (active && (value["supported"] !== true || !verified || value["production_ready"] !== true || platform !== hostPlatform || gradeRank(effectiveGrade) < gradeRank("deny-all"))) {
+    return null;
+  }
+  if (!active && gradeRank(effectiveGrade) >= gradeRank("deny-all")) return null;
+  return {
+    backendId: value["backend_id"],
+    effectiveGrade,
+    active,
+    observed: value["observed"] === true
+  };
+}
+function normalizeNetworkBackends(value, hostPlatform) {
+  if (!Array.isArray(value)) return null;
+  const backends = [];
+  const backendIds = /* @__PURE__ */ new Set();
+  for (const candidate of value) {
+    const backend = normalizeNetworkBackend(candidate, hostPlatform);
+    if (backend === null || backendIds.has(backend.backendId)) return null;
+    backendIds.add(backend.backendId);
+    backends.push(backend);
+  }
+  return backends;
+}
 function normalizeGuardNetworkStatus(value) {
   if (!isRecord(value) || value["schema"] !== "guard.network-status.v1") return null;
   const hostPlatform = enumValue(value["host_platform"], HOST_PLATFORMS);
   const effectiveGrade = enumValue(value["effective_grade"], NETWORK_GRADES);
+  const independentlyObservedGrade = enumValue(value["independently_observed_grade"], NETWORK_GRADES);
   const protectionActive = exactBoolean(value["protection_active"]);
   const independentlyObserved = exactBoolean(value["independently_observed"]);
-  const supervisorValue = value["supervisor"];
-  if (hostPlatform === null || effectiveGrade === null || protectionActive === null || independentlyObserved === null || !isRecord(supervisorValue)) {
+  const rawSupervisor = value["supervisor"];
+  if (hostPlatform === null || effectiveGrade === null || independentlyObservedGrade === null || protectionActive === null || independentlyObserved === null || !validIdentifier(value["reason_code"])) {
     return null;
   }
+  const backends = normalizeNetworkBackends(value["backends"], hostPlatform);
+  if (backends === null) return null;
+  const activeBackends = backends.filter((backend) => backend.active);
+  const observedBackends = backends.filter((backend) => backend.observed);
+  const maximumObservedGrade = observedBackends.reduce(
+    (maximum, backend) => gradeRank(backend.effectiveGrade) > gradeRank(maximum) ? backend.effectiveGrade : maximum,
+    "unavailable"
+  );
+  let supervisorValue = null;
+  if (isRecord(rawSupervisor)) {
+    supervisorValue = rawSupervisor;
+  } else if (rawSupervisor == null && !protectionActive && !independentlyObserved) {
+    supervisorValue = {
+      phase: "unavailable",
+      effective_grade: "unavailable",
+      healthy_until_epoch_ms: null,
+      permits_enforcement: false,
+      independently_observed: false,
+      backend_id: null,
+      backend_digest: null,
+      retry_attempt: 0,
+      next_retry_seconds: 0
+    };
+  }
+  if (supervisorValue === null) return null;
   const phase = enumValue(supervisorValue["phase"], NETWORK_PHASES);
   const supervisorGrade = enumValue(supervisorValue["effective_grade"], NETWORK_GRADES);
   const healthyUntilEpochMs = finiteTimestamp(supervisorValue["healthy_until_epoch_ms"]);
   const permitsEnforcement = exactBoolean(supervisorValue["permits_enforcement"]);
   const supervisorObserved = exactBoolean(supervisorValue["independently_observed"]);
-  if (phase === null || supervisorGrade === null || permitsEnforcement === null || supervisorObserved === null) return null;
+  const supervisorBackendId = supervisorValue["backend_id"];
+  const supervisorDigest = supervisorValue["backend_digest"];
+  const retryAttempt = supervisorValue["retry_attempt"];
+  const nextRetrySeconds = supervisorValue["next_retry_seconds"];
+  if (phase === null || supervisorGrade === null || permitsEnforcement === null || supervisorObserved === null || supervisorBackendId !== null && !validIdentifier(supervisorBackendId) || supervisorDigest !== null && (typeof supervisorDigest !== "string" || !SHA256.test(supervisorDigest)) || typeof retryAttempt !== "number" || !Number.isInteger(retryAttempt) || retryAttempt < 0 || typeof nextRetrySeconds !== "number" || !Number.isFinite(nextRetrySeconds) || nextRetrySeconds < 0) {
+    return null;
+  }
   if (supervisorValue["healthy_until_epoch_ms"] !== null && healthyUntilEpochMs === null) return null;
-  if (protectionActive !== permitsEnforcement || independentlyObserved !== supervisorObserved || effectiveGrade !== supervisorGrade || protectionActive && phase !== "healthy" || protectionActive && healthyUntilEpochMs === null || protectionActive && (effectiveGrade === "unavailable" || effectiveGrade === "observe") || hostPlatform === "unsupported" && protectionActive) {
+  const expectedPermits = phase === "healthy" && gradeRank(supervisorGrade) >= gradeRank("deny-all");
+  if (protectionActive !== activeBackends.length > 0 || protectionActive && activeBackends.length !== 1 || !protectionActive && effectiveGrade !== "unavailable" || protectionActive && activeBackends[0]?.effectiveGrade !== effectiveGrade || independentlyObserved !== (independentlyObservedGrade !== "unavailable") || independentlyObserved !== observedBackends.length > 0 || independentlyObservedGrade !== maximumObservedGrade || permitsEnforcement !== expectedPermits || protectionActive !== permitsEnforcement || independentlyObserved !== supervisorObserved || effectiveGrade !== supervisorGrade || protectionActive && phase !== "healthy" || protectionActive && healthyUntilEpochMs === null || protectionActive && supervisorDigest === null || protectionActive && activeBackends[0]?.backendId !== supervisorBackendId || protectionActive && (effectiveGrade === "unavailable" || effectiveGrade === "observe") || hostPlatform === "unsupported" && protectionActive) {
     return null;
   }
   return {
