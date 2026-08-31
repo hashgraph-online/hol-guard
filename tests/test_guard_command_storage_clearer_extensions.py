@@ -62,6 +62,11 @@ STORAGE_CLEARER_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.storage-clearer.cleanup",
     ),
     (
+        "fish --command './storage-clearer.sh run B'",
+        "Storage Clearer cleanup command",
+        "command.storage-clearer.cleanup",
+    ),
+    (
         "'/Applications/Storage Clearer.app/Contents/Resources/storage-clearer.sh' app-run B",
         "Storage Clearer cleanup command",
         "command.storage-clearer.cleanup",
