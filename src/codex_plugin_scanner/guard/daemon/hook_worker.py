@@ -28,6 +28,7 @@ from ..cli.commands_support_command_activity import (
     record_post_hook_command_activity_best_effort,
 )
 from ..config import load_guard_config
+from ..native_hook_edge import review_raw_hook_native
 from ..native_pretool import review_pre_tool_native
 from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import native_mode, native_runtime_status, review_post_tool_native
@@ -117,6 +118,50 @@ class HookWorker:
         """
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
+        if native_mode() in {"auto", "force"}:
+            observe_mode = event_name == "PostToolUse" and self._load_config(guard_home, workspace).mode == "observe"
+            edge = review_raw_hook_native(
+                payload=payload,
+                harness=harness,
+                event=event_name,
+                guard_home=guard_home,
+                home_dir=home_dir,
+                cwd=workspace,
+                source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
+                observe_mode=observe_mode,
+                deadline=deadline,
+            )
+            if edge is None:
+                if event_name == "PostToolUse":
+                    self._record_post_tool_activity(
+                        harness=harness,
+                        payload=payload,
+                        succeeded=hook_post_succeeded(event_name, payload),
+                    )
+                reason_code = (
+                    "native_post_tool_unavailable" if event_name == "PostToolUse" else "native_pre_tool_unavailable"
+                )
+                return post_tool_fail_safe_response(
+                    harness,
+                    reason="HOL Guard could not complete the native hook decision safely.",
+                    reason_code=reason_code,
+                )
+            native_event = str(edge["event_name"])
+            native_harness = str(edge["harness"])
+            native_result = edge["result"]
+            if not isinstance(native_result, Mapping):
+                return post_tool_fail_safe_response(harness, reason_code="native_hook_edge_invalid_response")
+            if native_event == "PreToolUse":
+                if native_result.get("minimum_action") == "review":
+                    record_python_semantic_hook_route()
+                    raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
+                return _harness_json_from_native_pre_tool(native_harness, native_result)
+            self._record_post_tool_activity(
+                harness=native_harness,
+                payload=payload,
+                succeeded=hook_post_succeeded(native_event, payload),
+            )
+            return _harness_json_from_native_post_tool(native_harness, native_result)
         if event_name == "PreToolUse":
             command = _pre_tool_command(payload)
             if command is None:
@@ -385,6 +430,22 @@ def _harness_json_from_native_pre_tool(harness: str, response: Mapping[str, obje
             "permissionDecisionReason": reason,
         },
     }
+
+
+def _harness_json_from_native_post_tool(
+    harness: str,
+    response: Mapping[str, object],
+) -> dict[str, object]:
+    if _canonical_hook_harness(harness) in {"pi", "omp"}:
+        return dict(response)
+    if response.get("decision") == "allow" and response.get("model_output_action") == "allow_original":
+        return {
+            "policy_action": "allow",
+            "hookSpecificOutput": {"hookEventName": "PostToolUse"},
+        }
+    reason = str(response.get("reason") or "HOL Guard blocked this tool output because it could not be proven safe.")
+    reason_code = str(response.get("reason_code") or "native_hook_edge_block")
+    return post_tool_native_block_response(reason=reason, reason_code=reason_code)
 
 
 def _canonical_hook_harness(harness: str) -> str:

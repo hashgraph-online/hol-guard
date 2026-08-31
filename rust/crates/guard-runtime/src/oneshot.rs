@@ -9,6 +9,13 @@ use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static MIN_POLICY_GENERATION: AtomicU64 = AtomicU64::new(0);
+#[cfg(test)]
+pub(crate) static POLICY_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+pub(crate) fn reset_policy_generation_for_test() {
+    MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+}
 
 pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), String> {
     let Some(snapshot_value) = value.get("policy_snapshot") else {
@@ -130,11 +137,15 @@ pub(crate) fn evaluate_command_model_bytes(bytes: &[u8]) -> Result<Vec<u8>, Stri
 
 pub(crate) fn evaluate_pre_tool_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value = crate::strict_json_value(bytes)?;
-    let command = extract_pre_tool_command(&value)?;
-    let dialect = mapping_string(&value, "dialect").unwrap_or("posix");
-    let transport = mapping_string(&value, "transport").unwrap_or("shell_string");
+    crate::encode_response(&evaluate_pre_tool_value(&value)?)
+}
+
+pub(crate) fn evaluate_pre_tool_value(value: &Value) -> Result<Value, String> {
+    let command = extract_pre_tool_command(value)?;
+    let dialect = mapping_string(value, "dialect").unwrap_or("posix");
+    let transport = mapping_string(value, "transport").unwrap_or("shell_string");
     let extraction_provenance =
-        mapping_string(&value, "extraction_provenance").unwrap_or("guard-shell");
+        mapping_string(value, "extraction_provenance").unwrap_or("guard-shell");
     let request = CommandModelRequestV1 {
         command,
         dialect: dialect.to_owned(),
@@ -142,8 +153,8 @@ pub(crate) fn evaluate_pre_tool_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
         extraction_provenance: extraction_provenance.to_owned(),
     };
     let decision = evaluate_pre_tool(&request)?;
-    let request_id = mapping_string(&value, "request_id");
-    crate::encode_response(&pre_tool_response(request_id, decision))
+    let request_id = mapping_string(value, "request_id");
+    Ok(pre_tool_response(request_id, decision))
 }
 
 pub(crate) fn evaluate_pre_tool_request(
@@ -156,13 +167,11 @@ pub(crate) fn evaluate_pre_tool_request(
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::sync::{Arc, Barrier, Mutex};
+    use std::sync::{Arc, Barrier};
     use std::thread;
 
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
-
     fn lock_generation() -> std::sync::MutexGuard<'static, ()> {
-        TEST_LOCK
+        POLICY_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -184,11 +193,11 @@ mod tests {
     #[test]
     fn rejects_stale_generation_after_newer_snapshot() {
         let _guard = lock_generation();
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_policy_generation_for_test();
         assert!(validate_request_policy_snapshot(&snapshot_value(10)).is_ok());
         let error = validate_request_policy_snapshot(&snapshot_value(5)).unwrap_err();
         assert_eq!(error, "snapshot_generation_downgrade");
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_policy_generation_for_test();
     }
 
     #[test]
@@ -197,13 +206,13 @@ mod tests {
         MIN_POLICY_GENERATION.store(10, Ordering::SeqCst);
         let error = ratchet_min_policy_generation(5).unwrap_err();
         assert_eq!(error, "native_policy_snapshot_stale");
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_policy_generation_for_test();
     }
 
     #[test]
     fn concurrent_stale_snapshot_cannot_succeed_after_newer_floor() {
         let _guard = lock_generation();
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_policy_generation_for_test();
         let start = Arc::new(Barrier::new(2));
         let high_start = start.clone();
         let high = thread::spawn(move || {
@@ -214,6 +223,6 @@ mod tests {
         assert!(high.join().expect("high generation thread").is_ok());
         let low = ratchet_min_policy_generation(5);
         assert_eq!(low.unwrap_err(), "native_policy_snapshot_stale");
-        MIN_POLICY_GENERATION.store(0, Ordering::SeqCst);
+        reset_policy_generation_for_test();
     }
 }

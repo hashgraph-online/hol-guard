@@ -11,13 +11,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .codex_hook_launch_runtime import run_isolated_hook_process
+from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
-from .native_runtime_resident import resident_native_request
 from .native_runtime_resilience import (
-    native_oneshot_lease,
-    native_record_oneshot_failure,
-    native_record_oneshot_success,
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
@@ -27,7 +23,6 @@ from .runtime.command_model import CanonicalCommand, CommandSegment
 from .runtime.command_shadow_evaluation import CommandShadowCohort, CommandShadowProposal
 
 _MAX_REQUEST_BYTES = 64 * 1024
-_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _MAX_SEGMENTS = 128
 _MAX_TOKENS = 2_048
 _PARSER_PROFILE = "posix-simple-v1"
@@ -249,7 +244,7 @@ def review_command_model_native(
     )
     if prepared is None:
         return None
-    request, request_bytes = prepared
+    request, _request_bytes = prepared
     timeout_seconds = min(timeout_seconds, 1.0)
     environment = _isolated_environment()
     decoder_arguments = {
@@ -265,9 +260,8 @@ def review_command_model_native(
             separators=(",", ":"),
             ensure_ascii=False,
         ).encode("utf-8")
-        resident_output = resident_native_request(
+        resident_output = native_resident_client_request(
             executable=status.identity.path,
-            identity_sha256=status.identity.sha256,
             guard_home=guard_home,
             environment=environment,
             payload=resident_envelope,
@@ -291,37 +285,7 @@ def review_command_model_native(
             reason="native_command_resident_unavailable",
         )
 
-    with native_oneshot_lease(status.identity.sha256, guard_home) as acquired:
-        if not acquired:
-            return None
-        result = run_isolated_hook_process(
-            (str(status.identity.path), "command-model", "--stdin"),
-            input_text=request_bytes.decode("utf-8"),
-            cwd=status.identity.path.parent,
-            environment=environment,
-            timeout_seconds=timeout_seconds,
-            output_limit=_MAX_RESPONSE_BYTES,
-        )
-        if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
-            native_record_oneshot_failure(
-                status.identity.sha256,
-                guard_home,
-                reason="native_command_oneshot_failed",
-            )
-            return None
-        try:
-            decoded = _decode_command_model(json.loads(result.stdout), **decoder_arguments)
-        except json.JSONDecodeError:
-            decoded = None
-        if decoded is None:
-            native_record_oneshot_failure(
-                status.identity.sha256,
-                guard_home,
-                reason="native_command_oneshot_invalid",
-            )
-            return None
-        native_record_oneshot_success(status.identity.sha256, guard_home)
-        return decoded
+    return None
 
 
 def _canonical_command_from_native(

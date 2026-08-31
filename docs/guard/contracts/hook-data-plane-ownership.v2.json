@@ -70,7 +70,7 @@
       "id": "http_pre_tool_use",
       "event": "PreToolUse",
       "entry": "src/codex_plugin_scanner/guard/daemon/server.py",
-      "current_authority": "rust_command_python_generic_fallback",
+      "current_authority": "rust_raw_edge_command_python_generic_fallback",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -79,7 +79,7 @@
       "id": "http_post_tool_use",
       "event": "PostToolUse",
       "entry": "src/codex_plugin_scanner/guard/daemon/server.py",
-      "current_authority": "rust_supported_python_off_shadow",
+      "current_authority": "rust_raw_edge_python_off_shadow",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -88,7 +88,7 @@
       "id": "cli_pre_tool_use",
       "event": "PreToolUse",
       "entry": "src/codex_plugin_scanner/guard/cli/commands_hook.py",
-      "current_authority": "rust_command_python_generic_fallback",
+      "current_authority": "rust_raw_edge_command_python_generic_fallback",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -97,7 +97,7 @@
       "id": "cli_post_tool_use",
       "event": "PostToolUse",
       "entry": "src/codex_plugin_scanner/guard/cli/commands_hook.py",
-      "current_authority": "rust_supported_python_off_shadow",
+      "current_authority": "rust_raw_edge_python_off_shadow",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -184,8 +184,17 @@
         "src/codex_plugin_scanner/guard/runtime/hook_payload_reference.py",
         "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
       ],
-      "current": "harness and event extraction, command extraction, source metadata parsing, and HookReviewRequest construction",
+      "current": "off and shadow retain compatibility request projection; auto and force route raw payloads to the native edge",
       "target": "unreachable from ordinary production hook semantics"
+    },
+    {
+      "id": "native_edge_launcher",
+      "class": "python_transport",
+      "paths": [
+        "src/codex_plugin_scanner/guard/native_hook_edge.py"
+      ],
+      "current": "mechanical bounded guard-hook-envelope.v2 serialization, package-bound native invocation, and typed result decoding",
+      "target": "minimal launcher and mechanical serialization only"
     },
     {
       "id": "python_reference_oracle",
@@ -215,14 +224,15 @@
       "id": "resident_client_and_supervisor",
       "class": "python_transport",
       "paths": [
+        "src/codex_plugin_scanner/guard/native_resident_client.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_runtime_admission.py",
         "src/codex_plugin_scanner/guard/native_route_receipt.py",
         "src/codex_plugin_scanner/guard/native_runtime_resident.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py"
       ],
-      "current": "binary identity, client authentication and framing, process lifecycle, reconnect, restart, and fallback budgeting",
-      "target": "Rust native edge and launcher"
+      "current": "binary identity and mechanical client launch remain Python; authentication, framing, process and peer attestation, bounded generation retirement, supervisor liveness, reconnect, restart, and generation state are Rust-owned; the legacy Python resident module is unreachable from the ordinary graph",
+      "target": "binary identity and minimal Rust client launch only"
     },
     {
       "id": "policy_and_approval_control",
@@ -254,11 +264,14 @@
       "class": "python_control",
       "paths": [
         ".github/workflows/native-wheel-ci.yml",
+        ".github/workflows/rust-daemon-edge-hardening.yml",
+        ".github/workflows/rust-runtime.yml",
         ".github/workflows/rust-authority-ownership.yml",
         "ci/native_runtime/**",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
         "scripts/ci/hook_data_plane_ownership_contract.py",
-        "scripts/ci/rust_authority_ownership_gate.py"
+        "scripts/ci/rust_authority_ownership_gate.py",
+        "tests/test_native_hook_edge.py"
       ],
       "current": "installed evidence and ownership enforcement",
       "target": "same"
@@ -286,7 +299,7 @@
         "rust/crates/guard-runtime/**",
         "rust/crates/guard-scanner/**"
       ],
-      "current": "command PreToolUse and supported PostToolUse authority with resident server enforcement",
+      "current": "strict raw hook-envelope v2 parsing, harness and event normalization, payload-kind validation, command PreToolUse and supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
       "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"
     },
     {
@@ -312,11 +325,14 @@
     "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
     "src/codex_plugin_scanner/guard/cli/commands_support_*.py",
     ".github/workflows/native-wheel-ci.yml",
+    ".github/workflows/rust-daemon-edge-hardening.yml",
+    ".github/workflows/rust-runtime.yml",
     ".github/workflows/rust-authority-ownership.yml",
     "ci/native_runtime/**",
     "docs/guard/contracts/hook-data-plane-ownership.v2.json",
     "scripts/ci/hook_data_plane_ownership_contract.py",
-    "scripts/ci/rust_authority_ownership_gate.py"
+    "scripts/ci/rust_authority_ownership_gate.py",
+    "tests/test_native_hook_edge.py"
   ],
   "installed_artifacts": [
     {
