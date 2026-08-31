@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - release/3.0
+      - release/3.2
     paths:
       - src/codex_plugin_scanner/guard/adapters/cline*.py
       - src/codex_plugin_scanner/guard/adapters/contracts.py
