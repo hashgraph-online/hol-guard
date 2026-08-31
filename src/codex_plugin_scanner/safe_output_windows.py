@@ -251,6 +251,11 @@ def write_bytes_atomic_no_follow_windows(path: Path, payload: bytes) -> None:
             _raise_windows_error("unable to create temporary output file")
         temporary_handle = int(opened)
         _write_file(api, temporary_handle, payload)
+        # SetFileInformationByHandle resolves an absolute target by opening the
+        # final directory for mutation, which conflicts with our own lock. Its
+        # parent remains locked, so this verified directory cannot be replaced;
+        # racing the leaf is safe because the source handle replaces that entry.
+        api.close_handle(directory_handles.pop())
         _rename_file_handle(api, temporary_handle, absolute)
         renamed = True
     finally:
