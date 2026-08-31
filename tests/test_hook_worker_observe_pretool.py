@@ -56,13 +56,19 @@ def test_hook_worker_watch_native_block_uses_cli_recording(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
         lambda: "auto",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
-        lambda *_args, **_kwargs: {
+    captured: dict[str, object] = {}
+
+    def native_block_edge(*_args: object, **kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {
             "event_name": "PreToolUse",
             "harness": "cursor",
             "result": _native_block("rm -rf /"),
-        },
+        }
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        native_block_edge,
     )
     worker = HookWorker(store=GuardStore(guard_home))
     with pytest.raises(HookWorkerUnsupported, match="CLI approval coordination"):
@@ -74,6 +80,7 @@ def test_hook_worker_watch_native_block_uses_cli_recording(
             guard_home=guard_home,
             workspace=tmp_path / "workspace",
         )
+    assert captured["observe_mode"] is True
 
 
 def test_hook_worker_watch_native_unavailable_uses_cli_recording(

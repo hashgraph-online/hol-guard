@@ -128,7 +128,7 @@ class HookWorker:
                 posture=config.protection_posture,
                 mode=config.mode,
             )
-            observe_mode = event_name == "PostToolUse" and recording_only
+            observe_mode = recording_only
             edge = review_raw_hook_native(
                 payload=payload,
                 harness=harness,
