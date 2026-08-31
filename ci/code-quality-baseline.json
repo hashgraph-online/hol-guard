@@ -479,7 +479,7 @@
     "scripts/verify_release_registry.py": 523,
     "src/codex_plugin_scanner/action_runner.py": 688,
     "src/codex_plugin_scanner/checks/manifest.py": 501,
-    "src/codex_plugin_scanner/checks/security.py": 884,
+    "src/codex_plugin_scanner/checks/security.py": 903,
     "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_bridge.py": 734,
     "src/codex_plugin_scanner/guard/adapters/claude_code.py": 527,
     "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py": 511,

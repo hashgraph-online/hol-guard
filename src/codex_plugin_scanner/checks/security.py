@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 from ..models import CheckResult, Finding, Severity
 from ..path_support import path_entry_exists, read_text_file_within_root, resolves_within_root
+from .security_failures import ScanInputUnreadableError, unreadable_scan_input_failure
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +171,11 @@ class ScanBudgetExceededError(RuntimeError):
     """Raised when analysis would be incomplete because a scan budget was exhausted."""
 
 
+def _raise_walk_error(error: OSError) -> None:
+    reason = error.strerror or type(error).__name__
+    raise ScanInputUnreadableError(f"filesystem traversal failed: {reason}") from error
+
+
 def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> list[Path]:
     """Recursively find all files, skipping excluded dirs."""
     if files is not None:
@@ -185,7 +191,12 @@ def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> 
         discovered = []
         entries_seen = 0
         resolved_root = plugin_dir.resolve(strict=True)
-        for root, dirs, names in os.walk(resolved_root, topdown=True, followlinks=False):
+        for root, dirs, names in os.walk(
+            resolved_root,
+            topdown=True,
+            onerror=_raise_walk_error,
+            followlinks=False,
+        ):
             current = Path(root)
             depth = len(current.relative_to(resolved_root).parts)
             if depth > MAX_SCAN_DEPTH:
@@ -570,6 +581,7 @@ def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None 
     resolved_plugin_dir = plugin_dir.resolve()
     try:
         for fpath in _scan_all_files(resolved_plugin_dir, files):
+            relative_path = fpath.relative_to(resolved_plugin_dir)
             try:
                 content = read_text_file_within_root(
                     resolved_plugin_dir,
@@ -578,11 +590,18 @@ def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None 
                     errors="ignore",
                 )
             except (OSError, UnicodeError):
-                continue
-            relative_path = fpath.relative_to(resolved_plugin_dir)
+                return unreadable_scan_input_failure(
+                    "No hardcoded secrets", max_points=7, path=relative_path.as_posix()
+                )
             line_number = _first_hardcoded_secret_line(relative_path, content)
             if line_number is not None:
                 findings.append((relative_path.as_posix(), line_number))
+    except ScanInputUnreadableError as exc:
+        return unreadable_scan_input_failure(
+            "No hardcoded secrets",
+            max_points=7,
+            reason=str(exc),
+        )
     except ScanBudgetExceededError as exc:
         return _resource_budget_failure("No hardcoded secrets", max_points=7, reason=str(exc))
     if not findings:

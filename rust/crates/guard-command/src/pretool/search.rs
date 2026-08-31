@@ -281,7 +281,7 @@ fn unsafe_search_value(role: SearchValueRole, value: &str) -> bool {
         SearchValueRole::Glob | SearchValueRole::Path => {
             sensitive_path_argument(value) || glob_can_select_sensitive_path(value)
         }
-        SearchValueRole::TypeGlob => value.split_once(':').map_or(true, |(_, glob)| {
+        SearchValueRole::TypeGlob => value.split_once(':').is_none_or(|(_, glob)| {
             sensitive_path_argument(glob) || glob_can_select_sensitive_path(glob)
         }),
         SearchValueRole::DirectoryAction => value.eq_ignore_ascii_case("recurse"),
