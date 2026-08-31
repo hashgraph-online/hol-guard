@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import tempfile
 import urllib.error
 import urllib.parse
@@ -22,9 +23,6 @@ from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_health,
     native_runtime_status,
     review_post_tool_native,
-)
-from codex_plugin_scanner.guard.native_runtime_resident import (
-    close_resident_native_runtimes,
 )
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -69,6 +67,19 @@ def _require(condition: bool, detail: object) -> None:
     """Fail the CI probe even when Python assertions are optimized out."""
     if not condition:
         raise RuntimeError(f"native_default_auto_probe_failed: {detail}")
+
+
+def _native_state_files(guard_home: Path) -> list[Path]:
+    return list((guard_home / "native-runtime").glob("resident-v3-*/generation-*.json"))
+
+
+def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
+    subprocess.run(
+        (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
+        check=False,
+        capture_output=True,
+        timeout=2,
+    )
 
 
 def _ownership_routes() -> dict[str, dict[str, str]]:
@@ -242,10 +253,11 @@ def main(*, json_path: Path | None = None) -> int:
             _require(health.reason == "native_ready", health)
             _require(health.resident_failures == 0, health)
             _require(health.oneshot_failures == 0, health)
-            _require(health.starts == 1, health)
+            _require(len(_native_state_files(root / "guard-home")) == 1, "native generation was not reused")
             installed_corpus = _installed_hook_corpus(root)
         finally:
-            close_resident_native_runtimes()
+            for guard_home in (root / "guard-home", root / "hook-home"):
+                _stop_native_runtime(status.identity.path, guard_home)
 
     os.environ["HOL_GUARD_NATIVE"] = "off"
     try:
