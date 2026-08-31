@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -17,12 +18,14 @@ from codex_plugin_scanner.guard.daemon.client import (
     GuardDaemonTransportError,
 )
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.runtime.network_capability_contract import default_platform_profiles
 from codex_plugin_scanner.guard.runtime.network_status import (
     NetworkStatusSchemaError,
     build_network_status,
     validate_network_status,
 )
-from codex_plugin_scanner.guard.runtime.network_supervisor import NetworkSupervisor
+from codex_plugin_scanner.guard.runtime.network_supervisor import NetworkSupervisor, NetworkSupervisorHealth
+from codex_plugin_scanner.guard.runtime.provider_recovery import RecoveryPhase
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -300,6 +303,30 @@ def test_zero_production_ready_backends_remain_truthfully_inactive() -> None:
     assert projected["protection_active"] is False
     assert projected["effective_grade"] == "unavailable"
     assert all(backend["production_ready"] is False for backend in cast(list[dict[str, object]], projected["backends"]))
+
+
+@pytest.mark.parametrize(("production_ready", "expected_active"), ((False, False), (True, True)))
+def test_producer_and_validator_agree_on_backend_readiness(
+    production_ready: bool,
+    expected_active: bool,
+) -> None:
+    profile = replace(default_platform_profiles()[0], production_ready=production_ready)
+    health = NetworkSupervisorHealth(
+        phase=RecoveryPhase.HEALTHY,
+        backend_id=profile.backend_id,
+        backend_digest="a" * 64,
+        effective_grade=profile.maximum_grade,
+        healthy_until_epoch_ms=4_000_000_000_000,
+        retry_attempt=0,
+        next_retry_seconds=0.0,
+    )
+
+    projected = validate_network_status(
+        build_network_status(profiles=(profile,), supervisor_health=health, platform_name="linux")
+    )
+
+    assert projected["protection_active"] is expected_active
+    assert projected["effective_grade"] == (profile.maximum_grade.value if expected_active else "unavailable")
 
 
 @pytest.mark.parametrize(
