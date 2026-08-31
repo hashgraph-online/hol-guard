@@ -487,7 +487,7 @@ const BACKEND_PLATFORMS = ["linux", "macos", "windows"];
 const CONTAINMENT_BACKENDS = ["unsupported", "macos-sandbox", "linux-bwrap"];
 const SHA256 = /^[0-9a-f]{64}$/;
 const SAFE_IDENTIFIER = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-const CONTAINMENT_POLICY_CONTRACT_DIGEST = "8861db0285235c9f06ca2c8443b0899928890cd63ba5d0f9873c9514e4614ee4";
+const CONTAINMENT_POLICY_CONTRACT_DIGEST = "157eb473c61c87e71483d1064db862b58e979864b486c693d39d54c6429b03f2";
 const STATUS_REQUEST_TIMEOUT_MS = 8e3;
 const DEFAULT_STATUS_LOADERS = {
   network: fetchGuardNetworkStatus,
@@ -735,6 +735,14 @@ function containmentPresentationState(resource, nowEpochMs) {
   }
   return resource.value.probeEnforced ? "ready" : "unavailable";
 }
+function nextProofClockDelay(state, nowEpochMs, fallbackMs = 3e4) {
+  const boundaries = [
+    state.network.value?.supervisor.healthyUntilEpochMs,
+    state.containment.value === null ? null : state.containment.value.probeAtEpochMs + 5 * 60 * 1e3
+  ];
+  const futureDelays = boundaries.filter((boundary) => boundary !== null && boundary > nowEpochMs).map((boundary) => boundary - nowEpochMs + 1);
+  return futureDelays.length === 0 ? fallbackMs : Math.min(fallbackMs, ...futureDelays);
+}
 function useNetworkSandboxStatus() {
   const [state, setState] = reactExports.useState(INITIAL_NETWORK_SANDBOX_STATUS);
   const controllerRef = reactExports.useRef(null);
@@ -934,9 +942,15 @@ function NetworkSandboxStatusPanel() {
     void refresh().finally(() => setNowEpochMs(Date.now()));
   }, [refresh]);
   reactExports.useEffect(() => {
-    const timer = window.setInterval(() => setNowEpochMs(Date.now()), 3e4);
-    return () => window.clearInterval(timer);
-  }, []);
+    let timer = 0;
+    const scheduleClock = () => {
+      const currentEpochMs = Date.now();
+      setNowEpochMs(currentEpochMs);
+      timer = window.setTimeout(scheduleClock, nextProofClockDelay(state, currentEpochMs));
+    };
+    scheduleClock();
+    return () => window.clearTimeout(timer);
+  }, [state]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     NetworkSandboxStatusPanelView,
     {

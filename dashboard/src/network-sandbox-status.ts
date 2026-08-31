@@ -16,7 +16,7 @@ const BACKEND_PLATFORMS = ["linux", "macos", "windows"] as const;
 const CONTAINMENT_BACKENDS = ["unsupported", "macos-sandbox", "linux-bwrap"] as const;
 const SHA256 = /^[0-9a-f]{64}$/;
 const SAFE_IDENTIFIER = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-const CONTAINMENT_POLICY_CONTRACT_DIGEST = "8861db0285235c9f06ca2c8443b0899928890cd63ba5d0f9873c9514e4614ee4";
+const CONTAINMENT_POLICY_CONTRACT_DIGEST = "157eb473c61c87e71483d1064db862b58e979864b486c693d39d54c6429b03f2";
 
 type NetworkGrade = (typeof NETWORK_GRADES)[number];
 type NetworkPhase = (typeof NETWORK_PHASES)[number];
@@ -428,6 +428,21 @@ export function containmentPresentationState(
     return "stale";
   }
   return resource.value.probeEnforced ? "ready" : "unavailable";
+}
+
+export function nextProofClockDelay(
+  state: NetworkSandboxStatusState,
+  nowEpochMs: number,
+  fallbackMs = 30_000,
+): number {
+  const boundaries = [
+    state.network.value?.supervisor.healthyUntilEpochMs,
+    state.containment.value === null ? null : state.containment.value.probeAtEpochMs + 5 * 60 * 1_000,
+  ];
+  const futureDelays = boundaries
+    .filter((boundary): boundary is number => boundary !== null && boundary > nowEpochMs)
+    .map((boundary) => boundary - nowEpochMs + 1);
+  return futureDelays.length === 0 ? fallbackMs : Math.min(fallbackMs, ...futureDelays);
 }
 
 export function useNetworkSandboxStatus(): {

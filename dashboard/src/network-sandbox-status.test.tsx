@@ -7,6 +7,7 @@ import {
   containmentPresentationState,
   loadNetworkSandboxStatus,
   networkPresentationState,
+  nextProofClockDelay,
   normalizeGuardContainmentHealth,
   normalizeGuardNetworkStatus,
   settleNetworkSandboxStatus,
@@ -71,7 +72,7 @@ const containmentPayload = {
     probe_at: "2026-08-30T15:59:00Z",
     probe_enforced: true,
     backend_digest: "a".repeat(64),
-    policy_contract_digest: "8861db0285235c9f06ca2c8443b0899928890cd63ba5d0f9873c9514e4614ee4",
+    policy_contract_digest: "157eb473c61c87e71483d1064db862b58e979864b486c693d39d54c6429b03f2",
     daemon_fingerprint: "b".repeat(64),
     runtime_fingerprint: "b".repeat(64),
     ignored_private_value: "private-value-is-discarded",
@@ -165,6 +166,21 @@ const containmentResource: GuardStatusResource<GuardContainmentHealth> = {
 };
 assert.equal(networkPresentationState(networkResource, now), "ready");
 assert.equal(containmentPresentationState(containmentResource, now), "ready");
+assert.equal(nextProofClockDelay({ network: networkResource, containment: containmentResource }, now), 30_000);
+assert.equal(
+  nextProofClockDelay(
+    {
+      network: {
+        ...networkResource,
+        value: { ...network, supervisor: { ...network.supervisor, healthyUntilEpochMs: now + 100 } },
+      },
+      containment: containmentResource,
+    },
+    now,
+  ),
+  101,
+  "the proof clock wakes immediately after the nearest exact expiry boundary",
+);
 assert.equal(
   networkPresentationState({ ...networkResource, value: { ...network, independentlyObserved: false } }, now),
   "unavailable",

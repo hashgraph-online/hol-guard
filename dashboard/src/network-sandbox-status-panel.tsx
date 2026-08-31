@@ -10,6 +10,7 @@ import { SectionLabel } from "./approval-center-primitives";
 import {
   containmentPresentationState,
   networkPresentationState,
+  nextProofClockDelay,
   useNetworkSandboxStatus,
   type NetworkSandboxStatusState,
   type ProofPresentationState,
@@ -235,9 +236,15 @@ export function NetworkSandboxStatusPanel() {
   }, [refresh]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowEpochMs(Date.now()), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+    let timer = 0;
+    const scheduleClock = () => {
+      const currentEpochMs = Date.now();
+      setNowEpochMs(currentEpochMs);
+      timer = window.setTimeout(scheduleClock, nextProofClockDelay(state, currentEpochMs));
+    };
+    scheduleClock();
+    return () => window.clearTimeout(timer);
+  }, [state]);
 
   return (
     <NetworkSandboxStatusPanelView
