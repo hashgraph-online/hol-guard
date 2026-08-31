@@ -202,6 +202,33 @@ def private_hook_runtime_cwd(manifest_path: Path) -> Path:
     return resolved
 
 
+def _spawn_windows_process(
+    command: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    allow_breakaway: bool,
+    use_job: bool,
+) -> tuple[subprocess.Popen[bytes], WindowsHookJob | None]:
+    if use_job:
+        return spawn_windows_hook_process(
+            command,
+            cwd=cwd,
+            environment=environment,
+            allow_breakaway=allow_breakaway,
+        )
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=environment,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+    )
+    return process, None
+
+
 def run_isolated_hook_process(
     command: Sequence[str],
     *,
@@ -211,7 +238,7 @@ def run_isolated_hook_process(
     timeout_seconds: float,
     output_limit: int = _HOOK_SUBPROCESS_OUTPUT_LIMIT,
     allow_windows_breakaway: bool = False,
-    allow_windows_silent_child_breakaway: bool = False,
+    windows_job_containment: bool = True,
     stop_event: threading.Event | None = None,
     parent_liveness: bool = False,
 ) -> BoundedHookProcessResult:
@@ -228,12 +255,12 @@ def run_isolated_hook_process(
     liveness_write_fd: int | None = None
     try:
         if os.name == "nt":
-            process, windows_job = spawn_windows_hook_process(
+            process, windows_job = _spawn_windows_process(
                 list(command),
                 cwd=cwd,
                 environment=dict(environment),
                 allow_breakaway=allow_windows_breakaway,
-                silent_child_breakaway=allow_windows_silent_child_breakaway,
+                use_job=windows_job_containment,
             )
         else:
             child_environment = dict(environment)
