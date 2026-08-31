@@ -67,10 +67,7 @@ def native_resident_client_request(
 ) -> bytes | None:
     """Invoke the native client without interpreting its protocol."""
     _LAST_FAILURE_CODE.set(None)
-    if not payload or (
-        deadline_monotonic is None
-        and (timeout_seconds is None or timeout_seconds <= 0)
-    ):
+    if not payload or (deadline_monotonic is None and (timeout_seconds is None or timeout_seconds <= 0)):
         _LAST_FAILURE_CODE.set("native_client_request_invalid")
         return None
     try:

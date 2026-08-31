@@ -34,6 +34,10 @@ use winapi::um::winbase::{
 };
 use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE};
 
+// SAFETY: This module is the sole Win32 FFI boundary. Every borrowed handle is
+// valid for the duration of its call, and every newly owned handle is wrapped
+// exactly once in an RAII type before any fallible operation can return.
+
 // PROC_THREAD_ATTRIBUTE_HANDLE_LIST is missing from winapi 0.3.9's constants.
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
 const STILL_ACTIVE: DWORD = 259;
@@ -52,11 +56,13 @@ impl ManagedChild {
 
     /// Wait for the child and report whether it exited successfully.
     pub fn wait_success(&self) -> io::Result<bool> {
+        // SAFETY: `process` owns a live process handle until this method returns.
         let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, INFINITE) };
         if wait != WAIT_OBJECT_0 {
             return Err(io::Error::last_os_error());
         }
         let mut exit_code = 0;
+        // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
         if unsafe { GetExitCodeProcess(self.process.as_raw_handle() as HANDLE, &mut exit_code) }
             == FALSE
         {
@@ -68,16 +74,19 @@ impl ManagedChild {
     /// Terminate the child if it is still running, then wait for it to exit.
     pub fn terminate(&self) -> io::Result<()> {
         let mut exit_code = 0;
+        // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
         if unsafe { GetExitCodeProcess(self.process.as_raw_handle() as HANDLE, &mut exit_code) }
             == FALSE
         {
             return Err(io::Error::last_os_error());
         }
         if exit_code == STILL_ACTIVE
+            // SAFETY: The process handle is owned and termination is followed by a wait.
             && unsafe { TerminateProcess(self.process.as_raw_handle() as HANDLE, 1) } == FALSE
         {
             return Err(io::Error::last_os_error());
         }
+        // SAFETY: `process` owns a live process handle until this method returns.
         let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, INFINITE) };
         if wait == WAIT_OBJECT_0 {
             Ok(())
@@ -110,6 +119,7 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
     let mut attributes = AttributeList::new(1)?;
     attributes.set_handle_list(&handles)?;
 
+    // SAFETY: STARTUPINFOEXW is a plain C struct where an all-zero value is valid.
     let mut startup = unsafe { zeroed::<STARTUPINFOEXW>() };
     startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as DWORD;
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
@@ -118,7 +128,10 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
     startup.StartupInfo.hStdError = handles[2];
     startup.lpAttributeList = attributes.as_mut_ptr();
 
+    // SAFETY: PROCESS_INFORMATION is a plain C struct where an all-zero value is valid.
     let mut process_info = unsafe { zeroed::<PROCESS_INFORMATION>() };
+    // SAFETY: All pointers reference live, nul-terminated or initialized storage;
+    // the attribute list names only the three inheritable standard handles above.
     let created = unsafe {
         CreateProcessW(
             executable_w.as_ptr(),
@@ -137,8 +150,11 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
         return Err(io::Error::last_os_error());
     }
 
+    // SAFETY: CreateProcessW returned each handle exactly once on success.
     let process = unsafe { OwnedHandle::from_raw_handle(process_info.hProcess as RawHandle) };
+    // SAFETY: CreateProcessW returned the thread handle exactly once on success.
     let _thread = unsafe { OwnedHandle::from_raw_handle(process_info.hThread as RawHandle) };
+    // SAFETY: `parent_stdin` is transferred exactly once into the File owner.
     let stdin = unsafe { std::fs::File::from_raw_handle(parent_stdin.into_raw_handle()) };
     Ok(ManagedChild {
         process,
@@ -149,14 +165,24 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
 fn create_stdin_pipe(security: &mut SECURITY_ATTRIBUTES) -> io::Result<(OwnedHandle, OwnedHandle)> {
     let mut child_read = null_mut();
     let mut parent_write = null_mut();
+    // SAFETY: Output pointers and SECURITY_ATTRIBUTES remain valid for the call.
     if unsafe { CreatePipe(&mut child_read, &mut parent_write, security, 0) } == FALSE {
         return Err(io::Error::last_os_error());
     }
-    if unsafe { SetHandleInformation(parent_write, HANDLE_FLAG_INHERIT, 0) } == FALSE {
-        return Err(io::Error::last_os_error());
-    }
+    // SAFETY: CreatePipe returned each handle exactly once; OwnedHandle now owns both.
     let child_read = unsafe { OwnedHandle::from_raw_handle(child_read as RawHandle) };
     let parent_write = unsafe { OwnedHandle::from_raw_handle(parent_write as RawHandle) };
+    // SAFETY: `parent_write` remains owned and valid for this call.
+    if unsafe {
+        SetHandleInformation(
+            parent_write.as_raw_handle() as HANDLE,
+            HANDLE_FLAG_INHERIT,
+            0,
+        )
+    } == FALSE
+    {
+        return Err(io::Error::last_os_error());
+    }
     Ok((child_read, parent_write))
 }
 
@@ -165,6 +191,7 @@ fn create_null_handle(
     security: &mut SECURITY_ATTRIBUTES,
 ) -> io::Result<OwnedHandle> {
     let path: Vec<u16> = OsStr::new(r"\\.\NUL").encode_wide().chain([0]).collect();
+    // SAFETY: The path is nul-terminated and all pointer arguments remain valid for the call.
     let handle = unsafe {
         CreateFileW(
             path.as_ptr(),
@@ -179,6 +206,7 @@ fn create_null_handle(
     if handle == INVALID_HANDLE_VALUE {
         Err(io::Error::last_os_error())
     } else {
+        // SAFETY: CreateFileW returned this handle exactly once.
         Ok(unsafe { OwnedHandle::from_raw_handle(handle as RawHandle) })
     }
 }
@@ -246,8 +274,10 @@ struct AttributeList {
 impl AttributeList {
     fn new(count: DWORD) -> io::Result<Self> {
         let mut size: SIZE_T = 0;
+        // SAFETY: The sizing probe intentionally passes a null list and a valid size pointer.
         let _ = unsafe { InitializeProcThreadAttributeList(null_mut(), count, 0, &mut size) };
         if size == 0
+            // SAFETY: GetLastError reads the calling thread's Win32 error state.
             || unsafe { GetLastError() } != winapi::shared::winerror::ERROR_INSUFFICIENT_BUFFER
         {
             return Err(io::Error::last_os_error());
@@ -255,6 +285,7 @@ impl AttributeList {
         let storage_units = size.div_ceil(size_of::<usize>() as SIZE_T);
         let mut storage = vec![0usize; storage_units];
         let list = storage.as_mut_ptr() as *mut _;
+        // SAFETY: `list` points to aligned, exclusively owned storage of the requested size.
         if unsafe { InitializeProcThreadAttributeList(list, count, 0, &mut size) } == FALSE {
             return Err(io::Error::last_os_error());
         }
@@ -266,6 +297,7 @@ impl AttributeList {
     }
 
     fn set_handle_list(&mut self, handles: &[HANDLE]) -> io::Result<()> {
+        // SAFETY: The initialized list and handle slice remain valid for this call.
         if unsafe {
             UpdateProcThreadAttribute(
                 self.list,
@@ -287,6 +319,7 @@ impl AttributeList {
 
 impl Drop for AttributeList {
     fn drop(&mut self) {
+        // SAFETY: `self.list` was initialized successfully and is dropped exactly once.
         unsafe { DeleteProcThreadAttributeList(self.list) };
         let _ = &self.storage;
     }

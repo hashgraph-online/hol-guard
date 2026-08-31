@@ -123,9 +123,10 @@
         "src/codex_plugin_scanner/guard/adapters/*resume*.py",
         "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
         "src/codex_plugin_scanner/guard/adapters/*transport*.py",
-        "src/codex_plugin_scanner/guard/adapters/hook_python*.py",
-        "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
-        "src/codex_plugin_scanner/guard/codex_hook_windows_job.py"
+          "src/codex_plugin_scanner/guard/adapters/hook_python*.py",
+          "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
+          "src/codex_plugin_scanner/guard/codex_hook_process_runtime.py",
+          "src/codex_plugin_scanner/guard/codex_hook_windows_job.py"
       ],
       "current": "bounded stdin, daemon authentication, HTTP transport, and mechanical response projection",
       "target": "minimal launcher and mechanical serialization only"
@@ -312,7 +313,8 @@
       "class": "rust_io",
       "paths": [
         "rust/crates/guard-hook-core/**",
-        "rust/crates/guard-secure-fs/**"
+        "rust/crates/guard-secure-fs/**",
+        "rust/crates/guard-runtime-windows-process/**"
       ],
       "current": "PostToolUse output extraction, source validation, secure reads, identity, hashing, equivalence, and scanning",
       "target": "all decision-critical hook content and source I/O"

@@ -49,10 +49,7 @@ def _rust_resident_state_signature(guard_home: Path) -> tuple[tuple[object, ...]
         payload = json.loads(state_path.read_text(encoding="utf-8"))
         assert isinstance(payload, dict)
         signatures.append(
-            tuple(
-                payload.get(field)
-                for field in ("generation", "process_id", "owner_process_id", "runtime_sha256")
-            )
+            tuple(payload.get(field) for field in ("generation", "process_id", "owner_process_id", "runtime_sha256"))
         )
     return tuple(signatures)
 
