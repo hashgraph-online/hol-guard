@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.runtime.network_capability_contract import (
     PlatformCapabilityProfile,
     PlatformFamily,
     default_platform_profiles,
+    enforcement_grade_rank,
 )
 from codex_plugin_scanner.guard.runtime.network_legacy_config import (
     migrate_new_network_domain_action,
@@ -75,8 +76,14 @@ def build_network_status(
             installed
             and selected_health is not None
             and selected_health.effective_grade is not EnforcementGrade.UNAVAILABLE
+            and enforcement_grade_rank(selected_health.effective_grade) <= enforcement_grade_rank(profile.maximum_grade)
         )
-        active = selected_health is not None and selected_health.permits_enforcement and profile.production_ready
+        active = (
+            selected_health is not None
+            and selected_health.permits_enforcement
+            and verified
+            and profile.production_ready
+        )
         effective_grade = (
             selected_health.effective_grade if selected_health is not None and active else EnforcementGrade.UNAVAILABLE
         )

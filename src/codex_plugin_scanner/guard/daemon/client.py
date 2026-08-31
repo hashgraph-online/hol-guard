@@ -9,6 +9,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from pathlib import Path
 from typing import Protocol, TypeGuard, cast
 
@@ -308,7 +309,7 @@ class GuardSurfaceDaemonClient:
                 payload = response.read(_MAX_GET_RESPONSE_BYTES + 1)
             except TimeoutError as error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
-            if time.monotonic() > deadline:
+            if time.monotonic() >= deadline:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out")
             if len(payload) > _MAX_GET_RESPONSE_BYTES:
                 raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
@@ -327,7 +328,7 @@ class GuardSurfaceDaemonClient:
                 chunk = bounded_read(min(65_536, _MAX_GET_RESPONSE_BYTES + 1 - total_bytes))
             except TimeoutError as error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
-            if time.monotonic() > deadline:
+            if time.monotonic() >= deadline:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out")
             if not chunk:
                 break
@@ -402,6 +403,9 @@ class GuardSurfaceDaemonClient:
             GuardDaemonRequestError,
         ):
             pass
+        finally:
+            with suppress(OSError):
+                error.close()
         message = code or str(error)
         return GuardDaemonRequestError(
             f"Guard daemon request failed: {message}",

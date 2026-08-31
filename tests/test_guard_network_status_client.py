@@ -52,6 +52,7 @@ class _RawResponse:
         self.read_error = read_error
         self.read_timeout: float | None = None
         self.consumed = False
+        self.closed = False
 
     def __enter__(self) -> _RawResponse:
         return self
@@ -72,7 +73,7 @@ class _RawResponse:
         self.read_timeout = timeout
 
     def close(self) -> None:
-        return None
+        self.closed = True
 
 
 def test_network_status_client_enforces_total_body_deadline(
@@ -122,6 +123,7 @@ def test_network_status_client_bounds_http_error_body(
     with pytest.raises(GuardDaemonTimeoutError, match="timed out") as error:
         client.network_status()
     assert "private" not in str(error.value)
+    assert error_body.closed is True
     assert time.monotonic() - started_at < 0.75
 
 
