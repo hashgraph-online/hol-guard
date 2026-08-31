@@ -434,10 +434,16 @@ def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClie
     return GuardSurfaceDaemonClient(daemon_url, auth_token)
 
 
-def load_running_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
+def load_running_guard_surface_daemon_client(
+    guard_home: Path, *, identity_timeout: float = 1.0
+) -> GuardSurfaceDaemonClient:
     """Load the current daemon authority without starting or repairing a daemon."""
 
-    identity = load_running_guard_daemon_identity(guard_home)
+    identity = (
+        load_running_guard_daemon_identity(guard_home)
+        if identity_timeout == 1.0
+        else load_running_guard_daemon_identity(guard_home, health_timeout=identity_timeout)
+    )
     if identity is None:
         raise GuardDaemonTransportError("Guard daemon authority is unavailable")
     daemon_url, auth_token = identity

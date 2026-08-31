@@ -32,7 +32,9 @@ def load_network_status_payload(
     try:
         if guard_home is None:
             raise GuardDaemonTransportError("Guard daemon authority is unavailable")
-        payload = validate_network_status(load_running_guard_surface_daemon_client(guard_home).network_status())
+        payload = validate_network_status(
+            load_running_guard_surface_daemon_client(guard_home, identity_timeout=0.05).network_status()
+        )
         payload["status_source"] = "daemon"
     except GuardDaemonTimeoutError:
         reason_code = "daemon-timeout"
