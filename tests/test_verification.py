@@ -2,6 +2,7 @@
 
 import json
 import socket
+import threading
 import urllib.parse
 from pathlib import Path
 
@@ -70,7 +71,7 @@ def test_online_mcp_verification_pins_the_validated_address(monkeypatch):
 
     def _probe(_parsed, addresses, *, timeout_seconds):
         observed_addresses.append(addresses)
-        assert timeout_seconds == 3
+        assert 0 < timeout_seconds <= 3
         return 200
 
     monkeypatch.setattr("codex_plugin_scanner.verification.probe_pinned_https", _probe)
@@ -92,6 +93,35 @@ def test_online_mcp_verification_caps_validated_addresses(monkeypatch):
 
     assert error is None
     assert len(addresses) == MAX_VALIDATED_HTTPS_ADDRESSES
+
+
+def test_online_mcp_verification_bounds_stalled_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    release = threading.Event()
+
+    def stalled_resolver(*_args, **_kwargs):
+        release.wait(10)
+        return []
+
+    monkeypatch.setattr(socket, "getaddrinfo", stalled_resolver)
+    monkeypatch.setattr("codex_plugin_scanner.verification.time.monotonic", lambda: 10.0)
+
+    _parsed, error, addresses = _validate_remote_url(
+        "https://example.com",
+        resolve_dns=True,
+        deadline=10.001,
+    )
+    release.set()
+
+    assert error == "Remote MCP hostname resolution timed out"
+    assert addresses == ()
+
+
+def test_malformed_remote_url_becomes_unsafe_destination_case() -> None:
+    cases = _check_mcp_http([{"url": "https://[malformed"}], online=False)
+
+    assert len(cases) == 1
+    assert cases[0].classification == "unsafe-destination"
+    assert cases[0].passed is False
 
 
 def test_pinned_https_uses_one_deadline_across_addresses(monkeypatch):

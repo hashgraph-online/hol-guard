@@ -6,6 +6,7 @@ import ipaddress
 import json
 import re
 import socket
+import time
 import urllib.parse
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -23,7 +24,7 @@ from .marketplace_support import (
 )
 from .models import ScanSkipTarget
 from .path_support import is_safe_relative_path, path_entry_exists, read_text_file_within_root
-from .pinned_https import probe_pinned_https
+from .pinned_https import probe_pinned_https, resolve_host_addresses
 from .repo_detect import discover_scan_targets
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^]]+\]\(([^)]+)\)")
@@ -397,8 +398,12 @@ def _validate_remote_url(
     url: str,
     *,
     resolve_dns: bool,
+    deadline: float | None = None,
 ) -> tuple[urllib.parse.ParseResult, str | None, tuple[str, ...]]:
-    parsed = urllib.parse.urlparse(url)
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return urllib.parse.urlparse(""), "Remote MCP URL is malformed", ()
     if parsed.scheme != "https":
         return parsed, "Remote MCP URLs must use HTTPS", ()
     if parsed.username is not None or parsed.password is not None:
@@ -426,10 +431,12 @@ def _validate_remote_url(
         return parsed, None, ()
 
     try:
-        resolved = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+        timeout_seconds = 3.0 if deadline is None else max(deadline - time.monotonic(), 0.0)
+        addresses = set(resolve_host_addresses(hostname, port, timeout_seconds=timeout_seconds))
+    except TimeoutError:
+        return parsed, "Remote MCP hostname resolution timed out", ()
     except socket.gaierror:
         return parsed, "Remote MCP hostname could not be resolved", ()
-    addresses = {str(item[4][0]).split("%", 1)[0] for item in resolved if item[4]}
     if not addresses or any(not _is_public_address(address) for address in addresses):
         return parsed, "Remote MCP hostname resolves to a non-public address", ()
     return parsed, None, tuple(sorted(addresses)[:MAX_VALIDATED_HTTPS_ADDRESSES])
@@ -443,14 +450,16 @@ def _check_mcp_http(remotes: list[object], *, online: bool) -> list[Verification
         url = str(remote.get("url", ""))
         if not url:
             continue
-        parsed, validation_error, addresses = _validate_remote_url(url, resolve_dns=online)
+        deadline = time.monotonic() + 3.0 if online else None
+        parsed, validation_error, addresses = _validate_remote_url(url, resolve_dns=online, deadline=deadline)
         display_url = _display_remote_url(parsed)
         if validation_error is not None:
             cases.append(VerificationCase("mcp", "remote destination", False, validation_error, "unsafe-destination"))
             continue
         if online:
             try:
-                status = probe_pinned_https(parsed, addresses, timeout_seconds=3)
+                timeout_seconds = max((deadline or time.monotonic()) - time.monotonic(), 0.001)
+                status = probe_pinned_https(parsed, addresses, timeout_seconds=timeout_seconds)
                 if status in (401, 403):
                     cases.append(
                         VerificationCase(

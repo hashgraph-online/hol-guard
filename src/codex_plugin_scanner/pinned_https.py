@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import socket
 import ssl
+import threading
 import time
 import urllib.parse
 
@@ -34,6 +35,29 @@ def _remaining_seconds(deadline: float) -> float:
     if remaining <= 0:
         raise TimeoutError("HTTPS probe exceeded its total deadline")
     return remaining
+
+
+def resolve_host_addresses(hostname: str, port: int, *, timeout_seconds: float) -> tuple[str, ...]:
+    """Resolve a hostname without allowing the platform resolver to overrun the caller's deadline."""
+    resolved: list[tuple[str, ...]] = []
+    errors: list[Exception] = []
+    finished = threading.Event()
+
+    def resolve() -> None:
+        try:
+            records = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+            resolved.append(tuple(str(item[4][0]).split("%", 1)[0] for item in records if item[4]))
+        except Exception as error:
+            errors.append(error)
+        finally:
+            finished.set()
+
+    threading.Thread(target=resolve, name="hol-guard-dns", daemon=True).start()
+    if not finished.wait(max(timeout_seconds, 0.0)):
+        raise TimeoutError("hostname resolution exceeded its deadline")
+    if errors:
+        raise errors[0]
+    return resolved[0] if resolved else ()
 
 
 def probe_pinned_https(

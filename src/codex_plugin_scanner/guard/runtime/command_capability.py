@@ -7,11 +7,11 @@ import hmac
 import json
 import os
 import secrets
-import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from ..portable_command import portable_command_argument, render_portable_command
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..stable_digest import sha256_content_digest
 from ..store import GuardStore
@@ -339,6 +339,8 @@ def command_job_identity(
         value = job.get(field)
         if not isinstance(value, str) or not value.strip():
             raise CommandCapabilityError(error_code)
+        if field == "id" and not portable_command_argument(value.strip()):
+            raise CommandCapabilityError("command_id_invalid")
         identity[field] = value.strip()
     schema_version = job.get("schemaVersion")
     if schema_version != schema_versions[operation]:
@@ -408,7 +410,7 @@ def register_pending_command(
         **authorized.identity,
         "issuer": job.get("issuer") if isinstance(job.get("issuer"), str) else "Guard Cloud",
         "recordedAt": recorded_at,
-        "approveCommand": shlex.join(["hol-guard", "commands", "approve", job_id, "--confirm", job_id]),
+        "approveCommand": render_portable_command(["hol-guard", "commands", "approve", job_id, "--confirm", job_id]),
     }
     items.append(item)
     store.set_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY, {"version": 1, "items": items[-64:]}, recorded_at)

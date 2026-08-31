@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shlex
 import sys
 import time
 import urllib.error
@@ -334,15 +333,8 @@ def test_connect_status_surfaces_quarantined_review_event_recovery(
         sync_url="https://hol.org/api/guard/receipts/sync",
         connect_url="https://hol.org/guard/connect",
     )
-    assert shlex.split(str(quoted_payload["review_event_recovery_command"])) == [
-        "hol-guard",
-        "connect",
-        "reassign-quarantined",
-        "--confirm-source",
-        binding["oauth_source"],
-        "--confirm-workspace",
-        binding["workspace_id"],
-    ]
+    assert "review_event_recovery_command" not in quoted_payload
+    assert quoted_payload["review_event_recovery_command_unavailable"] == "binding_identifiers_invalid"
 
 
 def test_connect_status_requires_retry_when_oauth_not_configured(tmp_path: Path) -> None:

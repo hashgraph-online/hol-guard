@@ -667,7 +667,7 @@ def main() -> int:
         verify_pass_for_summary = verification.verify_pass
         if output_path:
             target = Path(output_path)
-            target.write_text(rendered, encoding="utf-8")
+            write_text_atomic_no_follow(target, rendered)
             print(f"Report written to {target}")
             report_path_value = str(target)
         else:

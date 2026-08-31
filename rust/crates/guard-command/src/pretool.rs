@@ -100,7 +100,7 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
     })
 }
 
-fn safe_git_arguments(arguments: &[String]) -> bool {
+fn safe_git_arguments(arguments: &[String], allow_helper_context: bool) -> bool {
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };
@@ -110,11 +110,51 @@ fn safe_git_arguments(arguments: &[String]) -> bool {
     ) {
         return false;
     }
+    let option_end = arguments
+        .iter()
+        .position(|argument| argument == "--")
+        .unwrap_or(arguments.len());
+    let active_options = &arguments[1..option_end];
+    if !allow_helper_context
+        && matches!(subcommand, "diff" | "log" | "show")
+        && !(active_options
+            .iter()
+            .any(|argument| argument == "--no-ext-diff")
+            && active_options
+                .iter()
+                .any(|argument| argument == "--no-textconv"))
+    {
+        return false;
+    }
     !has_argument(
-        &arguments[1..],
+        active_options,
         &["--ext-diff", "--textconv", "--output", "-o"],
         &["--output=", "--exec-path="],
     )
+}
+
+fn git_helper_context_required(model: &CanonicalCommandV1) -> bool {
+    exact_safe_command(model, true)
+        && model.segments.iter().any(|segment| {
+            segment.executable.as_deref().is_some_and(|executable| {
+                executable_basename(executable) == "git"
+                    && segment.arguments.first().is_some_and(|subcommand| {
+                        let option_end = segment
+                            .arguments
+                            .iter()
+                            .position(|argument| argument == "--")
+                            .unwrap_or(segment.arguments.len());
+                        let active_options = &segment.arguments[1..option_end];
+                        matches!(subcommand.as_str(), "diff" | "log" | "show")
+                            && !(active_options
+                                .iter()
+                                .any(|argument| argument == "--no-ext-diff")
+                                && active_options
+                                    .iter()
+                                    .any(|argument| argument == "--no-textconv"))
+                    })
+            })
+        })
 }
 
 fn destructive_command(value: &str) -> bool {
@@ -155,7 +195,7 @@ fn exfiltration_command(value: &str) -> bool {
         && upload.iter().any(|needle| lowered.contains(needle))
 }
 
-fn exact_safe_command(model: &CanonicalCommandV1) -> bool {
+fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
     if model.confidence != "exact" || model.path_overridden || model.segments.is_empty() {
         return false;
     }
@@ -177,7 +217,7 @@ fn exact_safe_command(model: &CanonicalCommandV1) -> bool {
         }
         match basename {
             "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" | "stat" => true,
-            "git" => safe_git_arguments(&segment.arguments),
+            "git" => safe_git_arguments(&segment.arguments, allow_git_helper_context),
             "rg" | "grep" => safe_search_arguments(basename, &segment.arguments),
             _ => false,
         }
@@ -219,7 +259,15 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard requires review because this command overrides executable resolution.",
         ));
     }
-    if exact_safe_command(&model) {
+    if git_helper_context_required(&model) {
+        return Ok(pretool_decision(
+            model,
+            "review",
+            "native_git_helper_context_review",
+            "HOL Guard is checking repository Git-helper configuration before allowing this read-only command.",
+        ));
+    }
+    if exact_safe_command(&model, false) {
         return Ok(pretool_decision(
             model,
             "allow",
@@ -282,12 +330,14 @@ mod tests {
             "uname -a",
             "git status --short",
             "git rev-parse --show-toplevel",
-            "git diff --check",
+            "git diff --no-ext-diff --no-textconv --check",
             "rg -n authority src",
             "rg -g*.ts authority src",
             "rg --glob '*.{ts,tsx}' authority src",
+            "rg --line-number --color=never authority src",
             "rg -e '.env.local' src",
             "grep -n authority README.md",
+            "grep --line-number --color=never authority README.md",
             "grep -eerror README.md",
             "grep -e 'terraform.tfvars' README.md",
             "grep -d skip authority README.md",
@@ -335,11 +385,18 @@ mod tests {
             "grep -R authority .",
             "grep -d recurse TOKEN .",
             "grep --directories=recurse TOKEN .",
+            "grep --recursiv TOKEN .",
+            "grep --direct=recurse TOKEN .",
+            "rg --hidd TOKEN .",
+            "rg --globx '*.ts' TOKEN .",
             "/opt/guard-test/rg authority src",
             "FOO=bar git status --short",
             "GIT_EXTERNAL_DIFF=/opt/guard-test/payload git diff --ext-diff README.md",
             "git diff --output=/opt/guard-test/diff README.md",
             "git log -1 --output=/opt/guard-test/log",
+            "git diff --check",
+            "git log -1",
+            "git show HEAD",
             "git show HEAD:.env",
             "git show HEAD:.git/config",
         ] {
@@ -348,6 +405,23 @@ mod tests {
             assert_eq!(decision.minimum_action, "review", "{command}");
             assert!(!decision.explicitly_benign, "{command}");
         }
+    }
+
+    #[test]
+    fn defers_only_exact_safe_git_helper_context() {
+        let contextual = evaluate_pre_tool(&request("git diff --check")).unwrap();
+        assert_eq!(contextual.reason_code, "native_git_helper_context_review");
+
+        let unsafe_output =
+            evaluate_pre_tool(&request("git diff --output=/tmp/diff README.md")).unwrap();
+        assert_eq!(unsafe_output.reason_code, "native_command_review_required");
+
+        let option_shaped_paths =
+            evaluate_pre_tool(&request("git diff -- --no-ext-diff --no-textconv")).unwrap();
+        assert_eq!(
+            option_shaped_paths.reason_code,
+            "native_git_helper_context_review"
+        );
     }
 
     #[test]

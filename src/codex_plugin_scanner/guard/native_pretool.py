@@ -142,6 +142,8 @@ def native_pre_tool_policy_floor(
     )
     if native is not None:
         action = native.get("minimum_action")
+        if action == "review" and native.get("reason_code") == "native_git_helper_context_review":
+            return None
         return action if action in {"allow", "review", "block"} else "block"
     status = native_runtime_status()
     if status.mode in {"off", "shadow"}:

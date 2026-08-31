@@ -179,18 +179,27 @@ def _raise_walk_error(error: OSError) -> None:
 def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> list[Path]:
     """Recursively find all files, skipping excluded dirs."""
     if files is not None:
-        discovered = [
-            path
-            for path in files
-            if path.is_file()
-            and not path.is_symlink()
-            and path.suffix.lower() not in BINARY_EXTS
-            and resolves_within_root(plugin_dir, path, require_exists=True)
-        ]
+        discovered = []
+        try:
+            for path in files:
+                if (
+                    path.is_file()
+                    and not path.is_symlink()
+                    and path.suffix.lower() not in BINARY_EXTS
+                    and resolves_within_root(plugin_dir, path, require_exists=True)
+                ):
+                    discovered.append(path.resolve(strict=True))
+        except OSError as error:
+            reason = error.strerror or type(error).__name__
+            raise ScanInputUnreadableError(f"explicit scan input unavailable: {reason}") from error
     else:
         discovered = []
         entries_seen = 0
-        resolved_root = plugin_dir.resolve(strict=True)
+        try:
+            resolved_root = plugin_dir.resolve(strict=True)
+        except OSError as error:
+            reason = error.strerror or type(error).__name__
+            raise ScanInputUnreadableError(f"plugin directory unavailable: {reason}") from error
         for root, dirs, names in os.walk(
             resolved_root,
             topdown=True,
@@ -844,6 +853,9 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
     resolved_plugin_dir = plugin_dir.resolve()
     try:
         for file_path in _scan_all_files(resolved_plugin_dir, files):
+            relative_path = file_path.relative_to(resolved_plugin_dir)
+            if not file_path.name.endswith((".json", ".md", ".yaml", ".yml", ".toml")):
+                continue
             try:
                 content = read_text_file_within_root(
                     resolved_plugin_dir,
@@ -852,11 +864,19 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
                     errors="ignore",
                 )
             except (OSError, UnicodeError):
-                continue
-            if not file_path.name.endswith((".json", ".md", ".yaml", ".yml", ".toml")):
-                continue
+                return unreadable_scan_input_failure(
+                    "No approval bypass defaults",
+                    max_points=3,
+                    path=relative_path.as_posix(),
+                )
             if any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS):
-                findings.append(str(file_path.relative_to(resolved_plugin_dir)))
+                findings.append(relative_path.as_posix())
+    except ScanInputUnreadableError as exc:
+        return unreadable_scan_input_failure(
+            "No approval bypass defaults",
+            max_points=3,
+            reason=str(exc),
+        )
     except ScanBudgetExceededError as exc:
         return _resource_budget_failure("No approval bypass defaults", max_points=3, reason=str(exc))
 

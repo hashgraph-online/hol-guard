@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.action_runner import _write_outputs
 from codex_plugin_scanner.safe_output import write_text_atomic_no_follow
 
@@ -31,6 +33,20 @@ def test_atomic_output_rejects_absolute_symlinked_parent(tmp_path: Path) -> None
         raise AssertionError("absolute symlinked output parent was accepted")
 
     assert not (outside / "report.json").exists()
+
+
+def test_atomic_output_creates_missing_parents_without_path_based_mkdir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "missing" / "nested" / "report.json"
+
+    def reject_path_mkdir(*_args, **_kwargs):
+        raise AssertionError("path-based mkdir used")
+
+    monkeypatch.setattr(Path, "mkdir", reject_path_mkdir)
+    write_text_atomic_no_follow(output, "safe")
+
+    assert output.read_text(encoding="utf-8") == "safe"
 
 
 def test_github_outputs_use_multiline_protocol_for_untrusted_newlines(tmp_path: Path) -> None:

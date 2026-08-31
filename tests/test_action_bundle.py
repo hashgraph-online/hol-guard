@@ -97,6 +97,13 @@ def test_action_steps_enable_python_safe_path() -> None:
     assert 'cat "$REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"' in summary_step["run"]
 
 
+def test_cisco_action_version_matches_hashed_runtime_lock() -> None:
+    version = (ROOT / "action" / "cisco-version.txt").read_text(encoding="utf-8").strip()
+    runtime_lock = (ROOT / "action" / "scanner-cisco-runtime-requirements.txt").read_text(encoding="utf-8")
+
+    assert f"cisco-ai-skill-scanner=={version} " in runtime_lock
+
+
 def test_python_safe_path_blocks_workspace_module_shadowing(tmp_path: Path) -> None:
     if sys.version_info < (3, 11):
         pytest.skip("python -P requires Python 3.11+")

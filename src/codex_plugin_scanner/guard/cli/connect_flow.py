@@ -6,7 +6,6 @@ import base64
 import http.server
 import json
 import secrets
-import shlex
 import threading
 import time
 import urllib.error
@@ -32,6 +31,7 @@ from ..package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
     reconcile_connect_state_with_oauth_entitlement,
 )
+from ..portable_command import portable_command_payload
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
@@ -1352,17 +1352,16 @@ def build_connect_status_payload(
     if review_event_status.get("binding_state") == "quarantined" and review_event_binding is not None:
         source = review_event_binding["oauth_source"]
         workspace_id = review_event_binding["workspace_id"]
-        payload["review_event_recovery_command"] = shlex.join(
-            [
-                "hol-guard",
-                "connect",
-                "reassign-quarantined",
-                "--confirm-source",
-                source,
-                "--confirm-workspace",
-                workspace_id,
-            ]
-        )
+        recovery_arguments = [
+            "hol-guard",
+            "connect",
+            "reassign-quarantined",
+            "--confirm-source",
+            source,
+            "--confirm-workspace",
+            workspace_id,
+        ]
+        payload.update(portable_command_payload("review_event_recovery_command", recovery_arguments))
     if action in {"repair", "re-pair"}:
         payload["repair_action"] = "rerun_connect"
         payload["repair_message"] = "Run hol-guard connect to start browser sign-in."

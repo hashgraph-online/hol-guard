@@ -1,6 +1,7 @@
 use super::sensitive_path_argument;
 use std::collections::{HashSet, VecDeque};
 mod hint;
+mod options;
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
     let mut previous = vec![false; value.len() + 1];
     previous[0] = true;
@@ -359,18 +360,12 @@ fn safe_rg_arguments(arguments: &[String]) -> bool {
             ) {
                 return false;
             }
-            let role = match name {
-                "--glob" | "--iglob" => Some(SearchValueRole::Glob),
-                "--regexp" => Some(SearchValueRole::Pattern),
-                "--file" | "--ignore-file" => Some(SearchValueRole::Path),
-                "--type-add" => Some(SearchValueRole::TypeGlob),
-                "--after-context" | "--before-context" | "--context" | "--encoding"
-                | "--engine" | "--max-columns" | "--max-count" | "--max-depth" | "--threads"
-                | "--type" | "--type-clear" | "--type-not" => Some(SearchValueRole::Other),
-                _ => None,
-            };
+            let role = options::rg_value_role(name);
             if name == "--files" {
                 paths_only = true;
+            }
+            if role.is_none() && !options::safe_rg_flag(name) {
+                return false;
             }
             if let Some(role) = role {
                 if attached.is_empty() {
@@ -447,14 +442,10 @@ fn safe_grep_arguments(arguments: &[String]) -> bool {
             ) {
                 return false;
             }
-            let role = match name {
-                "--regexp" => Some(SearchValueRole::Pattern),
-                "--directories" => Some(SearchValueRole::DirectoryAction),
-                "--after-context" | "--before-context" | "--context" | "--max-count" => {
-                    Some(SearchValueRole::Other)
-                }
-                _ => None,
-            };
+            let role = options::grep_value_role(name);
+            if role.is_none() && !options::safe_grep_flag(name) {
+                return false;
+            }
             if let Some(role) = role {
                 if attached.is_empty() {
                     pending_value = Some(role);

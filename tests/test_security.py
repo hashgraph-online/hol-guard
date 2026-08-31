@@ -400,6 +400,21 @@ class TestScanAllFiles:
             result = check_no_hardcoded_secrets(root)
             assert result.passed is True
 
+    def test_explicit_scan_paths_are_normalized_under_a_symlinked_root(self, tmp_path: Path):
+        root = tmp_path / "plugin"
+        root.mkdir()
+        candidate = root / "README.md"
+        candidate.write_text("safe", encoding="utf-8")
+        alias = tmp_path / "plugin-alias"
+        try:
+            alias.symlink_to(root, target_is_directory=True)
+        except (NotImplementedError, OSError):
+            pytest.skip("directory symlinks are not supported in this environment")
+
+        result = check_no_hardcoded_secrets(alias, (alias / candidate.name,))
+
+        assert result.passed is True
+
     def test_resource_budget_exhaustion_blocks_incomplete_secret_scan(self, tmp_path, monkeypatch):
         (tmp_path / "one.txt").write_text("safe", encoding="utf-8")
         (tmp_path / "two.txt").write_text("safe", encoding="utf-8")

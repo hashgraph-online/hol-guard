@@ -162,6 +162,28 @@ class TestSecurityEdgeCases:
         assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
         assert "readable" in result.findings[0].remediation
 
+    def test_missing_plugin_directory_fails_closed(self, tmp_path: Path):
+        from codex_plugin_scanner.checks.security import check_no_hardcoded_secrets
+
+        result = check_no_hardcoded_secrets(tmp_path / "missing")
+
+        assert not result.passed
+        assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
+
+    def test_approval_bypass_scan_fails_closed_on_unreadable_input(self, tmp_path: Path):
+        from codex_plugin_scanner.checks.security import check_no_approval_bypass_defaults
+
+        candidate = tmp_path / "settings.json"
+        candidate.write_text("{}", encoding="utf-8")
+        with patch(
+            "codex_plugin_scanner.checks.security.read_text_file_within_root",
+            side_effect=OSError("Permission denied"),
+        ):
+            result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert not result.passed
+        assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
+
 
 class TestCodeQualityEdgeCases:
     def test_eval_and_function_in_same_file(self):

@@ -153,6 +153,35 @@ def test_policy_floor_uses_native_block(
     )
 
 
+def test_policy_floor_defers_contextual_git_helper_review_to_python(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    native_review = _native_block("git diff --check")
+    native_review.update(
+        {
+            "decision": "deny",
+            "minimum_action": "review",
+            "policy_action": "review",
+            "reason_code": "native_git_helper_context_review",
+        }
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
+        lambda *_args, **_kwargs: native_review,
+    )
+
+    assert (
+        native_pre_tool_policy_floor(
+            "git diff --check",
+            guard_home=tmp_path,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+        )
+        is None
+    )
+
+
 def test_policy_floor_fails_closed_when_native_is_forced_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
