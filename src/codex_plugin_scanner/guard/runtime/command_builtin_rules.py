@@ -76,6 +76,9 @@ COMMAND_ACTION_RISK_CLASSES: dict[str, tuple[str, ...]] = {
     "supabase destructive command": ("destructive_shell", "network_egress"),
     "rsync remote shell command": ("execution", "network_egress"),
     "noodle request execution command": ("execution", "network_egress"),
+    "probe request execution command": ("execution", "network_egress"),
+    "probe workspace mutation command": ("destructive_shell",),
+    "probe destructive command": ("destructive_shell",),
     **GITHUB_ACTION_RISK_CLASSES,
 }
 _GIT_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
