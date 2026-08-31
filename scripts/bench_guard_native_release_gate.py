@@ -138,6 +138,24 @@ def _native_environment(workspace: Path) -> dict[str, str]:
     return environment
 
 
+def _stop_native_resident(runtime: Path, state_dir: Path, workspace: Path) -> None:
+    state_files = list(state_dir.glob("resident-v3-*/generation-*.json"))
+    if not state_files:
+        return
+    result = run_isolated_hook_process(
+        (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
+        input_text="",
+        cwd=runtime.parent,
+        environment=_native_environment(workspace),
+        timeout_seconds=3.0,
+        output_limit=_MAX_RESPONSE_BYTES,
+    )
+    if result.returncode != 0 or result.timed_out or result.containment_failed:
+        raise RuntimeError("Native resident teardown failed")
+    if list(state_dir.glob("resident-v3-*/generation-*.json")):
+        raise RuntimeError("Native resident teardown left state behind")
+
+
 def _python_review(
     runner: HookProcessRunner,
     *,

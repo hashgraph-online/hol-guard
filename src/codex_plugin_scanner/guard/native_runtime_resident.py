@@ -23,6 +23,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
+from .native_resident_client import close_native_residents
 from .native_runtime_admission import native_resident_admission
 from .native_runtime_resident_transport import (
     _AUTH_NONCE_BYTES as _AUTH_NONCE_BYTES,
@@ -472,6 +473,7 @@ def close_resident_native_runtimes() -> None:
             with _SERVICES_LOCK:
                 if _SERVICES.get(key) is service:
                     _SERVICES.pop(key, None)
+    close_native_residents()
 
 
 atexit.register(close_resident_native_runtimes)

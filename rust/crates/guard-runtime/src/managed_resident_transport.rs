@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
+use super::resident_state_retirement;
 use crate::resident_state::publish_state;
 #[cfg(unix)]
 use crate::resident_state::socket_directory;
@@ -58,6 +59,7 @@ pub(super) fn serve_unix_managed(
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_socket()) {
         let _ = fs::remove_file(path);
     }
+    resident_state_retirement::retire_state(scope, generation, std::process::id(), digest, &token);
     result
 }
 
@@ -143,10 +145,13 @@ pub(super) fn serve_loopback_managed(
         crate::resident_transport::start_resident_workers(Arc::new(token), Some(policy_store));
     let mut last_activity = Instant::now();
     let mut failures = 0;
-    while owner_alive.load(Ordering::Acquire)
-        && last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
-        && !super::shutdown_requested()
-    {
+    let result = loop {
+        if !(owner_alive.load(Ordering::Acquire)
+            && last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
+            && !super::shutdown_requested())
+        {
+            break Ok(());
+        }
         match listener.accept() {
             Ok((stream, peer)) => {
                 if peer.ip() != Ipv4Addr::LOCALHOST {
@@ -166,8 +171,9 @@ pub(super) fn serve_loopback_managed(
                 failures += 1;
                 thread::sleep(crate::hardening::accept_retry_delay(failures, &error));
             }
-            Err(_) => return Err("native_resident_loopback_accept_failed".to_owned()),
+            Err(_) => break Err("native_resident_loopback_accept_failed".to_owned()),
         }
-    }
-    Ok(())
+    };
+    resident_state_retirement::retire_state(scope, generation, std::process::id(), digest, &token);
+    result
 }
