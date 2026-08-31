@@ -110,15 +110,13 @@ fn process_is_alive(process_id: u32) -> Result<bool, String> {
         return Ok(false);
     }
     #[cfg(windows)]
-    {
-        return guard_runtime_windows_process::wait_for_process_exit(process_id, Duration::ZERO)
+    let platform_result =
+        guard_runtime_windows_process::wait_for_process_exit(process_id, Duration::ZERO)
             .map(|exited| !exited)
             .map_err(|_| "native_resident_process_liveness_failed".to_owned());
-    }
     #[cfg(not(windows))]
-    {
-        Ok(true)
-    }
+    let platform_result: Result<bool, String> = Ok(true);
+    platform_result
 }
 
 fn terminate_managed_process(process_id: u32) -> Result<(), String> {
@@ -126,20 +124,18 @@ fn terminate_managed_process(process_id: u32) -> Result<(), String> {
         return Ok(());
     }
     #[cfg(windows)]
-    {
-        guard_runtime_windows_process::terminate_process(process_id)
-            .map_err(|_| "native_resident_spawn_containment_failed".to_owned())?;
-        return Ok(());
-    }
+    let platform_result = guard_runtime_windows_process::terminate_process(process_id)
+        .map_err(|_| "native_resident_spawn_containment_failed".to_owned());
     #[cfg(unix)]
-    {
+    let platform_result = {
         use nix::sys::signal::{kill, Signal};
         use nix::unistd::Pid;
         match kill(Pid::from_raw(process_id as i32), Signal::SIGKILL) {
             Ok(()) | Err(nix::errno::Errno::ESRCH) => Ok(()),
             Err(_) => Err("native_resident_spawn_containment_failed".to_owned()),
         }
-    }
+    };
+    platform_result
 }
 
 fn generation_process_ids(states: &[ResidentState], known_process_ids: &[u32]) -> Vec<u32> {
