@@ -93,6 +93,7 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
+from tests.support.network import stub_authenticated_urlopen
 
 COPILOT_NATIVE_DENY_COMMANDS = (
     """node -e "require('fs').unlinkSync('dangerous-marker.json')" """,
@@ -3992,7 +3993,7 @@ clearer UX and an implementation plan with technical references.
                 fp=None,
             )
 
-        monkeypatch.setattr(urllib.request, "urlopen", _raise_not_found)
+        stub_authenticated_urlopen(monkeypatch, _raise_not_found)
 
         summary = guard_runner_module.sync_runtime_session(
             store,
@@ -13776,6 +13777,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _make_pinnable_harness_executable(tmp_path, monkeypatch, "python")
     claude_executable = _make_pinnable_harness_executable(tmp_path, monkeypatch, "claude")
     _write_text(workspace_dir / "guard-pre.py", "pass\n")
     _write_json(
@@ -20354,7 +20356,7 @@ def test_remote_proxy_allows_notification_requests_without_response_body(monkeyp
         def read(self) -> bytes:
             return b""
 
-    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout: _EmptyResponse())
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _EmptyResponse())
     proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
 
     response = proxy.forward(
@@ -20383,7 +20385,7 @@ def test_remote_proxy_preserves_exact_base_url_when_forwarding_empty_path(monkey
         captured_urls.append(request.full_url)
         return _FakeResponse()
 
-    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
 
     response = proxy.forward("", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
@@ -20458,7 +20460,7 @@ def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
             raise urllib.error.URLError(TimeoutError("timed out"))
         return _Response()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_receipts(store)
 
@@ -20478,7 +20480,7 @@ def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monk
         attempted_request = True
         raise AssertionError("network call should be blocked before urlopen")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="hol-guard connect"):
         guard_runner_module.sync_receipts(store)
@@ -20495,7 +20497,7 @@ def test_sync_guard_events_rejects_untrusted_sync_host_before_network(tmp_path, 
         attempted_request = True
         raise AssertionError("network call should be blocked before urlopen")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
         guard_runner_module.sync_guard_events(
@@ -20515,7 +20517,7 @@ def test_sync_pain_signals_rejects_untrusted_sync_host_before_network(tmp_path, 
         attempted_request = True
         raise AssertionError("network call should be blocked before urlopen")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
         guard_runner_module.sync_pain_signals(
@@ -20577,7 +20579,7 @@ def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
         observed_batch_sizes.append(len(payload["receipts"]))
         return _Response(len(payload["receipts"]))
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_receipts(store)
 
@@ -20638,7 +20640,7 @@ def test_sync_receipts_uses_rowid_cursor_and_sync_context(tmp_path, monkeypatch)
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     first_summary = guard_runner_module.sync_receipts(store)
     cursor_payload = store.get_sync_payload("receipt_sync_cursor")
@@ -20733,7 +20735,7 @@ def test_sync_receipts_backfills_when_cursor_is_ahead_of_local_rows(tmp_path, mo
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     summary = guard_runner_module.sync_receipts(store)
 
@@ -20855,7 +20857,7 @@ def test_sync_receipts_marks_latest_connect_first_sync_succeeded(tmp_path, monke
                 }
             ).encode("utf-8")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", lambda request, timeout: _Response())
+    stub_authenticated_urlopen(monkeypatch, lambda request, timeout: _Response())
 
     payload = guard_runner_module.sync_receipts(store)
     with store._connect() as connection:
@@ -21026,7 +21028,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
         assert len(payload["receipts"]) in {50, 15}
         return _Response(next(sync_payloads))
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_receipts(store)
 
@@ -21351,7 +21353,7 @@ def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update
             return _Response({"accepted": 0, "rejected": 0, "statuses": []})
         return _Response(next(responses))
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     guard_runner_module.sync_receipts(store)
@@ -21438,7 +21440,7 @@ def test_invalid_bundle_cannot_fall_back_to_co_delivered_unsigned_policy(tmp_pat
             )()
         return _Response()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     summary = guard_runner_module.sync_receipts(store)
@@ -21514,7 +21516,7 @@ def test_valid_signed_empty_bundle_excludes_co_delivered_unsigned_policy_sibling
             return _Response({"accepted": 0, "rejected": 0, "statuses": []})
         return _Response(response_payload)
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     summary = guard_runner_module.sync_receipts(store)
@@ -21617,7 +21619,7 @@ def test_fresh_mdm_activation_bootstraps_first_signed_policy_sync(
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     summary = guard_runner_module.sync_receipts(store)
@@ -21692,7 +21694,7 @@ def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
         final_validation_calls += 1
         return None, "signing_key_revoked", ()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "validate_synced_policy_bundle", _revoked_anchor)
     monkeypatch.setattr(synced_policy_module, "validate_synced_policy_bundle", _initial_anchor)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
@@ -21833,7 +21835,7 @@ def test_omitted_bundle_with_invalid_cached_authority_clears_unsigned_legacy_pol
             return _Response({"accepted": 0, "rejected": 0, "statuses": []})
         return _Response(response_payload)
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     summary = guard_runner_module.sync_receipts(store)
@@ -21923,7 +21925,7 @@ def test_malformed_policy_bundle_field_rejects_unsigned_siblings_and_preserves_s
             return _Response({"accepted": 0, "rejected": 0, "statuses": []})
         return _Response(response_payload)
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     summary = guard_runner_module.sync_receipts(store)
@@ -22060,7 +22062,7 @@ def test_omitted_bundle_rematerializes_only_valid_cached_signed_policy(
             return _Response({"accepted": 0, "rejected": 0, "statuses": []})
         return _Response(response_payload)
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     summary = guard_runner_module.sync_receipts(store)
@@ -22165,7 +22167,7 @@ def test_invalid_refresh_preserves_newer_current_bundle_after_interrupted_last_g
             return _Response({"accepted": 0, "rejected": 0, "statuses": []})
         return _Response(next(responses))
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     guard_runner_module.sync_receipts(store)
@@ -22903,7 +22905,7 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypat
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     guard_runner_module.sync_receipts(store)
@@ -23064,7 +23066,7 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     guard_runner_module.sync_receipts(store)
@@ -23162,7 +23164,7 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(
         guard_runner_module,
         "validate_synced_policy_bundle",
@@ -23285,7 +23287,7 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(
         guard_runner_module,
         "validate_synced_policy_bundle",
@@ -23388,7 +23390,7 @@ def test_sync_receipts_clears_untrusted_cached_canonical_when_flag_is_disabled(
     def _fake_urlopen(request, timeout):
         return _Response()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
     monkeypatch.setattr(
         guard_runner_module,
         "sync_pain_signals",
@@ -23508,7 +23510,7 @@ def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
             raise urllib.error.URLError(TimeoutError("timed out"))
         return _Response()
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_runtime_session(
         store,
@@ -23567,7 +23569,7 @@ def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypa
         timeouts.append(timeout)
         return _Response(should_timeout=len(timeouts) == 1)
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_runtime_session(
         store,
@@ -23622,7 +23624,7 @@ def test_sync_runtime_session_rejects_untrusted_oauth_issuer_before_network(tmp_
         attempted_request = True
         raise AssertionError("network call should be blocked before urlopen")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncEndpointUntrustedError, match="hol-guard connect"):
         guard_runner_module.sync_runtime_session(
@@ -23658,7 +23660,7 @@ def test_sync_runtime_session_rejects_non_https_legacy_sync_url_before_network(t
         attempted_request = True
         raise AssertionError("network call should be blocked before urlopen")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
         guard_runner_module.sync_runtime_session(
@@ -23694,7 +23696,7 @@ def test_sync_runtime_session_rejects_unallowlisted_legacy_sync_url_before_netwo
         attempted_request = True
         raise AssertionError("network call should be blocked before urlopen")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
         guard_runner_module.sync_runtime_session(
@@ -23776,7 +23778,7 @@ def test_sync_runtime_session_refreshes_oauth_access_token_and_rotates_refresh_t
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_runtime_session(
         store,
@@ -24000,7 +24002,7 @@ def test_sync_receipts_uses_distinct_dpop_proofs_per_batch(tmp_path, monkeypatch
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_receipts(store)
 
@@ -24083,7 +24085,7 @@ def test_sync_local_guard_cloud_proof_refreshes_oauth_once(tmp_path, monkeypatch
             )
         raise AssertionError(f"unexpected request: {request.full_url}")
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_local_guard_cloud_proof(store)
     expected_session_id = guard_runner_module._cloud_runtime_session_payload(
@@ -24192,7 +24194,7 @@ def test_sync_local_guard_cloud_proof_serializes_concurrent_oauth_refresh(tmp_pa
         except Exception as error:  # pragma: no cover - assertion captured below
             sync_errors.append(error)
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     threads = [threading.Thread(target=_run_sync) for _ in range(2)]
     for thread in threads:
@@ -24246,7 +24248,7 @@ def test_sync_pain_signals_raises_when_oauth_refresh_is_revoked(tmp_path, monkey
             fp=_ErrorResponse(),
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError) as error:
         guard_runner_module.sync_pain_signals(store)
@@ -24291,7 +24293,7 @@ def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_p
             fp=_ErrorResponse(),
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(RuntimeError, match="oauth upstream down") as error:
         guard_runner_module.sync_runtime_session(
@@ -25321,7 +25323,7 @@ def test_sync_runtime_session_retries_with_dpop_nonce_challenge(tmp_path, monkey
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     payload = guard_runner_module.sync_runtime_session(
         store,
@@ -25372,7 +25374,7 @@ def test_sync_runtime_session_limits_dpop_nonce_retries(tmp_path, monkeypatch):
             io.BytesIO(json.dumps({"error": "use_dpop_nonce"}).encode("utf-8")),
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     with pytest.raises(RuntimeError, match="HTTP Error 401: Unauthorized"):
         guard_runner_module.sync_runtime_session(
@@ -25464,7 +25466,7 @@ def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path
             }
         )
 
-    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
     guard_runner_module.sync_runtime_session(
         store,

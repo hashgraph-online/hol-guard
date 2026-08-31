@@ -46,6 +46,11 @@ class TestBuildScrubbedEnv:
         env = _build_scrubbed_env({"HERMES_GUARD_TOKEN": "still-secret"})
         assert "HERMES_GUARD_TOKEN" not in env, "Caller-provided extra env must not re-inject scrubbed tokens"
 
+    def test_extra_env_cannot_reinject_token_with_different_case(self) -> None:
+        env = _build_scrubbed_env({"hermes_guard_token": "windows-case-insensitive-secret"})
+
+        assert "hermes_guard_token" not in env
+
     def test_no_extra_returns_clean_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HERMES_GUARD_TOKEN", "secret")
         env = _build_scrubbed_env()
