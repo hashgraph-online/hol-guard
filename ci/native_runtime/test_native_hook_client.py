@@ -15,6 +15,13 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.native_policy_snapshot import (
+    _policy_snapshot_push_bytes_v3,
+    build_policy_snapshot_v3,
+    derive_native_policy_verifier_key,
+    provision_native_policy_verifier_key,
+)
+
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 _NATIVE_DIAGNOSTIC_RE = re.compile(rb"\bnative_[a-z0-9_]+\b")
 
@@ -50,19 +57,34 @@ def _rule_digest(runtime: Path) -> str:
 
 
 def _request(runtime: Path, root: Path, *, command: str = "pwd") -> bytes:
-    generation_state = root / "native-policy-generation.json"
-    generation_state.write_text(
-        json.dumps(
-            {
-                "schema": "hol-guard-native-policy-generation.v1",
-                "generation": 1,
-                "policy_digest": "a" * 64,
-            },
-            separators=(",", ":"),
-        ),
-        encoding="utf-8",
+    runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
+    rule_digest = _rule_digest(runtime)
+    policy_master = b"\x07" * 32
+    provision_native_policy_verifier_key(root, policy_master)
+    policy_snapshot = build_policy_snapshot_v3(
+        config={
+            "mode": "enforce",
+            "protection_posture": "protected",
+            "security_level": "balanced",
+            "default_action": "allow",
+            "unknown_publisher_action": "review",
+            "changed_hash_action": "require-reapproval",
+            "new_network_domain_action": "warn",
+            "subprocess_action": "allow",
+            "risk_actions": {},
+            "harness_risk_actions": {},
+            "harness_actions": {},
+            "publisher_actions": {},
+            "artifact_actions": {},
+            "sandbox_analysis": "off",
+            "receipt_redaction_level": "full",
+        },
+        guard_home=root,
+        runtime_identity=runtime_identity,
+        rule_digest=rule_digest,
+        verifier_key=derive_native_policy_verifier_key(policy_master),
+        generation=1,
     )
-    generation_state.chmod(0o600)
     return json.dumps(
         {
             "schema": "guard-hook-envelope.v2",
@@ -75,25 +97,42 @@ def _request(runtime: Path, root: Path, *, command: str = "pwd") -> bytes:
             },
             "deadline_budget_ms": 1_000,
             "policy_generation": 1,
-            "policy_snapshot": {
-                "schema": "hol-guard-native-policy.v1",
-                "generation": 1,
-                "policy_digest": "a" * 64,
-                "config_digest": "b" * 64,
-                "rule_digest": _rule_digest(runtime),
-                "mode": "enforce",
-            },
+            "policy_snapshot": policy_snapshot,
             "source": {
                 "cwd": str(root),
                 "home_dir": str(root),
                 "guard_home": str(root),
+                "source_ref_external_allowed": False,
             },
         },
         separators=(",", ":"),
     ).encode()
 
 
+def _push_snapshot(runtime: Path, state_dir: Path, request: bytes) -> None:
+    value = json.loads(request)
+    assert isinstance(value, dict)
+    snapshot = value["policy_snapshot"]
+    assert isinstance(snapshot, dict)
+    result = subprocess.run(
+        (str(runtime), "resident-client", "--stdin", str(state_dir)),
+        input=_policy_snapshot_push_bytes_v3(snapshot),
+        check=False,
+        capture_output=True,
+        timeout=3,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"native policy push failed: {_native_diagnostic(result.stderr)}")
+    try:
+        acknowledgement = json.loads(result.stdout)
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        raise AssertionError("native policy push failed: native_policy_snapshot_ack_invalid") from None
+    assert isinstance(acknowledgement, dict)
+    assert acknowledgement["status"] == "accepted"
+
+
 def _invoke(runtime: Path, state_dir: Path, request: bytes) -> dict[str, object]:
+    _push_snapshot(runtime, state_dir, request)
     try:
         result = subprocess.run(
             (str(runtime), "hook-client", "--stdin", str(state_dir)),
@@ -451,8 +490,10 @@ def test_native_hook_client_recovers_only_stale_startup_lock(
 
 def test_native_hook_client_rejects_duplicate_edge_keys_without_fallback(
     native_runtime: tuple[Path, Path],
+    tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
+    provision_native_policy_verifier_key(tmp_path, b"\x07" * 32)
     malformed = b'{"schema":"guard-hook-envelope.v2","schema":"other"}'
     result = subprocess.run(
         (str(runtime), "hook-client", "--stdin", str(state_dir)),

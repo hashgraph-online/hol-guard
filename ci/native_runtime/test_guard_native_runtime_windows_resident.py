@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime_resident as resident
+from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_command_model import review_command_model_native
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 from codex_plugin_scanner.guard.native_runtime import (
@@ -173,9 +174,10 @@ def test_windows_native_runtime_reuses_authenticated_resident_service(
     first_request = _request(tmp_path, "windows-resident-first")
     second_request = _request(tmp_path, "windows-resident-second")
     try:
-        first = review_post_tool_native(first_request, observe_mode=False)
-        first_state = _rust_resident_state_signature(first_request.guard_home)
-        second = review_post_tool_native(second_request, observe_mode=False)
+        with native_policy_snapshot(first_request.guard_home) as snapshot:
+            first = review_post_tool_native(first_request, observe_mode=False, policy_snapshot=snapshot)
+            first_state = _rust_resident_state_signature(first_request.guard_home)
+            second = review_post_tool_native(second_request, observe_mode=False, policy_snapshot=snapshot)
         second_state = _rust_resident_state_signature(first_request.guard_home)
         command_model = review_command_model_native(
             "git status --short",

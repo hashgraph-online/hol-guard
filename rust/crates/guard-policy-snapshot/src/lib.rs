@@ -10,11 +10,23 @@
 //! file by the launcher; it is never part of a request or snapshot.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
+#[path = "policy_snapshot_canonical.rs"]
+mod canonical;
+#[path = "policy_snapshot_crypto.rs"]
+mod crypto;
+
+pub use canonical::{canonical_json_bytes, snapshot_bytes, snapshot_signing_bytes};
+pub use crypto::{
+    config_digest, derive_verifier_key, digest_bytes, generation_floor_mac, integrity_mac,
+    policy_digest, verifier_key_id,
+};
+
+#[cfg(test)]
+#[path = "policy_snapshot_tests.rs"]
+mod tests;
 pub const POLICY_SNAPSHOT_SCHEMA: &str = "hol-guard-native-policy.v3";
 pub const POLICY_SNAPSHOT_PUSH_SCHEMA: &str = "guard-policy-snapshot-push.v1";
 pub const POLICY_SNAPSHOT_VERSION: u16 = 3;
@@ -219,90 +231,6 @@ pub fn validate(snapshot: &PolicySnapshotV1, minimum_generation: u64) -> Result<
     Ok(())
 }
 
-pub fn digest_bytes(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
-}
-
-pub fn derive_verifier_key(policy_integrity_key: &[u8]) -> [u8; 32] {
-    hmac_sha256(
-        policy_integrity_key,
-        POLICY_SNAPSHOT_VERIFIER_DERIVATION_DOMAIN,
-        &[],
-    )
-}
-
-pub fn verifier_key_id(verifier_key: &[u8]) -> String {
-    digest_bytes(verifier_key)
-}
-
-/// Authenticate the monotonic generation floor kept by the resident. The
-/// floor prevents a damaged snapshot from resetting the resident to an older
-/// generation after restart.
-pub fn generation_floor_mac(generation: u64, policy_digest: &str, verifier_key: &[u8]) -> String {
-    let mut message = generation.to_be_bytes().to_vec();
-    message.push(0);
-    message.extend_from_slice(policy_digest.as_bytes());
-    hex::encode(hmac_sha256(
-        verifier_key,
-        POLICY_SNAPSHOT_FLOOR_DOMAIN,
-        &message,
-    ))
-}
-
-pub fn canonical_json_bytes(value: &Value) -> Result<Vec<u8>, SnapshotError> {
-    let mut output = Vec::new();
-    write_canonical_json(value, &mut output).map_err(|_| SnapshotError::Serialization)?;
-    Ok(output)
-}
-
-pub fn snapshot_bytes(snapshot: &PolicySnapshotV3) -> Result<Vec<u8>, SnapshotError> {
-    let value = serde_json::to_value(snapshot).map_err(|_| SnapshotError::Serialization)?;
-    let bytes = canonical_json_bytes(&value)?;
-    if bytes.len() > POLICY_SNAPSHOT_MAX_BYTES {
-        return Err(SnapshotError::TooLarge);
-    }
-    Ok(bytes)
-}
-
-pub fn snapshot_signing_bytes(snapshot: &PolicySnapshotV3) -> Result<Vec<u8>, SnapshotError> {
-    let mut value = serde_json::to_value(snapshot).map_err(|_| SnapshotError::Serialization)?;
-    let object = value.as_object_mut().ok_or(SnapshotError::Serialization)?;
-    object.remove("integrity");
-    canonical_json_bytes(&value)
-}
-
-pub fn config_digest(effective_policy: &EffectiveNativePolicyV3) -> Result<String, SnapshotError> {
-    let value = serde_json::to_value(effective_policy).map_err(|_| SnapshotError::Serialization)?;
-    Ok(digest_bytes(&canonical_json_bytes(&value)?))
-}
-
-pub fn policy_digest(snapshot: &PolicySnapshotV3) -> Result<String, SnapshotError> {
-    let value = serde_json::json!({
-        "config_digest": snapshot.config_digest,
-        "effective_policy_digest": config_digest(&snapshot.effective_policy)?,
-        "mode": snapshot.mode,
-        "protocol_version": snapshot.protocol_version,
-        "rule_digest": snapshot.rule_digest,
-        "runtime_identity": snapshot.runtime_identity,
-        "scope_digest": snapshot.scope_contract.scope_digest,
-        "version": snapshot.version,
-    });
-    Ok(digest_bytes(&canonical_json_bytes(&value)?))
-}
-
-pub fn integrity_mac(
-    snapshot: &PolicySnapshotV3,
-    verifier_key: &[u8],
-) -> Result<String, SnapshotError> {
-    Ok(hex::encode(hmac_sha256(
-        verifier_key,
-        POLICY_SNAPSHOT_INTEGRITY_DOMAIN,
-        &snapshot_signing_bytes(snapshot)?,
-    )))
-}
-
 pub fn validate_v3(
     snapshot: &PolicySnapshotV3,
     minimum_generation: u64,
@@ -366,7 +294,7 @@ pub fn validate_v3(
         return Err(SnapshotError::DigestMismatch);
     }
     let expected_mac = integrity_mac(snapshot, verifier_key)?;
-    if !constant_time_eq(expected_mac.as_bytes(), snapshot.integrity.mac.as_bytes()) {
+    if !crypto::constant_time_eq(expected_mac.as_bytes(), snapshot.integrity.mac.as_bytes()) {
         return Err(SnapshotError::IntegrityMismatch);
     }
     Ok(())
@@ -502,236 +430,4 @@ fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), Sna
         }
     }
     Ok(())
-}
-
-fn write_canonical_json(value: &Value, output: &mut Vec<u8>) -> Result<(), std::fmt::Error> {
-    match value {
-        Value::Null => output.extend_from_slice(b"null"),
-        Value::Bool(value) => output.extend_from_slice(if *value { b"true" } else { b"false" }),
-        Value::Number(value) => output.extend_from_slice(value.to_string().as_bytes()),
-        Value::String(value) => {
-            let encoded = serde_json::to_string(value).map_err(|_| std::fmt::Error)?;
-            output.extend_from_slice(encoded.as_bytes());
-        }
-        Value::Array(values) => {
-            output.push(b'[');
-            for (index, item) in values.iter().enumerate() {
-                if index > 0 {
-                    output.push(b',');
-                }
-                write_canonical_json(item, output)?;
-            }
-            output.push(b']');
-        }
-        Value::Object(values) => {
-            output.push(b'{');
-            let mut keys = values.keys().collect::<Vec<_>>();
-            keys.sort();
-            for (index, key) in keys.iter().enumerate() {
-                if index > 0 {
-                    output.push(b',');
-                }
-                let encoded = serde_json::to_string(key).map_err(|_| std::fmt::Error)?;
-                output.extend_from_slice(encoded.as_bytes());
-                output.push(b':');
-                write_canonical_json(values.get(*key).ok_or(std::fmt::Error)?, output)?;
-            }
-            output.push(b'}');
-        }
-    }
-    Ok(())
-}
-
-fn hmac_sha256(key: &[u8], label: &[u8], message: &[u8]) -> [u8; 32] {
-    const BLOCK_BYTES: usize = 64;
-    let mut key_block = [0u8; BLOCK_BYTES];
-    if key.len() > BLOCK_BYTES {
-        let digest = Sha256::digest(key);
-        key_block[..digest.len()].copy_from_slice(&digest);
-    } else {
-        key_block[..key.len()].copy_from_slice(key);
-    }
-    let mut inner_pad = [0x36u8; BLOCK_BYTES];
-    let mut outer_pad = [0x5cu8; BLOCK_BYTES];
-    for index in 0..BLOCK_BYTES {
-        inner_pad[index] ^= key_block[index];
-        outer_pad[index] ^= key_block[index];
-    }
-    let mut inner = Sha256::new();
-    inner.update(inner_pad);
-    inner.update(label);
-    inner.update(message);
-    let inner_digest = inner.finalize();
-    let mut outer = Sha256::new();
-    outer.update(outer_pad);
-    outer.update(inner_digest);
-    let digest = outer.finalize();
-    let mut output = [0u8; 32];
-    output.copy_from_slice(&digest);
-    output
-}
-
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    let mut difference = 0u8;
-    for (left, right) in left.iter().zip(right) {
-        difference |= left ^ right;
-    }
-    difference == 0
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn policy() -> EffectiveNativePolicyV3 {
-        EffectiveNativePolicyV3 {
-            protection_posture: "protected".into(),
-            security_level: "balanced".into(),
-            default_action: "warn".into(),
-            unknown_publisher_action: "review".into(),
-            changed_hash_action: "require-reapproval".into(),
-            new_network_domain_action: "warn".into(),
-            subprocess_action: "warn".into(),
-            risk_actions: BTreeMap::new(),
-            harness_risk_actions: BTreeMap::new(),
-            harness_actions: BTreeMap::new(),
-            publisher_actions: BTreeMap::new(),
-            artifact_actions: BTreeMap::new(),
-            sandbox_analysis: "off".into(),
-            receipt_redaction_level: "full".into(),
-        }
-    }
-
-    fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
-        let effective_policy = policy();
-        let mut result = PolicySnapshotV3 {
-            schema: POLICY_SNAPSHOT_SCHEMA.into(),
-            version: 3,
-            generation,
-            policy_digest: String::new(),
-            config_digest: config_digest(&effective_policy).unwrap(),
-            rule_digest: "b".repeat(64),
-            runtime_identity: "a".repeat(64),
-            protocol_version: 1,
-            mode: "enforce".into(),
-            scope_contract: ScopeContractV3 {
-                schema: "guard-native-scope.v1".into(),
-                kind: "guard-home".into(),
-                scope_digest: "c".repeat(64),
-                workspace_binding: "request-source".into(),
-            },
-            effective_policy,
-            issued_at_ms: 100,
-            expires_at_ms: 1_000,
-            integrity: SnapshotIntegrityV3 {
-                algorithm: POLICY_SNAPSHOT_INTEGRITY_ALGORITHM.into(),
-                key_id: verifier_key_id(key),
-                mac: String::new(),
-            },
-        };
-        result.policy_digest = policy_digest(&result).unwrap();
-        result.integrity.mac = integrity_mac(&result, key).unwrap();
-        result
-    }
-
-    #[test]
-    fn validates_authenticated_v3_snapshot() {
-        let key = [7u8; 32];
-        let snapshot = snapshot(1, &key);
-        assert!(validate_v3(&snapshot, 1, &"a".repeat(64), &"b".repeat(64), &key, 200).is_ok());
-    }
-
-    #[test]
-    fn rejects_mutated_effective_policy_and_mac() {
-        let key = [7u8; 32];
-        let mut snapshot = snapshot(1, &key);
-        snapshot.effective_policy.default_action = "block".into();
-        assert_eq!(
-            validate_v3(&snapshot, 1, &"a".repeat(64), &"b".repeat(64), &key, 200),
-            Err(SnapshotError::DigestMismatch)
-        );
-    }
-
-    #[test]
-    fn rejects_expired_and_replayed_generation() {
-        let key = [7u8; 32];
-        let snapshot = snapshot(1, &key);
-        assert_eq!(
-            validate_v3(&snapshot, 1, &"a".repeat(64), &"b".repeat(64), &key, 1_000),
-            Err(SnapshotError::Expired)
-        );
-        assert_eq!(
-            validate_v3(&snapshot, 2, &"a".repeat(64), &"b".repeat(64), &key, 200),
-            Err(SnapshotError::Downgrade)
-        );
-    }
-
-    #[test]
-    fn rejects_runtime_rule_and_protocol_mismatch() {
-        let key = [7u8; 32];
-        let snapshot = snapshot(1, &key);
-        assert_eq!(
-            validate_v3(&snapshot, 1, &"c".repeat(64), &"b".repeat(64), &key, 200),
-            Err(SnapshotError::RuntimeIdentity)
-        );
-        assert_eq!(
-            validate_v3(&snapshot, 1, &"a".repeat(64), &"c".repeat(64), &key, 200),
-            Err(SnapshotError::RuleDigest)
-        );
-        let mut incompatible = snapshot;
-        incompatible.protocol_version = 2;
-        assert_eq!(
-            validate_v3(
-                &incompatible,
-                1,
-                &"a".repeat(64),
-                &"b".repeat(64),
-                &key,
-                200,
-            ),
-            Err(SnapshotError::Protocol)
-        );
-    }
-
-    #[test]
-    fn rejects_unknown_risk_selector_and_conflicting_harness_aliases() {
-        let key = [7u8; 32];
-        let mut unknown = snapshot(1, &key);
-        unknown
-            .effective_policy
-            .risk_actions
-            .insert("future-risk".into(), "allow".into());
-        assert_eq!(
-            validate_v3(&unknown, 1, &"a".repeat(64), &"b".repeat(64), &key, 200),
-            Err(SnapshotError::Policy)
-        );
-
-        let mut conflicting = snapshot(1, &key);
-        conflicting
-            .effective_policy
-            .harness_actions
-            .insert("claude".into(), "allow".into());
-        conflicting
-            .effective_policy
-            .harness_actions
-            .insert("claude-code".into(), "block".into());
-        conflicting.policy_digest = policy_digest(&conflicting).unwrap();
-        conflicting.integrity.mac = integrity_mac(&conflicting, &key).unwrap();
-        assert_eq!(
-            validate_v3(&conflicting, 1, &"a".repeat(64), &"b".repeat(64), &key, 200,),
-            Err(SnapshotError::Policy)
-        );
-    }
-
-    #[test]
-    fn canonical_json_sorts_object_keys() {
-        let value = serde_json::json!({"z": 1, "a": {"b": true, "a": null}});
-        assert_eq!(
-            String::from_utf8(canonical_json_bytes(&value).unwrap()).unwrap(),
-            r#"{"a":{"a":null,"b":true},"z":1}"#
-        );
-    }
 }

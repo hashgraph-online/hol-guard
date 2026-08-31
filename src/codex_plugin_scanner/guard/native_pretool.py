@@ -90,6 +90,15 @@ _PRETOOL_ACTION_OPERATIONS = {
     "harness": {"start", "stop"},
     "unknown": {"unknown"},
 }
+_POLICY_ACTIONS = {
+    "allow",
+    "warn",
+    "review",
+    "require-reapproval",
+    "sandbox-required",
+    "block",
+}
+_ALLOWING_POLICY_ACTIONS = {"allow", "warn"}
 
 
 def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
@@ -105,7 +114,7 @@ def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
         or not isinstance(decision, str)
         or decision not in {"allow", "deny"}
         or not isinstance(policy_action, str)
-        or policy_action not in {"allow", "review", "block"}
+        or policy_action not in _POLICY_ACTIONS
         or minimum_action != policy_action
         or not isinstance(reason_code, str)
         or not reason_code
@@ -149,7 +158,8 @@ def _decode_generic_pre_tool(payload: object) -> dict[str, Any] | None:
         return None
     if not _valid_generic_result_fields(payload) or not _valid_generic_action(action):
         return None
-    return payload if payload["decision"] == ("allow" if payload["minimum_action"] == "allow" else "deny") else None
+    expected_decision = "allow" if payload["minimum_action"] in _ALLOWING_POLICY_ACTIONS else "deny"
+    return payload if payload["decision"] == expected_decision else None
 
 
 def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:

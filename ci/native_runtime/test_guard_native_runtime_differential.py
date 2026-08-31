@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
@@ -113,7 +114,8 @@ def _source_request(
 def _assert_parity(request: HookReviewRequest) -> None:
     store = GuardStore(request.guard_home)
     python_response = _engine(store).review(request)
-    native_response = review_post_tool_native(request, observe_mode=False)
+    with native_policy_snapshot(request.guard_home) as snapshot:
+        native_response = review_post_tool_native(request, observe_mode=False, policy_snapshot=snapshot)
     assert native_response is not None
     assert parity_signature(native_response) == parity_signature(python_response), (
         native_response,

@@ -558,13 +558,14 @@ def review_post_tool_native(
     request: HookReviewRequest,
     *,
     observe_mode: bool,
-    policy_snapshot: Mapping[str, object] | None = None,
+    policy_snapshot: Mapping[str, object],
 ) -> HookReviewResponse | None:
     """Review PostToolUse through the native Rust client and resident.
 
     Native failure returns ``None`` so the caller fails closed without Python
     re-evaluation or a semantic one-shot fallback.
     """
+    del observe_mode
     status = native_runtime_status()
     identity_key = _identity_key(status)
     if not status.available or not status.compatible or status.identity is None:
@@ -583,21 +584,21 @@ def review_post_tool_native(
     generation = policy_snapshot_payload.get("generation")
     if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
         return record_native_hook_result("native_fail_safe", None)
-    observe_mode = policy_snapshot_payload.get("mode") == "observe"
-
     envelope = {
-        "protocol_version": _NATIVE_PROTOCOL_VERSION,
+        "schema": "guard-hook-envelope.v2",
         "request_id": request.request_id,
         "harness": request.harness,
-        "event_name": request.event_name,
-        "payload": request.payload,
-        "cwd": str(request.cwd) if request.cwd is not None else None,
-        "home_dir": str(request.home_dir),
-        "guard_home": str(request.guard_home),
-        "source_ref_external_allowed": request.source_ref_external_allowed,
-        "observe_mode": observe_mode,
+        "event": request.event_name,
+        "raw_payload": request.payload,
         "deadline_budget_ms": deadline_budget_ms,
+        "policy_generation": generation,
         "policy_snapshot": policy_snapshot_payload,
+        "source": {
+            "cwd": str(request.cwd) if request.cwd is not None else None,
+            "home_dir": str(request.home_dir),
+            "guard_home": str(request.guard_home),
+            "source_ref_external_allowed": request.source_ref_external_allowed,
+        },
     }
     input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
     if len(encoded := input_text.encode("utf-8")) > _MAX_REQUEST_BYTES:

@@ -251,18 +251,6 @@ fn evaluate_validated_envelope(
     })
 }
 
-/// Evaluate the legacy one-shot edge. This remains available only for
-/// explicit compatibility and differential tests; the resident path uses
-/// [`evaluate_envelope_with_store`] so it cannot install policy per request.
-pub(crate) fn evaluate_envelope(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
-    validate_envelope_shape(&envelope)?;
-    crate::oneshot::validate_request_policy_snapshot(&serde_json::json!({
-        "guard_home": envelope.source.guard_home,
-        "policy_snapshot": envelope.policy_snapshot,
-    }))?;
-    evaluate_validated_envelope(envelope, None)
-}
-
 /// Evaluate a resident hook envelope against the already-installed in-memory
 /// policy snapshot. No request can install, replace, or downgrade policy.
 pub(crate) fn evaluate_envelope_with_store(
@@ -276,13 +264,6 @@ pub(crate) fn evaluate_envelope_with_store(
         envelope.policy_generation,
     )?;
     evaluate_validated_envelope(envelope, Some(&snapshot))
-}
-
-pub(crate) fn evaluate_envelope_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
-    let value = crate::strict_json_value(bytes)?;
-    let envelope = serde_json::from_value::<GuardHookEnvelopeV2>(value)
-        .map_err(|_| "native_hook_envelope_invalid".to_owned())?;
-    evaluate_envelope(envelope)
 }
 
 #[cfg(test)]
@@ -336,12 +317,8 @@ mod tests {
 
     fn evaluate_isolated(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
         let guard_home = std::path::PathBuf::from(&envelope.source.guard_home);
-        let _guard = crate::oneshot::POLICY_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        crate::oneshot::reset_policy_generation_for_test();
-        let result = evaluate_envelope(envelope);
-        crate::oneshot::reset_policy_generation_for_test();
+        let result = validate_envelope_shape(&envelope)
+            .and_then(|_| evaluate_validated_envelope(envelope, None));
         std::fs::remove_dir_all(guard_home).expect("remove edge generation fixture");
         result
     }

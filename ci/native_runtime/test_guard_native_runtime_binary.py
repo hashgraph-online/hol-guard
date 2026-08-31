@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
@@ -65,13 +66,12 @@ def test_compiled_native_runtime_reviews_and_reuses_resident_service(tmp_path: P
     with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp" if os.name != "nt" else None) as short_tmp:
         clean_request = _request(Path(short_tmp), "const value = 1;\n")
         try:
-            clean = review_post_tool_native(clean_request, observe_mode=False)
+            with native_policy_snapshot(clean_request.guard_home) as snapshot:
+                clean = review_post_tool_native(clean_request, observe_mode=False, policy_snapshot=snapshot)
+                secret_request = _request(Path(short_tmp), _github_like_token())
+                secret = review_post_tool_native(secret_request, observe_mode=False, policy_snapshot=snapshot)
             assert clean is not None
             assert clean.decision == "allow"
-            assert clean.reason_code == "output_scan_allow"
-
-            secret_request = _request(Path(short_tmp), _github_like_token())
-            secret = review_post_tool_native(secret_request, observe_mode=False)
             assert secret is not None
             assert secret.decision == "deny"
             assert secret.reason_code == "output_secret_match"

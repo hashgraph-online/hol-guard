@@ -113,6 +113,37 @@ def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically()
     assert hook_specific["permissionDecision"] == "allow"
 
 
+@pytest.mark.parametrize(
+    ("action", "decision"),
+    (
+        ("allow", "allow"),
+        ("warn", "allow"),
+        ("review", "deny"),
+        ("require-reapproval", "deny"),
+        ("sandbox-required", "deny"),
+        ("block", "deny"),
+    ),
+)
+def test_generic_result_decoder_accepts_complete_policy_action_lattice(
+    action: str,
+    decision: str,
+) -> None:
+    edge = _edge("codex", "PreToolUse")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    result.update(
+        {
+            "decision": decision,
+            "policy_action": action,
+            "minimum_action": action,
+            "reason_code": f"native_policy_{action.replace('-', '_')}",
+            "reason": "HOL Guard returned a typed native policy result.",
+            "explicitly_benign": action == "allow",
+        }
+    )
+    assert _decode_pre_tool(result, command="ignored") == result
+
+
 def test_native_review_is_mechanical_and_never_raises_worker_unsupported(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -236,7 +267,7 @@ def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     emitted: list[dict[str, object]] = []
-    monkeypatch.setattr(commands_hook_native_authority, "native_mode", lambda: "auto")
+    monkeypatch.setattr(commands_hook_native_authority, "_native_mode_requires_rust", lambda: True)
     monkeypatch.setattr(
         commands_hook_native_authority,
         "try_native_hook_authority",
@@ -276,7 +307,7 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
         def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
             raise RuntimeError("worker fixture failure")
 
-    monkeypatch.setattr(commands_hook_native_authority, "native_mode", lambda: "auto")
+    monkeypatch.setattr(commands_hook_native_authority, "_native_mode_requires_rust", lambda: True)
     monkeypatch.setattr(commands_hook_native_authority, "HookWorker", BrokenWorker)
     response = commands_hook_native_authority.try_native_hook_authority(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},

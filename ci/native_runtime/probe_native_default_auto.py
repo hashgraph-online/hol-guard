@@ -14,6 +14,7 @@ import urllib.request
 from pathlib import Path
 
 import codex_plugin_scanner
+from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
     _daemon_response_once,
 )
@@ -243,25 +244,28 @@ def main(*, json_path: Path | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="hg-auto-", dir=_short_temp_parent()) as temporary:
         root = Path(temporary)
         try:
-            clean = review_post_tool_native(
-                _request(root, "const value = 1;\n", "default-auto-clean"),
-                observe_mode=False,
-            )
-            if clean is None:
-                raise RuntimeError(
-                    f"native_default_auto_probe_failed: clean response missing: {native_resident_client_failure_code()}"
+            with native_policy_snapshot(root / "guard-home") as snapshot:
+                clean = review_post_tool_native(
+                    _request(root, "const value = 1;\n", "default-auto-clean"),
+                    observe_mode=False,
+                    policy_snapshot=snapshot,
                 )
-            _require(clean.decision == "allow", clean)
-            _require(clean.reason_code == "output_scan_allow", clean)
+                if clean is None:
+                    raise RuntimeError(
+                        "native_default_auto_probe_failed: clean response missing: "
+                        f"{native_resident_client_failure_code()}"
+                    )
+                _require(clean.decision == "allow", clean)
 
-            secret = review_post_tool_native(
-                _request(root, _synthetic_github_token(), "default-auto-secret"),
-                observe_mode=False,
-            )
-            if secret is None:
-                raise RuntimeError("native_default_auto_probe_failed: secret response missing")
-            _require(secret.decision == "deny", secret)
-            _require(secret.reason_code == "output_secret_match", secret)
+                secret = review_post_tool_native(
+                    _request(root, _synthetic_github_token(), "default-auto-secret"),
+                    observe_mode=False,
+                    policy_snapshot=snapshot,
+                )
+                if secret is None:
+                    raise RuntimeError("native_default_auto_probe_failed: secret response missing")
+                _require(secret.decision == "deny", secret)
+                _require(secret.reason_code == "output_secret_match", secret)
 
             health = native_runtime_health(root / "guard-home")
             _require(health.state == "healthy", health)

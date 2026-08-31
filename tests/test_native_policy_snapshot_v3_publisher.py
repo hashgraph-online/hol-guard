@@ -50,6 +50,16 @@ def _config() -> dict[str, object]:
     }
 
 
+def test_policy_merge_never_downgrades_enforcing_posture_to_watch() -> None:
+    protected = {**_config(), "mode": "enforce", "protection_posture": "protected"}
+    watch = {**_config(), "mode": "observe", "protection_posture": "watch"}
+
+    merged = snapshot_module._merge_effective_native_policies((protected, watch))
+
+    assert merged["protection_posture"] == "protected"
+    assert merged["mode"] == "enforce"
+
+
 def _status() -> SimpleNamespace:
     return SimpleNamespace(
         mode="auto",

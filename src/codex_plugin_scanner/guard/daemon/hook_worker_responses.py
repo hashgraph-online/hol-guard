@@ -22,6 +22,7 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             }
             if action == "warn":
                 output["reason"] = reason
+                output["notice"] = "warning"
             return output
         hook_specific: dict[str, object] = {
             "hookEventName": "PreToolUse",

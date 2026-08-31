@@ -10,15 +10,11 @@ from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..daemon.hook_worker import HookWorker, HookWorkerUnsupported
 from ..daemon.hook_worker_responses import post_tool_fail_safe_response
+from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..native_route_receipt import record_python_semantic_hook_route
-from ..native_runtime import native_mode
 from ..store import GuardStore
 from .commands_hook_source_ref import _try_source_ref_fast_path
 from .commands_support_interaction import _emit
-
-
-def _native_mode_requires_rust() -> bool:
-    return native_mode() in {"auto", "force"}
 
 
 def try_native_hook_authority(

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
@@ -131,23 +132,28 @@ def test_mutated_inline_corpus_keeps_exact_python_rust_parity(tmp_path: Path, se
         store = GuardStore(guard_home)
         engine = _engine(store)
         try:
-            for case_index in range(_CASES_PER_SEED):
-                request = _request(
-                    tmp_path,
-                    guard_home=guard_home,
-                    payload=_payload(rng, case_index),
-                    request_id=f"mutation-{seed}-{case_index}",
-                )
-                python_response = engine.review(request)
-                native_response = review_post_tool_native(request, observe_mode=False)
-                assert native_response is not None, (seed, case_index)
-                assert parity_signature(native_response) == parity_signature(python_response), (
-                    seed,
-                    case_index,
-                    request.payload,
-                    native_response,
-                    python_response,
-                )
+            with native_policy_snapshot(guard_home) as snapshot:
+                for case_index in range(_CASES_PER_SEED):
+                    request = _request(
+                        tmp_path,
+                        guard_home=guard_home,
+                        payload=_payload(rng, case_index),
+                        request_id=f"mutation-{seed}-{case_index}",
+                    )
+                    python_response = engine.review(request)
+                    native_response = review_post_tool_native(
+                        request,
+                        observe_mode=False,
+                        policy_snapshot=snapshot,
+                    )
+                    assert native_response is not None, (seed, case_index)
+                    assert parity_signature(native_response) == parity_signature(python_response), (
+                        seed,
+                        case_index,
+                        request.payload,
+                        native_response,
+                        python_response,
+                    )
         finally:
             close_resident_native_runtimes()
 

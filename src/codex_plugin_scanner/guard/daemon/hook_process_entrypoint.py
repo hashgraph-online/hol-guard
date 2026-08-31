@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
+from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..native_route_receipt import native_hook_route, record_native_hook_route, reset_native_hook_route
 from ..sqlite_profile import sqlite_error_is_busy_locked
 from .hook_process_protocol import (
@@ -332,12 +333,6 @@ def _run_resident_hook_request(
         )
         response["route"] = _current_decision_route()
         return response
-
-
-def _native_mode_requires_rust() -> bool:
-    from ..native_runtime import native_mode
-
-    return native_mode() in {"auto", "force"}
 
 
 def _current_decision_route() -> str:

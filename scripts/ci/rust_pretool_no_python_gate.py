@@ -152,16 +152,16 @@ def _graph_failures(root: Path) -> list[str]:
             failures.append("daemon hook ingress hydrates a payload before native dispatch")
         if _called_node(server_execute, "hydrate_hook_payload_reference") is not None:
             failures.append("daemon hook execution hydrates a payload before native dispatch")
-        legacy_call = _called_node(server_execute, "_handle_runtime_hook_legacy_cli")
-        if legacy_call is None:
-            failures.append("server execute path no longer exposes its legacy boundary")
-        elif _guard_if_before(server_execute, "_native_mode_requires_rust", legacy_call.lineno) is None:
-            failures.append("server execute path can reach legacy CLI without a native-mode return guard")
+        compatibility_call = _called_node(server_execute, "_handle_runtime_hook_compatibility_cli")
+        if compatibility_call is None:
+            failures.append("server execute path has no explicit compatibility boundary")
+        elif _guard_if_before(server_execute, "_native_mode_requires_rust", compatibility_call.lineno) is None:
+            failures.append("server execute path can reach compatibility CLI without a native-mode return guard")
         if "_native_mode_requires_rust" not in function_calls(server_execute):
-            failures.append("server execute path does not branch on native mode before legacy dispatch")
+            failures.append("server execute path does not branch on native mode before compatibility dispatch")
         unsupported = _exception_handler(server_fast, "HookWorkerUnsupported")
         if unsupported is None or "_native_mode_requires_rust" not in function_calls(unsupported):
-            failures.append("server fast path can spill HookWorkerUnsupported into legacy CLI in auto/force")
+            failures.append("server fast path can spill HookWorkerUnsupported into compatibility CLI in auto/force")
         elif "_runtime_hook_fail_safe_response" not in function_calls(unsupported):
             failures.append("server HookWorkerUnsupported native branch has no fail-safe response")
 

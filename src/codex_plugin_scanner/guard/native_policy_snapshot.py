@@ -186,7 +186,9 @@ _ACTION_SEVERITY = {
     "sandbox-required": 4,
     "block": 5,
 }
-_POSTURE_SEVERITY = {"protected": 0, "extra_careful": 1, "watch": 2}
+# ``watch`` is observe-only; it must never override an enforcing posture when
+# home/workspace policies are composed into one resident snapshot.
+_POSTURE_SEVERITY = {"watch": 0, "protected": 1, "extra_careful": 2}
 _SECURITY_LEVEL_SEVERITY = {
     "relaxed": 0,
     "gentle": 1,
@@ -2360,7 +2362,9 @@ def _merge_effective_native_policies(
         raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
     security_values = [cast(str, value) for value in security_values]
     merged["security_level"] = max(security_values, key=lambda value: _SECURITY_LEVEL_SEVERITY[value])
-    merged["mode"] = "observe" if any(policy.get("mode") == "observe" for policy in policies) else "enforce"
+    # Derive mode from the selected posture so an observe-only workspace
+    # overlay cannot downgrade a protected or extra-careful home policy.
+    merged["mode"] = "observe" if merged["protection_posture"] == "watch" else "enforce"
     sandbox = [policy.get("sandbox_analysis") for policy in policies]
     if not all(isinstance(value, str) and value in _SANDBOX_SEVERITY for value in sandbox):
         raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")

@@ -214,8 +214,7 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             return false;
         };
         let basename = executable_basename(executable);
-        let search_command = matches!(basename, "rg" | "grep");
-        if (!search_command && sensitive_command(&segment.text))
+        if sensitive_command(&segment.text)
             || (!matches!(basename, "rg" | "grep")
                 && segment
                     .arguments
@@ -346,7 +345,6 @@ mod tests {
             "rg -g*.ts authority src",
             "rg --glob '*.{ts,tsx}' authority src",
             "rg --line-number --color=never authority src",
-            "rg -e '.env.local' src",
             "grep -n authority README.md",
             "grep --line-number --color=never authority README.md",
             "grep -eerror README.md",
@@ -376,6 +374,9 @@ mod tests {
             r"rg --glob 'nested/[\.]env' TOKEN .",
             "rg --glob 'nested/{safe,.env}' TOKEN .",
             "rg TOKEN .env.local",
+            "rg -e '.env.local' src",
+            "grep -r password .",
+            "rg id_rsa /home",
             "rg --glob 'nested/[.]env.local' TOKEN .",
             "rg --glob 'nested/[.]env.production' TOKEN .",
             "rg --glob 'nested/[.]e[n]v.production' TOKEN .",

@@ -761,16 +761,15 @@ fn run() -> Result<(), String> {
             let response = oneshot::evaluate_hook_bytes(&bytes)?;
             write_bytes_response(&response)
         }
-        [command, flag] if command == "hook-edge" && flag == "--stdin" => {
-            let bytes = read_stdin_bounded()?;
-            if !matches!(
-                env::var("HOL_GUARD_NATIVE").ok().as_deref(),
-                Some("off" | "shadow")
-            ) {
-                return Err("native_policy_snapshot_unavailable".to_owned());
-            }
-            let response = edge::evaluate_envelope_bytes(&bytes)?;
-            write_bytes_response(&response)
+        [command, state_flag, state_dir]
+            if command == "migrate-policy"
+                && state_flag == "--state-dir" =>
+        {
+            let runtime_identity = resident_state::runtime_digest()?;
+            policy_store::PolicySnapshotStore::migrate_legacy_state(
+                std::path::Path::new(state_dir),
+                &runtime_identity,
+            )
         }
         [command, flag, state_dir]
             if matches!(command.as_str(), "hook-client" | "resident-client")
@@ -839,7 +838,7 @@ fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | hook-edge --stdin | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --runtime-sha256 SHA"
+            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --runtime-sha256 SHA"
                 .into(),
         ),
     }

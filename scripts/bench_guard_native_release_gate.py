@@ -19,8 +19,10 @@ import os
 import statistics
 import tempfile
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
+from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.native_runtime import (
@@ -140,12 +142,18 @@ def _bench_python_warm(
     return values
 
 
-def _bench_native_warm(*, workspace: Path, guard_home: Path, iterations: int) -> list[float]:
+def _bench_native_warm(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    iterations: int,
+    policy_snapshot: Mapping[str, object],
+) -> list[float]:
     values: list[float] = []
     for index in range(iterations):
         request = _request(workspace=workspace, guard_home=guard_home, request_id=f"native-warm-{index}")
         started = time.perf_counter()
-        response = review_post_tool_native(request, observe_mode=False)
+        response = review_post_tool_native(request, observe_mode=False, policy_snapshot=policy_snapshot)
         values.append((time.perf_counter() - started) * 1_000.0)
         if response is None or response.decision != "allow":
             raise RuntimeError("Native resident runtime did not return the expected allow decision")
@@ -243,25 +251,28 @@ def main() -> int:
         try:
             _python_review(python_runner, workspace=workspace, guard_home=guard_home)
             close_resident_native_runtimes()
-            readiness_started = time.perf_counter()
-            readiness_response = review_post_tool_native(
-                _request(workspace=workspace, guard_home=guard_home, request_id="native-readiness"),
-                observe_mode=False,
-            )
-            native_readiness_ms = (time.perf_counter() - readiness_started) * 1_000.0
-            if readiness_response is None or readiness_response.decision != "allow":
-                raise _readiness_failure(readiness_response)
-            python_warm = _bench_python_warm(
-                python_runner,
-                workspace=workspace,
-                guard_home=guard_home,
-                iterations=args.warm_iterations,
-            )
-            native_warm = _bench_native_warm(
-                workspace=workspace,
-                guard_home=guard_home,
-                iterations=args.warm_iterations,
-            )
+            with native_policy_snapshot(guard_home) as snapshot:
+                readiness_started = time.perf_counter()
+                readiness_response = review_post_tool_native(
+                    _request(workspace=workspace, guard_home=guard_home, request_id="native-readiness"),
+                    observe_mode=False,
+                    policy_snapshot=snapshot,
+                )
+                native_readiness_ms = (time.perf_counter() - readiness_started) * 1_000.0
+                if readiness_response is None or readiness_response.decision != "allow":
+                    raise _readiness_failure(readiness_response)
+                python_warm = _bench_python_warm(
+                    python_runner,
+                    workspace=workspace,
+                    guard_home=guard_home,
+                    iterations=args.warm_iterations,
+                )
+                native_warm = _bench_native_warm(
+                    workspace=workspace,
+                    guard_home=guard_home,
+                    iterations=args.warm_iterations,
+                    policy_snapshot=snapshot,
+                )
         finally:
             python_runner.close()
             close_resident_native_runtimes()

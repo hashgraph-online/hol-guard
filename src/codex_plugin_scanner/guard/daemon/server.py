@@ -128,6 +128,7 @@ from ..local_supply_chain import (
 )
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import DECISION_SCOPE_VALUES, DecisionScope, PolicyDecision, format_local_http_origin
+from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -412,12 +413,6 @@ def _runtime_hook_remaining_hint(payload: dict[str, object]) -> float:
     ):
         return float(raw_milliseconds) / 1000.0
     return _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
-
-
-def _native_mode_requires_rust() -> bool:
-    from ..native_runtime import native_mode
-
-    return native_mode() in {"auto", "force"}
 
 
 def _codex_live_replay_authority(
@@ -5765,6 +5760,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     default_harness=default_harness,
                     reason="HOL Guard could not authenticate the local hook payload.",
                     reason_code="invalid_hook_payload_reference",
+                    native_authoritative=native_required,
                 )
             )
             return
@@ -5781,6 +5777,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     params,
                     default_harness=default_harness,
                     reason_code=reservation_reason,
+                    native_authoritative=native_required,
                 )
             )
             return
@@ -5814,6 +5811,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         params,
                         default_harness=default_harness,
                         reason_code=admission.reason_code,
+                        native_authoritative=native_required,
                     )
                 )
                 return
@@ -5891,6 +5889,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         default_harness: str,
         reason_code: RuntimeHookAdmissionReason | None = None,
+        native_authoritative: bool = False,
     ) -> dict[str, object]:
         resolved_reason_code = reason_code or "daemon_hook_queue_capacity"
         if resolved_reason_code == "daemon_hook_deadline_exhausted":
@@ -5903,6 +5902,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             default_harness=default_harness,
             reason=reason,
             reason_code=resolved_reason_code,
+            native_authoritative=native_authoritative,
         )
 
     def _runtime_hook_fail_safe_response(
@@ -5913,6 +5913,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         default_harness: str,
         reason: str,
         reason_code: str,
+        native_authoritative: bool = False,
     ) -> dict[str, object]:
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
@@ -5925,7 +5926,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         except (OSError, RuntimeError, TypeError, ValueError):
             observe_mode = False
-        if observe_mode:
+        if observe_mode and not native_authoritative:
             if harness in {"pi", "omp"}:
                 return {
                     "decision": "allow",
@@ -6021,6 +6022,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         default_harness=default_harness,
                         reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
                         reason_code="daemon_hook_deadline_exhausted",
+                        native_authoritative=_native_mode_requires_rust(),
                     )
                 self._write_json(result)
                 return
@@ -6032,11 +6034,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         default_harness=default_harness,
                         reason="HOL Guard could not complete the native hook decision safely.",
                         reason_code="native_hook_worker_unavailable",
+                        native_authoritative=True,
                     )
                 )
                 return
 
-        self._handle_runtime_hook_legacy_cli(
+        self._handle_runtime_hook_compatibility_cli(
             payload,
             params,
             hook_env=hook_env,
@@ -6089,11 +6092,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     default_harness=default_harness,
                     reason="HOL Guard could not complete the native hook decision safely.",
                     reason_code="native_hook_worker_unsupported",
+                    native_authoritative=True,
                 )
             # Explicit off/shadow compatibility keeps the existing CLI path.
             return None
         except Exception as error:
-            # Fail safe: deny/block. Do not fall back to legacy CLI for
+            # Fail safe: deny/block. Do not fall back to compatibility CLI for
             # requests that omitted full output and supplied only guard_source_ref.
             self._daemon_server().hook_worker.metrics.record_failure(
                 stage="server",
@@ -6105,9 +6109,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 default_harness=default_harness,
                 reason="HOL Guard could not complete local hook review safely.",
                 reason_code="daemon_worker_exception",
+                native_authoritative=_native_mode_requires_rust(),
             )
 
-    def _handle_runtime_hook_legacy_cli(
+    def _handle_runtime_hook_compatibility_cli(
         self,
         payload: dict[str, object],
         params: Mapping[str, list[str]],
