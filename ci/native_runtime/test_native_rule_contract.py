@@ -29,6 +29,10 @@ _COMPONENTS = (
         Path("rust/crates/guard-runtime/src/policy_enforcement_facts.rs"),
     ),
     (
+        "guard-runtime-policy-enforcement-facts-tools",
+        Path("rust/crates/guard-runtime/src/policy_enforcement_facts_tools.rs"),
+    ),
+    (
         "guard-runtime-policy-enforcement-policy",
         Path("rust/crates/guard-runtime/src/policy_enforcement_policy.rs"),
     ),
