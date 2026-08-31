@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -63,6 +64,22 @@ def test_owner_controlled_readable_guard_home_is_supported(tmp_path: Path) -> No
     tmp_path.chmod(0o755)
 
     assert _snapshot(tmp_path, digest="a" * 64)["generation"] == 1
+
+
+def test_unchanged_policy_does_not_repeat_durable_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    first = _snapshot(tmp_path, digest="a" * 64)
+    fsync_calls = 0
+    real_fsync = os.fsync
+
+    def counting_fsync(descriptor: int) -> None:
+        nonlocal fsync_calls
+        fsync_calls += 1
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", counting_fsync)
+
+    assert _snapshot(tmp_path, digest="a" * 64) == first
+    assert fsync_calls == 0
 
 
 def test_group_writable_guard_home_is_rejected(tmp_path: Path) -> None:

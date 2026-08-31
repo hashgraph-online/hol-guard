@@ -158,7 +158,7 @@ def _write_generation_state(guard_home: Path, *, generation: int, policy_digest:
         os.chmod(path, 0o600)
         committed_descriptor = os.open(
             path,
-            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+            os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
         )
         try:
             os.fsync(committed_descriptor)
@@ -190,8 +190,10 @@ def _generation_for_policy(
             generation = 1
         elif current[1] == policy_digest:
             os.lseek(lock_descriptor, 0, os.SEEK_SET)
-            os.write(lock_descriptor, b"1")
-            os.fsync(lock_descriptor)
+            if os.read(lock_descriptor, 1) != b"1":
+                os.lseek(lock_descriptor, 0, os.SEEK_SET)
+                os.write(lock_descriptor, b"1")
+                os.fsync(lock_descriptor)
             return current[0]
         elif current[0] == _MAX_GENERATION:
             raise NativePolicySnapshotError("native_policy_generation_exhausted")

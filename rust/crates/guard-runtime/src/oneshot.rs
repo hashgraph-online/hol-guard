@@ -66,7 +66,6 @@ pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), Stri
     }
     let snapshot: PolicySnapshotV1 = serde_json::from_value(snapshot_value.clone())
         .map_err(|_| "native_policy_snapshot_invalid".to_owned())?;
-    validate_durable_policy_generation(value, &snapshot)?;
     let mut accepted = ACCEPTED_POLICY_SNAPSHOT
         .lock()
         .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
@@ -75,6 +74,7 @@ pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), Stri
     if snapshot.rule_digest != guard_rule_contract::rule_digest() {
         return Err("native_policy_snapshot_rule_mismatch".to_owned());
     }
+    validate_durable_policy_generation(value, &snapshot)?;
     if let Some(current) = accepted.as_ref() {
         if snapshot.generation == current.generation {
             if snapshot.policy_digest != current.policy_digest {
@@ -297,7 +297,7 @@ mod tests {
         let _guard = lock_generation();
         reset_generation();
         let error = validate_request_policy_snapshot(&snapshot_value(0)).unwrap_err();
-        assert_eq!(error, "native_policy_generation_state_invalid");
+        assert_eq!(error, "snapshot_generation_downgrade");
         reset_generation();
     }
 
