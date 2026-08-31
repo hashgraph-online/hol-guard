@@ -78,9 +78,7 @@ def is_explicitly_benign_native_file_read_request(
 
     if _normalize_tool_name(tool_name) != "read" or not isinstance(arguments, dict):
         return False
-    typed_arguments: dict[str, object] = {
-        key: value for key, value in arguments.items() if isinstance(key, str)
-    }
+    typed_arguments: dict[str, object] = {key: value for key, value in arguments.items() if isinstance(key, str)}
     if any(key in typed_arguments for key in _PATH_LIST_KEYS):
         return False
     candidates = [
