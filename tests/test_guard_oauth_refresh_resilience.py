@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 
 import pytest
 
@@ -155,3 +156,47 @@ def test_sync_auth_context_raises_after_persistent_invalid_grant(tmp_path, monke
 
     with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError):
         guard_runner_module._resolve_guard_sync_auth_context(store)
+
+
+def test_invalid_grant_retry_uses_reloaded_credentials(tmp_path, monkeypatch) -> None:
+    """Refresh retry must read rotated credentials persisted by another process."""
+    store = _store_with_oauth_credentials(tmp_path)
+    seen_tokens: list[str] = []
+
+    def _fake_urlopen(_request, timeout):
+        form = dict(urllib.parse.parse_qsl(_request.data.decode("utf-8")))
+        seen_tokens.append(form["refresh_token"])
+        if len(seen_tokens) == 1:
+            raise _invalid_grant_http_error()
+        return _SuccessResponse("access-token-3")
+
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
+    _allow_refresh(monkeypatch)
+
+    # Simulate peer-process rotation between attempts: change stored refresh token.
+    initial = store.get_oauth_local_credentials(allow_primary=True)
+    assert initial is not None
+    initial["refresh_token"] = "refresh-token-2"
+    # Patch store read used by the reloader to return the rotated credentials.
+    original_get = GuardStore.get_oauth_local_credentials
+
+    def _patched_get(self, *args, **kwargs):
+        if self is store:
+            return initial
+        return original_get(self, *args, **kwargs)
+
+    monkeypatch.setattr(GuardStore, "get_oauth_local_credentials", _patched_get)
+
+    refreshed = guard_runner_module._refresh_guard_oauth_access_token(
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_key_material=guard_runner_module._oauth_dpop_key_material(initial),
+        credential_reloader=lambda: (
+            initial["refresh_token"],
+            guard_runner_module._oauth_dpop_key_material(initial),
+        ),
+    )
+
+    assert refreshed["access_token"] == "access-token-3"
+    assert seen_tokens == ["refresh-token-1", "refresh-token-2"]

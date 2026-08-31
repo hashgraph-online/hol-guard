@@ -4545,23 +4545,28 @@ def _refresh_guard_oauth_access_token(
     client_id: str,
     refresh_token: str,
     dpop_key_material: GuardDpopKeyMaterial,
+    credential_reloader: Callable[[], tuple[str, GuardDpopKeyMaterial] | None] | None = None,
 ) -> dict[str, object]:
     """Refresh with bounded invalid_grant tolerance.
 
     A single invalid_grant can be an edge 4xx or a rotation race resolved
     server-side without grant revocation; failing once must not declare the
     local sign-in invalid (which used to trigger credential wipes and stop
-    sync). Retry exactly once after a short delay; a second invalid_grant is
+    sync). Retry exactly once after a short delay. Before the retry, ask the
+    caller for the latest stored credentials — a peer process may have
+    rotated the refresh token between attempts. A second invalid_grant is
     treated as genuine revocation and propagates.
     """
     last_error: GuardSyncAuthorizationExpiredError | None = None
+    attempt_refresh_token = refresh_token
+    attempt_dpop_key_material = dpop_key_material
     for attempt in range(_OAUTH_INVALID_GRANT_MAX_ATTEMPTS):
         try:
             return _refresh_guard_oauth_access_token_once(
                 token_endpoint=token_endpoint,
                 client_id=client_id,
-                refresh_token=refresh_token,
-                dpop_key_material=dpop_key_material,
+                refresh_token=attempt_refresh_token,
+                dpop_key_material=attempt_dpop_key_material,
             )
         except GuardSyncAuthorizationExpiredError as error:
             if str(error) != _guard_oauth_reconnect_after_revoked_message():
@@ -4570,6 +4575,12 @@ def _refresh_guard_oauth_access_token(
             if attempt + 1 >= _OAUTH_INVALID_GRANT_MAX_ATTEMPTS:
                 break
             time.sleep(_OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS)
+            if credential_reloader is None:
+                continue
+            reloaded = credential_reloader()
+            if reloaded is None:
+                continue
+            attempt_refresh_token, attempt_dpop_key_material = reloaded
     if last_error is None:  # pragma: no cover - unreachable when MAX_ATTEMPTS >= 1
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
     raise last_error
@@ -4744,11 +4755,22 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             "access_token": cached_access_token,
             "dpop_key_material": dpop_key_material,
         }
+
+    def _reload_current_oauth_credentials() -> tuple[str, GuardDpopKeyMaterial] | None:
+        reloaded_credentials = store.get_oauth_local_credentials(allow_primary=True)
+        if not isinstance(reloaded_credentials, dict):
+            return None
+        reloaded_refresh_token = _optional_string(reloaded_credentials.get("refresh_token"))
+        if reloaded_refresh_token is None:
+            return None
+        return reloaded_refresh_token, _oauth_dpop_key_material(reloaded_credentials)
+
     refreshed = _refresh_guard_oauth_access_token(
         token_endpoint=oauth_client.token_endpoint,
         client_id=client_id,
         refresh_token=refresh_token,
         dpop_key_material=dpop_key_material,
+        credential_reloader=_reload_current_oauth_credentials,
     )
     rotated_refresh_token = str(refreshed["refresh_token"])
     refreshed_entitlement = refreshed.get("package_firewall_entitlement")
