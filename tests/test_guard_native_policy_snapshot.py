@@ -49,3 +49,24 @@ def test_corrupt_generation_state_fails_closed_instead_of_resetting_floor(tmp_pa
         _snapshot(tmp_path, digest="a" * 64)
 
     assert json.loads(state_path.read_text(encoding="utf-8"))["generation"] == 99
+
+
+def test_missing_generation_state_after_initialization_fails_closed(tmp_path: Path) -> None:
+    _snapshot(tmp_path, digest="a" * 64)
+    (tmp_path / "native-policy-generation.json").unlink()
+
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_state_missing"):
+        _snapshot(tmp_path, digest="b" * 64)
+
+
+def test_owner_controlled_readable_guard_home_is_supported(tmp_path: Path) -> None:
+    tmp_path.chmod(0o755)
+
+    assert _snapshot(tmp_path, digest="a" * 64)["generation"] == 1
+
+
+def test_group_writable_guard_home_is_rejected(tmp_path: Path) -> None:
+    tmp_path.chmod(0o770)
+
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_home_invalid"):
+        _snapshot(tmp_path, digest="a" * 64)

@@ -5,8 +5,22 @@ use guard_command::{parse_command, CommandModelRequestV1};
 use guard_contracts::{NativeHookRequestV1, NATIVE_PROTOCOL_VERSION};
 use guard_hook_core::review_post_tool;
 use guard_policy_snapshot::{validate as validate_policy_snapshot, PolicySnapshotV1};
+use guard_secure_fs::read_bounded;
+use serde::Deserialize;
 use serde_json::Value;
+use std::path::Path;
 use std::sync::Mutex;
+
+const POLICY_GENERATION_STATE_SCHEMA: &str = "hol-guard-native-policy-generation.v1";
+const POLICY_GENERATION_STATE_NAME: &str = "native-policy-generation.json";
+const MAX_POLICY_GENERATION_STATE_BYTES: usize = 4 * 1024;
+
+#[derive(Deserialize)]
+struct DurablePolicyGenerationState {
+    schema: String,
+    generation: u64,
+    policy_digest: String,
+}
 
 #[derive(Clone)]
 struct AcceptedPolicySnapshot {
@@ -15,6 +29,33 @@ struct AcceptedPolicySnapshot {
 }
 
 static ACCEPTED_POLICY_SNAPSHOT: Mutex<Option<AcceptedPolicySnapshot>> = Mutex::new(None);
+
+fn validate_durable_policy_generation(
+    value: &Value,
+    snapshot: &PolicySnapshotV1,
+) -> Result<(), String> {
+    let guard_home = value
+        .get("guard_home")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .ok_or_else(|| "native_policy_generation_state_invalid".to_owned())?;
+    let canonical_guard_home = std::fs::canonicalize(Path::new(guard_home))
+        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
+    let state_path = canonical_guard_home.join(POLICY_GENERATION_STATE_NAME);
+    let state_bytes = read_bounded(&state_path, MAX_POLICY_GENERATION_STATE_BYTES)
+        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?
+        .bytes;
+    let state: DurablePolicyGenerationState = serde_json::from_slice(&state_bytes)
+        .map_err(|_| "native_policy_generation_state_invalid".to_owned())?;
+    if state.schema != POLICY_GENERATION_STATE_SCHEMA || state.generation == 0 {
+        return Err("native_policy_generation_state_invalid".to_owned());
+    }
+    if state.generation != snapshot.generation || state.policy_digest != snapshot.policy_digest {
+        return Err("native_policy_snapshot_not_current".to_owned());
+    }
+    Ok(())
+}
 
 pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), String> {
     let Some(snapshot_value) = value.get("policy_snapshot") else {
@@ -25,6 +66,7 @@ pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), Stri
     }
     let snapshot: PolicySnapshotV1 = serde_json::from_value(snapshot_value.clone())
         .map_err(|_| "native_policy_snapshot_invalid".to_owned())?;
+    validate_durable_policy_generation(value, &snapshot)?;
     let mut accepted = ACCEPTED_POLICY_SNAPSHOT
         .lock()
         .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
@@ -156,6 +198,7 @@ pub(crate) fn evaluate_pre_tool_request(
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::fs;
     use std::sync::{Arc, Barrier, Mutex};
     use std::thread;
 
@@ -173,13 +216,33 @@ mod tests {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
     }
 
+    fn generation_state_root() -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "hol-guard-native-generation-test-{}",
+            std::process::id()
+        ))
+    }
+
     fn snapshot_value(generation: u64) -> Value {
         snapshot_value_with_digest(generation, "a")
     }
 
     fn snapshot_value_with_digest(generation: u64, digest_character: &str) -> Value {
         let digest = digest_character.repeat(64);
+        let guard_home = generation_state_root();
+        fs::create_dir_all(&guard_home).expect("create generation fixture");
+        fs::write(
+            guard_home.join(POLICY_GENERATION_STATE_NAME),
+            serde_json::to_vec(&json!({
+                "schema": POLICY_GENERATION_STATE_SCHEMA,
+                "generation": generation,
+                "policy_digest": digest.clone(),
+            }))
+            .expect("encode generation fixture"),
+        )
+        .expect("write generation fixture");
         json!({
+            "guard_home": guard_home,
             "policy_snapshot": {
                 "schema": "hol-guard-native-policy.v1",
                 "generation": generation,
@@ -234,7 +297,18 @@ mod tests {
         let _guard = lock_generation();
         reset_generation();
         let error = validate_request_policy_snapshot(&snapshot_value(0)).unwrap_err();
-        assert_eq!(error, "snapshot_generation_downgrade");
+        assert_eq!(error, "native_policy_generation_state_invalid");
+        reset_generation();
+    }
+
+    #[test]
+    fn fresh_process_state_rejects_a_snapshot_not_matching_durable_authority() {
+        let _guard = lock_generation();
+        reset_generation();
+        let stale = snapshot_value_with_digest(10, "a");
+        let _current = snapshot_value_with_digest(11, "b");
+        let error = validate_request_policy_snapshot(&stale).unwrap_err();
+        assert_eq!(error, "native_policy_snapshot_not_current");
         reset_generation();
     }
 }

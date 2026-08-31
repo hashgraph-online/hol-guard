@@ -580,6 +580,7 @@ def review_post_tool_native(
                 guard_home=request.guard_home,
                 rule_digest=status.capabilities.rule_digest,
                 observe_mode=observe_mode,
+                deadline_monotonic=request.deadline_monotonic,
             )
         )
     except (NativePolicySnapshotError, OSError):
