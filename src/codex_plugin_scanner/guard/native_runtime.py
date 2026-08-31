@@ -14,12 +14,12 @@ import math
 import os
 import stat
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
-from .native_policy_snapshot import NativePolicySnapshotError, native_policy_snapshot
 from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
 from .native_runtime_resilience import (
@@ -558,6 +558,7 @@ def review_post_tool_native(
     request: HookReviewRequest,
     *,
     observe_mode: bool,
+    policy_snapshot: Mapping[str, object] | None = None,
 ) -> HookReviewResponse | None:
     """Review PostToolUse through the native Rust client and resident.
 
@@ -576,19 +577,13 @@ def review_post_tool_native(
         return record_native_hook_result("native_fail_safe", None)
 
     deadline_monotonic, deadline_budget_ms = _capture_native_deadline(request)
-    try:
-        policy_snapshot = (
-            None
-            if status.capabilities is None
-            else native_policy_snapshot(
-                guard_home=request.guard_home,
-                rule_digest=status.capabilities.rule_digest,
-                observe_mode=observe_mode,
-                deadline_monotonic=deadline_monotonic,
-            )
-        )
-    except (NativePolicySnapshotError, OSError):
+    if policy_snapshot is None:
         return record_native_hook_result("native_fail_safe", None)
+    policy_snapshot_payload = dict(policy_snapshot)
+    generation = policy_snapshot_payload.get("generation")
+    if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
+        return record_native_hook_result("native_fail_safe", None)
+    observe_mode = policy_snapshot_payload.get("mode") == "observe"
 
     envelope = {
         "protocol_version": _NATIVE_PROTOCOL_VERSION,
@@ -602,7 +597,7 @@ def review_post_tool_native(
         "source_ref_external_allowed": request.source_ref_external_allowed,
         "observe_mode": observe_mode,
         "deadline_budget_ms": deadline_budget_ms,
-        "policy_snapshot": policy_snapshot,
+        "policy_snapshot": policy_snapshot_payload,
     }
     input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
     if len(encoded := input_text.encode("utf-8")) > _MAX_REQUEST_BYTES:

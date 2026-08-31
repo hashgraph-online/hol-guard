@@ -20,6 +20,7 @@ Security:
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
@@ -31,6 +32,7 @@ from ..cli.commands_support_command_activity import (
 )
 from ..config import load_guard_config
 from ..native_hook_edge import review_raw_hook_native
+from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_pretool import review_pre_tool_native
 from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import native_mode, native_runtime_status, review_post_tool_native
@@ -108,6 +110,14 @@ class HookWorker:
         self.guard_home = store.guard_home
         self.activity_writer = activity_writer
         self._engine: HookReviewEngine | None = None
+        self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
+        mode = native_mode()
+        if mode in {"auto", "force", "shadow"}:
+            self.policy_snapshot_publisher.start()
+        if mode in {"auto", "force"}:
+            wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
+            if callable(wait_until_ready):
+                _ = wait_until_ready(time.monotonic() + 0.25)
         from .hook_metrics import HookMetricsRecorder
 
         self.metrics = HookMetricsRecorder()
@@ -126,6 +136,27 @@ class HookWorker:
 
     def _load_config(self, guard_home: Path, workspace: Path | None):
         return load_guard_config(guard_home, workspace=workspace)
+
+    def close(self) -> None:
+        """Stop the asynchronous native policy publisher with the worker."""
+
+        self.policy_snapshot_publisher.close()
+
+    def _native_policy_snapshot(self, workspace: Path | None = None) -> dict[str, object] | None:
+        """Return only the last resident-ACKed snapshot for native hooks."""
+
+        if native_mode() not in {"auto", "force", "shadow"}:
+            return None
+        register_workspace = getattr(self.policy_snapshot_publisher, "register_workspace", None)
+        workspace_registered = False
+        if callable(register_workspace):
+            workspace_registered = register_workspace(workspace) is True
+        self.policy_snapshot_publisher.start()
+        if workspace_registered and native_mode() in {"auto", "force"}:
+            wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
+            if callable(wait_until_ready):
+                _ = wait_until_ready(time.monotonic() + 0.25)
+        return self.policy_snapshot_publisher.current_snapshot()
 
     def review_http_payload(
         self,
@@ -225,11 +256,8 @@ class HookWorker:
         workspace: Path | None,
         deadline: float | None,
     ) -> dict[str, object]:
-        config = self._load_config(guard_home, workspace)
-        recording_only = protection_is_off(
-            posture=config.protection_posture,
-            mode=config.mode,
-        )
+        policy_snapshot = self._native_policy_snapshot(workspace)
+        recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
         edge = review_raw_hook_native(
             payload=payload,
             harness=harness,
@@ -240,6 +268,7 @@ class HookWorker:
             source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
             observe_mode=recording_only,
             deadline=deadline,
+            policy_snapshot=policy_snapshot,
         )
         if edge is None:
             if event_name == "PostToolUse":
@@ -295,14 +324,12 @@ class HookWorker:
         mode = native_mode()
         native_required = mode in {"auto", "force"}
         if native_required:
-            config = self._load_config(guard_home, workspace)
-            recording_only = protection_is_off(
-                posture=config.protection_posture,
-                mode=config.mode,
-            )
+            policy_snapshot = self._native_policy_snapshot(workspace)
+            recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
             response = review_post_tool_native(
                 request,
                 observe_mode=recording_only,
+                policy_snapshot=policy_snapshot,
             )
             if response is None:
                 self._record_post_tool_activity(
@@ -310,12 +337,6 @@ class HookWorker:
                     payload=payload,
                     succeeded=hook_post_succeeded(event_name, payload),
                 )
-                if recording_only:
-                    return {
-                        "policy_action": "allow",
-                        "reason_code": "native_post_tool_unavailable",
-                        "hookSpecificOutput": {"hookEventName": event_name},
-                    }
                 return post_tool_fail_safe_response(
                     harness,
                     reason="HOL Guard could not complete the native local hook review safely.",
@@ -325,7 +346,11 @@ class HookWorker:
             response = self.engine.review(request)
             if mode == "shadow":
                 with suppress(Exception):
-                    _ = review_post_tool_native(request, observe_mode=response.observe_mode)
+                    _ = review_post_tool_native(
+                        request,
+                        observe_mode=response.observe_mode,
+                        policy_snapshot=self._native_policy_snapshot(workspace),
+                    )
 
         self._record_post_tool_activity(
             harness=harness,

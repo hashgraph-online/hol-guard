@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_a
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import hook_process_entrypoint
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.native_pretool import _decode_pre_tool
 from codex_plugin_scanner.guard.runtime import hook_payload_reference as payload_reference_module
@@ -87,6 +88,29 @@ def test_generic_result_decoder_rejects_raw_or_conflicting_content() -> None:
     assert isinstance(malformed_result, dict)
     malformed_result["decision"] = []
     assert _decode_edge(malformed_type) is None
+
+
+def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically() -> None:
+    edge = _edge("codex", "PreToolUse")
+    result = edge["result"]
+    assert isinstance(result, dict)
+    result.update(
+        {
+            "decision": "allow",
+            "policy_action": "warn",
+            "minimum_action": "warn",
+            "reason_code": "native_policy_warning",
+            "reason": "HOL Guard raised a non-blocking warning.",
+            "explicitly_benign": False,
+        }
+    )
+    assert _decode_edge(edge) == edge
+    rendered = harness_json_from_native_pre_tool("codex", result)
+    assert rendered["continue"] is True
+    assert rendered["policy_action"] == "warn"
+    hook_specific = rendered["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecision"] == "allow"
 
 
 def test_native_review_is_mechanical_and_never_raises_worker_unsupported(

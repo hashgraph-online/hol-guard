@@ -528,6 +528,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
 
     def server_close(self) -> None:
         _ = self._stop_request_executors()
+        hook_worker = getattr(self, "hook_worker", None)
+        if hook_worker is not None:
+            with suppress(Exception):
+                hook_worker.close()
         writer = getattr(self, "runtime_hook_evidence_writer", None)
         if writer is not None:
             _ = writer.stop(timeout_seconds=1.0)

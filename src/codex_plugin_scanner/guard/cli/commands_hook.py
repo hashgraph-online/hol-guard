@@ -79,7 +79,6 @@ def _run_guard_hook_command(
         raise RuntimeError("Guard home is required")
     context = _require_guard_context(context)
     store = _require_guard_store(store)
-    config = _require_guard_config(config)
     runtime_harness = getattr(args, "runtime_harness", None)
     if isinstance(runtime_harness, str) and runtime_harness.strip():
         args.harness = runtime_harness.strip()
@@ -106,6 +105,10 @@ def _run_guard_hook_command(
     )
     if raw_routed is not None:
         return raw_routed
+    # Explicit off/shadow compatibility reaches this point after native has
+    # declined authority.  Auto/force already returned a typed fail-safe
+    # result above, so no hook request loads config here.
+    config = _require_guard_config(config)
     # Explicit off/shadow compatibility owns reference hydration only after
     # native routing has declined authority. Auto/force therefore sends the
     # bounded reference envelope to Rust without Python file I/O.

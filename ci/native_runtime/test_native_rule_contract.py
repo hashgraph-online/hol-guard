@@ -23,6 +23,7 @@ _COMPONENTS = (
     ("guard-command-pretool-generic", Path("rust/crates/guard-command/src/pretool/generic.rs")),
     ("guard-command-pretool-result", Path("rust/crates/guard-command/src/pretool/generic_result.rs")),
     ("guard-command-pretool-extract", Path("rust/crates/guard-command/src/pretool/generic_extract.rs")),
+    ("guard-runtime-policy-enforcement", Path("rust/crates/guard-runtime/src/policy_enforcement.rs")),
 )
 
 

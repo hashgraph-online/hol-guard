@@ -38,8 +38,10 @@ def try_native_hook_authority(
     """
     if not _native_mode_requires_rust():
         return None
+    worker: HookWorker | None = None
     try:
-        return HookWorker(store=store).review_http_payload(
+        worker = HookWorker(store=store)
+        return worker.review_http_payload(
             payload=payload,
             params={},
             default_harness=harness,
@@ -55,6 +57,11 @@ def try_native_hook_authority(
             reason="HOL Guard could not complete the native hook decision safely.",
             reason_code="native_hook_worker_exception",
         )
+    finally:
+        if worker is not None:
+            close = getattr(worker, "close", None)
+            if callable(close):
+                close()
 
 
 def try_native_or_source_ref_hook(

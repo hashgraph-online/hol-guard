@@ -688,6 +688,13 @@ def update_guard_settings(
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)
+    # Native hook decisions consume the resident's last ACKed snapshot. Wake
+    # the publisher only after the durable config write succeeds; it will
+    # rebuild and publish asynchronously without making this control-plane
+    # mutation wait on resident IPC.
+    from .native_policy_snapshot import notify_native_policy_mutation
+
+    notify_native_policy_mutation(guard_home)
     explicit_choice = incoming_selected_posture and updated.protection_posture_explicit
     if current_config.protection_posture != updated.protection_posture or (
         explicit_choice and not current_config.protection_posture_explicit
@@ -721,7 +728,11 @@ def update_guard_update_channel(
     current = _read_toml(guard_home / "config.toml")
     current["update_channel"] = update_channel
     _write_guard_config(guard_home / "config.toml", current)
-    return load_guard_config(guard_home)
+    updated = load_guard_config(guard_home)
+    from .native_policy_snapshot import notify_native_policy_mutation
+
+    notify_native_policy_mutation(guard_home)
+    return updated
 
 
 def reset_guard_settings(
@@ -735,7 +746,11 @@ def reset_guard_settings(
     current = _read_toml(guard_home / "config.toml")
     next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
     _write_guard_config(guard_home / "config.toml", next_payload)
-    return load_guard_config(guard_home)
+    updated = load_guard_config(guard_home)
+    from .native_policy_snapshot import notify_native_policy_mutation
+
+    notify_native_policy_mutation(guard_home)
+    return updated
 
 
 def _coerce_editable_setting(key: str, value: object) -> object:

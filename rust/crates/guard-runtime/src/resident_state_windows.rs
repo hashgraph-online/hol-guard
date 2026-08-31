@@ -1,7 +1,9 @@
 use std::path::Path;
-use windows_permissions::constants::{AccessRights, AceType, SeObjectType, SecurityInformation};
+use windows_permissions::constants::{
+    AccessRights, AceFlags, AceType, SeObjectType, SecurityInformation,
+};
 use windows_permissions::utilities::current_process_sid;
-use windows_permissions::wrappers::{GetNamedSecurityInfo, SetNamedSecurityInfo};
+use windows_permissions::wrappers::{GetNamedSecurityInfo, GetSecurityInfo, SetNamedSecurityInfo};
 use windows_permissions::{LocalBox, SecurityDescriptor, Sid};
 
 pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), String> {
@@ -32,15 +34,41 @@ pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), S
 }
 
 pub(super) fn verify_windows_path(path: &Path, owner: &Sid) -> Result<(), String> {
-    let system = "S-1-5-18"
-        .parse::<LocalBox<Sid>>()
-        .map_err(|_| "native_resident_windows_system_sid_failed".to_owned())?;
     let applied = GetNamedSecurityInfo(
         path.as_os_str(),
         SeObjectType::SE_FILE_OBJECT,
-        SecurityInformation::Dacl,
+        SecurityInformation::Dacl | SecurityInformation::Owner | SecurityInformation::ProtectedDacl,
     )
     .map_err(|_| "native_resident_windows_acl_verify_failed".to_owned())?;
+    verify_windows_descriptor(&applied, owner)
+}
+
+pub(super) fn verify_windows_handle<H: std::os::windows::io::AsRawHandle>(
+    handle: &H,
+    owner: &Sid,
+) -> Result<(), String> {
+    let applied = GetSecurityInfo(
+        handle,
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Dacl | SecurityInformation::Owner | SecurityInformation::ProtectedDacl,
+    )
+    .map_err(|_| "native_resident_windows_acl_verify_failed".to_owned())?;
+    verify_windows_descriptor(&applied, owner)
+}
+
+fn verify_windows_descriptor(applied: &SecurityDescriptor, owner: &Sid) -> Result<(), String> {
+    let system = "S-1-5-18"
+        .parse::<LocalBox<Sid>>()
+        .map_err(|_| "native_resident_windows_system_sid_failed".to_owned())?;
+    if applied.owner() != Some(owner) {
+        return Err("native_resident_windows_acl_not_private".to_owned());
+    }
+    let sddl = applied
+        .as_sddl()
+        .map_err(|_| "native_resident_windows_acl_verify_failed".to_owned())?;
+    if !sddl.to_string_lossy().contains("D:P") {
+        return Err("native_resident_windows_acl_not_private".to_owned());
+    }
     let applied_dacl = applied
         .dacl()
         .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
@@ -52,6 +80,7 @@ pub(super) fn verify_windows_path(path: &Path, owner: &Sid) -> Result<(), String
             .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
         if ace.ace_type() != AceType::ACCESS_ALLOWED_ACE_TYPE
             || !ace.mask().contains(AccessRights::FileAllAccess)
+            || ace.flags().contains(AceFlags::Inherited)
         {
             return Err("native_resident_windows_acl_not_private".to_owned());
         }

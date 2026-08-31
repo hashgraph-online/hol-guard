@@ -247,7 +247,7 @@
         "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
         "src/codex_plugin_scanner/guard/store_approvals.py"
       ],
-      "current": "policy materialization and approval presentation, persistence, and continuation",
+      "current": "asynchronous effective-policy compilation/publication plus approval presentation, persistence, and continuation",
       "target": "asynchronous snapshot publication and approval presentation only"
     },
     {
@@ -306,7 +306,7 @@
         "rust/crates/guard-runtime/**",
         "rust/crates/guard-scanner/**"
       ],
-      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
+      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
       "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"
     },
     {

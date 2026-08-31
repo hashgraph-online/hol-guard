@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from .native_policy_snapshot import NativePolicySnapshotError, native_policy_snapshot
 from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, native_runtime_status
@@ -76,6 +76,14 @@ _PRE_TOOL_RESULT_KEYS = {
     "reason",
     "explicitly_benign",
 }
+_PRE_TOOL_POLICY_ACTIONS = {
+    "allow",
+    "warn",
+    "review",
+    "require-reapproval",
+    "sandbox-required",
+    "block",
+}
 _PRE_TOOL_ACTION_KEYS = {
     "schema",
     "version",
@@ -108,7 +116,7 @@ def _valid_pre_tool_result_fields(result: dict[str, Any]) -> bool:
         or not isinstance(decision, str)
         or decision not in {"allow", "deny"}
         or not isinstance(policy_action, str)
-        or policy_action not in {"allow", "review", "block"}
+        or policy_action not in _PRE_TOOL_POLICY_ACTIONS
         or minimum_action != policy_action
         or not isinstance(reason_code, str)
         or not reason_code
@@ -157,7 +165,9 @@ def _decode_pre_tool_result(result: object, *, harness: str) -> bool:
     minimum_action = result["minimum_action"]
     if result["explicitly_benign"] != (decision == "allow" and minimum_action == "allow"):
         return False
-    return decision == ("allow" if minimum_action == "allow" else "deny")
+    # `warn` is an allow-with-warning floor. All stronger actions remain
+    # denying floors; this keeps the Python edge purely mechanical.
+    return decision == ("allow" if minimum_action in {"allow", "warn"} else "deny")
 
 
 def _decode_edge(payload: object) -> dict[str, Any] | None:
@@ -207,6 +217,7 @@ def review_raw_hook_native(
     source_ref_external_allowed: bool,
     observe_mode: bool,
     deadline: float | None,
+    policy_snapshot: Mapping[str, object] | None = None,
 ) -> dict[str, Any] | None:
     """Return a typed Rust edge result, or fail closed without reinterpretation."""
     status = native_runtime_status()
@@ -231,14 +242,12 @@ def review_raw_hook_native(
     ):
         return record_native_hook_result("native_fail_safe", None)
     deadline_monotonic, deadline_budget_ms = _capture_deadline(deadline)
-    try:
-        snapshot = native_policy_snapshot(
-            rule_digest=status.capabilities.rule_digest,
-            observe_mode=observe_mode,
-            guard_home=guard_home,
-            deadline_monotonic=deadline_monotonic,
-        )
-    except (NativePolicySnapshotError, OSError):
+    del observe_mode
+    if policy_snapshot is None:
+        return record_native_hook_result("native_fail_safe", None)
+    snapshot = dict(policy_snapshot)
+    generation = snapshot.get("generation")
+    if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
         return record_native_hook_result("native_fail_safe", None)
     envelope = {
         "schema": "guard-hook-envelope.v2",

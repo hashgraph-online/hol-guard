@@ -4,6 +4,8 @@ mod edge;
 mod hardening;
 mod managed_resident;
 mod oneshot;
+mod policy_enforcement;
+mod policy_store;
 mod resident_client;
 mod resident_state;
 mod resident_state_encoding;
@@ -15,6 +17,7 @@ use guard_contracts::{
     MAX_NATIVE_REQUEST_BYTES, MAX_NATIVE_RESPONSE_BYTES, NATIVE_PROTOCOL_VERSION,
 };
 use guard_hook_core::review_post_tool;
+use policy_store::PolicySnapshotStore;
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -63,6 +66,7 @@ const PARENT_LIVENESS_FD_ENV: &str = "HOL_GUARD_PARENT_LIVENESS_FD";
 enum ResidentOperationV1 {
     CommandModel(CommandModelRequestV1),
     PreToolUse(CommandModelRequestV1),
+    PolicySnapshotPush(Value),
     Health(Value),
     Shutdown(Value),
 }
@@ -157,7 +161,9 @@ fn capabilities() -> RuntimeCapabilitiesV1 {
         "resident-command-model-shadow-v1".into(),
         "pre-tool-command-authority-v1".into(),
         "pre-tool-generic-authority-v1".into(),
-        "policy-snapshot-v1".into(),
+        "policy-snapshot-v3".into(),
+        "policy-snapshot-push-v1".into(),
+        "native-policy-in-memory-v1".into(),
         "hook-envelope-v2".into(),
         "native-resident-client-v1".into(),
         "native-resident-lifecycle-v1".into(),
@@ -194,8 +200,22 @@ pub(crate) fn strict_json_value(bytes: &[u8]) -> Result<Value, String> {
     strict_json::parse(bytes)
 }
 
-fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+fn evaluate_resident_bytes(
+    bytes: &[u8],
+    policy_store: Option<&PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
     let value = strict_json_value(bytes)?;
+    if value.get("operation").and_then(Value::as_str) == Some("policy_snapshot_push") {
+        let object = value
+            .as_object()
+            .ok_or_else(|| "native_policy_snapshot_push_invalid".to_owned())?;
+        if object
+            .keys()
+            .any(|key| !matches!(key.as_str(), "operation" | "request" | "deadline_budget_ms"))
+        {
+            return Err("native_policy_snapshot_push_invalid".to_owned());
+        }
+    }
     if value.get("operation").is_none()
         && value.get("schema").and_then(Value::as_str) != Some(GUARD_HOOK_ENVELOPE_V2_SCHEMA)
     {
@@ -204,12 +224,21 @@ fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let request: ResidentRequestV1 = serde_json::from_value(value)
         .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
     match request {
-        ResidentRequestV1::Edge(request) => edge::evaluate_envelope(request),
+        ResidentRequestV1::Edge(request) => {
+            let policy_store =
+                policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+            edge::evaluate_envelope_with_store(request, policy_store)
+        }
         ResidentRequestV1::Operation(ResidentOperationV1::CommandModel(request)) => {
             oneshot::evaluate_command_model_request(&request)
         }
         ResidentRequestV1::Operation(ResidentOperationV1::PreToolUse(request)) => {
             oneshot::evaluate_pre_tool_request(&request)
+        }
+        ResidentRequestV1::Operation(ResidentOperationV1::PolicySnapshotPush(request)) => {
+            let policy_store =
+                policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+            policy_store.push(&request)
         }
         ResidentRequestV1::Operation(ResidentOperationV1::Health(_request)) => {
             encode_response(&serde_json::json!({
@@ -221,7 +250,16 @@ fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
             managed_resident::request_shutdown();
             encode_response(&serde_json::json!({"status": "stopping"}))
         }
-        ResidentRequestV1::Hook(request) => encode_response(&review_post_tool(&request)),
+        ResidentRequestV1::Hook(request) => {
+            // Managed residents always carry a v3 policy store. The legacy
+            // request has no generation-bound snapshot and must never reach a
+            // semantic evaluator in that path.
+            if policy_store.is_some() {
+                Err("native_policy_snapshot_required".to_owned())
+            } else {
+                encode_response(&review_post_tool(&request))
+            }
+        }
     }
 }
 
@@ -238,6 +276,17 @@ fn error_response(code: &'static str, retryable: bool) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({"error": code, "retryable": retryable})).unwrap_or_else(
         |_| b"{\"error\":\"native_response_encode_failed\",\"retryable\":false}".to_vec(),
     )
+}
+
+fn safe_error_response(code: &str, retryable: bool) -> Vec<u8> {
+    if code.starts_with("native_policy_snapshot_") || code.starts_with("snapshot_") {
+        return serde_json::to_vec(&serde_json::json!({
+            "error": code,
+            "retryable": retryable,
+        }))
+        .unwrap_or_else(|_| error_response("native_response_encode_failed", false));
+    }
+    error_response("native_request_invalid_json", retryable)
 }
 
 fn write_json<T: serde::Serialize>(value: &T) -> Result<(), String> {
@@ -390,7 +439,7 @@ fn write_overload(pending: &mut PendingRequest) {
     let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
 }
 
-fn handle_pending_request(mut pending: PendingRequest) {
+fn handle_pending_request(mut pending: PendingRequest, policy_store: Option<&PolicySnapshotStore>) {
     if hardening::request_expired(pending.accepted_at) {
         let response = error_response("native_request_deadline_exceeded", true);
         let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
@@ -413,9 +462,11 @@ fn handle_pending_request(mut pending: PendingRequest) {
         if !constant_time_eq(&digest, &pending.request_digest) {
             error_response("native_request_digest_mismatch", false)
         } else {
-            match catch_unwind(AssertUnwindSafe(|| evaluate_resident_bytes(&request))) {
+            match catch_unwind(AssertUnwindSafe(|| {
+                evaluate_resident_bytes(&request, policy_store)
+            })) {
                 Ok(Ok(response)) => response,
-                Ok(Err(_reason)) => error_response("native_request_invalid_json", false),
+                Ok(Err(reason)) => safe_error_response(&reason, false),
                 Err(_panic) => error_response("native_runtime_panicked", false),
             }
         }
@@ -446,14 +497,16 @@ where
     }
 }
 
-fn start_resident_workers(token: Arc<[u8; AUTH_TOKEN_BYTES]>) -> SyncSender<BoxedResidentStream> {
+fn start_resident_workers(
+    token: Arc<[u8; AUTH_TOKEN_BYTES]>,
+    policy_store: Option<Arc<PolicySnapshotStore>>,
+) -> SyncSender<BoxedResidentStream> {
     let (evaluation_sender, evaluation_receiver) =
         sync_channel::<PendingRequest>(EVALUATION_QUEUE_CAPACITY);
-    spawn_workers(
-        EVALUATION_WORKERS,
-        evaluation_receiver,
-        handle_pending_request,
-    );
+    let evaluation_policy_store = policy_store.clone();
+    spawn_workers(EVALUATION_WORKERS, evaluation_receiver, move |pending| {
+        handle_pending_request(pending, evaluation_policy_store.as_deref());
+    });
 
     let (authentication_sender, authentication_receiver) =
         sync_channel::<BoxedResidentStream>(AUTH_QUEUE_CAPACITY);
@@ -477,7 +530,7 @@ fn start_resident_workers(token: Arc<[u8; AUTH_TOKEN_BYTES]>) -> SyncSender<Boxe
         };
         pending.payload_prefix.truncate(available);
         if available == pending.length {
-            handle_pending_request(pending);
+            handle_pending_request(pending, policy_store.as_deref());
             return;
         }
         match evaluation_sender.try_send(pending) {
@@ -565,7 +618,7 @@ fn serve(socket_path: &str) -> Result<(), String> {
         .map_err(|_| "native_socket_nonblocking_failed".to_owned())?;
 
     let token = Arc::new(read_resident_auth_token()?);
-    let sender = start_resident_workers(token);
+    let sender = start_resident_workers(token, None);
     let parent_alive = resident_parent_liveness()?;
     let mut consecutive_accept_failures = 0;
     while parent_alive.load(std::sync::atomic::Ordering::Acquire) {
@@ -614,7 +667,7 @@ fn serve_loopback(address: &str) -> Result<(), String> {
     }
 
     let token = Arc::new(read_resident_auth_token()?);
-    let sender = start_resident_workers(token);
+    let sender = start_resident_workers(token, None);
     let mut consecutive_accept_failures = 0;
     loop {
         match listener.accept() {
@@ -710,6 +763,12 @@ fn run() -> Result<(), String> {
         }
         [command, flag] if command == "hook-edge" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
+            if !matches!(
+                env::var("HOL_GUARD_NATIVE").ok().as_deref(),
+                Some("off" | "shadow")
+            ) {
+                return Err("native_policy_snapshot_unavailable".to_owned());
+            }
             let response = edge::evaluate_envelope_bytes(&bytes)?;
             write_bytes_response(&response)
         }

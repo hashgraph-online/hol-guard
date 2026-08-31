@@ -17,6 +17,7 @@ guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-rule-contract = { path = "../guard-rule-contract" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 getrandom.workspace = true
+hex.workspace = true
 libc.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true

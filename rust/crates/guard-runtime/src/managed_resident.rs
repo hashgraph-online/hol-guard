@@ -217,6 +217,7 @@ pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
 #[cfg(unix)]
 fn serve_unix_managed(
     scope: &Path,
+    policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
     generation: u64,
     owner_process_id: u32,
     digest: &str,
@@ -254,7 +255,7 @@ fn serve_unix_managed(
         path.to_string_lossy().into_owned(),
         &token,
     )?;
-    let result = managed_accept_loop(listener, Arc::new(token), owner_alive);
+    let result = managed_accept_loop(listener, Arc::new(token), owner_alive, policy_store);
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_socket()) {
         let _ = fs::remove_file(path);
     }
@@ -266,8 +267,9 @@ fn managed_accept_loop(
     listener: std::os::unix::net::UnixListener,
     token: Arc<[u8; crate::AUTH_TOKEN_BYTES]>,
     owner_alive: Arc<AtomicBool>,
+    policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
 ) -> Result<(), String> {
-    let sender = crate::start_resident_workers(token);
+    let sender = crate::start_resident_workers(token, Some(policy_store));
     let mut last_activity = Instant::now();
     let mut failures = 0;
     while owner_alive.load(Ordering::Acquire)
@@ -299,6 +301,7 @@ fn managed_accept_loop(
 #[cfg(not(unix))]
 fn serve_unix_managed(
     _scope: &Path,
+    _policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
     _generation: u64,
     _owner_process_id: u32,
     _digest: &str,
@@ -310,6 +313,7 @@ fn serve_unix_managed(
 
 fn serve_loopback_managed(
     scope: &Path,
+    policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
     generation: u64,
     owner_process_id: u32,
     digest: &str,
@@ -336,7 +340,7 @@ fn serve_loopback_managed(
         address.to_string(),
         &token,
     )?;
-    let sender = crate::start_resident_workers(Arc::new(token));
+    let sender = crate::start_resident_workers(Arc::new(token), Some(policy_store));
     let mut last_activity = Instant::now();
     let mut failures = 0;
     while owner_alive.load(Ordering::Acquire)
@@ -379,11 +383,16 @@ pub(crate) fn serve_managed(
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }
     let scope = state_scope(state_base, expected_digest)?;
+    let policy_store = std::sync::Arc::new(crate::policy_store::PolicySnapshotStore::new(
+        state_base,
+        expected_digest,
+    )?);
     let token = crate::read_resident_auth_token()?;
     let owner_alive = crate::resident_stdin_liveness();
     if cfg!(unix) {
         serve_unix_managed(
             &scope,
+            policy_store,
             generation,
             owner_process_id,
             expected_digest,
@@ -393,6 +402,7 @@ pub(crate) fn serve_managed(
     } else {
         serve_loopback_managed(
             &scope,
+            policy_store,
             generation,
             owner_process_id,
             expected_digest,

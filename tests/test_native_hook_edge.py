@@ -313,6 +313,7 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
         source_ref_external_allowed=False,
         observe_mode=False,
         deadline=None,
+        policy_snapshot={"generation": 1},
     )
     assert result == _edge_result()
     encoded = captured["payload"]

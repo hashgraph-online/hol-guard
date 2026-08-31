@@ -13,6 +13,20 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 #[path = "resident_state_windows.rs"]
 mod windows_security;
 
+#[cfg(windows)]
+pub(crate) fn protect_windows_private_path(path: &Path, directory: bool) -> Result<(), String> {
+    windows_security::protect_windows_path(path, directory)
+}
+
+#[cfg(windows)]
+pub(crate) fn verify_windows_private_path(path: &Path, _directory: bool) -> Result<(), String> {
+    use windows_permissions::utilities::current_process_sid;
+
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    windows_security::verify_windows_path(path, owner.as_ref())
+}
+
 const STATE_SCHEMA: &str = "hol-guard-resident-state.v3";
 const STATE_FILE_PREFIX: &str = "generation-";
 const STATE_FILE_SUFFIX: &str = ".json";
@@ -79,6 +93,50 @@ fn private_file(path: &Path, create_new: bool) -> Result<File, String> {
     #[cfg(windows)]
     windows_security::protect_windows_path(path, false)?;
     Ok(file)
+}
+
+/// Open a private state file through one Windows handle, then validate the
+/// opened object and its ACL before callers read from that same handle. The
+/// reparse-point flag prevents the final path component from being followed;
+/// no path metadata is trusted across a second open.
+#[cfg(windows)]
+pub(crate) fn open_private_read(
+    path: &Path,
+    maximum_bytes: u64,
+    kind: &str,
+) -> Result<Option<File>, String> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    use windows_permissions::utilities::current_process_sid;
+
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_SHARE_DELETE: u32 = 0x0000_0004;
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    let file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(format!("native_resident_{kind}_read_failed")),
+    };
+    let metadata = file
+        .metadata()
+        .map_err(|_| format!("native_resident_{kind}_invalid"))?;
+    if !metadata.is_file()
+        || metadata.len() > maximum_bytes
+        || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    {
+        return Err(format!("native_resident_{kind}_invalid"));
+    }
+    let owner =
+        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
+    windows_security::verify_windows_handle(&file, owner.as_ref())?;
+    Ok(Some(file))
 }
 
 fn ensure_private_directory(path: &Path, protect_windows: bool) -> Result<PathBuf, String> {
@@ -308,15 +366,38 @@ fn read_state_file(
     scope: &Path,
     expected_digest: &str,
 ) -> Result<ResidentState, String> {
-    let metadata =
-        fs::symlink_metadata(path).map_err(|_| "native_resident_state_stat_failed".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_STATE_BYTES
-    {
-        return Err("native_resident_state_invalid".to_owned());
-    }
+    #[cfg(windows)]
+    let file = open_private_read(path, MAX_STATE_BYTES, "state")?
+        .ok_or_else(|| "native_resident_state_stat_failed".to_owned())?;
+    #[cfg(not(windows))]
+    let file = {
+        let metadata = fs::symlink_metadata(path)
+            .map_err(|_| "native_resident_state_stat_failed".to_owned())?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > MAX_STATE_BYTES
+        {
+            return Err("native_resident_state_invalid".to_owned());
+        }
+        #[cfg(unix)]
+        let mut options = {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut options = OpenOptions::new();
+            options
+                .read(true)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+            options
+        };
+        #[cfg(not(unix))]
+        let mut options = OpenOptions::new();
+        options.read(true);
+        options
+            .open(path)
+            .map_err(|_| "native_resident_state_read_failed".to_owned())?
+    };
     let mut bytes = Vec::new();
-    File::open(path)
-        .and_then(|file| file.take(MAX_STATE_BYTES + 1).read_to_end(&mut bytes))
+    file.take(MAX_STATE_BYTES + 1)
+        .read_to_end(&mut bytes)
         .map_err(|_| "native_resident_state_read_failed".to_owned())?;
     if bytes.len() as u64 > MAX_STATE_BYTES {
         return Err("native_resident_state_invalid".to_owned());

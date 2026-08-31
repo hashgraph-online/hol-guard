@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 pub const RULE_CONTRACT_SCHEMA: &str = "hol-guard-native-rule-contract.v2";
 const RULE_CONTRACT_DOMAIN: &[u8] = b"hol-guard-native-rule-contract.v2\0";
 
-const COMPONENTS: [(&str, &[u8]); 9] = [
+const COMPONENTS: [(&str, &[u8]); 10] = [
     (
         "guard-rules",
         include_bytes!("../../guard-rules/src/lib.rs"),
@@ -42,6 +42,10 @@ const COMPONENTS: [(&str, &[u8]); 9] = [
     (
         "guard-command-pretool-extract",
         include_bytes!("../../guard-command/src/pretool/generic_extract.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement",
+        include_bytes!("../../guard-runtime/src/policy_enforcement.rs"),
     ),
 ];
 
@@ -117,6 +121,7 @@ mod tests {
                 "guard-command-pretool-generic",
                 "guard-command-pretool-result",
                 "guard-command-pretool-extract",
+                "guard-runtime-policy-enforcement",
             ]
         );
         assert!(first

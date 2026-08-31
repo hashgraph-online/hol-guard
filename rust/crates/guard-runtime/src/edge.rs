@@ -6,6 +6,7 @@ use guard_contracts::{
     GUARD_HOOK_ENVELOPE_V2_SCHEMA, NATIVE_PROTOCOL_VERSION,
 };
 use guard_hook_core::review_post_tool;
+use guard_policy_snapshot::PolicySnapshotV3;
 use serde_json::Value;
 
 const MAX_HARNESS_BYTES: usize = 64;
@@ -140,7 +141,7 @@ fn payload_kind(payload: &Value) -> Result<GuardHookPayloadKindV2, String> {
     Ok(GuardHookPayloadKindV2::Inline)
 }
 
-fn validate_envelope(envelope: &GuardHookEnvelopeV2) -> Result<(), String> {
+fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String> {
     if envelope.schema != GUARD_HOOK_ENVELOPE_V2_SCHEMA {
         return Err("native_hook_envelope_schema_mismatch".to_owned());
     }
@@ -172,14 +173,13 @@ fn validate_envelope(envelope: &GuardHookEnvelopeV2) -> Result<(), String> {
     {
         bounded_nonempty(path, MAX_PATH_BYTES, "native_hook_source_metadata_invalid")?;
     }
-    crate::oneshot::validate_request_policy_snapshot(&serde_json::json!({
-        "guard_home": envelope.source.guard_home,
-        "policy_snapshot": envelope.policy_snapshot,
-    }))
+    Ok(())
 }
 
-pub(crate) fn evaluate_envelope(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
-    validate_envelope(&envelope)?;
+fn evaluate_validated_envelope(
+    envelope: GuardHookEnvelopeV2,
+    policy_snapshot: Option<&PolicySnapshotV3>,
+) -> Result<Vec<u8>, String> {
     let harness = canonical_harness(&envelope.harness)?;
     let event_name = authoritative_event(&envelope)?;
     let kind = payload_kind(&envelope.raw_payload)?;
@@ -187,27 +187,57 @@ pub(crate) fn evaluate_envelope(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>
         return Err("native_hook_encrypted_payload_unsupported".to_owned());
     }
     let result = match event_name.as_str() {
-        "PreToolUse" => serde_json::to_value(guard_command::pretool::evaluate_pre_tool_envelope(
-            &harness,
-            &event_name,
-            &envelope.raw_payload,
-        ))
-        .map_err(|_| "native_hook_edge_response_invalid".to_owned())?,
-        "PostToolUse" => serde_json::to_value(review_post_tool(&NativeHookRequestV1 {
-            protocol_version: NATIVE_PROTOCOL_VERSION,
-            request_id: envelope.request_id.clone(),
-            harness: harness.clone(),
-            event_name: event_name.clone(),
-            payload: envelope.raw_payload,
-            cwd: envelope.source.cwd,
-            home_dir: envelope.source.home_dir,
-            guard_home: envelope.source.guard_home,
-            source_ref_external_allowed: envelope.source.source_ref_external_allowed,
-            observe_mode: envelope.policy_snapshot.get("mode").and_then(Value::as_str)
-                == Some("observe"),
-            deadline_budget_ms: envelope.deadline_budget_ms,
-        }))
-        .map_err(|_| "native_hook_edge_response_invalid".to_owned())?,
+        "PreToolUse" => {
+            let native = guard_command::pretool::evaluate_pre_tool_envelope(
+                &harness,
+                &event_name,
+                &envelope.raw_payload,
+            );
+            let evaluated = if let Some(snapshot) = policy_snapshot {
+                crate::policy_enforcement::apply_pre_tool_policy(
+                    snapshot,
+                    &envelope.raw_payload,
+                    native,
+                )?
+            } else {
+                native
+            };
+            serde_json::to_value(evaluated)
+                .map_err(|_| "native_hook_edge_response_invalid".to_owned())?
+        }
+        "PostToolUse" => {
+            let payload_kind = kind.clone();
+            let request = NativeHookRequestV1 {
+                protocol_version: NATIVE_PROTOCOL_VERSION,
+                request_id: envelope.request_id.clone(),
+                harness: harness.clone(),
+                event_name: event_name.clone(),
+                payload: envelope.raw_payload,
+                cwd: envelope.source.cwd,
+                home_dir: envelope.source.home_dir,
+                guard_home: envelope.source.guard_home,
+                source_ref_external_allowed: envelope.source.source_ref_external_allowed,
+                // Keep the intrinsic result intact. The authenticated policy
+                // join below owns observe-mode semantics and suppresses only
+                // policy-only escalation; passing observe here would erase a
+                // native source/content block before that join runs.
+                observe_mode: false,
+                deadline_budget_ms: envelope.deadline_budget_ms,
+            };
+            let native = review_post_tool(&request);
+            let evaluated = if let Some(snapshot) = policy_snapshot {
+                crate::policy_enforcement::apply_post_tool_policy(
+                    snapshot,
+                    &request,
+                    payload_kind,
+                    native,
+                )?
+            } else {
+                native
+            };
+            serde_json::to_value(evaluated)
+                .map_err(|_| "native_hook_edge_response_invalid".to_owned())?
+        }
         _ => return Err("native_hook_event_unsupported".to_owned()),
     };
     crate::encode_response(&GuardHookEdgeResultV2 {
@@ -219,6 +249,33 @@ pub(crate) fn evaluate_envelope(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>
         payload_kind: kind,
         result,
     })
+}
+
+/// Evaluate the legacy one-shot edge. This remains available only for
+/// explicit compatibility and differential tests; the resident path uses
+/// [`evaluate_envelope_with_store`] so it cannot install policy per request.
+pub(crate) fn evaluate_envelope(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
+    validate_envelope_shape(&envelope)?;
+    crate::oneshot::validate_request_policy_snapshot(&serde_json::json!({
+        "guard_home": envelope.source.guard_home,
+        "policy_snapshot": envelope.policy_snapshot,
+    }))?;
+    evaluate_validated_envelope(envelope, None)
+}
+
+/// Evaluate a resident hook envelope against the already-installed in-memory
+/// policy snapshot. No request can install, replace, or downgrade policy.
+pub(crate) fn evaluate_envelope_with_store(
+    envelope: GuardHookEnvelopeV2,
+    policy_store: &crate::policy_store::PolicySnapshotStore,
+) -> Result<Vec<u8>, String> {
+    validate_envelope_shape(&envelope)?;
+    let snapshot = policy_store.validate_request_snapshot(
+        &envelope.policy_snapshot,
+        &envelope.source.guard_home,
+        envelope.policy_generation,
+    )?;
+    evaluate_validated_envelope(envelope, Some(&snapshot))
 }
 
 pub(crate) fn evaluate_envelope_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {

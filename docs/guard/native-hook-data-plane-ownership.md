@@ -29,9 +29,8 @@ harness launcher or managed hook
         -> Rust bounded action extraction, command parser/floors, classifier, decision
         -> Python harness response rendering
      -> PostToolUse
-        -> Python config load and policy-snapshot construction
         -> Rust edge normalization and resident client/supervisor
-        -> Rust output traversal, source I/O, hashing, scanning, policy, decision
+        -> Rust output traversal, source I/O, hashing, scanning, effective-policy floors, decision
         -> Python harness response rendering
      -> explicit off/shadow/test-oracle compatibility boundaries only
         -> Python CLI evaluator and approval presentation
@@ -75,7 +74,10 @@ Current material gaps include:
   owner-and-SYSTEM-only DACL, verifies the exact package process, and mutually
   authenticates loopback frames. The legacy Python resident module is not
   reachable from the ordinary graph.
-- Python constructs policy snapshots per hook request.
+- Python compiles and publishes authenticated policy snapshots asynchronously;
+  the resident validates and applies the installed effective policy from memory
+  for each hook request. Workspace and managed-policy overlays are composed
+  before publication; no hook request loads Python configuration.
 - Rust has no request-bound approval artifact or replay validation; full
   approval-artifact validation is the next migration slice.
 

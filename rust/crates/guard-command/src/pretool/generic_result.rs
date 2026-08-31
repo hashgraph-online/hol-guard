@@ -45,13 +45,16 @@ pub(super) fn generic_result(
     reason_code: &str,
     reason: &str,
 ) -> PreToolResultV1 {
+    // `warn` is a non-blocking native floor. Keep it distinct from `allow`
+    // in the typed receipt while preserving the harness permission to run.
     let explicitly_benign = minimum_action == "allow";
+    let execution_permitted = matches!(minimum_action, "allow" | "warn");
     PreToolResultV1 {
         schema: PRE_TOOL_RESULT_V1_SCHEMA.to_owned(),
         version: 1,
         authority: "rust".to_owned(),
         action,
-        decision: if explicitly_benign { "allow" } else { "deny" }.to_owned(),
+        decision: if execution_permitted { "allow" } else { "deny" }.to_owned(),
         policy_action: minimum_action.to_owned(),
         minimum_action: minimum_action.to_owned(),
         reason_code: reason_code.to_owned(),

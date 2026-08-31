@@ -152,6 +152,26 @@ def _hook_evaluator_main(connection: Connection, configured_guard_home: str | No
                 daemon_managed_schema=True,
             )
     try:
+        _hook_evaluator_loop(
+            connection,
+            stores=stores,
+            hook_workers=hook_workers,
+            configured_guard_home=configured_guard_home,
+        )
+    finally:
+        for worker in tuple(hook_workers.values()):
+            with suppress(Exception):
+                worker.close()
+
+
+def _hook_evaluator_loop(
+    connection: Connection,
+    *,
+    stores: dict[str, GuardStore],
+    hook_workers: dict[str, HookWorker],
+    configured_guard_home: str | None,
+) -> None:
+    try:
         connection.send(("ready", None))
     except (BrokenPipeError, EOFError, OSError):
         return
