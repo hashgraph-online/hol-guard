@@ -225,9 +225,20 @@ def test_independent_supervisors_do_not_replace_one_live_resident(monkeypatch: p
             guard_home=guard_home,
             environment=environment,
         )
+        assert first.socket_path is not None
+        stale_credential = first.socket_path.with_name(f"{first.socket_path.name}.stale.auth")
+        stale_credential.write_bytes(b"stale")
+        stale_credential.chmod(0o600)
         try:
             assert first.request(b"{}", timeout_seconds=3.0) is not None
+            assert not stale_credential.exists()
+            credential_paths = list((guard_home / "native-runtime").glob("*.auth"))
+            assert len(credential_paths) == 1
+            assert stat.S_IMODE(credential_paths[0].stat().st_mode) == 0o600
+            credential_paths[0].chmod(0o644)
             assert second.request(b"{}", timeout_seconds=3.0) is None
+            credential_paths[0].chmod(0o600)
+            assert second.request(b"{}", timeout_seconds=3.0) is not None
             assert len(starts_path.read_text(encoding="utf-8").splitlines()) == 1
 
             second.close()
@@ -241,6 +252,7 @@ def test_independent_supervisors_do_not_replace_one_live_resident(monkeypatch: p
             first.close()
 
         assert not any((guard_home / "native-runtime").glob("*.sock"))
+        assert not any((guard_home / "native-runtime").glob("*.auth"))
 
 
 def test_spawned_supervisors_share_one_resident_owner() -> None:
@@ -266,9 +278,11 @@ def test_spawned_supervisors_share_one_resident_owner() -> None:
                 process.start()
             results = [result_queue.get(timeout=10.0) for _ in processes]
 
-            assert results.count(True) == 1
-            assert results.count(False) == 3
+            assert results == [True] * 4
             assert len(starts_path.read_text(encoding="utf-8").splitlines()) == 1
+            credential_paths = list((guard_home / "native-runtime").glob("*.auth"))
+            assert len(credential_paths) == 1
+            assert stat.S_IMODE(credential_paths[0].stat().st_mode) == 0o600
         finally:
             release_event.set()
             for process in processes:
@@ -281,6 +295,7 @@ def test_spawned_supervisors_share_one_resident_owner() -> None:
 
         assert all(process.exitcode == 0 for process in processes)
         assert not any((guard_home / "native-runtime").glob("*.sock"))
+        assert not any((guard_home / "native-runtime").glob("*.auth"))
 
 
 def test_resident_close_preserves_replacement_socket(monkeypatch: pytest.MonkeyPatch) -> None:

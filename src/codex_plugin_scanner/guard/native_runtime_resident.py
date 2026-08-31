@@ -49,7 +49,16 @@ from .native_runtime_resident_transport import (
     _proof as _proof,
 )
 from .native_runtime_resident_transport import (
+    _prune_socket_credentials as _prune_socket_credentials,
+)
+from .native_runtime_resident_transport import (
+    _publish_socket_credential as _publish_socket_credential,
+)
+from .native_runtime_resident_transport import (
     _read_exact as _read_exact,
+)
+from .native_runtime_resident_transport import (
+    _read_socket_credential as _read_socket_credential,
 )
 from .native_runtime_resident_transport import (
     _resident_socket_path as _resident_socket_path,
@@ -74,6 +83,9 @@ from .native_runtime_resident_transport import (
 )
 from .native_runtime_resident_transport import (
     _unlink_owned_socket as _unlink_owned_socket,
+)
+from .native_runtime_resident_transport import (
+    _unlink_socket_credential as _unlink_socket_credential,
 )
 from .native_runtime_resilience import (
     native_record_resident_failure,
@@ -204,9 +216,23 @@ class _ResidentService:
                 if os.name != "nt" and self.socket_path is None:
                     return False
                 thread = self._thread
+            if (
+                os.name != "nt"
+                and (thread is None or not thread.is_alive())
+                and _unix_socket_accepts_connections(self.socket_path)
+            ):
+                return self._adopt_running_resident(timeout_seconds=min(_remaining_budget(deadline), 0.1))
+            started_here = False
+            started_auth_token: bytes | None = None
+            started_stop_event: threading.Event | None = None
+            started_generation: int | None = None
+            with self._lock:
+                if self._closed:
+                    return False
+                thread = self._thread
                 if thread is None or not thread.is_alive():
-                    if os.name != "nt" and _unix_socket_accepts_connections(self.socket_path):
-                        return False
+                    if os.name != "nt" and self.socket_path is not None:
+                        _prune_socket_credentials(self.socket_path)
                     stop_event = threading.Event()
                     auth_token = secrets.token_bytes(_AUTH_TOKEN_BYTES)
                     self._stop_event = stop_event
@@ -225,12 +251,36 @@ class _ResidentService:
                     )
                     self._thread = thread
                     self._starts += 1
+                    started_here = True
+                    started_auth_token = auth_token
+                    started_stop_event = stop_event
+                    started_generation = generation
                     thread.start()
             while time.monotonic() < deadline:
                 remaining = _remaining_budget(deadline)
                 if remaining <= 0:
                     return False
                 if self._transport_accepts_authenticated_connections(timeout_seconds=min(remaining, 0.1)):
+                    if started_here and os.name != "nt":
+                        assert started_auth_token is not None
+                        assert started_stop_event is not None
+                        assert started_generation is not None
+                        socket_path = self.socket_path
+                        identity = _socket_identity(socket_path) if socket_path is not None else None
+                        if (
+                            socket_path is None
+                            or identity is None
+                            or not _publish_socket_credential(
+                                socket_path,
+                                expected_identity=identity,
+                                auth_token=started_auth_token,
+                            )
+                        ):
+                            started_stop_event.set()
+                            return False
+                        with self._lock:
+                            if self._generation == started_generation:
+                                self._owned_socket_identity = identity
                     return True
                 with self._lock:
                     if self._closed or self._thread is not thread or not thread.is_alive():
@@ -238,11 +288,30 @@ class _ResidentService:
                 time.sleep(min(0.01, _remaining_budget(deadline)))
             return False
 
+    def _adopt_running_resident(self, *, timeout_seconds: float) -> bool:
+        socket_path = self.socket_path
+        if socket_path is None or timeout_seconds <= 0:
+            return False
+        identity = _socket_identity(socket_path)
+        if identity is None:
+            return False
+        auth_token = _read_socket_credential(socket_path, expected_identity=identity)
+        if auth_token is None:
+            return False
+        with self._lock:
+            if self._closed:
+                return False
+            self._auth_token = auth_token
+        if self._transport_accepts_authenticated_connections(timeout_seconds=timeout_seconds):
+            return True
+        with self._lock:
+            if self._thread is None and self._auth_token == auth_token:
+                self._auth_token = None
+        return False
+
     def _transport_accepts_authenticated_connections(self, *, timeout_seconds: float) -> bool:
         if timeout_seconds <= 0:
             return False
-        with self._lock:
-            socket_path = self.socket_path
         response = self._send(_HEALTH_REQUEST, timeout_seconds=timeout_seconds)
         if response is None:
             return False
@@ -250,13 +319,7 @@ class _ResidentService:
             payload = json.loads(response)
         except (UnicodeDecodeError, json.JSONDecodeError):
             return False
-        ready = payload == {"status": "ready", "protocol_version": 2}
-        if ready and socket_path is not None:
-            identity = _socket_identity(socket_path)
-            if identity is not None:
-                with self._lock:
-                    self._owned_socket_identity = identity
-        return ready
+        return payload == {"status": "ready", "protocol_version": 2}
 
     def _run(
         self,
@@ -317,12 +380,18 @@ class _ResidentService:
             self._closed = True
             self._stop_event.set()
             thread = self._thread
+            auth_token = self._auth_token
             self._auth_token = None
             owned_socket_identity = self._owned_socket_identity
         with _resident_start_lock(self.socket_path, timeout_seconds=1.5) as acquired:
             if thread is not None and thread.is_alive():
                 thread.join(timeout=1.5)
             if acquired:
+                _unlink_socket_credential(
+                    self.socket_path,
+                    expected_identity=owned_socket_identity,
+                    auth_token=auth_token,
+                )
                 _unlink_owned_socket(self.socket_path, expected_identity=owned_socket_identity)
         with self._lock:
             if self._thread is thread:

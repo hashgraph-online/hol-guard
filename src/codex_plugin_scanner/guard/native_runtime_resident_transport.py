@@ -139,6 +139,125 @@ def _socket_identity(socket_path: Path) -> tuple[int, int] | None:
     return metadata.st_dev, metadata.st_ino
 
 
+def _socket_credential_path(socket_path: Path, socket_identity: tuple[int, int]) -> Path:
+    device, inode = socket_identity
+    return socket_path.with_name(f"{socket_path.name}.{device:x}-{inode:x}.auth")
+
+
+def _prune_socket_credentials(socket_path: Path) -> None:
+    current_uid = os.getuid() if hasattr(os, "getuid") else None
+    for path in socket_path.parent.glob(f"{socket_path.name}.*.auth"):
+        try:
+            metadata = path.lstat()
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or (current_uid is not None and getattr(metadata, "st_uid", current_uid) != current_uid)
+            ):
+                continue
+            path.unlink()
+        except OSError:
+            continue
+
+
+def _read_credential_file(path: Path) -> bytes | None:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        metadata = os.fstat(descriptor)
+        current_uid = os.getuid() if hasattr(os, "getuid") else None
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or stat.S_IMODE(metadata.st_mode) & 0o077
+            or (current_uid is not None and getattr(metadata, "st_uid", current_uid) != current_uid)
+            or metadata.st_size != _AUTH_TOKEN_BYTES
+        ):
+            return None
+        value = os.read(descriptor, _AUTH_TOKEN_BYTES + 1)
+        return value if len(value) == _AUTH_TOKEN_BYTES else None
+    except OSError:
+        return None
+    finally:
+        with suppress(OSError):
+            os.close(descriptor)
+
+
+def _read_socket_credential(
+    socket_path: Path,
+    *,
+    expected_identity: tuple[int, int],
+) -> bytes | None:
+    if _socket_identity(socket_path) != expected_identity:
+        return None
+    value = _read_credential_file(_socket_credential_path(socket_path, expected_identity))
+    if value is None or _socket_identity(socket_path) != expected_identity:
+        return None
+    return value
+
+
+def _publish_socket_credential(
+    socket_path: Path,
+    *,
+    expected_identity: tuple[int, int],
+    auth_token: bytes,
+) -> bool:
+    if len(auth_token) != _AUTH_TOKEN_BYTES or _socket_identity(socket_path) != expected_identity:
+        return False
+    credential_path = _socket_credential_path(socket_path, expected_identity)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(credential_path, flags, 0o600)
+    except FileExistsError:
+        existing = _read_socket_credential(socket_path, expected_identity=expected_identity)
+        return existing is not None and hmac.compare_digest(existing, auth_token)
+    except OSError:
+        return False
+    published = False
+    try:
+        os.fchmod(descriptor, 0o600)
+        view = memoryview(auth_token)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                return False
+            view = view[written:]
+        os.fsync(descriptor)
+        published = _socket_identity(socket_path) == expected_identity
+        return published
+    except OSError:
+        return False
+    finally:
+        with suppress(OSError):
+            os.close(descriptor)
+        if not published:
+            with suppress(OSError):
+                credential_path.unlink()
+
+
+def _unlink_socket_credential(
+    socket_path: Path | None,
+    *,
+    expected_identity: tuple[int, int] | None,
+    auth_token: bytes | None,
+) -> None:
+    if socket_path is None or expected_identity is None or auth_token is None:
+        return
+    credential_path = _socket_credential_path(socket_path, expected_identity)
+    existing = _read_credential_file(credential_path)
+    if existing is None or not hmac.compare_digest(existing, auth_token):
+        return
+    with suppress(OSError):
+        credential_path.unlink()
+
+
 def _unlink_owned_socket(socket_path: Path | None, *, expected_identity: tuple[int, int] | None) -> None:
     if socket_path is None or expected_identity is None:
         return
