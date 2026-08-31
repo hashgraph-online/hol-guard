@@ -4570,7 +4570,11 @@ def _refresh_guard_oauth_access_token(
             if attempt + 1 >= _OAUTH_INVALID_GRANT_MAX_ATTEMPTS:
                 break
             time.sleep(_OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS)
-    raise last_error  # type: ignore[misc]
+    if last_error is None:  # pragma: no cover - unreachable when MAX_ATTEMPTS >= 1
+        raise GuardSyncAuthorizationExpiredError(
+            _guard_oauth_reconnect_after_revoked_message()
+        )
+    raise last_error
 
 
 def _persist_recovered_oauth_binding(store: GuardStore, credentials: dict[str, object]) -> bool:
