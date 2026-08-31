@@ -190,6 +190,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self._BaseServer__shutdown_request = False
         capacity = _bounded_int(
             "HOL_GUARD_DAEMON_MAX_ACTIVE_REQUESTS",
             _DEFAULT_ACTIVE_REQUESTS,
@@ -201,6 +202,16 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
             _DEFAULT_SOCKET_TIMEOUT_SECONDS,
             _MAX_SOCKET_TIMEOUT_SECONDS,
         )
+
+    def request_serve_stop(self) -> None:
+        """Request loop termination without waiting for loop entry.
+
+        ``BaseServer.shutdown`` waits for ``serve_forever`` to acknowledge the
+        request, which deadlocks if startup has not entered the loop yet. The
+        loop reads this flag both before and after polling, so setting it is
+        safe on either side of loop entry.
+        """
+        self._BaseServer__shutdown_request = True
 
     def verify_request(self, request: Any, client_address: Any) -> bool:
         if not _loopback(client_address):

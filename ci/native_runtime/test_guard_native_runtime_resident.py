@@ -349,6 +349,41 @@ def test_start_lock_wait_stays_inside_request_deadline(monkeypatch: pytest.Monke
         assert not starts_path.exists()
 
 
+def test_request_shares_one_deadline_across_probe_start_and_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [10.0]
+    send_timeouts: list[float] = []
+    start_timeouts: list[float] = []
+    service = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+        executable=tmp_path / "runtime",
+        identity_sha256="a" * 64,
+        guard_home=tmp_path,
+        environment={},
+    )
+
+    def fake_send(_payload: bytes, *, timeout_seconds: float) -> bytes | None:
+        send_timeouts.append(timeout_seconds)
+        clock[0] += timeout_seconds
+        return None if len(send_timeouts) == 1 else b"ready"
+
+    def fake_start(*, timeout_seconds: float) -> bool:
+        start_timeouts.append(timeout_seconds)
+        clock[0] += 0.12
+        return True
+
+    monkeypatch.setattr(resident.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(service, "_transport_configured", lambda: True)
+    monkeypatch.setattr(service, "_send", fake_send)
+    monkeypatch.setattr(service, "_ensure_started", fake_start)
+
+    assert service.request(b"{}", timeout_seconds=0.25) == b"ready"
+    assert send_timeouts == pytest.approx([0.05, 0.08])
+    assert start_timeouts == pytest.approx([0.2])
+    assert clock[0] == pytest.approx(10.25)
+
+
 def test_resident_runtime_falls_back_for_overlong_socket_path(tmp_path: Path) -> None:
     executable = _fake_runtime(tmp_path)
     guard_home = tmp_path

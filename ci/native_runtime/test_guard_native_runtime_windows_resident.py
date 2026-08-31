@@ -136,7 +136,7 @@ def test_windows_service_rotates_auth_secret_and_stays_closed(
     monkeypatch.setattr(
         service,
         "_transport_accepts_authenticated_connections",
-        lambda: False,
+        lambda *, timeout_seconds: timeout_seconds < 0,
     )
     monkeypatch.setattr(
         service,

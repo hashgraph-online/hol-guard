@@ -106,6 +106,71 @@ def test_daemon_start_waits_for_serve_loop_entry(
         daemon.stop()
 
 
+def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    daemon = GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home"),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=0,
+    )
+    original_serve_forever = daemon._serve_forever
+    original_request_stop = daemon._server.request_serve_stop
+    serve_thread_entered = threading.Event()
+    stop_requested = threading.Event()
+    release_serve_thread = threading.Event()
+    start_errors: list[BaseException] = []
+    stop_errors: list[BaseException] = []
+
+    def delayed_serve_forever() -> None:
+        serve_thread_entered.set()
+        assert release_serve_thread.wait(timeout=5)
+        original_serve_forever()
+
+    def recording_request_stop() -> None:
+        stop_requested.set()
+        original_request_stop()
+
+    def start_daemon() -> None:
+        try:
+            daemon.start()
+        except BaseException as error:
+            start_errors.append(error)
+
+    def stop_daemon() -> None:
+        try:
+            daemon.stop()
+        except BaseException as error:
+            stop_errors.append(error)
+
+    monkeypatch.setattr(daemon, "_serve_forever", delayed_serve_forever)
+    monkeypatch.setattr(daemon._server, "request_serve_stop", recording_request_stop)
+    starter = threading.Thread(target=start_daemon)
+    stopper = threading.Thread(target=stop_daemon)
+    try:
+        starter.start()
+        assert serve_thread_entered.wait(timeout=10)
+        stopper.start()
+        assert stop_requested.wait(timeout=10)
+        release_serve_thread.set()
+        starter.join(timeout=10)
+        stopper.join(timeout=10)
+
+        assert not starter.is_alive()
+        assert not stopper.is_alive()
+        assert stop_errors == []
+        assert len(start_errors) == 1
+        assert str(start_errors[0]) == "Guard daemon stopped during startup"
+        assert daemon._thread is None
+        assert daemon._owner_lock is None
+        assert daemon._server.hook_process_runner.stats()["workers"] == 0
+    finally:
+        release_serve_thread.set()
+        daemon.stop()
+
+
 def test_occupied_port_preserves_bind_error_during_partial_server_cleanup(tmp_path: Path) -> None:
     diagnostics_threads_before = {
         thread.ident

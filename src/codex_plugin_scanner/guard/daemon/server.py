@@ -8047,20 +8047,23 @@ class GuardDaemonServer:
             serve_thread_started = True
             if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                 raise RuntimeError("Guard daemon serve thread did not become ready")
+            if self._shutdown_started.is_set():
+                raise RuntimeError("Guard daemon stopped during startup")
             self._server.hook_process_runner.enable_full_capacity()
         except BaseException as error:
             self._diagnostics.record_exception("daemon_start_thread_failed")
             serve_thread_contained = True
-            if serve_thread_started and self._thread is not None:
-                self._server.shutdown()
-                self._thread.join(timeout=5)
-                serve_thread_contained = not self._thread.is_alive()
+            serve_thread = self._thread
+            if serve_thread_started and serve_thread is not None:
+                self._server.request_serve_stop()
+                serve_thread.join(timeout=5)
+                serve_thread_contained = not serve_thread.is_alive()
             else:
                 try:
                     self._server.server_close()
                 except Exception:
                     serve_thread_contained = False
-            if serve_thread_contained:
+            if serve_thread_contained and self._thread is serve_thread:
                 self._thread = None
             if not self._finish_service() or not serve_thread_contained:
                 add_note = getattr(error, "add_note", None)
@@ -8077,12 +8080,12 @@ class GuardDaemonServer:
         self._record_lifecycle("shutdown_requested", reason="explicit_stop")
         self._diagnostics.record("daemon_shutdown_requested")
         self._shutdown_started.set()
-        if self._serve_loop_started.is_set():
-            self._server.shutdown()
+        self._server.request_serve_stop()
         self._server.server_close()
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-            if not self._thread.is_alive():
+        serve_thread = self._thread
+        if serve_thread is not None:
+            serve_thread.join(timeout=5)
+            if not serve_thread.is_alive() and self._thread is serve_thread:
                 self._thread = None
         _ = self._finish_service()
 
@@ -8290,6 +8293,8 @@ class GuardDaemonServer:
             self._server.server_close()
             _ = self._finish_service()
             self._record_lifecycle("stopped", reason=stop_reason)
+            if self._thread is threading.current_thread():
+                self._thread = None
 
     def _record_lifecycle(self, event: str, *, reason: str | None = None) -> None:
         with suppress(Exception):
