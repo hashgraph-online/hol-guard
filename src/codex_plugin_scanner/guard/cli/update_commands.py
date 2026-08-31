@@ -2263,36 +2263,14 @@ def _verified_newer_guard_daemon(
 ) -> dict[str, object] | None:
     """Retain a live newer runtime only after signed-state and loopback health agree."""
 
-    from ..daemon.discovery import load_authenticated_daemon_state
-    from ..daemon.manager import (
-        GUARD_DAEMON_COMPATIBILITY_VERSION,
-        load_guard_daemon_auth_token,
-    )
+    from ..daemon.live_identity import verified_live_guard_daemon_identity
 
-    state = load_authenticated_daemon_state(guard_home)
-    if state is None:
+    identity = verified_live_guard_daemon_identity(guard_home)
+    if identity is None:
         return None
-    daemon_version_text = state.get("package_version")
-    host = state.get("host")
-    port = state.get("port")
-    compatibility_version = state.get("compatibility_version")
-    runtime_fingerprint = state.get("runtime_fingerprint")
-    daemon_pid = state.get("pid")
-    token = load_guard_daemon_auth_token(guard_home)
-    if (
-        not isinstance(daemon_version_text, str)
-        or not isinstance(host, str)
-        or host not in {"127.0.0.1", "::1"}
-        or not isinstance(port, int)
-        or not 1 <= port <= 65535
-        or compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION
-        or not isinstance(runtime_fingerprint, str)
-        or not runtime_fingerprint
-        or not isinstance(daemon_pid, int)
-        or daemon_pid <= 0
-        or not isinstance(token, str)
-        or not token
-    ):
+    daemon_version_text = identity.get("package_version")
+    daemon_url = identity.get("daemon_url")
+    if not isinstance(daemon_version_text, str) or not isinstance(daemon_url, str):
         return None
     try:
         daemon_version = Version(daemon_version_text)
@@ -2303,35 +2281,6 @@ def _verified_newer_guard_daemon(
     if daemon_version <= required_version:
         return None
 
-    daemon_url = f"http://{f'[{host}]' if host == '::1' else host}:{port}"
-    request = urllib.request.Request(
-        f"{daemon_url}/v1/healthz/details",
-        headers={"X-Guard-Token": token},
-        method="GET",
-    )
-    try:
-        with managed_urlopen(request, timeout=1.0, policy=ManagedNetworkPolicy(proxy_mode="none")) as response:
-            if response.status != 200:
-                return None
-            response_bytes = response.read(65_537)
-            if len(response_bytes) > 65_536:
-                return None
-            details = json.loads(response_bytes.decode("utf-8"))
-    except (ManagedNetworkError, OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
-        return None
-    if not isinstance(details, dict) or details.get("ok") is not True:
-        return None
-    try:
-        details_guard_home = Path(str(details.get("guard_home"))).expanduser().resolve()
-    except (OSError, RuntimeError, ValueError):
-        return None
-    identity_fields = ("package_version", "compatibility_version", "runtime_fingerprint", "pid")
-    if (
-        details_guard_home != guard_home.expanduser().resolve()
-        or any(field not in state or field not in details for field in identity_fields)
-        or any(details.get(field) != state.get(field) for field in identity_fields)
-    ):
-        return None
     return {
         "status": "retained_newer_runtime",
         "daemon_url": daemon_url,

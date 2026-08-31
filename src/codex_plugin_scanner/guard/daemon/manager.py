@@ -45,7 +45,10 @@ from .discovery import (
     load_daemon_discovery_key,
     verify_daemon_state,
 )
+from .file_locking import lock_daemon_file as _lock_daemon_start_file
+from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
 from .lifecycle_journal import record_daemon_lifecycle_event
+from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 
 DEFAULT_GUARD_DAEMON_PORT = 4781
 GUARD_DAEMON_PORT_RANGE = 1000
@@ -126,8 +129,6 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
     }
 )
 _GUARD_DAEMON_DESKTOP_ENV_KEYS = ("HOL_GUARD_DESKTOP", "HOL_GUARD_DESKTOP_RUNTIME_OWNER", "HOL_GUARD_DESKTOP_VERSION")
-_START_LOCKS: dict[str, threading.Lock] = {}
-_START_LOCKS_GUARD = threading.Lock()
 _RECOVERY_LOCKS: dict[str, threading.Lock] = {}
 _RECOVERY_LOCKS_GUARD = threading.Lock()
 _STATE_WRITE_LOCKS: dict[str, threading.Lock] = {}
@@ -2957,41 +2958,6 @@ def _wait_for_guard_daemon_url(
 
 
 @contextmanager
-def _guard_daemon_start_lock(guard_home: Path, *, deadline: float | None = None):
-    lock_key = str(guard_home.resolve())
-    with _START_LOCKS_GUARD:
-        thread_lock = _START_LOCKS.setdefault(lock_key, threading.Lock())
-    if deadline is None:
-        thread_lock.acquire()
-    else:
-        acquired = thread_lock.acquire(timeout=max(0.0, deadline - time.monotonic()))
-        if not acquired:
-            raise RuntimeError("Timed out waiting to start the Guard daemon.")
-    try:
-        lock_path = guard_home / "daemon-start.lock"
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with lock_path.open("a+b") as handle:
-            if deadline is None:
-                _lock_daemon_start_file(handle)
-            else:
-                while not _try_lock_daemon_file(handle):
-                    if time.monotonic() >= deadline:
-                        raise RuntimeError("Timed out waiting to start the Guard daemon.")
-                    time.sleep(
-                        min(
-                            GUARD_DAEMON_POLL_INTERVAL_SECONDS,
-                            max(0.0, deadline - time.monotonic()),
-                        )
-                    )
-            try:
-                yield
-            finally:
-                _unlock_daemon_start_file(handle)
-    finally:
-        thread_lock.release()
-
-
-@contextmanager
 def _guard_daemon_recovery_lock(guard_home: Path):
     """Serialize a complete daemon recovery transaction for one Guard home."""
 
@@ -3054,50 +3020,6 @@ def _guard_daemon_state_write_lock(guard_home: Path):
                 yield
             finally:
                 _unlock_daemon_start_file(handle)
-
-
-def _lock_daemon_start_file(handle: BinaryIO) -> None:
-    if os.name == "nt":
-        import msvcrt
-
-        handle.seek(0)
-        if os.fstat(handle.fileno()).st_size == 0:
-            handle.write(b"0")
-            handle.flush()
-        handle.seek(0)
-        while True:
-            try:
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-                return
-            except OSError:
-                time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
-        return
-    import fcntl
-
-    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-
-
-def _try_lock_daemon_file(handle: BinaryIO) -> bool:
-    if os.name == "nt":
-        import msvcrt
-
-        handle.seek(0)
-        if os.fstat(handle.fileno()).st_size == 0:
-            handle.write(b"0")
-            handle.flush()
-        handle.seek(0)
-        try:
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
-            return False
-        return True
-    import fcntl
-
-    try:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return False
-    return True
 
 
 _unlock_daemon_start_file = release_file_lock
