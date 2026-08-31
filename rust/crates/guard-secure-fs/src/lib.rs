@@ -244,6 +244,10 @@ mod tests {
         fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
         fs::write(workspace.join(".secret/config.ts"), "value = 1\n").unwrap();
         fs::write(workspace.join(".env"), "fixture=value\n").unwrap();
+        let skill = home.join(".claude/skills/safe");
+        fs::create_dir_all(skill.join("credentials")).unwrap();
+        fs::write(skill.join("SKILL.md"), "# Safe\n").unwrap();
+        fs::write(skill.join("credentials/config.ts"), "value = 1\n").unwrap();
 
         assert!(classify_source_path("src/main.rs", &workspace, Some(&home), false).allowed);
         assert_eq!(
@@ -256,7 +260,27 @@ mod tests {
         );
         assert_eq!(
             classify_source_path("../../outside.rs", &workspace, Some(&home), true).reason_code,
-            "external_target_not_readable"
+            "path_traversal"
+        );
+        assert_eq!(
+            classify_source_path(
+                "~/.claude/skills/safe/../../src/app.py",
+                &workspace,
+                Some(&home),
+                false,
+            )
+            .reason_code,
+            "path_traversal"
+        );
+        assert_eq!(
+            classify_source_path(
+                "~/.claude/skills/safe/credentials/config.ts",
+                &workspace,
+                Some(&home),
+                false,
+            )
+            .reason_code,
+            "sensitive_basename"
         );
         let _ = fs::remove_dir_all(root);
     }
