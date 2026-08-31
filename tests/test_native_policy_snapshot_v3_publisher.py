@@ -66,6 +66,12 @@ test_windows_cache_reader_verifies_and_reads_one_handle = (
 test_windows_open_handle_uses_disk_nonreparse_read_contract = (
     _windows_tests.test_windows_open_handle_uses_disk_nonreparse_read_contract
 )
+test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle = (
+    _windows_tests.test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle
+)
+test_windows_private_descriptor_deduplicates_system_owner_ace = (
+    _windows_tests.test_windows_private_descriptor_deduplicates_system_owner_ace
+)
 
 __all__ = [
     "test_auto_hook_uses_barrier_without_loading_config_per_request",
@@ -87,6 +93,8 @@ __all__ = [
     "test_windows_cache_read_rejects_ancestor_reparse_before_open",
     "test_windows_cache_reader_closes_handle_on_all_failures",
     "test_windows_cache_reader_verifies_and_reads_one_handle",
+    "test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle",
     "test_windows_open_handle_uses_disk_nonreparse_read_contract",
+    "test_windows_private_descriptor_deduplicates_system_owner_ace",
     "test_windows_scope_aliases_share_one_digest_identity",
 ]
