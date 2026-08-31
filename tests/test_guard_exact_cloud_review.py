@@ -396,6 +396,7 @@ def test_connect_consent_does_not_enable_capability_when_requeue_needs_retry(
     assert cloud_review["enabled"] is False
     assert cloud_review["reason"] == "pending_request_requeue_failed"
     assert cloud_review["pending_request_requeue_status"] == "retry_required"
+    assert cloud_review["retained_existing_capability"] is False
     assert exact_cloud_review_operations(store) == ()
 
 
@@ -432,7 +433,40 @@ def test_cloud_review_enable_reports_requeue_retry_without_crashing(
     assert payload["error"] == "pending_request_requeue_failed"
     assert payload["pending_requests_requeued"] == 0
     assert payload["pending_request_requeue_status"] == "retry_required"
+    assert payload["capability_enabled"] is False
+    assert payload["retained_existing_capability"] is False
     assert exact_cloud_review_operations(store) == ()
+
+
+def test_cloud_review_enable_reports_retained_capability_when_requeue_retry_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = _connected_store(tmp_path)
+    enable_exact_cloud_review(store)
+
+    def fail_requeue(_store: GuardStore) -> int:
+        raise cloud_review_dispatch.PendingReviewRequeueError
+
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_requeue_pending_cloud_review_requests",
+        fail_requeue,
+    )
+
+    exit_code = cloud_review_dispatch._run_guard_cloud_review_command(
+        argparse.Namespace(cloud_review_command="enable", expires_in_days=30, json=True),
+        guard_home=store.guard_home,
+        store=store,
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["error"] == "pending_request_requeue_failed"
+    assert payload["capability_enabled"] is True
+    assert payload["retained_existing_capability"] is True
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
 def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_approval(tmp_path: Path) -> None:

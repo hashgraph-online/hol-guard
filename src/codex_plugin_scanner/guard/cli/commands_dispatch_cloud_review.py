@@ -54,6 +54,7 @@ def apply_connect_time_cloud_review_consent(
         return payload
     if exit_code != 0:
         return {**payload, "cloud_review": {"enabled": False, "reason": "connect_not_completed"}}
+    previously_enabled = exact_cloud_review_status(store).get("enabled") is True
     try:
         pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
         capability = enable_exact_cloud_review(store, issuer="connect-consent")
@@ -61,11 +62,12 @@ def apply_connect_time_cloud_review_consent(
         return {
             **payload,
             "cloud_review": {
-                "capability_enabled": False,
-                "enabled": False,
+                "capability_enabled": previously_enabled,
+                "enabled": previously_enabled,
                 "reason": "pending_request_requeue_failed",
                 "pending_requests_requeued": 0,
                 "pending_request_requeue_status": "retry_required",
+                "retained_existing_capability": previously_enabled,
             },
         }
     except ExactCloudReviewError as error:
@@ -102,11 +104,13 @@ def _run_guard_cloud_review_command(
         raise RuntimeError("Cloud Review requires initialized Guard storage.")
     command = getattr(args, "cloud_review_command", None)
     pending_requests_requeued = 0
+    previously_enabled = False
     if command == "status":
         _emit("cloud-review", exact_cloud_review_status(store), bool(getattr(args, "json", False)))
         return 0
     try:
         if command == "enable":
+            previously_enabled = exact_cloud_review_status(store).get("enabled") is True
             pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
             capability = enable_exact_cloud_review(
                 store,
@@ -125,8 +129,10 @@ def _run_guard_cloud_review_command(
             {
                 "status": "error",
                 "error": "pending_request_requeue_failed",
+                "capability_enabled": previously_enabled,
                 "pending_requests_requeued": 0,
                 "pending_request_requeue_status": "retry_required",
+                "retained_existing_capability": previously_enabled,
             },
             bool(getattr(args, "json", False)),
         )
