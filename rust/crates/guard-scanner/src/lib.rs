@@ -458,6 +458,7 @@ mod tests {
             "password = example-production-value",
             "password = {user.password}",
             "api_key = {token: \"AIza-realistic-value\"}",
+            "password = {r.stdout}real-password",
             "secret = f\"{config.token}\" + \"prod-live-value\"",
             "secret = get_secret(\"deployment-config\") + \"prod-live-value\"",
         ] {
