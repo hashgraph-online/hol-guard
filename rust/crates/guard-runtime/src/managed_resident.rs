@@ -1,15 +1,18 @@
 #![forbid(unsafe_code)]
 
-use serde::{Deserialize, Serialize};
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+#[cfg(unix)]
+use std::fs;
+use std::io::Write;
 use std::net::{Ipv4Addr, TcpListener};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
+
+#[path = "resident_restart_budget.rs"]
+mod restart_budget;
 
 #[cfg(unix)]
 use crate::resident_state::socket_directory;
@@ -23,10 +26,6 @@ use crate::resident_state::{
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
-const RESTART_WINDOW_MS: u64 = 60_000;
-const RESTART_CIRCUIT_MS: u64 = 30_000;
-const MAX_RESTARTS_PER_WINDOW: u32 = 3;
-const BUDGET_SCHEMA: &str = "hol-guard-resident-restart-budget.v1";
 static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn request_shutdown() {
@@ -35,90 +34,6 @@ pub(crate) fn request_shutdown() {
 
 fn shutdown_requested() -> bool {
     MANAGED_SHUTDOWN_REQUESTED.load(Ordering::Acquire)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RestartBudget {
-    schema: String,
-    window_start_ms: u64,
-    attempts: u32,
-    circuit_until_ms: u64,
-}
-
-fn now_ms() -> Result<u64, String> {
-    u64::try_from(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| "native_resident_clock_invalid".to_owned())?
-            .as_millis(),
-    )
-    .map_err(|_| "native_resident_clock_invalid".to_owned())
-}
-
-fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let mut options = OpenOptions::new();
-    options.create(true).truncate(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
-    }
-    let mut file = options
-        .open(path)
-        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
-    file.write_all(bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())
-}
-
-fn consume_restart_budget(scope: &Path) -> Result<(), String> {
-    let path = scope.join("restart-budget.json");
-    let now = now_ms()?;
-    let mut budget = if path.exists() {
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|_| "native_resident_restart_budget_stat_failed".to_owned())?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > 4096 {
-            return Err("native_resident_restart_budget_invalid".to_owned());
-        }
-        let mut bytes = Vec::new();
-        File::open(&path)
-            .and_then(|file| file.take(4097).read_to_end(&mut bytes))
-            .map_err(|_| "native_resident_restart_budget_read_failed".to_owned())?;
-        let value = crate::strict_json_value(&bytes)
-            .map_err(|_| "native_resident_restart_budget_invalid".to_owned())?;
-        serde_json::from_value::<RestartBudget>(value)
-            .map_err(|_| "native_resident_restart_budget_invalid".to_owned())?
-    } else {
-        RestartBudget {
-            schema: BUDGET_SCHEMA.to_owned(),
-            window_start_ms: now,
-            attempts: 0,
-            circuit_until_ms: 0,
-        }
-    };
-    if budget.schema != BUDGET_SCHEMA {
-        return Err("native_resident_restart_budget_invalid".to_owned());
-    }
-    if budget.circuit_until_ms > now {
-        return Err("native_resident_restart_circuit_open".to_owned());
-    }
-    if now.saturating_sub(budget.window_start_ms) >= RESTART_WINDOW_MS {
-        budget.window_start_ms = now;
-        budget.attempts = 0;
-        budget.circuit_until_ms = 0;
-    }
-    if budget.attempts >= MAX_RESTARTS_PER_WINDOW {
-        budget.circuit_until_ms = now.saturating_add(RESTART_CIRCUIT_MS);
-        let encoded = serde_json::to_vec(&budget)
-            .map_err(|_| "native_resident_restart_budget_encode_failed".to_owned())?;
-        write_private(&path, &encoded)?;
-        return Err("native_resident_restart_circuit_open".to_owned());
-    }
-    budget.attempts += 1;
-    let encoded = serde_json::to_vec(&budget)
-        .map_err(|_| "native_resident_restart_budget_encode_failed".to_owned())?;
-    write_private(&path, &encoded)
 }
 
 fn try_states(
@@ -237,7 +152,7 @@ pub(crate) fn client_request(
     if let Some(response) = try_states(&scope, &digest, payload, overall_deadline)? {
         return Ok(response);
     }
-    consume_restart_budget(&scope)?;
+    restart_budget::consume(&scope)?;
     let generation = next_generation(&scope, &digest)?;
     let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
     getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;
@@ -533,22 +448,5 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn generation_parser_rejects_zero_and_non_numeric() {
-        assert!(parse_generation("0").is_err());
-        assert!(parse_generation("not-a-number").is_err());
-        assert_eq!(parse_generation("7").unwrap(), 7);
-    }
-
-    #[test]
-    fn client_deadline_is_bounded() {
-        assert_eq!(
-            client_timeout(br#"{"deadline_budget_ms":999999}"#),
-            Duration::from_secs(9)
-        );
-        assert_eq!(client_timeout(br#"{}"#), Duration::from_millis(750));
-    }
-}
+#[path = "managed_resident_tests.rs"]
+mod tests;

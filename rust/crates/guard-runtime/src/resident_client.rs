@@ -78,8 +78,50 @@ fn connect_unix(
     timeout: Duration,
     expected_process_id: u32,
 ) -> Result<BoxedResidentStream, String> {
+    use nix::errno::Errno;
+    use nix::fcntl::{fcntl, FcntlArg, FdFlag, OFlag};
+    use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+    use nix::sys::socket::{
+        connect, getsockopt, socket, sockopt, AddressFamily, SockFlag, SockType, UnixAddr,
+    };
+    use std::os::fd::{AsFd, AsRawFd};
     use std::os::unix::net::UnixStream;
-    let stream = UnixStream::connect(Path::new(endpoint))
+    let address = UnixAddr::new(Path::new(endpoint))
+        .map_err(|_| "native_client_endpoint_invalid".to_owned())?;
+    let descriptor = socket(
+        AddressFamily::Unix,
+        SockType::Stream,
+        SockFlag::empty(),
+        None,
+    )
+    .map_err(|_| "native_client_connect_failed".to_owned())?;
+    fcntl(&descriptor, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))
+        .map_err(|_| "native_client_connect_failed".to_owned())?;
+    fcntl(&descriptor, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC))
+        .map_err(|_| "native_client_connect_failed".to_owned())?;
+    match connect(descriptor.as_raw_fd(), &address) {
+        Ok(()) | Err(Errno::EISCONN) => {}
+        Err(Errno::EINPROGRESS) => {
+            let poll_timeout = PollTimeout::try_from(timeout)
+                .map_err(|_| "native_client_deadline_invalid".to_owned())?;
+            let mut descriptors = [PollFd::new(descriptor.as_fd(), PollFlags::POLLOUT)];
+            if poll(&mut descriptors, poll_timeout)
+                .map_err(|_| "native_client_connect_failed".to_owned())?
+                == 0
+            {
+                return Err("native_client_deadline_exceeded".to_owned());
+            }
+            let socket_error = getsockopt(&descriptor, sockopt::SocketError)
+                .map_err(|_| "native_client_connect_failed".to_owned())?;
+            if socket_error != 0 {
+                return Err("native_client_connect_failed".to_owned());
+            }
+        }
+        Err(_) => return Err("native_client_connect_failed".to_owned()),
+    }
+    let stream = UnixStream::from(descriptor);
+    stream
+        .set_nonblocking(false)
         .map_err(|_| "native_client_connect_failed".to_owned())?;
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     let peer_process_id =

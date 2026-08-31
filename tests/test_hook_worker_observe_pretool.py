@@ -53,8 +53,16 @@ def test_hook_worker_watch_native_block_uses_cli_recording(
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
-        lambda *_args, **_kwargs: _native_block("rm -rf /"),
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: {
+            "event_name": "PreToolUse",
+            "harness": "cursor",
+            "result": _native_block("rm -rf /"),
+        },
     )
     worker = HookWorker(store=GuardStore(guard_home))
     with pytest.raises(HookWorkerUnsupported, match="CLI approval coordination"):
@@ -75,7 +83,11 @@ def test_hook_worker_watch_native_unavailable_uses_cli_recording(
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -106,8 +118,16 @@ def test_hook_worker_watch_native_allow_still_allows(
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
-        lambda *_args, **_kwargs: _native_allow("pwd"),
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: {
+            "event_name": "PreToolUse",
+            "harness": "codex",
+            "result": _native_allow("pwd"),
+        },
     )
     worker = HookWorker(store=GuardStore(guard_home))
     result = worker.review_http_payload(

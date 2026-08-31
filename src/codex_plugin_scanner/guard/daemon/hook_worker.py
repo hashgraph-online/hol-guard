@@ -120,8 +120,15 @@ class HookWorker:
         """
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
+        if event_name not in {"PreToolUse", "PostToolUse"}:
+            raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
         if native_mode() in {"auto", "force"}:
-            observe_mode = event_name == "PostToolUse" and self._load_config(guard_home, workspace).mode == "observe"
+            config = self._load_config(guard_home, workspace)
+            recording_only = protection_is_off(
+                posture=config.protection_posture,
+                mode=config.mode,
+            )
+            observe_mode = event_name == "PostToolUse" and recording_only
             edge = review_raw_hook_native(
                 payload=payload,
                 harness=harness,
@@ -134,6 +141,8 @@ class HookWorker:
                 deadline=deadline,
             )
             if edge is None:
+                if event_name == "PreToolUse" and recording_only:
+                    raise HookWorkerUnsupported("observe PreToolUse uses CLI recording")
                 if event_name == "PostToolUse":
                     self._record_post_tool_activity(
                         harness=harness,
@@ -154,7 +163,8 @@ class HookWorker:
             if not isinstance(native_result, Mapping):
                 return post_tool_fail_safe_response(harness, reason_code="native_hook_edge_invalid_response")
             if native_event == "PreToolUse":
-                if native_result.get("minimum_action") == "review":
+                action = str(native_result.get("minimum_action") or "")
+                if action == "review" or (recording_only and action != "allow"):
                     record_python_semantic_hook_route()
                     raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
                 return _harness_json_from_native_pre_tool(native_harness, native_result)

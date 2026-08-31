@@ -8,6 +8,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
+#[cfg(windows)]
+#[path = "resident_state_windows.rs"]
+mod windows_security;
+
 const STATE_SCHEMA: &str = "hol-guard-resident-state.v3";
 const STATE_FILE_PREFIX: &str = "generation-";
 const STATE_FILE_SUFFIX: &str = ".json";
@@ -72,89 +76,8 @@ fn private_file(path: &Path, create_new: bool) -> Result<File, String> {
         .open(path)
         .map_err(|_| "native_resident_state_write_failed".to_owned())?;
     #[cfg(windows)]
-    protect_windows_path(path, false)?;
+    windows_security::protect_windows_path(path, false)?;
     Ok(file)
-}
-
-#[cfg(windows)]
-fn protect_windows_path(path: &Path, directory: bool) -> Result<(), String> {
-    use windows_permissions::constants::{SeObjectType, SecurityInformation};
-    use windows_permissions::utilities::current_process_sid;
-    use windows_permissions::wrappers::SetNamedSecurityInfo;
-    use windows_permissions::{LocalBox, SecurityDescriptor};
-
-    let owner =
-        current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-    let owner_sddl = owner.to_string();
-    let inheritance = if directory { "OICI" } else { "" };
-    let descriptor_sddl =
-        format!("D:P(A;{inheritance};FA;;;{owner_sddl})(A;{inheritance};FA;;;SY)");
-    let descriptor = descriptor_sddl
-        .parse::<LocalBox<SecurityDescriptor>>()
-        .map_err(|_| "native_resident_windows_acl_build_failed".to_owned())?;
-    let dacl = descriptor
-        .dacl()
-        .ok_or_else(|| "native_resident_windows_acl_build_failed".to_owned())?;
-    SetNamedSecurityInfo(
-        path.as_os_str(),
-        SeObjectType::SE_FILE_OBJECT,
-        SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
-        None,
-        None,
-        Some(dacl),
-        None,
-    )
-    .map_err(|_| "native_resident_windows_acl_apply_failed".to_owned())?;
-
-    verify_windows_path(path, &owner)
-}
-
-#[cfg(windows)]
-fn verify_windows_path(path: &Path, owner: &windows_permissions::Sid) -> Result<(), String> {
-    use windows_permissions::constants::{
-        AccessRights, AceType, SeObjectType, SecurityInformation,
-    };
-    use windows_permissions::wrappers::GetNamedSecurityInfo;
-    use windows_permissions::{LocalBox, Sid};
-
-    let system = "S-1-5-18"
-        .parse::<LocalBox<Sid>>()
-        .map_err(|_| "native_resident_windows_system_sid_failed".to_owned())?;
-    let applied = GetNamedSecurityInfo(
-        path.as_os_str(),
-        SeObjectType::SE_FILE_OBJECT,
-        SecurityInformation::Dacl,
-    )
-    .map_err(|_| "native_resident_windows_acl_verify_failed".to_owned())?;
-    let applied_dacl = applied
-        .dacl()
-        .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
-    let mut owner_allowed = false;
-    let mut system_allowed = false;
-    for index in 0..applied_dacl.len() {
-        let ace = applied_dacl
-            .get_ace(index)
-            .ok_or_else(|| "native_resident_windows_acl_verify_failed".to_owned())?;
-        if ace.ace_type() != AceType::ACCESS_ALLOWED_ACE_TYPE
-            || !ace.mask().contains(AccessRights::FileAllAccess)
-        {
-            return Err("native_resident_windows_acl_not_private".to_owned());
-        }
-        let sid = ace
-            .sid()
-            .ok_or_else(|| "native_resident_windows_acl_not_private".to_owned())?;
-        if sid == owner {
-            owner_allowed = true;
-        } else if sid == system.as_ref() {
-            system_allowed = true;
-        } else {
-            return Err("native_resident_windows_acl_not_private".to_owned());
-        }
-    }
-    if !owner_allowed || (!system_allowed && owner != system.as_ref()) {
-        return Err("native_resident_windows_acl_not_private".to_owned());
-    }
-    Ok(())
 }
 
 fn ensure_private_directory(path: &Path, protect_windows: bool) -> Result<PathBuf, String> {
@@ -172,12 +95,12 @@ fn ensure_private_directory(path: &Path, protect_windows: bool) -> Result<PathBu
     #[cfg(windows)]
     if protect_windows {
         if created {
-            protect_windows_path(path, true)?;
+            windows_security::protect_windows_path(path, true)?;
         } else {
             use windows_permissions::utilities::current_process_sid;
             let owner = current_process_sid()
                 .map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-            verify_windows_path(path, owner.as_ref())?;
+            windows_security::verify_windows_path(path, owner.as_ref())?;
         }
     }
     #[cfg(unix)]
@@ -593,83 +516,5 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_scope(label: &str) -> PathBuf {
-        let unique = format!(
-            "hol-guard-resident-{label}-{}-{}",
-            std::process::id(),
-            now_ms().unwrap()
-        );
-        let path = std::env::temp_dir().join(unique);
-        fs::create_dir(&path).unwrap();
-        path
-    }
-
-    #[test]
-    fn state_mac_rejects_endpoint_mutation() {
-        let token = [7u8; crate::AUTH_TOKEN_BYTES];
-        let digest = runtime_digest().unwrap();
-        let mut state = ResidentState {
-            schema: STATE_SCHEMA.to_owned(),
-            generation: 1,
-            process_id: 1,
-            owner_process_id: 1,
-            runtime_sha256: digest,
-            transport: "loopback".to_owned(),
-            endpoint: "127.0.0.1:1234".to_owned(),
-            token_hex: hex_bytes(&token),
-            created_ms: 1,
-            state_mac: String::new(),
-        };
-        state.state_mac = state_mac(&state, &token);
-        state.endpoint = "127.0.0.1:4321".to_owned();
-        assert_ne!(state.state_mac, state_mac(&state, &token));
-    }
-
-    #[test]
-    fn publishing_generations_retires_superseded_state() {
-        let scope = test_scope("state-retention");
-        let digest = runtime_digest().unwrap();
-        let token = [7u8; crate::AUTH_TOKEN_BYTES];
-        for generation in 1..=70 {
-            publish_state(
-                &scope,
-                generation,
-                std::process::id(),
-                &digest,
-                "loopback",
-                "127.0.0.1:1".to_owned(),
-                &token,
-            )
-            .unwrap();
-        }
-        let states = discover_states(&scope, &digest).unwrap();
-        assert_eq!(states.len(), RETAINED_STATE_FILES);
-        assert_eq!(states[0].generation, 70);
-        assert_eq!(states.last().unwrap().generation, 63);
-        fs::remove_dir_all(scope).unwrap();
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn windows_state_scope_and_token_state_are_owner_private() {
-        let base = test_scope("windows-private-state");
-        let digest = runtime_digest().unwrap();
-        let scope = state_scope(&base, &digest).unwrap();
-        let token = [9u8; crate::AUTH_TOKEN_BYTES];
-        publish_state(
-            &scope,
-            1,
-            std::process::id(),
-            &digest,
-            "loopback",
-            "127.0.0.1:1".to_owned(),
-            &token,
-        )
-        .unwrap();
-        assert_eq!(discover_states(&scope, &digest).unwrap().len(), 1);
-        fs::remove_dir_all(base).unwrap();
-    }
-}
+#[path = "resident_state_tests.rs"]
+mod tests;
