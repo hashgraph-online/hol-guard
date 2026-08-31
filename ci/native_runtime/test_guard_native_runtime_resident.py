@@ -142,7 +142,9 @@ def _resident_process_worker(
     identity: str,
     result_queue: _ResultQueue,
     release_event: _ReleaseEvent,
+    start_timeout_seconds: float,
 ) -> None:
+    resident._START_TIMEOUT_SECONDS = start_timeout_seconds  # pyright: ignore[reportPrivateUsage]
     service = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
         executable=Path(executable),
         identity_sha256=identity,
@@ -241,8 +243,7 @@ def test_independent_supervisors_do_not_replace_one_live_resident(monkeypatch: p
         assert not any((guard_home / "native-runtime").glob("*.sock"))
 
 
-def test_spawned_supervisors_share_one_resident_owner(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(resident, "_START_TIMEOUT_SECONDS", 2.0)
+def test_spawned_supervisors_share_one_resident_owner() -> None:
     with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp") as short_tmp:
         root = Path(short_tmp)
         starts_path = root / "starts.log"
@@ -256,7 +257,7 @@ def test_spawned_supervisors_share_one_resident_owner(monkeypatch: pytest.Monkey
         processes = [
             context.Process(
                 target=_resident_process_worker,
-                args=(str(executable), str(guard_home), identity, result_queue, release_event),
+                args=(str(executable), str(guard_home), identity, result_queue, release_event, 2.0),
             )
             for _ in range(4)
         ]
