@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
-from .native_policy_snapshot import native_policy_snapshot
+from .native_policy_snapshot import NativePolicySnapshotError, native_policy_snapshot
 from .native_route_receipt import record_native_hook_result
 from .native_runtime_resident import resident_native_request
 from .native_runtime_resilience import (
@@ -572,6 +572,20 @@ def review_post_tool_native(
             )
         return record_native_hook_result("native_fail_safe", None)
 
+    try:
+        policy_snapshot = (
+            None
+            if status.capabilities is None
+            else native_policy_snapshot(
+                guard_home=request.guard_home,
+                rule_digest=status.capabilities.rule_digest,
+                observe_mode=observe_mode,
+                deadline_monotonic=request.deadline_monotonic,
+            )
+        )
+    except (NativePolicySnapshotError, OSError):
+        return record_native_hook_result("native_fail_safe", None)
+
     envelope = {
         "protocol_version": _NATIVE_PROTOCOL_VERSION,
         "request_id": request.request_id,
@@ -584,9 +598,7 @@ def review_post_tool_native(
         "source_ref_external_allowed": request.source_ref_external_allowed,
         "observe_mode": observe_mode,
         "deadline_budget_ms": _deadline_budget_ms(request),
-        "policy_snapshot": None
-        if status.capabilities is None
-        else native_policy_snapshot(rule_digest=status.capabilities.rule_digest, observe_mode=observe_mode),
+        "policy_snapshot": policy_snapshot,
     }
     input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
     if len(encoded := input_text.encode("utf-8")) > _MAX_REQUEST_BYTES:

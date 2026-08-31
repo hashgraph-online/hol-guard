@@ -2,7 +2,7 @@ name: Guard gVisor reference runtime
 
 on:
   pull_request:
-    branches: [release/3.0]
+    branches: [release/3.0, release/3.2]
     paths:
       - "src/codex_plugin_scanner/guard/runtime/gvisor_reference_runtime.py"
       - "tests/test_guard_gvisor_reference_runtime.py"

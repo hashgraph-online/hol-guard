@@ -205,7 +205,6 @@ class StoreExactCloudReviewMixin:
         expected_oauth_binding: dict[str, object],
         expected_request: dict[str, object],
         receipt_expires_at: str,
-        request_expires_at: str,
     ) -> dict[str, object]:
         """Claim and apply an exact receipt after rechecking all mutable state."""
 
@@ -246,9 +245,6 @@ class StoreExactCloudReviewMixin:
             expires_at = parse_utc_timestamp(receipt_expires_at)
             if expires_at is None or expires_at <= current:
                 return _exact_error("remote_approval_expired", now=resolved_at)
-            request_expires = parse_utc_timestamp(request_expires_at)
-            if request_expires is None or request_expires <= current:
-                return _exact_error("remote_exact_request_expired", now=resolved_at)
             request = load_approval_request(connection, request_id)
             if request is None or request.get("status") != "pending":
                 return _exact_error("remote_exact_request_not_pending", now=resolved_at)
@@ -302,7 +298,7 @@ class StoreExactCloudReviewMixin:
                     publisher=_optional_text(request.get("publisher")),
                     action="allow",
                     created_at=resolved_at,
-                    expires_at=min(capability_expires_at, expires_at, request_expires).isoformat(),
+                    expires_at=min(capability_expires_at, expires_at).isoformat(),
                     integrity_key=local_integrity_key,
                     integrity_key_id=local_integrity_key_id,
                 )

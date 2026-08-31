@@ -171,7 +171,7 @@ def test_native_wheel_workflow_is_always_selected() -> None:
     source = (ROOT / ".github" / "workflows" / "native-wheel-ci.yml").read_text(encoding="utf-8")
     trigger = source.split("permissions:", maxsplit=1)[0]
 
-    assert "pull_request:\n    branches: [main]" in trigger
+    assert "pull_request:\n    branches: [main, release/3.2]" in trigger
     assert "paths:" not in trigger
     assert "paths-ignore:" not in trigger
     assert "HOL_GUARD_HOOK_FAST_PATH" in source
