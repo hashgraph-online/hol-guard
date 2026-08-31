@@ -13,9 +13,13 @@ _FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400
 _FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
 _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 _FILE_LIST_DIRECTORY = 0x0001
+_FILE_READ_ATTRIBUTES = 0x0080
 _FILE_TRAVERSE = 0x0020
 _FILE_RENAME_INFORMATION_CLASS = 10
+_FILE_DISPOSITION_INFORMATION_CLASS = 13
 _FILE_SHARE_READ = 0x00000001
+_FILE_SHARE_WRITE = 0x00000002
+_FILE_SHARE_DELETE = 0x00000004
 _GENERIC_WRITE = 0x40000000
 _CREATE_NEW = 1
 _OPEN_EXISTING = 3
@@ -50,6 +54,10 @@ class _IoStatusBlock(ctypes.Structure):
     _fields_ = [("value", _IoStatusValue), ("information", ctypes.c_size_t)]
 
 
+class _FileDispositionInformation(ctypes.Structure):
+    _fields_ = [("delete_file", ctypes.c_ubyte)]
+
+
 class _WindowsApi:
     def __init__(self) -> None:
         library = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -68,8 +76,6 @@ class _WindowsApi:
             ctypes.c_void_p,
         ]
         library.CreateFileW.restype = ctypes.c_void_p
-        library.DeleteFileW.argtypes = [ctypes.c_wchar_p]
-        library.DeleteFileW.restype = ctypes.c_int
         library.FlushFileBuffers.argtypes = [ctypes.c_void_p]
         library.FlushFileBuffers.restype = ctypes.c_int
         library.GetFileInformationByHandleEx.argtypes = [
@@ -118,9 +124,6 @@ class _WindowsApi:
         )
         return int(handle) if handle is not None else 0
 
-    def delete_file(self, path: Path) -> None:
-        self._library.DeleteFileW(_extended_path(path))
-
     def flush_file(self, handle: int) -> bool:
         return bool(self._library.FlushFileBuffers(ctypes.c_void_p(handle)))
 
@@ -146,9 +149,29 @@ class _WindowsApi:
             )
         )
         if status < 0:
-            ctypes.set_last_error(int(self._native_library.RtlNtStatusToDosError(status)))
+            self._set_last_error_from_status(status)
             return False
         return True
+
+    def delete_file_handle(self, handle: int) -> bool:
+        status_block = _IoStatusBlock()
+        information = _FileDispositionInformation(delete_file=True)
+        status = int(
+            self._native_library.NtSetInformationFile(
+                ctypes.c_void_p(handle),
+                ctypes.byref(status_block),
+                ctypes.byref(information),
+                ctypes.sizeof(information),
+                _FILE_DISPOSITION_INFORMATION_CLASS,
+            )
+        )
+        if status < 0:
+            self._set_last_error_from_status(status)
+            return False
+        return True
+
+    def _set_last_error_from_status(self, status: int) -> None:
+        ctypes.set_last_error(int(self._native_library.RtlNtStatusToDosError(status)))
 
     def write_file(
         self,
@@ -197,6 +220,26 @@ def _open_locked_directory(api: _WindowsApi, path: Path) -> int:
     if not api.inspect_file(handle, info):
         api.close_handle(handle)
         _raise_windows_error(f"unable to inspect output directory {path}")
+    if info.file_attributes & _FILE_ATTRIBUTE_REPARSE_POINT:
+        api.close_handle(handle)
+        raise OSError(f"refusing reparse-point output directory: {path}")
+    return int(handle)
+
+
+def _open_rename_directory(api: _WindowsApi, path: Path) -> int:
+    handle = api.create_file(
+        path,
+        _FILE_TRAVERSE | _FILE_READ_ATTRIBUTES,
+        _FILE_SHARE_READ | _FILE_SHARE_WRITE | _FILE_SHARE_DELETE,
+        _OPEN_EXISTING,
+        _FILE_FLAG_BACKUP_SEMANTICS | _FILE_FLAG_OPEN_REPARSE_POINT,
+    )
+    if handle == _INVALID_HANDLE_VALUE:
+        _raise_windows_error(f"unable to bind output directory {path}")
+    info = _FileAttributeTagInfo()
+    if not api.inspect_file(handle, info):
+        api.close_handle(handle)
+        _raise_windows_error(f"unable to inspect bound output directory {path}")
     if info.file_attributes & _FILE_ATTRIBUTE_REPARSE_POINT:
         api.close_handle(handle)
         raise OSError(f"refusing reparse-point output directory: {path}")
@@ -252,12 +295,13 @@ def _rename_file_handle(api: _WindowsApi, handle: int, parent_handle: int, name:
 
 
 def write_bytes_atomic_no_follow_windows(path: Path, payload: bytes) -> None:
-    """Write with every ancestor locked against replacement throughout the final rename."""
+    """Write through locked ancestry and a handle-bound final directory."""
     absolute = Path(os.path.abspath(path))
     api = _WindowsApi()
     directory_handles = _create_or_lock_directories(api, absolute.parent)
     temporary = absolute.parent / f".{absolute.name}.{secrets.token_hex(16)}"
     temporary_handle: int | None = None
+    rename_directory_handle: int | None = None
     renamed = False
     try:
         opened = api.create_file(
@@ -271,12 +315,16 @@ def write_bytes_atomic_no_follow_windows(path: Path, payload: bytes) -> None:
             _raise_windows_error("unable to create temporary output file")
         temporary_handle = int(opened)
         _write_file(api, temporary_handle, payload)
-        _rename_file_handle(api, temporary_handle, directory_handles[-1], absolute.name)
+        rename_directory_handle = _open_rename_directory(api, absolute.parent)
+        api.close_handle(directory_handles.pop())
+        _rename_file_handle(api, temporary_handle, rename_directory_handle, absolute.name)
         renamed = True
     finally:
         if temporary_handle is not None:
+            if not renamed:
+                api.delete_file_handle(temporary_handle)
             api.close_handle(temporary_handle)
-        if temporary_handle is not None and not renamed:
-            api.delete_file(temporary)
+        if rename_directory_handle is not None:
+            api.close_handle(rename_directory_handle)
         for handle in reversed(directory_handles):
             api.close_handle(handle)
