@@ -4,9 +4,9 @@ This page provides concise, source-backed answers to the most common questions a
 
 ## What is HOL Guard?
 
-HOL Guard is an open-source, local-first runtime security layer for AI agents. It evaluates supported agent tool calls and local artifacts before trust or execution decisions, blocks known threats, pauses ambiguous actions for approval, and records security receipts for later review.
+HOL Guard is a local-first runtime security layer for AI agents. Its core Guard Local runtime is open source and evaluates supported agent tool calls and local artifacts before trust or execution decisions, blocks known threats, pauses ambiguous actions for approval, and records security receipts for later review.
 
-Guard Local runs on the developer's machine without requiring a cloud account. Guard Cloud is optional and adds synchronized evidence, shared policy, fleet visibility, and team approval workflows.
+Guard Local runs on the developer's machine without requiring a cloud account. Guard Cloud is an optional, separately scoped service that adds synchronized evidence, shared policy, fleet visibility, and team approval workflows.
 
 - Product: https://hol.org/guard#what-is-hol-guard
 - Architecture: https://hol.org/guard/docs/guard/architecture
@@ -32,7 +32,7 @@ Enforcement depth varies by agent and event type. The public coverage and harnes
 
 ## Is HOL Guard open source?
 
-Yes. HOL Guard is open source under the Apache License 2.0. Guard Local can be installed, inspected, and used without a paid plan or cloud account, and normal local protection continues offline.
+HOL Guard's core Guard Local runtime is open source under the Apache License 2.0. It can be installed, inspected, and used without a paid plan or cloud account, and normal local protection continues offline. Guard Cloud is an optional, separately scoped service for synchronized evidence, shared policy, fleet visibility, and team workflows.
 
 - License: ./LICENSE
 - Security policy: ./SECURITY.md
