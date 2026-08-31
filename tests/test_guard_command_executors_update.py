@@ -9,6 +9,7 @@ from unittest.mock import patch
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.runtime.command_executors import (
     APP_OPERATIONS,
+    _audit_workspace_is_bound_to_context,
     execute_guard_command_job,
 )
 
@@ -115,6 +116,29 @@ class TestAppUpdateOperations:
         job = _make_job("guard.app.unknownOperation")
         result = execute_guard_command_job(job, context=context, store=store, now=lambda: "2026-07-04T00:00:00Z")
         assert result["failureCode"] == "unsupported_operation"
+
+
+def test_cloud_audit_rejects_workspace_override_outside_active_context(tmp_path: Path) -> None:
+    context = _make_context(tmp_path)
+    other_workspace = tmp_path / "other-workspace"
+    other_workspace.mkdir()
+
+    result = execute_guard_command_job(
+        _make_job("guard.packageShims.audit", {"workspace_dir": str(other_workspace)}),
+        context=context,
+        store=_FakeStore(),
+        now=lambda: "2026-07-04T00:00:00Z",
+    )
+
+    assert result["failureCode"] == "workspace_scope_mismatch"
+
+
+def test_cloud_audit_accepts_relative_active_workspace_without_approval(tmp_path: Path) -> None:
+    context = _make_context(tmp_path)
+    assert context.workspace_dir is not None
+    context.workspace_dir.mkdir()
+
+    assert _audit_workspace_is_bound_to_context({"workspace_dir": "."}, context)
 
 
 class TestAutoUpdateThrottle:

@@ -6,6 +6,7 @@ import base64
 import http.server
 import json
 import secrets
+import shlex
 import threading
 import time
 import urllib.error
@@ -1351,8 +1352,16 @@ def build_connect_status_payload(
     if review_event_status.get("binding_state") == "quarantined" and review_event_binding is not None:
         source = review_event_binding["oauth_source"]
         workspace_id = review_event_binding["workspace_id"]
-        payload["review_event_recovery_command"] = (
-            f"hol-guard connect reassign-quarantined --confirm-source {source} --confirm-workspace {workspace_id}"
+        payload["review_event_recovery_command"] = shlex.join(
+            [
+                "hol-guard",
+                "connect",
+                "reassign-quarantined",
+                "--confirm-source",
+                source,
+                "--confirm-workspace",
+                workspace_id,
+            ]
         )
     if action in {"repair", "re-pair"}:
         payload["repair_action"] = "rerun_connect"

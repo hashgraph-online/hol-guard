@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 import secrets
+import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -407,7 +408,7 @@ def register_pending_command(
         **authorized.identity,
         "issuer": job.get("issuer") if isinstance(job.get("issuer"), str) else "Guard Cloud",
         "recordedAt": recorded_at,
-        "approveCommand": f"hol-guard commands approve {job_id} --confirm {job_id}",
+        "approveCommand": shlex.join(["hol-guard", "commands", "approve", job_id, "--confirm", job_id]),
     }
     items.append(item)
     store.set_sync_payload(COMMAND_PENDING_APPROVALS_STATE_KEY, {"version": 1, "items": items[-64:]}, recorded_at)

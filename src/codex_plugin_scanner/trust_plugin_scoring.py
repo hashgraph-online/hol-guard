@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .checks.manifest import load_manifest
 from .models import CategoryResult
+from .path_support import path_entry_exists
 from .trust_helpers import build_adapter_score, build_domain_score, category_checks, check_percent, is_https_url
 from .trust_models import TrustDomainScore
 from .trust_specs import PLUGIN_TRUST_SPEC
@@ -54,7 +55,7 @@ def build_plugin_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]
         else 0.0
     )
     has_marketplace_surface = (plugin_dir / "marketplace.json").exists()
-    has_mcp_surface = (plugin_dir / ".mcp.json").exists()
+    has_mcp_surface = path_entry_exists(plugin_dir / ".mcp.json")
 
     spec_by_id = {adapter.adapter_id: adapter for adapter in PLUGIN_TRUST_SPEC.adapters}
     adapters = (

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from .markdown_support import escape_markdown_text
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, ScanResult, Severity, severity_from_value
 from .version import __version__
 
@@ -235,11 +236,11 @@ def format_markdown(result: ScanResult) -> str:
     lines = [
         "# Plugin Scanner Report",
         "",
-        f"- {'Repository' if result.scope == 'repository' else 'Plugin'}: `{result.plugin_dir}`",
+        f"- {'Repository' if result.scope == 'repository' else 'Plugin'}: `{escape_markdown_text(result.plugin_dir)}`",
         f"- Score: **{result.score}/100**",
         f"- Grade: **{result.grade} - {GRADE_LABELS.get(result.grade, 'Unknown')}**",
         f"- Trust: **{result.trust_report.total if result.trust_report else 0.0}/100**",
-        f"- Ecosystems: **{', '.join(result.ecosystems) if result.ecosystems else 'unknown'}**",
+        f"- Ecosystems: **{escape_markdown_text(', '.join(result.ecosystems) if result.ecosystems else 'unknown')}**",
         "",
         "## Findings Summary",
         "",
@@ -252,20 +253,22 @@ def format_markdown(result: ScanResult) -> str:
         for plugin in result.plugin_results:
             trust_total = plugin.trust_report.total if plugin.trust_report else 0.0
             lines.append(
-                f"- **{plugin.plugin_name or plugin.plugin_dir}**: "
+                f"- **{escape_markdown_text(plugin.plugin_name or plugin.plugin_dir)}**: "
                 f"{plugin.score}/100 ({plugin.grade}), trust {trust_total}/100"
             )
         if result.skipped_targets:
             lines += ["", "## Skipped Marketplace Entries", ""]
             for skipped in result.skipped_targets:
-                source_path = f" (`{skipped.source_path}`)" if skipped.source_path else ""
-                lines.append(f"- **{skipped.name}**{source_path}: {skipped.reason}")
+                source_path = f" (`{escape_markdown_text(skipped.source_path)}`)" if skipped.source_path else ""
+                lines.append(
+                    f"- **{escape_markdown_text(skipped.name)}**{source_path}: {escape_markdown_text(skipped.reason)}"
+                )
 
     lines += ["", "## Categories", ""]
     for category in result.categories:
         category_score = sum(check.points for check in category.checks)
         category_max = sum(check.max_points for check in category.checks)
-        lines.append(f"- **{category.name}**: {category_score}/{category_max}")
+        lines.append(f"- **{escape_markdown_text(category.name)}**: {category_score}/{category_max}")
 
     top_findings = _sorted_findings(result.findings)[:10]
     lines += ["", "## Top Findings", ""]
@@ -273,22 +276,30 @@ def format_markdown(result: ScanResult) -> str:
         lines.append("- No findings detected.")
     else:
         for finding in top_findings:
-            path = f" (`{finding.file_path}`)" if finding.file_path else ""
-            lines.append(f"- **{finding.severity.value.upper()}** {finding.title}{path}")
-            lines.append(f"  - {finding.description}")
+            path = f" (`{escape_markdown_text(finding.file_path)}`)" if finding.file_path else ""
+            lines.append(f"- **{finding.severity.value.upper()}** {escape_markdown_text(finding.title)}{path}")
+            lines.append(f"  - {escape_markdown_text(finding.description)}")
             if finding.remediation:
-                lines.append(f"  - Remediation: {finding.remediation}")
+                lines.append(f"  - Remediation: {escape_markdown_text(finding.remediation)}")
 
     if result.trust_report and result.trust_report.domains:
         lines += ["", "## Trust Provenance", ""]
         for domain in result.trust_report.domains:
-            lines.append(f"- **{domain.label}** ({domain.spec_id}): {domain.score}/100")
+            lines.append(
+                f"- **{escape_markdown_text(domain.label)}** ({escape_markdown_text(domain.spec_id)}): "
+                f"{domain.score}/100"
+            )
             for adapter in domain.adapters:
-                lines.append(f"  - {adapter.label}: {adapter.score}/100 (weight {adapter.weight})")
+                lines.append(
+                    f"  - {escape_markdown_text(adapter.label)}: {adapter.score}/100 (weight {adapter.weight})"
+                )
 
     lines += ["", "## Integration Status", ""]
     for integration in result.integrations:
-        lines.append(f"- **{integration.name}**: `{integration.status}` - {integration.message}")
+        lines.append(
+            f"- **{escape_markdown_text(integration.name)}**: `{escape_markdown_text(integration.status)}` - "
+            f"{escape_markdown_text(integration.message)}"
+        )
 
     return "\n".join(lines)
 

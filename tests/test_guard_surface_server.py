@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -2981,10 +2982,11 @@ class TestGuardSurfaceServer:
         assert initialize_payload["protocol"]["supported_versions"] == ["1.1", "1.0"]
         assert "auth_token" not in initialize_payload
         assert "dashboard_session_token" not in initialize_payload
+        assert "sessions" not in initialize_payload
         assert unsupported_error is not None
         assert unsupported_error.code == 400
 
-    def test_initialize_refreshes_signed_dashboard_session_without_exposing_root_token(
+    def test_initialize_refreshes_signed_dashboard_session_within_absolute_lifetime(
         self,
         tmp_path,
         monkeypatch,
@@ -3033,6 +3035,51 @@ class TestGuardSurfaceServer:
         assert refreshed_token != stale_session_token
         assert "auth_token" not in initialize_payload
         assert settings_payload["guard_home"] == str(tmp_path / "guard-home")
+
+    def test_initialize_does_not_refresh_dashboard_session_past_absolute_lifetime(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        original_time = time.time()
+        stale_session_token = build_local_dashboard_session_token(
+            auth_token=daemon._server.auth_token,
+            surface="dashboard",
+            expires_in_seconds=1,
+            session_started_at=datetime.fromtimestamp(
+                original_time - (8 * 24 * 60 * 60),
+                tz=timezone.utc,
+            ).isoformat(),
+        )
+        monkeypatch.setattr(daemon_server_module.time, "time", lambda: original_time + 5)
+
+        try:
+            initialize_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps(
+                    {
+                        "client_name": "guard-dashboard-web",
+                        "surface": "dashboard",
+                        "supported_protocol_versions": ["1.0", "1.1"],
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Dashboard-Session": stale_session_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(initialize_request, timeout=5) as response:
+                initialize_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert "dashboard_session_token" not in initialize_payload
+        assert "auth_token" not in initialize_payload
 
     def test_surface_runtime_persists_sessions_operations_and_items(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

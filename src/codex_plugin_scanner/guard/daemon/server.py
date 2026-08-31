@@ -112,7 +112,13 @@ from ..desktop_notifications import (
     macos_notification_guidance,
 )
 from ..insights_share import publish_insights_share
-from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
+from ..local_dashboard_session import (
+    DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS,
+    LOCAL_DASHBOARD_SESSION_AUDIENCE,
+    LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM,
+    MAX_LOCAL_DASHBOARD_SESSION_AGE_SECONDS,
+    build_local_dashboard_session_token,
+)
 from ..local_supply_chain import (
     build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
@@ -5307,6 +5313,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 supported_protocol_versions=tuple(str(item) for item in supported_versions if isinstance(item, str))
                 if isinstance(supported_versions, list)
                 else (),
+                include_sessions=self._header_token_is_valid(payload=payload),
             )
         except ValueError as error:
             self._write_json({"error": str(error)}, status=400)
@@ -6622,12 +6629,32 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return claims
 
     def _refresh_dashboard_session_token(self, *, surface: str) -> str | None:
-        if self._refreshable_dashboard_session_claims() is None:
+        claims = self._refreshable_dashboard_session_claims()
+        if claims is None:
+            return None
+        started_at = self._optional_string(claims.get(LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM))
+        if started_at is None:
+            expires_at = self._optional_string(claims.get("expires_at"))
+            if expires_at is None:
+                return None
+            try:
+                started_at_timestamp = _parse_iso_timestamp(expires_at) - DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS
+            except ValueError:
+                return None
+            started_at = datetime.fromtimestamp(started_at_timestamp, tz=timezone.utc).isoformat()
+        try:
+            absolute_expires_at = _parse_iso_timestamp(started_at) + MAX_LOCAL_DASHBOARD_SESSION_AGE_SECONDS
+        except ValueError:
+            return None
+        remaining_seconds = absolute_expires_at - time.time()
+        if remaining_seconds < 1:
             return None
         refreshed_surface = surface if surface in {"approval-center", "dashboard", "cloud-dashboard"} else "dashboard"
         return build_local_dashboard_session_token(
             auth_token=self.server.auth_token,  # type: ignore[attr-defined]
             surface=refreshed_surface,
+            expires_in_seconds=min(DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS, int(remaining_seconds)),
+            session_started_at=started_at,
         )
 
     def _refreshable_dashboard_session_claims(self) -> dict[str, object] | None:

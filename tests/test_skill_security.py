@@ -175,6 +175,10 @@ def test_run_cisco_skill_scan_populates_skipped_skills(monkeypatch):
     monkeypatch.setitem(sys.modules, "skill_scanner", skill_scanner_module)
     monkeypatch.setitem(sys.modules, "skill_scanner.core", skill_scanner_core_module)
     monkeypatch.setitem(sys.modules, "skill_scanner.core.scan_policy", scan_policy_module)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_skill_scanner._scan_directory_with_timeout",
+        lambda *_args, **_kwargs: FakeReport().to_dict(),
+    )
 
     summary = run_cisco_skill_scan(FIXTURES / "good-plugin" / "skills", mode="on", policy_name="strict")
 

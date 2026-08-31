@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 import time
 import urllib.error
@@ -325,6 +326,23 @@ def test_connect_status_surfaces_quarantined_review_event_recovery(
     assert payload["review_event_recovery_command"] == (
         "hol-guard connect reassign-quarantined --confirm-source default --confirm-workspace workspace-1"
     )
+
+    binding["oauth_source"] = "default; touch /opt/guard-test/unsafe"
+    binding["workspace_id"] = "workspace-$(id)"
+    quoted_payload = build_connect_status_payload(
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+    )
+    assert shlex.split(str(quoted_payload["review_event_recovery_command"])) == [
+        "hol-guard",
+        "connect",
+        "reassign-quarantined",
+        "--confirm-source",
+        binding["oauth_source"],
+        "--confirm-workspace",
+        binding["workspace_id"],
+    ]
 
 
 def test_connect_status_requires_retry_when_oauth_not_configured(tmp_path: Path) -> None:

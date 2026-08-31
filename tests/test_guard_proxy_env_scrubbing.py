@@ -23,17 +23,22 @@ class TestBuildScrubbedEnv:
         env = _build_scrubbed_env()
         assert "HERMES_GUARD_TOKEN" not in env
 
-    def test_non_token_vars_are_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_only_runtime_basics_are_inherited_implicitly(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HERMES_GUARD_TOKEN", "secret")
         monkeypatch.setenv("PATH", "/usr/bin:/bin")
-        monkeypatch.setenv("HOME", "/tmp/test")
+        monkeypatch.setenv("HOME", "/opt/guard-test/home")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "ambient-secret")
+        monkeypatch.setenv("UNRELATED_PROJECT_TOKEN", "ambient-project-secret")
         env = _build_scrubbed_env()
         assert env["PATH"] == "/usr/bin:/bin"
-        assert env["HOME"] == "/tmp/test"
+        assert env["HOME"] == "/opt/guard-test/home"
+        assert "AWS_SECRET_ACCESS_KEY" not in env
+        assert "UNRELATED_PROJECT_TOKEN" not in env
 
     def test_extra_env_is_merged(self) -> None:
-        env = _build_scrubbed_env({"MCP_SERVER_PORT": "8080"})
+        env = _build_scrubbed_env({"MCP_SERVER_PORT": "8080", "MCP_API_TOKEN": "explicit-grant"})
         assert env["MCP_SERVER_PORT"] == "8080"
+        assert env["MCP_API_TOKEN"] == "explicit-grant"
 
     def test_extra_env_cannot_reinject_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Tokens in extra are also scrubbed — defense-in-depth against re-injection."""
