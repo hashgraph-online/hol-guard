@@ -133,9 +133,7 @@ class _ActivityWriter:
         payload: object,
         succeeded: bool,
     ) -> bool:
-        self.calls.append(
-            {"harness": harness, "event": event, "payload": payload, "succeeded": succeeded}
-        )
+        self.calls.append({"harness": harness, "event": event, "payload": payload, "succeeded": succeeded})
         return True
 
 
@@ -212,11 +210,11 @@ def test_cli_off_mode_leaves_python_source_ref_path(tmp_path: Path, monkeypatch:
     assert result is None
 
 
-def test_native_policy_snapshot_generation_is_stable_for_same_policy() -> None:
+def test_native_policy_snapshot_generation_is_stable_for_same_policy(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot
 
     digest = "a" * 64
-    first = native_policy_snapshot(rule_digest=digest, observe_mode=False)
-    second = native_policy_snapshot(rule_digest=digest, observe_mode=False)
+    first = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
+    second = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
     assert first["generation"] == second["generation"]
     assert isinstance(first["generation"], int)
