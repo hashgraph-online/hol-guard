@@ -76,11 +76,7 @@ def build_network_status(
             and selected_health is not None
             and selected_health.effective_grade is not EnforcementGrade.UNAVAILABLE
         )
-        active = (
-            selected_health is not None
-            and selected_health.permits_enforcement
-            and profile.production_ready
-        )
+        active = selected_health is not None and selected_health.permits_enforcement and profile.production_ready
         effective_grade = (
             selected_health.effective_grade if selected_health is not None and active else EnforcementGrade.UNAVAILABLE
         )
