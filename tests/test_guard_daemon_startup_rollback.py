@@ -125,6 +125,7 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
     start_errors: list[BaseException] = []
     stop_errors: list[BaseException] = []
     finish_service_calls = 0
+    listener_closed_before_loop_entry = False
 
     def delayed_serve_forever() -> None:
         serve_thread_entered.set()
@@ -140,6 +141,14 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
         finish_service_calls += 1
         return original_finish_service()
 
+    original_server_close = daemon._server.server_close
+
+    def recording_server_close() -> None:
+        nonlocal listener_closed_before_loop_entry
+        if not release_serve_thread.is_set():
+            listener_closed_before_loop_entry = True
+        original_server_close()
+
     def start_daemon() -> None:
         try:
             daemon.start()
@@ -154,6 +163,7 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
 
     monkeypatch.setattr(daemon, "_serve_forever", delayed_serve_forever)
     monkeypatch.setattr(daemon._server, "request_serve_stop", recording_request_stop)
+    monkeypatch.setattr(daemon._server, "server_close", recording_server_close)
     monkeypatch.setattr(daemon, "_finish_service_locked", recording_finish_service)
     starter = threading.Thread(target=start_daemon)
     stopper = threading.Thread(target=stop_daemon)
@@ -163,8 +173,8 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
         stopper.start()
         assert stop_requested.wait(timeout=10)
         release_serve_thread.set()
-        starter.join(timeout=10)
-        stopper.join(timeout=10)
+        starter.join(timeout=30)
+        stopper.join(timeout=30)
 
         assert not starter.is_alive()
         assert not stopper.is_alive()
@@ -174,6 +184,7 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
         assert daemon._thread is None
         assert daemon._owner_lock is None
         assert finish_service_calls == 1
+        assert listener_closed_before_loop_entry is False
         assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_serve_thread.set()

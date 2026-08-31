@@ -23,7 +23,8 @@ import statistics
 import sys
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -171,7 +172,6 @@ def _bench_python_warm(
         values.append((time.perf_counter() - started) * 1_000.0)
     return values
 
-
 def _bench_native_warm(
     *,
     workspace: Path,
@@ -247,13 +247,16 @@ def _prewarm_native_concurrent(
 
 def _bench_python_cold(*, workspace: Path, guard_home: Path, iterations: int) -> list[float]:
     values: list[float] = []
-    for _ in range(iterations):
-        runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
-        started = time.perf_counter()
-        runner.start()
-        _python_review(runner, workspace=workspace, guard_home=guard_home)
-        values.append((time.perf_counter() - started) * 1_000.0)
-        runner.close()
+    with _python_reference_mode():
+        for _ in range(iterations):
+            runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
+            started = time.perf_counter()
+            runner.start()
+            try:
+                _python_review(runner, workspace=workspace, guard_home=guard_home)
+                values.append((time.perf_counter() - started) * 1_000.0)
+            finally:
+                runner.close()
     return values
 
 

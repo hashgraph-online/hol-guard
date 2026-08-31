@@ -8042,15 +8042,21 @@ class GuardDaemonServer:
         self._begin_service()
         serve_thread_started = False
         try:
-            self._serve_loop_started.clear()
-            self._thread = threading.Thread(target=self._serve_forever, daemon=True)
-            self._thread.start()
-            serve_thread_started = True
+            with self._finish_service_lock:
+                if self._shutdown_started.is_set():
+                    raise RuntimeError("Guard daemon stopped during startup")
+                self._serve_loop_started.clear()
+                self._thread = threading.Thread(target=self._serve_forever, daemon=True)
+                self._thread.start()
+                serve_thread_started = True
             if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                 raise RuntimeError("Guard daemon serve thread did not become ready")
-            if self._shutdown_started.is_set():
-                raise RuntimeError("Guard daemon stopped during startup")
-            self._server.hook_process_runner.enable_full_capacity()
+            with self._finish_service_lock:
+                if self._shutdown_started.is_set():
+                    raise RuntimeError("Guard daemon stopped during startup")
+                self._server.hook_process_runner.enable_full_capacity()
+                if self._shutdown_started.is_set():
+                    raise RuntimeError("Guard daemon stopped during startup")
         except BaseException as error:
             self._diagnostics.record_exception("daemon_start_thread_failed")
             serve_thread = self._thread
@@ -8088,9 +8094,11 @@ class GuardDaemonServer:
         self._record_lifecycle("shutdown_requested", reason="explicit_stop")
         self._diagnostics.record("daemon_shutdown_requested")
         self._shutdown_started.set()
-        self._server.request_serve_stop()
-        self._server.server_close()
-        serve_thread = self._thread
+        with self._finish_service_lock:
+            serve_thread = self._thread
+            self._server.request_serve_stop()
+            if serve_thread is None:
+                self._server.server_close()
         _ = self._finish_service()
         remaining_serve_thread = self._join_service_thread(
             serve_thread,
