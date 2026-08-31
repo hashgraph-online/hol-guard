@@ -124,6 +124,100 @@ def test_v2_explicit_signed_removal_clears_cloud_authority_but_not_local_file(tm
     assert source.read_text(encoding="utf-8") == "still local"
 
 
+@pytest.mark.parametrize("state", ["allowed", "blocked", "removed"])
+def test_v2_projection_does_not_mutate_never_observed_identity(tmp_path: Path, state: str) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    identity = UnlistedCliIdentity(
+        cli_id="local-cli.persisted-tool-12345678",
+        name="persisted-tool",
+        kind="executable",
+        identity_hash="c" * 64,
+        example_label="persisted-tool",
+    )
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="blocked",
+        expected_revision=0,
+        updated_at=_NOW,
+        command_states={},
+    )
+
+    before = store.read_local_cli_grant(identity.cli_id)
+    projected = apply_verified_custom_extension_continuity(
+        store,
+        _bundle(identity.identity_hash, state=state),
+        device_id=_DEVICE_ID,
+        now=_NOW,
+    )
+
+    assert store.read_local_cli_grant(identity.cli_id) == before
+    assert _state_items(projected)[identity.cli_id] == {
+        "workspace_identity_hash": _workspace_identity(identity.identity_hash),
+        "local_identity_hash": identity.identity_hash,
+        "cloud_revision": 1,
+        "status": "pending_observation",
+        "reason": "local_identity_not_observed",
+    }
+
+
+def test_v2_context_change_does_not_clear_authority_after_observation_is_revoked(tmp_path: Path) -> None:
+    store, identity = _observed_store(tmp_path)
+    apply_verified_custom_extension_continuity(
+        store,
+        _bundle(identity.identity_hash),
+        device_id=_DEVICE_ID,
+        now=_NOW,
+    )
+    with store._connect() as connection:
+        _ = connection.execute("delete from local_cli_observation where cli_id = ?", (identity.cli_id,))
+
+    before = store.read_local_cli_grant(identity.cli_id)
+    next_bundle = _bundle(identity.identity_hash, workspace_id="workspace-other", device_id="device-other")
+    payload = next_bundle["payload"]
+    assert isinstance(payload, dict)
+    continuity = payload[CUSTOM_EXTENSION_CONTINUITY_FIELD]
+    assert isinstance(continuity, dict)
+    continuity["items"] = []
+
+    apply_verified_custom_extension_continuity(
+        store,
+        next_bundle,
+        device_id="device-other",
+        now=_NOW,
+    )
+
+    assert store.read_local_cli_grant(identity.cli_id) == before
+
+
+def test_v2_projection_does_not_apply_prior_stale_identity_to_replacement(tmp_path: Path) -> None:
+    store, original = _observed_store(tmp_path)
+    apply_verified_custom_extension_continuity(
+        store,
+        _bundle(original.identity_hash),
+        device_id=_DEVICE_ID,
+        now=_NOW,
+    )
+    replacement = UnlistedCliIdentity(
+        cli_id=original.cli_id,
+        name=original.name,
+        kind=original.kind,
+        identity_hash="d" * 64,
+        example_label=original.example_label,
+    )
+    store.record_local_cli_observation(replacement, seen_at=_NOW, help_status="ok")
+
+    before = store.read_local_cli_grant(original.cli_id)
+    projected = apply_verified_custom_extension_continuity(
+        store,
+        _bundle(original.identity_hash, state="allowed", revision=2),
+        device_id=_DEVICE_ID,
+        now=_NOW,
+    )
+
+    assert store.read_local_cli_grant(original.cli_id) == before
+    assert _state_items(projected)[original.cli_id]["status"] == "changed_identity"
+
+
 def test_omitted_projection_retains_last_known_good_until_explicit_tombstone(tmp_path: Path) -> None:
     store, identity = _observed_store(tmp_path)
     apply_verified_custom_extension_continuity(

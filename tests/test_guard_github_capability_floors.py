@@ -252,6 +252,24 @@ def test_left_associative_and_or_does_not_skip_reachable_github_deletes(
     assert match is not None
 
 
+def test_unknown_and_grouped_and_or_chains_keep_reachable_github_deletes(tmp_path: Path) -> None:
+    commands = (
+        "true || unknown && gh repo delete o/r --yes",
+        "false && unknown || gh repo delete o/r --yes",
+        "(true || unknown) && gh repo delete o/r --yes",
+        "(false && unknown) || gh repo delete o/r --yes",
+        "true && (false || unknown) || gh repo delete o/r --yes",
+    )
+
+    for command in commands:
+        assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
+
+        assert assessment is not None
+        assert assessment.capabilities == ("delete_remote",)
+        match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+        assert match is not None
+
+
 @pytest.mark.parametrize(
     "command",
     (
@@ -264,6 +282,17 @@ def test_statically_dead_and_or_skips_github_deletes(tmp_path: Path, command: st
     assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
 
     assert assessment is None
+
+
+def test_unknown_and_or_chains_skip_only_provably_dead_github_deletes(tmp_path: Path) -> None:
+    commands = (
+        "unknown && false && gh repo delete o/r --yes",
+        "unknown || true || gh repo delete o/r --yes",
+    )
+
+    for command in commands:
+        assessment = classify_github_shell_capabilities(command, home_dir=tmp_path)
+        assert assessment is None
 
 
 def test_local_write_cannot_mask_remote_secret_capability(tmp_path: Path) -> None:

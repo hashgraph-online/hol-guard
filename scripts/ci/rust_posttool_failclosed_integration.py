@@ -22,7 +22,7 @@ def _run(runtime: Path, payload: dict[str, Any] | bytes) -> subprocess.Completed
         if key.upper() in {"HOME", "LANG", "LC_ALL", "TEMP", "TMP", "TMPDIR", "USERPROFILE", "SYSTEMROOT", "WINDIR"}
         or key.upper().startswith("LC_")
     }
-    return subprocess.run(
+    return subprocess.run(  # noqa: UP022
         (str(runtime), "hook", "--stdin"),
         input=encoded,
         stdout=subprocess.PIPE,
@@ -81,6 +81,24 @@ def _request(workspace: Path, rule_digest: str, output: str, generation: int) ->
     }
 
 
+def _run_current(runtime: Path, request: dict[str, Any]) -> subprocess.CompletedProcess[bytes]:
+    snapshot = request["policy_snapshot"]
+    state_path = Path(request["guard_home"]) / "native-policy-generation.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema": "hol-guard-native-policy-generation.v1",
+                "generation": snapshot["generation"],
+                "policy_digest": snapshot["policy_digest"],
+            },
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    state_path.chmod(0o600)
+    return _run(runtime, request)
+
+
 def _decision(value: dict[str, Any]) -> str:
     raw = value.get("decision")
     return raw.lower() if isinstance(raw, str) else ""
@@ -89,9 +107,7 @@ def _decision(value: dict[str, Any]) -> str:
 def _require_native_error(result: subprocess.CompletedProcess[bytes], reason: str) -> None:
     blob = result.stderr.decode("utf-8", "replace") + result.stdout.decode("utf-8", "replace")
     if result.returncode == 0 or reason not in blob:
-        raise SystemExit(
-            f"expected native error {reason}, got rc={result.returncode} output={blob[:240]!r}"
-        )
+        raise SystemExit(f"expected native error {reason}, got rc={result.returncode} output={blob[:240]!r}")
 
 
 def main() -> int:
@@ -100,7 +116,7 @@ def main() -> int:
     parser.add_argument("--json", type=Path)
     args = parser.parse_args()
     runtime = args.runtime.expanduser().resolve(strict=True)
-    capabilities_result = subprocess.run(
+    capabilities_result = subprocess.run(  # noqa: UP022
         (str(runtime), "capabilities", "--json"),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -122,13 +138,15 @@ def main() -> int:
         workspace = Path(temporary)
         (workspace / ".guard").mkdir(mode=0o700)
 
-        safe = _decode(_run(runtime, _request(workspace, rule_digest, "export const value = 1;\n", time.time_ns())))
+        safe = _decode(
+            _run_current(runtime, _request(workspace, rule_digest, "export const value = 1;\n", time.time_ns()))
+        )
         if safe is None or _decision(safe) != "allow":
             raise SystemExit("safe PostToolUse did not produce native allow")
         evidence.append({"case": "safe-inline", "decision": _decision(safe)})
 
         secret = _decode(
-            _run(
+            _run_current(
                 runtime,
                 _request(
                     workspace,
@@ -144,7 +162,7 @@ def main() -> int:
 
         bad_rule = _request(workspace, rule_digest, "safe\n", time.time_ns())
         bad_rule["policy_snapshot"]["rule_digest"] = "0" * 64
-        bad_result = _run(runtime, bad_rule)
+        bad_result = _run_current(runtime, bad_rule)
         _require_native_error(bad_result, "native_policy_snapshot_rule_mismatch")
         evidence.append({"case": "rule-mismatch", "returncode": bad_result.returncode})
 
@@ -153,7 +171,7 @@ def main() -> int:
         evidence.append({"case": "malformed", "returncode": malformed.returncode})
 
         oversized_output = "x" * (7 * 1024 * 1024)
-        oversized = _run(runtime, _request(workspace, rule_digest, oversized_output, time.time_ns()))
+        oversized = _run_current(runtime, _request(workspace, rule_digest, oversized_output, time.time_ns()))
         _require_native_error(oversized, "native_request_too_large")
         evidence.append({"case": "oversized", "returncode": oversized.returncode})
 
