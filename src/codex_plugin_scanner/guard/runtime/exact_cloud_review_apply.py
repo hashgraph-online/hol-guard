@@ -82,9 +82,8 @@ def apply_exact_cloud_review(
     if not isinstance(request, dict) or request.get("status") != "pending":
         raise _reject(store, "remote_exact_request_not_pending", now=current)
     if not _request_is_current(request, now=current):
-        raise _reject(store, "remote_exact_request_expired", now=current)
+        raise _reject(store, "remote_exact_request_not_pending", now=current)
     request_expires_at = _request_expires_at(request)
-    assert request_expires_at is not None
     if expected_harness is not None and request.get("harness") != expected_harness:
         raise _reject(store, "remote_exact_harness_mismatch", now=current)
     action = _exact_action(envelope.get("decision"))
@@ -130,7 +129,7 @@ def apply_exact_cloud_review(
         },
         expected_request=request,
         receipt_expires_at=receipt_expires_at,
-        request_expires_at=request_expires_at.isoformat(),
+        request_expires_at=request_expires_at.isoformat() if request_expires_at is not None else "",
     )
     return _resolution_from_result(
         store,

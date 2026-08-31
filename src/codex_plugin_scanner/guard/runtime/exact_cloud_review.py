@@ -32,7 +32,6 @@ EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY = "guard_exact_cloud_review_capability"
 EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY = "guard_exact_cloud_review_revocation"
 EXACT_CLOUD_REVIEW_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 EXACT_CLOUD_REVIEW_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
-EXACT_CLOUD_REVIEW_REQUEST_TTL_SECONDS = 10 * 60
 
 
 class ExactCloudReviewError(ValueError):
@@ -157,15 +156,15 @@ def _exact_action(value: object) -> str | None:
 
 
 def _request_expires_at(request: dict[str, object]) -> datetime | None:
-    observed_at = parse_utc_timestamp(request.get("last_seen_at") or request.get("created_at"))
-    return None if observed_at is None else observed_at + timedelta(seconds=EXACT_CLOUD_REVIEW_REQUEST_TTL_SECONDS)
+    """Pending local review requests do not expire. Signed receipts still do."""
+
+    del request
+    return None
 
 
 def _request_is_current(request: dict[str, object], *, now: datetime) -> bool:
-    expires_at = _request_expires_at(request)
-    if expires_at is None:
-        return False
-    return expires_at - timedelta(seconds=EXACT_CLOUD_REVIEW_REQUEST_TTL_SECONDS) <= now < expires_at
+    del now
+    return str(request.get("status") or "pending") == "pending"
 
 
 def enable_exact_cloud_review(

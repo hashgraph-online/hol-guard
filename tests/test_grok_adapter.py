@@ -188,6 +188,15 @@ class TestGrokHookResponses:
         payload = grok_hook_response_from_guard(policy_action="review", reason="Review in HOL Guard.")
         assert payload == {"decision": "deny", "reason": "Review in HOL Guard."}
 
+    def test_watch_mode_never_denies_review_or_block(self) -> None:
+        for action in ("review", "require-reapproval", "sandbox-required", "block"):
+            payload = grok_hook_response_from_guard(
+                policy_action=action,
+                reason="Would have stopped this in Protected.",
+                recording_only=True,
+            )
+            assert payload == {"decision": "allow"}, action
+
     def test_emit_grok_hook_response_writes_json_line(self) -> None:
         stream = io.StringIO()
         emit_grok_hook_response(policy_action="allow", reason="", output_stream=stream)
@@ -259,6 +268,47 @@ class TestGrokHookResponses:
             )
         assert rc == 2
         assert '"decision":"deny"' in stdout_capture.getvalue()
+
+    def test_watch_posture_allows_pretool_even_when_mode_is_enforce(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
+        from codex_plugin_scanner.guard.config import GuardConfig
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        guard_home = tmp_path / ".hol-guard"
+        store = GuardStore(guard_home)
+        config = GuardConfig(
+            guard_home=guard_home,
+            workspace=tmp_path,
+            mode="enforce",
+            protection_posture="watch",
+        )
+        args = argparse.Namespace(
+            harness="grok",
+            json=False,
+            policy_action="block",
+            artifact_id=None,
+            artifact_name=None,
+        )
+        payload = {
+            "hookEventName": "pre_tool_use",
+            "toolName": "run_terminal_command",
+            "toolInput": {"command": "rm -rf /"},
+        }
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        with redirect_stderr(stderr_capture):
+            rc = _run_hook_generic_payload(
+                args,
+                action_envelope=None,
+                config=config,
+                output_stream=stdout_capture,
+                payload=payload,
+                home_dir=tmp_path,
+                runtime_workspace=tmp_path,
+                store=store,
+            )
+        assert rc == 0
+        assert json.loads(stdout_capture.getvalue()) == {"decision": "allow"}
 
 
 class TestGrokManagedBlockHelpers:
@@ -670,7 +720,7 @@ class TestGrokInventoryAndResponses:
         grok_root = ctx.home_dir / ".grok"
         (grok_root / "workflows").mkdir(parents=True)
         (grok_root / "agents").mkdir(parents=True)
-        (grok_root / "sandbox.toml").write_text("[profiles.project]\nextends = \"workspace\"\n", encoding="utf-8")
+        (grok_root / "sandbox.toml").write_text('[profiles.project]\nextends = "workspace"\n', encoding="utf-8")
         result = GrokHarnessAdapter().detect(ctx)
         assert any(path.endswith(".grok/workflows") for path in result.config_paths)
         assert any(path.endswith(".grok/agents") for path in result.config_paths)

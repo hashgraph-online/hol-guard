@@ -194,7 +194,10 @@ class HookWorker:
             config = self._load_config(guard_home, workspace)
             response = review_post_tool_native(
                 request,
-                observe_mode=config.mode == "observe",
+                observe_mode=protection_is_off(
+                    posture=config.protection_posture,
+                    mode=config.mode,
+                ),
             )
             if response is None:
                 self._record_post_tool_activity(

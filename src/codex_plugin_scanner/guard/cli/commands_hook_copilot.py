@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 from ..mcp_tool_calls import resolve_tool_call_policy_action
 from ..models import GuardAction
+from ..protection_posture import protection_is_off
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _copilot_tool_decision_scanner_evidence
 from ._commands_shared import *
@@ -125,7 +126,8 @@ def _run_hook_copilot_pretool(
     saved_policy_blocks = decision.saved_action == "block"
     now = _now()
     observed_policy_action: GuardAction | None = None
-    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
+    recording_only = protection_is_off(posture=config.protection_posture, mode=config.mode)
+    if recording_only and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         observe_mode_evidence: dict[str, object] = {
             "source": "observe_mode",
@@ -134,7 +136,7 @@ def _run_hook_copilot_pretool(
         }
         decision_scanner_evidence = (*decision_scanner_evidence, observe_mode_evidence)
         policy_action = "allow"
-    if config.mode == "observe" and observed_policy_action is not None:
+    if recording_only and observed_policy_action is not None:
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=runtime_artifact,
@@ -312,7 +314,8 @@ def _run_hook_copilot_permission_request(
     if decision_scanner_evidence:
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
     observed_policy_action: GuardAction | None = None
-    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
+    recording_only = protection_is_off(posture=config.protection_posture, mode=config.mode)
+    if recording_only and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         response_payload["approval_requests"] = []
         if terminal_action:
@@ -327,7 +330,7 @@ def _run_hook_copilot_permission_request(
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
         policy_action = "allow"
         response_payload["policy_action"] = "allow"
-    if config.mode == "observe" and observed_policy_action is not None:
+    if recording_only and observed_policy_action is not None:
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=runtime_artifact,
