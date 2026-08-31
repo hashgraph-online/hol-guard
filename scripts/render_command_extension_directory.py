@@ -24,6 +24,7 @@ CATEGORY_ORDER = (
     "Managed services",
     "Package supply chain",
     "Specialized tools",
+    "Other extensions",
 )
 
 CORE_EXTENSION_IDS = frozenset(
@@ -71,7 +72,7 @@ def _category(extension_id: str) -> str:
         return "Package supply chain"
     if extension_id == "command.skill-sunset":
         return "Specialized tools"
-    raise ValueError(f"Extension directory category is missing for {extension_id}")
+    return "Other extensions"
 
 
 def _escape_cell(value: str) -> str:
@@ -95,6 +96,8 @@ def render_catalog() -> str:
 
     sections: list[str] = []
     for category in CATEGORY_ORDER:
+        if not grouped[category]:
+            continue
         rows = [
             f"### {category}",
             "",

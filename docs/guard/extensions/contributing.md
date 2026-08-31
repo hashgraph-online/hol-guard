@@ -44,6 +44,11 @@ Use the narrowest existing module that owns the domain:
 - Package-manager coverage lives in `command_package_extensions.py` and delegates decisions to Package Firewall.
 - Shared typed contracts live in `command_extension_specs.py`, `command_rules.py`, and `command_extensions.py`.
 
+Directory categories are presentation-only and never affect runtime authority. The renderer assigns known families to
+curated sections and places every otherwise-valid new ID in **Other extensions**, so a registry addition cannot break
+documentation generation. Add an explicit category rule when the new family has a durable public taxonomy; do not
+add documentation-only fields to the runtime security contract.
+
 Do not add a second parser, retokenize raw shell text inside a matcher, import workspace code, or let an Extension
 emit an allow/approval decision. Matchers return structured evidence; Guard policy retains final authority.
 

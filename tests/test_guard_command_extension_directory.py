@@ -32,6 +32,12 @@ def test_extension_directory_matches_canonical_registry() -> None:
         assert current.count(f"`{extension.extension_id}`") == 1
 
 
+def test_future_extension_ids_use_a_non_breaking_directory_fallback() -> None:
+    renderer = _load_renderer()
+
+    assert renderer._category("command.future-capability") == "Other extensions"
+
+
 def test_readme_and_contribution_guide_expose_complete_entry_path() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     contributing = (REPO_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
