@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from contextvars import ContextVar
 from pathlib import Path
 
-from .codex_hook_launch_runtime import run_isolated_hook_process
+from .codex_hook_launch_runtime import BoundedHookProcessResult, run_isolated_hook_process
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _MAX_FAILURE_CODE_LENGTH = 128
@@ -28,12 +28,31 @@ def native_resident_client_failure_code() -> str | None:
     return _LAST_FAILURE_CODE.get()
 
 
-def _record_failure_code(stderr: str, fallback: str) -> None:
+def _allowlisted_failure_code(stderr: str) -> str | None:
     for line in stderr.splitlines():
         if len(line) <= _MAX_FAILURE_CODE_LENGTH and _FAILURE_CODE_PATTERN.fullmatch(line):
-            _LAST_FAILURE_CODE.set(line)
-            return
-    _LAST_FAILURE_CODE.set(fallback)
+            return line
+    return None
+
+
+def _classify_failure(result: BoundedHookProcessResult) -> str:
+    if result.containment_failed:
+        return "native_client_containment_failed"
+    if result.timed_out:
+        return "native_client_timed_out"
+    if result.output_limit_exceeded:
+        return "native_client_output_limit_exceeded"
+    if result.returncode is None:
+        return "native_client_status_missing"
+    if result.returncode != 0:
+        return "native_client_exit_nonzero"
+    if not result.stdout:
+        return "native_client_output_missing"
+    return "native_client_process_failed"
+
+
+def _record_failure_code(result: BoundedHookProcessResult) -> None:
+    _LAST_FAILURE_CODE.set(_allowlisted_failure_code(result.stderr) or _classify_failure(result))
 
 
 def native_resident_client_request(
@@ -77,7 +96,7 @@ def native_resident_client_request(
         or result.containment_failed
         or not result.stdout
     ):
-        _record_failure_code(result.stderr, "native_client_process_failed")
+        _record_failure_code(result)
         return None
     return result.stdout.encode("utf-8")
 

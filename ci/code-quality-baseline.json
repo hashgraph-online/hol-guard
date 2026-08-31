@@ -264,7 +264,7 @@
     "src/codex_plugin_scanner/guard/cli/update_subprocess.py::build_trusted_update_context": 132,
     "src/codex_plugin_scanner/guard/codex_app_server.py::resume_codex_thread_for_request": 175,
     "src/codex_plugin_scanner/guard/codex_hook_inventory.py::_handler_record": 129,
-    "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py::run_isolated_hook_process": 153,
+    "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py::run_isolated_hook_process": 154,
     "src/codex_plugin_scanner/guard/config.py::load_guard_config": 109,
     "src/codex_plugin_scanner/guard/consumer/service.py::evaluate_detection": 743,
     "src/codex_plugin_scanner/guard/daemon/extension_control_semantic_preview.py::build_extension_control_semantic_preview": 152,
