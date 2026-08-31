@@ -754,7 +754,7 @@
   },
   "schema_version": 2,
   "silent_broad_exception_handlers": [
-    "src/codex_plugin_scanner/guard/cli/commands_dispatch_local.py::_migrate_legacy_macos_secrets::Exception::49",
+    "src/codex_plugin_scanner/guard/cli/commands_dispatch_local.py::_migrate_legacy_macos_secrets::Exception::48",
     "src/codex_plugin_scanner/guard/cli/commands_support_service.py::_handle_daemon_status::Exception::221",
     "src/codex_plugin_scanner/guard/daemon/diagnostics.py::DaemonDiagnostics.__init__::Exception::100",
     "src/codex_plugin_scanner/guard/daemon/diagnostics.py::DaemonDiagnostics._run::Exception::170",
