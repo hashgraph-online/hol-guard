@@ -1,4 +1,4 @@
-"""Watch/observe PreToolUse must not harness-deny when native blocks or is missing."""
+"""Watch/observe preserves native authority and fail-safe behavior."""
 
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ def test_hook_worker_watch_native_allow_still_allows(
     assert result["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
-def test_hook_worker_watch_posttool_native_unavailable_allows(
+def test_hook_worker_watch_posttool_native_unavailable_fails_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -149,5 +149,5 @@ def test_hook_worker_watch_posttool_native_unavailable_allows(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["policy_action"] == "allow"
+    assert result["policy_action"] == "block"
     assert result["reason_code"] == "native_post_tool_unavailable"
