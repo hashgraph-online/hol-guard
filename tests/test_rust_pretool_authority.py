@@ -320,7 +320,11 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "force",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -350,7 +354,11 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -380,6 +388,10 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "off",
+    )
+    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
         lambda *_args, **_kwargs: None,
     )
@@ -399,13 +411,49 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
         )
 
 
-def test_hook_worker_leaves_non_command_pretool_to_cli(tmp_path: Path) -> None:
+def test_hook_worker_fails_closed_for_non_command_pretool_without_native_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    with pytest.raises(HookWorkerUnsupported):
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/foo.ts"}},
+        params={},
+        default_harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "native_pre_tool_unavailable"
+
+
+def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: pytest.fail("out-of-scope event reached the native edge"),
+    )
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    with pytest.raises(HookWorkerUnsupported, match="fast path supports"):
         worker.review_http_payload(
-            payload={"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/foo.ts"}},
+            payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
             params={},
-            default_harness="pi",
+            default_harness="claude-code",
             home_dir=tmp_path / "home",
             guard_home=tmp_path / "guard-home",
             workspace=tmp_path / "workspace",

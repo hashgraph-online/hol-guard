@@ -1,4 +1,4 @@
-"""Python transport for Rust PreToolUse authority.
+"""Mechanical Python launcher for Rust PreToolUse authority.
 
 This module validates and returns the native decision. It does not parse,
 classify, or lower the semantic result. Command-model shadow comparison stays
@@ -8,24 +8,20 @@ in native_command_model and is not a PreToolUse authority.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
-from .codex_hook_launch_runtime import run_isolated_hook_process
+from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
-from .native_runtime_resident import resident_native_request
 from .native_runtime_resilience import (
-    native_oneshot_lease,
-    native_record_oneshot_failure,
-    native_record_oneshot_success,
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
 )
 
 _MAX_REQUEST_BYTES = 64 * 1024
-_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 
@@ -79,6 +75,10 @@ def review_pre_tool_native(
         if status.mode in {"auto", "force"}:
             return record_native_hook_result("native_fail_safe", None)
         return None
+    timeout_seconds = min(timeout_seconds, 1.0)
+    deadline_started = time.monotonic()
+    deadline_monotonic = deadline_started + timeout_seconds
+    deadline_budget_ms = max(1, min(9_000, int(timeout_seconds * 1_000)))
     request = {
         "command": command,
         "dialect": "posix",
@@ -88,21 +88,23 @@ def review_pre_tool_native(
     encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(encoded) > _MAX_REQUEST_BYTES:
         return record_native_hook_result("native_fail_safe", None)
-    timeout_seconds = min(timeout_seconds, 1.0)
     environment = _isolated_environment()
     if _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
         resident = json.dumps(
-            {"operation": "pre_tool_use", "request": request},
+            {
+                "operation": "pre_tool_use",
+                "deadline_budget_ms": deadline_budget_ms,
+                "request": request,
+            },
             separators=(",", ":"),
             ensure_ascii=False,
         ).encode("utf-8")
-        output = resident_native_request(
+        output = native_resident_client_request(
             executable=status.identity.path,
-            identity_sha256=status.identity.sha256,
             guard_home=guard_home,
             environment=environment,
             payload=resident,
-            timeout_seconds=timeout_seconds,
+            deadline_monotonic=deadline_monotonic,
         )
         if output is not None:
             try:
@@ -121,37 +123,7 @@ def review_pre_tool_native(
             guard_home,
             reason="native_pre_tool_resident_unavailable",
         )
-    with native_oneshot_lease(status.identity.sha256, guard_home) as acquired:
-        if not acquired:
-            return record_native_hook_result("native_fail_safe", None)
-        result = run_isolated_hook_process(
-            (str(status.identity.path), "pre-tool", "--stdin"),
-            input_text=encoded.decode("utf-8"),
-            cwd=status.identity.path.parent,
-            environment=environment,
-            timeout_seconds=timeout_seconds,
-            output_limit=_MAX_RESPONSE_BYTES,
-        )
-        if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
-            native_record_oneshot_failure(
-                status.identity.sha256,
-                guard_home,
-                reason="native_pre_tool_oneshot_failed",
-            )
-            return record_native_hook_result("native_fail_safe", None)
-        try:
-            decoded = _decode_pre_tool(json.loads(result.stdout), command=command)
-        except json.JSONDecodeError:
-            decoded = None
-        if decoded is None:
-            native_record_oneshot_failure(
-                status.identity.sha256,
-                guard_home,
-                reason="native_pre_tool_oneshot_invalid",
-            )
-            return record_native_hook_result("native_fail_safe", None)
-        native_record_oneshot_success(status.identity.sha256, guard_home)
-        return record_native_hook_result("native_oneshot", decoded)
+    return record_native_hook_result("native_fail_safe", None)
 
 
 def native_pre_tool_policy_floor(

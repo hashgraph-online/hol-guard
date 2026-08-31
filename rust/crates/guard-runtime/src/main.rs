@@ -1,22 +1,25 @@
 #![forbid(unsafe_code)]
 
+mod edge;
 mod hardening;
+mod managed_resident;
 mod oneshot;
+mod resident_client;
+mod resident_state;
+mod resident_state_encoding;
+mod strict_json;
 
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
-    NativeHookRequestV1, RuntimeCapabilitiesV1, MAX_NATIVE_REQUEST_BYTES,
-    MAX_NATIVE_RESPONSE_BYTES, NATIVE_PROTOCOL_VERSION,
+    GuardHookEnvelopeV2, NativeHookRequestV1, RuntimeCapabilitiesV1, GUARD_HOOK_ENVELOPE_V2_SCHEMA,
+    MAX_NATIVE_REQUEST_BYTES, MAX_NATIVE_RESPONSE_BYTES, NATIVE_PROTOCOL_VERSION,
 };
 use guard_hook_core::review_post_tool;
-use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
-use serde_json::{Map, Number, Value};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 use std::env;
-use std::fmt;
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
@@ -45,13 +48,11 @@ const AUTH_WORKERS: usize = 4;
 const AUTH_QUEUE_CAPACITY: usize = 16;
 const EVALUATION_WORKERS: usize = 16;
 const EVALUATION_QUEUE_CAPACITY: usize = 32;
+const AUTHENTICATED_PREFETCH_BYTES: usize = 64 * 1024;
 const AUTH_TIMEOUT: Duration = Duration::from_millis(250);
 const HEADER_TIMEOUT: Duration = Duration::from_millis(250);
 const PAYLOAD_TIMEOUT: Duration = Duration::from_secs(2);
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(1);
-const MAX_JSON_DEPTH: usize = 32;
-const MAX_JSON_COLLECTION_ITEMS: usize = 4_096;
-const MAX_JSON_STRING_BYTES: usize = 1024 * 1024;
 const SERVER_PROOF_LABEL: &[u8] = b"hol-guard-resident-server-v1\0";
 const CLIENT_PROOF_LABEL: &[u8] = b"hol-guard-resident-client-v1\0";
 #[cfg(unix)]
@@ -63,18 +64,21 @@ enum ResidentOperationV1 {
     CommandModel(CommandModelRequestV1),
     PreToolUse(CommandModelRequestV1),
     Health(Value),
+    Shutdown(Value),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ResidentRequestV1 {
     Operation(ResidentOperationV1),
+    Edge(GuardHookEnvelopeV2),
     Hook(NativeHookRequestV1),
 }
 
 trait ResidentStream: Read + Write + Send {
     fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
     fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
+    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize>;
     fn configure_low_latency(&self) -> io::Result<()> {
         Ok(())
     }
@@ -87,6 +91,17 @@ impl ResidentStream for TcpStream {
 
     fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
         TcpStream::set_write_timeout(self, timeout)
+    }
+
+    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        self.set_nonblocking(true)?;
+        let result = self.read(output);
+        let restore = self.set_nonblocking(false);
+        match (result, restore) {
+            (Err(error), Ok(())) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
+            (result, Ok(())) => result,
+            (_, Err(error)) => Err(error),
+        }
     }
 
     fn configure_low_latency(&self) -> io::Result<()> {
@@ -103,6 +118,17 @@ impl ResidentStream for std::os::unix::net::UnixStream {
     fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
         std::os::unix::net::UnixStream::set_write_timeout(self, timeout)
     }
+
+    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        self.set_nonblocking(true)?;
+        let result = self.read(output);
+        let restore = self.set_nonblocking(false);
+        match (result, restore) {
+            (Err(error), Ok(())) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
+            (result, Ok(())) => result,
+            (_, Err(error)) => Err(error),
+        }
+    }
 }
 
 type BoxedResidentStream = Box<dyn ResidentStream>;
@@ -112,131 +138,8 @@ struct PendingRequest {
     request_id: [u8; FRAME_REQUEST_ID_BYTES],
     request_digest: [u8; FRAME_DIGEST_BYTES],
     length: usize,
+    payload_prefix: Vec<u8>,
     accepted_at: Instant,
-}
-
-#[derive(Clone, Copy)]
-struct StrictJsonSeed {
-    depth: usize,
-}
-
-impl<'de> DeserializeSeed<'de> for StrictJsonSeed {
-    type Value = Value;
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        if self.depth > MAX_JSON_DEPTH {
-            return Err(serde::de::Error::custom("native_json_depth_exceeded"));
-        }
-        deserializer.deserialize_any(StrictJsonVisitor { depth: self.depth })
-    }
-}
-
-struct StrictJsonVisitor {
-    depth: usize,
-}
-
-impl<'de> Visitor<'de> for StrictJsonVisitor {
-    type Value = Value;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("bounded JSON without duplicate object keys")
-    }
-
-    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E> {
-        Ok(Value::Bool(value))
-    }
-
-    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
-        Ok(Value::Number(Number::from(value)))
-    }
-
-    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
-        Ok(Value::Number(Number::from(value)))
-    }
-
-    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Number::from_f64(value)
-            .map(Value::Number)
-            .ok_or_else(|| E::custom("native_json_number_invalid"))
-    }
-
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        self.visit_string(value.to_owned())
-    }
-
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        if value.len() > MAX_JSON_STRING_BYTES {
-            return Err(E::custom("native_json_string_too_large"));
-        }
-        Ok(Value::String(value))
-    }
-
-    fn visit_none<E>(self) -> Result<Self::Value, E> {
-        Ok(Value::Null)
-    }
-
-    fn visit_unit<E>(self) -> Result<Self::Value, E> {
-        Ok(Value::Null)
-    }
-
-    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        StrictJsonSeed { depth: self.depth }.deserialize(deserializer)
-    }
-
-    fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
-    where
-        A: SeqAccess<'de>,
-    {
-        let mut output = Vec::new();
-        while let Some(value) = sequence.next_element_seed(StrictJsonSeed {
-            depth: self.depth + 1,
-        })? {
-            if output.len() >= MAX_JSON_COLLECTION_ITEMS {
-                return Err(serde::de::Error::custom("native_json_array_too_wide"));
-            }
-            output.push(value);
-        }
-        Ok(Value::Array(output))
-    }
-
-    fn visit_map<A>(self, mut object: A) -> Result<Self::Value, A::Error>
-    where
-        A: MapAccess<'de>,
-    {
-        let mut output = Map::new();
-        let mut seen = HashSet::new();
-        while let Some(key) = object.next_key::<String>()? {
-            if key.len() > MAX_JSON_STRING_BYTES {
-                return Err(serde::de::Error::custom("native_json_key_too_large"));
-            }
-            if !seen.insert(key.clone()) {
-                return Err(serde::de::Error::custom("native_json_duplicate_key"));
-            }
-            if output.len() >= MAX_JSON_COLLECTION_ITEMS {
-                return Err(serde::de::Error::custom("native_json_object_too_wide"));
-            }
-            let value = object.next_value_seed(StrictJsonSeed {
-                depth: self.depth + 1,
-            })?;
-            output.insert(key, value);
-        }
-        Ok(Value::Object(output))
-    }
 }
 
 fn capabilities() -> RuntimeCapabilitiesV1 {
@@ -254,6 +157,9 @@ fn capabilities() -> RuntimeCapabilitiesV1 {
         "resident-command-model-shadow-v1".into(),
         "pre-tool-command-authority-v1".into(),
         "policy-snapshot-v1".into(),
+        "hook-envelope-v2".into(),
+        "native-resident-client-v1".into(),
+        "native-resident-lifecycle-v1".into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
@@ -284,24 +190,20 @@ fn read_stdin_bounded() -> Result<Vec<u8>, String> {
 }
 
 pub(crate) fn strict_json_value(bytes: &[u8]) -> Result<Value, String> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let value = StrictJsonSeed { depth: 0 }
-        .deserialize(&mut deserializer)
-        .map_err(|_| "native_request_invalid_json".to_owned())?;
-    deserializer
-        .end()
-        .map_err(|_| "native_request_trailing_json".to_owned())?;
-    Ok(value)
+    strict_json::parse(bytes)
 }
 
 fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value = strict_json_value(bytes)?;
-    if value.get("operation").is_none() {
+    if value.get("operation").is_none()
+        && value.get("schema").and_then(Value::as_str) != Some(GUARD_HOOK_ENVELOPE_V2_SCHEMA)
+    {
         oneshot::validate_request_policy_snapshot(&value)?;
     }
     let request: ResidentRequestV1 = serde_json::from_value(value)
         .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
     match request {
+        ResidentRequestV1::Edge(request) => edge::evaluate_envelope(request),
         ResidentRequestV1::Operation(ResidentOperationV1::CommandModel(request)) => {
             oneshot::evaluate_command_model_request(&request)
         }
@@ -313,6 +215,10 @@ fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
                 "status": "ready",
                 "protocol_version": RESIDENT_PROTOCOL_VERSION,
             }))
+        }
+        ResidentRequestV1::Operation(ResidentOperationV1::Shutdown(_request)) => {
+            managed_resident::request_shutdown();
+            encode_response(&serde_json::json!({"status": "stopping"}))
         }
         ResidentRequestV1::Hook(request) => encode_response(&review_post_tool(&request)),
     }
@@ -444,6 +350,7 @@ fn read_request_header(mut stream: BoxedResidentStream) -> Result<PendingRequest
         request_id,
         request_digest,
         length,
+        payload_prefix: Vec::new(),
         accepted_at: Instant::now(),
     })
 }
@@ -491,8 +398,14 @@ fn handle_pending_request(mut pending: PendingRequest) {
     let _ = pending
         .stream
         .set_resident_read_timeout(Some(PAYLOAD_TIMEOUT));
+    let prefix_length = pending.payload_prefix.len();
     let mut request = vec![0u8; pending.length];
-    let response = if pending.stream.read_exact(&mut request).is_err() {
+    request[..prefix_length].copy_from_slice(&pending.payload_prefix);
+    let response = if pending
+        .stream
+        .read_exact(&mut request[prefix_length..])
+        .is_err()
+    {
         error_response("native_frame_read_failed", false)
     } else {
         let digest = Sha256::digest(&request);
@@ -551,6 +464,21 @@ fn start_resident_workers(token: Arc<[u8; AUTH_TOKEN_BYTES]>) -> SyncSender<Boxe
             Ok(value) => value,
             Err(_) => return,
         };
+        pending
+            .payload_prefix
+            .resize(pending.length.min(AUTHENTICATED_PREFETCH_BYTES), 0);
+        let available = match pending
+            .stream
+            .try_read_available(&mut pending.payload_prefix)
+        {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+        pending.payload_prefix.truncate(available);
+        if available == pending.length {
+            handle_pending_request(pending);
+            return;
+        }
         match evaluation_sender.try_send(pending) {
             Ok(()) => {}
             Err(TrySendError::Full(returned)) => {
@@ -719,8 +647,9 @@ fn hex_nibble(value: u8) -> Option<u8> {
 fn read_resident_auth_token() -> Result<[u8; AUTH_TOKEN_BYTES], String> {
     let mut encoded = String::new();
     io::stdin()
+        .lock()
         .take((AUTH_TOKEN_BYTES * 2 + 2) as u64)
-        .read_to_string(&mut encoded)
+        .read_line(&mut encoded)
         .map_err(|error| hardening::read_error(&error, "native_resident_auth_read_failed"))?;
     let encoded = encoded.trim();
     if encoded.len() != AUTH_TOKEN_BYTES * 2 {
@@ -733,6 +662,17 @@ fn read_resident_auth_token() -> Result<[u8; AUTH_TOKEN_BYTES], String> {
         token[index] = (high << 4) | low;
     }
     Ok(token)
+}
+
+fn resident_stdin_liveness() -> Arc<std::sync::atomic::AtomicBool> {
+    let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let watcher_state = Arc::clone(&alive);
+    thread::spawn(move || {
+        let mut byte = [0u8; 1];
+        let _ = io::stdin().read(&mut byte);
+        watcher_state.store(false, std::sync::atomic::Ordering::Release);
+    });
+    alive
 }
 
 fn write_bytes_response(response: &[u8]) -> Result<(), String> {
@@ -767,6 +707,27 @@ fn run() -> Result<(), String> {
             let response = oneshot::evaluate_hook_bytes(&bytes)?;
             write_bytes_response(&response)
         }
+        [command, flag] if command == "hook-edge" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            let response = edge::evaluate_envelope_bytes(&bytes)?;
+            write_bytes_response(&response)
+        }
+        [command, flag, state_dir]
+            if matches!(command.as_str(), "hook-client" | "resident-client")
+                && flag == "--stdin" =>
+        {
+            let bytes = read_stdin_bounded()?;
+            let timeout = managed_resident::client_timeout(&bytes);
+            let response = managed_resident::client_request(
+                std::path::Path::new(state_dir),
+                &bytes,
+                timeout,
+            )?;
+            write_bytes_response(&response)
+        }
+        [command, flag, state_dir] if command == "resident-stop" && flag == "--state-dir" => {
+            managed_resident::stop_managed(std::path::Path::new(state_dir))
+        }
         [command, flag] if command == "command-model" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_command_model_bytes(&bytes)?;
@@ -781,8 +742,44 @@ fn run() -> Result<(), String> {
         [command, flag, address] if command == "serve" && flag == "--tcp-loopback" => {
             serve_loopback(address)
         }
+        [
+            command,
+            state_flag,
+            state_dir,
+            generation_flag,
+            generation,
+            owner_flag,
+            owner_process_id,
+            digest_flag,
+            digest,
+        ]
+            if command == "serve-managed"
+                && state_flag == "--state-dir"
+                && generation_flag == "--generation"
+                && owner_flag == "--owner-process-id"
+                && digest_flag == "--runtime-sha256" =>
+        {
+            managed_resident::serve_managed(
+                std::path::Path::new(state_dir),
+                managed_resident::parse_generation(generation)?,
+                managed_resident::parse_process_id(owner_process_id)?,
+                digest,
+            )
+        }
+        [command, state_flag, state_dir, generation_flag, generation, digest_flag, digest]
+            if command == "supervise-managed"
+                && state_flag == "--state-dir"
+                && generation_flag == "--generation"
+                && digest_flag == "--runtime-sha256" =>
+        {
+            managed_resident::supervise_managed(
+                std::path::Path::new(state_dir),
+                managed_resident::parse_generation(generation)?,
+                digest,
+            )
+        }
         _ => Err(
-            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT"
+            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | hook-edge --stdin | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --runtime-sha256 SHA"
                 .into(),
         ),
     }
@@ -837,13 +834,13 @@ mod tests {
     fn strict_json_rejects_deep_and_wide_values() {
         let deep = format!(
             "{}0{}",
-            "[".repeat(MAX_JSON_DEPTH + 2),
-            "]".repeat(MAX_JSON_DEPTH + 2)
+            "[".repeat(strict_json::TEST_MAX_JSON_DEPTH + 2),
+            "]".repeat(strict_json::TEST_MAX_JSON_DEPTH + 2)
         );
         assert!(strict_json_value(deep.as_bytes()).is_err());
         let wide = format!(
             "[{}]",
-            std::iter::repeat_n("0", MAX_JSON_COLLECTION_ITEMS + 1)
+            std::iter::repeat_n("0", strict_json::TEST_MAX_JSON_COLLECTION_ITEMS + 1)
                 .collect::<Vec<_>>()
                 .join(",")
         );

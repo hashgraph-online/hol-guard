@@ -31,7 +31,12 @@ def _stable_manifest(*, sha256: str, size: int) -> dict[str, object]:
     }
 
 
-def test_apply_installs_stable_sidecar_from_stable_tag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("include_alpha", [False, True])
+def test_apply_installs_stable_sidecar_from_stable_tag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    include_alpha: bool,
+) -> None:
     monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
     monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
@@ -48,7 +53,7 @@ def test_apply_installs_stable_sidecar_from_stable_tag(tmp_path: Path, monkeypat
     result = update_desktop_core.apply_desktop_core_update(
         current_version="3.0.0a239",
         target_version="3.0.7",
-        include_alpha=False,
+        include_alpha=include_alpha,
         fetch_bytes=fetch_bytes,
     )
 
@@ -75,7 +80,7 @@ def test_stable_channel_rejects_prerelease_targets(
     assert error.value.reason_code == "desktop_core_channel_unsupported"
 
 
-def test_pypi_versions_separate_stable_and_alpha() -> None:
+def test_pypi_versions_stable_channel_excludes_alpha_and_alpha_channel_includes_stable() -> None:
     payload = {
         "releases": {
             "3.0.7": [{"yanked": False}],
@@ -86,7 +91,15 @@ def test_pypi_versions_separate_stable_and_alpha() -> None:
         }
     }
     assert update_desktop_core.pypi_desktop_core_versions(payload, include_alpha=False) == ["3.0.7"]
-    assert update_desktop_core.pypi_desktop_core_versions(payload, include_alpha=True) == ["3.0.8a1"]
+    assert update_desktop_core.pypi_desktop_core_versions(payload, include_alpha=True) == ["3.0.7", "3.0.8a1"]
+    assert (
+        update_desktop_core.select_desktop_core_latest(
+            "3.0.6",
+            ["3.0.1a2", "3.0.7"],
+            include_alpha=True,
+        )
+        == "3.0.7"
+    )
 
 
 def test_status_migrates_embedded_alpha_core_to_stable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -110,6 +123,7 @@ def test_status_migrates_embedded_alpha_core_to_stable(monkeypatch: pytest.Monke
         }
     )
     monkeypatch.setattr(update_commands, "_version_check_payload", version_check)
+    monkeypatch.setattr(update_commands, "_last_pypi_payload", None)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_desktop_apply.desktop_core_updates_supported",
         lambda: True,
@@ -129,6 +143,7 @@ def test_status_migrates_embedded_alpha_core_to_stable(monkeypatch: pytest.Monke
 def test_status_supports_current_stable_core(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_desktop_core, "is_frozen_runtime", lambda: True)
     monkeypatch.setattr(update_commands, "_is_frozen_runtime", lambda: True)
+    monkeypatch.setattr(update_commands, "_last_pypi_payload", None)
     monkeypatch.setattr(update_commands, "_current_version", lambda: "3.0.7")
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
     monkeypatch.setattr(

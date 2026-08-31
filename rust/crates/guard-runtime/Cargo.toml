@@ -15,9 +15,20 @@ guard-contracts = { path = "../guard-contracts" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-rule-contract = { path = "../guard-rule-contract" }
+guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
+getrandom.workspace = true
+libc.workspace = true
+guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+sysinfo.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-permissions.workspace = true
 
 [lints]
 workspace = true
