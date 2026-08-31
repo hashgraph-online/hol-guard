@@ -183,12 +183,34 @@ def _write_generation_state(guard_home: Path, *, generation: int, policy_digest:
             temporary.unlink()
 
 
+def _initialized_generation_for_policy(guard_home: Path, policy_digest: str) -> int | None:
+    _private_guard_home(guard_home)
+    lock_path = guard_home / _LOCK_NAME
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(lock_path, flags)
+    except (FileNotFoundError, OSError):
+        return None
+    try:
+        if os.read(descriptor, 1) != b"1":
+            return None
+    finally:
+        os.close(descriptor)
+    current = _read_generation_state(guard_home)
+    if current is not None and current[1] == policy_digest:
+        return current[0]
+    return None
+
+
 def _generation_for_policy(
     guard_home: Path,
     policy_digest: str,
     *,
     deadline_monotonic: float | None,
 ) -> int:
+    initialized_generation = _initialized_generation_for_policy(guard_home, policy_digest)
+    if initialized_generation is not None:
+        return initialized_generation
     with _generation_lock(guard_home, deadline_monotonic=deadline_monotonic) as lock_descriptor:
         current = _read_generation_state(guard_home)
         if current is None:

@@ -23,14 +23,14 @@ between those commits.
 harness launcher or managed hook
   -> Python bridge: bounded stdin, daemon authentication, HTTP transport
   -> Python daemon ingress: JSON decode, path/query projection, deadline
-  -> Python HookWorker: harness/event/payload-kind/action extraction
+  -> Python HookWorker: mechanical raw-envelope launch
      -> command PreToolUse
-        -> Python resident client/supervisor
-        -> Rust command parser, classifier, policy floor, decision
+        -> Rust edge normalization and resident client/supervisor
+        -> Rust command extraction, parser, classifier, policy floor, decision
         -> Python harness response rendering
      -> PostToolUse
         -> Python config load and policy-snapshot construction
-        -> Python resident client/supervisor
+        -> Rust edge normalization and resident client/supervisor
         -> Rust output traversal, source I/O, hashing, scanning, policy, decision
         -> Python harness response rendering
      -> non-command/review/off/shadow/unsupported
@@ -45,10 +45,10 @@ harness launcher or managed hook
 | Harness launchers | Python transport | Minimal launcher and mechanical serialization |
 | Harness event/action normalization | Python semantic | Rust raw-envelope normalization |
 | HTTP ingress | Python transport | Authentication and byte transport only |
-| Hook request projection | Python semantic | Rust raw-envelope edge |
+| Hook request projection | Rust semantic for auto/force; Python compatibility for off/shadow | Rust raw-envelope edge |
 | CLI hook evaluation | Python semantic | Presentation and orchestration only |
 | Python reference oracle | Python semantic | Differential tests only |
-| Resident client and supervisor | Python transport | Rust native edge and launcher |
+| Resident client and supervisor | Rust transport/lifecycle with a minimal Python process launcher | Rust native edge and launcher |
 | Policy and approval control | Python control | Snapshot publication and presentation only |
 | Evidence persistence | Persistence-only | Non-blocking receipt consumption |
 | Native command, policy, rules, runtime, scanner | Rust semantic | Complete supported hook authority |
@@ -67,8 +67,13 @@ Current material gaps include:
 - Non-command PreToolUse and native `review` escape through Python CLI handling.
 - OpenCode, Grok, Hermes, OpenClaw, ZCode, Gemini, and Antigravity expose partial
   or detection-only production hook surfaces.
-- Python owns resident client authentication, framing, lifecycle, restart, and
-  bounded one-shot recovery.
+- The native client now owns authentication, framing, runtime-digest-keyed
+  discovery, process and peer identity checks, bounded generation retirement,
+  restart budget, circuit breaking, supervisor liveness, and shutdown. Unix
+  uses owner-private sockets; Windows protects the token and state with an
+  owner-and-SYSTEM-only DACL, verifies the exact package process, and mutually
+  authenticates loopback frames. The legacy Python resident module is not
+  reachable from the ordinary graph.
 - Python constructs policy snapshots per PostToolUse request.
 - Rust has no request-bound approval artifact or replay validation.
 

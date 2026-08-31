@@ -1,4 +1,4 @@
-"""Watch/observe PreToolUse must not harness-deny when native blocks or is missing."""
+"""Watch/observe preserves native authority and fail-safe behavior."""
 
 from __future__ import annotations
 
@@ -53,8 +53,22 @@ def test_hook_worker_watch_native_block_uses_cli_recording(
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
-        lambda *_args, **_kwargs: _native_block("rm -rf /"),
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    captured: dict[str, object] = {}
+
+    def native_block_edge(*_args: object, **kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {
+            "event_name": "PreToolUse",
+            "harness": "cursor",
+            "result": _native_block("rm -rf /"),
+        }
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        native_block_edge,
     )
     worker = HookWorker(store=GuardStore(guard_home))
     with pytest.raises(HookWorkerUnsupported, match="CLI approval coordination"):
@@ -66,6 +80,7 @@ def test_hook_worker_watch_native_block_uses_cli_recording(
             guard_home=guard_home,
             workspace=tmp_path / "workspace",
         )
+    assert captured["observe_mode"] is True
 
 
 def test_hook_worker_watch_native_unavailable_uses_cli_recording(
@@ -75,7 +90,11 @@ def test_hook_worker_watch_native_unavailable_uses_cli_recording(
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -106,8 +125,16 @@ def test_hook_worker_watch_native_allow_still_allows(
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
-        lambda *_args, **_kwargs: _native_allow("pwd"),
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: {
+            "event_name": "PreToolUse",
+            "harness": "codex",
+            "result": _native_allow("pwd"),
+        },
     )
     worker = HookWorker(store=GuardStore(guard_home))
     result = worker.review_http_payload(
@@ -122,7 +149,7 @@ def test_hook_worker_watch_native_allow_still_allows(
     assert result["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
-def test_hook_worker_watch_posttool_native_unavailable_allows(
+def test_hook_worker_watch_posttool_native_unavailable_fails_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -149,5 +176,5 @@ def test_hook_worker_watch_posttool_native_unavailable_allows(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["policy_action"] == "allow"
+    assert result["policy_action"] == "block"
     assert result["reason_code"] == "native_post_tool_unavailable"

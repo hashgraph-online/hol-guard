@@ -179,16 +179,27 @@ def test_hook_worker_auto_is_native_first(tmp_path: Path, monkeypatch: pytest.Mo
     worker = HookWorker(store=store)
     native_calls = 0
 
-    def fake_native(*args: object, **kwargs: object) -> HookReviewResponse:
+    def fake_native(*args: object, **kwargs: object) -> dict[str, object]:
         nonlocal native_calls
         native_calls += 1
-        return _allow_response("native_allow")
+        return {
+            "schema": "guard-hook-edge-result.v2",
+            "authority": "rust",
+            "harness": "claude-code",
+            "event_name": "PostToolUse",
+            "payload_kind": "inline",
+            "result": {
+                "decision": "allow",
+                "model_output_action": "allow_original",
+                "reason_code": "native_allow",
+            },
+        }
 
     def fail_python(*args: object, **kwargs: object) -> HookReviewResponse:
         raise AssertionError("Python engine should not run after an authoritative native result")
 
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native", fake_native)
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", fake_native)
     monkeypatch.setattr(worker.engine, "review", fail_python)
 
     result = worker.review_http_payload(
@@ -224,7 +235,7 @@ def test_hook_worker_auto_fails_closed_when_native_unavailable(tmp_path: Path, m
         ),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(worker.engine, "review", fake_python)

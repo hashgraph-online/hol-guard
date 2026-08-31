@@ -6,24 +6,40 @@ on:
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
+      - "src/codex_plugin_scanner/guard/native_hook_edge.py"
+      - "src/codex_plugin_scanner/guard/native_command_model.py"
+      - "src/codex_plugin_scanner/guard/native_policy_snapshot.py"
+      - "src/codex_plugin_scanner/guard/native_pretool.py"
+      - "src/codex_plugin_scanner/guard/native_resident_client.py"
       - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
       - "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py"
       - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
       - "tests/test_guard_native_runtime.py"
+      - "tests/test_native_hook_edge.py"
+      - "tests/test_rust_posttool_authority.py"
       - "ci/native_runtime/test_guard_native_runtime_binary.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
+      - "ci/native_runtime/test_native_hook_client.py"
       - ".github/workflows/rust-runtime.yml"
   pull_request:
     branches: [main]
     paths:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_runtime.py"
+      - "src/codex_plugin_scanner/guard/native_hook_edge.py"
+      - "src/codex_plugin_scanner/guard/native_command_model.py"
+      - "src/codex_plugin_scanner/guard/native_policy_snapshot.py"
+      - "src/codex_plugin_scanner/guard/native_pretool.py"
+      - "src/codex_plugin_scanner/guard/native_resident_client.py"
       - "src/codex_plugin_scanner/guard/native_runtime_resident.py"
       - "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py"
       - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
       - "tests/test_guard_native_runtime.py"
+      - "tests/test_native_hook_edge.py"
+      - "tests/test_rust_posttool_authority.py"
       - "ci/native_runtime/test_guard_native_runtime_binary.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
+      - "ci/native_runtime/test_native_hook_client.py"
       - ".github/workflows/rust-runtime.yml"
   workflow_dispatch:
 
@@ -88,22 +104,42 @@ jobs:
         run: >-
           uv run --no-sync python -m ruff check
           src/codex_plugin_scanner/guard/native_runtime.py
+          src/codex_plugin_scanner/guard/native_command_model.py
+          src/codex_plugin_scanner/guard/native_policy_snapshot.py
+          src/codex_plugin_scanner/guard/native_hook_edge.py
+          src/codex_plugin_scanner/guard/native_pretool.py
+          src/codex_plugin_scanner/guard/native_resident_client.py
           src/codex_plugin_scanner/guard/native_runtime_resident.py
+          src/codex_plugin_scanner/guard/daemon/hook_worker.py
           tests/test_guard_native_runtime.py
+          tests/test_native_hook_edge.py
+          tests/test_rust_posttool_authority.py
           ci/native_runtime/test_guard_native_runtime_binary.py
           ci/native_runtime/test_guard_native_runtime_resident.py
+          ci/native_runtime/test_native_hook_client.py
       - name: Format native Python boundary
         run: >-
           uv run --no-sync python -m ruff format --check
           src/codex_plugin_scanner/guard/native_runtime.py
+          src/codex_plugin_scanner/guard/native_command_model.py
+          src/codex_plugin_scanner/guard/native_policy_snapshot.py
+          src/codex_plugin_scanner/guard/native_hook_edge.py
+          src/codex_plugin_scanner/guard/native_pretool.py
+          src/codex_plugin_scanner/guard/native_resident_client.py
           src/codex_plugin_scanner/guard/native_runtime_resident.py
+          src/codex_plugin_scanner/guard/daemon/hook_worker.py
           tests/test_guard_native_runtime.py
+          tests/test_native_hook_edge.py
+          tests/test_rust_posttool_authority.py
           ci/native_runtime/test_guard_native_runtime_binary.py
           ci/native_runtime/test_guard_native_runtime_resident.py
+          ci/native_runtime/test_native_hook_client.py
       - name: Run native Python boundary tests
         run: >-
           uv run --no-sync pytest
           tests/test_guard_native_runtime.py
+          tests/test_native_hook_edge.py
+          tests/test_rust_posttool_authority.py
           ci/native_runtime/test_guard_native_runtime_resident.py
           tests/test_guard_hook_process_deadline_contract.py
           --tb=short
@@ -139,4 +175,8 @@ jobs:
         env:
           HOL_GUARD_NATIVE: force
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
-        run: uv run --no-sync pytest ci/native_runtime/test_guard_native_runtime_binary.py --tb=short
+        run: >-
+          uv run --no-sync pytest
+          ci/native_runtime/test_guard_native_runtime_binary.py
+          ci/native_runtime/test_native_hook_client.py
+          --tb=short

@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import urllib.error
 import urllib.parse
@@ -17,14 +19,12 @@ from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
 )
 from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_health,
     native_runtime_status,
     review_post_tool_native,
-)
-from codex_plugin_scanner.guard.native_runtime_resident import (
-    close_resident_native_runtimes,
 )
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -69,6 +69,28 @@ def _require(condition: bool, detail: object) -> None:
     """Fail the CI probe even when Python assertions are optimized out."""
     if not condition:
         raise RuntimeError(f"native_default_auto_probe_failed: {detail}")
+
+
+def _native_state_files(guard_home: Path) -> list[Path]:
+    return list((guard_home / "native-runtime").glob("resident-v3-*/generation-*.json"))
+
+
+def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
+    try:
+        result = subprocess.run(
+            (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
+            check=False,
+            capture_output=True,
+            timeout=2,
+        )
+    except subprocess.TimeoutExpired:
+        print("native_default_auto_probe_cleanup_timeout", file=sys.stderr)
+        return
+    if result.returncode != 0:
+        print(
+            f"native_default_auto_probe_cleanup_failed: returncode={result.returncode}",
+            file=sys.stderr,
+        )
 
 
 def _ownership_routes() -> dict[str, dict[str, str]]:
@@ -211,7 +233,9 @@ def main(*, json_path: Path | None = None) -> int:
     _require(status.mode == "auto", status)
     _require(status.available and status.compatible, status)
     _require(status.reason == "native_ready", status)
-    _require(status.identity is not None, status)
+    identity = status.identity
+    if identity is None:
+        raise RuntimeError(f"native_default_auto_probe_failed: {status}")
     capabilities = status.capabilities
     if capabilities is None:
         raise RuntimeError(f"native_default_auto_probe_failed: {status}")
@@ -224,7 +248,9 @@ def main(*, json_path: Path | None = None) -> int:
                 observe_mode=False,
             )
             if clean is None:
-                raise RuntimeError("native_default_auto_probe_failed: clean response missing")
+                raise RuntimeError(
+                    f"native_default_auto_probe_failed: clean response missing: {native_resident_client_failure_code()}"
+                )
             _require(clean.decision == "allow", clean)
             _require(clean.reason_code == "output_scan_allow", clean)
 
@@ -242,10 +268,11 @@ def main(*, json_path: Path | None = None) -> int:
             _require(health.reason == "native_ready", health)
             _require(health.resident_failures == 0, health)
             _require(health.oneshot_failures == 0, health)
-            _require(health.starts == 1, health)
+            _require(len(_native_state_files(root / "guard-home")) == 1, "native generation was not reused")
             installed_corpus = _installed_hook_corpus(root)
         finally:
-            close_resident_native_runtimes()
+            for guard_home in (root / "guard-home", root / "hook-home"):
+                _stop_native_runtime(identity.path, guard_home)
 
     os.environ["HOL_GUARD_NATIVE"] = "off"
     try:

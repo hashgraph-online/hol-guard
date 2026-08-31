@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -12,10 +13,6 @@ from codex_plugin_scanner.guard.native_command_model import (
     review_command_model_native,
 )
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
-from codex_plugin_scanner.guard.native_runtime_resident import (
-    close_resident_native_runtimes,
-    resident_service_starts,
-)
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="resident native service is POSIX-only in this wave")
 
@@ -32,6 +29,19 @@ def _runtime_from_environment() -> Path:
     value = os.environ.get("HOL_GUARD_NATIVE_BINARY")
     assert value, "HOL_GUARD_NATIVE_BINARY is required for resident integration"
     return Path(value).resolve(strict=True)
+
+
+def _native_state_files(guard_home: Path) -> list[Path]:
+    return list((guard_home / "native-runtime").glob("resident-v3-*/generation-*.json"))
+
+
+def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
+    subprocess.run(
+        (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
+        check=False,
+        capture_output=True,
+        timeout=2,
+    )
 
 
 def _exact_payload() -> dict[str, object]:
@@ -143,7 +153,6 @@ def test_command_model_decoder_rejects_inconsistent_segments() -> None:
 def test_command_model_reuses_version_matched_resident_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = _runtime_from_environment()
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
-    close_resident_native_runtimes()
     with tempfile.TemporaryDirectory(prefix="hgr-", dir="/tmp") as short_tmp:
         guard_home = Path(short_tmp) / "guard-home"
         guard_home.mkdir(mode=0o700)
@@ -161,23 +170,15 @@ def test_command_model_reuses_version_matched_resident_runtime(monkeypatch: pyte
             assert status.identity is not None
             assert status.capabilities is not None
             assert "resident-command-model-shadow-v1" in status.capabilities.features
-            assert (
-                resident_service_starts(
-                    executable=runtime,
-                    identity_sha256=status.identity.sha256,
-                    guard_home=guard_home,
-                )
-                == 1
-            )
+            assert len(_native_state_files(guard_home)) == 1
         finally:
-            close_resident_native_runtimes()
+            _stop_native_runtime(runtime, guard_home)
 
 
 def test_complex_command_remains_non_authoritative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(mode=0o700)
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
-    close_resident_native_runtimes()
     try:
         model = review_command_model_native("echo $(uname) > out.txt", guard_home=guard_home)
         assert model is not None
@@ -185,7 +186,7 @@ def test_complex_command_remains_non_authoritative(tmp_path: Path, monkeypatch: 
         assert model["segments"] == []
         assert model["uncertainty_reason"]
     finally:
-        close_resident_native_runtimes()
+        _stop_native_runtime(_runtime_from_environment(), guard_home)
 
 
 def test_command_model_bridge_is_disabled_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
