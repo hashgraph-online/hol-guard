@@ -166,9 +166,7 @@ def test_network_status_client_types_truncated_body_as_transport_failure(
     monkeypatch.setattr(
         urllib.request,
         "urlopen",
-        lambda _request, *, timeout: _RawResponse(
-            read_error=http.client.IncompleteRead(b"private partial body", 100)
-        ),
+        lambda _request, *, timeout: _RawResponse(read_error=http.client.IncompleteRead(b"private partial body", 100)),
     )
     with pytest.raises(GuardDaemonTransportError, match="truncated") as error:
         client.network_status()
