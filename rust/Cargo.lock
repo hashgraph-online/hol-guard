@@ -191,6 +191,7 @@ dependencies = [
  "guard-hook-core",
  "guard-policy-snapshot",
  "guard-rule-contract",
+ "guard-secure-fs",
  "libc",
  "nix",
  "serde",

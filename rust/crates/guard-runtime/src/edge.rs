@@ -167,7 +167,8 @@ fn validate_envelope(envelope: &GuardHookEnvelopeV2) -> Result<(), String> {
         bounded_nonempty(path, MAX_PATH_BYTES, "native_hook_source_metadata_invalid")?;
     }
     crate::oneshot::validate_request_policy_snapshot(&serde_json::json!({
-        "policy_snapshot": envelope.policy_snapshot
+        "guard_home": envelope.source.guard_home,
+        "policy_snapshot": envelope.policy_snapshot,
     }))
 }
 
@@ -227,6 +228,21 @@ mod tests {
 
     fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
         let digest = "a".repeat(64);
+        let guard_home = std::env::temp_dir().join(format!(
+            "hol-guard-native-edge-generation-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&guard_home).expect("create edge generation fixture");
+        std::fs::write(
+            guard_home.join("native-policy-generation.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema": "hol-guard-native-policy-generation.v1",
+                "generation": 1,
+                "policy_digest": digest.clone(),
+            }))
+            .expect("encode edge generation fixture"),
+        )
+        .expect("write edge generation fixture");
         GuardHookEnvelopeV2 {
             schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
             request_id: Some("edge-test".to_owned()),
@@ -246,7 +262,7 @@ mod tests {
             source: guard_contracts::GuardHookSourceMetadataV2 {
                 cwd: Some("/workspace".to_owned()),
                 home_dir: "/home/test".to_owned(),
-                guard_home: "/home/test/.hol-guard".to_owned(),
+                guard_home: guard_home.to_string_lossy().into_owned(),
                 source_ref_external_allowed: false,
             },
         }

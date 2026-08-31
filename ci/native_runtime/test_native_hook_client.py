@@ -48,6 +48,19 @@ def _rule_digest(runtime: Path) -> str:
 
 
 def _request(runtime: Path, root: Path, *, command: str = "pwd") -> bytes:
+    generation_state = root / "native-policy-generation.json"
+    generation_state.write_text(
+        json.dumps(
+            {
+                "schema": "hol-guard-native-policy-generation.v1",
+                "generation": 1,
+                "policy_digest": "a" * 64,
+            },
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    generation_state.chmod(0o600)
     return json.dumps(
         {
             "schema": "guard-hook-envelope.v2",

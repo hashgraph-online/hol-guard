@@ -9,8 +9,8 @@ mod resident_state;
 
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
-    GuardHookEnvelopeV2, NativeHookRequestV1, RuntimeCapabilitiesV1, MAX_NATIVE_REQUEST_BYTES,
-    MAX_NATIVE_RESPONSE_BYTES, NATIVE_PROTOCOL_VERSION,
+    GuardHookEnvelopeV2, NativeHookRequestV1, RuntimeCapabilitiesV1, GUARD_HOOK_ENVELOPE_V2_SCHEMA,
+    MAX_NATIVE_REQUEST_BYTES, MAX_NATIVE_RESPONSE_BYTES, NATIVE_PROTOCOL_VERSION,
 };
 use guard_hook_core::review_post_tool;
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
@@ -329,7 +329,9 @@ pub(crate) fn strict_json_value(bytes: &[u8]) -> Result<Value, String> {
 
 fn evaluate_resident_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value = strict_json_value(bytes)?;
-    if value.get("operation").is_none() {
+    if value.get("operation").is_none()
+        && value.get("schema").and_then(Value::as_str) != Some(GUARD_HOOK_ENVELOPE_V2_SCHEMA)
+    {
         oneshot::validate_request_policy_snapshot(&value)?;
     }
     let request: ResidentRequestV1 = serde_json::from_value(value)

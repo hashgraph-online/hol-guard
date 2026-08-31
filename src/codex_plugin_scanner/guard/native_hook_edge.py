@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .native_policy_snapshot import NativePolicyGenerationError, native_policy_snapshot
+from .native_policy_snapshot import NativePolicySnapshotError, native_policy_snapshot
 from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, native_runtime_status
@@ -79,8 +79,9 @@ def review_raw_hook_native(
             rule_digest=status.capabilities.rule_digest,
             observe_mode=observe_mode,
             guard_home=guard_home,
+            deadline_monotonic=deadline,
         )
-    except NativePolicyGenerationError:
+    except (NativePolicySnapshotError, OSError):
         return record_native_hook_result("native_fail_safe", None)
     envelope = {
         "schema": "guard-hook-envelope.v2",

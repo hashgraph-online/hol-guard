@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
-from .native_policy_snapshot import NativePolicyGenerationError, native_policy_snapshot
+from .native_policy_snapshot import NativePolicySnapshotError, native_policy_snapshot
 from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
 from .native_runtime_resilience import (
@@ -574,12 +574,13 @@ def review_post_tool_native(
             None
             if status.capabilities is None
             else native_policy_snapshot(
+                guard_home=request.guard_home,
                 rule_digest=status.capabilities.rule_digest,
                 observe_mode=observe_mode,
-                guard_home=request.guard_home,
+                deadline_monotonic=request.deadline_monotonic,
             )
         )
-    except NativePolicyGenerationError:
+    except (NativePolicySnapshotError, OSError):
         return record_native_hook_result("native_fail_safe", None)
 
     envelope = {

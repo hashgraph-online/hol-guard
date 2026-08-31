@@ -214,23 +214,23 @@ def test_cli_off_mode_leaves_python_source_ref_path(tmp_path: Path, monkeypatch:
     assert result is None
 
 
-def test_native_policy_snapshot_generation_is_stable_for_same_policy() -> None:
+def test_native_policy_snapshot_generation_is_stable_for_same_policy(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot
 
     digest = "a" * 64
-    first = native_policy_snapshot(rule_digest=digest, observe_mode=False)
-    second = native_policy_snapshot(rule_digest=digest, observe_mode=False)
+    first = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
+    second = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
     assert first["generation"] == second["generation"]
     assert isinstance(first["generation"], int)
 
 
-def test_native_policy_snapshot_generation_advances_when_mode_changes() -> None:
+def test_native_policy_snapshot_generation_advances_when_mode_changes(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot
 
     digest = "a" * 64
-    enforce = native_policy_snapshot(rule_digest=digest, observe_mode=False)
-    observe = native_policy_snapshot(rule_digest=digest, observe_mode=True)
-    restored = native_policy_snapshot(rule_digest=digest, observe_mode=False)
+    enforce = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
+    observe = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=True)
+    restored = native_policy_snapshot(guard_home=tmp_path, rule_digest=digest, observe_mode=False)
     enforce_generation = enforce["generation"]
     observe_generation = observe["generation"]
     restored_generation = restored["generation"]
@@ -272,12 +272,12 @@ def test_native_policy_snapshot_generation_is_shared_across_processes(tmp_path: 
 
 def test_native_policy_snapshot_rejects_corrupt_shared_generation(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.native_policy_snapshot import (
-        NativePolicyGenerationError,
+        NativePolicySnapshotError,
         native_policy_snapshot,
     )
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     (guard_home / "native-policy-generation.json").write_text("{}", encoding="utf-8")
-    with pytest.raises(NativePolicyGenerationError, match="native_policy_generation_state_invalid"):
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_state_invalid"):
         native_policy_snapshot(rule_digest="a" * 64, observe_mode=False, guard_home=guard_home)

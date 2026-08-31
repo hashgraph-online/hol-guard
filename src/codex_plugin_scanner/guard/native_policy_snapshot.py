@@ -5,190 +5,231 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import tempfile
-import threading
+import secrets
+import stat
 import time
-from collections.abc import Generator
-from contextlib import contextmanager
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import BinaryIO, cast
 
 _STATE_SCHEMA = "hol-guard-native-policy-generation.v1"
+_STATE_NAME = "native-policy-generation.json"
+_LOCK_NAME = "native-policy-generation.lock"
 _MAX_STATE_BYTES = 4 * 1024
-_LOCK_TIMEOUT_SECONDS = 0.1
-_GENERATION_LOCK = threading.Lock()
-_current_policy_digest = ""
-_current_generation = 0
-_shared_generation_cache: dict[Path, tuple[str, int, tuple[int, int, int, int]]] = {}
+_MAX_GENERATION = (1 << 64) - 1
 
 
-class NativePolicyGenerationError(RuntimeError):
-    """Raised when the shared policy generation cannot be advanced safely."""
+class NativePolicySnapshotError(RuntimeError):
+    """Raised when the durable native-policy generation cannot be trusted."""
 
 
-def _process_local_generation(policy_digest: str) -> int:
-    global _current_generation, _current_policy_digest
-    if policy_digest == _current_policy_digest and _current_generation > 0:
-        return _current_generation
-    wall_clock_generation = max(1, time.time_ns() // 1_000)
-    _current_generation = max(wall_clock_generation, _current_generation + 1)
-    _current_policy_digest = policy_digest
-    return _current_generation
-
-
-def _lock_file(handle: BinaryIO) -> None:
-    if os.name == "nt":
-        import msvcrt
-
-        _ = handle.seek(0)
-        if not handle.read(1):
-            _ = handle.write(b"0")
-            handle.flush()
-        _ = handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        return
-    import fcntl
-
-    _ = fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-
-def _unlock_file(handle: BinaryIO) -> None:
-    if os.name == "nt":
-        import msvcrt
-
-        _ = handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        return
-    import fcntl
-
-    _ = fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-@contextmanager
-def _generation_file_lock(guard_home: Path) -> Generator[None, None, None]:
-    guard_home.mkdir(parents=True, exist_ok=True)
-    lock_path = guard_home / "native-policy-generation.lock"
-    if lock_path.is_symlink() or (lock_path.exists() and not lock_path.is_file()):
-        raise NativePolicyGenerationError("native_policy_generation_lock_invalid")
-    flags = os.O_RDWR | os.O_CREAT
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    descriptor = os.open(lock_path, flags, 0o600)
-    with os.fdopen(descriptor, "r+b", closefd=True) as handle:
-        deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
-        while True:
-            try:
-                _lock_file(handle)
-                break
-            except OSError as exc:
-                if time.monotonic() >= deadline:
-                    raise NativePolicyGenerationError("native_policy_generation_lock_busy") from exc
-                time.sleep(0.002)
-        try:
-            yield
-        finally:
-            _unlock_file(handle)
-
-
-def _read_generation_state(path: Path) -> tuple[str, int] | None:
-    if not path.exists():
-        return None
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > _MAX_STATE_BYTES:
-        raise NativePolicyGenerationError("native_policy_generation_state_invalid")
-    try:
-        payload = cast(object, json.loads(path.read_bytes()))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise NativePolicyGenerationError("native_policy_generation_state_invalid") from exc
-    if not isinstance(payload, dict) or set(payload) != {"schema", "policy_digest", "generation"}:
-        raise NativePolicyGenerationError("native_policy_generation_state_invalid")
-    typed_payload = cast(dict[str, object], payload)
-    policy_digest = typed_payload.get("policy_digest")
-    generation = typed_payload.get("generation")
-    if (
-        typed_payload.get("schema") != _STATE_SCHEMA
-        or not isinstance(policy_digest, str)
-        or len(policy_digest) != 64
-        or not isinstance(generation, int)
-        or isinstance(generation, bool)
-        or generation <= 0
-    ):
-        raise NativePolicyGenerationError("native_policy_generation_state_invalid")
-    return policy_digest, generation
-
-
-def _write_generation_state(path: Path, policy_digest: str, generation: int) -> None:
-    encoded = json.dumps(
-        {"schema": _STATE_SCHEMA, "policy_digest": policy_digest, "generation": generation},
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("ascii")
-    descriptor, temporary_name = tempfile.mkstemp(prefix=".native-policy-generation.", dir=path.parent)
-    temporary_path = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            if hasattr(os, "fchmod"):
-                os.fchmod(handle.fileno(), 0o600)
-            _ = handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary_path, path)
-        os.chmod(path, 0o600)
-    finally:
-        temporary_path.unlink(missing_ok=True)
-
-
-def _state_identity(path: Path) -> tuple[int, int, int, int]:
-    metadata = path.lstat()
-    if path.is_symlink() or not path.is_file() or metadata.st_size > _MAX_STATE_BYTES:
-        raise NativePolicyGenerationError("native_policy_generation_state_invalid")
-    return metadata.st_dev, metadata.st_ino, metadata.st_mtime_ns, metadata.st_size
-
-
-def _shared_generation(guard_home: Path, policy_digest: str) -> int:
-    cache_key = guard_home.absolute()
-    state_path = guard_home / "native-policy-generation.json"
-    try:
-        cached = _shared_generation_cache.get(cache_key)
-        if cached is not None and cached[0] == policy_digest and _state_identity(state_path) == cached[2]:
-            return cached[1]
-        with _generation_file_lock(guard_home):
-            previous = _read_generation_state(state_path)
-            if previous is not None and previous[0] == policy_digest:
-                generation = previous[1]
-            else:
-                previous_generation = previous[1] if previous is not None else 0
-                generation = max(1, time.time_ns() // 1_000, previous_generation + 1)
-                _write_generation_state(state_path, policy_digest, generation)
-            _shared_generation_cache[cache_key] = (
-                policy_digest,
-                generation,
-                _state_identity(state_path),
-            )
-            return generation
-    except NativePolicyGenerationError:
-        raise
-    except OSError as exc:
-        raise NativePolicyGenerationError("native_policy_generation_io_failed") from exc
-
-
-def native_policy_snapshot(
-    *, rule_digest: str, observe_mode: bool, guard_home: Path | None = None
-) -> dict[str, object]:
-    mode = "observe" if observe_mode else "enforce"
-    config_bytes = json.dumps({"mode": mode}, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    config_digest = hashlib.sha256(config_bytes).hexdigest()
+def _policy_digest(*, config_digest: str, rule_digest: str) -> str:
     policy_bytes = json.dumps(
         {"config_digest": config_digest, "rule_digest": rule_digest},
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
-    policy_digest = hashlib.sha256(policy_bytes).hexdigest()
-    with _GENERATION_LOCK:
-        generation = (
-            _process_local_generation(policy_digest)
-            if guard_home is None
-            else _shared_generation(guard_home, policy_digest)
+    return hashlib.sha256(policy_bytes).hexdigest()
+
+
+def _private_guard_home(guard_home: Path) -> None:
+    try:
+        metadata = guard_home.lstat()
+    except FileNotFoundError:
+        guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
+        metadata = guard_home.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+        raise NativePolicySnapshotError("native_policy_generation_home_invalid")
+    if os.name != "nt" and (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o022):
+        raise NativePolicySnapshotError("native_policy_generation_home_invalid")
+
+
+def _acquire_generation_lock(descriptor: int, *, deadline_monotonic: float | None) -> None:
+    if os.name != "nt":
+        import fcntl
+
+        deadline = deadline_monotonic if deadline_monotonic is not None else time.monotonic() + 1.0
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except BlockingIOError as error:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise NativePolicySnapshotError("native_policy_generation_lock_timeout") from error
+                time.sleep(min(0.01, remaining))
+
+    import msvcrt
+
+    deadline = deadline_monotonic if deadline_monotonic is not None else time.monotonic() + 1.0
+    while True:
+        try:
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+            return
+        except OSError as error:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise NativePolicySnapshotError("native_policy_generation_lock_timeout") from error
+            time.sleep(min(0.01, remaining))
+
+
+@contextmanager
+def _generation_lock(guard_home: Path, *, deadline_monotonic: float | None) -> Iterator[int]:
+    _private_guard_home(guard_home)
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(guard_home / _LOCK_NAME, flags, 0o600)
+    except OSError as error:
+        raise NativePolicySnapshotError("native_policy_generation_lock_invalid") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or (
+            os.name != "nt" and (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077)
+        ):
+            raise NativePolicySnapshotError("native_policy_generation_lock_invalid")
+        if metadata.st_size == 0:
+            os.write(descriptor, b"0")
+            os.fsync(descriptor)
+        _acquire_generation_lock(descriptor, deadline_monotonic=deadline_monotonic)
+        try:
+            yield descriptor
+        finally:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
+
+
+def _read_generation_state(guard_home: Path) -> tuple[int, str] | None:
+    path = guard_home / _STATE_NAME
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise NativePolicySnapshotError("native_policy_generation_state_invalid") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_size > _MAX_STATE_BYTES
+            or (os.name != "nt" and (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077))
+        ):
+            raise NativePolicySnapshotError("native_policy_generation_state_invalid")
+        payload = os.read(descriptor, _MAX_STATE_BYTES + 1)
+    finally:
+        os.close(descriptor)
+    try:
+        state = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise NativePolicySnapshotError("native_policy_generation_state_invalid") from error
+    if not isinstance(state, dict):
+        raise NativePolicySnapshotError("native_policy_generation_state_invalid")
+    generation = state.get("generation")
+    policy_digest = state.get("policy_digest")
+    if (
+        state.get("schema") != _STATE_SCHEMA
+        or type(generation) is not int
+        or not 1 <= generation <= _MAX_GENERATION
+        or not isinstance(policy_digest, str)
+        or len(policy_digest) != 64
+        or any(character not in "0123456789abcdef" for character in policy_digest)
+    ):
+        raise NativePolicySnapshotError("native_policy_generation_state_invalid")
+    return generation, policy_digest
+
+
+def _write_generation_state(guard_home: Path, *, generation: int, policy_digest: str) -> None:
+    path = guard_home / _STATE_NAME
+    payload = json.dumps(
+        {"generation": generation, "policy_digest": policy_digest, "schema": _STATE_SCHEMA},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    temporary = guard_home / f".{_STATE_NAME}.{secrets.token_hex(16)}.tmp"
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+        committed_descriptor = os.open(
+            path,
+            os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
         )
+        try:
+            os.fsync(committed_descriptor)
+        finally:
+            os.close(committed_descriptor)
+        if os.name != "nt":
+            directory_descriptor = os.open(guard_home, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory_descriptor)
+            finally:
+                os.close(directory_descriptor)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def _generation_for_policy(
+    guard_home: Path,
+    policy_digest: str,
+    *,
+    deadline_monotonic: float | None,
+) -> int:
+    with _generation_lock(guard_home, deadline_monotonic=deadline_monotonic) as lock_descriptor:
+        current = _read_generation_state(guard_home)
+        if current is None:
+            os.lseek(lock_descriptor, 0, os.SEEK_SET)
+            if os.read(lock_descriptor, 1) == b"1":
+                raise NativePolicySnapshotError("native_policy_generation_state_missing")
+            generation = 1
+        elif current[1] == policy_digest:
+            os.lseek(lock_descriptor, 0, os.SEEK_SET)
+            if os.read(lock_descriptor, 1) != b"1":
+                os.lseek(lock_descriptor, 0, os.SEEK_SET)
+                os.write(lock_descriptor, b"1")
+                os.fsync(lock_descriptor)
+            return current[0]
+        elif current[0] == _MAX_GENERATION:
+            raise NativePolicySnapshotError("native_policy_generation_exhausted")
+        else:
+            generation = current[0] + 1
+        _write_generation_state(guard_home, generation=generation, policy_digest=policy_digest)
+        os.lseek(lock_descriptor, 0, os.SEEK_SET)
+        os.write(lock_descriptor, b"1")
+        os.fsync(lock_descriptor)
+        return generation
+
+
+def native_policy_snapshot(
+    *,
+    guard_home: Path,
+    rule_digest: str,
+    observe_mode: bool,
+    deadline_monotonic: float | None = None,
+) -> dict[str, object]:
+    mode = "observe" if observe_mode else "enforce"
+    config_bytes = json.dumps({"mode": mode}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    config_digest = hashlib.sha256(config_bytes).hexdigest()
+    policy_digest = _policy_digest(config_digest=config_digest, rule_digest=rule_digest)
+    generation = _generation_for_policy(
+        guard_home,
+        policy_digest,
+        deadline_monotonic=deadline_monotonic,
+    )
     return {
         "schema": "hol-guard-native-policy.v1",
         "generation": generation,
@@ -199,4 +240,4 @@ def native_policy_snapshot(
     }
 
 
-__all__ = ["NativePolicyGenerationError", "native_policy_snapshot"]
+__all__ = ["NativePolicySnapshotError", "native_policy_snapshot"]
