@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "ad45f7cf4ced786e02439781f1b58ae53eaf4999659f12a6fff76a197c439fb8",
+  "catalog_digest": "e7e028036094821fc0e2dfed2ac217bdd6dad20b1e6fe8570dc530efcb6a688d",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -21,7 +21,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 61,
+  "extension_count": 62,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -78,6 +78,7 @@
     "command.search.elasticsearch",
     "command.shell-mutations",
     "command.skill-sunset",
+    "command.storage-clearer",
     "command.storage.aws-s3",
     "command.storage.azure-blob",
     "command.storage.google-cloud",
@@ -88,7 +89,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 159,
+  "permission_count": 160,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -219,6 +220,7 @@
     "command.shell-mutations.permission.process-environment-secret-read": "python3 -c 'import os; print(os.environ)'",
     "command.shell-mutations.permission.sensitive-file-write": "echo \"ssh-ed25519 KEY\" >> ~/.ssh/authorized_keys",
     "command.skill-sunset.permission.audit": "skill-sunset audit",
+    "command.storage-clearer.permission.cleanup": "./storage-clearer.sh run B",
     "command.storage.aws-s3.permission.cp": "aws s3 cp",
     "command.storage.aws-s3.permission.deletion": "aws s3 rm",
     "command.storage.aws-s3.permission.ls": "aws s3 ls",
@@ -452,6 +454,7 @@
     "command.shell-mutations.permission.process-environment-secret-read",
     "command.shell-mutations.permission.sensitive-file-write",
     "command.skill-sunset.permission.audit",
+    "command.storage-clearer.permission.cleanup",
     "command.storage.aws-s3.permission.cp",
     "command.storage.aws-s3.permission.deletion",
     "command.storage.aws-s3.permission.ls",
@@ -493,7 +496,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 147,
+  "rule_count": 148,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -612,6 +615,7 @@
     "command.shell-mutations.process-environment-secret-read",
     "command.shell-mutations.github-body-substitution",
     "command.skill-sunset.audit",
+    "command.storage-clearer.cleanup",
     "command.storage.aws-s3.deletion",
     "command.storage.aws-s3.cp",
     "command.storage.aws-s3.ls",
