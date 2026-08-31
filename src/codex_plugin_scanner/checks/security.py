@@ -7,6 +7,7 @@ import ipaddress
 import json
 import os
 import re
+import stat
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
@@ -182,9 +183,9 @@ def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> 
         discovered = []
         try:
             for path in files:
+                metadata = path.lstat()
                 if (
-                    path.is_file()
-                    and not path.is_symlink()
+                    stat.S_ISREG(metadata.st_mode)
                     and path.suffix.lower() not in BINARY_EXTS
                     and resolves_within_root(plugin_dir, path, require_exists=True)
                 ):

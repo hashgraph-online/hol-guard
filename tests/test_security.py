@@ -415,6 +415,12 @@ class TestScanAllFiles:
 
         assert result.passed is True
 
+    def test_missing_explicit_scan_path_fails_closed(self, tmp_path: Path):
+        result = check_no_hardcoded_secrets(tmp_path, (tmp_path / "missing.md",))
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
+
     def test_resource_budget_exhaustion_blocks_incomplete_secret_scan(self, tmp_path, monkeypatch):
         (tmp_path / "one.txt").write_text("safe", encoding="utf-8")
         (tmp_path / "two.txt").write_text("safe", encoding="utf-8")
