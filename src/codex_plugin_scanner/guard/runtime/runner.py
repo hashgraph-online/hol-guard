@@ -4787,7 +4787,6 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
     effective_credentials = effective_credentials_ref["value"]
     effective_dpop_key_material = _apply_refreshed_oauth_credentials(
         store=store,
-        oauth_credentials=oauth_credentials,
         effective_credentials=effective_credentials,
         refreshed=refreshed,
         refresh_token=refresh_token,
@@ -4809,7 +4808,6 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
 def _apply_refreshed_oauth_credentials(
     *,
     store: GuardStore,
-    oauth_credentials: dict[str, object],
     effective_credentials: dict[str, object],
     refreshed: dict[str, object],
     refresh_token: str,
@@ -4843,14 +4841,17 @@ def _apply_refreshed_oauth_credentials(
     # When the refresh response includes a guard_local_entitlement but no
     # user_profile, clear the stale profile rather than preserving it.
     # When there's no guard_local_entitlement at all (old server), keep existing.
+    # Sources: prefer the refresh response, then the effective (possibly
+    # reloaded-by-peer) credentials dict; compare against the same effective
+    # snapshot so a peer's newer profile is not treated as a change.
     effective_cloud_user_profile: dict[str, str] | None
     if had_entitlement:
         effective_cloud_user_profile = refreshed_cloud_user_profile
     else:
         effective_cloud_user_profile = refreshed_cloud_user_profile or _extract_dict_field(
-            oauth_credentials, "cloud_user_profile"
+            effective_credentials, "cloud_user_profile"
         )
-    stored_cloud_user_profile = _extract_dict_field(oauth_credentials, "cloud_user_profile")
+    stored_cloud_user_profile = _extract_dict_field(effective_credentials, "cloud_user_profile")
     profile_changed = effective_cloud_user_profile != stored_cloud_user_profile
     if (
         force_refresh
