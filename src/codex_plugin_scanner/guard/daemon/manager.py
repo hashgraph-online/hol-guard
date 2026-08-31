@@ -1009,10 +1009,8 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
     return _live_guard_daemon_url(guard_home, require_current_runtime=True)
 
 
-def load_running_guard_daemon_identity(guard_home: Path) -> tuple[str, str] | None:
-    """Return one validated live daemon URL/token generation."""
-
-    return _live_guard_daemon_identity(guard_home, require_current_runtime=True)
+def load_running_guard_daemon_identity(guard_home: Path, *, health_timeout: float = 1.0) -> tuple[str, str] | None:
+    return _live_guard_daemon_identity(guard_home, require_current_runtime=True, health_timeout=health_timeout)
 
 
 def _live_guard_daemon_url(
@@ -1034,6 +1032,7 @@ def _live_guard_daemon_identity(
     *,
     require_current_runtime: bool = True,
     expected_pid: int | None = None,
+    health_timeout: float = 1.0,
 ) -> tuple[str, str] | None:
     identity = _load_authenticated_daemon_identity(guard_home)
     if identity is None:
@@ -1054,7 +1053,7 @@ def _live_guard_daemon_identity(
         return None
     url = f"http://127.0.0.1:{port}"
     try:
-        with urllib.request.urlopen(_daemon_health_request(f"{url}/healthz"), timeout=1) as response:
+        with urllib.request.urlopen(_daemon_health_request(f"{url}/healthz"), timeout=health_timeout) as response:
             raw_payload = response.read().decode("utf-8")
             if response.status != 200 or not _healthz_payload_is_current(raw_payload):
                 return None
@@ -1062,9 +1061,8 @@ def _live_guard_daemon_identity(
         return None
     if _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
         return url, auth_token
-    # In-process or wrapped daemons may not expose a command line we can bind
-    # back to guard_home, so fall back to authenticated detailed health.
-    if _daemon_healthz_details_match_guard_home(url, guard_home, auth_token=auth_token):
+    # Wrapped daemons may require authenticated detailed health for binding.
+    if _daemon_healthz_details_match_guard_home(url, guard_home, auth_token=auth_token, timeout=health_timeout):
         return url, auth_token
     return None
 
@@ -1103,10 +1101,10 @@ def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.re
     return urllib.request.Request(url, headers=headers, method="GET")
 
 
-def _daemon_healthz_details_payload(url: str, auth_token: str) -> dict[str, object] | None:
+def _daemon_healthz_details_payload(url: str, auth_token: str, *, timeout: float = 1.0) -> dict[str, object] | None:
     try:
         request = _daemon_health_request(f"{url}/v1/healthz/details", auth_token)
-        with urllib.request.urlopen(request, timeout=1) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             if response.status != 200:
                 return None
             payload = json.loads(response.read().decode("utf-8"))
@@ -1115,8 +1113,10 @@ def _daemon_healthz_details_payload(url: str, auth_token: str) -> dict[str, obje
     return payload if isinstance(payload, dict) else None
 
 
-def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth_token: str) -> bool:
-    payload = _daemon_healthz_details_payload(url, auth_token)
+def _daemon_healthz_details_match_guard_home(
+    url: str, guard_home: Path, *, auth_token: str, timeout: float = 1.0
+) -> bool:
+    payload = _daemon_healthz_details_payload(url, auth_token, timeout=timeout)
     if payload is None:
         return False
     return _healthz_payload_matches_guard_home(json.dumps(payload), guard_home)

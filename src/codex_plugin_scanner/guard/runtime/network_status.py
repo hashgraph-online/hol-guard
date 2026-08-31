@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.runtime.network_capability_contract import (
     PlatformCapabilityProfile,
     PlatformFamily,
     default_platform_profiles,
+    enforcement_grade_rank,
 )
 from codex_plugin_scanner.guard.runtime.network_legacy_config import (
     migrate_new_network_domain_action,
@@ -48,6 +49,18 @@ def _default_host_profiles(platform_name: str | None = None) -> tuple[PlatformCa
     return tuple(profile for profile in default_platform_profiles() if profile.platform is family)
 
 
+def _health_is_verified_for_profile(
+    profile: PlatformCapabilityProfile,
+    health: NetworkSupervisorHealth | None,
+) -> bool:
+    return (
+        health is not None
+        and health.backend_digest is not None
+        and health.effective_grade is not EnforcementGrade.UNAVAILABLE
+        and enforcement_grade_rank(health.effective_grade) <= enforcement_grade_rank(profile.maximum_grade)
+    )
+
+
 def build_network_status(
     profiles: tuple[PlatformCapabilityProfile, ...] | None = None,
     *,
@@ -71,12 +84,13 @@ def build_network_status(
         )
         selected_health = supervisor_health if selected else None
         installed = selected_health is not None and selected_health.backend_digest is not None
-        verified = (
-            installed
-            and selected_health is not None
-            and selected_health.effective_grade is not EnforcementGrade.UNAVAILABLE
+        verified = _health_is_verified_for_profile(profile, selected_health)
+        active = (
+            selected_health is not None
+            and selected_health.permits_enforcement
+            and verified
+            and profile.production_ready
         )
-        active = selected_health is not None and selected_health.permits_enforcement
         effective_grade = (
             selected_health.effective_grade if selected_health is not None and active else EnforcementGrade.UNAVAILABLE
         )
@@ -93,7 +107,7 @@ def build_network_status(
                 "observed": False,
                 "advertised_maximum_grade": profile.maximum_grade.value,
                 "effective_grade": effective_grade.value,
-                "production_ready": False,
+                "production_ready": profile.production_ready,
                 "requires_privilege": profile.requires_privilege,
                 "reason_code": (
                     "independent-observer-unavailable"
@@ -134,7 +148,10 @@ def build_network_status(
             "sandbox_required": migrated.sandbox_required,
         }
     if supervisor_health is not None:
-        status["supervisor"] = project_network_supervisor_health(supervisor_health)
+        supervisor = project_network_supervisor_health(supervisor_health)
+        supervisor["effective_grade"] = active_grade.value
+        supervisor["permits_enforcement"] = bool(status["protection_active"])
+        status["supervisor"] = supervisor
     return status
 
 
