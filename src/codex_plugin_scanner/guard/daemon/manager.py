@@ -28,6 +28,7 @@ from typing import BinaryIO, Literal, TypedDict
 
 from ...version import __version__
 from .. import windows_processes
+from ..live_process_identity import process_start_token
 from ..mdm.file_lock import release_file_lock
 from ..private_file_io import private_regular_file_is_valid, read_private_regular_text
 from ..windows_paths import (
@@ -566,7 +567,7 @@ def recover_guard_daemon_after_hook_failure(
         "transport-failure",
     }:
         raise ValueError(f"Unsupported Guard daemon hook failure kind: {failure_kind}")
-    if recovery_lock_timeout_seconds is not None and _guard_recovery_is_disabled(guard_home):
+    if _guard_recovery_is_disabled(guard_home):
         current_url = load_guard_daemon_url(guard_home)
         if current_url is not None:
             return current_url
@@ -615,7 +616,7 @@ def recover_guard_daemon_after_hook_failure(
                 return current_url
             if live_process_url is not None:
                 return live_process_url
-        if recovery_lock_timeout_seconds is not None and _guard_recovery_is_disabled(guard_home):
+        if _guard_recovery_is_disabled(guard_home):
             current_url = load_guard_daemon_url(guard_home)
             if current_url is not None:
                 return current_url
@@ -731,12 +732,17 @@ def schedule_guard_daemon_recovery(
         process_pid = getattr(process, "pid", None)
         if type(process_pid) is int and process_pid > 0:
             process_creation_time = windows_process_creation_time(process_pid) if os.name == "nt" else None
-            if not _bind_guard_daemon_recovery_reservation(
-                guard_home,
-                token=recovery_token,
-                pid=process_pid,
-                process_creation_time=process_creation_time,
-            ):
+            try:
+                reservation_bound = _bind_guard_daemon_recovery_reservation(
+                    guard_home,
+                    token=recovery_token,
+                    pid=process_pid,
+                    process_creation_time=process_creation_time,
+                )
+            except Exception:
+                # A reservation write/query failure must never leave the detached child running.
+                reservation_bound = False
+            if not reservation_bound:
                 _terminate_recovery_worker(process)
                 with suppress(OSError, RuntimeError, ValueError):
                     clear_guard_daemon_recovery_reservation(guard_home, token=recovery_token)
@@ -1055,6 +1061,23 @@ def _guard_daemon_recovery_owner_state(reservation: dict[str, object] | None) ->
     pid = reservation.get("pid")
     if type(pid) is not int or pid <= 0:
         return None
+    if not _guard_daemon_pid_is_running(pid):
+        return False
+    process_command_digest = reservation.get("process_command_digest")
+    if isinstance(process_command_digest, str) and process_command_digest:
+        actual_command = _guard_daemon_command_for_pid(pid)
+        if actual_command is None:
+            return None
+        actual_command_digest = hashlib.sha256(actual_command.encode("utf-8", errors="replace")).hexdigest()
+        if not secrets.compare_digest(actual_command_digest, process_command_digest):
+            return False
+    process_start_marker = reservation.get("process_start_marker")
+    if isinstance(process_start_marker, str) and process_start_marker:
+        actual_start_marker = process_start_token(pid)
+        if actual_start_marker is None:
+            return None
+        if not secrets.compare_digest(actual_start_marker, process_start_marker):
+            return False
     if os.name == "nt":
         creation_time = reservation.get("process_creation_time")
         if type(creation_time) is int:
@@ -1062,7 +1085,7 @@ def _guard_daemon_recovery_owner_state(reservation: dict[str, object] | None) ->
             if actual_creation_time != creation_time:
                 return False
         return windows_process_liveness(pid) is not False
-    return _guard_daemon_pid_is_running(pid)
+    return True
 
 
 def _bind_guard_daemon_recovery_reservation(
@@ -1083,6 +1106,14 @@ def _bind_guard_daemon_recovery_reservation(
             return False
         payload = dict(reservation)
         payload["pid"] = pid
+        process_command = _guard_daemon_command_for_pid(pid)
+        if process_command is not None:
+            payload["process_command_digest"] = hashlib.sha256(
+                process_command.encode("utf-8", errors="replace")
+            ).hexdigest()
+        process_start_marker = process_start_token(pid)
+        if process_start_marker is not None:
+            payload["process_start_marker"] = process_start_marker
         if process_creation_time is not None:
             payload["process_creation_time"] = process_creation_time
         _write_private_atomic_text(
