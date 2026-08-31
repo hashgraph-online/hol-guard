@@ -79,6 +79,27 @@ def test_agent_guidance_read_rejects_skill_symlink_escape(guidance_home: Path, t
     )
 
 
+@pytest.mark.parametrize(
+    "target",
+    (
+        "~/.agents/skills/github-pr-review-loop/credentials/config.ts",
+        "~/.agents/skills/github-pr-review-loop/*.md",
+        "~/.agents/skills/github-pr-review-loop/[.]env",
+        "~/.agents/skills/github-pr-review-loop/../secret.py",
+    ),
+)
+def test_shell_skill_read_rejects_sensitive_glob_and_traversal_targets(
+    guidance_home: Path,
+    tmp_path: Path,
+    target: str,
+) -> None:
+    credentials = guidance_home / ".agents" / "skills" / "github-pr-review-loop" / "credentials"
+    credentials.mkdir(exist_ok=True)
+    (credentials / "config.ts").write_text("export const value = 1\n", encoding="utf-8")
+
+    assert not _is_benign(f"cat {target}", workspace=tmp_path, home=guidance_home)
+
+
 def test_agent_guidance_read_rejects_safety_parent_symlink(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()

@@ -694,6 +694,30 @@ class TestHookWorkerOutputScanning:
         assert result["policy_action"] == "block"
         assert result["reason_code"] == "output_secret_match"
 
+    def test_codex_native_read_secret_output_remains_blocked(
+        self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
+    ) -> None:
+        """The Codex Read post-hook blocks high-confidence file content."""
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "src/config.py"},
+            "tool_response": "token: ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+        }
+
+        result = worker.review_http_payload(
+            payload=payload,
+            params={},
+            default_harness="codex",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+
+        assert result["decision"] == "block"
+        assert result["policy_action"] == "block"
+        assert result["reason_code"] == "output_secret_match"
+
     def test_empty_output_allows_without_second_approval(
         self, worker: HookWorker, workspace: Path, home_dir: Path, guard_home: Path
     ) -> None:
