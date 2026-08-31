@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -307,8 +308,196 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
     cloud_review = connected["cloud_review"]
     assert isinstance(cloud_review, dict)
     assert cloud_review["enabled"] is True
+    assert cloud_review["pending_requests_requeued"] == 0
+    assert cloud_review["pending_request_requeue_status"] == "requeued"
     assert cloud_review["worker"] == {"status": "refreshed"}
     assert isinstance(cloud_review["capability"], dict)
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
+
+
+def test_cloud_review_enable_requeues_existing_pending_requests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("pending-before-consent")
+    _add_request(store, request)
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_refresh_cloud_review_worker",
+        lambda _guard_home: {"status": "refreshed"},
+    )
+
+    exit_code = cloud_review_dispatch._run_guard_cloud_review_command(
+        argparse.Namespace(
+            cloud_review_command="enable",
+            expires_in_days=30,
+            json=True,
+        ),
+        guard_home=store.guard_home,
+        store=store,
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["pending_requests_requeued"] == 1
+    assert payload["pending_request_requeue_status"] == "requeued"
+    assert payload["worker"] == {"status": "refreshed"}
+
+
+def test_cloud_review_requeue_database_failure_is_retryable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+
+    def fail_requeue(*, changed_at: str) -> int:
+        del changed_at
+        raise sqlite3.OperationalError("database is busy")
+
+    monkeypatch.setattr(store, "requeue_pending_review_events", fail_requeue)
+
+    with pytest.raises(cloud_review_dispatch.PendingReviewRequeueError):
+        cloud_review_dispatch._requeue_pending_cloud_review_requests(store)
+
+
+def test_connect_consent_does_not_enable_capability_when_requeue_needs_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+
+    def fail_requeue(_store: GuardStore) -> int:
+        raise cloud_review_dispatch.PendingReviewRequeueError
+
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_requeue_pending_cloud_review_requests",
+        fail_requeue,
+    )
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_refresh_cloud_review_worker",
+        lambda _guard_home: {"status": "refreshed"},
+    )
+
+    connected = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
+        args=argparse.Namespace(enable_cloud_review=True),
+        store=store,
+        guard_home=store.guard_home,
+        payload={"status": "connected"},
+        exit_code=0,
+    )
+
+    cloud_review = connected["cloud_review"]
+    assert isinstance(cloud_review, dict)
+    assert cloud_review["capability_enabled"] is False
+    assert cloud_review["enabled"] is False
+    assert cloud_review["reason"] == "pending_request_requeue_failed"
+    assert cloud_review["pending_request_requeue_status"] == "retry_required"
+    assert cloud_review["retained_existing_capability"] is False
+    assert exact_cloud_review_operations(store) == ()
+
+
+def test_cloud_review_enable_reports_requeue_retry_without_crashing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = _connected_store(tmp_path)
+
+    def fail_requeue(_store: GuardStore) -> int:
+        raise cloud_review_dispatch.PendingReviewRequeueError
+
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_requeue_pending_cloud_review_requests",
+        fail_requeue,
+    )
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_refresh_cloud_review_worker",
+        lambda _guard_home: {"status": "refreshed"},
+    )
+
+    exit_code = cloud_review_dispatch._run_guard_cloud_review_command(
+        argparse.Namespace(cloud_review_command="enable", expires_in_days=30, json=True),
+        guard_home=store.guard_home,
+        store=store,
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "error"
+    assert payload["error"] == "pending_request_requeue_failed"
+    assert payload["pending_requests_requeued"] == 0
+    assert payload["pending_request_requeue_status"] == "retry_required"
+    assert payload["capability_enabled"] is False
+    assert payload["retained_existing_capability"] is False
+    assert exact_cloud_review_operations(store) == ()
+
+
+def test_connect_consent_reports_retained_capability_as_failed_activation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    enable_exact_cloud_review(store)
+
+    def fail_requeue(_store: GuardStore) -> int:
+        raise cloud_review_dispatch.PendingReviewRequeueError
+
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_requeue_pending_cloud_review_requests",
+        fail_requeue,
+    )
+
+    connected = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
+        args=argparse.Namespace(enable_cloud_review=True),
+        store=store,
+        guard_home=store.guard_home,
+        payload={"status": "connected"},
+        exit_code=0,
+    )
+
+    cloud_review = connected["cloud_review"]
+    assert isinstance(cloud_review, dict)
+    assert cloud_review["enabled"] is False
+    assert cloud_review["capability_enabled"] is True
+    assert cloud_review["retained_existing_capability"] is True
+    assert cloud_review["reason"] == "pending_request_requeue_failed"
+
+
+def test_cloud_review_enable_reports_retained_capability_when_requeue_retry_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = _connected_store(tmp_path)
+    enable_exact_cloud_review(store)
+
+    def fail_requeue(_store: GuardStore) -> int:
+        raise cloud_review_dispatch.PendingReviewRequeueError
+
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_requeue_pending_cloud_review_requests",
+        fail_requeue,
+    )
+
+    exit_code = cloud_review_dispatch._run_guard_cloud_review_command(
+        argparse.Namespace(cloud_review_command="enable", expires_in_days=30, json=True),
+        guard_home=store.guard_home,
+        store=store,
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["error"] == "pending_request_requeue_failed"
+    assert payload["capability_enabled"] is True
+    assert payload["retained_existing_capability"] is True
     assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
