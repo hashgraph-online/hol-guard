@@ -23888,8 +23888,9 @@ def test_resolve_guard_sync_auth_context_serializes_refresh_token_rotation(tmp_p
         client_id: str,
         refresh_token: str,
         dpop_key_material,
+        credential_reloader=None,
     ) -> dict[str, object]:
-        del token_endpoint, client_id, dpop_key_material
+        del token_endpoint, client_id, dpop_key_material, credential_reloader
         observed_refresh_tokens.append(refresh_token)
         if refresh_token == "refresh-token-1":
             first_refresh_started.set()
