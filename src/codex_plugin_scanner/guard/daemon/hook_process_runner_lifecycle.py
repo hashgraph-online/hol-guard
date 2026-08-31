@@ -34,6 +34,7 @@ class HookProcessRunnerLifecycleMixin:
     _recovery_event: threading.Event
     _ready_slot_ids: set[int]
     _capacity_target: int
+    _startup_capacity_waiting: bool
     _capacity_listener: Callable[[int], None] | None
     _adaptive_capacity: AdaptiveHookProcessCapacity | None
     _adaptive_refresh_enabled: bool

@@ -135,18 +135,9 @@ def _hook_evaluator_main(connection: Connection, configured_guard_home: str | No
         _ = importlib.import_module(module_name)
     stores: dict[str, GuardStore] = {}
     hook_workers: dict[str, HookWorker] = {}
-    if configured_guard_home is not None:
-        from ..store import GuardStore
-
-        guard_home = Path(configured_guard_home).resolve(strict=False)
-        # The worker can become ready while a concurrent daemon migration
-        # finishes; the first request retries store construction lazily.
-        with suppress(Exception):
-            stores[str(guard_home)] = GuardStore(
-                guard_home,
-                prime_policy_integrity=False,
-                daemon_managed_schema=True,
-            )
+    # Store construction stays on the first request. Readiness must only prove
+    # process isolation and evaluator bootstrap; eager schema work can expose
+    # transient SQLite WAL files as a false state mutation to the daemon.
     try:
         _hook_evaluator_loop(
             connection,
