@@ -12,9 +12,8 @@ def isolate_terminal_block_patches(monkeypatch: Any, unexpected: Callable[..., o
     from codex_plugin_scanner.guard.cli import commands_hook_generic as generic
     from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 
-    monkeypatch.setattr(commands_module, "ensure_guard_daemon", unexpected)
-    monkeypatch.setattr(commands_module, "queue_blocked_approvals", unexpected)
-    monkeypatch.setattr(generic, "ensure_guard_daemon", unexpected)
-    monkeypatch.setattr(generic, "queue_blocked_approvals", unexpected)
-    monkeypatch.setattr(shared, "queue_blocked_approvals", unexpected)
+    for module in (commands_module, generic, shared):
+        monkeypatch.setattr(module, "ensure_guard_daemon", unexpected)
+        monkeypatch.setattr(module, "queue_blocked_approvals", unexpected)
+        monkeypatch.setattr(module, "wait_for_approval_requests", unexpected)
     monkeypatch.setattr(interaction, "wait_for_approval_requests", unexpected)
