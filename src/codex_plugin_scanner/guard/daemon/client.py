@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -39,8 +40,16 @@ class GuardDaemonTransportError(GuardDaemonRequestError):
     """Raised when the Guard daemon request fails due to transport issues."""
 
 
+class GuardDaemonTimeoutError(GuardDaemonTransportError):
+    """Raised when a bounded Guard daemon request exceeds its deadline."""
+
+
+class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
+    """Raised when the daemon response is not valid JSON object data."""
+
+
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
-_STATUS_REQUEST_TIMEOUT_S: float = 0.25
+_STATUS_REQUEST_TIMEOUT_S: float = 1.0
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -188,6 +197,15 @@ class GuardSurfaceDaemonClient:
             raise GuardDaemonRequestError("Guard daemon returned invalid containment health")
         return value
 
+    def network_status(self) -> dict[str, object]:
+        """Read current network protection truth without starting the daemon.
+
+        Network status is an interactive, loopback-only health read. A one-second
+        deadline accommodates a busy local daemon without leaving the CLI in limbo.
+        """
+
+        return self._get("/v1/network/status", timeout=_STATUS_REQUEST_TIMEOUT_S)
+
     def resolve_policy_decision(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/policy/resolve", payload)
 
@@ -208,8 +226,18 @@ class GuardSurfaceDaemonClient:
             raise self._http_request_error(error) from error
         except GuardDaemonRequestError:
             raise
-        except (OSError, urllib.error.URLError) as error:
-            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
+        except UnicodeDecodeError as error:
+            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
+        except http.client.IncompleteRead as error:
+            raise GuardDaemonTransportError("Guard daemon response was truncated") from error
+        except TimeoutError as error:
+            raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
+            raise GuardDaemonTransportError("Guard daemon request failed") from error
+        except OSError as error:
+            raise GuardDaemonTransportError("Guard daemon request failed") from error
 
     def _post(
         self,
@@ -234,6 +262,10 @@ class GuardSurfaceDaemonClient:
             raise self._http_request_error(error) from error
         except GuardDaemonRequestError:
             raise
+        except UnicodeDecodeError as error:
+            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
+        except http.client.IncompleteRead as error:
+            raise GuardDaemonTransportError("Guard daemon response was truncated") from error
         except (OSError, urllib.error.URLError) as error:
             raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
 
@@ -248,7 +280,13 @@ class GuardSurfaceDaemonClient:
             if _is_string_object_dict(recovery):
                 raw_action = recovery.get("action")
                 recovery_action = raw_action if isinstance(raw_action, str) else None
-        except (OSError, json.JSONDecodeError, GuardDaemonRequestError):
+        except (
+            OSError,
+            UnicodeDecodeError,
+            http.client.IncompleteRead,
+            json.JSONDecodeError,
+            GuardDaemonRequestError,
+        ):
             pass
         message = code or str(error)
         return GuardDaemonRequestError(
@@ -263,9 +301,9 @@ class GuardSurfaceDaemonClient:
         try:
             payload = json.loads(raw_payload)
         except json.JSONDecodeError as error:
-            raise GuardDaemonRequestError(f"Guard daemon request failed: {error}") from error
+            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
         if not isinstance(payload, dict):
-            raise GuardDaemonRequestError("Guard daemon request failed: invalid daemon response")
+            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid")
         return payload
 
 
