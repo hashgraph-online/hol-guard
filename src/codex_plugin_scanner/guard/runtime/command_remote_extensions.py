@@ -187,11 +187,13 @@ _RSYNC_REMOTE_SHELL = AnyMatcher(
 
 
 _ESSH_GLOBAL_OPTIONS = frozenset({"--theme"})
+_ESSH_EXIT_ONLY_FLAGS = frozenset({"-h", "--help", "-V", "--version"})
 _ESSH_GROUP_EXECUTION = LeadingSubcommandMatcher(
     executables=executable_names("essh"),
     subcommands=("run",),
     options_with_values=_ESSH_GLOBAL_OPTIONS,
     interleaved_options_with_values=_ESSH_GLOBAL_OPTIONS,
+    forbidden_flags_before_delimiter=_ESSH_EXIT_ONLY_FLAGS,
 )
 _ESSH_CACHE_REMOVAL = AnyMatcher(
     matchers=tuple(
@@ -200,6 +202,7 @@ _ESSH_CACHE_REMOVAL = AnyMatcher(
             subcommands=subcommands,
             options_with_values=_ESSH_GLOBAL_OPTIONS,
             interleaved_options_with_values=_ESSH_GLOBAL_OPTIONS,
+            forbidden_flags_before_delimiter=_ESSH_EXIT_ONLY_FLAGS,
         )
         for subcommands in (("hosts", "remove"), ("keys", "remove"), ("workspace", "remove"))
     )

@@ -157,6 +157,16 @@ REMOTE_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "essh group execution command",
         "command.remote.essh.group-execution",
     ),
+    (
+        "essh run web -- --help",
+        "essh group execution command",
+        "command.remote.essh.group-execution",
+    ),
+    (
+        "essh run web -- essh --help",
+        "essh group execution command",
+        "command.remote.essh.group-execution",
+    ),
 )
 
 
@@ -209,6 +219,18 @@ REMOTE_SAFE_COMMANDS: tuple[str, ...] = (
     "essh hosts --theme dark add web-1",
     "essh workspace --theme dark show production",
     "grep 'essh hosts --theme dark remove web-1' docs",
+    "essh -h",
+    "essh --help",
+    "essh -V",
+    "essh --version",
+    "essh --help run",
+    "essh --help keys remove deploy-key",
+    "essh run --help",
+    "essh hosts remove --help",
+    "essh hosts --help remove web-1",
+    "essh keys --help remove deploy-key",
+    "essh --theme dark run --help",
+    "essh -V run web -- uptime",
 )
 
 
@@ -327,3 +349,17 @@ def test_leading_subcommand_matcher_ignores_interleaved_options_by_default(tmp_p
     assert tolerant.match(interleaved)
     assert strict.match(plain)
     assert tolerant.match(plain)
+
+
+def test_leading_subcommand_matcher_exit_flags_stop_before_delimiter(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.command_database_matchers import LeadingSubcommandMatcher
+
+    matcher = LeadingSubcommandMatcher(
+        executables=frozenset({"remote-admin"}),
+        subcommands=("run",),
+        forbidden_flags_before_delimiter=frozenset({"-h", "--help"}),
+    )
+    for exiting in ("remote-admin --help run web", "remote-admin run --help", "remote-admin -h run"):
+        assert matcher.match(parse_shell_command(exiting, cwd=tmp_path, home_dir=tmp_path)) == (), exiting
+    for executing in ("remote-admin run web -- --help", "remote-admin run web -- uptime"):
+        assert matcher.match(parse_shell_command(executing, cwd=tmp_path, home_dir=tmp_path)), executing
