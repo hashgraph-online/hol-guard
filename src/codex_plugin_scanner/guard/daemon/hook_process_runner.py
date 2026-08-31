@@ -24,7 +24,7 @@ from .hook_process_worker import HookProcessReview, HookWorkerSlot, worker_retir
 _HOOK_PROCESS_MAX_LIMIT = 16
 _HOOK_PROCESS_TIMEOUT_SECONDS = 2.8
 _HOOK_PROCESS_START_TIMEOUT_SECONDS = 30.0
-_HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 2.0
+_HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 30.0
 _HOOK_PROCESS_BACKFILL_MAX_DEFERRAL_SECONDS = 5.0
 _HOOK_PROCESS_RETRY_MAX_SECONDS = 5.0
 _HOOK_PROCESS_RETRY_READY_SECONDS = 0.75
@@ -107,7 +107,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
             self._recovery_event.clear()
             self._generation += 1
             generation = self._generation
-            startup_floor_target = min(2, self._initial_target) if defer_backfill else self._initial_target
+            startup_floor_target = min(1, self._initial_target) if defer_backfill else self._initial_target
             self._capacity_target = startup_floor_target
             self._startup_floor_target = startup_floor_target if nonblocking_deferred_start else 0
             self._adaptive_refresh_enabled = not defer_backfill

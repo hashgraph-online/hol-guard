@@ -35,6 +35,7 @@ def test_daemon_start_preserves_deferred_hook_worker_backfill(
     try:
         daemon.start()
         assert calls == [{}]
+        assert runner.stats()["ready"] == 1
     finally:
         daemon.stop()
 

@@ -578,7 +578,7 @@ def test_deferred_runner_serves_startup_floor_before_backfilling(tmp_path: Path)
     ready_workers = 0
     try:
         runner.start(defer_backfill=True)
-        assert runner.stats()["ready"] == 2
+        assert runner.stats()["ready"] == 1
 
         runner.enable_full_capacity(delay_seconds=0)
         assert runner.wait_for_capacity(minimum_workers=4, timeout_seconds=8)
@@ -600,7 +600,7 @@ def test_deferred_runner_does_not_adapt_before_backfill_is_enabled(tmp_path: Pat
         deferred_target = runner._capacity_target  # pyright: ignore[reportPrivateUsage]
         runner._refresh_capacity_policy()  # pyright: ignore[reportPrivateUsage]
 
-        assert deferred_target == 2
+        assert deferred_target == 1
         assert runner._capacity_target == deferred_target  # pyright: ignore[reportPrivateUsage]
 
         runner.enable_full_capacity(delay_seconds=0)
@@ -644,7 +644,7 @@ def test_deferred_runner_bounds_backfill_deferral_during_active_reviews(
             runner._active_reviews[generation] = 1  # pyright: ignore[reportPrivateUsage]
         runner.enable_full_capacity(delay_seconds=0)
         time.sleep(0.1)
-        assert attempts == 2
+        assert attempts == 1
         assert runner.wait_for_capacity(minimum_workers=3, timeout_seconds=5)
     finally:
         with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
