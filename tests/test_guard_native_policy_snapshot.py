@@ -83,6 +83,23 @@ def test_unchanged_policy_does_not_repeat_durable_writes(tmp_path: Path, monkeyp
     assert fsync_calls == 0
 
 
+def test_initialized_unchanged_policy_does_not_reacquire_generation_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = _snapshot(tmp_path, digest="a" * 64)
+
+    def unexpected_lock(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("unchanged initialized policy reacquired generation lock")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_policy_snapshot._generation_lock",
+        unexpected_lock,
+    )
+
+    assert _snapshot(tmp_path, digest="a" * 64) == first
+
+
 @pytest.mark.skipif(os.name == "nt", reason="POSIX flock contract")
 def test_posix_generation_lock_honors_hook_deadline(tmp_path: Path) -> None:
     import fcntl
