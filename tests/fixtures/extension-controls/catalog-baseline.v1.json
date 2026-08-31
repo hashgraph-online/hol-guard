@@ -7,7 +7,7 @@
     "canonical_diff_digest",
     "effective"
   ],
-  "catalog_digest": "7fd8f8affd5163d1b8b307e6253e3f0184b3ac239ab0b0eb5142a1e69b496220",
+  "catalog_digest": "ad45f7cf4ced786e02439781f1b58ae53eaf4999659f12a6fff76a197c439fb8",
   "control_schema_version": "1.0.0",
   "daemon_api_schema": "guard.daemon.extension-controls.v1",
   "effective_shape": [
@@ -21,7 +21,7 @@
     "failures",
     "projection"
   ],
-  "extension_count": 60,
+  "extension_count": 61,
   "extension_ids": [
     "command.api-gateway",
     "command.backup.borg",
@@ -59,6 +59,7 @@
     "command.messaging.nats",
     "command.messaging.rabbitmq",
     "command.monitoring",
+    "command.noodle",
     "command.package.go",
     "command.package.jvm",
     "command.package.node",
@@ -87,7 +88,7 @@
   "extension_schema_version": 2,
   "installed_browser_config": "dashboard/playwright.installed.config.ts",
   "overview_route": "/extensions",
-  "permission_count": 158,
+  "permission_count": 159,
   "permission_examples": {
     "command.api-gateway.permission.delete": "aws apigateway delete-rest-api",
     "command.backup.borg.permission.mutation": "borg delete",
@@ -190,6 +191,7 @@
     "command.messaging.nats.permission.delete": "nats str rm ORDERS",
     "command.messaging.rabbitmq.permission.delete": "rabbitmqctl delete_queue jobs",
     "command.monitoring.permission.delete": "aws cloudwatch delete-alarms",
+    "command.noodle.permission.run": "noodle request run users/get --collection ./my-api",
     "command.package.go.permission.package-protection": "go install golang.org/x/tools/cmd/goimports@latest",
     "command.package.jvm.permission.package-protection": "mvn dependency:copy-dependencies",
     "command.package.node.permission.package-protection": "npm install left-pad",
@@ -422,6 +424,7 @@
     "command.messaging.nats.permission.delete",
     "command.messaging.rabbitmq.permission.delete",
     "command.monitoring.permission.delete",
+    "command.noodle.permission.run",
     "command.package.go.permission.package-protection",
     "command.package.jvm.permission.package-protection",
     "command.package.node.permission.package-protection",
@@ -490,7 +493,7 @@
     "controls",
     "semantic_preview"
   ],
-  "rule_count": 146,
+  "rule_count": 147,
   "rule_ids": [
     "command.api-gateway.delete",
     "command.backup.borg.mutation",
@@ -589,6 +592,7 @@
     "command.messaging.nats.delete",
     "command.messaging.rabbitmq.delete",
     "command.monitoring.delete",
+    "command.noodle.run",
     "command.payment.delete",
     "command.platform.heroku.app-destruction",
     "command.platform.heroku.release-change",
