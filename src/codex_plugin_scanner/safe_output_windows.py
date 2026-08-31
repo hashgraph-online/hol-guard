@@ -216,15 +216,15 @@ def _write_file(api: _WindowsApi, handle: int, payload: bytes) -> None:
         _raise_windows_error("unable to flush output file")
 
 
-def _rename_file_handle(api: _WindowsApi, handle: int, parent_handle: int, name: str) -> None:
-    encoded_name = name.encode("utf-16-le")
+def _rename_file_handle(api: _WindowsApi, handle: int, target: Path) -> None:
+    encoded_name = str(target).encode("utf-16-le")
     file_name_offset = _FileRenameInfo.file_name.offset
     # Windows requires the full FILE_RENAME_INFO structure plus the variable
     # filename payload, even though FileNameLength excludes the placeholder.
     buffer = ctypes.create_string_buffer(ctypes.sizeof(_FileRenameInfo) + len(encoded_name))
     info = ctypes.cast(buffer, ctypes.POINTER(_FileRenameInfo)).contents
     info.replace_if_exists = True
-    info.root_directory = parent_handle
+    info.root_directory = None
     info.file_name_length = len(encoded_name)
     ctypes.memmove(ctypes.addressof(buffer) + file_name_offset, encoded_name, len(encoded_name))
     if not api.rename_file(handle, buffer):
@@ -232,7 +232,7 @@ def _rename_file_handle(api: _WindowsApi, handle: int, parent_handle: int, name:
 
 
 def write_bytes_atomic_no_follow_windows(path: Path, payload: bytes) -> None:
-    """Write with each parent locked against rename and the final rename bound to its handle."""
+    """Write with every ancestor locked against replacement throughout the final rename."""
     absolute = Path(os.path.abspath(path))
     api = _WindowsApi()
     directory_handles = _create_or_lock_directories(api, absolute.parent)
@@ -251,7 +251,7 @@ def write_bytes_atomic_no_follow_windows(path: Path, payload: bytes) -> None:
             _raise_windows_error("unable to create temporary output file")
         temporary_handle = int(opened)
         _write_file(api, temporary_handle, payload)
-        _rename_file_handle(api, temporary_handle, directory_handles[-1], absolute.name)
+        _rename_file_handle(api, temporary_handle, absolute)
         renamed = True
     finally:
         if temporary_handle is not None:
