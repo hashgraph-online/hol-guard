@@ -120,3 +120,34 @@ def test_hook_worker_watch_native_allow_still_allows(
     )
     assert result["policy_action"] == "allow"
     assert result["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
+def test_hook_worker_watch_posttool_native_unavailable_allows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    _write_watch_config(guard_home)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        lambda *_args, **_kwargs: None,
+    )
+    worker = HookWorker(store=GuardStore(guard_home))
+    result = worker.review_http_payload(
+        payload={
+            "hook_event_name": "PostToolUse",
+            "tool_input": {"command": "pwd"},
+            "tool_response_summary": {"text_excerpt": "ok"},
+        },
+        params={},
+        default_harness="codex",
+        home_dir=tmp_path / "home",
+        guard_home=guard_home,
+        workspace=tmp_path / "workspace",
+    )
+    assert result["policy_action"] == "allow"
+    assert result["reason_code"] == "native_post_tool_unavailable"
