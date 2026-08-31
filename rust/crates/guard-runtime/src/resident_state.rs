@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use crate::resident_state_encoding::{decode_hex, hex_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
@@ -487,32 +488,6 @@ pub(crate) fn clear_stale_startup_lock(
     }
     fs::remove_file(path).map_err(|_| "native_resident_lock_recovery_failed".to_owned())?;
     Ok(true)
-}
-
-fn hex_bytes(bytes: &[u8]) -> String {
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
-    }
-    output
-}
-
-fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
-    if value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err("native_resident_state_hex_invalid".to_owned());
-    }
-    value
-        .as_bytes()
-        .chunks_exact(2)
-        .map(|pair| {
-            let high = crate::hex_nibble(pair[0])
-                .ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
-            let low = crate::hex_nibble(pair[1])
-                .ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
-            Ok((high << 4) | low)
-        })
-        .collect()
 }
 
 #[cfg(test)]

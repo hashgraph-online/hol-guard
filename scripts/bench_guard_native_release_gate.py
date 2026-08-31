@@ -232,7 +232,6 @@ def main() -> int:
     args = parser.parse_args()
     if args.warm_iterations < 10 or args.cold_iterations < 2:
         parser.error("benchmark iteration counts are too small")
-
     runtime = _validated_runtime(args.runtime)
     with tempfile.TemporaryDirectory(prefix="hol-guard-native-bench-") as temp_dir:
         workspace = Path(temp_dir)
