@@ -160,7 +160,7 @@ def test_v2_projection_does_not_mutate_never_observed_identity(tmp_path: Path, s
     }
 
 
-def test_v2_projection_does_not_restore_authority_after_observation_is_revoked(tmp_path: Path) -> None:
+def test_v2_context_change_does_not_clear_authority_after_observation_is_revoked(tmp_path: Path) -> None:
     store, identity = _observed_store(tmp_path)
     apply_verified_custom_extension_continuity(
         store,
@@ -172,15 +172,21 @@ def test_v2_projection_does_not_restore_authority_after_observation_is_revoked(t
         _ = connection.execute("delete from local_cli_observation where cli_id = ?", (identity.cli_id,))
 
     before = store.read_local_cli_grant(identity.cli_id)
-    projected = apply_verified_custom_extension_continuity(
+    next_bundle = _bundle(identity.identity_hash, workspace_id="workspace-other", device_id="device-other")
+    payload = next_bundle["payload"]
+    assert isinstance(payload, dict)
+    continuity = payload[CUSTOM_EXTENSION_CONTINUITY_FIELD]
+    assert isinstance(continuity, dict)
+    continuity["items"] = []
+
+    apply_verified_custom_extension_continuity(
         store,
-        _bundle(identity.identity_hash, state="allowed", revision=2),
-        device_id=_DEVICE_ID,
+        next_bundle,
+        device_id="device-other",
         now=_NOW,
     )
 
     assert store.read_local_cli_grant(identity.cli_id) == before
-    assert _state_items(projected)[identity.cli_id]["status"] == "pending_observation"
 
 
 def test_v2_projection_does_not_apply_prior_stale_identity_to_replacement(tmp_path: Path) -> None:

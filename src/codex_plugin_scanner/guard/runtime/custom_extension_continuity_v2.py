@@ -271,6 +271,9 @@ def _plan_context_cleanup(
         prior_identity = raw.get("local_identity_hash", raw.get("identity_hash"))
         if local is None or local.get("identity_hash") != prior_identity or not isinstance(prior_identity, str):
             continue
+        observed_count = local.get("observed_count")
+        if type(observed_count) is not int or observed_count < 1:
+            continue
         if _local_override_matches(removals.get(cli_id), identity_hash=prior_identity, cloud_revision=cloud_revision):
             continue
         current = store.read_local_cli_grant(cli_id)
