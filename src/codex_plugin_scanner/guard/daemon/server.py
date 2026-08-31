@@ -251,6 +251,7 @@ from .discovery import (
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
 from .hook_process_runner import HookProcessRunner
+from .hook_worker_responses import prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_api import LocalCliApiError, LocalCliApiService
@@ -5737,24 +5738,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_json({"error": error.code}, status=400)
                 return
 
-        if native_required:
-            prepared_policy = daemon_server.hook_worker.prepare_workspace_policy(
-                Path(workspace) if workspace is not None else None,
-                deadline=hook_deadline.expires_at,
-            )
-            if prepared_policy is None:
-                daemon_server.hook_worker.metrics.record_route("native_fail_safe")
-                self._write_json(
-                    self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not prepare the native policy safely.",
-                        reason_code="native_policy_not_ready",
-                        native_authoritative=True,
-                    )
-                )
-                return
+        if native_required and not prepare_native_hook_policy(
+            self, daemon_server, payload, params, default_harness, workspace, hook_deadline.expires_at
+        ):
+            return
 
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         capacity_harness = daemon_server.canonical_hook_capacity_harness(

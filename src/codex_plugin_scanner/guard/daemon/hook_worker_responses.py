@@ -3,6 +3,39 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+
+def prepare_native_hook_policy(
+    handler: Any,
+    daemon_server: Any,
+    payload: dict[str, object],
+    params: Mapping[str, list[str]],
+    default_harness: str,
+    workspace: str | None,
+    deadline: float,
+) -> bool:
+    """Apply the production native-policy barrier before hook admission."""
+
+    prepared_policy = daemon_server.hook_worker.prepare_workspace_policy(
+        Path(workspace) if workspace is not None else None,
+        deadline=deadline,
+    )
+    if prepared_policy is not None:
+        return True
+    daemon_server.hook_worker.metrics.record_route("native_fail_safe")
+    handler._write_json(
+        handler._runtime_hook_fail_safe_response(
+            payload,
+            params,
+            default_harness=default_harness,
+            reason="HOL Guard could not prepare the native policy safely.",
+            reason_code="native_policy_not_ready",
+            native_authoritative=True,
+        )
+    )
+    return False
 
 
 def _canonical_hook_harness(harness: str) -> str:
