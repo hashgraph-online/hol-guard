@@ -65,7 +65,6 @@ def _config_command(config: dict[str, object], name: str) -> list[str]:
 
 def test_daemon_start_command_keeps_pre_home_argument_compatibility(tmp_path: Path) -> None:
     command = isolated_daemon_start_command(sys.executable, tmp_path, tmp_path / "guard")
-
     assert f"home_dir=Path({str(Path.home())!r})" in command[3]
     assert "schedule_guard_daemon_recovery" in command[3]
 

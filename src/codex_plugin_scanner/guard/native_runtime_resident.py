@@ -100,6 +100,7 @@ _SERVICE_OUTPUT_LIMIT = 64 * 1024
 _MAX_CLIENT_IN_FLIGHT = 16
 _OVERLOAD_RESPONSE = b'{"error":"native_overloaded","retryable":true}'
 _HEALTH_REQUEST = b'{"operation":"health","request":{}}'
+_StartedResident = tuple[bytes, threading.Event, int]
 
 
 def _remaining_budget(deadline: float) -> float:
@@ -222,71 +223,79 @@ class _ResidentService:
                 and _unix_socket_accepts_connections(self.socket_path)
             ):
                 return self._adopt_running_resident(timeout_seconds=min(_remaining_budget(deadline), 0.1))
-            started_here = False
-            started_auth_token: bytes | None = None
-            started_stop_event: threading.Event | None = None
-            started_generation: int | None = None
+            thread, started = self._start_thread_if_needed()
+            if thread is None:
+                return False
+            return self._wait_until_ready(thread=thread, started=started, deadline=deadline)
+
+    def _start_thread_if_needed(self) -> tuple[threading.Thread | None, _StartedResident | None]:
+        with self._lock:
+            if self._closed:
+                return None, None
+            thread = self._thread
+            if thread is not None and thread.is_alive():
+                return thread, None
+            if os.name != "nt" and self.socket_path is not None:
+                _prune_socket_credentials(self.socket_path)
+            stop_event = threading.Event()
+            auth_token = secrets.token_bytes(_AUTH_TOKEN_BYTES)
+            self._stop_event = stop_event
+            self._auth_token = auth_token
+            self._generation += 1
+            generation = self._generation
+            if self._starts == 0:
+                native_record_starting(self.identity_sha256, self.guard_home)
+            else:
+                native_record_restart(self.identity_sha256, self.guard_home)
+            thread = threading.Thread(
+                target=self._run,
+                args=(stop_event, auth_token, generation),
+                name="hol-guard-native-runtime",
+                daemon=True,
+            )
+            self._thread = thread
+            self._starts += 1
+            thread.start()
+            return thread, (auth_token, stop_event, generation)
+
+    def _wait_until_ready(
+        self,
+        *,
+        thread: threading.Thread,
+        started: _StartedResident | None,
+        deadline: float,
+    ) -> bool:
+        while time.monotonic() < deadline:
+            remaining = _remaining_budget(deadline)
+            if remaining <= 0:
+                return False
+            if self._transport_accepts_authenticated_connections(timeout_seconds=min(remaining, 0.1)):
+                return started is None or os.name == "nt" or self._publish_started_credential(started)
             with self._lock:
-                if self._closed:
+                if self._closed or self._thread is not thread or not thread.is_alive():
                     return False
-                thread = self._thread
-                if thread is None or not thread.is_alive():
-                    if os.name != "nt" and self.socket_path is not None:
-                        _prune_socket_credentials(self.socket_path)
-                    stop_event = threading.Event()
-                    auth_token = secrets.token_bytes(_AUTH_TOKEN_BYTES)
-                    self._stop_event = stop_event
-                    self._auth_token = auth_token
-                    self._generation += 1
-                    generation = self._generation
-                    if self._starts == 0:
-                        native_record_starting(self.identity_sha256, self.guard_home)
-                    else:
-                        native_record_restart(self.identity_sha256, self.guard_home)
-                    thread = threading.Thread(
-                        target=self._run,
-                        args=(stop_event, auth_token, generation),
-                        name="hol-guard-native-runtime",
-                        daemon=True,
-                    )
-                    self._thread = thread
-                    self._starts += 1
-                    started_here = True
-                    started_auth_token = auth_token
-                    started_stop_event = stop_event
-                    started_generation = generation
-                    thread.start()
-            while time.monotonic() < deadline:
-                remaining = _remaining_budget(deadline)
-                if remaining <= 0:
-                    return False
-                if self._transport_accepts_authenticated_connections(timeout_seconds=min(remaining, 0.1)):
-                    if started_here and os.name != "nt":
-                        assert started_auth_token is not None
-                        assert started_stop_event is not None
-                        assert started_generation is not None
-                        socket_path = self.socket_path
-                        identity = _socket_identity(socket_path) if socket_path is not None else None
-                        if (
-                            socket_path is None
-                            or identity is None
-                            or not _publish_socket_credential(
-                                socket_path,
-                                expected_identity=identity,
-                                auth_token=started_auth_token,
-                            )
-                        ):
-                            started_stop_event.set()
-                            return False
-                        with self._lock:
-                            if self._generation == started_generation:
-                                self._owned_socket_identity = identity
-                    return True
-                with self._lock:
-                    if self._closed or self._thread is not thread or not thread.is_alive():
-                        return False
-                time.sleep(min(0.01, _remaining_budget(deadline)))
+            time.sleep(min(0.01, _remaining_budget(deadline)))
+        return False
+
+    def _publish_started_credential(self, started: _StartedResident) -> bool:
+        auth_token, stop_event, generation = started
+        socket_path = self.socket_path
+        identity = _socket_identity(socket_path) if socket_path is not None else None
+        if (
+            socket_path is None
+            or identity is None
+            or not _publish_socket_credential(
+                socket_path,
+                expected_identity=identity,
+                auth_token=auth_token,
+            )
+        ):
+            stop_event.set()
             return False
+        with self._lock:
+            if self._generation == generation:
+                self._owned_socket_identity = identity
+        return True
 
     def _adopt_running_resident(self, *, timeout_seconds: float) -> bool:
         socket_path = self.socket_path

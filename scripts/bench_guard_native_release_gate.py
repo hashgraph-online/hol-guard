@@ -4,11 +4,14 @@
 Only aggregate synthetic measurements are emitted. No user commands, file
 contents, secrets, or machine paths are included in benchmark output.
 
-The warm comparison measures two already-resident IPC paths. It accepts either
-the absolute latency ceiling or a material improvement over the pinned Python
-baseline, matching the release acceptance contract.
-The cold comparison measures the process topology that the native runtime is
-intended to replace and therefore retains the stronger relative-speedup gate.
+The warm comparison measures two already-resident IPC paths. The Python
+reference explicitly disables native authority and varies synthetic samples to
+avoid cache distortion. Relative speed remains informative because trivial
+allow payloads can be faster in Python, while release acceptance follows the
+contract: native p95 must either stay below the absolute ceiling or materially
+improve over the pinned Python reference. The cold comparison measures the
+process topology that the native runtime is intended to replace and therefore
+retains the stronger relative-speedup gate.
 """
 
 from __future__ import annotations
@@ -46,6 +49,19 @@ _measurement_summaries = _native_release_reporting.measurement_summaries
 _performance_failures = _native_release_reporting.performance_failures
 
 
+@contextmanager
+def _python_reference_mode() -> Iterator[None]:
+    previous = os.environ.get("HOL_GUARD_NATIVE")
+    os.environ["HOL_GUARD_NATIVE"] = "off"
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("HOL_GUARD_NATIVE", None)
+        else:
+            os.environ["HOL_GUARD_NATIVE"] = previous
+
+
 def _percentile(values: list[float], quantile: float) -> float:
     ordered = sorted(values)
     index = min(len(ordered) - 1, max(0, int(len(ordered) * quantile)))
@@ -61,20 +77,27 @@ def _summary(values: list[float]) -> dict[str, float]:
     }
 
 
-def _payload() -> dict[str, object]:
+def _payload(sample: int | None = None) -> dict[str, object]:
+    sample_marker = "" if sample is None else f"// benchmark sample {sample}\n"
     return {
         "hook_event_name": "PostToolUse",
         "tool_name": "Read",
         "tool_input": {"file_path": "src/example.ts"},
-        "tool_response": [{"type": "text", "text": "export const value = 1;\n" * 40}],
+        "tool_response": [{"type": "text", "text": ("export const value = 1;\n" * 40) + sample_marker}],
     }
 
 
-def _request(*, workspace: Path, guard_home: Path, request_id: str) -> HookReviewRequest:
+def _request(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    request_id: str,
+    sample: int | None = None,
+) -> HookReviewRequest:
     return HookReviewRequest(
         harness="claude-code",
         event_name="PostToolUse",
-        payload=_payload(),
+        payload=_payload(sample),
         payload_kind="inline",
         config_path=None,
         cwd=workspace,
@@ -119,9 +142,10 @@ def _python_review(
     *,
     workspace: Path,
     guard_home: Path,
+    sample: int | None = None,
 ) -> None:
     result = runner.review(
-        payload=_payload(),
+        payload=_payload(sample),
         harness="claude-code",
         home_dir=workspace,
         guard_home=guard_home,
@@ -141,9 +165,9 @@ def _bench_python_warm(
     iterations: int,
 ) -> list[float]:
     values: list[float] = []
-    for _ in range(iterations):
+    for index in range(iterations):
         started = time.perf_counter()
-        _python_review(runner, workspace=workspace, guard_home=guard_home)
+        _python_review(runner, workspace=workspace, guard_home=guard_home, sample=index)
         values.append((time.perf_counter() - started) * 1_000.0)
     return values
 
@@ -157,12 +181,21 @@ def _bench_native_warm(
 ) -> list[float]:
     values: list[float] = []
     for index in range(iterations):
-        request = _request(workspace=workspace, guard_home=guard_home, request_id=f"native-warm-{index}")
+        request = _request(
+            workspace=workspace,
+            guard_home=guard_home,
+            request_id=f"native-warm-{index}",
+            sample=index,
+        )
         started = time.perf_counter()
         response = review_post_tool_native(request, observe_mode=False, policy_snapshot=policy_snapshot)
         values.append((time.perf_counter() - started) * 1_000.0)
         if response is None or response.decision != "allow":
-            raise RuntimeError("Native resident runtime did not return the expected allow decision")
+            raise RuntimeError(
+                "Native resident runtime did not return the expected allow decision: "
+                f"sample={index} reason_code={getattr(response, 'reason_code', None)} "
+                f"reason={getattr(response, 'reason', None)}"
+            )
     return values
 
 
