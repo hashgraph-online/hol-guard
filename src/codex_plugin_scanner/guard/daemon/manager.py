@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from contextlib import contextmanager, nullcontext, suppress
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO, Literal, TypedDict
@@ -45,7 +45,10 @@ from .discovery import (
     load_daemon_discovery_key,
     verify_daemon_state,
 )
+from .file_locking import lock_daemon_file as _lock_daemon_start_file
+from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
 from .lifecycle_journal import record_daemon_lifecycle_event
+from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 
 DEFAULT_GUARD_DAEMON_PORT = 4781
 GUARD_DAEMON_PORT_RANGE = 1000
@@ -126,8 +129,6 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
     }
 )
 _GUARD_DAEMON_DESKTOP_ENV_KEYS = ("HOL_GUARD_DESKTOP", "HOL_GUARD_DESKTOP_RUNTIME_OWNER", "HOL_GUARD_DESKTOP_VERSION")
-_START_LOCKS: dict[str, threading.Lock] = {}
-_START_LOCKS_GUARD = threading.Lock()
 _RECOVERY_LOCKS: dict[str, threading.Lock] = {}
 _RECOVERY_LOCKS_GUARD = threading.Lock()
 _STATE_WRITE_LOCKS: dict[str, threading.Lock] = {}
@@ -358,7 +359,6 @@ def ensure_guard_daemon(
     preferred_port: int | None = None,
     allow_windows_job_breakaway: bool = False,
     executable: Path | None = None,
-    _start_lock_held: bool = False,
 ) -> str:
     if desktop_preflight_requested():
         raise RuntimeError("Guard daemon start is disabled during Desktop preflight.")
@@ -374,8 +374,7 @@ def ensure_guard_daemon(
             if preferred_port is None or existing_port == preferred_port:
                 _schedule_duplicate_guard_daemon_retirement(guard_home)
                 return existing_url
-    start_lock = nullcontext() if _start_lock_held else _guard_daemon_start_lock(guard_home, deadline=start_deadline)
-    with start_lock:
+    with _guard_daemon_start_lock(guard_home, deadline=start_deadline):
         if executable is None:
             existing_url = load_guard_daemon_url(guard_home)
             if existing_url is not None:
@@ -524,19 +523,8 @@ def ensure_guard_daemon_after_update(
     preferred_port: int | None = None,
     allow_windows_job_breakaway: bool = False,
     executable: Path | None = None,
-    _start_lock_held: bool = False,
 ) -> str:
     """Restart the local daemon after a package update with a longer startup window."""
-    if _start_lock_held:
-        return ensure_guard_daemon(
-            guard_home,
-            home_dir=home_dir,
-            start_timeout=GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
-            preferred_port=preferred_port,
-            allow_windows_job_breakaway=allow_windows_job_breakaway,
-            executable=executable,
-            _start_lock_held=True,
-        )
     if executable is None:
         return ensure_guard_daemon(
             guard_home,
@@ -1119,66 +1107,13 @@ def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.re
 def _daemon_healthz_details_payload(url: str, auth_token: str) -> dict[str, object] | None:
     try:
         request = _daemon_health_request(f"{url}/v1/healthz/details", auth_token)
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(request, timeout=1) as response:
+        with urllib.request.urlopen(request, timeout=1) as response:
             if response.status != 200:
                 return None
-            response_bytes = response.read(65_537)
-            if len(response_bytes) > 65_536:
-                return None
-            payload = json.loads(response_bytes.decode("utf-8"))
+            payload = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
         return None
     return payload if isinstance(payload, dict) else None
-
-
-def verified_live_guard_daemon_identity(guard_home: Path) -> dict[str, object] | None:
-    """Return authenticated live daemon identity after state and health agree."""
-
-    state = load_authenticated_daemon_state(guard_home)
-    if not isinstance(state, dict):
-        return None
-    version_text = state.get("package_version")
-    host = state.get("host")
-    port = state.get("port")
-    pid = state.get("pid")
-    runtime_fingerprint = state.get("runtime_fingerprint")
-    token = load_guard_daemon_auth_token(guard_home)
-    if (
-        not isinstance(version_text, str)
-        or not isinstance(host, str)
-        or host not in {"127.0.0.1", "::1"}
-        or not isinstance(port, int)
-        or not 1 <= port <= 65_535
-        or state.get("compatibility_version") != GUARD_DAEMON_COMPATIBILITY_VERSION
-        or not isinstance(runtime_fingerprint, str)
-        or not runtime_fingerprint
-        or not isinstance(pid, int)
-        or pid <= 0
-        or not isinstance(token, str)
-        or not token
-    ):
-        return None
-    url_host = f"[{host}]" if host == "::1" else host
-    daemon_url = f"http://{url_host}:{port}"
-    details = _daemon_healthz_details_payload(daemon_url, token)
-    identity_fields = ("package_version", "compatibility_version", "runtime_fingerprint", "pid")
-    details_guard_home = details.get("guard_home") if isinstance(details, dict) else None
-    if (
-        not isinstance(details, dict)
-        or details.get("ok") is not True
-        or not isinstance(details_guard_home, str)
-        or not details_guard_home
-        or any(details.get(field) != state.get(field) for field in identity_fields)
-    ):
-        return None
-    try:
-        resolved_details_home = Path(details_guard_home).expanduser().resolve()
-    except (OSError, RuntimeError, ValueError):
-        return None
-    if resolved_details_home != guard_home.expanduser().resolve():
-        return None
-    return {**state, "daemon_url": daemon_url}
 
 
 def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth_token: str) -> bool:
@@ -3023,41 +2958,6 @@ def _wait_for_guard_daemon_url(
 
 
 @contextmanager
-def _guard_daemon_start_lock(guard_home: Path, *, deadline: float | None = None):
-    lock_key = str(guard_home.resolve())
-    with _START_LOCKS_GUARD:
-        thread_lock = _START_LOCKS.setdefault(lock_key, threading.Lock())
-    if deadline is None:
-        thread_lock.acquire()
-    else:
-        acquired = thread_lock.acquire(timeout=max(0.0, deadline - time.monotonic()))
-        if not acquired:
-            raise RuntimeError("Timed out waiting to start the Guard daemon.")
-    try:
-        lock_path = guard_home / "daemon-start.lock"
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with lock_path.open("a+b") as handle:
-            if deadline is None:
-                _lock_daemon_start_file(handle)
-            else:
-                while not _try_lock_daemon_file(handle):
-                    if time.monotonic() >= deadline:
-                        raise RuntimeError("Timed out waiting to start the Guard daemon.")
-                    time.sleep(
-                        min(
-                            GUARD_DAEMON_POLL_INTERVAL_SECONDS,
-                            max(0.0, deadline - time.monotonic()),
-                        )
-                    )
-            try:
-                yield
-            finally:
-                _unlock_daemon_start_file(handle)
-    finally:
-        thread_lock.release()
-
-
-@contextmanager
 def _guard_daemon_recovery_lock(guard_home: Path):
     """Serialize a complete daemon recovery transaction for one Guard home."""
 
@@ -3120,50 +3020,6 @@ def _guard_daemon_state_write_lock(guard_home: Path):
                 yield
             finally:
                 _unlock_daemon_start_file(handle)
-
-
-def _lock_daemon_start_file(handle: BinaryIO) -> None:
-    if os.name == "nt":
-        import msvcrt
-
-        handle.seek(0)
-        if os.fstat(handle.fileno()).st_size == 0:
-            handle.write(b"0")
-            handle.flush()
-        handle.seek(0)
-        while True:
-            try:
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-                return
-            except OSError:
-                time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
-        return
-    import fcntl
-
-    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-
-
-def _try_lock_daemon_file(handle: BinaryIO) -> bool:
-    if os.name == "nt":
-        import msvcrt
-
-        handle.seek(0)
-        if os.fstat(handle.fileno()).st_size == 0:
-            handle.write(b"0")
-            handle.flush()
-        handle.seek(0)
-        try:
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
-            return False
-        return True
-    import fcntl
-
-    try:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return False
-    return True
 
 
 _unlock_daemon_start_file = release_file_lock

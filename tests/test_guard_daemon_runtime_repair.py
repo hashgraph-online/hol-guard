@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import manager, runtime_repair
+from codex_plugin_scanner.guard.daemon import live_identity, manager, runtime_repair, start_lock
 
 
 def test_repair_restarts_authenticated_older_runtime(
@@ -48,7 +48,7 @@ def test_repair_restarts_authenticated_older_runtime(
     monkeypatch.setattr(
         runtime_repair,
         "ensure_guard_daemon_after_update",
-        lambda _home, *, home_dir, _start_lock_held: events.append("ensure") or "http://127.0.0.1:5474",
+        lambda _home, *, home_dir: events.append("ensure") or "http://127.0.0.1:5474",
     )
 
     result = runtime_repair.repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
@@ -135,7 +135,7 @@ def test_repair_restarts_equal_version_with_stale_fingerprint(
     monkeypatch.setattr(
         runtime_repair,
         "ensure_guard_daemon_after_update",
-        lambda _home, *, home_dir, _start_lock_held: "http://127.0.0.1:5474",
+        lambda _home, *, home_dir: "http://127.0.0.1:5474",
     )
 
     result = runtime_repair.repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
@@ -164,7 +164,7 @@ def test_repair_restarts_when_authenticated_state_is_absent(
     monkeypatch.setattr(
         runtime_repair,
         "ensure_guard_daemon_after_update",
-        lambda _home, *, home_dir, _start_lock_held: "http://127.0.0.1:5474",
+        lambda _home, *, home_dir: "http://127.0.0.1:5474",
     )
 
     result = runtime_repair.repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
@@ -190,7 +190,7 @@ def test_live_identity_rejects_non_string_host(
     host: object,
 ) -> None:
     monkeypatch.setattr(
-        manager,
+        live_identity,
         "load_authenticated_daemon_state",
         lambda _home: {
             "package_version": "3.0.34",
@@ -201,9 +201,9 @@ def test_live_identity_rejects_non_string_host(
             "runtime_fingerprint": "fingerprint",
         },
     )
-    monkeypatch.setattr(manager, "load_guard_daemon_auth_token", lambda _home: "token")
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "token")
 
-    assert manager.verified_live_guard_daemon_identity(tmp_path) is None
+    assert live_identity.verified_live_guard_daemon_identity(tmp_path) is None
 
 
 def test_live_identity_rejects_empty_health_guard_home(
@@ -218,12 +218,21 @@ def test_live_identity_rejects_empty_health_guard_home(
         "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
         "runtime_fingerprint": "fingerprint",
     }
-    monkeypatch.setattr(manager, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(manager, "load_guard_daemon_auth_token", lambda _home: "token")
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "token")
     monkeypatch.setattr(
-        manager,
-        "_daemon_healthz_details_payload",
+        live_identity,
+        "_proxy_disabled_health_details",
         lambda _url, _token: {**state, "ok": True, "guard_home": ""},
     )
 
-    assert manager.verified_live_guard_daemon_identity(tmp_path) is None
+    assert live_identity.verified_live_guard_daemon_identity(tmp_path) is None
+
+
+def test_daemon_start_lock_is_reentrant_for_repair_transaction(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+
+    with manager._guard_daemon_start_lock(guard_home), manager._guard_daemon_start_lock(guard_home):
+        assert start_lock._THREAD_DEPTHS[(start_lock.threading.get_ident(), str(guard_home.resolve()))] == 2
+
+    assert start_lock._THREAD_DEPTHS == {}

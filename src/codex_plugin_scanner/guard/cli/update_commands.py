@@ -2263,9 +2263,7 @@ def _verified_newer_guard_daemon(
 ) -> dict[str, object] | None:
     """Retain a live newer runtime only after signed-state and loopback health agree."""
 
-    from ..daemon.manager import (
-        verified_live_guard_daemon_identity,
-    )
+    from ..daemon.live_identity import verified_live_guard_daemon_identity
 
     identity = verified_live_guard_daemon_identity(guard_home)
     if identity is None:
