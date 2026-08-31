@@ -165,6 +165,9 @@ hol-guard command explain 'grep "rm -rf|git clean" README.md'
 hol-guard command extensions command.git --json
 ```
 
+[Explore built-in Extensions](docs/guard/extensions/README.md) ·
+[Contribute an Extension](docs/guard/extensions/contributing.md)
+
 Structured core rules preserve every match in a compound command. A Git preview such as `git clean -ndx` remains
 safe, while an unrelated destructive segment still produces review. New structured coverage feeds the same runtime
 artifact and policy pipeline as existing command classifications.
