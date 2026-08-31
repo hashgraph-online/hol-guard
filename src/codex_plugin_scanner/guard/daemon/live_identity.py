@@ -22,7 +22,7 @@ def _proxy_disabled_health_details(url: str, auth_token: str) -> dict[str, objec
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(request, timeout=1.0) as response:
-            if response.status != 200:
+            if getattr(response, "status", None) != 200:
                 return None
             response_bytes = response.read(_MAX_HEALTH_DETAILS_BYTES + 1)
     except (OSError, ValueError, urllib.error.URLError):

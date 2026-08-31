@@ -173,6 +173,24 @@ def test_repair_restarts_when_authenticated_state_is_absent(
     assert result["daemon_version"] == "unknown"
 
 
+def test_repair_rejects_invalid_installed_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setattr(runtime_repair, "verified_live_guard_daemon_identity", lambda _home: None)
+    monkeypatch.setattr(runtime_repair, "__version__", "invalid version")
+    monkeypatch.setattr(
+        runtime_repair,
+        "repair_approval_center_locator",
+        lambda _home: {"repaired": True, "cleared": []},
+    )
+
+    with pytest.raises(RuntimeError, match="package version is invalid"):
+        runtime_repair.repair_guard_daemon_runtime(tmp_path / "guard-home", home_dir=home_dir)
+
+
 def test_repair_rejects_home_file(
     tmp_path: Path,
 ) -> None:

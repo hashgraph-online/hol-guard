@@ -49,8 +49,8 @@ def repair_guard_daemon_runtime(
         verified_runtime = _verified_live_runtime(identity) if identity is not None else None
         try:
             current_version = Version(__version__)
-        except InvalidVersion:
-            return result
+        except InvalidVersion as error:
+            raise RuntimeError("Installed Guard package version is invalid.") from error
         current_fingerprint = current_guard_daemon_runtime_fingerprint()
         if verified_runtime is not None and (
             verified_runtime[0] > current_version
