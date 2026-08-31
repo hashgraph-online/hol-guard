@@ -242,8 +242,8 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     _emit("daemon", payload, as_json)
     return 0
 
-def _handle_daemon_repair(guard_home: Path, as_json: bool) -> int:
-    result = repair_approval_center_locator(guard_home)
+def _handle_daemon_repair(guard_home: Path, as_json: bool, *, home_dir: Path | None = None) -> int:
+    result = repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
     _emit("daemon", result, as_json)
     return 0
 
@@ -341,7 +341,7 @@ def _dispatch_guard_daemon_command(
     if daemon_command == "status":
         return _handle_daemon_status(guard_home, getattr(args, "json", False))
     if daemon_command == "repair":
-        return _handle_daemon_repair(guard_home, getattr(args, "json", False))
+        return _handle_daemon_repair(guard_home, getattr(args, "json", False), home_dir=home_dir)
     if daemon_command == "stop":
         return _handle_daemon_stop(guard_home, getattr(args, "json", False))
     if store is None:
