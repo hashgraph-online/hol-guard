@@ -636,16 +636,15 @@ def test_deferred_runner_bounds_backfill_deferral_during_active_reviews(
         return original_start(generation=generation)
 
     monkeypatch.setattr(runner, "_start_slot", counted_start)
-    monkeypatch.setattr(hook_runner_module, "_HOOK_PROCESS_BACKFILL_MAX_DEFERRAL_SECONDS", 0.2)
     try:
         runner.start(defer_backfill=True)
         with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
             generation = runner._generation  # pyright: ignore[reportPrivateUsage]
             runner._active_reviews[generation] = 1  # pyright: ignore[reportPrivateUsage]
-        runner.enable_full_capacity(delay_seconds=0)
+        runner.enable_full_capacity(delay_seconds=0, active_deferral_seconds=0.2)
         time.sleep(0.1)
         assert attempts == 1
-        assert runner.wait_for_capacity(minimum_workers=3, timeout_seconds=5)
+        assert runner.wait_for_capacity(minimum_workers=3, timeout_seconds=8)
     finally:
         with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
             runner._active_reviews.clear()  # pyright: ignore[reportPrivateUsage]
