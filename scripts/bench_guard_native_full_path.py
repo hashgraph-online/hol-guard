@@ -16,9 +16,9 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import (
     review_post_tool_native,
 )

@@ -485,6 +485,34 @@ def native_runtime_status() -> NativeRuntimeStatus:
 def _response_from_payload(payload: object) -> HookReviewResponse | None:
     if not isinstance(payload, dict):
         return None
+    if payload.get("schema") == "guard-hook-edge-result.v2":
+        if set(payload) - {
+            "schema",
+            "authority",
+            "request_id",
+            "harness",
+            "event_name",
+            "payload_kind",
+            "result",
+        }:
+            return None
+        if (
+            payload.get("authority") != "rust"
+            or payload.get("event_name") != "PostToolUse"
+            or payload.get("payload_kind") not in {"inline", "source_file_ref", "encrypted_payload_ref"}
+            or not isinstance(payload.get("harness"), str)
+            or not payload["harness"]
+            or len(payload["harness"]) > 64
+            or not isinstance(payload.get("result"), dict)
+        ):
+            return None
+        request_id = payload.get("request_id")
+        if request_id is not None and (not isinstance(request_id, str) or len(request_id) > 256):
+            return None
+        result_payload = payload.get("result")
+        if not isinstance(result_payload, dict):
+            return None
+        payload = result_payload
     decision = payload.get("decision")
     model_output_action = payload.get("model_output_action")
     notice = payload.get("notice")

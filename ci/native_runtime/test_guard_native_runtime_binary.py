@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from ci.native_runtime.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 

@@ -273,6 +273,7 @@
         ".github/workflows/rust-runtime.yml",
         ".github/workflows/rust-authority-ownership.yml",
         "ci/native_runtime/**",
+        "src/codex_plugin_scanner/guard/native_policy_test_support.py",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
         "scripts/ci/hook_data_plane_ownership_contract.py",
         "scripts/bench_guard_native_release_gate.py",

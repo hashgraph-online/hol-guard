@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_command_model import (
     _decode_command_model,
     review_command_model_native,
 )
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="resident native service is POSIX-only in this wave")

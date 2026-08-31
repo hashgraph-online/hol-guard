@@ -7,8 +7,8 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 
-from codex_plugin_scanner.guard.native_policy_snapshot import get_native_policy_snapshot_publisher
-from codex_plugin_scanner.guard.store import GuardStore
+from .native_policy_snapshot import get_native_policy_snapshot_publisher
+from .store import GuardStore
 
 
 @contextmanager

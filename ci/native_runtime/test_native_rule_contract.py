@@ -24,6 +24,23 @@ _COMPONENTS = (
     ("guard-command-pretool-result", Path("rust/crates/guard-command/src/pretool/generic_result.rs")),
     ("guard-command-pretool-extract", Path("rust/crates/guard-command/src/pretool/generic_extract.rs")),
     ("guard-runtime-policy-enforcement", Path("rust/crates/guard-runtime/src/policy_enforcement.rs")),
+    (
+        "guard-runtime-policy-enforcement-facts",
+        Path("rust/crates/guard-runtime/src/policy_enforcement_facts.rs"),
+    ),
+    (
+        "guard-runtime-policy-enforcement-policy",
+        Path("rust/crates/guard-runtime/src/policy_enforcement_policy.rs"),
+    ),
+    ("guard-policy-snapshot", Path("rust/crates/guard-policy-snapshot/src/lib.rs")),
+    (
+        "guard-policy-snapshot-canonical",
+        Path("rust/crates/guard-policy-snapshot/src/policy_snapshot_canonical.rs"),
+    ),
+    (
+        "guard-policy-snapshot-crypto",
+        Path("rust/crates/guard-policy-snapshot/src/policy_snapshot_crypto.rs"),
+    ),
 )
 
 

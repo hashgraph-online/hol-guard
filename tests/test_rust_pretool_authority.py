@@ -262,8 +262,16 @@ def test_hook_worker_returns_native_allow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
-        lambda *_args, **_kwargs: _native_allow("pwd"),
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: {
+            "event_name": "PreToolUse",
+            "harness": "codex",
+            "result": _native_allow("pwd"),
+        },
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
@@ -316,7 +324,7 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
     assert native_hook_route() == "native_resident"
 
 
-def test_full_cli_review_continuation_keeps_python_terminal_provenance(
+def test_full_cli_review_keeps_native_terminal_provenance(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -333,14 +341,10 @@ def test_full_cli_review_continuation_keeps_python_terminal_provenance(
 
     def review_with_resident_receipt(*_args: object, **_kwargs: object) -> dict[str, Any]:
         record_native_hook_route("native_resident")
-        return native_review
+        return {"event_name": "PreToolUse", "harness": "codex", "result": native_review}
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
-        review_with_resident_receipt,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         review_with_resident_receipt,
     )
     reset_native_hook_route()
@@ -371,7 +375,7 @@ def test_full_cli_review_continuation_keeps_python_terminal_provenance(
     )
 
     assert result == 0
-    assert native_hook_route() == "python_semantic"
+    assert native_hook_route() == "native_resident"
 
 
 def test_hook_worker_fails_closed_when_forced_native_is_missing(

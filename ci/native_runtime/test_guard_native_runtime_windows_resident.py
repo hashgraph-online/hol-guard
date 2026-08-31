@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime_resident as resident
-from ci.native_runtime.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_command_model import review_command_model_native
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_status,
