@@ -22,6 +22,21 @@ STORAGE_CLEARER_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
         "command.storage-clearer.cleanup",
     ),
     (
+        "bash -c './storage-clearer.sh run B'",
+        "Storage Clearer cleanup command",
+        "command.storage-clearer.cleanup",
+    ),
+    (
+        "bash --init-file /dev/null -c './storage-clearer.sh run B'",
+        "Storage Clearer cleanup command",
+        "command.storage-clearer.cleanup",
+    ),
+    (
+        "bash -O extglob -c './storage-clearer.sh run B'",
+        "Storage Clearer cleanup command",
+        "command.storage-clearer.cleanup",
+    ),
+    (
         "bash -x ./storage-clearer.sh run B",
         "Storage Clearer cleanup command",
         "command.storage-clearer.cleanup",
@@ -38,6 +53,11 @@ STORAGE_CLEARER_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "sh storage-clearer.sh app-run A",
+        "Storage Clearer cleanup command",
+        "command.storage-clearer.cleanup",
+    ),
+    (
+        "sh -c './storage-clearer.sh app-run A'",
         "Storage Clearer cleanup command",
         "command.storage-clearer.cleanup",
     ),
