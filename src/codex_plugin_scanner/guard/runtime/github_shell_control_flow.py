@@ -40,7 +40,7 @@ def _and_or_skipped_indexes(
             accumulated_statuses = frozenset()
             continue
         truth = _literal_pipeline_truth(pipeline, primary_command)
-        pipeline_statuses = frozenset({False, True}) if truth is None else frozenset({truth})
+        pipeline_statuses: frozenset[bool] = frozenset({False, True}) if truth is None else frozenset({truth})
         if pipeline_index == 0:
             accumulated_statuses = pipeline_statuses
             continue
@@ -49,17 +49,15 @@ def _and_or_skipped_indexes(
             if True not in accumulated_statuses:
                 skipped.add(pipeline_index)
                 continue
-            accumulated_statuses = pipeline_statuses | (
-                frozenset({False}) if False in accumulated_statuses else frozenset()
-            )
+            preserved_statuses: frozenset[bool] = frozenset({False}) if False in accumulated_statuses else frozenset()
+            accumulated_statuses = pipeline_statuses | preserved_statuses
             continue
         if connector == "||":
             if False not in accumulated_statuses:
                 skipped.add(pipeline_index)
                 continue
-            accumulated_statuses = pipeline_statuses | (
-                frozenset({True}) if True in accumulated_statuses else frozenset()
-            )
+            preserved_statuses = frozenset({True}) if True in accumulated_statuses else frozenset()
+            accumulated_statuses = pipeline_statuses | preserved_statuses
             continue
         accumulated_statuses = pipeline_statuses
     return skipped

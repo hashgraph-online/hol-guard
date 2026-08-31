@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import ModuleType
 from typing import Any, TextIO
 
@@ -27,7 +29,7 @@ _FACADE_NAMES = {
     "_iter_facade_overrides",
     "_parser",
     "_refresh_cloud_policy_bundle",
-    "_sync_support_overrides",
+    "_support_overrides",
     "_support",
     "add_guard_parser",
     "add_guard_root_parser",
@@ -45,13 +47,40 @@ def _iter_facade_overrides() -> dict[str, object]:
     for name, value in vars(module).items():
         if name.startswith("__") or name in _FACADE_NAMES:
             continue
-        if hasattr(_support, name):
+        if hasattr(_support, name) and value is not getattr(_support, name):
             overrides[name] = value
     return overrides
 
 
-def _sync_support_overrides() -> None:
-    _support._apply_overrides(_iter_facade_overrides())
+@contextmanager
+def _support_overrides() -> Iterator[None]:
+    overrides = _iter_facade_overrides()
+    missing = object()
+    export_map, module_export_names = _support._build_export_map(overrides)
+    override_names = set(overrides)
+    targets: list[tuple[ModuleType, set[str]]] = [(_support, set(export_map))]
+    for module in _support._SOURCE_MODULES:
+        affected_names = {
+            name
+            for name in export_map
+            if name not in module_export_names[module] or name in override_names
+        }
+        targets.append((module, affected_names))
+    snapshots = [
+        (module, {name: getattr(module, name, missing) for name in affected_names})
+        for module, affected_names in targets
+    ]
+    try:
+        _support._apply_overrides(overrides)
+        yield
+    finally:
+        for module, bindings in snapshots:
+            for name, value in bindings.items():
+                if value is missing:
+                    if hasattr(module, name):
+                        delattr(module, name)
+                else:
+                    setattr(module, name, value)
 
 
 def _support_attr(name: str) -> Any:
@@ -75,35 +104,45 @@ def run_guard_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
-    _sync_support_overrides()
-    return _support_attr("run_guard_command")(args, input_text=input_text, output_stream=output_stream)
+    with _support_overrides():
+        return _support_attr("run_guard_command")(
+            args,
+            input_text=input_text,
+            output_stream=output_stream,
+        )
 
 
 def _build_guard_device_connect_payload(*args: Any, **kwargs: Any):
-    _sync_support_overrides()
-    return _support_attr("_build_guard_device_connect_payload")(*args, **kwargs)
+    with _support_overrides():
+        return _support_attr("_build_guard_device_connect_payload")(*args, **kwargs)
 
 
 def _finalize_guard_connect_payload(*args: Any, **kwargs: Any):
-    _sync_support_overrides()
-    return _support_attr("_finalize_guard_connect_payload")(*args, **kwargs)
+    with _support_overrides():
+        return _support_attr("_finalize_guard_connect_payload")(*args, **kwargs)
 
 
 def _headless_approval_resolver(*args: Any, **kwargs: Any):
-    _sync_support_overrides()
-    return _support_attr("_headless_approval_resolver")(*args, **kwargs)
+    with _support_overrides():
+        resolver = _support_attr("_headless_approval_resolver")(*args, **kwargs)
+
+    def _scoped_resolver(*resolver_args: Any, **resolver_kwargs: Any):
+        with _support_overrides():
+            return resolver(*resolver_args, **resolver_kwargs)
+
+    return _scoped_resolver
 
 
 def _refresh_cloud_policy_bundle(*args: Any, **kwargs: Any):
-    _sync_support_overrides()
-    return _support_attr("_refresh_cloud_policy_bundle")(*args, **kwargs)
+    with _support_overrides():
+        return _support_attr("_refresh_cloud_policy_bundle")(*args, **kwargs)
 
 
 def __getattr__(name: str) -> Any:
     if name in _SYNCED_CALLS:
         def _wrapped(*args: Any, **kwargs: Any):
-            _sync_support_overrides()
-            return getattr(_support, name)(*args, **kwargs)
+            with _support_overrides():
+                return getattr(_support, name)(*args, **kwargs)
 
         _wrapped.__name__ = name
         _wrapped.__qualname__ = name
