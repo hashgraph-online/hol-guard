@@ -1,0 +1,105 @@
+name: Rust authority ownership
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-authority-ownership-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ownership:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+      - name: Enforce permanent source ownership
+        env:
+          OWNERSHIP_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          args=(--root . --json rust-authority-ownership.json)
+          if [[ -n "$OWNERSHIP_BASE_REF" ]]; then
+            args+=(--base-ref "$OWNERSHIP_BASE_REF")
+          fi
+          uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py "${args[@]}"
+      - name: Compile and lint complete Rust workspace
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --no-deps >/dev/null
+          cargo fmt --manifest-path rust/Cargo.toml --all --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+          rust/target/release/hol-guard-runtime self-test --json
+      - name: Run compiled PreToolUse adversarial integration
+        run: |
+          uv run --no-sync python scripts/ci/rust_pretool_authority_integration.py \
+            --runtime rust/target/release/hol-guard-runtime \
+            --json rust-pretool-authority.json
+      - name: Run compiled PostToolUse adversarial integration
+        run: |
+          uv run --no-sync python scripts/ci/rust_posttool_failclosed_integration.py \
+            --runtime rust/target/release/hol-guard-runtime \
+            --json rust-posttool-authority.json
+      - name: Run resident differential and mutation integration
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          uv run --no-sync pytest -q \
+            ci/native_runtime/test_command_model_resident.py \
+            ci/native_runtime/test_guard_native_runtime_binary.py \
+            ci/native_runtime/test_guard_native_runtime_differential.py \
+            ci/native_runtime/test_guard_native_runtime_mutation_differential.py \
+            --tb=short
+      - name: Enforce native performance
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          uv run --no-sync python scripts/bench_guard_native_release_gate.py \
+            --runtime "$HOL_GUARD_NATIVE_BINARY" \
+            --warm-iterations 30 --cold-iterations 2 \
+            --json rust-authority-performance.json --enforce
+      - name: Run installed native-wheel execution proof
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          uv run --no-sync pytest -q ci/native_runtime/test_native_hol_guard_wheel.py --tb=short
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: rust-authority-ownership-evidence
+          path: |
+            rust-authority-ownership.json
+            rust-pretool-authority.json
+            rust-posttool-authority.json
+            rust-authority-performance.json
+          if-no-files-found: error
+          retention-days: 30

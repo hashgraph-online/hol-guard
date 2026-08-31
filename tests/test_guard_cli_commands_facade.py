@@ -23,3 +23,19 @@ def test_commands_facade_wrapped_helpers_report_facade_module() -> None:
     assert guard_commands_module.run_guard_command.__module__ == guard_commands_module.__name__
     assert guard_commands_module._finalize_guard_connect_payload.__module__ == guard_commands_module.__name__
     assert guard_commands_module._headless_approval_resolver.__module__ == guard_commands_module.__name__
+
+
+def test_commands_facade_restores_propagated_overrides(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.cli import commands_hook_generic as generic_commands
+
+    original = generic_commands.schedule_guard_daemon_ensure
+
+    def replacement(_guard_home):
+        return "http://127.0.0.1:4455"
+
+    monkeypatch.setattr(guard_commands_module, "schedule_guard_daemon_ensure", replacement)
+
+    with guard_commands_module._support_overrides():
+        assert generic_commands.schedule_guard_daemon_ensure is replacement
+
+    assert generic_commands.schedule_guard_daemon_ensure is original

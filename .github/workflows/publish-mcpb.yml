@@ -61,7 +61,7 @@ jobs:
           for attempt in $(seq 1 180); do
             git fetch --force --tags origin
             if [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
-              tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.0a*' | sort -V | tail -n 1)
+              tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.1a*' | sort -V | tail -n 1)
             elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
               tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
             else

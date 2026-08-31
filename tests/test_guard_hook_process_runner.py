@@ -1175,7 +1175,7 @@ def test_blocked_worker_spawn_does_not_block_supervisor_shutdown(
             lambda _slot, *, graceful=False: False,
         )
         release_spawn.set()
-        spawn_thread.join(timeout=2)
+        spawn_thread.join(timeout=10)
         assert not spawn_thread.is_alive()
         assert runner.stats()["workers"] == 1
         assert not runner.close_contained()

@@ -10,6 +10,7 @@ import pytest
 
 import codex_plugin_scanner.guard.native_runtime_resident as resident
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.native_runtime_resident import (
     close_resident_native_runtimes,
     resident_native_request,
@@ -202,7 +203,7 @@ def test_hook_worker_auto_is_native_first(tmp_path: Path, monkeypatch: pytest.Mo
     assert result == {"policy_action": "allow", "hookSpecificOutput": {"hookEventName": "PostToolUse"}}
 
 
-def test_hook_worker_auto_falls_back_to_python(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_hook_worker_auto_fails_closed_when_native_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     worker = HookWorker(store=store)
     python_calls = 0
@@ -213,6 +214,15 @@ def test_hook_worker_auto_falls_back_to_python(tmp_path: Path, monkeypatch: pyte
         return _allow_response("python_fallback")
 
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="auto",
+            available=False,
+            compatible=False,
+            reason="missing",
+        ),
+    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
         lambda *args, **kwargs: None,
@@ -227,8 +237,9 @@ def test_hook_worker_auto_falls_back_to_python(tmp_path: Path, monkeypatch: pyte
         guard_home=store.guard_home,
         workspace=tmp_path,
     )
-    assert python_calls == 1
-    assert result["policy_action"] == "allow"
+    assert python_calls == 0
+    assert result["decision"] == "block"
+    assert result["reason_code"] == "native_post_tool_unavailable"
 
 
 def test_hook_worker_shadow_keeps_python_authoritative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

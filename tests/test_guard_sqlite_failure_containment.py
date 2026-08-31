@@ -179,11 +179,11 @@ def test_io_error_that_clears_after_directory_probe_does_not_quarantine(
         )
         is False
     )
-    assert active_attempts == 2
+    assert active_attempts == 1
     assert _quarantined_databases(store.guard_home) == []
 
 
-def test_fatal_error_recovers_when_rechecks_report_persistent_io(
+def test_fatal_error_does_not_recover_when_rechecks_report_persistent_io(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -204,9 +204,9 @@ def test_fatal_error_recovers_when_rechecks_report_persistent_io(
         store._store_is_proven_unusable(  # pyright: ignore[reportPrivateUsage]
             sqlite3.DatabaseError("database disk image is malformed")
         )
-        is True
+        is False
     )
-    assert active_attempts == 2
+    assert active_attempts == 1
 
 
 def test_recovery_restores_readable_quarantined_store(

@@ -83,7 +83,21 @@ def test_signing_identity_is_imported_before_pyinstaller_build() -> None:
     assert isinstance(run, str)
     assert '--codesign-identity "$APPLE_SIGNING_IDENTITY"' in run
     assert "verify_pyinstaller_macos_signing.py" in run
+    assert "seal_pyinstaller_native_manifest.py" in run
+    assert "verify_pyinstaller_native_runtime.py" in run
     assert '--team-id "$APPLE_TEAM_ID"' in run
+    assert run.index(
+        'codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$NATIVE_RUNTIME"'
+    ) < run.index("uv run --no-sync pyinstaller")
+    assert run.index('codesign --remove-signature "$BUILT"') < run.index("seal_pyinstaller_native_manifest.py")
+    assert run.index("seal_pyinstaller_native_manifest.py") < run.index("fix_pyinstaller_macos_exe_headers.py")
+    assert run.index("fix_pyinstaller_macos_exe_headers.py") < run.index(
+        'codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$BUILT"'
+    )
+    assert run.index(
+        'codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$BUILT"'
+    ) < run.index("verify_pyinstaller_macos_signing.py")
+    assert run.index("verify_pyinstaller_macos_signing.py") < run.index("verify_pyinstaller_native_runtime.py")
 
 
 def test_final_verification_checks_reused_and_new_embedded_team_identity() -> None:
@@ -96,6 +110,18 @@ def test_final_verification_checks_reused_and_new_embedded_team_identity() -> No
     verifier = "python3 -I scripts/release/verify_pyinstaller_macos_signing.py"
     assert verifier in run
     assert run.index(verifier) < run.index('if [[ "$MODE" == "build" ]]; then')
+    assert "verify_pyinstaller_native_runtime.py" not in run
+
+
+def test_reused_core_assets_skip_native_runtime_verifier() -> None:
+    steps = _publish_steps()
+    build = next(step for step in steps if step.get("name") == "Build standalone Core executable")
+    verify = next(
+        step for step in steps if step.get("name") == "Verify exact Apple identity, notarization, and Core contract"
+    )
+    assert build.get("if") == "steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'"
+    assert "verify_pyinstaller_native_runtime.py" in str(build.get("run"))
+    assert "verify_pyinstaller_native_runtime.py" not in str(verify.get("run"))
 
 
 def test_verifier_accepts_framework_runtime_symlink(

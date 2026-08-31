@@ -59,8 +59,15 @@ def test_each_managed_control_flag_is_independent_and_prerequisites_fail_closed(
         "extension-control-layer.v1",
         "policy-extension-targets.v1",
         "managed-controls-atomic-apply.v1",
+        "custom-extension-continuity.v2",
     )
     assert enabled.allows_custom_extension_continuity() is True
+    monkeypatch.setenv(GUARD_EXTENSION_FIRST_CONTROLS_UI, "false")
+    without_continuity = ManagedControlsFeatureFlags.from_environment()
+    assert "custom-extension-continuity.v2" not in without_continuity.runtime_capabilities(
+        protected_authority=True
+    )
+    monkeypatch.setenv(GUARD_EXTENSION_FIRST_CONTROLS_UI, "true")
     for disabled in names:
         monkeypatch.setenv(disabled, "false")
         flags = ManagedControlsFeatureFlags.from_environment()

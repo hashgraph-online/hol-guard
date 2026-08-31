@@ -99,6 +99,26 @@ def test_refresh_swaps_atomically_and_rejects_rollback_or_equivocation() -> None
     assert runtime.refresh(_view(5, state=ControlState.ENABLED)).revision == 5
 
 
+def test_recovery_replacement_allows_rollback_only_from_recovery_state() -> None:
+    runtime = ExtensionControlRuntime(_view(9, state=ControlState.DISABLED))
+    with pytest.raises(ValueError, match="not awaiting recovery"):
+        runtime.replace_after_recovery(_view(4, state=ControlState.ENABLED))
+
+    runtime.refresh(_view(9, health=AuthorityHealth.RECOVERY_REQUIRED))
+    with pytest.raises(ValueError, match="not protected"):
+        runtime.replace_after_recovery(_view(4, health=AuthorityHealth.RECOVERY_REQUIRED))
+
+    recovered = runtime.replace_after_recovery(_view(4, state=ControlState.ENABLED))
+
+    assert recovered.health is AuthorityHealth.PROTECTED
+    assert recovered.revision == 4
+    assert runtime.replace_after_recovery(_view(4, state=ControlState.ENABLED)) is recovered
+    with pytest.raises(ValueError, match="not awaiting recovery"):
+        runtime.replace_after_recovery(_view(4, state=ControlState.DISABLED))
+    with pytest.raises(ValueError, match="move backwards"):
+        runtime.refresh(_view(3, state=ControlState.ENABLED))
+
+
 def test_refresh_accepts_monotonic_managed_activation_without_local_revision_change() -> None:
     initial = _view(3, state=ControlState.ENABLED)
     runtime = ExtensionControlRuntime(initial)

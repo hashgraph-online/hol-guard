@@ -12,8 +12,46 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_extension_control_api import _dashboard_token, _mutation_payload
+
+
+def test_http_repair_converges_when_store_recovered_after_daemon_cached_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    stale = ExtensionControlAuthorityView(
+        AuthorityHealth.RECOVERY_REQUIRED,
+        4,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    protected = ExtensionControlAuthorityView(
+        AuthorityHealth.PROTECTED,
+        4,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: stale)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: protected)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{daemon.port}", auth_token)
+
+        repaired = client.recover_extension_control_authority({"session_nonce": "nonce"})
+
+        assert repaired["health"] == AuthorityHealth.PROTECTED.value
+        assert client.effective_extension_controls()["health"] == AuthorityHealth.PROTECTED.value
+    finally:
+        daemon.stop()
 
 
 def test_http_routes_authenticate_before_reading_sensitive_post_body(tmp_path: Path) -> None:

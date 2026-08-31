@@ -25,10 +25,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate_pull_request:
+    name: Validate notifier contract
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - name: Install test environment
+        run: uv sync --frozen --extra dev --python 3.12
+      - name: Validate notifier workflow contract
+        run: uv run --no-sync pytest tests/test_notify_hol_guard_plugin_workflow.py --tb=short
+
   resolve_publication:
     name: Resolve exact published HOL Guard release
     if: >-
-      github.event_name == 'pull_request' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&

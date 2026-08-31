@@ -128,16 +128,28 @@ _PYTEST_RUNNER_OPTIONS_WITH_VALUES = {
     "uv": frozenset(
         {
             "--cache-dir",
+            "--color",
             "--config-file",
+            "--config-settings",
+            "--default-index",
             "--directory",
             "--env-file",
+            "--extra",
+            "--find-links",
+            "--group",
             "--index",
+            "--index-strategy",
             "--index-url",
+            "--keyring-provider",
+            "--package",
             "--project",
             "--python",
             "--with",
             "--with-editable",
             "--with-requirements",
+            "-f",
+            "-p",
+            "-w",
         }
     ),
 }

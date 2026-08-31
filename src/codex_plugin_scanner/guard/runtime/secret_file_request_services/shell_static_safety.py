@@ -11,7 +11,11 @@ from pathlib import Path
 
 from ..git_execution_safety import git_binary_path_is_trusted
 from ..shell_execution_context import ShellExecutionContext
-from .constants_core import _SHELL_COMMAND_STRING_INTERPRETERS, _UNMODELED_INLINE_INTERPRETER_COMMANDS
+from .constants_core import (
+    _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES,
+    _SHELL_COMMAND_STRING_INTERPRETERS,
+    _UNMODELED_INLINE_INTERPRETER_COMMANDS,
+)
 from .constants_patterns import _READ_ONLY_INTERPRETER_MUTATION_PATTERNS
 from .docker_requests import _which_for_execution_cwd
 from .request_artifacts import _normalized_shell_command_name
@@ -308,11 +312,28 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
             continue
         index = command_index + 1
         while index < len(segment):
+            token = segment[index]
+            if token == "--":
+                break
             flag_payload = _interpreter_flag_payload(segment, index)
             if flag_payload is not None:
                 scripts.append(flag_payload.script_text)
                 break
-            index += 1
+            if _is_python_interpreter_command(command_name) and token in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+                if index + 1 >= len(segment):
+                    break
+                index += 2
+                continue
+            if token.startswith("--"):
+                _option_name, separator, _attached = token.partition("=")
+                if separator:
+                    index += 1
+                    continue
+                break
+            if token.startswith("-"):
+                index += 1
+                continue
+            break
     return tuple(scripts)
 
 

@@ -11,7 +11,6 @@ from pathlib import Path
 from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
-from .cloud_review_repair import cloud_review_sync_repair_status
 from .command_capability import (
     CommandCapabilityError,
     command_capability_operations,
@@ -144,22 +143,12 @@ def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
     return {"repaired": repaired, "repaired_count": len(repaired), "status": command_queue_status(store)}
 
 
-def cloud_review_repair_status(store: GuardStore) -> dict[str, object] | None:
-    try:
-        return cloud_review_sync_repair_status(store)
-    except Exception as error:
-        message = redacted_error(error, http_formatter=_sync_http_error_message, os_formatter=_sync_url_error_message)
-        _LOGGER.warning("Guard Cloud Review repair status failed: %s", message)
-        return None
-
-
 def command_queue_lease_payload(
     store: GuardStore,
     *,
     operations: tuple[str, ...] | None = None,
     wait_ms: int | None = None,
     operation_resolver: Callable[[GuardStore], tuple[str, ...]] = command_queue_operations,
-    repair_status_resolver: Callable[[GuardStore], dict[str, object] | None] = cloud_review_repair_status,
 ) -> dict[str, object]:
     machine_id, workspace_id = command_queue_oauth_target(store)
     operations = operation_resolver(store) if operations is None else operations
@@ -174,10 +163,6 @@ def command_queue_lease_payload(
     if schema_versions:
         capabilities["schemaVersions"] = schema_versions
     exact_only = operations == (EXACT_CLOUD_REVIEW_OPERATION,)
-    if not exact_only:
-        repair_status = repair_status_resolver(store)
-        if repair_status is not None:
-            capabilities["reviewSync"] = repair_status
     payload: dict[str, object] = {
         "workspaceId": workspace_id,
         "deviceId": machine_id,
@@ -200,7 +185,6 @@ __all__ = [
     "COMMAND_QUEUE_LEASE_WAIT_MS_ENV",
     "COMMAND_QUEUE_STATE_KEY",
     "clear_exact_route_failure",
-    "cloud_review_repair_status",
     "command_queue_enabled",
     "command_queue_lease_payload",
     "command_queue_now",

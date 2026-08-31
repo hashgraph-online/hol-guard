@@ -45,16 +45,16 @@ def _find_cookie(handle) -> int:
     raise ValueError("PyInstaller CArchive cookie was not found")
 
 
-def _archive_layout(binary: Path) -> tuple[int, str, list[tuple[str, int, int, bool, str]]]:
+def _archive_toc(
+    binary: Path,
+) -> tuple[int, int, int, str, list[tuple[str, int, int, int, bool, str]]]:
     with binary.open("rb") as handle:
         cookie_offset = _find_cookie(handle)
         handle.seek(cookie_offset)
         cookie = handle.read(COOKIE_LENGTH)
         if len(cookie) != COOKIE_LENGTH:
             raise ValueError("Truncated PyInstaller CArchive cookie")
-        magic, archive_length, toc_offset, toc_length, _pyvers, raw_pylib_name = struct.unpack(
-            COOKIE_FORMAT, cookie
-        )
+        magic, archive_length, toc_offset, toc_length, pyvers, raw_pylib_name = struct.unpack(COOKIE_FORMAT, cookie)
         try:
             pylib_name = raw_pylib_name.rstrip(b"\0").decode("utf-8")
         except UnicodeDecodeError as exc:
@@ -71,21 +71,17 @@ def _archive_layout(binary: Path) -> tuple[int, str, list[tuple[str, int, int, b
         if len(toc) != toc_length:
             raise ValueError("Truncated PyInstaller CArchive TOC")
 
-    entries: list[tuple[str, int, int, bool, str]] = []
+    entries: list[tuple[str, int, int, int, bool, str]] = []
     cursor = 0
     while cursor < len(toc):
         header = toc[cursor : cursor + TOC_HEADER_LENGTH]
         if len(header) != TOC_HEADER_LENGTH:
             raise ValueError("Truncated PyInstaller TOC header")
-        entry_length, offset, length, _uncompressed, compressed, raw_typecode = struct.unpack(
-            TOC_FORMAT, header
-        )
+        entry_length, offset, length, uncompressed, compressed, raw_typecode = struct.unpack(TOC_FORMAT, header)
         name_length = entry_length - TOC_HEADER_LENGTH
         if name_length <= 0 or cursor + entry_length > len(toc):
             raise ValueError("Invalid PyInstaller TOC entry length")
-        raw_name = toc[
-            cursor + TOC_HEADER_LENGTH : cursor + TOC_HEADER_LENGTH + name_length
-        ]
+        raw_name = toc[cursor + TOC_HEADER_LENGTH : cursor + TOC_HEADER_LENGTH + name_length]
         try:
             name = raw_name.rstrip(b"\0").decode("utf-8")
             typecode = raw_typecode.decode("ascii")
@@ -93,9 +89,25 @@ def _archive_layout(binary: Path) -> tuple[int, str, list[tuple[str, int, int, b
             raise ValueError("Invalid PyInstaller TOC text encoding") from exc
         if not name:
             raise ValueError("PyInstaller TOC entry has an empty name")
-        entries.append((name, offset, length, bool(compressed), typecode))
+        if offset < 0 or length < 0 or uncompressed < 0:
+            raise ValueError(f"PyInstaller TOC entry {name!r} has an invalid range")
+        if offset > toc_offset or length > toc_offset - offset:
+            raise ValueError(f"PyInstaller TOC entry {name!r} overlaps the archive TOC")
+        entries.append((name, offset, length, uncompressed, bool(compressed), typecode))
         cursor += entry_length
-    return archive_start, pylib_name, entries
+    return archive_start, cookie_offset, pyvers, pylib_name, entries
+
+
+def _archive_layout(binary: Path) -> tuple[int, str, list[tuple[str, int, int, bool, str]]]:
+    archive_start, _cookie_offset, _pyvers, pylib_name, entries = _archive_toc(binary)
+    return (
+        archive_start,
+        pylib_name,
+        [
+            (name, offset, length, compressed, typecode)
+            for name, offset, length, _uncompressed, compressed, typecode in entries
+        ],
+    )
 
 
 def _entry_bytes(
@@ -217,9 +229,7 @@ def verify(binary: Path, expected_team_id: str) -> None:
 
     macho_count = 0
     declared_runtime_verified = False
-    with binary.open("rb") as handle, tempfile.TemporaryDirectory(
-        prefix="hol-guard-pyi-signing-"
-    ) as tmp:
+    with binary.open("rb") as handle, tempfile.TemporaryDirectory(prefix="hol-guard-pyi-signing-") as tmp:
         runtime_entry = _resolve_declared_runtime(handle, archive_start, declared_runtime, entries)
         runtime_name = runtime_entry[0]
         root = Path(tmp)
@@ -241,8 +251,7 @@ def verify(binary: Path, expected_team_id: str) -> None:
             actual_team_id = _team_id(extracted)
             if actual_team_id != expected_team_id:
                 raise ValueError(
-                    f"Embedded Mach-O {name!r} has TeamIdentifier={actual_team_id!r}; "
-                    f"expected {expected_team_id!r}"
+                    f"Embedded Mach-O {name!r} has TeamIdentifier={actual_team_id!r}; expected {expected_team_id!r}"
                 )
             if name == runtime_name:
                 declared_runtime_verified = True
@@ -250,9 +259,7 @@ def verify(binary: Path, expected_team_id: str) -> None:
     if macho_count == 0:
         raise ValueError("PyInstaller archive contained no Mach-O binary entries")
     if not declared_runtime_verified:
-        raise ValueError(
-            f"Cookie-declared Python runtime {declared_runtime!r} was not signature-verified"
-        )
+        raise ValueError(f"Cookie-declared Python runtime {declared_runtime!r} was not signature-verified")
     print(
         f"verified {macho_count} embedded Mach-O binaries, including declared Python runtime "
         f"{declared_runtime!r}, with TeamIdentifier={expected_team_id}"

@@ -1,4 +1,4 @@
-"""Deterministic helpers for the privileged Desktop Core alpha feed workflow."""
+"""Deterministic helpers for the privileged Desktop Core feed workflow."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 MANIFEST_SCHEMA = "hol-guard-core-update.v1"
 MARKER_SCHEMA = "hol-guard-core-attestation.v3"
 SUPPORTED_TRAINS = frozenset({"3.0"})
-_ALPHA_TAG = re.compile(r"^alpha/v(3\.(\d+)\.(\d+)a(\d+))$")
+_STABLE_TAG = re.compile(r"^v(3\.(\d+)\.(\d+))$")
 
 
 def _sha256(path: Path) -> str:
@@ -38,18 +38,23 @@ def _emit(key: str, value: str | bool) -> None:
     print(f"{key}={value}")
 
 
-def discover_release(tags_file: Path) -> None:
-    candidates: list[tuple[tuple[int, int, int], str, str, str]] = []
+def discover_release(tags_file: Path, requested_version: str = "") -> None:
+    candidates: list[tuple[tuple[int, int], str, str, str]] = []
     for raw in tags_file.read_text(encoding="utf-8").splitlines():
         tag = raw.strip()
-        match = _ALPHA_TAG.fullmatch(tag)
+        match = _STABLE_TAG.fullmatch(tag)
         if match is None:
             continue
         train = f"3.{match.group(2)}"
         if train not in SUPPORTED_TRAINS:
             continue
-        order = (int(match.group(2)), int(match.group(3)), int(match.group(4)))
+        order = (int(match.group(2)), int(match.group(3)))
         candidates.append((order, match.group(1), tag, train))
+    if requested_version:
+        requested = [candidate for candidate in candidates if candidate[1] == requested_version]
+        if not requested:
+            raise SystemExit(f"Requested stable Core {requested_version} is not an eligible published release")
+        candidates = requested
     if not candidates:
         _emit("available", False)
         return
@@ -58,10 +63,15 @@ def discover_release(tags_file: Path) -> None:
     _emit("version", version)
     _emit("tag", tag)
     _emit("train", train)
-    _emit("branch", f"release/{train}")
+    _emit("branch", "main")
 
 
 def inspect_assets(assets_file: Path, base: str) -> None:
+    """Reuse a complete published Core set. Native bundling is build-only.
+
+    Existing GitHub Core assets are immutable. A complete set is verified as-is
+    and is not rebuilt, so the native runtime verifier runs only on new builds.
+    """
     names = set(assets_file.read_text(encoding="utf-8").splitlines())
     expected = {base, f"{base}.json", f"{base}.attested.json"}
     present = expected & names
@@ -86,7 +96,7 @@ def _manifest_expected(
 ) -> dict[str, object]:
     return {
         "schema": MANIFEST_SCHEMA,
-        "channel": "alpha",
+        "channel": "stable",
         "version": version,
         "sourceCommit": source_commit,
         "sourceTag": source_tag,
@@ -174,6 +184,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     discover = subparsers.add_parser("discover-release")
     discover.add_argument("--tags", type=Path, required=True)
+    discover.add_argument("--version", default="")
     inspect = subparsers.add_parser("inspect-assets")
     inspect.add_argument("--assets", type=Path, required=True)
     inspect.add_argument("--base", required=True)
@@ -193,7 +204,7 @@ def main() -> int:
     _marker_arguments(validate_marker_parser)
     args = parser.parse_args()
     if args.command == "discover-release":
-        discover_release(args.tags)
+        discover_release(args.tags, args.version)
     elif args.command == "inspect-assets":
         inspect_assets(args.assets, args.base)
     elif args.command == "verify-bootstrap":

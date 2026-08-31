@@ -1,4 +1,4 @@
-name: Wake Desktop Core alpha feed
+name: Wake Desktop Core stable feed
 
 on:
   workflow_run:
@@ -21,12 +21,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: wake-desktop-core-alpha-feed
+  group: wake-desktop-core-stable-feed
   cancel-in-progress: false
 
 jobs:
   wake:
-    name: Dispatch Desktop Core alpha feed
+    name: Dispatch Desktop Core stable feed
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'issues' &&
@@ -34,11 +34,13 @@ jobs:
         github.event.issue.author_association == 'MEMBER' ||
         github.event.issue.author_association == 'COLLABORATOR') &&
        startsWith(github.event.issue.title, '[desktop-core-feed]')) ||
-      (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'alpha/v3.')) ||
+      (github.event_name == 'release' &&
+       startsWith(github.event.release.tag_name, 'v3.') &&
+       github.event.release.prerelease == false) ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       startsWith(github.event.workflow_run.head_branch, 'release/3.'))
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

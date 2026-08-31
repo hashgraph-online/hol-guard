@@ -13,27 +13,56 @@ def _load(name: str) -> dict[str, object]:
     return payload
 
 
-def test_native_capability_ownership_has_one_declared_owner_per_capability() -> None:
-    payload = _load("rust-native-capability-ownership.v1.json")
-    capabilities = payload["capabilities"]
-    assert isinstance(capabilities, list)
+def test_hook_data_plane_ownership_v2_maps_every_supported_route() -> None:
+    payload = _load("hook-data-plane-ownership.v2.json")
+    assert payload["schema"] == "hol-guard.hook-data-plane-ownership.v2"
+    harnesses = payload["supported_harnesses"]
+    harness_routes = payload["harness_routes"]
+    assert isinstance(harnesses, list)
+    assert isinstance(harness_routes, dict)
+    assert set(harnesses) == set(harness_routes)
+    assert all(
+        isinstance(route, dict) and set(route) == {"pre_tool_use", "post_tool_use"}
+        for route in harness_routes.values()
+    )
+
+    routes = payload["routes"]
+    assert isinstance(routes, list)
+    assert {route["id"] for route in routes if isinstance(route, dict)} == {
+        "http_pre_tool_use",
+        "http_post_tool_use",
+        "cli_pre_tool_use",
+        "cli_post_tool_use",
+    }
+    assert all(
+        isinstance(route, dict)
+        and route["target_authority"] == "rust"
+        and route["native_failure"] == "fail_closed"
+        and route["python_semantic_fallback_target"] is False
+        for route in routes
+    )
+
+
+def test_hook_data_plane_ownership_v2_has_one_declared_class_per_node() -> None:
+    payload = _load("hook-data-plane-ownership.v2.json")
+    nodes = payload["nodes"]
+    assert isinstance(nodes, list)
     ids: set[str] = set()
-    dead_duplicates = 0
-    for item in capabilities:
-        assert isinstance(item, dict)
-        capability_id = item["id"]
-        assert isinstance(capability_id, str) and capability_id not in ids
-        ids.add(capability_id)
-        assert item["authority"] in {
-            "rust_eligible_python_reference",
-            "python_authoritative_rust_shadow",
-            "python_authoritative",
-            "hook_worker_direct",
-        }
-        assert isinstance(item["python_owner"], str) and item["python_owner"]
-        if item["python_removal_status"] in {"dead_duplicate_remove", "removed"}:
-            dead_duplicates += 1
-    assert dead_duplicates >= 1
+    allowed_classes = {
+        "rust_semantic",
+        "rust_io",
+        "python_semantic",
+        "python_transport",
+        "python_control",
+        "persistence_only",
+    }
+    for node in nodes:
+        assert isinstance(node, dict)
+        node_id = node["id"]
+        assert isinstance(node_id, str) and node_id not in ids
+        ids.add(node_id)
+        assert node["class"] in allowed_classes
+        assert isinstance(node["paths"], list) and node["paths"]
 
 
 def test_fail_safe_matrix_never_allows_unreviewed_output() -> None:
@@ -89,16 +118,11 @@ def test_hardening_source_documents_reference_the_current_backlog() -> None:
 
 
 def test_dead_python_cleanup_is_an_explicit_release_gate() -> None:
-    ownership = _load("rust-native-capability-ownership.v1.json")
-    capabilities = ownership["capabilities"]
-    assert isinstance(capabilities, list)
-    selector = next(
-        item for item in capabilities if isinstance(item, dict) and item.get("id") == "native_backend_response_selector"
-    )
-    assert selector["python_removal_status"] == "removed"
-    evidence = selector["evidence"]
-    assert isinstance(evidence, dict)
-    assert evidence["deletion_task"] == "NRH-T112"
+    ownership = _load("hook-data-plane-ownership.v2.json")
+    nodes = ownership["nodes"]
+    assert isinstance(nodes, list)
+    oracle = next(item for item in nodes if isinstance(item, dict) and item.get("id") == "python_reference_oracle")
+    assert oracle["target"] == "differential tests only"
 
     prd = (ROOT / "docs" / "guard" / "rust-runtime-hardening-prd.md").read_text(encoding="utf-8")
     todo = (ROOT / "docs" / "guard" / "rust-runtime-hardening-todo.md").read_text(encoding="utf-8")

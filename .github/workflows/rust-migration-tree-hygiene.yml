@@ -2,12 +2,12 @@ name: Rust migration tree hygiene
 
 on:
   pull_request:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - ".github/**"
       - "scripts/ci/**"
   push:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - ".github/**"
       - "scripts/ci/**"

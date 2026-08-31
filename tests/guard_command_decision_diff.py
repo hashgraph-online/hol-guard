@@ -1,7 +1,5 @@
 """Generate the deterministic command decision-diff evidence report."""
 
-# ruff: noqa: E402
-
 from __future__ import annotations
 
 import hashlib
@@ -12,6 +10,7 @@ import time
 import types
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 from typing import Final, cast
@@ -21,9 +20,27 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def _install_evaluator_packages() -> None:
+_PACKAGE_PREFIX: Final = "codex_plugin_scanner"
+_MISSING_BINDING: Final = object()
+
+
+@dataclass(frozen=True, slots=True)
+class _EvaluatorPackageState:
+    modules: dict[str, types.ModuleType]
+    parent_snapshots: tuple[tuple[types.ModuleType, dict[str, object]], ...]
+
+
+def _install_evaluator_packages() -> _EvaluatorPackageState:
     """Import evaluator modules without unrelated optional scanner exports."""
 
+    existing_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == _PACKAGE_PREFIX or name.startswith(f"{_PACKAGE_PREFIX}.")
+    }
+    existing_parent_snapshots = tuple(
+        (module, module.__dict__.copy()) for module in existing_modules.values()
+    )
     package_root = REPO_ROOT / "src" / "codex_plugin_scanner"
     packages = (
         ("codex_plugin_scanner", package_root),
@@ -58,30 +75,58 @@ def _install_evaluator_packages() -> None:
         parent = sys.modules.get(parent_name)
         if parent is not None and parent_name:
             setattr(parent, leaf, package)
+    return _EvaluatorPackageState(
+        modules=existing_modules,
+        parent_snapshots=existing_parent_snapshots,
+    )
 
 
-_install_evaluator_packages()
+def _restore_evaluator_packages(state: _EvaluatorPackageState) -> None:
+    """Remove evaluator-only imports and restore any packages already loaded."""
 
-from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
-    COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
-)
-from codex_plugin_scanner.guard.runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
-from tests.guard_command_corpus import (
-    KNOWN_GAPS_PATH,
-    MANIFEST_PATH,
-    PAIRS_PATH,
-    corpus_digest,
-    iter_adversarial_corpus,
-    iter_benign_corpus,
-    load_seed_manifest,
-)
-from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
-from tests.guard_command_corpus_oracle_types import OracleRecord
-from tests.guard_command_corpus_runner import peak_rss_mib
-from tests.guard_command_decision_diff_runner import (
-    MAX_CONCURRENT_WORKERS,
-    evaluate_decision_diff_shards,
-)
+    parent_snapshots = {id(module): snapshot for module, snapshot in state.parent_snapshots}
+    for name in tuple(sys.modules):
+        if name != _PACKAGE_PREFIX and not name.startswith(f"{_PACKAGE_PREFIX}."):
+            continue
+        parent_name, _, leaf = name.rpartition(".")
+        parent = state.modules.get(parent_name)
+        if parent is None:
+            continue
+        previous = parent_snapshots[id(parent)].get(leaf, _MISSING_BINDING)
+        if previous is _MISSING_BINDING:
+            parent.__dict__.pop(leaf, None)
+        else:
+            setattr(parent, leaf, previous)
+    for name in tuple(sys.modules):
+        if name == _PACKAGE_PREFIX or name.startswith(f"{_PACKAGE_PREFIX}."):
+            sys.modules.pop(name)
+    sys.modules.update(state.modules)
+
+
+_evaluator_package_state = _install_evaluator_packages()
+try:
+    from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
+        COMMAND_SHADOW_BASELINE_PROPOSAL_VERSION,
+    )
+    from codex_plugin_scanner.guard.runtime.effect_decision import EFFECT_DECISION_SCHEMA_VERSION
+    from tests.guard_command_corpus import (
+        KNOWN_GAPS_PATH,
+        MANIFEST_PATH,
+        PAIRS_PATH,
+        corpus_digest,
+        iter_adversarial_corpus,
+        iter_benign_corpus,
+        load_seed_manifest,
+    )
+    from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
+    from tests.guard_command_corpus_oracle_types import OracleRecord
+    from tests.guard_command_corpus_runner import peak_rss_mib
+    from tests.guard_command_decision_diff_runner import (
+        MAX_CONCURRENT_WORKERS,
+        evaluate_decision_diff_shards,
+    )
+finally:
+    _restore_evaluator_packages(_evaluator_package_state)
 
 REPORT_SCHEMA_VERSION: Final = "guard.command-decision-diff.v1"
 BASE_RELEASE_SHA: Final = "21a81a6d5ca55e262bac837eb7a2ac8d530c6d28"
@@ -97,6 +142,7 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_contained_write.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "contained_package_script_execution.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "contained_workspace_write_execution.py",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "durable_harness_launcher.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "package_shim_gate.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "package_shim_frozen.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "shims.py",

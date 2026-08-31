@@ -280,6 +280,32 @@ def test_pytest_runner_does_not_treat_dependency_or_payload_argument_as_executab
     )
 
 
+def test_uv_run_color_value_option_does_not_hide_pytest(tmp_path: Path) -> None:
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "uv run --color always pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "pytest repository-code execution"
+    assert match.guard_default_action == "sandbox-required"
+    assert match.reason_code == "pytest_restricted_profile_required"
+
+
+def test_uv_run_short_find_links_alias_does_not_hide_pytest(tmp_path: Path) -> None:
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "uv run -f /tmp/wheels pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "pytest repository-code execution"
+    assert match.guard_default_action == "sandbox-required"
+    assert match.reason_code == "pytest_restricted_profile_required"
+
+
 def test_non_applicable_pyproject_does_not_hide_later_tox_config(tmp_path: Path) -> None:
     _write(tmp_path / "pyproject.toml", '[build-system]\nrequires = ["fixture"]\n')
     _write(tmp_path / "tox.ini", "[pytest]\naddopts = -p evil\n")

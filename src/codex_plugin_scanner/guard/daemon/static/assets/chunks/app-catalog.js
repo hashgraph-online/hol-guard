@@ -1,4 +1,20 @@
+const SUPPORTED_APP_SLUGS = [
+  "codex",
+  "claude-code",
+  "opencode",
+  "copilot",
+  "cursor",
+  "cline",
+  "gemini",
+  "hermes",
+  "openclaw",
+  "kimi",
+  "grok"
+];
 const SUPPORTED_APPS_BRIEF = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, and Grok.";
+function defaultConnectHarness(repairHarness, visibleHarnesses = []) {
+  return repairHarness ?? visibleHarnesses[0] ?? SUPPORTED_APP_SLUGS[0];
+}
 const APP_STATUS_LABELS = {
   active: "Active",
   partial: "Partial setup",
@@ -122,5 +138,6 @@ export {
   APP_STATUS_LABELS as A,
   RISK_CONTROL_CONSEQUENCES as R,
   SUPPORTED_APPS_BRIEF as S,
+  defaultConnectHarness as d,
   filterSettingsBySearch as f
 };

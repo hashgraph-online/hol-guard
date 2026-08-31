@@ -1,6 +1,8 @@
 import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
+import { isHarnessDetectedItems, resolveDetectedAppStatus, visibleHarnessesFor } from "./harness-detection";
 import type { FleetHeroCopy } from "./fleet-workspace";
 
 function assert(condition: boolean, message: string): void {
@@ -13,6 +15,51 @@ const targetedRepairError = new ProtectionRepairFlowError("App hooks need repair
 assert(
   targetedRepairError.failedHarnesses.length === 2,
   "repair failures retain every app needed for the next actions",
+);
+assert(
+  defaultConnectHarness(undefined, []) === "codex",
+  "empty fleet still opens a supported app from Connect an app",
+);
+assert(
+  defaultConnectHarness(undefined, ["grok", "claude-code"]) === "grok",
+  "observed apps keep their own connect target",
+);
+assert(
+  defaultConnectHarness("grok", []) === "grok",
+  "empty managed installs still connect the first visible fleet app",
+);
+
+const noProtectionHealth = {
+  harness: "omp",
+  state: "degraded" as const,
+  label: "Not protected",
+  detail: "No managed hooks.",
+  evidence_gap: true,
+  checks: [],
+  reason_codes: [],
+};
+assert(
+  resolveDetectedAppStatus(undefined, noProtectionHealth, false, false, true) === "found_unprotected",
+  "detected OMP and ZCode installs appear as observed before Guard manages their hooks",
+);
+assert(
+  resolveDetectedAppStatus(undefined, noProtectionHealth, false, false, false) === "not_found",
+  "apps without detection or activity remain absent",
+);
+const detectedApps = visibleHarnessesFor({
+  managed: ["codex"],
+  observed: [],
+  inventory: [],
+  detected: ["omp", "zcode"],
+  policies: [],
+});
+assert(
+  detectedApps.join(",") === "codex,omp,zcode",
+  "Protect includes locally detected OMP and ZCode without requiring prior activity",
+);
+assert(
+  isHarnessDetectedItems([{ harness: "zcode", status: "found" }], "zcode"),
+  "app detail preserves detection for config-only harnesses",
 );
 assert(
   activeFailedHarnesses(["codex", "codex", "grok"], ["grok"])[0] === "grok",

@@ -12,7 +12,7 @@ CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 CI_BRANCHES = ["main", "release/3.0", "release/3.1"]
 RELEASE_BRANCHES = ["main", "release/3.0"]
-PR_CANARY_BRANCHES = ["main", "release/3.0"]
+PR_CANARY_BRANCHES = ["main", "release/3.0", "release/3.2"]
 RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots"}
 
 
@@ -62,16 +62,38 @@ def test_release_branch_pushes_publish_alpha_while_main_pushes_publish_stable() 
         assert "github.event_name == 'push'" in condition
         assert "github.ref == 'refs/heads/release/3.0'" in condition
         assert "github.event.action == 'closed'" not in condition
-    for job_name in ("publish-main-testpypi", "publish-main-pypi", "release-main"):
+    for job_name in ("publish-main-testpypi", "reserve-main-tag", "publish-main-pypi", "release-main"):
         condition = jobs[job_name]["if"]
         assert "github.event_name == 'push'" in condition
         assert "github.run_attempt == 1" in condition
         assert "github.ref == 'refs/heads/main'" in condition
         assert "needs.build.outputs.channel == 'stable'" in condition
-    assert jobs["publish-main-pypi"]["needs"] == "build"
+    assert jobs["reserve-main-tag"]["needs"] == ["build", "assemble-native-guard-distributions"]
+    assert jobs["reserve-main-tag"]["permissions"] == {"contents": "write"}
+    reserve_run = next(
+        step["run"]
+        for step in jobs["reserve-main-tag"]["steps"]
+        if step.get("name") == "Bind stable tag to the exact main source"
+    )
+    assert "git ls-remote --exit-code origin refs/heads/main" in reserve_run
+    assert '-f ref="refs/tags/${tag}"' in reserve_run
+    assert '-f sha="$SOURCE_SHA"' in reserve_run
+    assert 'git fetch --force --no-tags origin "+refs/tags/${tag}:refs/tags/${tag}"' in reserve_run
+    assert 'git rev-parse "${tag}^{commit}"' in reserve_run
+    assert "verifying the resulting remote ref" in reserve_run
+    assert jobs["publish-main-pypi"]["needs"] == [
+        "build",
+        "assemble-native-guard-distributions",
+        "reserve-main-tag",
+    ]
+    assert "needs.reserve-main-tag.result == 'success'" in jobs["publish-main-pypi"]["if"]
     assert "needs.publish-main-testpypi.result == 'success'" not in jobs["publish-main-pypi"]["if"]
     assert "vars.MAIN_TESTPYPI_ENABLED == 'true'" in jobs["publish-main-testpypi"]["if"]
-    assert jobs["release-main"]["needs"] == ["build", "publish-main-pypi"]
+    assert jobs["release-main"]["needs"] == [
+        "build",
+        "assemble-native-guard-distributions",
+        "publish-main-pypi",
+    ]
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     assert "startsWith(github.ref, 'refs/tags/')" not in workflow_text
@@ -99,7 +121,8 @@ def test_main_push_build_computes_a_registry_derived_stable_version() -> None:
     assert "verify_release_registry.py" in compute_run
     assert "list-versions --registry pypi" in compute_run
     assert "list-versions --registry testpypi" in compute_run
-    assert "'$pypi + $testpypi | unique'" in compute_run
+    assert "git tag --list 'v*'" in compute_run
+    assert "'$pypi + $testpypi + $tags | unique'" in compute_run
     assert "compute_main_release_version.py" in compute_run
     assert "if" not in stamp_step
     assert "sync_repo_version.py --check" in stamp_run
@@ -200,6 +223,9 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert assemble["needs"] == ["build", "build-native-guard-wheels"]
     assert "needs.build.result == 'success'" in assemble["if"]
     assert "needs.build-native-guard-wheels.result == 'success'" in assemble["if"]
+    native_if = jobs["build-native-guard-wheels"]["if"]
+    assert "channel == 'stable'" in native_if
+    assert "refs/heads/main" in native_if
     assemble_steps = assemble["steps"]
     assert any(step.get("with", {}).get("name") == "distributions" for step in assemble_steps)
     assert any(
@@ -212,7 +238,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert "needs.publish-alpha-testpypi" not in jobs["publish-alpha-pypi"]["if"]
     assert "vars.ALPHA_TESTPYPI_ENABLED" not in jobs["publish-alpha-pypi"]["if"]
     assert "vars.ALPHA_TESTPYPI_ENABLED == 'true'" in jobs["publish-alpha-testpypi"]["if"]
-    for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi"):
+    for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi", "publish-main-pypi"):
         steps = jobs[job_name]["steps"]
         assert any(step.get("with", {}).get("name") == "distributions-native" for step in steps)
         assert any(step.get("with", {}).get("name") == "distribution-sha256-native" for step in steps)
@@ -230,9 +256,14 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert any(
         "sha256sum --check distribution-sha256-native.txt" in step.get("run", "") for step in release_alpha_steps
     )
+    release_main_steps = jobs["release-main"]["steps"]
+    assert any(step.get("with", {}).get("name") == "distributions-native" for step in release_main_steps)
+    assert any(step.get("with", {}).get("name") == "distribution-sha256-native" for step in release_main_steps)
+    assert any("sha256sum --check distribution-sha256-native.txt" in step.get("run", "") for step in release_main_steps)
     for job_name in ("publish-main-testpypi",):
         steps = jobs[job_name]["steps"]
-        assert any(step.get("run") == "sha256sum --check distribution-sha256.txt" for step in steps)
+        assert any(step.get("run") == "sha256sum --check distribution-sha256-native.txt" for step in steps)
+        assert any(step.get("with", {}).get("name") == "distributions-native" for step in steps)
         assert any(
             step.get("name") == "Keep only the Guard release distribution" and "plugin_scanner" in step.get("run", "")
             for step in steps
@@ -240,7 +271,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
 
     public_hashes = {
         "publish-alpha-pypi": "sha256sum --check distribution-sha256-native.txt",
-        "publish-main-pypi": "sha256sum --check distribution-sha256.txt",
+        "publish-main-pypi": "sha256sum --check distribution-sha256-native.txt",
     }
     for job_name in ("publish-alpha-pypi", "publish-main-pypi"):
         steps = jobs[job_name]["steps"]
@@ -256,6 +287,34 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
         if step.get("name") == "Prepare project-specific distributions"
     )
     assert '"${#guard_files[@]}" -ge "2"' in alpha_prepare["run"]
+    stable_prepare = next(
+        step
+        for step in jobs["publish-main-pypi"]["steps"]
+        if step.get("name") == "Prepare project-specific distributions"
+    )
+    assert '"${#guard_files[@]}" -ge "6"' in stable_prepare["run"]
+    main_steps = jobs["publish-main-pypi"]["steps"]
+    native_validate = next(step for step in main_steps if step.get("name") == "Validate native Guard release set")
+    assert "validate-local" in native_validate["run"] and "--artifact-set full" in native_validate["run"]
+    main_quota = next(
+        step for step in main_steps if step.get("name") == "Refuse PyPI upload when the project is over quota"
+    )
+    assert "--pending-dir dist-hol-guard" in main_quota["run"]
+    main_verify = next(step for step in main_steps if step.get("name") == "Download and verify exact PyPI artifacts")
+    assert "--artifact-set full" in main_verify["run"]
+    assert "verify-published" in main_verify["run"]
+
+    stable_native = jobs["build-native-guard-wheels"]["if"]
+    assert "needs.build.outputs.channel == 'stable'" in stable_native
+    assert "github.ref == 'refs/heads/main'" in stable_native
+    for job_name in ("publish-main-testpypi", "publish-main-pypi", "release-main"):
+        job = jobs[job_name]
+        assert "assemble-native-guard-distributions" in job["needs"]
+        assert "needs.assemble-native-guard-distributions.result == 'success'" in job["if"]
+        assert any(
+            step.get("with", {}).get("name") == "distributions-native"
+            for step in job["steps"]
+        )
 
     workflow_text = PUBLISH_WORKFLOW.read_text(encoding="utf-8")
     assert "skip-existing" not in workflow_text and "pytest" not in workflow_text
@@ -348,6 +407,8 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         < main_test_steps.index(main_test_verify)
     )
     assert "--download-dir verified-testpypi" in main_test_verify["run"]
+    assert 'select(endswith("-py3-none-any.whl"))' in main_test_verify["run"]
+    assert '"${#wheels[@]}" == "1"' in main_test_verify["run"]
 
     main_revalidation = next(
         step["run"] for step in jobs["publish-main-pypi"]["steps"] if step.get("name") == "Revalidate main publication"
@@ -357,17 +418,22 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         for step in jobs["publish-main-testpypi"]["steps"]
         if step.get("name") == "Revalidate main source before TestPyPI"
     )
-    for main_source_revalidation in (main_testpypi_revalidation, main_revalidation):
-        assert "git ls-remote --exit-code origin refs/heads/main" in main_source_revalidation
-        assert '[[ "$remote_main_sha" != "$SOURCE_SHA" ]]' in main_source_revalidation
-        assert "Main publication source is no longer the branch head" in main_source_revalidation
-        assert 'git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main' not in main_source_revalidation
+    assert "git ls-remote --exit-code origin refs/heads/main" in main_testpypi_revalidation
+    assert '[[ "$remote_main_sha" != "$SOURCE_SHA" ]]' in main_testpypi_revalidation
+    assert "Main publication source is no longer the branch head" in main_testpypi_revalidation
+    assert 'git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main' not in main_testpypi_revalidation
+    assert 'git fetch --no-tags origin "+refs/tags/v${VERSION}:refs/tags/v${VERSION}"' in main_revalidation
+    assert 'git rev-parse "v${VERSION}^{commit}"' in main_revalidation
+    assert '[[ "$reserved_source_sha" != "$SOURCE_SHA" ]]' in main_revalidation
+    assert "Stable tag does not target the exact publication source" in main_revalidation
+    assert "refs/heads/main" not in main_revalidation
     assert "compute_main_release_version.py" in main_revalidation
     assert main_revalidation.count("uv run --with packaging==25.0") == 5
     assert "uv run --no-sync" not in main_revalidation
     assert "list-versions --registry pypi" in main_revalidation
     assert "list-versions --registry testpypi" in main_revalidation
-    assert "'$pypi + $testpypi + [$version] | unique'" in main_revalidation
+    assert "git tag --list 'v*'" in main_revalidation
+    assert "'$pypi + $testpypi + $tags + [$version] | unique'" in main_revalidation
     assert '<<< "$RELEASE_VERSIONS"' in main_revalidation
     assert '[[ "$LATEST_RELEASE_VERSION" != "$VERSION" ]]' in main_revalidation
     assert "--latest-existing" in main_revalidation
@@ -420,6 +486,9 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
         assert 'attempt" == "60"' in verify_step["run"]
         assert '== "hol-guard $VERSION"' in verify_step["run"]
         assert '== "plugin-scanner $VERSION"' in verify_step["run"]
+        assert 'select(endswith("-py3-none-any.whl"))' in verify_step["run"]
+        assert '"${#guard_wheels[@]}" == "1"' in verify_step["run"]
+        assert '"${#scanner_wheels[@]}" == "1"' in verify_step["run"]
 
     alpha_steps = jobs["publish-alpha-pypi"]["steps"]
     alpha_inspect = next(step for step in alpha_steps if step.get("name") == "Inspect PyPI release state")
@@ -493,8 +562,8 @@ def test_release_tags_are_bound_to_the_exact_published_source() -> None:
         step["run"] for step in jobs["release-main"]["steps"] if step.get("name") == "Create discoverable main release"
     )
     assert 'tag="v${VERSION}"' in stable_run
-    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs"' in stable_run
-    assert '-f sha="$SOURCE_SHA"' in stable_run
+    assert 'git fetch --force --no-tags origin "+refs/tags/${tag}:refs/tags/${tag}"' in stable_run
+    assert 'git rev-parse "${tag}^{commit}"' in stable_run
     assert 'remote_tag_sha" != "$SOURCE_SHA"' in stable_run
     assert 'gh release view "$tag" --json isDraft,isPrerelease' in stable_run
     assert "Existing stable release is a draft or prerelease" in stable_run

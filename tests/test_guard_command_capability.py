@@ -10,6 +10,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.runtime import command_capability as command_capability_module
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
     COMMAND_CAPABILITY_STATE_KEY,
@@ -186,6 +187,51 @@ def test_every_supported_operation_has_one_local_side_effect_classification() ->
     assert classified == set(SUPPORTED_COMMAND_OPERATIONS) - {EXACT_CLOUD_REVIEW_OPERATION}
     assert EXACT_CLOUD_REVIEW_OPERATION not in classified
     assert not (set(READ_ONLY_COMMAND_OPERATIONS) & set(STATE_CHANGING_COMMAND_OPERATIONS))
+
+
+def test_retired_cloud_review_operations_are_not_advertised_or_authorizable(tmp_path: Path) -> None:
+    retired_operations = (
+        "guard.approval.resolve",
+        "guard.localRequests.snapshot",
+        "guard.liveRequests.reassignQuarantined",
+    )
+    classified = (
+        set(READ_ONLY_COMMAND_OPERATIONS)
+        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
+        | set(STATE_CHANGING_COMMAND_OPERATIONS)
+    )
+    assert not (set(retired_operations) & set(SUPPORTED_COMMAND_OPERATIONS))
+    assert not (set(retired_operations) & classified)
+
+    store = _connected_store(tmp_path)
+    _issue(store, "guard.packageShims.status")
+    for index, operation in enumerate(retired_operations):
+        job = _job(store, job_id=f"retired-job-{index}")
+        job["operation"] = operation
+        with pytest.raises(CommandCapabilityError, match="command_operation_unsupported"):
+            authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+
+
+def test_signed_pre_cutover_capability_preserves_supported_operations(tmp_path: Path) -> None:
+    store = _connected_store(tmp_path)
+    _issue(store, "guard.packageShims.status")
+    stored = store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY)
+    assert isinstance(stored, dict)
+    unsigned = {str(key): value for key, value in stored.items() if key not in {"keyId", "signature"}}
+    unsigned["operations"] = ["guard.packageShims.status", "guard.approval.resolve"]
+    migrated_capability = command_capability_module._signed_payload(store, unsigned, create_key=False)
+    store.set_sync_payload(
+        COMMAND_CAPABILITY_STATE_KEY,
+        migrated_capability,
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    status = command_capability_status(store)
+
+    assert status["enabled"] is True
+    assert status["capability_valid"] is True
+    assert status["operations"] == ["guard.packageShims.status"]
+    assert command_queue.command_queue_enabled(store, environ={}) is True
 
 
 def test_policy_memory_capability_requires_its_own_local_confirmation(tmp_path: Path) -> None:

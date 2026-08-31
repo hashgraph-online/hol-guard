@@ -59,6 +59,49 @@ def test_storage_report_fails_when_over_limit(tmp_path: Path) -> None:
     assert pypi_project_storage.main(["--payload", str(payload_path), "--fail-if-over-limit"]) == 1
 
 
+def test_storage_report_counts_pending_upload_bytes(tmp_path: Path) -> None:
+    payload_path = tmp_path / "pypi.json"
+    payload_path.write_text(
+        json.dumps({"releases": {"3.0.6": [{"filename": "hol_guard-3.0.6.tar.gz", "size": 10}]}}),
+        encoding="utf-8",
+    )
+    pending = tmp_path / "dist-hol-guard"
+    pending.mkdir()
+    (pending / "hol_guard-3.0.7.tar.gz").write_bytes(b"x" * 20)
+
+    assert pypi_project_storage.pending_dir_size_bytes(pending) == 20
+    assert pypi_project_storage.over_project_limit(10, 20) is False
+    assert (
+        pypi_project_storage.main(
+            ["--payload", str(payload_path), "--fail-if-over-limit", "--pending-dir", str(pending)]
+        )
+        == 0
+    )
+
+    tight = tmp_path / "tight.json"
+    tight.write_text(
+        json.dumps(
+            {
+                "releases": {
+                    "3.0.6": [
+                        {
+                            "filename": "hol_guard-3.0.6.tar.gz",
+                            "size": pypi_project_storage.PYPI_PROJECT_LIMIT_BYTES - 5,
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert (
+        pypi_project_storage.main(
+            ["--payload", str(tight), "--fail-if-over-limit", "--pending-dir", str(pending)]
+        )
+        == 1
+    )
+
+
 def test_already_current_message_explains_unpublished_reserved_alpha() -> None:
     from codex_plugin_scanner.guard.cli.update_commands import (
         already_current_update_message,

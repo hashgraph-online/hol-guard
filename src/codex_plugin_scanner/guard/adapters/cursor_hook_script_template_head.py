@@ -239,6 +239,11 @@ def _daemon_hook_result(
         return (None, "authenticated-control-plane-failure")
     if not isinstance(parsed_body, dict):
         return (None, "authenticated-control-plane-failure")
+    if parsed_body.get("reason_code") in {
+        "native_pre_tool_unavailable",
+        "native_post_tool_unavailable",
+    }:
+        return (None, None)
     raw_event_name = _raw_hook_event_name(request_payload)
     if raw_event_name not in {"aftershellexecution", "aftermcpexecution"}:
         policy_action = parsed_body.get("policy_action")

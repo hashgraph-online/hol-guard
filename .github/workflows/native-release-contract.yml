@@ -2,14 +2,14 @@ name: Native release contract
 
 on:
   pull_request:
-    branches: [release/3.0]
+    branches: [main, release/3.2]
     paths:
       - ".github/workflows/publish.yml"
       - ".github/workflows/native-release-contract.yml"
       - "scripts/verify_native_runtime_release.py"
       - "ci/native_runtime/test_native_runtime_release.py"
   push:
-    branches: [release/3.0]
+    branches: [main]
     paths:
       - ".github/workflows/publish.yml"
       - ".github/workflows/native-release-contract.yml"

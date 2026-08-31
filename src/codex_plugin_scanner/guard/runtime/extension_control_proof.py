@@ -7,7 +7,9 @@ import hmac
 import json
 import os
 import secrets
+import stat
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,7 +28,7 @@ EXTENSION_CONTROL_ENROLLMENT_SCHEMA = "guard.extension-control-enrollment.v1"
 EXTENSION_CONTROL_ENROLLMENT_ACTION = "enroll-authority"
 _MAX_IDENTITY_LENGTH = 256
 _ENROLLMENT_CONFIRMATION_PREFIX = "ENROLL EXTENSION CONTROL"
-_REMOTE_TERMINAL_ENVIRONMENT = ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY")
+_REMOTE_TERMINAL_ENVIRONMENT = ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "MOSH_CONNECTION")
 
 
 class ExtensionControlProofError(PermissionError):
@@ -86,7 +88,7 @@ def _current_login_name() -> str | None:
 
 
 def _terminal_session_is_local(terminal_name: str) -> bool:
-    """Require an OS login record for this TTY with no remote host."""
+    """Accept a local login record or a user-owned desktop PTY."""
 
     expected_user = _current_login_name()
     if expected_user is None:
@@ -101,14 +103,35 @@ def _terminal_session_is_local(terminal_name: str) -> bool:
             env={"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
         )
     except (OSError, subprocess.SubprocessError):
-        return False
+        completed = None
     terminal_id = Path(terminal_name).name
-    for line in completed.stdout.splitlines():
-        fields = line.split()
-        if len(fields) < 2 or fields[0] != expected_user or fields[1] != terminal_id:
-            continue
-        return not (fields[-1].startswith("(") and fields[-1].endswith(")"))
-    return False
+    if completed is not None:
+        for line in completed.stdout.splitlines():
+            fields = line.split()
+            if len(fields) < 2 or fields[0] != expected_user or fields[1] != terminal_id:
+                continue
+            return not (fields[-1].startswith("(") and fields[-1].endswith(")"))
+    # GNOME and other desktop terminal emulators often do not create utmp
+    # records. systemd-logind provides the session origin independently of
+    # mutable child-process environment variables.
+    try:
+        session = subprocess.run(
+            ("/usr/bin/loginctl", "show-session", "self", "--property=Remote", "--value"),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            env={"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if session.stdout.strip().lower() != "no":
+        return False
+    try:
+        terminal = os.stat(terminal_name, follow_symlinks=True)
+    except OSError:
+        return False
+    return terminal.st_uid == os.geteuid() and stat.S_ISCHR(terminal.st_mode)
 
 
 def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
@@ -119,7 +142,16 @@ def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment)
     except OSError as exc:
         raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
     try:
-        if not os.isatty(descriptor) or not _terminal_session_is_local(os.ttyname(descriptor)):
+        terminal_name = os.ttyname(descriptor)
+        if sys.stdin.isatty():
+            # Opening /dev/tty can preserve that alias rather than returning
+            # the concrete /dev/pts or /dev/ttys device. stdin identifies the
+            # same controlling terminal for an interactive CLI invocation.
+            stdin_descriptor = sys.stdin.fileno()
+            if os.fstat(descriptor).st_rdev != os.fstat(stdin_descriptor).st_rdev:
+                raise ExtensionControlProofError("extension control enrollment requires one interactive local terminal")
+            terminal_name = os.ttyname(stdin_descriptor)
+        if not os.isatty(descriptor) or not _terminal_session_is_local(terminal_name):
             raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
         expected = f"{_ENROLLMENT_CONFIRMATION_PREFIX} {enrollment.actor_id}"
         with os.fdopen(os.dup(descriptor), "w", encoding="utf-8") as terminal_output:

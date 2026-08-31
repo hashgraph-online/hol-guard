@@ -36,6 +36,64 @@ def teardown_module() -> None:
     _sync_namespace()
 
 
+def test_decision_diff_import_does_not_shadow_scanner_package_exports() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import tests.guard_command_decision_diff; "
+                "from codex_plugin_scanner import __version__, scan_plugin; "
+                "from codex_plugin_scanner.submission import build_submission_payload; "
+                "assert __version__; assert callable(scan_plugin); "
+                "assert callable(build_submission_payload)"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
+    scripts = (
+        (
+            "import sys; "
+            "import codex_plugin_scanner as scanner; "
+            "marker = object(); previous = getattr(scanner, 'guard', marker); "
+            "import tests.guard_command_decision_diff; "
+            "assert getattr(scanner, 'guard', marker) is previous; "
+            "from codex_plugin_scanner.guard import models; "
+            "assert models is sys.modules['codex_plugin_scanner.guard.models']"
+        ),
+        (
+                "import sys; "
+                "import codex_plugin_scanner.guard as guard; "
+                "import codex_plugin_scanner.guard.runtime as runtime; "
+                "guard_modules = {k: v for k, v in guard.__dict__.items() "
+                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+                "runtime_modules = {k: v for k, v in runtime.__dict__.items() "
+                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+                "import tests.guard_command_decision_diff; "
+                "assert guard_modules == {k: v for k, v in guard.__dict__.items() "
+                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+                "assert runtime_modules == {k: v for k, v in runtime.__dict__.items() "
+                "if getattr(v, '__name__', '').startswith('codex_plugin_scanner.')}; "
+                "from codex_plugin_scanner.guard.runtime import effect_decision; "
+                "assert effect_decision is sys.modules['codex_plugin_scanner.guard.runtime.effect_decision']"
+        ),
+    )
+    for script in scripts:
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
+
+
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
     report = generate_decision_diff_report()
     assert REPORT_PATH.read_bytes() == canonical_json_bytes(report)
@@ -70,6 +128,7 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "src/codex_plugin_scanner/guard/cli/commands_support.py",
         "src/codex_plugin_scanner/guard/contained_package_script_execution.py",
         "src/codex_plugin_scanner/guard/contained_workspace_write_execution.py",
+        "src/codex_plugin_scanner/guard/durable_harness_launcher.py",
         "src/codex_plugin_scanner/guard/package_shim_gate.py",
         "src/codex_plugin_scanner/guard/package_shim_frozen.py",
         "src/codex_plugin_scanner/guard/shims.py",

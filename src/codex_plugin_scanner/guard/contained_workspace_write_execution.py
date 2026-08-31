@@ -53,7 +53,22 @@ from .runtime.secret_sensitivity import classify_secret_path
 from .runtime.workspace_snapshot_inputs import complete_workspace_snapshot
 
 ContainedWriteOperation = Literal["patch-check", "patch-apply", "format-write", "copy-generated"]
-_PROTECTED_PARTS = frozenset({".git", ".guard", ".ssh", "guard-home"})
+_PROTECTED_PARTS = frozenset(
+    {
+        ".aws",
+        ".claude",
+        ".codex",
+        ".cursor",
+        ".docker",
+        ".git",
+        ".gnupg",
+        ".guard",
+        ".hol-guard",
+        ".kube",
+        ".ssh",
+        "guard-home",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)

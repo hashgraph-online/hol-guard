@@ -1,0 +1,58 @@
+name: Rust PreToolUse adversarial integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_command_model.py"
+      - "src/codex_plugin_scanner/guard/native_pretool.py"
+      - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+      - "scripts/integration/rust_pretool_adversarial.py"
+      - ".github/workflows/rust-pretool-adversarial.yml"
+  push:
+    branches: [main]
+    paths:
+      - "rust/**"
+      - "src/codex_plugin_scanner/guard/native_command_model.py"
+      - "src/codex_plugin_scanner/guard/native_pretool.py"
+      - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+      - "scripts/integration/rust_pretool_adversarial.py"
+      - ".github/workflows/rust-pretool-adversarial.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adversarial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Build version-matched runtime
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime
+      - name: Execute adversarial real-process corpus
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: uv run --no-sync python scripts/integration/rust_pretool_adversarial.py

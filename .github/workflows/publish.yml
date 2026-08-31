@@ -27,7 +27,7 @@ on:
   push:
     branches: [main, release/3.0]
   pull_request:
-    branches: [main, release/3.0]
+    branches: [main, release/3.0, release/3.2]
     types: [opened, synchronize, reopened, labeled]
 
 permissions:
@@ -217,7 +217,7 @@ jobs:
               --argjson tags "$TAG_VERSIONS" \
               '$pypi + $testpypi + $tags | unique')
             mapfile -t SOURCE_ALPHA_TAGS < <(
-              git tag --points-at "$SOURCE_SHA" --list "alpha/v${TRAIN}.0a*" | sed 's#^alpha/v##'
+              git tag --points-at "$SOURCE_SHA" --list "alpha/v${TRAIN}.1a*" | sed 's#^alpha/v##'
             )
             if [[ "${#SOURCE_ALPHA_TAGS[@]}" -gt 1 ]]; then
               echo "Source commit has multiple reserved alpha versions" >&2
@@ -267,10 +267,13 @@ jobs:
               list-versions --registry pypi)
             TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
               list-versions --registry testpypi)
+            TAG_VERSIONS=$(git tag --list 'v*' | sed 's/^v//' | jq -R -s \
+              'split("\n") | map(select(length > 0))')
             VERSIONS=$(jq -n \
               --argjson pypi "$PYPI_VERSIONS" \
               --argjson testpypi "$TESTPYPI_VERSIONS" \
-              '$pypi + $testpypi | unique')
+              --argjson tags "$TAG_VERSIONS" \
+              '$pypi + $testpypi + $tags | unique')
             VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
               --base-version "$BASE_VERSION" <<< "$VERSIONS")
           fi
@@ -407,6 +410,11 @@ jobs:
             (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
             (github.event_name == 'workflow_dispatch' && github.event.inputs.release_train == '3.0')
           )
+        ) ||
+        (
+          needs.build.outputs.channel == 'stable' &&
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main'
         )
       )
     needs: build
@@ -1082,8 +1090,9 @@ jobs:
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
       needs.build.result == 'success' &&
+      needs.assemble-native-guard-distributions.result == 'success' &&
       needs.build.outputs.channel == 'stable'
-    needs: build
+    needs: [build, assemble-native-guard-distributions]
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
@@ -1099,13 +1108,13 @@ jobs:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distributions
+          name: distributions-native
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distribution-sha256
+          name: distribution-sha256-native
       - name: Verify immutable build artifact
-        run: sha256sum --check distribution-sha256.txt
+        run: sha256sum --check distribution-sha256-native.txt
       - name: Keep only the Guard release distribution
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - name: Revalidate main source before TestPyPI
@@ -1159,9 +1168,59 @@ jobs:
             fi
             sleep 5
           done
-          wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$result")
-          [[ -n "$wheel" ]]
+          mapfile -t wheels < <(
+            jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$result"
+          )
+          [[ "${#wheels[@]}" == "1" ]]
+          wheel="${wheels[0]}"
           [[ "$(uv tool run --from "$wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
+
+  reserve-main-tag:
+    name: Reserve stable tag
+    if: >-
+      always() &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      github.event_name == 'push' &&
+      github.run_attempt == 1 &&
+      github.ref == 'refs/heads/main' &&
+      needs.build.result == 'success' &&
+      needs.assemble-native-guard-distributions.result == 'success' &&
+      needs.build.outputs.channel == 'stable'
+    needs: [build, assemble-native-guard-distributions]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build.outputs.source_sha }}
+      - name: Bind stable tag to the exact main source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
+          if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
+            echo "Stable tag source is no longer the main branch head" >&2
+            exit 1
+          fi
+          tag="v${VERSION}"
+          remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
+          if [[ -z "$remote_tag_sha" ]]; then
+            if ! gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${tag}" \
+              -f sha="$SOURCE_SHA" >/dev/null; then
+              echo "Stable tag creation raced or failed; verifying the resulting remote ref" >&2
+            fi
+          fi
+          git fetch --force --no-tags origin "+refs/tags/${tag}:refs/tags/${tag}"
+          remote_tag_sha=$(git rev-parse "${tag}^{commit}")
+          if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
+            echo "Stable tag does not target the exact main source" >&2
+            exit 1
+          fi
 
   publish-main-pypi:
     name: Publish main release to PyPI
@@ -1172,8 +1231,10 @@ jobs:
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
       needs.build.result == 'success' &&
+      needs.assemble-native-guard-distributions.result == 'success' &&
+      needs.reserve-main-tag.result == 'success' &&
       needs.build.outputs.channel == 'stable'
-    needs: build
+    needs: [build, assemble-native-guard-distributions, reserve-main-tag]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -1189,30 +1250,38 @@ jobs:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distributions
+          name: distributions-native
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distribution-sha256
+          name: distribution-sha256-native
       - name: Verify immutable build artifact
-        run: sha256sum --check distribution-sha256.txt
+        run: sha256sum --check distribution-sha256-native.txt
       - name: Prepare project-specific distributions
         run: |
           shopt -s nullglob
           guard_files=(dist/hol_guard-* dist/hol-guard-*)
           scanner_files=(dist/plugin_scanner-* dist/plugin-scanner-*)
-          [[ "${#guard_files[@]}" == "2" && "${#scanner_files[@]}" == "2" ]]
+          [[ "${#guard_files[@]}" -ge "6" && "${#scanner_files[@]}" == "2" ]]
           mkdir dist-hol-guard dist-plugin-scanner
           cp "${guard_files[@]}" dist-hol-guard/
           cp "${scanner_files[@]}" dist-plugin-scanner/
+      - name: Validate native Guard release set
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
+            validate-local --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full
       - name: Revalidate main publication
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          remote_main_sha=$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')
-          if [[ "$remote_main_sha" != "$SOURCE_SHA" ]]; then
-            echo "Main publication source is no longer the branch head" >&2
+          git fetch --no-tags origin "+refs/tags/v${VERSION}:refs/tags/v${VERSION}"
+          reserved_source_sha=$(git rev-parse "v${VERSION}^{commit}")
+          if [[ "$reserved_source_sha" != "$SOURCE_SHA" ]]; then
+            echo "Stable tag does not target the exact publication source" >&2
             exit 1
           fi
           BASE_VERSION=$(uv run --with packaging==25.0 python scripts/sync_repo_version.py --check)
@@ -1220,11 +1289,14 @@ jobs:
             list-versions --registry pypi)
           TESTPYPI_VERSIONS=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
             list-versions --registry testpypi)
+          TAG_VERSIONS=$(git tag --list 'v*' | sed 's/^v//' | jq -R -s \
+            'split("\n") | map(select(length > 0))')
           RELEASE_VERSIONS=$(jq -n \
             --arg version "$VERSION" \
             --argjson pypi "$PYPI_VERSIONS" \
             --argjson testpypi "$TESTPYPI_VERSIONS" \
-            '$pypi + $testpypi + [$version] | unique')
+            --argjson tags "$TAG_VERSIONS" \
+            '$pypi + $testpypi + $tags + [$version] | unique')
           LATEST_RELEASE_VERSION=$(uv run --with packaging==25.0 python scripts/compute_main_release_version.py \
             --base-version "$BASE_VERSION" --latest-existing <<< "$RELEASE_VERSIONS")
           if [[ "$LATEST_RELEASE_VERSION" != "$VERSION" ]]; then
@@ -1257,6 +1329,9 @@ jobs:
           [[ "$scanner_status" == "absent" || "$scanner_status" == "exact" ]]
           [[ "$guard_status" == "absent" ]] && echo "hol_guard_upload=true" >> "$GITHUB_OUTPUT" || echo "hol_guard_upload=false" >> "$GITHUB_OUTPUT"
           [[ "$scanner_status" == "absent" ]] && echo "plugin_scanner_upload=true" >> "$GITHUB_OUTPUT" || echo "plugin_scanner_upload=false" >> "$GITHUB_OUTPUT"
+      - name: Refuse PyPI upload when the project is over quota
+        if: steps.pypi.outputs.hol_guard_upload == 'true'
+        run: uv run --with packaging==25.0 python scripts/pypi_project_storage.py --fail-if-over-limit --pending-dir dist-hol-guard
       - name: Publish HOL Guard to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.pypi.outputs.hol_guard_upload == 'true'
@@ -1271,6 +1346,7 @@ jobs:
         run: rm -f dist-hol-guard/*.publish.attestation dist-plugin-scanner/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
         env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           for attempt in {1..60}; do
@@ -1297,9 +1373,18 @@ jobs:
             fi
             sleep 5
           done
-          guard_wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$guard_result")
-          scanner_wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$scanner_result")
-          [[ -n "$guard_wheel" && -n "$scanner_wheel" ]]
+          uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
+            verify-published --registry pypi --version "$VERSION" \
+            --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full
+          mapfile -t guard_wheels < <(
+            jq -r '.install_paths[] | select(endswith("-py3-none-any.whl"))' <<< "$guard_result"
+          )
+          mapfile -t scanner_wheels < <(
+            jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$scanner_result"
+          )
+          [[ "${#guard_wheels[@]}" == "1" && "${#scanner_wheels[@]}" == "1" ]]
+          guard_wheel="${guard_wheels[0]}"
+          scanner_wheel="${scanner_wheels[0]}"
           [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
           [[ "$(uv tool run --from "$scanner_wheel" plugin-scanner --version)" == "plugin-scanner $VERSION" ]]
 
@@ -1312,9 +1397,10 @@ jobs:
       github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
       needs.build.result == 'success' &&
+      needs.assemble-native-guard-distributions.result == 'success' &&
       needs.publish-main-pypi.result == 'success' &&
       needs.build.outputs.channel == 'stable'
-    needs: [build, publish-main-pypi]
+    needs: [build, assemble-native-guard-distributions, publish-main-pypi]
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -1327,11 +1413,11 @@ jobs:
           ref: ${{ needs.build.outputs.source_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distributions
+          name: distributions-native
           path: dist/
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: distribution-sha256
+          name: distribution-sha256-native
       - name: Download release toolchain SBOM
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -1339,7 +1425,7 @@ jobs:
           path: dist/
       - name: Verify and select release assets
         run: |
-          sha256sum --check distribution-sha256.txt
+          sha256sum --check distribution-sha256-native.txt
           rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - name: Attest main release assets
         id: provenance
@@ -1357,13 +1443,8 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           tag="v${VERSION}"
-          remote_tag_sha=$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1}')
-          if [[ -z "$remote_tag_sha" ]]; then
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -f ref="refs/tags/${tag}" \
-              -f sha="$SOURCE_SHA" >/dev/null
-            remote_tag_sha=$(git ls-remote --exit-code origin "refs/tags/${tag}" | awk '{print $1}')
-          fi
+          git fetch --force --no-tags origin "+refs/tags/${tag}:refs/tags/${tag}"
+          remote_tag_sha=$(git rev-parse "${tag}^{commit}")
           if [[ "$remote_tag_sha" != "$SOURCE_SHA" ]]; then
             echo "Stable tag does not target the published source" >&2
             exit 1

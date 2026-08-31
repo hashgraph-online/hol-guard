@@ -53,7 +53,7 @@ from .interpreter_observers import (
     _looks_like_safe_read_only_lookup_command,
 )
 from .request_artifacts import _candidate_command_texts
-from .request_models import ToolActionRequestMatch, _normalize_tool_name
+from .request_models import ToolActionRequestMatch, _normalize_tool_name, tool_action_risk_summary
 from .routine_directory_creation import is_safe_routine_directory_creation
 from .sensitive_read_pipeline import _runtime_read_root_texts
 from .shell_quote_tokens import shell_token_segments, shell_tokens_preserving_quote_context
@@ -439,7 +439,7 @@ def build_tool_action_request_artifact(
             f"Requested `{request.tool_name}` action `{request.command_text}` via transparent wrappers "
             f"`{' -> '.join(wrapper_chain)}` ({request.action_class})."
         )
-    risk_summary = f"Requests a sensitive native tool action: {request.action_class}."
+    risk_summary = tool_action_risk_summary(request)
     runtime_reason = request.reason
     if wrapper_chain:
         runtime_reason = (
@@ -469,7 +469,7 @@ def build_tool_action_request_artifact(
             "command_text": request.command_text,
             "action_class": request.action_class,
             "request_summary": request_summary,
-            "runtime_request_signals": [f"invokes a sensitive native tool action: {request.action_class}"],
+            "runtime_request_signals": [risk_summary],
             "runtime_request_summary": risk_summary,
             "runtime_request_reason": runtime_reason,
             "raw_command_text": request.raw_command_text,
