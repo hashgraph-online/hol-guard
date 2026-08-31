@@ -200,3 +200,72 @@ def test_invalid_grant_retry_uses_reloaded_credentials(tmp_path, monkeypatch) ->
 
     assert refreshed["access_token"] == "access-token-3"
     assert seen_tokens == ["refresh-token-1", "refresh-token-2"]
+
+
+def test_invalid_grant_retry_persists_and_returns_effective_credentials(tmp_path, monkeypatch) -> None:
+    """After reloader swaps credentials mid-retry, persistence + return MUST use the newer snapshot.
+
+    CodeRabbit #2714: before this fix the resolver persisted `oauth_credentials`
+    (stale dpop_key) and returned `dpop_key_material` (stale), even when the
+    reloader supplied newer material on the retry leg — leaving signed sync
+    requests with an outdated key after peer rotation.
+    """
+    store = _store_with_oauth_credentials(tmp_path)
+    initial = store.get_oauth_local_credentials(allow_primary=True)
+    assert initial is not None
+    initial_dpop = guard_runner_module._oauth_dpop_key_material(initial)
+    seen_tokens: list[str] = []
+
+    def _fake_urlopen(_request, timeout):
+        form = dict(urllib.parse.parse_qsl(_request.data.decode("utf-8")))
+        seen_tokens.append(form["refresh_token"])
+        if len(seen_tokens) == 1:
+            raise _invalid_grant_http_error()
+        return _SuccessResponse("access-token-3")
+
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
+    _allow_refresh(monkeypatch)
+
+    rotated = dict(initial)
+    rotated["refresh_token"] = "refresh-token-2"
+    rotated_dpop_pair = generate_dpop_key_pair()
+    rotated["dpop_private_key_pem"] = rotated_dpop_pair.private_key_pem
+    rotated["dpop_public_jwk"] = rotated_dpop_pair.public_jwk
+    rotated["dpop_public_jwk_thumbprint"] = rotated_dpop_pair.public_jwk_thumbprint
+    rotated_dpop = guard_runner_module._oauth_dpop_key_material(rotated)
+    original_get = GuardStore.get_oauth_local_credentials
+    call_count = {"n": 0}
+
+    def _patched_get(self, *args, **kwargs):
+        # The reloader's reads mimic a peer having rotated credentials in the
+        # store between the first (failed) and second (successful) attempts.
+        if self is store:
+            call_count["n"] += 1
+            return rotated
+        return original_get(self, *args, **kwargs)
+
+    monkeypatch.setattr(GuardStore, "get_oauth_local_credentials", _patched_get)
+
+    context = guard_runner_module._resolve_guard_sync_auth_context_from_oauth_credentials(
+        store,
+        initial,
+        force_refresh=True,
+        persist_recovered_secret=False,
+    )
+
+    # Return context must carry the reloaded DPoP material (used to sign
+    # subsequent sync requests). dataclass — compare by value, not identity.
+    actual = context["dpop_key_material"]
+    assert actual == rotated_dpop
+    assert actual != initial_dpop
+
+    # Persistence must record the rotated credentials, not the stale initial.
+    monkeypatch.setattr(GuardStore, "get_oauth_local_credentials", original_get)
+    persisted = original_get(store, allow_primary=True)
+    assert persisted is not None
+    # `_persist_rotated_oauth_refresh_token` stamps the new refresh_token from
+    # the refresh response over whichever credentials dict it received — so
+    # the persisted dict MUST be derived from `rotated`, not `initial`.
+    assert persisted.get("dpop_private_key_pem") == rotated.get("dpop_private_key_pem")
+    assert persisted.get("dpop_public_jwk_thumbprint") == rotated.get("dpop_public_jwk_thumbprint")
+    assert seen_tokens == ["refresh-token-1", "refresh-token-2"]
