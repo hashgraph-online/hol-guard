@@ -12,7 +12,7 @@ CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 CI_BRANCHES = ["main", "release/3.0", "release/3.1"]
 RELEASE_BRANCHES = ["main", "release/3.0"]
-PR_CANARY_BRANCHES = ["main", "release/3.0"]
+PR_CANARY_BRANCHES = ["main", "release/3.0", "release/3.2"]
 RELEASE_MAINTAINERS = {"@kantorcodes", "@deep-purple-boots"}
 
 
