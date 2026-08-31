@@ -23,6 +23,7 @@ else:  # pragma: no cover - runtime compatibility
 
 from .action_lattice import coerce_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
+from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
 from .config_preset_support import apply_named_posture_harness_policy
 from .guard_home_state import database_has_custom_extension_state
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
@@ -397,8 +398,6 @@ class GuardConfig:
     publisher_actions: dict[str, GuardAction] | None = None
     artifact_actions: dict[str, GuardAction] | None = None
     evidence_retain_days: int = 90
-    # Opt-in caps on retained detailed rows. None keeps the store defaults
-    # (250k each); power users can lower these to bound database growth.
     receipt_detail_limit: int | None = None
     guard_event_limit: int | None = None
     managed_policy_status: str = "absent"
@@ -688,26 +687,16 @@ def update_guard_settings(
         raise ValueError("Cloud sync requires a paid team plan.")
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)
-    # Native hook decisions consume the resident's last ACKed snapshot. Wake
-    # the publisher only after the durable config write succeeds; it will
-    # rebuild and publish asynchronously without making this control-plane
-    # mutation wait on resident IPC.
-    from .native_policy_snapshot import notify_native_policy_mutation
-
     notify_native_policy_mutation(guard_home)
-    explicit_choice = incoming_selected_posture and updated.protection_posture_explicit
-    if current_config.protection_posture != updated.protection_posture or (
-        explicit_choice and not current_config.protection_posture_explicit
-    ):
-        from .protection_events import record_posture_change
-
-        record_posture_change(
-            guard_home,
-            previous=current_config.protection_posture,
-            next_posture=updated.protection_posture,
-            source=event_source,
-            auto=event_source == "auto-revert",
-        )
+    record_posture_change_if_needed(
+        guard_home,
+        previous=current_config.protection_posture,
+        next_posture=updated.protection_posture,
+        previous_explicit=current_config.protection_posture_explicit,
+        next_explicit=updated.protection_posture_explicit,
+        selected=incoming_selected_posture,
+        event_source=event_source,
+    )
     return updated
 
 
@@ -729,8 +718,6 @@ def update_guard_update_channel(
     current["update_channel"] = update_channel
     _write_guard_config(guard_home / "config.toml", current)
     updated = load_guard_config(guard_home)
-    from .native_policy_snapshot import notify_native_policy_mutation
-
     notify_native_policy_mutation(guard_home)
     return updated
 
@@ -747,8 +734,6 @@ def reset_guard_settings(
     next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)
-    from .native_policy_snapshot import notify_native_policy_mutation
-
     notify_native_policy_mutation(guard_home)
     return updated
 

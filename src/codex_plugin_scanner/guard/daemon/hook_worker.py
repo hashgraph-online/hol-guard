@@ -40,11 +40,14 @@ from ..protection_posture import protection_is_off
 from ..runtime.hook_content_scanner import ContentScanner
 from ..runtime.hook_decision_cache import HookDecisionCache
 from ..runtime.hook_review_engine import HookReviewEngine
-from ..runtime.hook_review_types import (
-    HookOutputSummary,
-    HookPayloadKind,
-    HookReviewRequest,
-    HookSourceFileRef,
+from ..runtime.hook_review_types import HookOutputSummary, HookPayloadKind, HookReviewRequest, HookSourceFileRef
+from .hook_request_parsing import (
+    build_hook_review_request,
+    parse_output_summary,
+    parse_source_ref,
+    payload_kind,
+    pre_tool_command,
+    runtime_hook_event_name,
 )
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
@@ -67,34 +70,6 @@ class CommandActivityWriter(Protocol):
         payload: Mapping[str, object],
         succeeded: bool,
     ) -> bool: ...
-
-
-def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
-    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            raw = value.strip()
-            compact = raw.lower().replace("_", "").replace("-", "")
-            if compact in {
-                "pretool",
-                "pretooluse",
-                "beforeshellexecution",
-                "beforereadfile",
-                "beforewritefile",
-                "beforemcpexecution",
-            }:
-                return "PreToolUse"
-            if compact in {
-                "posttool",
-                "posttooluse",
-                "aftershellexecution",
-                "afterreadfile",
-                "afterwritefile",
-                "aftermcpexecution",
-            }:
-                return "PostToolUse"
-            return raw
-    return "PreToolUse"
 
 
 class HookWorkerUnsupported(RuntimeError):  # noqa: N818
@@ -199,7 +174,7 @@ class HookWorker:
         if event_name not in {"PreToolUse", "PostToolUse"}:
             raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
         if event_name == "PreToolUse":
-            command = _pre_tool_command(payload)
+            command = pre_tool_command(payload)
             if command is None:
                 raise HookWorkerUnsupported("fast path PreToolUse requires a command")
             config = self._load_config(guard_home, workspace)
@@ -405,105 +380,27 @@ class HookWorker:
         workspace: Path | None,
         deadline: float | None = None,
     ) -> HookReviewRequest:
-        event_name = self._hook_event_name(payload)
-        payload_kind = self._payload_kind(payload)
-        output_summary = self._parse_output_summary(payload)
-        source_ref = self._parse_source_ref(payload)
-        source_scope = str(payload.get("source_scope") or "project")
-        config_path = payload.get("config_path")
-        if not isinstance(config_path, str):
-            config_path = None
-        return HookReviewRequest(
+        return build_hook_review_request(
+            payload,
             harness=harness,
-            event_name=event_name,
-            payload=payload,
-            payload_kind=payload_kind,
-            config_path=config_path,
-            cwd=workspace,
+            source_ref_external_allowed=source_ref_external_allowed,
             home_dir=home_dir,
             guard_home=guard_home,
-            source_scope=source_scope,
-            source_ref_external_allowed=source_ref_external_allowed,
-            output_summary=output_summary,
-            source_ref=source_ref,
-            deadline_monotonic=deadline,
+            workspace=workspace,
+            deadline=deadline,
         )
 
     def _hook_event_name(self, payload: Mapping[str, object]) -> str:
         return runtime_hook_event_name(payload)
 
     def _payload_kind(self, payload: Mapping[str, object]) -> HookPayloadKind:
-        if "guard_payload_ref" in payload:
-            return "encrypted_payload_ref"
-        if "guard_source_ref" in payload:
-            return "source_file_ref"
-        return "inline"
+        return payload_kind(payload)
 
     def _parse_output_summary(self, payload: Mapping[str, object]) -> HookOutputSummary | None:
-        summary = payload.get("tool_response_summary")
-        if not isinstance(summary, Mapping):
-            return None
-        text_excerpt = summary.get("text_excerpt") or summary.get("excerpt") or ""
-        if not isinstance(text_excerpt, str):
-            text_excerpt = str(text_excerpt)
-        excerpt_truncated = bool(summary.get("excerpt_truncated", False))
-        output_sha256 = summary.get("output_sha256")
-        if not isinstance(output_sha256, str):
-            output_sha256 = None
-        output_chars_raw = summary.get("output_chars")
-        output_chars = int(output_chars_raw) if isinstance(output_chars_raw, (int, float)) else None
-        content_items_seen_raw = summary.get("content_items_seen")
-        content_items_seen = int(content_items_seen_raw) if isinstance(content_items_seen_raw, (int, float)) else None
-        object_keys_seen_raw = summary.get("object_keys_seen")
-        object_keys_seen = int(object_keys_seen_raw) if isinstance(object_keys_seen_raw, (int, float)) else None
-        max_depth_seen_raw = summary.get("max_depth_seen")
-        max_depth_seen = int(max_depth_seen_raw) if isinstance(max_depth_seen_raw, (int, float)) else None
-        return HookOutputSummary(
-            text_excerpt=text_excerpt,
-            excerpt_truncated=excerpt_truncated,
-            output_sha256=output_sha256,
-            output_chars=output_chars,
-            content_items_seen=content_items_seen,
-            object_keys_seen=object_keys_seen,
-            max_depth_seen=max_depth_seen,
-        )
+        return parse_output_summary(payload)
 
     def _parse_source_ref(self, payload: Mapping[str, object]) -> HookSourceFileRef | None:
-        ref = payload.get("guard_source_ref")
-        if not isinstance(ref, Mapping):
-            return None
-        version = ref.get("version")
-        path = ref.get("path")
-        output_sha256 = ref.get("output_sha256")
-        output_chars = ref.get("output_chars")
-        tool_input_path = ref.get("tool_input_path")
-        adapter_stat = ref.get("adapter_stat")
-        if not isinstance(version, int) or not isinstance(path, str) or not isinstance(output_sha256, str):
-            return HookSourceFileRef(version=-1, path="", output_sha256="", output_chars=0)
-        if not isinstance(output_chars, int):
-            output_chars = 0
-        if not isinstance(tool_input_path, str):
-            tool_input_path = None
-        stat_dict = dict(adapter_stat) if isinstance(adapter_stat, Mapping) else {}
-        return HookSourceFileRef(
-            version=version,
-            path=path,
-            output_sha256=output_sha256,
-            output_chars=output_chars,
-            tool_input_path=tool_input_path,
-            adapter_stat=stat_dict,
-        )
-
-
-def _pre_tool_command(payload: Mapping[str, object]) -> str | None:
-    for candidate in (payload.get("tool_input"), payload.get("arguments"), payload):
-        if not isinstance(candidate, Mapping):
-            continue
-        for key in ("command", "cmd", "shell_command", "shellCommand"):
-            value = candidate.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-    return None
+        return parse_source_ref(payload)
 
 
 __all__ = [

@@ -230,22 +230,16 @@ def _readiness_failure(response: object) -> RuntimeError:
     )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Benchmark the Python and Rust hook paths")
-    parser.add_argument("--runtime", type=Path, required=True)
-    parser.add_argument("--warm-iterations", type=int, default=100)
-    parser.add_argument("--cold-iterations", type=int, default=3)
-    parser.add_argument("--json", type=Path)
-    parser.add_argument("--enforce", action="store_true")
-    args = parser.parse_args()
-    if args.warm_iterations < 10 or args.cold_iterations < 2:
-        parser.error("benchmark iteration counts are too small")
-    runtime = _validated_runtime(args.runtime)
+def _collect_measurements(
+    runtime: Path,
+    *,
+    warm_iterations: int,
+    cold_iterations: int,
+) -> tuple[list[float], list[float], list[float], list[float], float]:
     with tempfile.TemporaryDirectory(prefix="hol-guard-native-bench-") as temp_dir:
         workspace = Path(temp_dir)
         guard_home = workspace / "guard-home"
         guard_home.mkdir(mode=0o700)
-
         python_runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
         python_runner.start()
         try:
@@ -265,29 +259,47 @@ def main() -> int:
                     python_runner,
                     workspace=workspace,
                     guard_home=guard_home,
-                    iterations=args.warm_iterations,
+                    iterations=warm_iterations,
                 )
                 native_warm = _bench_native_warm(
                     workspace=workspace,
                     guard_home=guard_home,
-                    iterations=args.warm_iterations,
+                    iterations=warm_iterations,
                     policy_snapshot=snapshot,
                 )
         finally:
             python_runner.close()
             close_resident_native_runtimes()
-
         python_cold = _bench_python_cold(
             workspace=workspace,
             guard_home=guard_home,
-            iterations=args.cold_iterations,
+            iterations=cold_iterations,
         )
         native_oneshot = _bench_native_oneshot(
             runtime=runtime,
             workspace=workspace,
             guard_home=guard_home,
-            iterations=args.cold_iterations,
+            iterations=cold_iterations,
         )
+    return python_warm, native_warm, python_cold, native_oneshot, native_readiness_ms
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Benchmark the Python and Rust hook paths")
+    parser.add_argument("--runtime", type=Path, required=True)
+    parser.add_argument("--warm-iterations", type=int, default=100)
+    parser.add_argument("--cold-iterations", type=int, default=3)
+    parser.add_argument("--json", type=Path)
+    parser.add_argument("--enforce", action="store_true")
+    args = parser.parse_args()
+    if args.warm_iterations < 10 or args.cold_iterations < 2:
+        parser.error("benchmark iteration counts are too small")
+    runtime = _validated_runtime(args.runtime)
+    python_warm, native_warm, python_cold, native_oneshot, native_readiness_ms = _collect_measurements(
+        runtime,
+        warm_iterations=args.warm_iterations,
+        cold_iterations=args.cold_iterations,
+    )
 
     python_warm_summary = _summary(python_warm)
     native_warm_summary = _summary(native_warm)

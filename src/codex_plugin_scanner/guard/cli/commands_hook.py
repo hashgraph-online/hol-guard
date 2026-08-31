@@ -17,13 +17,7 @@ if TYPE_CHECKING:
     from .commands_support_claude_approval import _persist_claude_guard_question_decision
     from .commands_support_connect import _synced_policy_payload
     from .commands_support_hook_payload import _hook_action_envelope, _load_hook_payload, _normalize_hook_payload
-    from .commands_support_interaction import _emit
-    from .commands_support_permission_store import (
-        _cursor_conversation_id,
-        _cursor_shell_command_from_payload,
-        _discard_claude_pending_permissions,
-        _persist_cursor_native_permission_after_shell,
-    )
+    from .commands_support_permission_store import _discard_claude_pending_permissions
     from .commands_support_runtime_artifacts import _hook_event_name, _hook_runtime_artifact
     from .commands_support_runtime_policy import _runtime_action_data_flow_signals
     from .commands_support_runtime_resolution import (
@@ -41,6 +35,7 @@ from .commands_hook_claude import (
     _run_hook_claude_permission_prompt_notification,
     _run_hook_claude_permission_request,
 )
+from .commands_hook_compatibility import maybe_handle_cursor_post_tool, prepare_compatibility_hook_payload
 from .commands_hook_copilot import (
     _run_hook_copilot_permission_request,
     _run_hook_copilot_pretool,
@@ -52,12 +47,7 @@ from .commands_hook_runtime_finish import _finalize_runtime_artifact_hook
 from .commands_hook_runtime_review import _review_runtime_artifact_hook
 from .commands_hook_runtime_state import RuntimeArtifactHookState
 from .commands_parser_helpers import *
-from .commands_support_command_activity import (
-    hook_post_succeeded,
-    record_command_activity_failure_best_effort,
-    record_post_hook_command_activity_best_effort,
-)
-from .commands_support_workspace import _workspace_from_cursor_project_dir, _workspace_from_hook_payload
+from .commands_support_workspace import _workspace_from_hook_payload
 
 
 def _run_guard_hook_command(
@@ -116,22 +106,7 @@ def _run_guard_hook_command(
 
     payload = hydrate_hook_payload_reference(payload)
     payload = _normalize_hook_payload(payload, harness=args.harness)
-    if _canonical_harness_name(args.harness) == "cline":
-        from ..adapters.cline_hook_payload import prepare_cline_hook_payload
-
-        payload = _normalize_hook_payload(prepare_cline_hook_payload(payload), harness=args.harness)
-    if _canonical_harness_name(args.harness) == "cursor":
-        from ..adapters.cursor_hooks import prepare_cursor_hook_payload
-
-        payload = _normalize_hook_payload(prepare_cursor_hook_payload(payload), harness=args.harness)
-    if _canonical_harness_name(args.harness) == "grok":
-        from ..adapters.grok_hooks import prepare_grok_hook_payload
-
-        payload = _normalize_hook_payload(prepare_grok_hook_payload(payload), harness=args.harness)
-    if _canonical_harness_name(args.harness) == "zcode":
-        from ..adapters.zcode_hooks import prepare_zcode_hook_payload
-
-        payload = _normalize_hook_payload(prepare_zcode_hook_payload(payload), harness=args.harness)
+    payload = prepare_compatibility_hook_payload(payload, harness=args.harness)
     managed_install = _managed_install_for(store, args.harness)
     workspace_was_explicit = workspace is not None
     runtime_workspace = _workspace_from_hook_payload(payload, workspace)
@@ -140,60 +115,15 @@ def _run_guard_hook_command(
             current_workspace = Path.cwd().resolve()
             if current_workspace.is_dir():
                 runtime_workspace = current_workspace
-    if _canonical_harness_name(args.harness) == "cursor" and _hook_event_name(payload) in {
-        "afterShellExecution",
-        "afterMCPExecution",
-    }:
-        if runtime_workspace is None:
-            runtime_workspace = _workspace_from_cursor_project_dir()
-        from ..runtime.command_activity_cursor import cursor_command_activity_observer_trusted
-
-        cursor_conversation_id = _cursor_conversation_id(payload)
-        cursor_command = _cursor_shell_command_from_payload(payload)
-        try:
-            command_activity_observer_trusted = (
-                cursor_conversation_id is not None
-                and cursor_command is not None
-                and cursor_command_activity_observer_trusted(
-                    guard_home=context.guard_home,
-                    payload=payload,
-                    conversation_id=cursor_conversation_id,
-                    command=cursor_command,
-                    env=os.environ,
-                )
-            )
-        except Exception:
-            command_activity_observer_trusted = False
-            record_command_activity_failure_best_effort(store, "cursor_observer_verify_failed")
-        saved = _persist_cursor_native_permission_after_shell(
-            store=store,
-            payload=payload,
-            harness=args.harness,
-            home_dir=context.home_dir,
-            guard_home=context.guard_home,
-            workspace=runtime_workspace,
-            hook_env=os.environ,
-        )
-        if command_activity_observer_trusted:
-            event_name = _hook_event_name(payload) or "afterShellExecution"
-            _ = record_post_hook_command_activity_best_effort(
-                store=store,
-                guard_home=context.guard_home,
-                harness="cursor",
-                event=event_name,
-                payload=payload,
-                succeeded=hook_post_succeeded(event_name, payload),
-            )
-        _emit(
-            "hook",
-            {
-                "recorded": saved,
-                "harness": "cursor",
-                "session_approved": saved,
-            },
-            getattr(args, "json", False),
-        )
-        return 0
+    runtime_workspace, cursor_result = maybe_handle_cursor_post_tool(
+        args=args,
+        payload=payload,
+        context=context,
+        store=store,
+        runtime_workspace=runtime_workspace,
+    )
+    if cursor_result is not None:
+        return cursor_result
     if args.harness == "copilot":
         runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
     routed = try_native_or_source_ref_hook(

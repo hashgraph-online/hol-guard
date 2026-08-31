@@ -20,6 +20,8 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_binary.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
       - "ci/native_runtime/test_native_hook_client.py"
+      - "ci/native_runtime/native_hook_client_support.py"
+      - "ci/native_runtime/test_native_hook_client_transport.py"
       - ".github/workflows/rust-runtime.yml"
   pull_request:
     branches: [main]
@@ -40,6 +42,8 @@ on:
       - "ci/native_runtime/test_guard_native_runtime_binary.py"
       - "ci/native_runtime/test_guard_native_runtime_resident.py"
       - "ci/native_runtime/test_native_hook_client.py"
+      - "ci/native_runtime/native_hook_client_support.py"
+      - "ci/native_runtime/test_native_hook_client_transport.py"
       - ".github/workflows/rust-runtime.yml"
   workflow_dispatch:
 
@@ -116,7 +120,9 @@ jobs:
           tests/test_rust_posttool_authority.py
           ci/native_runtime/test_guard_native_runtime_binary.py
           ci/native_runtime/test_guard_native_runtime_resident.py
+          ci/native_runtime/native_hook_client_support.py
           ci/native_runtime/test_native_hook_client.py
+          ci/native_runtime/test_native_hook_client_transport.py
       - name: Format native Python boundary
         run: >-
           uv run --no-sync python -m ruff format --check
@@ -133,7 +139,9 @@ jobs:
           tests/test_rust_posttool_authority.py
           ci/native_runtime/test_guard_native_runtime_binary.py
           ci/native_runtime/test_guard_native_runtime_resident.py
+          ci/native_runtime/native_hook_client_support.py
           ci/native_runtime/test_native_hook_client.py
+          ci/native_runtime/test_native_hook_client_transport.py
       - name: Run native Python boundary tests
         run: >-
           uv run --no-sync pytest
@@ -142,6 +150,7 @@ jobs:
           tests/test_rust_posttool_authority.py
           ci/native_runtime/test_guard_native_runtime_resident.py
           tests/test_guard_hook_process_deadline_contract.py
+          ci/native_runtime/test_native_hook_client_transport.py
           --tb=short
 
   resident-integration:
@@ -179,4 +188,5 @@ jobs:
           uv run --no-sync pytest
           ci/native_runtime/test_guard_native_runtime_binary.py
           ci/native_runtime/test_native_hook_client.py
+          ci/native_runtime/test_native_hook_client_transport.py
           --tb=short
