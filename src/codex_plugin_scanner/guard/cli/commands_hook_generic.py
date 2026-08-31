@@ -983,10 +983,7 @@ def _run_hook_generic_payload(
         policy_action = approval_reuse.action
         approval_reuse_source = "claimed_saved_policy_decision"
     observed_policy_action: GuardAction | None = None
-    from ..protection_posture import protection_is_off
-
-    recording_only = protection_is_off(posture=config.protection_posture, mode=config.mode)
-    if recording_only and policy_action not in {"allow", "warn"}:
+    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         policy_action = "allow"
     policy_composition = {
@@ -1179,7 +1176,7 @@ def _run_hook_generic_payload(
             output_stream=output_stream,
         )
         return 0
-    if recording_only and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
+    if config.mode == "observe" and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
         observed_artifact = GuardArtifact(
             artifact_id=artifact_id,
             name=artifact_name,

@@ -196,9 +196,7 @@ def _review_runtime_artifact_hook(
         policy_action=policy_action,
         guard_payload=response_payload,
     )
-    from ..protection_posture import protection_is_off
-
-    observe_mode = protection_is_off(posture=config.protection_posture, mode=config.mode)
+    observe_mode = config.mode == "observe"
     terminal_action = policy_action in {
         "block",
         "sandbox-required",
