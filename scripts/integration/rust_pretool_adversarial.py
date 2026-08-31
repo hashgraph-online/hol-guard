@@ -109,7 +109,7 @@ def main() -> int:
         "uname -a",
         "git status --short",
         "git rev-parse --show-toplevel",
-        "git diff --check",
+        "git diff --no-ext-diff --no-textconv --check",
         "rg -n authority src",
         "grep -n authority README.md",
         "stat README.md",

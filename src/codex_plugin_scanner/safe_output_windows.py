@@ -15,7 +15,6 @@ _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 _FILE_LIST_DIRECTORY = 0x0001
 _FILE_TRAVERSE = 0x0020
 _FILE_RENAME_INFO_CLASS = 3
-_FILE_RENAME_REPLACE_IF_EXISTS = 0x00000001
 _FILE_SHARE_READ = 0x00000001
 _GENERIC_WRITE = 0x40000000
 _CREATE_NEW = 1
@@ -28,9 +27,14 @@ class _FileAttributeTagInfo(ctypes.Structure):
     _fields_ = [("file_attributes", ctypes.c_uint32), ("reparse_tag", ctypes.c_uint32)]
 
 
+class _FileRenameMode(ctypes.Union):
+    _fields_ = [("replace_if_exists", ctypes.c_ubyte), ("flags", ctypes.c_uint32)]  # noqa: RUF012
+
+
 class _FileRenameInfo(ctypes.Structure):
+    _anonymous_ = ("mode",)
     _fields_ = [
-        ("flags", ctypes.c_uint32),
+        ("mode", _FileRenameMode),
         ("root_directory", ctypes.c_void_p),
         ("file_name_length", ctypes.c_uint32),
         ("file_name", ctypes.c_wchar * 1),
@@ -215,9 +219,11 @@ def _write_file(api: _WindowsApi, handle: int, payload: bytes) -> None:
 def _rename_file_handle(api: _WindowsApi, handle: int, parent_handle: int, name: str) -> None:
     encoded_name = name.encode("utf-16-le")
     file_name_offset = _FileRenameInfo.file_name.offset
-    buffer = ctypes.create_string_buffer(file_name_offset + len(encoded_name))
+    # Windows requires the full FILE_RENAME_INFO structure plus the variable
+    # filename payload, even though FileNameLength excludes the placeholder.
+    buffer = ctypes.create_string_buffer(ctypes.sizeof(_FileRenameInfo) + len(encoded_name))
     info = ctypes.cast(buffer, ctypes.POINTER(_FileRenameInfo)).contents
-    info.flags = _FILE_RENAME_REPLACE_IF_EXISTS
+    info.replace_if_exists = True
     info.root_directory = parent_handle
     info.file_name_length = len(encoded_name)
     ctypes.memmove(ctypes.addressof(buffer) + file_name_offset, encoded_name, len(encoded_name))
