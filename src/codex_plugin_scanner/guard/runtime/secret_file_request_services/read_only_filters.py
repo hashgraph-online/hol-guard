@@ -386,10 +386,12 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir:
     lowered_parts = [part.lower() for part in parts]
     if not parts:
         return allow_dirs
-    if target_is_known_skill_doc_path(stripped, home_dir=home_dir):
-        return True
+    if ".." in parts or any(marker in stripped for marker in ("*", "?", "{", "}")):
+        return False
     if any(part in SOURCE_INSPECTION_SENSITIVE_PARTS for part in lowered_parts):
         return False
+    if target_is_known_skill_doc_path(stripped, home_dir=home_dir):
+        return True
     hidden_parts = [part for part in lowered_parts if part.startswith(".")]
     if hidden_parts and not all(part in SOURCE_INSPECTION_BENIGN_DOTFILES for part in hidden_parts):
         return False
