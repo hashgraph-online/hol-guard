@@ -285,10 +285,13 @@ def _contract_failures(root: Path) -> list[str]:
         ),
         (
             root / "rust/crates/guard-runtime/src/main.rs",
+            ('command == "pre-tool"',),
+        ),
+        (
+            root / "rust/crates/guard-runtime/src/resident_protocol.rs",
             (
                 "pre-tool-command-authority-v1",
                 "pre-tool-generic-authority-v1",
-                'command == "pre-tool"',
                 "PreToolUse(CommandModelRequestV1)",
             ),
         ),
