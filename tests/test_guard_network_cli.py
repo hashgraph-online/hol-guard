@@ -51,6 +51,10 @@ def _run_network_status(
             assert response is not None
             return response
 
+    def load_client(_guard_home: Path, *, identity_timeout: float) -> Client:
+        assert identity_timeout == 0.05
+        return Client()
+
     monkeypatch.setattr(
         commands_dispatch_local,
         "_emit",
@@ -60,7 +64,7 @@ def _run_network_status(
     monkeypatch.setattr(
         network_status_command,
         "load_running_guard_surface_daemon_client",
-        lambda _guard_home: Client(),
+        load_client,
     )
     args = _parse(["guard", "network", "status", "--json"])
 
