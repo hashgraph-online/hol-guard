@@ -184,6 +184,7 @@ def _write_generation_state(guard_home: Path, *, generation: int, policy_digest:
 
 
 def _initialized_generation_for_policy(guard_home: Path, policy_digest: str) -> int | None:
+    _private_guard_home(guard_home)
     lock_path = guard_home / _LOCK_NAME
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:

@@ -100,6 +100,15 @@ def test_initialized_unchanged_policy_does_not_reacquire_generation_lock(
     assert _snapshot(tmp_path, digest="a" * 64) == first
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission contract")
+def test_unchanged_policy_fast_path_revalidates_guard_home(tmp_path: Path) -> None:
+    _snapshot(tmp_path, digest="a" * 64)
+    tmp_path.chmod(0o770)
+
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_home_invalid"):
+        _snapshot(tmp_path, digest="a" * 64)
+
+
 @pytest.mark.skipif(os.name == "nt", reason="POSIX flock contract")
 def test_posix_generation_lock_honors_hook_deadline(tmp_path: Path) -> None:
     import fcntl
