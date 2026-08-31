@@ -7,7 +7,10 @@ import pytest
 
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
-from codex_plugin_scanner.guard.native_resident_client import native_resident_client_request
+from codex_plugin_scanner.guard.native_resident_client import (
+    native_resident_client_failure_code,
+    native_resident_client_request,
+)
 from codex_plugin_scanner.guard.native_runtime import (
     NativeRuntimeCapabilities,
     NativeRuntimeIdentity,
@@ -68,6 +71,32 @@ def test_python_launcher_only_invokes_package_bound_native_client(
     assert captured["timeout_seconds"] == 0.5
     assert captured["output_limit"] == 2 * 1024 * 1024
     assert captured["windows_kill_on_job_close"] is False
+    assert native_resident_client_failure_code() is None
+
+
+def test_native_client_records_only_allowlisted_failure_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_resident_client.run_isolated_hook_process",
+        lambda *_args, **_kwargs: BoundedHookProcessResult(
+            2,
+            "",
+            False,
+            False,
+            stderr="private path\nnative_resident_start_timeout\nsecret",
+        ),
+    )
+    result = native_resident_client_request(
+        executable=tmp_path / "runtime",
+        guard_home=tmp_path / "guard-home",
+        environment={},
+        payload=b"{}",
+        timeout_seconds=0.5,
+    )
+    assert result is None
+    assert native_resident_client_failure_code() == "native_resident_start_timeout"
 
 
 def test_raw_hook_bridge_preserves_payload_for_rust_parsing(

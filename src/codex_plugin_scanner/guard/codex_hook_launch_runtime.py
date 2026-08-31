@@ -46,6 +46,29 @@ _HOOK_ENVIRONMENT_KEYS = frozenset(
 )
 
 
+def _truncate_decoded_output(value: str, limit: int) -> str:
+    """Keep decoded output within a byte budget after replacement decoding."""
+
+    encoded = value.encode("utf-8")
+    if len(encoded) <= limit:
+        return value
+    return encoded[: max(0, limit)].decode("utf-8", errors="ignore")
+
+
+def _decode_combined_output(
+    stdout_bytes: bytearray,
+    stderr_bytes: bytearray,
+    output_limit: int,
+) -> tuple[str, str]:
+    """Decode both streams while preserving their shared byte bound."""
+
+    remaining = max(0, output_limit)
+    stdout = _truncate_decoded_output(bytes(stdout_bytes).decode("utf-8", errors="replace"), remaining)
+    remaining = max(0, remaining - len(stdout.encode("utf-8")))
+    stderr = _truncate_decoded_output(bytes(stderr_bytes).decode("utf-8", errors="replace"), remaining)
+    return stdout, stderr
+
+
 @dataclass(frozen=True, slots=True)
 class BoundedHookProcessResult:
     """One bounded child result without inherited process context."""
@@ -55,6 +78,7 @@ class BoundedHookProcessResult:
     output_limit_exceeded: bool
     timed_out: bool
     containment_failed: bool = False
+    stderr: str = ""
 
 
 @dataclass(slots=True)
@@ -260,20 +284,20 @@ def run_isolated_hook_process(
         return BoundedHookProcessResult(None, "", False, False)
     if liveness_read_fd is not None:
         os.close(liveness_read_fd)
-    stdout_bytes = bytearray()
+    stdout_bytes, stderr_bytes = bytearray(), bytearray()
     output_bytes = 0
     output_lock = threading.Lock()
     output_limit_exceeded = threading.Event()
 
-    def drain(stream: BinaryIO, *, capture: bool) -> None:
+    def drain(stream: BinaryIO, target: bytearray) -> None:
         nonlocal output_bytes
         while chunk := stream.read(64 * 1024):
             with output_lock:
                 remaining = max(0, output_limit - output_bytes)
                 accepted = chunk[:remaining]
                 output_bytes += len(chunk)
-                if capture and accepted:
-                    stdout_bytes.extend(accepted)
+                if accepted:
+                    target.extend(accepted)
                 if output_bytes > output_limit:
                     output_limit_exceeded.set()
 
@@ -289,8 +313,8 @@ def run_isolated_hook_process(
             process.stdin.close()
 
     readers = [
-        threading.Thread(target=drain, args=(process.stdout,), kwargs={"capture": True}, daemon=True),
-        threading.Thread(target=drain, args=(process.stderr,), kwargs={"capture": False}, daemon=True),
+        threading.Thread(target=drain, args=(process.stdout, stdout_bytes), daemon=True),
+        threading.Thread(target=drain, args=(process.stderr, stderr_bytes), daemon=True),
     ]
     writer = threading.Thread(target=write_input, daemon=True)
     for thread in readers:
@@ -347,13 +371,14 @@ def run_isolated_hook_process(
     if liveness_write_fd is not None:
         os.close(liveness_write_fd)
     with output_lock:
-        stdout_decoded = stdout_bytes.decode("utf-8", errors="replace")
+        stdout_decoded, stderr_decoded = _decode_combined_output(stdout_bytes, stderr_bytes, output_limit)
     return BoundedHookProcessResult(
         returncode=None if job_cleanup_failed or not containment_confirmed else returncode,
         stdout=stdout_decoded,
         output_limit_exceeded=output_limit_exceeded.is_set(),
         timed_out=timed_out,
         containment_failed=not containment_confirmed,
+        stderr=stderr_decoded,
     )
 
 

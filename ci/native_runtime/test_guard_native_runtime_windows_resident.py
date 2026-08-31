@@ -10,6 +10,7 @@ import pytest
 
 import codex_plugin_scanner.guard.native_runtime_resident as resident
 from codex_plugin_scanner.guard.native_command_model import review_command_model_native
+from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_status,
     review_post_tool_native,
@@ -165,7 +166,8 @@ def test_windows_native_runtime_reuses_authenticated_resident_service(
             "git status --short",
             guard_home=first_request.guard_home,
         )
-        assert first is not None and first.decision == "allow"
+        assert first is not None, native_resident_client_failure_code()
+        assert first.decision == "allow"
         assert second is not None and second.decision == "allow"
         assert command_model is not None
         assert command_model["confidence"] == "exact"

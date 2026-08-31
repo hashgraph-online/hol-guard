@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
 )
 from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_health,
@@ -247,7 +248,9 @@ def main(*, json_path: Path | None = None) -> int:
                 observe_mode=False,
             )
             if clean is None:
-                raise RuntimeError("native_default_auto_probe_failed: clean response missing")
+                raise RuntimeError(
+                    f"native_default_auto_probe_failed: clean response missing: {native_resident_client_failure_code()}"
+                )
             _require(clean.decision == "allow", clean)
             _require(clean.reason_code == "output_scan_allow", clean)
 
