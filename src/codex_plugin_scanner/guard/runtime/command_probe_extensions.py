@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .command_extension_matchers import executable_names
+from .command_extension_matchers import executable_names, safe_flag_variant
 from .command_extension_specs import CommandExtensionSpec
 from .command_matcher_contracts import CommandMatcher
 from .command_path_set_matcher import ExecutablePathSetMatcher
@@ -79,34 +79,10 @@ _PROBE_ENVIRONMENT_WRITE = _probe_paths(
 _PROBE_ENVIRONMENT_DELETE = _probe_paths(("environment", "delete"))
 
 
-def _help_variants(matcher: CommandMatcher) -> tuple[CommandSafeVariant, ...]:
+def _help_variants(matcher: AnyMatcher) -> tuple[CommandSafeVariant, ...]:
     return (
-        CommandSafeVariant(
-            variant_id="help",
-            title="Command help",
-            matcher=AllMatcher(
-                matchers=(
-                    matcher,
-                    ArgumentMatcher(
-                        executables=executable_names("probe"),
-                        required_arguments=frozenset({"--help"}),
-                    ),
-                )
-            ),
-        ),
-        CommandSafeVariant(
-            variant_id="short-help",
-            title="Command help",
-            matcher=AllMatcher(
-                matchers=(
-                    matcher,
-                    ArgumentMatcher(
-                        executables=executable_names("probe"),
-                        required_arguments=frozenset({"-h"}),
-                    ),
-                )
-            ),
-        ),
+        safe_flag_variant(matcher, variant_id="help", title="Command help", flag="--help"),
+        safe_flag_variant(matcher, variant_id="short-help", title="Command help", flag="-h"),
     )
 
 
@@ -121,7 +97,7 @@ def _probe_rule(
     safer_alternative: str,
     example_command: str,
     severity: CommandRuleSeverity = "high",
-    help_matcher: CommandMatcher | None = None,
+    help_matcher: AnyMatcher | None = None,
 ) -> CommandSafetyRule:
     return CommandSafetyRule(
         rule_id=rule_id,
@@ -159,7 +135,7 @@ PROBE_COMMAND_RULES = (
         safer_alternative="Review the output path and existing destination before writing the response body.",
         example_command="probe request run api.yml items/0 --output response.json",
         severity="medium",
-        help_matcher=_PROBE_REQUEST_OUTPUT,
+        help_matcher=_PROBE_REQUEST_RUN,
     ),
     _probe_rule(
         rule_id="command.probe.request-write",

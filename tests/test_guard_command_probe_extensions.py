@@ -112,6 +112,39 @@ def test_probe_read_only_help_and_unrelated_commands_remain_safe(tmp_path: Path)
     assert_safe_command_cases(PROBE_SAFE_COMMANDS, tmp_path)
 
 
+PROBE_CHAINED_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
+    (
+        "probe request delete api.yml items/0; probe --help",
+        _DELETE_ACTION,
+        "command.probe.request-delete",
+    ),
+    (
+        "probe --help; probe request delete api.yml items/0",
+        _DELETE_ACTION,
+        "command.probe.request-delete",
+    ),
+    (
+        "probe folder delete --help && probe request delete api.yml items/0",
+        _DELETE_ACTION,
+        "command.probe.request-delete",
+    ),
+    (
+        "probe request delete api.yml items/0; probe folder delete --help",
+        _DELETE_ACTION,
+        "command.probe.request-delete",
+    ),
+    (
+        "probe request run --help; probe request run api.yml items/0",
+        _RUN_ACTION,
+        "command.probe.request-run",
+    ),
+)
+
+
+def test_probe_help_segment_cannot_hide_chained_destructive_command(tmp_path: Path) -> None:
+    assert_reviewed_command_cases(PROBE_CHAINED_REVIEW_CASES, tmp_path)
+
+
 def test_probe_output_adds_local_write_evidence_without_replacing_run_classification(tmp_path: Path) -> None:
     payload = inspect_command(
         "probe request run api.yml items/0 --output response.json",
