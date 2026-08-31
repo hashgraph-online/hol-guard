@@ -164,6 +164,26 @@ def test_known_skill_paths_reject_sensitive_glob_and_traversal_targets(tmp_path)
         assert not decision.allowed
 
 
+def test_native_read_rejects_symlinked_skill_root(tmp_path):
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    outside_root = tmp_path / "outside-skills"
+    skill_file = outside_root / "safe" / "SKILL.md"
+    workspace.mkdir()
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text("# Safe\n")
+    linked_root = home / ".claude" / "skills"
+    linked_root.parent.mkdir(parents=True)
+    linked_root.symlink_to(outside_root, target_is_directory=True)
+
+    assert not is_explicitly_benign_native_file_read_request(
+        "Read",
+        {"file_path": "~/.claude/skills/safe/SKILL.md"},
+        cwd=workspace,
+        home_dir=home,
+    )
+
+
 def test_skill_uri_absolute_path():
     """skill:///etc/passwd must be rejected."""
     assert target_is_known_skill_doc_path("skill:///etc/passwd") is False

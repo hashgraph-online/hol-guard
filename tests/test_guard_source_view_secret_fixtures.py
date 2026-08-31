@@ -2,12 +2,42 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 
 
 def _write_text(path: Path, contents: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(contents, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "tool_input"),
+    (
+        ("Read", {"file_path": "src/config.py"}),
+        ("mcp__hub__describe", {"skill": "guard-dev-testing"}),
+    ),
+)
+def test_codex_non_shell_post_tool_secret_output_is_blocked(
+    tmp_path: Path,
+    tool_name: str,
+    tool_input: dict[str, str],
+) -> None:
+    token = "".join(("gh", "p_")) + "a" * 30
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+            "tool_response": {"stdout": f"token={token}"},
+        },
+        config_path=str(tmp_path / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert artifact is not None
 
 
 def test_codex_source_view_allows_placeholder_private_key_fixture_output(tmp_path: Path) -> None:

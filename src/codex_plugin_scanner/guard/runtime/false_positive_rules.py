@@ -153,6 +153,8 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
         root = f"{home}/{suffix}"
         if normalized != root and not normalized.startswith(f"{root}/"):
             continue
+        if os.path.islink(root):
+            continue
         if not _path_has_symlink_component(normalized, root=root):
             return True
         relative_parts = Path(normalized).relative_to(root).parts
@@ -180,8 +182,10 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
 
 
 def _path_has_symlink_component(normalized_target: str, *, root: str) -> bool:
+    if os.path.islink(root):
+        return True
     if normalized_target == root:
-        return os.path.islink(root)
+        return False
     relative = normalized_target.removeprefix(f"{root}/")
     current = root
     for part in relative.split("/"):
