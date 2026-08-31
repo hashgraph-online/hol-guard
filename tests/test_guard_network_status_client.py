@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import http.client
-import threading
 import time
+import urllib.error
 import urllib.request
 
 import pytest
@@ -50,6 +50,8 @@ class _RawResponse:
     def __init__(self, *, payload: bytes | None = None, read_error: Exception | None = None) -> None:
         self.payload = payload
         self.read_error = read_error
+        self.read_timeout: float | None = None
+        self.consumed = False
 
     def __enter__(self) -> _RawResponse:
         return self
@@ -61,18 +63,26 @@ class _RawResponse:
         if self.read_error is not None:
             raise self.read_error
         assert self.payload is not None
+        if self.consumed:
+            return b""
+        self.consumed = True
         return self.payload
+
+    def settimeout(self, timeout: float) -> None:
+        self.read_timeout = timeout
+
+    def close(self) -> None:
+        return None
 
 
 def test_network_status_client_enforces_total_body_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    release_reader = threading.Event()
-
     class SlowResponse(_RawResponse):
         def read(self, _amount: int = -1) -> bytes:
-            release_reader.wait(timeout=2.0)
-            return b"{}"
+            assert self.read_timeout is not None
+            time.sleep(self.read_timeout)
+            raise TimeoutError("private socket timeout")
 
     client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
     monkeypatch.setattr(
@@ -81,11 +91,57 @@ def test_network_status_client_enforces_total_body_deadline(
         lambda _request, *, timeout: SlowResponse(payload=b"{}"),
     )
     started_at = time.monotonic()
-    try:
-        with pytest.raises(GuardDaemonTimeoutError, match="timed out"):
-            client.network_status()
-    finally:
-        release_reader.set()
+    with pytest.raises(GuardDaemonTimeoutError, match="timed out"):
+        client.network_status()
+    assert time.monotonic() - started_at < 0.75
+
+
+def test_network_status_client_bounds_http_error_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SlowErrorBody(_RawResponse):
+        def read(self, _amount: int = -1) -> bytes:
+            assert self.read_timeout is not None
+            time.sleep(self.read_timeout)
+            raise TimeoutError("private socket timeout")
+
+    error_body = SlowErrorBody(payload=b"{}")
+
+    def raise_http_error(_request: urllib.request.Request, *, timeout: float) -> None:
+        raise urllib.error.HTTPError(
+            "http://127.0.0.1:1/v1/network/status",
+            503,
+            "private",
+            {},
+            error_body,
+        )
+
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
+    monkeypatch.setattr(urllib.request, "urlopen", raise_http_error)
+    started_at = time.monotonic()
+    with pytest.raises(GuardDaemonTimeoutError, match="timed out") as error:
+        client.network_status()
+    assert "private" not in str(error.value)
+    assert time.monotonic() - started_at < 0.75
+
+
+def test_network_status_client_enforces_deadline_across_slow_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class TrickleResponse(_RawResponse):
+        def read1(self, _amount: int = -1) -> bytes:
+            time.sleep(0.06)
+            return b"x"
+
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda _request, *, timeout: TrickleResponse(payload=b"unused"),
+    )
+    started_at = time.monotonic()
+    with pytest.raises(GuardDaemonTimeoutError, match="timed out"):
+        client.network_status()
     assert time.monotonic() - started_at < 0.75
 
 

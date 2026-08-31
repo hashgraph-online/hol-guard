@@ -76,7 +76,11 @@ def build_network_status(
             and selected_health is not None
             and selected_health.effective_grade is not EnforcementGrade.UNAVAILABLE
         )
-        active = selected_health is not None and selected_health.permits_enforcement
+        active = (
+            selected_health is not None
+            and selected_health.permits_enforcement
+            and profile.production_ready
+        )
         effective_grade = (
             selected_health.effective_grade if selected_health is not None and active else EnforcementGrade.UNAVAILABLE
         )
@@ -93,7 +97,7 @@ def build_network_status(
                 "observed": False,
                 "advertised_maximum_grade": profile.maximum_grade.value,
                 "effective_grade": effective_grade.value,
-                "production_ready": False,
+                "production_ready": profile.production_ready,
                 "requires_privilege": profile.requires_privilege,
                 "reason_code": (
                     "independent-observer-unavailable"
@@ -134,7 +138,10 @@ def build_network_status(
             "sandbox_required": migrated.sandbox_required,
         }
     if supervisor_health is not None:
-        status["supervisor"] = project_network_supervisor_health(supervisor_health)
+        supervisor = project_network_supervisor_health(supervisor_health)
+        supervisor["effective_grade"] = active_grade.value
+        supervisor["permits_enforcement"] = bool(status["protection_active"])
+        status["supervisor"] = supervisor
     return status
 
 
