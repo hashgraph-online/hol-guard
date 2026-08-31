@@ -99,7 +99,15 @@ def review_raw_hook_native(
             "source_ref_external_allowed": source_ref_external_allowed,
         },
     }
-    encoded = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False).encode()
+    try:
+        encoded = json.dumps(
+            envelope,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode()
+    except (TypeError, ValueError):
+        return record_native_hook_result("native_fail_safe", None)
     if len(encoded) > _MAX_REQUEST_BYTES:
         return record_native_hook_result("native_fail_safe", None)
     output = native_resident_client_request(

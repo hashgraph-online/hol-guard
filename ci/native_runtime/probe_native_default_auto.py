@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import urllib.error
 import urllib.parse
@@ -74,12 +75,21 @@ def _native_state_files(guard_home: Path) -> list[Path]:
 
 
 def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
-    subprocess.run(
-        (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
-        check=False,
-        capture_output=True,
-        timeout=2,
-    )
+    try:
+        result = subprocess.run(
+            (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
+            check=False,
+            capture_output=True,
+            timeout=2,
+        )
+    except subprocess.TimeoutExpired:
+        print("native_default_auto_probe_cleanup_timeout", file=sys.stderr)
+        return
+    if result.returncode != 0:
+        print(
+            f"native_default_auto_probe_cleanup_failed: returncode={result.returncode}",
+            file=sys.stderr,
+        )
 
 
 def _ownership_routes() -> dict[str, dict[str, str]]:
@@ -222,7 +232,9 @@ def main(*, json_path: Path | None = None) -> int:
     _require(status.mode == "auto", status)
     _require(status.available and status.compatible, status)
     _require(status.reason == "native_ready", status)
-    _require(status.identity is not None, status)
+    identity = status.identity
+    if identity is None:
+        raise RuntimeError(f"native_default_auto_probe_failed: {status}")
     capabilities = status.capabilities
     if capabilities is None:
         raise RuntimeError(f"native_default_auto_probe_failed: {status}")
@@ -257,7 +269,7 @@ def main(*, json_path: Path | None = None) -> int:
             installed_corpus = _installed_hook_corpus(root)
         finally:
             for guard_home in (root / "guard-home", root / "hook-home"):
-                _stop_native_runtime(status.identity.path, guard_home)
+                _stop_native_runtime(identity.path, guard_home)
 
     os.environ["HOL_GUARD_NATIVE"] = "off"
     try:

@@ -84,10 +84,13 @@ fn private_file(path: &Path, create_new: bool) -> Result<File, String> {
 fn ensure_private_directory(path: &Path, protect_windows: bool) -> Result<PathBuf, String> {
     #[cfg(not(windows))]
     let _ = protect_windows;
-    let created = !path.exists();
-    if created {
-        fs::create_dir(path).map_err(|_| "native_resident_state_dir_create_failed".to_owned())?;
-    }
+    let created = match fs::create_dir(path) {
+        Ok(()) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
+        Err(_) => return Err("native_resident_state_dir_create_failed".to_owned()),
+    };
+    #[cfg(not(windows))]
+    let _ = created;
     let metadata = fs::symlink_metadata(path)
         .map_err(|_| "native_resident_state_dir_stat_failed".to_owned())?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {

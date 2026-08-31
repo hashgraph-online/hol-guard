@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const RESTART_WINDOW_MS: u64 = 60_000;
@@ -29,19 +29,46 @@ fn now_ms() -> Result<u64, String> {
 }
 
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let temporary = temporary_path(path)?;
     let mut options = OpenOptions::new();
-    options.create(true).truncate(true).write(true);
+    options.create_new(true).write(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
     }
     let mut file = options
-        .open(path)
+        .open(&temporary)
         .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
-    file.write_all(bytes)
+    let write_result = file
+        .write_all(bytes)
         .and_then(|()| file.sync_all())
-        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())
+        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned());
+    drop(file);
+    if write_result.is_err() {
+        let _ = fs::remove_file(&temporary);
+        return write_result;
+    }
+    fs::rename(&temporary, path).map_err(|_| {
+        let _ = fs::remove_file(&temporary);
+        "native_resident_restart_budget_write_failed".to_owned()
+    })?;
+    #[cfg(unix)]
+    File::open(
+        path.parent()
+            .ok_or_else(|| "native_resident_restart_budget_write_failed".to_owned())?,
+    )
+    .and_then(|directory| directory.sync_all())
+    .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
+    Ok(())
+}
+
+fn temporary_path(path: &Path) -> Result<PathBuf, String> {
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "native_resident_restart_budget_write_failed".to_owned())?;
+    Ok(path.with_file_name(format!(".{name}.{}.tmp", std::process::id())))
 }
 
 pub(super) fn consume(scope: &Path) -> Result<(), String> {
@@ -91,4 +118,37 @@ pub(super) fn consume(scope: &Path) -> Result<(), String> {
     let encoded = serde_json::to_vec(&budget)
         .map_err(|_| "native_resident_restart_budget_encode_failed".to_owned())?;
     write_private(&path, &encoded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repeated_updates_replace_budget_without_leaving_temporary_state() {
+        let scope = std::env::temp_dir().join(format!(
+            "hol-guard-restart-budget-{}-{}",
+            std::process::id(),
+            now_ms().unwrap()
+        ));
+        fs::create_dir(&scope).unwrap();
+
+        consume(&scope).unwrap();
+        consume(&scope).unwrap();
+
+        let encoded = fs::read(scope.join("restart-budget.json")).unwrap();
+        let budget: RestartBudget = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(budget.schema, BUDGET_SCHEMA);
+        assert_eq!(budget.attempts, 2);
+        assert_eq!(
+            fs::read_dir(&scope)
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+                .count(),
+            0
+        );
+
+        fs::remove_dir_all(scope).unwrap();
+    }
 }

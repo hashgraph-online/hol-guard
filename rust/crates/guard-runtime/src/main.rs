@@ -48,6 +48,7 @@ const AUTH_WORKERS: usize = 4;
 const AUTH_QUEUE_CAPACITY: usize = 16;
 const EVALUATION_WORKERS: usize = 16;
 const EVALUATION_QUEUE_CAPACITY: usize = 32;
+const AUTHENTICATED_PREFETCH_BYTES: usize = 64 * 1024;
 const AUTH_TIMEOUT: Duration = Duration::from_millis(250);
 const HEADER_TIMEOUT: Duration = Duration::from_millis(250);
 const PAYLOAD_TIMEOUT: Duration = Duration::from_secs(2);
@@ -463,7 +464,9 @@ fn start_resident_workers(token: Arc<[u8; AUTH_TOKEN_BYTES]>) -> SyncSender<Boxe
             Ok(value) => value,
             Err(_) => return,
         };
-        pending.payload_prefix.resize(pending.length, 0);
+        pending
+            .payload_prefix
+            .resize(pending.length.min(AUTHENTICATED_PREFETCH_BYTES), 0);
         let available = match pending
             .stream
             .try_read_available(&mut pending.payload_prefix)
@@ -776,7 +779,7 @@ fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | hook-edge --stdin | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT"
+            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | hook-edge --stdin | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --runtime-sha256 SHA"
                 .into(),
         ),
     }

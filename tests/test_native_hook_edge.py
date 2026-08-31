@@ -133,3 +133,22 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
     assert envelope["harness"] == "claude"
     assert envelope["event"] == "PreToolUse"
     assert captured["raw_hook_envelope"] is True
+
+    for invalid_value in ({"not", "json"}, float("nan")):
+        captured.clear()
+        invalid_payload = {**raw_payload, "invalid": invalid_value}
+        assert (
+            review_raw_hook_native(
+                payload=invalid_payload,
+                harness="claude",
+                event="PreToolUse",
+                guard_home=tmp_path,
+                home_dir=tmp_path,
+                cwd=tmp_path,
+                source_ref_external_allowed=False,
+                observe_mode=False,
+                deadline=None,
+            )
+            is None
+        )
+        assert captured == {}
