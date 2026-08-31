@@ -211,6 +211,7 @@ def run_isolated_hook_process(
     timeout_seconds: float,
     output_limit: int = _HOOK_SUBPROCESS_OUTPUT_LIMIT,
     allow_windows_breakaway: bool = False,
+    allow_windows_silent_child_breakaway: bool = False,
     stop_event: threading.Event | None = None,
     parent_liveness: bool = False,
 ) -> BoundedHookProcessResult:
@@ -220,7 +221,6 @@ def run_isolated_hook_process(
     process-group / Windows Job containment path used for deadlines. Existing
     one-shot callers do not need to supply it.
     """
-
     if _HOOK_PROCESS_CONTAINMENT_FAILED.is_set() and not _retry_quarantined_hook_processes():
         return BoundedHookProcessResult(None, "", False, False, containment_failed=True)
     windows_job: WindowsHookJob | None = None
@@ -233,6 +233,7 @@ def run_isolated_hook_process(
                 cwd=cwd,
                 environment=dict(environment),
                 allow_breakaway=allow_windows_breakaway,
+                silent_child_breakaway=allow_windows_silent_child_breakaway,
             )
         else:
             child_environment = dict(environment)
@@ -259,7 +260,6 @@ def run_isolated_hook_process(
         return BoundedHookProcessResult(None, "", False, False)
     if liveness_read_fd is not None:
         os.close(liveness_read_fd)
-
     stdout_bytes = bytearray()
     output_bytes = 0
     output_lock = threading.Lock()

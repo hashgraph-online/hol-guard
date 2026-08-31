@@ -26,8 +26,6 @@ use crate::resident_state::{
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
-#[cfg(windows)]
-const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn request_shutdown() {
@@ -92,11 +90,6 @@ fn spawn_managed(
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(CREATE_BREAKAWAY_FROM_JOB);
-    }
     let mut child = command
         .spawn()
         .map_err(|_| "native_resident_spawn_failed".to_owned())?;

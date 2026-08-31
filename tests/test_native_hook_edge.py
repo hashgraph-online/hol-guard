@@ -67,7 +67,7 @@ def test_python_launcher_only_invokes_package_bound_native_client(
     assert captured["input_text"] == "{}"
     assert captured["timeout_seconds"] == 0.5
     assert captured["output_limit"] == 2 * 1024 * 1024
-    assert captured["allow_windows_breakaway"] is True
+    assert captured["allow_windows_silent_child_breakaway"] is True
 
 
 def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
