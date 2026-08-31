@@ -116,9 +116,7 @@ def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
         or not isinstance(payload.get("explicitly_benign"), bool)
     ):
         return False
-    return payload["explicitly_benign"] == (
-        decision == "allow" and minimum_action == "allow"
-    )
+    return payload["explicitly_benign"] == (decision == "allow" and minimum_action == "allow")
 
 
 def _valid_generic_action(action: dict[str, Any]) -> bool:

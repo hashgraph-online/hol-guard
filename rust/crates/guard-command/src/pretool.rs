@@ -214,7 +214,8 @@ fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool
             return false;
         };
         let basename = executable_basename(executable);
-        if sensitive_command(&segment.text)
+        let search_command = matches!(basename, "rg" | "grep");
+        if (!search_command && sensitive_command(&segment.text))
             || (!matches!(basename, "rg" | "grep")
                 && segment
                     .arguments
@@ -253,6 +254,14 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard blocked a command that combines sensitive data access with network transfer.",
         ));
     }
+    if exact_safe_command(&model, false) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this bounded command explicitly benign.",
+        ));
+    }
     if sensitive_command(normalized) {
         return Ok(pretool_decision(
             model,
@@ -275,14 +284,6 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "review",
             "native_git_helper_context_review",
             "HOL Guard is checking repository Git-helper configuration before allowing this read-only command.",
-        ));
-    }
-    if exact_safe_command(&model, false) {
-        return Ok(pretool_decision(
-            model,
-            "allow",
-            "native_exact_safe_command",
-            "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
     Ok(pretool_decision(

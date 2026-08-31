@@ -95,14 +95,18 @@ def test_hook_worker_watch_native_block_stays_native_and_denies(
         native_block_edge,
     )
     worker = HookWorker(store=GuardStore(guard_home))
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "rm -rf /"}},
-        params={},
-        default_harness="cursor",
-        home_dir=tmp_path / "home",
-        guard_home=guard_home,
-        workspace=tmp_path / "workspace",
-    )
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace: {"mode": "observe"})
+    try:
+        result = worker.review_http_payload(
+            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "rm -rf /"}},
+            params={},
+            default_harness="cursor",
+            home_dir=tmp_path / "home",
+            guard_home=guard_home,
+            workspace=tmp_path / "workspace",
+        )
+    finally:
+        worker.close()
     assert captured["observe_mode"] is True
     hook_output = result["hookSpecificOutput"]
     assert isinstance(hook_output, dict)

@@ -197,9 +197,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not isinstance(payload.get("result"), dict)
     ):
         return None
-    if event_name == "PreToolUse" and not _decode_pre_tool_result(
-        payload["result"], harness=payload["harness"]
-    ):
+    if event_name == "PreToolUse" and not _decode_pre_tool_result(payload["result"], harness=payload["harness"]):
         return None
     if event_name == "PreToolUse" and payload_kind == "encrypted_payload_ref":
         return None

@@ -86,9 +86,7 @@ def test_rule_contract_changes_when_any_component_bytes_change() -> None:
         assert isinstance(component, dict)
         mutated_components = [dict(value) for value in components]
         digest = str(mutated_components[index]["sha256"])
-        mutated_components[index]["sha256"] = (
-            ("0" if digest[0] != "0" else "1") + digest[1:]
-        )
+        mutated_components[index]["sha256"] = ("0" if digest[0] != "0" else "1") + digest[1:]
         combined = hashlib.sha256()
         combined.update(_DOMAIN)
         for value in mutated_components:

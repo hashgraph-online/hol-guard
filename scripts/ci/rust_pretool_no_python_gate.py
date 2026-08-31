@@ -66,8 +66,10 @@ def _called_node(node: ast.AST, name: str) -> ast.Call | None:
             child
             for child in ast.walk(node)
             if isinstance(child, ast.Call)
-            and ((isinstance(child.func, ast.Name) and child.func.id == name) or
-                 (isinstance(child.func, ast.Attribute) and child.func.attr == name))
+            and (
+                (isinstance(child.func, ast.Name) and child.func.id == name)
+                or (isinstance(child.func, ast.Attribute) and child.func.attr == name)
+            )
         ),
         None,
     )
@@ -120,8 +122,10 @@ def _calls_guarded_by(node: ast.FunctionDef, call_name: str, guard_name: str) ->
     for child in ast.walk(node):
         if not isinstance(child, ast.Call):
             continue
-        called_name = child.func.id if isinstance(child.func, ast.Name) else (
-            child.func.attr if isinstance(child.func, ast.Attribute) else None
+        called_name = (
+            child.func.id
+            if isinstance(child.func, ast.Name)
+            else (child.func.attr if isinstance(child.func, ast.Attribute) else None)
         )
         if called_name != call_name:
             continue
