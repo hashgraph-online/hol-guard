@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[path = "managed_resident_containment.rs"]
+mod containment;
 #[path = "managed_resident_transport.rs"]
 mod managed_resident_transport;
 #[cfg(windows)]
@@ -207,55 +209,6 @@ fn try_states(
     Ok(None)
 }
 
-fn spawn_managed(
-    state_base: &Path,
-    generation: u64,
-    digest: &str,
-    token: &[u8],
-) -> Result<(), String> {
-    #[cfg(windows)]
-    return managed_resident_windows::spawn_managed(state_base, generation, digest, token);
-    #[cfg(not(windows))]
-    {
-        let executable = std::env::current_exe()
-            .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
-        let mut command = Command::new(executable);
-        command
-            .arg("supervise-managed")
-            .arg("--state-dir")
-            .arg(state_base)
-            .arg("--generation")
-            .arg(generation.to_string())
-            .arg("--runtime-sha256")
-            .arg(digest)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        let mut child = command
-            .spawn()
-            .map_err(|_| "native_resident_spawn_failed".to_owned())?;
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| "native_resident_spawn_stdin_failed".to_owned())?;
-        stdin
-            .write_all(hex_token(token).as_bytes())
-            .and_then(|()| stdin.write_all(b"\n"))
-            .and_then(|()| stdin.flush())
-            .map_err(|_| "native_resident_spawn_auth_failed".to_owned())?;
-        Ok(())
-    }
-}
-
-fn hex_token(token: &[u8]) -> String {
-    let mut output = String::with_capacity(token.len() * 2);
-    for byte in token {
-        use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
-    }
-    output
-}
-
 pub(crate) fn client_request(
     state_base: &Path,
     payload: &[u8],
@@ -300,15 +253,42 @@ pub(crate) fn client_request(
     let generation = next_generation(&scope, &digest)?;
     let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
     getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;
-    spawn_managed(state_base, generation, &digest, &token)?;
+    let mut spawned = containment::spawn_managed(state_base, generation, &digest, &token)?;
     let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
-    while Instant::now() < deadline {
-        if let Some(response) = try_states(&scope, &digest, payload, overall_deadline)? {
-            return Ok(response);
+    let request_result = loop {
+        if Instant::now() >= deadline {
+            break Ok(None);
+        }
+        match try_states(&scope, &digest, payload, overall_deadline) {
+            Ok(Some(response)) => break Ok(Some(response)),
+            Ok(None) => {}
+            Err(error) => break Err(error),
         }
         thread::sleep(CLIENT_RETRY_DELAY);
+    };
+    match request_result {
+        Ok(Some(response)) => Ok(response),
+        Ok(None) => {
+            containment::contain_spawned_managed(
+                &mut spawned,
+                &scope,
+                &digest,
+                generation,
+                &token,
+            )?;
+            Err("native_resident_start_timeout".to_owned())
+        }
+        Err(error) => {
+            containment::contain_spawned_managed(
+                &mut spawned,
+                &scope,
+                &digest,
+                generation,
+                &token,
+            )?;
+            Err(error)
+        }
     }
-    Err("native_resident_start_timeout".to_owned())
 }
 
 pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
@@ -316,14 +296,13 @@ pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
     let scope = state_scope(state_base, &digest)?;
     let request = br#"{"operation":"shutdown","request":{}}"#;
     let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
+    let initial_states = discover_states(&scope, &digest)?;
+    let process_ids = initial_states
+        .iter()
+        .flat_map(|state| [state.process_id, state.owner_process_id])
+        .collect::<Vec<_>>();
     if try_states(&scope, &digest, request, deadline)?.is_some() {
-        while Instant::now() < deadline {
-            if discover_states(&scope, &digest)?.is_empty() {
-                return Ok(());
-            }
-            thread::sleep(CLIENT_RETRY_DELAY);
-        }
-        return Err("native_resident_stop_timeout".to_owned());
+        return containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids);
     }
     Err("native_resident_stop_unavailable".to_owned())
 }
@@ -412,7 +391,7 @@ pub(crate) fn supervise_managed(
             .take()
             .ok_or_else(|| "native_resident_spawn_stdin_failed".to_owned())?;
         liveness_writer
-            .write_all(hex_token(&token).as_bytes())
+            .write_all(containment::hex_token(&token).as_bytes())
             .and_then(|()| liveness_writer.write_all(b"\n"))
             .and_then(|()| liveness_writer.flush())
             .map_err(|_| "native_resident_spawn_auth_failed".to_owned())?;

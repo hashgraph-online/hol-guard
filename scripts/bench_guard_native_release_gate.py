@@ -110,14 +110,20 @@ def _request(
     )
 
 
-def _wire_request(*, workspace: Path, guard_home: Path) -> str:
+def _wire_request(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    request_id: str = "native-benchmark-oneshot",
+    sample: int | None = None,
+) -> str:
     return json.dumps(
         {
             "protocol_version": 1,
-            "request_id": "native-benchmark-oneshot",
+            "request_id": request_id,
             "harness": "claude-code",
             "event_name": "PostToolUse",
-            "payload": _payload(),
+            "payload": _payload(sample),
             "cwd": str(workspace),
             "home_dir": str(workspace),
             "guard_home": str(guard_home),

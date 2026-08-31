@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
@@ -81,3 +82,35 @@ def test_python_cold_spawns_and_reviews_with_native_disabled(
     assert _RecordingRunner.modes == ["off", "off", "off", "off"]
     assert review_modes == ["off", "off"]
     assert os.environ["HOL_GUARD_NATIVE"] == "force"
+
+
+def test_native_warm_uses_persistent_authenticated_resident_ipc(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        benchmark,
+        "native_runtime_status",
+        lambda: SimpleNamespace(
+            identity=SimpleNamespace(path=tmp_path / "runtime", sha256="a" * 64),
+        ),
+    )
+
+    def fake_resident_request(**kwargs: object) -> bytes:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        request = benchmark.json.loads(payload)
+        assert isinstance(request, dict)
+        requests.append(request)
+        return b'{"authority":"rust","decision":"allow"}'
+
+    monkeypatch.setattr(benchmark, "resident_native_request", fake_resident_request)
+    values = benchmark._bench_native_warm(
+        workspace=tmp_path,
+        guard_home=tmp_path / "guard-home",
+        iterations=2,
+    )
+
+    assert len(values) == 2
+    assert [request["request_id"] for request in requests] == ["native-warm-0", "native-warm-1"]

@@ -18,13 +18,14 @@ from .hook_process_capacity import (
 from .hook_process_creation import start_hook_worker_slot
 from .hook_process_protocol import as_string_object_dict, is_pair
 from .hook_process_request import build_hook_process_review_request, runtime_hook_review_is_idempotent
-from .hook_process_runner_lifecycle import _HOOK_PROCESS_READY_TIMEOUT_SECONDS, HookProcessRunnerLifecycleMixin
+from .hook_process_runner_lifecycle import HookProcessRunnerLifecycleMixin, hook_worker_ready_timeout
 from .hook_process_slot_review import review_hook_worker_slot
 from .hook_process_spawner import hook_worker_became_isolated, hook_worker_became_ready, spawn_hook_worker
 from .hook_process_worker import HookProcessReview, HookWorkerSlot, worker_retirement_thread
 
 _HOOK_PROCESS_MAX_LIMIT = 16
 _HOOK_PROCESS_TIMEOUT_SECONDS = 2.8
+_HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
 _HOOK_PROCESS_START_TIMEOUT_SECONDS = 30.0
 _HOOK_PROCESS_BACKFILL_DELAY_SECONDS = 30.0
 _HOOK_PROCESS_BACKFILL_MAX_DEFERRAL_SECONDS = 5.0
@@ -481,7 +482,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
                 _ = self._recovery_event.wait(timeout=retry_delay)
                 retry_delay = min(retry_delay * 2, _HOOK_PROCESS_RETRY_MAX_SECONDS)
                 continue
-            ready = hook_worker_became_ready(replacement, _HOOK_PROCESS_READY_TIMEOUT_SECONDS)
+            ready = hook_worker_became_ready(replacement, hook_worker_ready_timeout(self._timeout_seconds))
             with self._state_lock:
                 cancelled = self._closed or generation != self._generation
                 if not cancelled and not ready:

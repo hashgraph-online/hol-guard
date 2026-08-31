@@ -62,6 +62,7 @@ def _request(
     *,
     command: str = "pwd",
     default_action: str = "allow",
+    deadline_budget_ms: int = 1_000,
 ) -> bytes:
     runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
     rule_digest = _rule_digest(runtime)
@@ -101,7 +102,7 @@ def _request(
                 "hook_event_name": "PreToolUse",
                 "tool_input": {"command": command},
             },
-            "deadline_budget_ms": 1_000,
+            "deadline_budget_ms": deadline_budget_ms,
             "policy_generation": 1,
             "policy_snapshot": policy_snapshot,
             "source": {

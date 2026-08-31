@@ -7,7 +7,6 @@ from __future__ import annotations
 import os
 import queue
 import threading
-import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 
@@ -16,7 +15,11 @@ from .hook_process_metrics import increment_bounded_metric
 from .hook_process_worker import HookProcessReview, HookWorkerSlot, retire_worker_slot, worker_retirement_thread
 
 _HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
-_NATIVE_CLIENT_CLOSE_TIMEOUT_SECONDS = 2.0
+_HOOK_PROCESS_START_TIMEOUT_SECONDS = 30.0
+
+
+def hook_worker_ready_timeout(configured_timeout: float) -> float:
+    return min(_HOOK_PROCESS_START_TIMEOUT_SECONDS, max(_HOOK_PROCESS_READY_TIMEOUT_SECONDS, configured_timeout))
 
 
 class HookProcessRunnerLifecycleMixin:
@@ -57,37 +60,6 @@ class HookProcessRunnerLifecycleMixin:
         with self._state_lock:
             self._ready_slot_ids.discard(slot.process.pid or id(slot))
         self._publish_capacity()
-
-    def close_native_resident_clients(self, *, timeout_seconds: float = _NATIVE_CLIENT_CLOSE_TIMEOUT_SECONDS) -> bool:
-        """Close native client pools in every serving worker before a resident stop."""
-
-        if timeout_seconds <= 0:
-            return False
-        with self._state_lock:
-            if self._closed or not self._started:
-                return True
-            slots = tuple(self._all_slots.values())
-        deadline = time.monotonic() + timeout_seconds
-        for slot in slots:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return False
-            if not slot.handshake_lock.acquire(timeout=remaining):
-                return False
-            try:
-                if not slot.process.is_alive():
-                    continue
-                slot.connection.send(("close_native_resident_clients", None))
-                remaining = deadline - time.monotonic()
-                if remaining <= 0 or not slot.connection.poll(remaining):
-                    return False
-                if slot.connection.recv() != ("closed_native_resident_clients", None):
-                    return False
-            except (BrokenPipeError, EOFError, OSError):
-                return False
-            finally:
-                slot.handshake_lock.release()
-        return True
 
     def _retire_idle_slot_async(self, slot: HookWorkerSlot) -> None:
         def contained() -> None:

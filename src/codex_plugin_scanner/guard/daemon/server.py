@@ -511,6 +511,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     request_executors_stopped: bool
     diagnostics: DaemonDiagnostics
     auth_audit_lock: threading.Lock
+    denial_audit_lock: threading.Lock
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: GuardDaemonServer | None
     home_dir: Path
@@ -572,6 +573,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.shutdown_started = shutdown_started
         self.diagnostics = diagnostics
         self.auth_audit_lock = threading.Lock()
+        self.denial_audit_lock = threading.Lock()
         self.auth_audit_windows = {}
         self.command_queue_lifecycle = None
         self.package_firewall_connect_state = None
@@ -6604,11 +6606,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _record_bounded_denial_event(self, event_name: str, payload: dict[str, object]) -> None:
         daemon_server = self._daemon_server()
-        try:
-            with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
-                daemon_server.store.add_event(event_name, payload, _now())
-        except Exception:
-            daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
+        with daemon_server.denial_audit_lock:
+            for attempt in range(2):
+                try:
+                    with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
+                        daemon_server.store.add_event(event_name, payload, _now())
+                except sqlite3.OperationalError as error:
+                    if attempt == 0 and any(
+                        marker in str(error).lower() for marker in ("database is locked", "database table is locked")
+                    ):
+                        continue
+                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
+                except sqlite3.DatabaseError:
+                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
+                else:
+                    return
 
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")

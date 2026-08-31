@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import time
 from pathlib import Path
@@ -17,15 +16,7 @@ from native_hook_client_support import (
 )
 from native_hook_client_support import native_runtime as _native_runtime_fixture  # noqa: F401
 
-
-def _process_is_alive(process_id: int) -> bool:
-    try:
-        os.kill(process_id, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+from ci.native_runtime.resident_test_support import process_is_alive
 
 
 def test_native_hook_client_reuses_one_authenticated_generation(
@@ -69,10 +60,10 @@ def test_native_hook_client_stop_reaps_managed_processes(
     assert result.returncode == 0, result.stderr
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline and (
-        _state_files(state_dir) or any(_process_is_alive(process_id) for process_id in process_ids)
+        _state_files(state_dir) or any(process_is_alive(process_id) for process_id in process_ids)
     ):
         time.sleep(0.01)
-    assert not (_state_files(state_dir) or any(_process_is_alive(process_id) for process_id in process_ids))
+    assert not (_state_files(state_dir) or any(process_is_alive(process_id) for process_id in process_ids))
 
 
 def test_release_resident_starts_without_authority_and_rejects_approval(

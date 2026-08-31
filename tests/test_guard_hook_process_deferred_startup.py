@@ -96,7 +96,7 @@ def test_zero_delay_full_capacity_bounds_active_review_deferral(
 
     runner.enable_full_capacity(delay_seconds=0, active_deferral_seconds=0.2)
 
-    assert runner._backfill_not_before == 100.0  # pyright: ignore[reportPrivateUsage]
+    assert runner._backfill_not_before == 0.0  # pyright: ignore[reportPrivateUsage]
     assert runner._backfill_force_after == 100.2  # pyright: ignore[reportPrivateUsage]
 
 

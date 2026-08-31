@@ -45,7 +45,7 @@ def backfill_window_after_capacity_enable(
 
     requested_not_before = now + max(0.0, delay_seconds)
     if delay_seconds <= 0:
-        return requested_not_before, requested_not_before + active_deferral_seconds
+        return 0.0, now + active_deferral_seconds
     not_before = max(current_not_before, requested_not_before)
     return not_before, max(current_force_after, not_before + active_deferral_seconds)
 
