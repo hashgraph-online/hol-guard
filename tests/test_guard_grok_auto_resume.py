@@ -199,9 +199,13 @@ def test_grok_live_wait_skips_observe_events_and_zero_timeout(tmp_path: Path) ->
 
 
 def test_grok_generic_hook_does_not_wait_when_timeout_is_zero(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.approvals import queue_blocked_approvals as original_queue
+    from codex_plugin_scanner.guard.cli import commands_hook_generic as generic_hook_module
     from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
     from codex_plugin_scanner.guard.config import GuardConfig
     from codex_plugin_scanner.guard.store import GuardStore
+
+    generic_hook_module.queue_blocked_approvals = original_queue
 
     guard_home = tmp_path / ".hol-guard"
     store = GuardStore(guard_home)

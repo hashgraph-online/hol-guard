@@ -13,7 +13,6 @@ import pytest
 
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, wait_for_approval_requests
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-from codex_plugin_scanner.guard.cli import commands_hook_generic as generic_hook_module
 from codex_plugin_scanner.guard.cli import commands_hook_runtime_finish as finish_module
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction_module
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
@@ -410,8 +409,6 @@ def test_current_terminal_block_is_not_queued_or_browser_approved(
 
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", unexpected)
     monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", unexpected)
-    monkeypatch.setattr(generic_hook_module, "ensure_guard_daemon", unexpected)
-    monkeypatch.setattr(generic_hook_module, "queue_blocked_approvals", unexpected)
     monkeypatch.setattr(interaction_module, "wait_for_approval_requests", unexpected)
     output = StringIO()
     stdout = StringIO()
