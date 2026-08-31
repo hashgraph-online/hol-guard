@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import http.client
 import json
+import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TypeGuard
+from typing import Protocol, TypeGuard
 
 from .manager import (
     clear_guard_daemon_state,
@@ -50,6 +52,11 @@ class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
 
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
 _STATUS_REQUEST_TIMEOUT_S: float = 0.25
+_MAX_GET_RESPONSE_BYTES: int = 1_048_576
+
+
+class _ReadableResponse(Protocol):
+    def read(self, amount: int = -1) -> bytes: ...
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -200,8 +207,8 @@ class GuardSurfaceDaemonClient:
     def network_status(self) -> dict[str, object]:
         """Read current network protection truth without starting the daemon.
 
-        Network status is an interactive, loopback-only health read. A one-second
-        deadline accommodates a busy local daemon without leaving the CLI in limbo.
+        Network status is an interactive, loopback-only health read. A 250 ms total
+        deadline keeps an unhealthy daemon from leaving the CLI in limbo.
         """
 
         return self._get("/v1/network/status", timeout=_STATUS_REQUEST_TIMEOUT_S)
@@ -214,6 +221,7 @@ class GuardSurfaceDaemonClient:
         return response.get("claimed") is True
 
     def _get(self, path: str, *, timeout: float) -> dict[str, object]:
+        deadline = time.monotonic() + timeout
         request = urllib.request.Request(
             f"{self.daemon_url}{path}",
             headers={"X-Guard-Token": self.auth_token},
@@ -221,7 +229,8 @@ class GuardSurfaceDaemonClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                return self._decode_json_response(response.read().decode("utf-8"))
+                payload = self._read_response_with_deadline(response, deadline=deadline)
+                return self._decode_json_response(payload.decode("utf-8"))
         except urllib.error.HTTPError as error:
             raise self._http_request_error(error) from error
         except GuardDaemonRequestError:
@@ -238,6 +247,35 @@ class GuardSurfaceDaemonClient:
             raise GuardDaemonTransportError("Guard daemon request failed") from error
         except OSError as error:
             raise GuardDaemonTransportError("Guard daemon request failed") from error
+
+    @staticmethod
+    def _read_response_with_deadline(
+        response: _ReadableResponse,
+        *,
+        deadline: float,
+    ) -> bytes:
+        payloads: list[bytes] = []
+        failures: list[Exception] = []
+
+        def read_bounded_body() -> None:
+            try:
+                payloads.append(response.read(_MAX_GET_RESPONSE_BYTES + 1))
+            except Exception as error:
+                failures.append(error)
+
+        reader = threading.Thread(target=read_bounded_body, daemon=True)
+        reader.start()
+        reader.join(max(0.0, deadline - time.monotonic()))
+        if reader.is_alive():
+            raise GuardDaemonTimeoutError("Guard daemon request timed out")
+        if failures:
+            raise failures[0]
+        if not payloads:
+            raise GuardDaemonTransportError("Guard daemon response was unavailable")
+        payload = payloads[0]
+        if len(payload) > _MAX_GET_RESPONSE_BYTES:
+            raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
+        return payload
 
     def _post(
         self,

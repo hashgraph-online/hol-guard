@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import threading
+import time
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -418,11 +420,38 @@ class _RawResponse:
     def __exit__(self, *_args: object) -> None:
         return None
 
-    def read(self) -> bytes:
+    def read(self, _amount: int = -1) -> bytes:
         if self.read_error is not None:
             raise self.read_error
         assert self.payload is not None
         return self.payload
+
+
+def test_network_status_client_enforces_total_body_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release_reader = threading.Event()
+
+    class SlowResponse(_RawResponse):
+        def read(self, _amount: int = -1) -> bytes:
+            release_reader.wait(timeout=2.0)
+            return b"{}"
+
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda _request, *, timeout: SlowResponse(payload=b"{}"),
+    )
+
+    started_at = time.monotonic()
+    try:
+        with pytest.raises(GuardDaemonTimeoutError, match="timed out"):
+            client.network_status()
+    finally:
+        release_reader.set()
+
+    assert time.monotonic() - started_at < 0.75
 
 
 def test_network_status_client_types_invalid_utf8_as_schema_failure(
