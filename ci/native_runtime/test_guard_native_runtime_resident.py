@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
+import threading
 import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -100,6 +101,59 @@ def test_start_lock_wait_stays_inside_request_deadline(monkeypatch: pytest.Monke
 
         assert time.monotonic() - started < 0.2
         assert not starts_path.exists()
+
+
+def test_startup_timeout_signals_new_resident_for_containment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+        executable=tmp_path / "runtime",
+        identity_sha256="c" * 64,
+        guard_home=tmp_path,
+        environment={},
+    )
+    stop_event = threading.Event()
+    stop_observed = threading.Event()
+    thread = threading.Thread(
+        target=lambda: (stop_event.wait(timeout=1.0), stop_observed.set()),
+        daemon=True,
+    )
+    service._thread = thread  # pyright: ignore[reportPrivateUsage]
+    thread.start()
+    monkeypatch.setattr(service, "_transport_accepts_authenticated_connections", lambda **_kwargs: False)
+
+    deadline = time.monotonic() + 0.02
+    assert not service._wait_until_ready(  # pyright: ignore[reportPrivateUsage]
+        thread=thread,
+        started=(b"t" * resident._AUTH_TOKEN_BYTES, stop_event, 0),  # pyright: ignore[reportPrivateUsage]
+        deadline=deadline,
+    )
+    assert stop_observed.wait(timeout=1.0)
+    thread.join(timeout=1.0)
+    assert not thread.is_alive()
+
+
+def test_close_retains_tracking_until_resident_thread_stops(
+    tmp_path: Path,
+) -> None:
+    service = resident._ResidentService(  # pyright: ignore[reportPrivateUsage]
+        executable=tmp_path / "runtime",
+        identity_sha256="d" * 64,
+        guard_home=tmp_path,
+        environment={},
+    )
+    thread = threading.Thread(daemon=True)
+    thread.is_alive = lambda: True  # type: ignore[method-assign]
+    thread.join = lambda timeout=None: None  # type: ignore[method-assign]
+    service._thread = thread  # pyright: ignore[reportPrivateUsage]
+
+    assert service.close() is False
+    assert service._thread is thread  # pyright: ignore[reportPrivateUsage]
+
+    thread.is_alive = lambda: False  # type: ignore[method-assign]
+    assert service.close() is True
+    assert service._thread is None  # pyright: ignore[reportPrivateUsage]
 
 
 def test_request_shares_one_deadline_across_probe_start_and_retry(

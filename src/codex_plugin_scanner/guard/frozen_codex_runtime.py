@@ -196,6 +196,7 @@ def _run_frozen_daemon_recovery_worker(raw_payload: str) -> int:
         raise ValueError("Codex daemon recovery worker token is invalid")
 
     from .daemon.manager import (
+        _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
         clear_guard_daemon_recovery_reservation,
         recover_guard_daemon_after_hook_failure,
     )
@@ -205,6 +206,7 @@ def _run_frozen_daemon_recovery_worker(raw_payload: str) -> int:
             guard_home,
             home_dir=home_dir,
             failure_kind=typed_failure_kind,
+            recovery_lock_timeout_seconds=_GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS,
         )
     finally:
         with suppress(OSError, RuntimeError, ValueError):

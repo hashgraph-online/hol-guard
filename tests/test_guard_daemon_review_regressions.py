@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -85,6 +86,156 @@ def test_recovery_worker_clears_its_claim_when_recovery_fails(
         recovery_worker.main()
 
     assert cleared == [(guard_home, "recovery-token")]
+
+
+def test_recovery_reservation_keeps_live_worker_owner_past_expiry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    claimed_at = time.time()
+    monkeypatch.setattr(daemon_manager.time, "time", lambda: claimed_at)
+    token = daemon_manager._claim_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
+    assert token is not None
+    monkeypatch.setattr(
+        daemon_manager,
+        "_guard_daemon_pid_is_running",
+        lambda pid: pid == 42,
+    )
+    assert daemon_manager._bind_guard_daemon_recovery_reservation(  # pyright: ignore[reportPrivateUsage]
+        guard_home,
+        token=token,
+        pid=42,
+    )
+
+    monkeypatch.setattr(daemon_manager.time, "time", lambda: claimed_at + 31.0)
+    assert daemon_manager._claim_guard_daemon_recovery_reservation(guard_home) is None  # pyright: ignore[reportPrivateUsage]
+
+    monkeypatch.setattr(daemon_manager, "_guard_daemon_pid_is_running", lambda _pid: False)
+    replacement = daemon_manager._claim_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
+    assert replacement is not None and replacement != token
+
+
+def test_recovery_worker_thread_lock_timeout_is_bounded(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    with daemon_manager._guard_daemon_recovery_lock(guard_home):  # pyright: ignore[reportPrivateUsage]
+        started = time.monotonic()
+        with pytest.raises(RuntimeError, match="recovery ownership"), daemon_manager._guard_daemon_recovery_lock(  # pyright: ignore[reportPrivateUsage]
+            guard_home,
+            timeout_seconds=0.02,
+        ):
+            pass
+        assert time.monotonic() - started < 0.5
+
+
+def test_recovery_worker_file_lock_timeout_is_bounded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(daemon_manager, "_try_lock_daemon_file", lambda _handle: False)
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="recovery ownership"), daemon_manager._guard_daemon_recovery_lock(  # pyright: ignore[reportPrivateUsage]
+        guard_home,
+        timeout_seconds=0.02,
+    ):
+        pass
+    assert time.monotonic() - started < 0.5
+
+
+def test_recovery_scheduler_respects_explicitly_off_protection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text(
+        'mode = "observe"\nprotection_posture = "watch"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: pytest.fail("disabled protection must not restart a recovery worker"),
+    )
+
+    daemon_manager.schedule_guard_daemon_recovery(
+        guard_home,
+        failure_kind="transport-failure",
+    )
+
+    assert not (guard_home / "daemon-recovery-reservation.json").exists()
+
+
+def test_bounded_recovery_worker_stops_when_protection_turns_off(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text(
+        'mode = "observe"\nprotection_posture = "watch"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        daemon_manager,
+        "ensure_guard_daemon",
+        lambda *_args, **_kwargs: pytest.fail("disabled protection must not ensure a daemon"),
+    )
+
+    with pytest.raises(RuntimeError, match="disabled by local protection posture"):
+        daemon_manager.recover_guard_daemon_after_hook_failure(
+            guard_home,
+            failure_kind="transport-failure",
+            recovery_lock_timeout_seconds=0.1,
+        )
+
+
+def test_recovery_scheduler_keeps_one_live_worker_past_reservation_expiry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    guard_home.mkdir()
+    home_dir.mkdir()
+    clock = [100.0]
+    spawned: list[object] = []
+
+    class FakeProcess:
+        pid = 4242
+
+        def poll(self) -> int | None:
+            return None
+
+    monkeypatch.setattr(daemon_manager.time, "time", lambda: clock[0])
+    monkeypatch.setattr(daemon_manager, "_guard_daemon_pid_is_running", lambda pid: pid == 4242)
+    monkeypatch.setattr(
+        daemon_manager,
+        "_isolated_python_module_command",
+        lambda *_args: ["python", "recovery-worker"],
+    )
+    monkeypatch.setattr(daemon_manager, "_daemon_launcher_env", lambda **_kwargs: {})
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: spawned.append(FakeProcess()) or spawned[-1],
+    )
+
+    daemon_manager.schedule_guard_daemon_recovery(
+        guard_home,
+        home_dir=home_dir,
+        failure_kind="transport-failure",
+    )
+    clock[0] += 31.0
+    daemon_manager.schedule_guard_daemon_recovery(
+        guard_home,
+        home_dir=home_dir,
+        failure_kind="transport-failure",
+    )
+
+    assert len(spawned) == 1
 
 
 def test_frozen_recovery_scheduler_spawns_private_worker(

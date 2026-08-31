@@ -7984,6 +7984,9 @@ class GuardDaemonServer:
             self._diagnostics.close(timeout_seconds=0.5)
             raise
         self._shutdown_started = threading.Event()
+        self._lifecycle_lock = threading.Lock()
+        self._lifecycle_generation = 0
+        self._active_start_generation: int | None = None
         self._finish_service_lock = threading.Lock()
         self._finish_service_completed = False
         self._owner_lock: BinaryIO | None = None
@@ -8040,6 +8043,7 @@ class GuardDaemonServer:
             return
         self._thread = None
         self._begin_service()
+        generation = self._active_start_generation
         serve_thread_started = False
         try:
             with self._finish_service_lock:
@@ -8052,10 +8056,10 @@ class GuardDaemonServer:
             if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                 raise RuntimeError("Guard daemon serve thread did not become ready")
             with self._finish_service_lock:
-                if self._shutdown_started.is_set():
+                if not self._startup_generation_is_current(generation):
                     raise RuntimeError("Guard daemon stopped during startup")
                 self._server.hook_process_runner.enable_full_capacity()
-                if self._shutdown_started.is_set():
+                if not self._startup_generation_is_current(generation):
                     raise RuntimeError("Guard daemon stopped during startup")
         except BaseException as error:
             self._diagnostics.record_exception("daemon_start_thread_failed")
@@ -8087,13 +8091,21 @@ class GuardDaemonServer:
 
     def serve(self) -> None:
         self._begin_service()
-        self._server.hook_process_runner.enable_full_capacity()
+        generation = self._active_start_generation
+        with self._finish_service_lock:
+            if not self._startup_generation_is_current(generation):
+                raise RuntimeError("Guard daemon stopped during startup")
+            self._server.hook_process_runner.enable_full_capacity()
+            if not self._startup_generation_is_current(generation):
+                raise RuntimeError("Guard daemon stopped during startup")
         self._serve_forever()
 
     def stop(self) -> None:
         self._record_lifecycle("shutdown_requested", reason="explicit_stop")
         self._diagnostics.record("daemon_shutdown_requested")
-        self._shutdown_started.set()
+        with self._lifecycle_lock:
+            self._lifecycle_generation += 1
+            self._shutdown_started.set()
         with self._finish_service_lock:
             serve_thread = self._thread
             self._server.request_serve_stop()
@@ -8107,8 +8119,17 @@ class GuardDaemonServer:
         if remaining_serve_thread is None and self._thread is serve_thread:
             self._thread = None
 
+    def _startup_generation_is_current(self, generation: int | None) -> bool:
+        with self._lifecycle_lock:
+            return generation == self._lifecycle_generation and not self._shutdown_started.is_set()
+
     def _begin_service(self) -> None:
         with self._finish_service_lock:
+            with self._lifecycle_lock:
+                self._lifecycle_generation += 1
+                generation = self._lifecycle_generation
+                self._active_start_generation = generation
+                self._shutdown_started.clear()
             self._finish_service_completed = False
         self._record_lifecycle("start_requested")
         if self._is_quarantined():
@@ -8116,9 +8137,12 @@ class GuardDaemonServer:
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
             self._require_command_activity_maintenance_stopped()
             raise RuntimeError("This Guard daemon is quarantined after unconfirmed containment.")
-        self._owner_lock = acquire_guard_daemon_owner_lock(self._server.store.guard_home)
         try:
-            self._begin_owned_service()
+            with self._finish_service_lock:
+                if not self._startup_generation_is_current(generation):
+                    raise RuntimeError("Guard daemon stopped during startup")
+                self._owner_lock = acquire_guard_daemon_owner_lock(self._server.store.guard_home)
+                self._begin_owned_service(generation)
         except BaseException as error:
             self._diagnostics.record_exception("daemon_start_failed")
             self._record_lifecycle("start_failed", reason="initialization_failed")
@@ -8128,13 +8152,17 @@ class GuardDaemonServer:
                     add_note("Guard retained daemon ownership because partial-start containment was unconfirmed.")
             raise
 
-    def _begin_owned_service(self) -> None:
+    def _begin_owned_service(self, generation: int | None = None) -> None:
+        if generation is None:
+            generation = self._active_start_generation
+        with self._lifecycle_lock:
+            if generation != self._lifecycle_generation or self._shutdown_started.is_set():
+                raise RuntimeError("Guard daemon stopped during startup")
         if self._aibom_refresh_thread is not None:
             if self._aibom_refresh_thread.is_alive():
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
             self._aibom_refresh_thread = None
         self._require_command_activity_maintenance_stopped()
-        self._shutdown_started.clear()
         self._server.hook_process_runner.start(defer_backfill=True)
         self._server.hook_process_runner.require_initial_capacity()
         self._reconcile_runtime_artifacts_best_effort()

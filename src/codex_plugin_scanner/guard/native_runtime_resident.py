@@ -130,6 +130,7 @@ class _ResidentService:
         self._generation = 0
         self._closed = False
         self._owned_socket_identity: tuple[int, int] | None = None
+        self._containment_confirmed = True
 
     @property
     def starts(self) -> int:
@@ -241,6 +242,7 @@ class _ResidentService:
             auth_token = secrets.token_bytes(_AUTH_TOKEN_BYTES)
             self._stop_event = stop_event
             self._auth_token = auth_token
+            self._containment_confirmed = False
             self._generation += 1
             generation = self._generation
             if self._starts == 0:
@@ -268,14 +270,27 @@ class _ResidentService:
         while time.monotonic() < deadline:
             remaining = _remaining_budget(deadline)
             if remaining <= 0:
-                return False
+                break
             if self._transport_accepts_authenticated_connections(timeout_seconds=min(remaining, 0.1)):
-                return started is None or os.name == "nt" or self._publish_started_credential(started)
+                if started is None or os.name == "nt" or self._publish_started_credential(started):
+                    return True
+                break
             with self._lock:
                 if self._closed or self._thread is not thread or not thread.is_alive():
-                    return False
+                    break
             time.sleep(min(0.01, _remaining_budget(deadline)))
+        if started is not None:
+            self._cancel_start(started)
         return False
+
+    def _cancel_start(self, started: _StartedResident) -> None:
+        """Stop a resident that failed its bounded startup admission."""
+
+        _auth_token, stop_event, generation = started
+        stop_event.set()
+        with self._lock:
+            if self._generation == generation:
+                self._auth_token = None
 
     def _publish_started_credential(self, started: _StartedResident) -> bool:
         auth_token, stop_event, generation = started
@@ -365,6 +380,7 @@ class _ResidentService:
             intentional_stop = self._closed or stop_event.is_set()
             if current_generation:
                 self._auth_token = None
+                self._containment_confirmed = not result.containment_failed
         if current_generation and not intentional_stop:
             if result.containment_failed:
                 reason = "native_resident_containment_failed"
@@ -382,10 +398,8 @@ class _ResidentService:
                 reason=reason,
             )
 
-    def close(self) -> None:
+    def close(self) -> bool:
         with self._lock:
-            if self._closed:
-                return
             self._closed = True
             self._stop_event.set()
             thread = self._thread
@@ -395,16 +409,28 @@ class _ResidentService:
         with _resident_start_lock(self.socket_path, timeout_seconds=1.5) as acquired:
             if thread is not None and thread.is_alive():
                 thread.join(timeout=1.5)
-            if acquired:
+            with self._lock:
+                thread_stopped = thread is None or not thread.is_alive()
+                contained = thread_stopped and self._containment_confirmed
+            if acquired and contained:
                 _unlink_socket_credential(
                     self.socket_path,
                     expected_identity=owned_socket_identity,
                     auth_token=auth_token,
                 )
                 _unlink_owned_socket(self.socket_path, expected_identity=owned_socket_identity)
+            elif not contained:
+                native_record_resident_failure(
+                    self.identity_sha256,
+                    self.guard_home,
+                    reason="native_resident_containment_failed",
+                )
         with self._lock:
-            if self._thread is thread:
+            if contained and self._thread is thread:
                 self._thread = None
+            if contained and acquired:
+                self._owned_socket_identity = None
+        return contained
 
 
 _SERVICES_LOCK = threading.Lock()
@@ -462,10 +488,12 @@ def resident_service_starts(*, executable: Path, identity_sha256: str, guard_hom
 def close_resident_native_runtimes() -> None:
     """Stop every resident runtime through the contained launcher path."""
     with _SERVICES_LOCK:
-        services = list(_SERVICES.values())
-        _SERVICES.clear()
-    for service in services:
-        service.close()
+        services = list(_SERVICES.items())
+    for key, service in services:
+        if service.close():
+            with _SERVICES_LOCK:
+                if _SERVICES.get(key) is service:
+                    _SERVICES.pop(key, None)
 
 
 atexit.register(close_resident_native_runtimes)

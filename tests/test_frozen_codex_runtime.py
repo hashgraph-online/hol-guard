@@ -117,7 +117,7 @@ def test_frozen_recovery_worker_releases_its_reservation(
     monkeypatch.setattr(
         daemon_manager,
         "recover_guard_daemon_after_hook_failure",
-        lambda requested_guard_home, *, home_dir, failure_kind: recovered.append(
+        lambda requested_guard_home, *, home_dir, failure_kind, **_kwargs: recovered.append(
             (requested_guard_home, home_dir, failure_kind)
         ),
     )
