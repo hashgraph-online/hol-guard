@@ -75,5 +75,10 @@ ARBITRARY_STDOUT_FULL_ALLOW_BYTES = 256 * 1024  # Max arbitrary stdout for full 
 ## Integration Points
 
 - **Daemon**: `daemon/server.py` `_handle_runtime_hook()` dispatches to fast worker or legacy CLI
-- **CLI**: `cli/commands_hook_native_authority.py` sends auto/force command PreToolUse and PostToolUse to the native worker. Python `_try_source_ref_fast_path()` remains for off/shadow rollback and for file PreToolUse the native worker reports as unsupported.
+- **CLI**: `cli/commands_hook_native_authority.py` sends auto/force complete
+  PreToolUse and PostToolUse envelopes to the native worker. Python
+  `_try_source_ref_fast_path()` remains only for explicit off/shadow rollback;
+  native generic PreToolUse classifies file, package, MCP, network, process,
+  browser, config, prompt, and harness actions and never spills a supported
+  review into the CLI semantic path.
 - **Adapter**: Pi extension generates `guard_source_ref` and verifies `reviewed_output_sha256`

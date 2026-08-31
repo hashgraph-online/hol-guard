@@ -58,6 +58,30 @@ def _native_block(command: str) -> dict[str, Any]:
     }
 
 
+def _native_generic_review(harness: str = "codex") -> dict[str, Any]:
+    return {
+        "schema": "guard-pre-tool-result.v1",
+        "version": 1,
+        "authority": "rust",
+        "action": {
+            "schema": "guard-pre-tool-action.v1",
+            "version": 1,
+            "harness": harness,
+            "event": "PreToolUse",
+            "action_type": "network",
+            "operation": "request",
+            "bounded": True,
+            "sensitive_target": False,
+        },
+        "decision": "deny",
+        "minimum_action": "review",
+        "policy_action": "review",
+        "reason_code": "native_network_review",
+        "reason": "HOL Guard requires review before this network action can execute.",
+        "explicitly_benign": False,
+    }
+
+
 def test_decode_pre_tool_rejects_unbound_command_model() -> None:
     payload = _native_allow("pwd")
     payload["command_model"] = {"normalized_text": "whoami"}
@@ -251,39 +275,45 @@ def test_hook_worker_returns_native_allow(
         workspace=tmp_path / "workspace",
     )
     assert result["policy_action"] == "allow"
-    assert result["hookSpecificOutput"]["permissionDecision"] == "allow"
+    hook_output = result["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"
 
 
-def test_hook_worker_clears_native_route_before_python_review_continuation(
+def test_hook_worker_native_review_does_not_escape_to_python_semantics(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    native_review = _native_block("git push")
-    native_review["minimum_action"] = "review"
-    native_review["policy_action"] = "review"
+    native_review = _native_generic_review()
 
     def review_with_resident_receipt(*_args: object, **_kwargs: object) -> dict[str, Any]:
         record_native_hook_route("native_resident")
-        return native_review
+        return {"event_name": "PreToolUse", "harness": "codex", "result": native_review}
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         review_with_resident_receipt,
     )
     reset_native_hook_route()
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
 
-    with pytest.raises(HookWorkerUnsupported, match="CLI approval coordination"):
-        worker.review_http_payload(
-            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}},
-            params={},
-            default_harness="codex",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-        )
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
+        params={},
+        default_harness="codex",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
 
-    assert native_hook_route() == "python_semantic"
+    hook_output = result["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "deny"
+    assert native_hook_route() == "native_resident"
 
 
 def test_full_cli_review_continuation_keeps_python_terminal_provenance(
@@ -465,7 +495,7 @@ def test_hook_worker_fails_closed_for_non_command_pretool_without_native_result(
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
-def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
+def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -475,15 +505,16 @@ def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
-        lambda *_args, **_kwargs: pytest.fail("out-of-scope event reached the native edge"),
+        lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    with pytest.raises(HookWorkerUnsupported, match="fast path supports"):
-        worker.review_http_payload(
-            payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
-            params={},
-            default_harness="claude-code",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-        )
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
+        params={},
+        default_harness="claude-code",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["reason_code"] == "native_hook_event_unavailable"
+    assert result["continue"] is False

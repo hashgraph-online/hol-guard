@@ -67,7 +67,13 @@ fn canonical_event(value: &str) -> Result<String, String> {
     let compact = value.trim().to_ascii_lowercase().replace(['_', '-'], "");
     match compact.as_str() {
         "pretool" | "pretooluse" => Ok("PreToolUse".to_owned()),
+        "beforeshellexecution" | "beforereadfile" | "beforewritefile" | "beforemcpexecution" => {
+            Ok("PreToolUse".to_owned())
+        }
         "posttool" | "posttooluse" => Ok("PostToolUse".to_owned()),
+        "aftershellexecution" | "afterreadfile" | "afterwritefile" | "aftermcpexecution" => {
+            Ok("PostToolUse".to_owned())
+        }
         "prompt" | "userpromptsubmit" | "userpromptsubmitted" => Ok("UserPromptSubmit".to_owned()),
         "permissionrequest" => Ok("PermissionRequest".to_owned()),
         _ => Err("native_hook_event_unsupported".to_owned()),
@@ -181,12 +187,12 @@ pub(crate) fn evaluate_envelope(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>
         return Err("native_hook_encrypted_payload_unsupported".to_owned());
     }
     let result = match event_name.as_str() {
-        "PreToolUse" => crate::oneshot::evaluate_pre_tool_value(&serde_json::json!({
-            "protocol_version": NATIVE_PROTOCOL_VERSION,
-            "request_id": envelope.request_id,
-            "event_name": event_name,
-            "payload": envelope.raw_payload,
-        }))?,
+        "PreToolUse" => serde_json::to_value(guard_command::pretool::evaluate_pre_tool_envelope(
+            &harness,
+            &event_name,
+            &envelope.raw_payload,
+        ))
+        .map_err(|_| "native_hook_edge_response_invalid".to_owned())?,
         "PostToolUse" => serde_json::to_value(review_post_tool(&NativeHookRequestV1 {
             protocol_version: NATIVE_PROTOCOL_VERSION,
             request_id: envelope.request_id.clone(),
@@ -342,5 +348,77 @@ mod tests {
         ))
         .unwrap_err();
         assert_eq!(error, "native_hook_source_ref_invalid");
+    }
+
+    #[test]
+    fn evaluates_complete_cursor_file_envelope_as_native_generic_result() {
+        let bytes = evaluate_isolated(envelope(
+            "beforeReadFile",
+            serde_json::json!({
+                "event": "beforeReadFile",
+                "toolName": "read_file",
+                "toolInput": {"file_path": "README.md"}
+            }),
+        ))
+        .unwrap();
+        let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result.event_name, "PreToolUse");
+        assert_eq!(result.result["schema"], "guard-pre-tool-result.v1");
+        assert_eq!(result.result["authority"], "rust");
+        assert_eq!(result.result["action"]["action_type"], "file_read");
+        assert_eq!(result.result["minimum_action"], "review");
+        assert!(result.result.get("raw_payload").is_none());
+    }
+
+    #[test]
+    fn evaluates_generic_pretool_for_supported_harness_aliases() {
+        for (harness, expected) in [
+            ("Claude", "claude-code"),
+            ("Codex", "codex"),
+            ("Cline", "cline"),
+            ("Cursor", "cursor"),
+            ("Copilot", "copilot"),
+            ("Grok", "grok"),
+            ("Z-Code", "zcode"),
+        ] {
+            let mut request = envelope(
+                "PreToolUse",
+                serde_json::json!({
+                    "hook_event_name": "PreToolUse",
+                    "toolName": "read_file",
+                    "toolInput": {"file_path": "README.md"}
+                }),
+            );
+            request.harness = harness.to_owned();
+            let bytes = evaluate_isolated(request).unwrap();
+            let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(result.harness, expected);
+            assert_eq!(result.result["action"]["harness"], expected);
+            assert_eq!(result.result["action"]["action_type"], "file_read");
+            assert_eq!(result.result["minimum_action"], "review");
+        }
+    }
+
+    #[test]
+    fn unknown_and_ambiguous_pretool_payloads_never_receive_an_allow_floor() {
+        let unknown = evaluate_isolated(envelope(
+            "PreToolUse",
+            serde_json::json!({"toolName": "future_tool", "opaque": true}),
+        ))
+        .unwrap();
+        let unknown_result: GuardHookEdgeResultV2 = serde_json::from_slice(&unknown).unwrap();
+        assert_eq!(unknown_result.result["minimum_action"], "review");
+
+        let ambiguous = evaluate_isolated(envelope(
+            "PreToolUse",
+            serde_json::json!({"command": "pwd", "cmd": "whoami"}),
+        ))
+        .unwrap();
+        let ambiguous_result: GuardHookEdgeResultV2 = serde_json::from_slice(&ambiguous).unwrap();
+        assert_eq!(ambiguous_result.result["minimum_action"], "block");
+        assert_eq!(
+            ambiguous_result.result["reason_code"],
+            "native_pre_tool_ambiguous_payload"
+        );
     }
 }

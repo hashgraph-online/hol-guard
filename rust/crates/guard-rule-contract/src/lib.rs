@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 pub const RULE_CONTRACT_SCHEMA: &str = "hol-guard-native-rule-contract.v2";
 const RULE_CONTRACT_DOMAIN: &[u8] = b"hol-guard-native-rule-contract.v2\0";
 
-const COMPONENTS: [(&str, &[u8]); 4] = [
+const COMPONENTS: [(&str, &[u8]); 9] = [
     (
         "guard-rules",
         include_bytes!("../../guard-rules/src/lib.rs"),
@@ -22,6 +22,26 @@ const COMPONENTS: [(&str, &[u8]); 4] = [
     (
         "guard-hook-core",
         include_bytes!("../../guard-hook-core/src/lib.rs"),
+    ),
+    (
+        "guard-contracts",
+        include_bytes!("../../guard-contracts/src/lib.rs"),
+    ),
+    (
+        "guard-command-pretool",
+        include_bytes!("../../guard-command/src/pretool.rs"),
+    ),
+    (
+        "guard-command-pretool-generic",
+        include_bytes!("../../guard-command/src/pretool/generic.rs"),
+    ),
+    (
+        "guard-command-pretool-result",
+        include_bytes!("../../guard-command/src/pretool/generic_result.rs"),
+    ),
+    (
+        "guard-command-pretool-extract",
+        include_bytes!("../../guard-command/src/pretool/generic_extract.rs"),
     ),
 ];
 
@@ -92,6 +112,11 @@ mod tests {
                 "guard-scanner",
                 "guard-secure-fs",
                 "guard-hook-core",
+                "guard-contracts",
+                "guard-command-pretool",
+                "guard-command-pretool-generic",
+                "guard-command-pretool-result",
+                "guard-command-pretool-extract",
             ]
         );
         assert!(first

@@ -7,6 +7,10 @@ mod search;
 
 use search::safe_search_arguments;
 
+pub mod generic;
+
+pub use generic::evaluate_pre_tool_envelope;
+
 fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)
 }
@@ -42,11 +46,11 @@ fn pretool_decision(
     }
 }
 
-fn normalized_haystack(value: &str) -> String {
+pub(super) fn normalized_haystack(value: &str) -> String {
     value.to_ascii_lowercase().replace('\\', "/")
 }
 
-fn sensitive_command(value: &str) -> bool {
+pub(super) fn sensitive_command(value: &str) -> bool {
     let lowered = normalized_haystack(value);
     let needles = [
         "/.ssh/",
@@ -71,6 +75,12 @@ fn sensitive_command(value: &str) -> bool {
         "id_ed25519",
         "aws_secret_access_key",
         "private_key",
+        ".env",
+        "api key",
+        "api_key",
+        "api-key",
+        "password",
+        "secret",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
         || lowered.contains("printenv")

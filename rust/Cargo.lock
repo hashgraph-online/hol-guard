@@ -106,7 +106,9 @@ name = "guard-command"
 version = "0.1.0"
 dependencies = [
  "guard-secure-fs",
+ "guard-contracts",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

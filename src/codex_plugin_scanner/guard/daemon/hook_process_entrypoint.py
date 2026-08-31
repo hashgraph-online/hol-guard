@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
-from ..native_route_receipt import native_hook_route, reset_native_hook_route
+from ..native_route_receipt import native_hook_route, record_native_hook_route, reset_native_hook_route
 from ..sqlite_profile import sqlite_error_is_busy_locked
 from .hook_process_protocol import (
     applied_hook_environment,
@@ -206,7 +206,7 @@ def _run_resident_hook_request(
     from ..cli.commands_support_connect import _synced_policy_payload
     from ..config import load_guard_config, overlay_synced_guard_policy
     from ..store import GuardStore
-    from .hook_worker import HookWorker, HookWorkerUnsupported
+    from .hook_worker import HookWorker, HookWorkerUnsupported, post_tool_fail_safe_response, runtime_hook_event_name
 
     parsed = _coerce_resident_hook_request(request)
     if parsed is None:
@@ -230,8 +230,8 @@ def _run_resident_hook_request(
         home_override_explicit=True,
         workspace_override_explicit=parsed.workspace is not None,
     )
-    event_name = parsed.payload.get("hook_event_name", parsed.payload.get("event"))
-    if event_name == "PostToolUse":
+    event_name = runtime_hook_event_name(parsed.payload)
+    if _native_mode_requires_rust() or event_name in {"PreToolUse", "PostToolUse"}:
         worker = hook_workers.get(store_key)
         if worker is None:
             worker = HookWorker(store=store)
@@ -246,7 +246,30 @@ def _run_resident_hook_request(
                 workspace=parsed.workspace,
             )
         except HookWorkerUnsupported:
-            pass
+            if _native_mode_requires_rust():
+                record_native_hook_route("native_fail_safe")
+                return {
+                    "payload": post_tool_fail_safe_response(
+                        parsed.harness,
+                        reason="HOL Guard could not complete the native hook decision safely.",
+                        reason_code="native_hook_worker_unsupported",
+                    ),
+                    "reason_code": "native_hook_worker_unsupported",
+                    "route": "native_fail_safe",
+                }
+        except Exception:
+            if _native_mode_requires_rust():
+                record_native_hook_route("native_fail_safe")
+                return {
+                    "payload": post_tool_fail_safe_response(
+                        parsed.harness,
+                        reason="HOL Guard could not complete the native hook decision safely.",
+                        reason_code="native_hook_worker_exception",
+                    ),
+                    "reason_code": "native_hook_worker_exception",
+                    "route": "native_fail_safe",
+                }
+            raise
         else:
             return {
                 "payload": worker_payload,

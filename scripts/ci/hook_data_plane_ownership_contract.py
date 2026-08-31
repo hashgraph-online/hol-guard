@@ -26,7 +26,6 @@ HARNESS_ROUTE_STATUSES: Final = frozenset(
         "installed_canonical",
         "installed_canonical_source_ref",
         "installed_cli_bridge",
-        "installed_command_only",
         "installed_observation_only",
         "normalizer_only_not_installed",
         "preflight_only",

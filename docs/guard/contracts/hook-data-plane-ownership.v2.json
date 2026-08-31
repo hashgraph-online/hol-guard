@@ -44,7 +44,7 @@
     "kimi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
     "omp": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical"},
     "openclaw": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
-    "opencode": {"pre_tool_use": "installed_command_only", "post_tool_use": "unavailable"},
+    "opencode": {"pre_tool_use": "installed_cli_bridge", "post_tool_use": "unavailable"},
     "pi": {"pre_tool_use": "installed_canonical", "post_tool_use": "installed_canonical_source_ref"},
     "zcode": {"pre_tool_use": "installed_canonical", "post_tool_use": "normalizer_only_not_installed"}
   },
@@ -70,7 +70,7 @@
       "id": "http_pre_tool_use",
       "event": "PreToolUse",
       "entry": "src/codex_plugin_scanner/guard/daemon/server.py",
-      "current_authority": "rust_raw_edge_command_python_generic_fallback",
+      "current_authority": "rust_raw_edge_generic",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -88,7 +88,7 @@
       "id": "cli_pre_tool_use",
       "event": "PreToolUse",
       "entry": "src/codex_plugin_scanner/guard/cli/commands_hook.py",
-      "current_authority": "rust_raw_edge_command_python_generic_fallback",
+      "current_authority": "rust_raw_edge_generic",
       "target_authority": "rust",
       "native_failure": "fail_closed",
       "python_semantic_fallback_target": false
@@ -151,7 +151,7 @@
         "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py",
         "src/codex_plugin_scanner/guard/adapters/zcode.py"
       ],
-      "current": "harness event, tool, action, and payload normalization before native evaluation",
+      "current": "transport-only harness envelope forwarding; Rust owns event, tool, action, and payload normalization",
       "target": "Rust raw-envelope normalization"
     },
     {
@@ -187,7 +187,7 @@
         "src/codex_plugin_scanner/guard/runtime/hook_payload_reference.py",
         "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
       ],
-      "current": "off and shadow retain compatibility request projection; auto and force route raw payloads to the native edge",
+      "current": "off and shadow retain explicit compatibility request projection; auto and force route complete raw payloads to the native edge",
       "target": "unreachable from ordinary production hook semantics"
     },
     {
@@ -211,7 +211,7 @@
         "src/codex_plugin_scanner/guard/runtime/source_paths.py",
         "src/codex_plugin_scanner/guard/native_command_model.py"
       ],
-      "current": "explicit off and shadow compatibility plus generic PreToolUse fallback",
+      "current": "explicit off and shadow compatibility plus differential-test oracle",
       "target": "differential tests only"
     },
     {
@@ -221,7 +221,7 @@
         "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_*.py"
       ],
-      "current": "hook CLI support, generic action extraction, policy evaluation, approval continuation, and final decision composition",
+      "current": "hook CLI presentation, approval continuation, and final harness projection",
       "target": "presentation and orchestration only"
     },
     {
@@ -277,7 +277,8 @@
         "scripts/bench_guard_native_release_gate.py",
         "scripts/ci/rust_pretool_no_python_gate.py",
         "scripts/ci/rust_authority_ownership_gate.py",
-        "tests/test_native_hook_edge.py"
+        "tests/test_native_hook_edge.py",
+        "tests/test_native_pretool_generic.py"
       ],
       "current": "installed evidence and ownership enforcement",
       "target": "same"
@@ -305,7 +306,7 @@
         "rust/crates/guard-runtime/**",
         "rust/crates/guard-scanner/**"
       ],
-      "current": "strict raw hook-envelope v2 parsing, harness and event normalization, payload-kind validation, command PreToolUse and supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
+      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
       "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"
     },
     {
@@ -338,10 +339,11 @@
     "ci/native_runtime/**",
     "docs/guard/contracts/hook-data-plane-ownership.v2.json",
       "scripts/ci/hook_data_plane_ownership_contract.py",
-      "scripts/bench_guard_native_release_gate.py",
-      "scripts/ci/rust_pretool_no_python_gate.py",
-      "scripts/ci/rust_authority_ownership_gate.py",
-    "tests/test_native_hook_edge.py"
+    "scripts/bench_guard_native_release_gate.py",
+    "scripts/ci/rust_pretool_no_python_gate.py",
+    "scripts/ci/rust_authority_ownership_gate.py",
+    "tests/test_native_hook_edge.py",
+    "tests/test_native_pretool_generic.py"
   ],
   "installed_artifacts": [
     {
@@ -369,8 +371,17 @@
   "migration_prs": {
     "A": "NHD-001-NHD-020",
     "B": "NHD-021-NHD-040",
-    "C": "NHD-041-NHD-060",
+    "C": "NHD-041-NHD-050",
+    "C_follow_up": "NHD-051-NHD-060",
     "D": "NHD-061-NHD-080",
     "E": "NHD-081-NHD-100"
+  },
+  "route_receipts": {
+    "schema": "hol-guard-native-hook-route-receipt.v1",
+    "slice": "NHD-041-NHD-050",
+    "supported_routes": ["native_resident", "native_oneshot", "native_fail_safe"],
+    "pre_tool_authority": "native_resident_or_fail_safe",
+    "python_semantic_for_supported_pre_tool": false,
+    "payload_fields_excluded": ["command", "prompt", "path", "url", "raw_payload", "secret"]
   }
 }

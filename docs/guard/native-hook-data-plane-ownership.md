@@ -24,17 +24,17 @@ harness launcher or managed hook
   -> Python bridge: bounded stdin, daemon authentication, HTTP transport
   -> Python daemon ingress: JSON decode, path/query projection, deadline
   -> Python HookWorker: mechanical raw-envelope launch
-     -> command PreToolUse
+     -> PreToolUse (complete raw envelope)
         -> Rust edge normalization and resident client/supervisor
-        -> Rust command extraction, parser, classifier, policy floor, decision
+        -> Rust bounded action extraction, command parser/floors, classifier, decision
         -> Python harness response rendering
      -> PostToolUse
         -> Python config load and policy-snapshot construction
         -> Rust edge normalization and resident client/supervisor
         -> Rust output traversal, source I/O, hashing, scanning, policy, decision
         -> Python harness response rendering
-     -> non-command/review/off/shadow/unsupported
-        -> Python CLI evaluator, approval, and compatibility paths
+     -> explicit off/shadow/test-oracle compatibility boundaries only
+        -> Python CLI evaluator and approval presentation
   -> Python asynchronous evidence writer or synchronous CLI persistence
 ```
 
@@ -63,8 +63,9 @@ events.
 
 Current material gaps include:
 
-- Copilot and Cursor event aliases do not enter the exact fast-worker event path.
-- Non-command PreToolUse and native `review` escape through Python CLI handling.
+- Copilot and Cursor event aliases are normalized by the Rust raw edge.
+- Non-command PreToolUse and native `review` remain native decisions; the
+  harness bridge renders an unsupported review as a conservative deny.
 - OpenCode, Grok, Hermes, OpenClaw, ZCode, Gemini, and Antigravity expose partial
   or detection-only production hook surfaces.
 - The native client now owns authentication, framing, runtime-digest-keyed
@@ -74,8 +75,9 @@ Current material gaps include:
   owner-and-SYSTEM-only DACL, verifies the exact package process, and mutually
   authenticates loopback frames. The legacy Python resident module is not
   reachable from the ordinary graph.
-- Python constructs policy snapshots per PostToolUse request.
-- Rust has no request-bound approval artifact or replay validation.
+- Python constructs policy snapshots per hook request.
+- Rust has no request-bound approval artifact or replay validation; full
+  approval-artifact validation is the next migration slice.
 
 ## No-environment production contract
 

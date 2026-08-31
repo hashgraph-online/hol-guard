@@ -414,6 +414,12 @@ def _runtime_hook_remaining_hint(payload: dict[str, object]) -> float:
     return _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
 
 
+def _native_mode_requires_rust() -> bool:
+    from ..native_runtime import native_mode
+
+    return native_mode() in {"auto", "force"}
+
+
 def _codex_live_replay_authority(
     request: object,
     previous: object,
@@ -5685,7 +5691,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         from ..runtime.hook_payload_reference import (
             HookPayloadReferenceError,
             hook_payload_reference_size,
-            hydrate_hook_payload_reference,
         )
 
         transport_deadline = self._daemon_server().request_deadline(
@@ -5698,6 +5703,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         hook_deadline = RuntimeHookDeadline(expires_at=min(hinted_deadline.expires_at, transport_deadline))
         hook_env = _runtime_hook_env_overlay_from_payload(payload)
         payload = {key: value for key, value in payload.items() if key != "hook_env"}
+        daemon_server = self._daemon_server()
+        native_required = _native_mode_requires_rust()
         try:
             home_dir = self._validated_hook_directory_string(
                 "home",
@@ -5717,19 +5724,31 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 roots=self._hook_safe_roots(),
             )
         except _HookPathValidationError as error:
-            self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
-            self._write_json({"error": error.code}, status=400)
-            return
+            if native_required:
+                # The Rust edge still receives the complete raw payload. Use
+                # daemon-owned metadata when an optional caller context is
+                # missing or invalid; never turn metadata rejection into a
+                # Python semantic/source-ref fallback in auto/force.
+                self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+                home_dir = str(daemon_server.home_dir)
+                guard_home = str(daemon_server.store.guard_home)
+                workspace = None
+            else:
+                self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+                self._write_json({"error": error.code}, status=400)
+                return
 
-        daemon_server = self._daemon_server()
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         capacity_harness = daemon_server.canonical_hook_capacity_harness(
             (runtime_harness or default_harness).strip().lower().replace("_", "-")
         )
         try:
-            payload_bytes = hook_payload_reference_size(payload)
-            if payload_bytes is None:
-                payload_bytes = self._runtime_hook_payload_size(payload)
+            referenced_payload_bytes = hook_payload_reference_size(payload)
+            payload_bytes = (
+                referenced_payload_bytes
+                if referenced_payload_bytes is not None
+                else self._runtime_hook_payload_size(payload)
+            )
         except HookPayloadReferenceError as error:
             daemon_server.hook_worker.metrics.record_failure(
                 stage="server",
@@ -5762,50 +5781,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
         with byte_reservation:
-            try:
-                payload = hydrate_hook_payload_reference(payload)
-            except HookPayloadReferenceError as error:
-                daemon_server.hook_worker.metrics.record_failure(
-                    stage="server",
-                    exception_type=type(error).__name__,
-                )
-                self._write_json(
-                    self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not authenticate the local hook payload.",
-                        reason_code="invalid_hook_payload_reference",
-                    )
-                )
-                return
-            hydrated_payload_bytes = self._runtime_hook_payload_size(payload)
-            normalized_payload = json.dumps(
-                payload,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8")
-            resize_reason = byte_reservation.resize(
-                hydrated_payload_bytes,
-                deadline=hook_deadline.expires_at,
-            )
-            if resize_reason is not None:
-                self._record_hook_capacity_rejection(daemon_server, capacity_harness)
-                self._write_json(
-                    self._runtime_hook_capacity_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason_code=resize_reason,
-                    )
-                )
-                return
+            # A referenced payload reserves its bounded maximum, but remains
+            # an opaque envelope until the native edge owns its file I/O.
+            # Do not hydrate or re-encode it here: duplicate keys in the
+            # referenced bytes must not be collapsed by Python before Rust.
+            normalized_payload = None
+            if referenced_payload_bytes is None:
+                normalized_payload = json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
             admission = daemon_server.runtime_hook_scheduler.acquire(
                 harness=capacity_harness,
                 client_key=self._runtime_hook_client_key(payload, workspace),
                 lane=self._runtime_hook_lane(payload),
-                payload_bytes=hydrated_payload_bytes,
+                payload_bytes=payload_bytes,
                 deadline=hook_deadline,
                 byte_reservation=byte_reservation,
                 normalized_payload=normalized_payload,
@@ -5821,10 +5813,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     )
                 )
                 return
-            normalized_object = cast(object, json.loads(normalized_payload))
-            if not _is_string_object_dict(normalized_object):
-                raise RuntimeError("normalized runtime hook payload must remain an object")
-            payload = normalized_object
         with daemon_server.hook_capacity_lock:
             daemon_server.active_hook_requests += 1
             daemon_server.hook_harness_active[capacity_harness] = (
@@ -6011,31 +5999,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload_hydrated: bool = False,
         deadline: float | None = None,
     ) -> None:
-        from ..runtime.hook_payload_reference import (
-            HookPayloadReferenceError,
-            hydrate_hook_payload_reference,
-        )
-
-        if not payload_hydrated:
-            try:
-                payload = hydrate_hook_payload_reference(payload)
-            except HookPayloadReferenceError as error:
-                self._daemon_server().hook_worker.metrics.record_failure(
-                    stage="server",
-                    exception_type=type(error).__name__,
-                )
-                self._write_json(
-                    self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not authenticate the local hook payload.",
-                        reason_code="invalid_hook_payload_reference",
-                    )
-                )
-                return
-
-        if self._hook_fast_path_enabled():
+        if self._hook_fast_path_enabled() or _native_mode_requires_rust():
             result = self._handle_runtime_hook_fast(
                 payload,
                 params,
@@ -6055,6 +6019,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         reason_code="daemon_hook_deadline_exhausted",
                     )
                 self._write_json(result)
+                return
+            if _native_mode_requires_rust():
+                self._write_json(
+                    self._runtime_hook_fail_safe_response(
+                        payload,
+                        params,
+                        default_harness=default_harness,
+                        reason="HOL Guard could not complete the native hook decision safely.",
+                        reason_code="native_hook_worker_unavailable",
+                    )
+                )
                 return
 
         self._handle_runtime_hook_legacy_cli(
@@ -6084,37 +6059,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         workspace: str | None,
         deadline: float | None,
     ) -> dict[str, object] | None:
-        """Try the resident hook worker. Return None to fall back to legacy.
-
-        The worker handles PostToolUse and supported command PreToolUse.
-        ``HookWorkerUnsupported`` means the event is not eligible for the
-        fast path — return ``None`` so the caller falls through to the
-        legacy CLI path, preserving existing policy/permission checks.
-
-        Any other exception is a real failure — deny/block rather than
-        fall back, because the request may have omitted full output and
-        supplied only ``guard_source_ref``.
-        """
+        """Try the resident hook worker; only explicit rollback may fall back."""
         from .hook_worker import HookWorkerUnsupported
 
-        if home_dir is None or guard_home is None:
-            return None
+        daemon_server = self._daemon_server()
+        effective_home_dir = Path(home_dir) if home_dir is not None else daemon_server.home_dir
+        effective_guard_home = Path(guard_home) if guard_home is not None else daemon_server.store.guard_home
 
         try:
-            worker = self._daemon_server().hook_worker
+            worker = daemon_server.hook_worker
             return worker.review_http_payload(
                 payload=payload,
                 params=params,
                 default_harness=default_harness,
-                home_dir=Path(home_dir),
-                guard_home=Path(guard_home),
+                home_dir=effective_home_dir,
+                guard_home=effective_guard_home,
                 workspace=Path(workspace) if workspace else None,
                 deadline=deadline,
             )
         except HookWorkerUnsupported:
-            # Not eligible for fast path — fall back to legacy CLI so
-            # non-command PreToolUse/PermissionRequest/PostToolUse-without-source-ref
-            # still get full policy/permission/approval checks.
+            if _native_mode_requires_rust():
+                return self._runtime_hook_fail_safe_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    reason="HOL Guard could not complete the native hook decision safely.",
+                    reason_code="native_hook_worker_unsupported",
+                )
+            # Explicit off/shadow compatibility keeps the existing CLI path.
             return None
         except Exception as error:
             # Fail safe: deny/block. Do not fall back to legacy CLI for

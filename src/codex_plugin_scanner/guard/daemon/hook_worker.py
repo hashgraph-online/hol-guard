@@ -12,9 +12,10 @@ Security:
 - Native PostToolUse is decided by Rust for ``auto``/``force``. Native failure
   fails closed instead of spilling into Python review. The Python engine is
   constructed only for ``off``/``shadow``.
-- Supported command PreToolUse is decided by Rust. Native failure fails closed
-  except when protection is off (watch/observe), which records via the CLI path.
-  Non-command PreToolUse still raises ``HookWorkerUnsupported`` for the CLI path.
+- Supported generic PreToolUse is decided by Rust. Native failure fails closed
+  in auto/force; explicit off/shadow keeps its compatibility path.
+  Native review and block results are rendered mechanically and never escape to
+  the Python semantic CLI path.
 """
 
 from __future__ import annotations
@@ -70,12 +71,32 @@ def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
     for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            raw = value.strip()
+            compact = raw.lower().replace("_", "").replace("-", "")
+            if compact in {
+                "pretool",
+                "pretooluse",
+                "beforeshellexecution",
+                "beforereadfile",
+                "beforewritefile",
+                "beforemcpexecution",
+            }:
+                return "PreToolUse"
+            if compact in {
+                "posttool",
+                "posttooluse",
+                "aftershellexecution",
+                "afterreadfile",
+                "afterwritefile",
+                "aftermcpexecution",
+            }:
+                return "PostToolUse"
+            return raw
     return "PreToolUse"
 
 
 class HookWorkerUnsupported(RuntimeError):  # noqa: N818
-    """Raised when the worker cannot handle a request (caller falls back to CLI)."""
+    """Raised only for explicit off/shadow compatibility requests."""
 
 
 @final
@@ -127,9 +148,11 @@ class HookWorker:
         """
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
-        if event_name not in {"PreToolUse", "PostToolUse"}:
-            raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
-        if native_mode() in {"auto", "force"}:
+        mode = native_mode()
+        if mode in {"auto", "force"}:
+            # Send even unknown or malformed event labels to Rust. The edge
+            # returns no semantic result for unsupported events, which this
+            # method turns into a deterministic deny/fail-safe response.
             return self._review_native_edge(
                 payload=payload,
                 harness=harness,
@@ -140,6 +163,8 @@ class HookWorker:
                 workspace=workspace,
                 deadline=deadline,
             )
+        if event_name not in {"PreToolUse", "PostToolUse"}:
+            raise HookWorkerUnsupported(f"fast path supports PreToolUse and PostToolUse, got event={event_name}")
         if event_name == "PreToolUse":
             command = _pre_tool_command(payload)
             if command is None:
@@ -217,17 +242,16 @@ class HookWorker:
             deadline=deadline,
         )
         if edge is None:
-            if event_name == "PreToolUse" and recording_only:
-                raise HookWorkerUnsupported("observe PreToolUse uses CLI recording")
             if event_name == "PostToolUse":
                 self._record_post_tool_activity(
                     harness=harness,
                     payload=payload,
                     succeeded=hook_post_succeeded(event_name, payload),
                 )
-            reason_code = (
-                "native_post_tool_unavailable" if event_name == "PostToolUse" else "native_pre_tool_unavailable"
-            )
+            reason_code = {
+                "PostToolUse": "native_post_tool_unavailable",
+                "PreToolUse": "native_pre_tool_unavailable",
+            }.get(event_name, "native_hook_event_unavailable")
             return post_tool_fail_safe_response(
                 harness,
                 reason="HOL Guard could not complete the native hook decision safely.",
@@ -239,10 +263,6 @@ class HookWorker:
         if not isinstance(native_result, Mapping):
             return post_tool_fail_safe_response(harness, reason_code="native_hook_edge_invalid_response")
         if native_event == "PreToolUse":
-            action = str(native_result.get("minimum_action") or "")
-            if action == "review" or (recording_only and action != "allow"):
-                record_python_semantic_hook_route()
-                raise HookWorkerUnsupported("native PreToolUse review uses CLI approval coordination")
             return harness_json_from_native_pre_tool(native_harness, native_result)
         self._record_post_tool_activity(
             harness=native_harness,

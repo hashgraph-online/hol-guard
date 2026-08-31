@@ -89,7 +89,30 @@ def _run_guard_hook_command(
         getattr(args, "event_file", None),
         input_text=input_text,
         harness=args.harness,
+        normalize=False,
     )
+    # Auto/force sends the bounded, authenticated raw payload to Rust before
+    # any harness adapter or generic semantic normalization can project it.
+    # Explicit off/shadow returns here and continues through the compatibility
+    # normalizers below.
+    raw_routed = try_native_or_source_ref_hook(
+        args,
+        config=config,
+        context=context,
+        payload=payload,
+        runtime_workspace=workspace,
+        store=store,
+        allow_compatibility=False,
+    )
+    if raw_routed is not None:
+        return raw_routed
+    # Explicit off/shadow compatibility owns reference hydration only after
+    # native routing has declined authority. Auto/force therefore sends the
+    # bounded reference envelope to Rust without Python file I/O.
+    from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
+
+    payload = hydrate_hook_payload_reference(payload)
+    payload = _normalize_hook_payload(payload, harness=args.harness)
     if _canonical_harness_name(args.harness) == "cline":
         from ..adapters.cline_hook_payload import prepare_cline_hook_payload
 

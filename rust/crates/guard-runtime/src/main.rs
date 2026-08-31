@@ -156,6 +156,7 @@ fn capabilities() -> RuntimeCapabilitiesV1 {
         "pre-tool-command-model-shadow-v1".into(),
         "resident-command-model-shadow-v1".into(),
         "pre-tool-command-authority-v1".into(),
+        "pre-tool-generic-authority-v1".into(),
         "policy-snapshot-v1".into(),
         "hook-envelope-v2".into(),
         "native-resident-client-v1".into(),

@@ -18,6 +18,11 @@ _COMPONENTS = (
     ("guard-scanner", Path("rust/crates/guard-scanner/src/lib.rs")),
     ("guard-secure-fs", Path("rust/crates/guard-secure-fs/src/lib.rs")),
     ("guard-hook-core", Path("rust/crates/guard-hook-core/src/lib.rs")),
+    ("guard-contracts", Path("rust/crates/guard-contracts/src/lib.rs")),
+    ("guard-command-pretool", Path("rust/crates/guard-command/src/pretool.rs")),
+    ("guard-command-pretool-generic", Path("rust/crates/guard-command/src/pretool/generic.rs")),
+    ("guard-command-pretool-result", Path("rust/crates/guard-command/src/pretool/generic_result.rs")),
+    ("guard-command-pretool-extract", Path("rust/crates/guard-command/src/pretool/generic_extract.rs")),
 )
 
 

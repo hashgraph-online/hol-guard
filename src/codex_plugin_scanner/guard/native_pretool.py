@@ -22,11 +22,141 @@ from .native_runtime_resilience import (
 )
 
 _MAX_REQUEST_BYTES = 64 * 1024
+_MAX_RESULT_TEXT = 2_048
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
+_PRETOOL_GENERIC_AUTHORITY_FEATURE = "pre-tool-generic-authority-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
+_PRETOOL_RESULT_KEYS = {
+    "schema",
+    "version",
+    "authority",
+    "action",
+    "decision",
+    "policy_action",
+    "minimum_action",
+    "reason_code",
+    "reason",
+    "explicitly_benign",
+}
+_PRETOOL_ACTION_KEYS = {
+    "schema",
+    "version",
+    "harness",
+    "event",
+    "action_type",
+    "operation",
+    "bounded",
+    "sensitive_target",
+}
+_PRETOOL_ACTION_TYPES = {
+    "command",
+    "file_read",
+    "file_write",
+    "package",
+    "mcp_tool",
+    "network",
+    "process_service",
+    "browser",
+    "config",
+    "prompt",
+    "harness",
+    "unknown",
+}
+_PRETOOL_OPERATIONS = {
+    "execute",
+    "read",
+    "write",
+    "install",
+    "call",
+    "request",
+    "start",
+    "stop",
+    "navigate",
+    "set",
+    "submit",
+    "unknown",
+}
+_PRETOOL_ACTION_OPERATIONS = {
+    "command": {"execute"},
+    "file_read": {"read"},
+    "file_write": {"write"},
+    "package": {"install"},
+    "mcp_tool": {"call"},
+    "network": {"request"},
+    "process_service": {"start", "stop"},
+    "browser": {"navigate"},
+    "config": {"set"},
+    "prompt": {"submit"},
+    "harness": {"start", "stop"},
+    "unknown": {"unknown"},
+}
+
+
+def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
+    decision = payload.get("decision")
+    policy_action = payload.get("policy_action")
+    minimum_action = payload.get("minimum_action")
+    reason_code = payload.get("reason_code")
+    reason = payload.get("reason")
+    if (
+        payload.get("schema") != "guard-pre-tool-result.v1"
+        or payload.get("version") != 1
+        or payload.get("authority") != "rust"
+        or not isinstance(decision, str)
+        or decision not in {"allow", "deny"}
+        or not isinstance(policy_action, str)
+        or policy_action not in {"allow", "review", "block"}
+        or minimum_action != policy_action
+        or not isinstance(reason_code, str)
+        or not reason_code
+        or len(reason_code) > _MAX_RESULT_TEXT
+        or not isinstance(reason, str)
+        or not reason
+        or len(reason) > _MAX_RESULT_TEXT
+        or not isinstance(payload.get("explicitly_benign"), bool)
+    ):
+        return False
+    return payload["explicitly_benign"] == (
+        decision == "allow" and minimum_action == "allow"
+    )
+
+
+def _valid_generic_action(action: dict[str, Any]) -> bool:
+    action_type = action.get("action_type")
+    operation = action.get("operation")
+    if (
+        action.get("schema") != "guard-pre-tool-action.v1"
+        or action.get("version") != 1
+        or action.get("event") != "PreToolUse"
+        or not isinstance(action_type, str)
+        or action_type not in _PRETOOL_ACTION_TYPES
+        or not isinstance(operation, str)
+        or operation not in _PRETOOL_OPERATIONS
+        or not isinstance(action.get("harness"), str)
+        or not action["harness"]
+        or len(action["harness"]) > 64
+        or len(action["event"]) > 64
+        or not isinstance(action.get("bounded"), bool)
+        or not isinstance(action.get("sensitive_target"), bool)
+    ):
+        return False
+    return operation in _PRETOOL_ACTION_OPERATIONS[action_type]
+
+
+def _decode_generic_pre_tool(payload: object) -> dict[str, Any] | None:
+    if not isinstance(payload, dict) or set(payload) != _PRETOOL_RESULT_KEYS:
+        return None
+    action = payload.get("action")
+    if not isinstance(action, dict) or set(action) != _PRETOOL_ACTION_KEYS:
+        return None
+    if not _valid_generic_result_fields(payload) or not _valid_generic_action(action):
+        return None
+    return payload if payload["decision"] == ("allow" if payload["minimum_action"] == "allow" else "deny") else None
 
 
 def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
+    if isinstance(payload, dict) and "action" in payload:
+        return _decode_generic_pre_tool(payload)
     if not isinstance(payload, dict):
         return None
     decision = payload.get("decision")
@@ -36,7 +166,9 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
     explicitly_benign = payload.get("explicitly_benign")
     model = payload.get("command_model")
     if (
-        decision not in {"allow", "deny"}
+        not isinstance(decision, str)
+        or decision not in {"allow", "deny"}
+        or not isinstance(action, str)
         or action not in {"allow", "review", "block"}
         or not isinstance(reason_code, str)
         or not reason_code
