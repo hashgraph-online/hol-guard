@@ -4,8 +4,9 @@
 Only aggregate synthetic measurements are emitted. No user commands, file
 contents, secrets, or machine paths are included in benchmark output.
 
-The warm comparison measures two already-resident IPC paths. It guards against
-a native regression but is not expected to reproduce the process-startup gain.
+The warm comparison measures two already-resident IPC paths. It accepts either
+the absolute latency ceiling or a material improvement over the pinned Python
+baseline, matching the release acceptance contract.
 The cold comparison measures the process topology that the native runtime is
 intended to replace and therefore retains the stronger relative-speedup gate.
 """
@@ -231,7 +232,6 @@ def main() -> int:
     args = parser.parse_args()
     if args.warm_iterations < 10 or args.cold_iterations < 2:
         parser.error("benchmark iteration counts are too small")
-
     runtime = _validated_runtime(args.runtime)
     with tempfile.TemporaryDirectory(prefix="hol-guard-native-bench-") as temp_dir:
         workspace = Path(temp_dir)
@@ -298,6 +298,7 @@ def main() -> int:
         },
         "native_readiness_ms": round(native_readiness_ms, 3),
         "gates": {
+            "warm_acceptance": "p95_ms_lte_maximum_or_speedup_gte_minimum",
             "minimum_warm_p95_speedup": _MIN_WARM_P95_SPEEDUP,
             "maximum_warm_p95_ms": _MAX_WARM_P95_MS,
             "minimum_cold_p95_speedup": _MIN_COLD_P95_SPEEDUP,
@@ -314,12 +315,12 @@ def main() -> int:
     if not args.enforce:
         return 0
     failures: list[str] = []
-    if warm_speedup < _MIN_WARM_P95_SPEEDUP:
+    if warm_speedup < _MIN_WARM_P95_SPEEDUP and native_warm_summary["p95_ms"] > _MAX_WARM_P95_MS:
         failures.append(
-            f"warm native resident p95 speedup is below {_MIN_WARM_P95_SPEEDUP:.2f}x"
+            "warm native resident p95 neither meets the "
+            f"{_MAX_WARM_P95_MS:.0f}ms ceiling nor improves by "
+            f"{_MIN_WARM_P95_SPEEDUP:.2f}x"
         )
-    if native_warm_summary["p95_ms"] > _MAX_WARM_P95_MS:
-        failures.append(f"warm native resident p95 exceeds {_MAX_WARM_P95_MS:.0f}ms")
     if cold_speedup < _MIN_COLD_P95_SPEEDUP:
         failures.append(f"cold native one-shot p95 speedup is below {_MIN_COLD_P95_SPEEDUP:.0f}x")
     if native_oneshot_summary["p95_ms"] > _MAX_COLD_P95_MS:

@@ -10,6 +10,7 @@ import functools
 import hashlib
 import importlib.metadata
 import json
+import math
 import os
 import stat
 import time
@@ -19,14 +20,11 @@ from typing import Literal, cast
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
 from .native_policy_snapshot import NativePolicySnapshotError, native_policy_snapshot
+from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
-from .native_runtime_resident import resident_native_request
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
-    native_oneshot_lease,
     native_record_integrity_failure,
-    native_record_oneshot_failure,
-    native_record_oneshot_success,
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
@@ -533,13 +531,18 @@ def _native_error(payload: object) -> str | None:
     return error
 
 
+def _capture_native_deadline(request: HookReviewRequest) -> tuple[float, int]:
+    """Capture one absolute native deadline and its bounded envelope budget."""
+    now = time.monotonic()
+    requested = request.deadline_monotonic
+    deadline = requested if requested is not None and math.isfinite(requested) else now + 0.75
+    budget_ms = max(1, min(9_000, int((deadline - now) * 1_000)))
+    return deadline, budget_ms
+
+
 def _deadline_budget_ms(request: HookReviewRequest) -> int:
-    if request.deadline_monotonic is None:
-        return 750
-    return max(
-        1,
-        min(9_000, int((request.deadline_monotonic - time.monotonic()) * 1_000)),
-    )
+    """Return a bounded budget for compatibility with existing callers."""
+    return _capture_native_deadline(request)[1]
 
 
 def _identity_key(status: NativeRuntimeStatus) -> str:
@@ -556,10 +559,10 @@ def review_post_tool_native(
     *,
     observe_mode: bool,
 ) -> HookReviewResponse | None:
-    """Review PostToolUse with resident Rust, then one bounded Rust recovery.
+    """Review PostToolUse through the native Rust client and resident.
 
-    Native failure returns ``None`` so the caller can fail closed without
-    Python re-evaluation. The one-shot path stays globally bounded.
+    Native failure returns ``None`` so the caller fails closed without Python
+    re-evaluation or a semantic one-shot fallback.
     """
     status = native_runtime_status()
     identity_key = _identity_key(status)
@@ -572,6 +575,7 @@ def review_post_tool_native(
             )
         return record_native_hook_result("native_fail_safe", None)
 
+    deadline_monotonic, deadline_budget_ms = _capture_native_deadline(request)
     try:
         policy_snapshot = (
             None
@@ -580,7 +584,7 @@ def review_post_tool_native(
                 guard_home=request.guard_home,
                 rule_digest=status.capabilities.rule_digest,
                 observe_mode=observe_mode,
-                deadline_monotonic=request.deadline_monotonic,
+                deadline_monotonic=deadline_monotonic,
             )
         )
     except (NativePolicySnapshotError, OSError):
@@ -597,26 +601,20 @@ def review_post_tool_native(
         "guard_home": str(request.guard_home),
         "source_ref_external_allowed": request.source_ref_external_allowed,
         "observe_mode": observe_mode,
-        "deadline_budget_ms": _deadline_budget_ms(request),
+        "deadline_budget_ms": deadline_budget_ms,
         "policy_snapshot": policy_snapshot,
     }
     input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
     if len(encoded := input_text.encode("utf-8")) > _MAX_REQUEST_BYTES:
         return record_native_hook_result("native_fail_safe", None)
-    timeout_seconds = max(
-        0.05,
-        min(9.0, _deadline_budget_ms(request) / 1_000.0),
-    )
-
     resident_output = None
     if status.capabilities is not None and _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
-        resident_output = resident_native_request(
+        resident_output = native_resident_client_request(
             executable=status.identity.path,
-            identity_sha256=status.identity.sha256,
             guard_home=request.guard_home,
             environment=_isolated_environment(),
             payload=encoded,
-            timeout_seconds=timeout_seconds,
+            deadline_monotonic=deadline_monotonic,
         )
     if resident_output is not None:
         try:
@@ -644,39 +642,7 @@ def review_post_tool_native(
         request.guard_home,
         reason=failure_reason,
     )
-    with native_oneshot_lease(
-        status.identity.sha256,
-        request.guard_home,
-    ) as acquired:
-        if not acquired:
-            return record_native_hook_result("native_fail_safe", None)
-        output = _run_native_process(
-            status.identity.path,
-            ("hook", "--stdin"),
-            input_text=input_text,
-            timeout_seconds=timeout_seconds,
-        )
-        if output is None:
-            native_record_oneshot_failure(
-                status.identity.sha256,
-                request.guard_home,
-                reason="native_oneshot_failed",
-            )
-            return record_native_hook_result("native_fail_safe", None)
-        try:
-            oneshot_payload = json.loads(output)
-        except json.JSONDecodeError:
-            oneshot_payload = None
-        response = _response_from_payload(oneshot_payload)
-        if response is None:
-            native_record_oneshot_failure(
-                status.identity.sha256,
-                request.guard_home,
-                reason=_native_error(oneshot_payload) or "native_oneshot_invalid_response",
-            )
-            return record_native_hook_result("native_fail_safe", None)
-        native_record_oneshot_success(status.identity.sha256, request.guard_home)
-        return record_native_hook_result("native_oneshot", response)
+    return record_native_hook_result("native_fail_safe", None)
 
 
 def parity_signature(response: HookReviewResponse) -> tuple[object, ...]:

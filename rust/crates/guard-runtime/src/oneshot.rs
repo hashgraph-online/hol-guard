@@ -57,6 +57,16 @@ fn validate_durable_policy_generation(
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) static POLICY_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+pub(crate) fn reset_policy_generation_for_test() {
+    *ACCEPTED_POLICY_SNAPSHOT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+}
+
 pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), String> {
     let Some(snapshot_value) = value.get("policy_snapshot") else {
         return Ok(());
@@ -172,11 +182,15 @@ pub(crate) fn evaluate_command_model_bytes(bytes: &[u8]) -> Result<Vec<u8>, Stri
 
 pub(crate) fn evaluate_pre_tool_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let value = crate::strict_json_value(bytes)?;
-    let command = extract_pre_tool_command(&value)?;
-    let dialect = mapping_string(&value, "dialect").unwrap_or("posix");
-    let transport = mapping_string(&value, "transport").unwrap_or("shell_string");
+    crate::encode_response(&evaluate_pre_tool_value(&value)?)
+}
+
+pub(crate) fn evaluate_pre_tool_value(value: &Value) -> Result<Value, String> {
+    let command = extract_pre_tool_command(value)?;
+    let dialect = mapping_string(value, "dialect").unwrap_or("posix");
+    let transport = mapping_string(value, "transport").unwrap_or("shell_string");
     let extraction_provenance =
-        mapping_string(&value, "extraction_provenance").unwrap_or("guard-shell");
+        mapping_string(value, "extraction_provenance").unwrap_or("guard-shell");
     let request = CommandModelRequestV1 {
         command,
         dialect: dialect.to_owned(),
@@ -184,8 +198,8 @@ pub(crate) fn evaluate_pre_tool_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
         extraction_provenance: extraction_provenance.to_owned(),
     };
     let decision = evaluate_pre_tool(&request)?;
-    let request_id = mapping_string(&value, "request_id");
-    crate::encode_response(&pre_tool_response(request_id, decision))
+    let request_id = mapping_string(value, "request_id");
+    Ok(pre_tool_response(request_id, decision))
 }
 
 pub(crate) fn evaluate_pre_tool_request(
@@ -199,13 +213,11 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
-    use std::sync::{Arc, Barrier, Mutex};
+    use std::sync::{Arc, Barrier};
     use std::thread;
 
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
-
     fn lock_generation() -> std::sync::MutexGuard<'static, ()> {
-        TEST_LOCK
+        POLICY_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }

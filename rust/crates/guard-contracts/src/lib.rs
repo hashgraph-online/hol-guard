@@ -4,11 +4,61 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
+pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";
+pub const GUARD_HOOK_EDGE_RESULT_V2_SCHEMA: &str = "guard-hook-edge-result.v2";
 pub const MAX_NATIVE_REQUEST_BYTES: usize = 6 * 1024 * 1024;
 pub const MAX_NATIVE_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookSourceMetadataV2 {
+    #[serde(default)]
+    pub cwd: Option<String>,
+    pub home_dir: String,
+    pub guard_home: String,
+    #[serde(default)]
+    pub source_ref_external_allowed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookEnvelopeV2 {
+    pub schema: String,
+    #[serde(default)]
+    pub request_id: Option<String>,
+    pub harness: String,
+    pub event: String,
+    pub raw_payload: Value,
+    #[serde(default)]
+    pub deadline_budget_ms: Option<u64>,
+    pub policy_generation: u64,
+    pub policy_snapshot: Value,
+    pub source: GuardHookSourceMetadataV2,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GuardHookPayloadKindV2 {
+    Inline,
+    SourceFileRef,
+    EncryptedPayloadRef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookEdgeResultV2 {
+    pub schema: String,
+    pub authority: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub harness: String,
+    pub event_name: String,
+    pub payload_kind: GuardHookPayloadKindV2,
+    pub result: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -160,5 +210,24 @@ mod tests {
         assert!(encoded.get("reason").is_none());
         assert_eq!(encoded["decision"], "allow");
         assert_eq!(encoded["reason_code"], "output_scan_allow");
+    }
+
+    #[test]
+    fn hook_envelope_v2_rejects_unknown_fields() {
+        let value = serde_json::json!({
+            "schema": GUARD_HOOK_ENVELOPE_V2_SCHEMA,
+            "harness": "claude-code",
+            "event": "PostToolUse",
+            "raw_payload": {},
+            "deadline_budget_ms": 100,
+            "policy_generation": 1,
+            "policy_snapshot": {},
+            "source": {
+                "home_dir": "/home/test",
+                "guard_home": "/home/test/.hol-guard"
+            },
+            "unexpected": true
+        });
+        assert!(serde_json::from_value::<GuardHookEnvelopeV2>(value).is_err());
     }
 }
