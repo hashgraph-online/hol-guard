@@ -625,7 +625,7 @@ def test_load_guard_daemon_url_rejects_live_port_when_state_pid_is_not_guard_dae
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-        def read(self, _limit: int = -1) -> bytes:
+        def read(self) -> bytes:
             return json.dumps(
                 {
                     "ok": True,
@@ -690,16 +690,7 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
             requested_headers.append({})
         return FakeResponse()
 
-    class FakeOpener:
-        def open(self, request, *_args, **_kwargs):
-            return fake_urlopen(request)
-
     monkeypatch.setattr(daemon_manager_module.urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(
-        daemon_manager_module.urllib.request,
-        "build_opener",
-        lambda *_handlers: FakeOpener(),
-    )
 
     assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:4833"
     assert requested_urls == [

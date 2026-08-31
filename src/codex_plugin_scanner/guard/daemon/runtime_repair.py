@@ -7,16 +7,16 @@ from pathlib import Path
 from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
+from .live_identity import verified_live_guard_daemon_identity
 from .manager import (
-    _guard_daemon_start_lock,
     clear_guard_daemon_state,
     current_guard_daemon_runtime_fingerprint,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
-    verified_live_guard_daemon_identity,
 )
+from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 
 
 def _verified_live_runtime(
@@ -72,7 +72,6 @@ def repair_guard_daemon_runtime(
         daemon_url = ensure_guard_daemon_after_update(
             guard_home,
             home_dir=trusted_home,
-            _start_lock_held=True,
         )
     return {
         **result,

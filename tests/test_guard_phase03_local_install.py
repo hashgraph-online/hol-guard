@@ -179,7 +179,7 @@ def test_daemon_refresh_retains_verified_newer_desktop_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard.daemon import live_identity
 
     context = _context(tmp_path)
     context.guard_home.mkdir(parents=True)
@@ -193,8 +193,8 @@ def test_daemon_refresh_retains_verified_newer_desktop_runtime(
         "package_version": "3.0.0a253",
         "runtime_fingerprint": "desktop-core-fingerprint",
     }
-    monkeypatch.setattr(manager, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(manager, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
     monkeypatch.setattr(update_commands.package_version, "__version__", "2.2.123")
 
     class Response:
@@ -218,7 +218,7 @@ def test_daemon_refresh_retains_verified_newer_desktop_runtime(
         assert policy.proxy_url is None
         return Response()
 
-    monkeypatch.setattr(manager, "_daemon_healthz_details_payload", lambda _url, _token: {**state, "ok": True})
+    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", lambda _url, _token: {**state, "ok": True})
 
     payload, note = update_commands.refresh_guard_daemon_after_update(
         context,
@@ -238,7 +238,7 @@ def test_daemon_refresh_restarts_runtime_older_than_installed_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard.daemon import live_identity
 
     context = _context(tmp_path)
     context.guard_home.mkdir(parents=True)
@@ -252,8 +252,8 @@ def test_daemon_refresh_restarts_runtime_older_than_installed_target(
         "package_version": "2.2.123",
         "runtime_fingerprint": "old-runtime-fingerprint",
     }
-    monkeypatch.setattr(manager, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(manager, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
     monkeypatch.setattr(update_commands.package_version, "__version__", "2.2.122")
 
     class Response:
@@ -269,7 +269,7 @@ def test_daemon_refresh_restarts_runtime_older_than_installed_target(
             assert limit == 65_537
             return json.dumps({**state, "ok": True}).encode("utf-8")
 
-    monkeypatch.setattr(manager, "_daemon_healthz_details_payload", lambda _url, _token: {**state, "ok": True})
+    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", lambda _url, _token: {**state, "ok": True})
     restart = SimpleNamespace(
         returncode=0,
         stdout='{"status":"restarted","runtime_verified":true}',
@@ -298,7 +298,7 @@ def test_daemon_refresh_does_not_trust_newer_state_when_live_identity_differs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard.daemon import live_identity
 
     context = _context(tmp_path)
     context.guard_home.mkdir(parents=True)
@@ -312,8 +312,8 @@ def test_daemon_refresh_does_not_trust_newer_state_when_live_identity_differs(
         "package_version": "3.0.0a253",
         "runtime_fingerprint": "signed-state-fingerprint",
     }
-    monkeypatch.setattr(manager, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(manager, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
     monkeypatch.setattr(update_commands.package_version, "__version__", "2.2.123")
 
     class Response:
@@ -330,8 +330,8 @@ def test_daemon_refresh_does_not_trust_newer_state_when_live_identity_differs(
             return json.dumps({**state, "ok": True, "runtime_fingerprint": "different-live-fingerprint"}).encode()
 
     monkeypatch.setattr(
-        manager,
-        "_daemon_healthz_details_payload",
+        live_identity,
+        "_proxy_disabled_health_details",
         lambda _url, _token: {**state, "ok": True, "runtime_fingerprint": "different-live-fingerprint"},
     )
     restart = SimpleNamespace(
@@ -361,7 +361,7 @@ def test_daemon_refresh_falls_back_when_authenticated_host_is_malformed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard.daemon import live_identity
 
     context = _context(tmp_path)
     context.guard_home.mkdir(parents=True)
@@ -375,10 +375,10 @@ def test_daemon_refresh_falls_back_when_authenticated_host_is_malformed(
         "package_version": "3.0.0a253",
         "runtime_fingerprint": "desktop-core-fingerprint",
     }
-    monkeypatch.setattr(manager, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(manager, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
     health_probe = MagicMock()
-    monkeypatch.setattr(manager, "_daemon_healthz_details_payload", health_probe)
+    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", health_probe)
     restart = SimpleNamespace(
         returncode=0,
         stdout='{"status":"restarted","runtime_verified":true}',
@@ -415,7 +415,7 @@ def test_daemon_refresh_falls_back_for_incomplete_or_incompatible_identity(
     field: str,
     value: object,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard.daemon import live_identity
 
     context = _context(tmp_path)
     context.guard_home.mkdir(parents=True)
@@ -433,10 +433,10 @@ def test_daemon_refresh_falls_back_for_incomplete_or_incompatible_identity(
         state.pop(field)
     else:
         state[field] = value
-    monkeypatch.setattr(manager, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(manager, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
+    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "daemon-token")
     health_probe = MagicMock()
-    monkeypatch.setattr(manager, "_daemon_healthz_details_payload", health_probe)
+    monkeypatch.setattr(live_identity, "_proxy_disabled_health_details", health_probe)
     restart = SimpleNamespace(
         returncode=0,
         stdout='{"status":"restarted","runtime_verified":true}',
