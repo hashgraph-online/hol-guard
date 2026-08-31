@@ -8,7 +8,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from copy import deepcopy
 from importlib.resources import files as resource_files
-from typing import Final, Literal, TypeAlias, cast
+from typing import Final, Literal, NoReturn, TypeAlias, cast
 
 from jsonschema import FormatChecker, ValidationError
 from jsonschema.validators import Draft202012Validator, extend
@@ -82,7 +82,7 @@ _MESSAGES: Final[dict[str, str]] = {
 }
 
 
-def _fail(code: str) -> None:
+def _fail(code: str) -> NoReturn:
     raise FleetContractError(code, _MESSAGES.get(code, "The fleet configuration is invalid."))
 
 
