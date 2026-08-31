@@ -49,10 +49,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
         let _ = fs::remove_file(&temporary);
         return write_result;
     }
-    fs::rename(&temporary, path).map_err(|_| {
-        let _ = fs::remove_file(&temporary);
-        "native_resident_restart_budget_write_failed".to_owned()
-    })?;
+    replace_temporary(&temporary, path)?;
     #[cfg(unix)]
     File::open(
         path.parent()
@@ -61,6 +58,59 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     .and_then(|directory| directory.sync_all())
     .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
     Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_temporary(temporary: &Path, path: &Path) -> Result<(), String> {
+    fs::rename(temporary, path).map_err(|_| {
+        let _ = fs::remove_file(temporary);
+        "native_resident_restart_budget_write_failed".to_owned()
+    })
+}
+
+#[cfg(windows)]
+fn replace_temporary(temporary: &Path, path: &Path) -> Result<(), String> {
+    let backup = backup_path(path);
+    if path
+        .try_exists()
+        .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?
+    {
+        fs::rename(path, &backup)
+            .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
+    }
+    if fs::rename(temporary, path).is_err() {
+        let _ = fs::rename(&backup, path);
+        let _ = fs::remove_file(temporary);
+        return Err("native_resident_restart_budget_write_failed".to_owned());
+    }
+    if backup.try_exists().unwrap_or(false) {
+        fs::remove_file(backup)
+            .map_err(|_| "native_resident_restart_budget_write_failed".to_owned())?;
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn backup_path(path: &Path) -> PathBuf {
+    path.with_extension("json.previous")
+}
+
+#[cfg(windows)]
+fn recover_interrupted_replace(path: &Path) -> Result<(), String> {
+    let backup = backup_path(path);
+    let path_exists = path
+        .try_exists()
+        .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
+    let backup_exists = backup
+        .try_exists()
+        .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned())?;
+    match (path_exists, backup_exists) {
+        (false, true) => fs::rename(backup, path)
+            .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned()),
+        (true, true) => fs::remove_file(backup)
+            .map_err(|_| "native_resident_restart_budget_recovery_failed".to_owned()),
+        _ => Ok(()),
+    }
 }
 
 fn temporary_path(path: &Path) -> Result<PathBuf, String> {
@@ -73,6 +123,8 @@ fn temporary_path(path: &Path) -> Result<PathBuf, String> {
 
 pub(super) fn consume(scope: &Path) -> Result<(), String> {
     let path = scope.join("restart-budget.json");
+    #[cfg(windows)]
+    recover_interrupted_replace(&path)?;
     let now = now_ms()?;
     let mut budget = if path.exists() {
         let metadata = fs::symlink_metadata(&path)
@@ -149,6 +201,26 @@ mod tests {
             0
         );
 
+        fs::remove_dir_all(scope).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn interrupted_windows_replace_restores_previous_budget() {
+        let scope = std::env::temp_dir().join(format!(
+            "hol-guard-restart-budget-recovery-{}-{}",
+            std::process::id(),
+            now_ms().unwrap()
+        ));
+        fs::create_dir(&scope).unwrap();
+        consume(&scope).unwrap();
+        let path = scope.join("restart-budget.json");
+        fs::rename(&path, backup_path(&path)).unwrap();
+
+        consume(&scope).unwrap();
+
+        let budget: RestartBudget = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(budget.attempts, 2);
         fs::remove_dir_all(scope).unwrap();
     }
 }
