@@ -49,6 +49,18 @@ def _default_host_profiles(platform_name: str | None = None) -> tuple[PlatformCa
     return tuple(profile for profile in default_platform_profiles() if profile.platform is family)
 
 
+def _health_is_verified_for_profile(
+    profile: PlatformCapabilityProfile,
+    health: NetworkSupervisorHealth | None,
+) -> bool:
+    return (
+        health is not None
+        and health.backend_digest is not None
+        and health.effective_grade is not EnforcementGrade.UNAVAILABLE
+        and enforcement_grade_rank(health.effective_grade) <= enforcement_grade_rank(profile.maximum_grade)
+    )
+
+
 def build_network_status(
     profiles: tuple[PlatformCapabilityProfile, ...] | None = None,
     *,
@@ -72,12 +84,7 @@ def build_network_status(
         )
         selected_health = supervisor_health if selected else None
         installed = selected_health is not None and selected_health.backend_digest is not None
-        verified = (
-            installed
-            and selected_health is not None
-            and selected_health.effective_grade is not EnforcementGrade.UNAVAILABLE
-            and enforcement_grade_rank(selected_health.effective_grade) <= enforcement_grade_rank(profile.maximum_grade)
-        )
+        verified = _health_is_verified_for_profile(profile, selected_health)
         active = (
             selected_health is not None
             and selected_health.permits_enforcement
