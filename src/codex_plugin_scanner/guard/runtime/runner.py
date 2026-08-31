@@ -4785,6 +4785,45 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         credential_reloader=_reload_current_oauth_credentials,
     )
     effective_credentials = effective_credentials_ref["value"]
+    effective_dpop_key_material = _apply_refreshed_oauth_credentials(
+        store=store,
+        oauth_credentials=oauth_credentials,
+        effective_credentials=effective_credentials,
+        refreshed=refreshed,
+        refresh_token=refresh_token,
+        dpop_key_material=dpop_key_material,
+        persist_recovered_secret=persist_recovered_secret,
+        force_refresh=force_refresh,
+    )
+    sync_url = _validate_guard_sync_url(
+        _oauth_sync_url_from_issuer(oauth_client.issuer),
+        issuer=oauth_client.issuer,
+    )
+    return {
+        "sync_url": sync_url,
+        "access_token": str(refreshed["access_token"]),
+        "dpop_key_material": effective_dpop_key_material,
+    }
+
+
+def _apply_refreshed_oauth_credentials(
+    *,
+    store: GuardStore,
+    oauth_credentials: dict[str, object],
+    effective_credentials: dict[str, object],
+    refreshed: dict[str, object],
+    refresh_token: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+    persist_recovered_secret: bool,
+    force_refresh: bool,
+) -> GuardDpopKeyMaterial:
+    """Project the refresh result onto the credential store and return context.
+
+    Removes the wrapper's internal `_effective_*` markers from `refreshed`,
+    persists the rotated credentials when state actually changed (using the
+    effective snapshot — the one the retry leg may have reloaded), and
+    returns the effective DPoP key material for the caller to sign with.
+    """
     refreshed.pop("_effective_refresh_token", None)
     effective_dpop_key_material_raw = refreshed.pop("_effective_dpop_key_material", None)
     effective_dpop_key_material = (
@@ -4830,15 +4869,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
             access_token_expires_at=_optional_string(refreshed.get("access_token_expires_at")),
             force_primary_secret_rewrite=force_refresh,
         )
-    sync_url = _validate_guard_sync_url(
-        _oauth_sync_url_from_issuer(oauth_client.issuer),
-        issuer=oauth_client.issuer,
-    )
-    return {
-        "sync_url": sync_url,
-        "access_token": str(refreshed["access_token"]),
-        "dpop_key_material": effective_dpop_key_material,
-    }
+    return effective_dpop_key_material
 
 
 # Test-only override: when set, _resolve_guard_sync_auth_context returns this dict
