@@ -157,16 +157,18 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
         )
 
 
-def test_exact_cloud_review_rejects_stale_requests_and_durable_binding_drift(tmp_path: Path) -> None:
+def test_exact_cloud_review_keeps_pending_requests_durable_and_rejects_binding_drift(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     stale = _request("exact-stale-request")
     store.add_approval_request(stale, "2020-01-01T00:00:00+00:00")
     enable_exact_cloud_review(store)
-    with pytest.raises(ExactCloudReviewError, match="remote_exact_request_expired"):
-        apply_exact_cloud_review(
-            store,
-            remote_approval=_remote_approval(store, stale.request_id, receipt_id="exact-stale-request"),
-        )
+    resolution = apply_exact_cloud_review(
+        store,
+        remote_approval=_remote_approval(store, stale.request_id, receipt_id="exact-stale-request"),
+    )
+    assert resolution.request_id == stale.request_id
+    resolved = store.get_approval_request(stale.request_id)
+    assert resolved is not None and resolved["status"] == "resolved"
 
     fresh = _request("exact-binding-drift")
     _add_request(store, fresh)

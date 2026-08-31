@@ -307,9 +307,40 @@ def test_successful_connect_issues_cloud_review_capability_only_after_explicit_c
     cloud_review = connected["cloud_review"]
     assert isinstance(cloud_review, dict)
     assert cloud_review["enabled"] is True
+    assert cloud_review["pending_requests_requeued"] == 0
     assert cloud_review["worker"] == {"status": "refreshed"}
     assert isinstance(cloud_review["capability"], dict)
     assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
+
+
+def test_cloud_review_enable_requeues_existing_pending_requests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = _connected_store(tmp_path)
+    request = _request("pending-before-consent")
+    _add_request(store, request)
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_refresh_cloud_review_worker",
+        lambda _guard_home: {"status": "refreshed"},
+    )
+
+    exit_code = cloud_review_dispatch._run_guard_cloud_review_command(
+        argparse.Namespace(
+            cloud_review_command="enable",
+            expires_in_days=30,
+            json=True,
+        ),
+        guard_home=store.guard_home,
+        store=store,
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["pending_requests_requeued"] == 1
+    assert payload["worker"] == {"status": "refreshed"}
 
 
 def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_approval(tmp_path: Path) -> None:

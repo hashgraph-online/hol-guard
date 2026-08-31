@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TextIO
 
@@ -27,6 +28,10 @@ def _refresh_cloud_review_worker(guard_home: Path) -> dict[str, object]:
         }
 
 
+def _requeue_pending_cloud_review_requests(store: GuardStore) -> int:
+    return store.requeue_pending_review_events(changed_at=datetime.now(timezone.utc).isoformat())
+
+
 def apply_connect_time_cloud_review_consent(
     *,
     args: argparse.Namespace,
@@ -45,6 +50,7 @@ def apply_connect_time_cloud_review_consent(
         capability = enable_exact_cloud_review(store, issuer="connect-consent")
     except ExactCloudReviewError as error:
         return {**payload, "cloud_review": {"enabled": False, "reason": error.code}}
+    pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
     worker = _refresh_cloud_review_worker(guard_home)
     ready = worker.get("status") == "refreshed"
     return {
@@ -54,6 +60,7 @@ def apply_connect_time_cloud_review_consent(
             "capability_enabled": True,
             "enabled": ready,
             "reason": None if ready else "worker_restart_required",
+            "pending_requests_requeued": pending_requests_requeued,
             "worker": worker,
         },
     }
@@ -74,6 +81,7 @@ def _run_guard_cloud_review_command(
     if store is None or guard_home is None:
         raise RuntimeError("Cloud Review requires initialized Guard storage.")
     command = getattr(args, "cloud_review_command", None)
+    pending_requests_requeued = 0
     if command == "status":
         _emit("cloud-review", exact_cloud_review_status(store), bool(getattr(args, "json", False)))
         return 0
@@ -83,6 +91,7 @@ def _run_guard_cloud_review_command(
                 store,
                 ttl_seconds=int(getattr(args, "expires_in_days", 30)) * 24 * 60 * 60,
             )
+            pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
             status = "enabled"
         elif command == "disable":
             capability = disable_exact_cloud_review(store)
@@ -98,6 +107,7 @@ def _run_guard_cloud_review_command(
         {
             "status": status,
             "capability": capability,
+            **({"pending_requests_requeued": pending_requests_requeued} if command == "enable" else {}),
             "worker": _refresh_cloud_review_worker(guard_home),
         },
         bool(getattr(args, "json", False)),
