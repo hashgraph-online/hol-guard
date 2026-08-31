@@ -133,10 +133,11 @@ def spawn_windows_hook_process(
     cwd: Path,
     environment: dict[str, str],
     allow_breakaway: bool = False,
+    kill_on_close: bool = True,
 ) -> tuple[subprocess.Popen[bytes], WindowsHookJob]:
-    """Start suspended, assign to a kill-on-close job, then resume."""
+    """Start suspended, assign to a lifecycle job, then resume."""
 
-    job = _create_job(allow_breakaway=allow_breakaway)
+    job = _create_job(allow_breakaway=allow_breakaway, kill_on_close=kill_on_close)
     process: subprocess.Popen[bytes] | None = None
     try:
         process = subprocess.Popen(
@@ -198,7 +199,7 @@ def _kernel32():  # type: ignore[no-untyped-def]
     return win_dll("kernel32", use_last_error=True)
 
 
-def _create_job(*, allow_breakaway: bool = False) -> WindowsHookJob:
+def _create_job(*, allow_breakaway: bool = False, kill_on_close: bool = True) -> WindowsHookJob:
     kernel32 = _kernel32()
     create_job = kernel32.CreateJobObjectW
     create_job.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
@@ -212,7 +213,10 @@ def _create_job(*, allow_breakaway: bool = False) -> WindowsHookJob:
     job = WindowsHookJob(handle=int(raw_handle))
     try:
         limits = _ExtendedLimitInformation()
-        limits.basic_limit_information.limit_flags = _job_limit_flags(allow_breakaway=allow_breakaway)
+        limits.basic_limit_information.limit_flags = _job_limit_flags(
+            allow_breakaway=allow_breakaway,
+            kill_on_close=kill_on_close,
+        )
         if not set_information(
             wintypes.HANDLE(job.handle),
             _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
@@ -227,8 +231,8 @@ def _create_job(*, allow_breakaway: bool = False) -> WindowsHookJob:
         raise
 
 
-def _job_limit_flags(*, allow_breakaway: bool) -> int:
-    flags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+def _job_limit_flags(*, allow_breakaway: bool, kill_on_close: bool = True) -> int:
+    flags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE if kill_on_close else 0
     if allow_breakaway:
         flags |= _JOB_OBJECT_LIMIT_BREAKAWAY_OK
     return flags

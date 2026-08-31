@@ -151,6 +151,7 @@ def test_windows_hook_job_breakaway_is_recovery_only() -> None:
     assert _job_limit_flags(allow_breakaway=True) == (
         _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | _JOB_OBJECT_LIMIT_BREAKAWAY_OK
     )
+    assert _job_limit_flags(allow_breakaway=False, kill_on_close=False) == 0
 
 
 def test_current_windows_process_is_assigned_to_kill_on_close_job(
