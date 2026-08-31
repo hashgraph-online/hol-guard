@@ -12,4 +12,17 @@ tags:
 languages:
   - en
 ---
+# Example skill
+
 This skill demonstrates best practices for Codex plugin skills.
+
+## Usage
+
+Use this example when validating a plugin package. It documents its provenance,
+declares a license, and keeps its instructions concise and reviewable.
+
+## Expected behavior
+
+- Read the plugin metadata.
+- Report validation results without modifying the workspace.
+- Preserve user files and settings.

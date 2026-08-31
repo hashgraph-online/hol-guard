@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
-import urllib.error
+import socket
+import time
 import urllib.parse
-import urllib.request
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .checks.manifest import load_manifest
 from .checks.manifest_support import safe_manifest_path
 from .deepseek_harness_support import validate_dsh_package
 from .ecosystems.detect import detect_packages
@@ -23,7 +23,8 @@ from .marketplace_support import (
     validate_marketplace_path_requirements,
 )
 from .models import ScanSkipTarget
-from .path_support import is_safe_relative_path
+from .path_support import is_safe_relative_path, path_entry_exists, read_text_file_within_root
+from .pinned_https import probe_pinned_https, resolve_host_addresses
 from .repo_detect import discover_scan_targets
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^]]+\]\(([^)]+)\)")
@@ -33,6 +34,7 @@ INTERFACE_REQUIRED_FIELDS = (
     "developerName",
     "category",
 )
+MAX_VALIDATED_HTTPS_ADDRESSES = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,10 +110,10 @@ def build_verification_payload(result: VerificationResult) -> dict[str, object]:
     return payload
 
 
-def _read_json(path: Path) -> dict[str, object] | list[object] | None:
+def _read_json(plugin_dir: Path, path: Path) -> dict[str, object] | list[object] | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+        return json.loads(read_text_file_within_root(plugin_dir, path))
+    except (json.JSONDecodeError, OSError, UnicodeError, ValueError):
         return None
 
 
@@ -132,7 +134,7 @@ def _check_manifest(plugin_dir: Path) -> list[VerificationCase]:
             )
         ]
 
-    payload = _read_json(manifest_path)
+    payload = _read_json(plugin_dir, manifest_path)
     if payload is None:
         return [
             VerificationCase(
@@ -374,6 +376,72 @@ def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
     return cases
 
 
+def _display_remote_url(parsed: urllib.parse.ParseResult) -> str:
+    hostname = parsed.hostname or "invalid-host"
+    if ":" in hostname:
+        hostname = f"[{hostname}]"
+    try:
+        port = f":{parsed.port}" if parsed.port is not None else ""
+    except ValueError:
+        port = ""
+    return urllib.parse.urlunparse((parsed.scheme, f"{hostname}{port}", parsed.path, "", "", ""))
+
+
+def _is_public_address(value: str) -> bool:
+    try:
+        return ipaddress.ip_address(value).is_global
+    except ValueError:
+        return False
+
+
+def _validate_remote_url(
+    url: str,
+    *,
+    resolve_dns: bool,
+    deadline: float | None = None,
+) -> tuple[urllib.parse.ParseResult, str | None, tuple[str, ...]]:
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return urllib.parse.urlparse(""), "Remote MCP URL is malformed", ()
+    if parsed.scheme != "https":
+        return parsed, "Remote MCP URLs must use HTTPS", ()
+    if parsed.username is not None or parsed.password is not None:
+        return parsed, "Remote MCP URLs must not contain credentials", ()
+    hostname = parsed.hostname
+    if not hostname:
+        return parsed, "Remote MCP URLs must include a hostname", ()
+    try:
+        port = parsed.port or 443
+    except ValueError:
+        return parsed, "Remote MCP URL contains an invalid port", ()
+
+    normalized_host = hostname.rstrip(".").lower()
+    if normalized_host == "localhost" or normalized_host.endswith((".localhost", ".local")):
+        return parsed, "Remote MCP URL targets a local hostname", ()
+    try:
+        literal_address = ipaddress.ip_address(normalized_host)
+    except ValueError:
+        literal_address = None
+    if literal_address is not None:
+        if not literal_address.is_global:
+            return parsed, "Remote MCP URL targets a non-public address", ()
+        return parsed, None, (str(literal_address),)
+    if not resolve_dns:
+        return parsed, None, ()
+
+    try:
+        timeout_seconds = 3.0 if deadline is None else max(deadline - time.monotonic(), 0.0)
+        addresses = set(resolve_host_addresses(hostname, port, timeout_seconds=timeout_seconds))
+    except TimeoutError:
+        return parsed, "Remote MCP hostname resolution timed out", ()
+    except socket.gaierror:
+        return parsed, "Remote MCP hostname could not be resolved", ()
+    if not addresses or any(not _is_public_address(address) for address in addresses):
+        return parsed, "Remote MCP hostname resolves to a non-public address", ()
+    return parsed, None, tuple(sorted(addresses)[:MAX_VALIDATED_HTTPS_ADDRESSES])
+
+
 def _check_mcp_http(remotes: list[object], *, online: bool) -> list[VerificationCase]:
     cases: list[VerificationCase] = []
     for remote in remotes:
@@ -382,47 +450,36 @@ def _check_mcp_http(remotes: list[object], *, online: bool) -> list[Verification
         url = str(remote.get("url", ""))
         if not url:
             continue
-        parsed = urllib.parse.urlparse(url)
-        if parsed.scheme and parsed.scheme != "https":
-            cases.append(
-                VerificationCase("mcp", "remote scheme", False, f"Insecure scheme in {url}", "insecure-scheme")
-            )
+        deadline = time.monotonic() + 3.0 if online else None
+        parsed, validation_error, addresses = _validate_remote_url(url, resolve_dns=online, deadline=deadline)
+        display_url = _display_remote_url(parsed)
+        if validation_error is not None:
+            cases.append(VerificationCase("mcp", "remote destination", False, validation_error, "unsafe-destination"))
             continue
         if online:
             try:
-                req = urllib.request.Request(url, method="GET")
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    if resp.status in (401, 403):
-                        cases.append(
-                            VerificationCase(
-                                "mcp",
-                                "remote auth",
-                                True,
-                                f"Auth required for {url}",
-                                "auth-required",
-                            )
-                        )
-                    elif 200 <= resp.status < 400:
-                        cases.append(VerificationCase("mcp", "remote reachability", True, f"Reachable: {url}"))
-                    else:
-                        cases.append(
-                            VerificationCase(
-                                "mcp",
-                                "remote reachability",
-                                False,
-                                f"HTTP {resp.status} for {url}",
-                                "transport",
-                            )
-                        )
-            except urllib.error.HTTPError as exc:
-                if exc.code in (401, 403):
+                timeout_seconds = max((deadline or time.monotonic()) - time.monotonic(), 0.001)
+                status = probe_pinned_https(parsed, addresses, timeout_seconds=timeout_seconds)
+                if status in (401, 403):
                     cases.append(
                         VerificationCase(
                             "mcp",
                             "remote auth",
                             True,
-                            f"Auth required for {url}",
+                            f"Auth required for {display_url}",
                             "auth-required",
+                        )
+                    )
+                elif 200 <= status < 300:
+                    cases.append(VerificationCase("mcp", "remote reachability", True, f"Reachable: {display_url}"))
+                elif 300 <= status < 400:
+                    cases.append(
+                        VerificationCase(
+                            "mcp",
+                            "remote reachability",
+                            False,
+                            f"Redirect refused for {display_url}",
+                            "unsafe-redirect",
                         )
                     )
                 else:
@@ -431,7 +488,7 @@ def _check_mcp_http(remotes: list[object], *, online: bool) -> list[Verification
                             "mcp",
                             "remote reachability",
                             False,
-                            f"HTTP error for {url}: {exc.code}",
+                            f"HTTP {status} for {display_url}",
                             "transport",
                         )
                     )
@@ -441,7 +498,7 @@ def _check_mcp_http(remotes: list[object], *, online: bool) -> list[Verification
                         "mcp",
                         "remote reachability",
                         False,
-                        f"Transport failure for {url}: {exc}",
+                        f"Transport failure for {display_url}: {exc}",
                         "transport",
                     )
                 )
@@ -451,7 +508,7 @@ def _check_mcp_http(remotes: list[object], *, online: bool) -> list[Verification
                     "mcp",
                     "remote reachability",
                     True,
-                    f"Offline mode skipped: {url}",
+                    f"Offline mode skipped: {display_url}",
                     "offline-skip",
                 )
             )
@@ -480,10 +537,10 @@ def _check_mcp_stdio(servers: dict[object, object]) -> list[VerificationCase]:
 
 def _check_mcp(plugin_dir: Path, *, online: bool) -> tuple[list[VerificationCase], list[RuntimeTrace]]:
     mcp_config = plugin_dir / ".mcp.json"
-    if not mcp_config.exists():
+    if not path_entry_exists(mcp_config):
         return [VerificationCase("mcp", ".mcp.json optional", True, ".mcp.json not present", "optional")], []
 
-    payload = _read_json(mcp_config)
+    payload = _read_json(plugin_dir, mcp_config)
     if payload is None:
         return [VerificationCase("mcp", ".mcp.json parses", False, "Invalid .mcp.json", "invalid-json")], []
     if not isinstance(payload, dict):
@@ -508,8 +565,9 @@ def _check_mcp(plugin_dir: Path, *, online: bool) -> tuple[list[VerificationCase
 
 
 def _check_skills(plugin_dir: Path) -> list[VerificationCase]:
-    manifest = load_manifest(plugin_dir)
-    if manifest is None:
+    manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
+    manifest = _read_json(plugin_dir, manifest_path) if manifest_path.exists() else None
+    if not isinstance(manifest, dict):
         return [
             VerificationCase(
                 "skills",
@@ -553,8 +611,8 @@ def _check_skills(plugin_dir: Path) -> list[VerificationCase]:
     reference_issues: list[str] = []
     for skill_file in skill_files:
         try:
-            content = skill_file.read_text(encoding="utf-8")
-        except OSError as exc:
+            content = read_text_file_within_root(plugin_dir, skill_file)
+        except (OSError, UnicodeError) as exc:
             frontmatter_issues.append(f"{skill_file.relative_to(plugin_dir)} unreadable: {exc}")
             continue
         parts = content.split("---", 2)
@@ -605,7 +663,7 @@ def _check_apps(plugin_dir: Path) -> list[VerificationCase]:
     app_config = plugin_dir / ".app.json"
     if not app_config.exists():
         return [VerificationCase("apps", "apps optional", True, ".app.json not present", "optional")]
-    payload = _read_json(app_config)
+    payload = _read_json(plugin_dir, app_config)
     if payload is None:
         return [VerificationCase("apps", ".app.json parses", False, "Invalid .app.json", "invalid-json")]
     if not isinstance(payload, dict):

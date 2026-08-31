@@ -26,9 +26,11 @@ jobs:
           NPM_CONFIG_IGNORE_SCRIPTS: "true"
         run: |
           set -euo pipefail
-          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb validate distributions/mcpb
-          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb pack distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
-          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb info "$RUNNER_TEMP/hol-guard.mcpb"
+          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
+          MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
+          "$MCPB_CLI" validate distributions/mcpb
+          "$MCPB_CLI" pack distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
+          "$MCPB_CLI" info "$RUNNER_TEMP/hol-guard.mcpb"
           test -s "$RUNNER_TEMP/hol-guard.mcpb"
 
   publish:
@@ -137,9 +139,11 @@ jobs:
           ARTIFACT: ${{ steps.bundle.outputs.artifact }}
         run: |
           set -euo pipefail
-          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb validate "$BUNDLE_DIR"
-          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb pack "$BUNDLE_DIR" "$ARTIFACT"
-          npm exec --yes --package=@anthropic-ai/mcpb@2.1.2 -- mcpb info "$ARTIFACT"
+          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
+          MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
+          "$MCPB_CLI" validate "$BUNDLE_DIR"
+          "$MCPB_CLI" pack "$BUNDLE_DIR" "$ARTIFACT"
+          "$MCPB_CLI" info "$ARTIFACT"
           sha256sum "$ARTIFACT" > "${ARTIFACT}.sha256"
 
       - name: Attach bundle and checksum to canonical release

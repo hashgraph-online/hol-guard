@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import secrets
 import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -24,6 +26,7 @@ from .github_reporting import (
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, max_severity
 from .quality_artifact import build_quality_artifact, write_quality_artifact
 from .reporting import build_json_payload, format_markdown, format_sarif, should_fail_for_severity
+from .safe_output import write_text_atomic_no_follow
 from .submission import (
     SubmissionIssue,
     build_submission_issue_body,
@@ -64,7 +67,15 @@ def _read_positive_int_env(name: str, *, default: int) -> int:
 def _write_outputs(path: str, values: dict[str, str]) -> None:
     with Path(path).open("a", encoding="utf-8") as handle:
         for key, value in values.items():
-            handle.write(f"{key}={value}\n")
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) is None:
+                raise ValueError(f"invalid GitHub output name: {key}")
+            if "\n" not in value and "\r" not in value:
+                handle.write(f"{key}={value}\n")
+                continue
+            delimiter = f"HOL_GUARD_{secrets.token_hex(16)}"
+            while delimiter in value:
+                delimiter = f"HOL_GUARD_{secrets.token_hex(16)}"
+            handle.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
 
 
 def _write_step_summary(path: str, lines: tuple[str, ...]) -> None:
@@ -77,10 +88,13 @@ def _resolve_pr_comment_settings(
     *,
     plugin_dir: str,
     config_path: str,
+    trust_repository_policy: bool,
 ) -> tuple[str, str, int]:
     config = None
     try:
-        config = load_scanner_config(Path(plugin_dir).resolve(), config_path or None)
+        config = (
+            load_scanner_config(Path(plugin_dir).resolve(), config_path or None) if trust_repository_policy else None
+        )
     except ConfigError as error:
         print(f"Warning: failed to load scanner config for PR comment settings: {error}", file=sys.stderr)
     pr_comment = resolve_pr_comment_config(
@@ -108,6 +122,7 @@ def _build_scan_args(
     cisco_scan: str,
     cisco_mcp_scan: str,
     cisco_policy: str,
+    trust_repository_policy: bool = True,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         plugin_dir=plugin_dir,
@@ -121,6 +136,7 @@ def _build_scan_args(
         cisco_skill_scan=cisco_scan,
         cisco_mcp_scan=cisco_mcp_scan,
         cisco_policy=cisco_policy,
+        trust_repository_policy=trust_repository_policy,
     )
 
 
@@ -290,6 +306,7 @@ def main() -> int:
     profile = _read_env("PROFILE", "default")
     config = _read_env("CONFIG")
     baseline = _read_env("BASELINE")
+    trust_repository_policy = _read_bool_env("TRUST_REPOSITORY_POLICY")
     online = _read_bool_env("ONLINE")
     min_score = int(_read_env("MIN_SCORE", "0"))
     fail_on = _read_env("FAIL_ON", "none")
@@ -317,6 +334,7 @@ def main() -> int:
     pr_comment_mode, pr_comment_style, pr_comment_max_findings = _resolve_pr_comment_settings(
         plugin_dir=plugin_dir,
         config_path=config,
+        trust_repository_policy=trust_repository_policy,
     )
     pull_request_number = load_pull_request_number(github_event_path) if github_event_path else None
 
@@ -436,6 +454,7 @@ def main() -> int:
             cisco_scan=cisco_scan,
             cisco_mcp_scan=cisco_mcp_scan,
             cisco_policy=cisco_policy,
+            trust_repository_policy=trust_repository_policy,
         )
         (
             raw_result,
@@ -514,7 +533,7 @@ def main() -> int:
 
         if output_path and mode != "submit":
             target = Path(output_path)
-            target.write_text(rendered, encoding="utf-8")
+            write_text_atomic_no_follow(target, rendered)
             print(f"Report written to {target}")
             report_path_value = str(target)
         elif mode == "submit":
@@ -560,7 +579,7 @@ def main() -> int:
             )
             if registry_payload_output:
                 registry_path = Path(registry_payload_output)
-                registry_path.write_text(json.dumps(registry_payload, indent=2), encoding="utf-8")
+                write_text_atomic_no_follow(registry_path, json.dumps(registry_payload, indent=2))
                 registry_payload_path_value = str(registry_path)
                 output_values["registry_payload_path"] = registry_payload_path_value
 
@@ -648,7 +667,7 @@ def main() -> int:
         verify_pass_for_summary = verification.verify_pass
         if output_path:
             target = Path(output_path)
-            target.write_text(rendered, encoding="utf-8")
+            write_text_atomic_no_follow(target, rendered)
             print(f"Report written to {target}")
             report_path_value = str(target)
         else:

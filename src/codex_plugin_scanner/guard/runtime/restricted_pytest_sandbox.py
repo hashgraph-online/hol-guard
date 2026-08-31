@@ -6,9 +6,12 @@ import contextlib
 import os
 import signal
 import subprocess
+import sys
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from types import FrameType
+from typing import BinaryIO, TextIO
 
 from .restricted_pytest_model import (
     _DEFAULT_CPU_SECONDS,
@@ -38,6 +41,7 @@ from .restricted_pytest_validation import (
 )
 
 _RESOURCE_AVAILABLE = os.name == "posix"
+_MAX_REPLAY_BYTES = 1_048_576
 if _RESOURCE_AVAILABLE:
     import resource as _resource
 else:
@@ -244,48 +248,63 @@ def _run_backend_process(argv: Sequence[str], *, env: Mapping[str, str], timeout
         if hasattr(resource_module, "RLIMIT_NPROC"):
             _set_resource_limit(resource_module.RLIMIT_NPROC, _DEFAULT_PROCESSES)
 
-    try:
-        process = subprocess.Popen(
-            list(argv),
-            env=dict(env),
-            stdin=None,
-            stdout=None,
-            stderr=None,
-            close_fds=True,
-            start_new_session=True,
-            preexec_fn=apply_limits if _RESOURCE_AVAILABLE else None,
-        )
-    except OSError as error:
-        raise RestrictedPytestError(
-            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
-            f"Restricted pytest sandbox could not start; execution was not started: {error}",
-        ) from error
-
-    previous_handlers: dict[int, int | signal.Handlers | Callable[[int, FrameType | None], object] | None] = {}
-
-    def forward_signal(signum: int, _frame: object) -> None:
-        with contextlib.suppress(OSError):
-            os.killpg(process.pid, signum)
-
-    for signum in (signal.SIGINT, signal.SIGTERM):
-        previous_handlers[signum] = signal.getsignal(signum)
-        _ = signal.signal(signum, forward_signal)
-    try:
+    with tempfile.TemporaryFile(mode="w+b") as stdout_file, tempfile.TemporaryFile(mode="w+b") as stderr_file:
         try:
-            return_code = process.wait(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired as error:
-            with contextlib.suppress(OSError):
-                os.killpg(process.pid, signal.SIGKILL)
-            _ = process.wait()
+            process = subprocess.Popen(
+                list(argv),
+                env=dict(env),
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                close_fds=True,
+                start_new_session=True,
+                preexec_fn=apply_limits if _RESOURCE_AVAILABLE else None,
+            )
+        except OSError as error:
             raise RestrictedPytestError(
-                "pytest_restricted_timeout",
-                f"Restricted pytest exceeded its {timeout_seconds}-second execution deadline.",
-                exit_code=124,
+                PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
+                f"Restricted pytest sandbox could not start; execution was not started: {error}",
             ) from error
-    finally:
-        for signum, handler in previous_handlers.items():
-            _ = signal.signal(signum, handler)
-    return return_code if return_code >= 0 else 128 + abs(return_code)
+
+        previous_handlers: dict[int, int | signal.Handlers | Callable[[int, FrameType | None], object] | None] = {}
+
+        def forward_signal(signum: int, _frame: object) -> None:
+            with contextlib.suppress(OSError):
+                os.killpg(process.pid, signum)
+
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            previous_handlers[signum] = signal.getsignal(signum)
+            _ = signal.signal(signum, forward_signal)
+        try:
+            try:
+                return_code = process.wait(timeout=timeout_seconds)
+            except subprocess.TimeoutExpired as error:
+                with contextlib.suppress(OSError):
+                    os.killpg(process.pid, signal.SIGKILL)
+                _ = process.wait()
+                raise RestrictedPytestError(
+                    "pytest_restricted_timeout",
+                    f"Restricted pytest exceeded its {timeout_seconds}-second execution deadline.",
+                    exit_code=124,
+                ) from error
+        finally:
+            for signum, handler in previous_handlers.items():
+                _ = signal.signal(signum, handler)
+            _replay_sandbox_output(stdout_file, sys.stdout)
+            _replay_sandbox_output(stderr_file, sys.stderr)
+        return return_code if return_code >= 0 else 128 + abs(return_code)
+
+
+def _replay_sandbox_output(source: BinaryIO, destination: TextIO) -> None:
+    source.seek(0)
+    raw = source.read(_MAX_REPLAY_BYTES + 1)
+    truncated = len(raw) > _MAX_REPLAY_BYTES
+    text = raw[:_MAX_REPLAY_BYTES].decode("utf-8", errors="replace")
+    safe_text = "".join(character if character in {"\n", "\t"} or ord(character) >= 32 else "�" for character in text)
+    if truncated:
+        safe_text += "\n[HOL Guard truncated restricted pytest output]\n"
+    destination.write(safe_text)
+    destination.flush()
 
 
 def _set_resource_limit(resource_name: int, requested: int) -> None:

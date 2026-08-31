@@ -335,8 +335,8 @@ def _windows_acl_script(encoded_items: str) -> str:
     )
 
 
-def _run_windows_acl_probe(paths: MachinePaths) -> object:
-    encoded = base64.b64encode(json.dumps(_windows_surface_payload(paths), separators=(",", ":")).encode()).decode()
+def _run_windows_acl_payload(payload: list[dict[str, str | bool]]) -> object:
+    encoded = base64.b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode()
     windows_directory = _windows_directory()
     system_directory = ntpath.join(windows_directory, "System32")
     powershell = ntpath.join(system_directory, "WindowsPowerShell", "v1.0", "powershell.exe")
@@ -356,6 +356,10 @@ def _run_windows_acl_probe(paths: MachinePaths) -> object:
     if len(result.stdout.encode("utf-8")) > _MAX_ACL_OUTPUT_BYTES:
         raise ValueError("Windows ACL output exceeds limit")
     return json.loads(result.stdout)
+
+
+def _run_windows_acl_probe(paths: MachinePaths) -> object:
+    return _run_windows_acl_payload(_windows_surface_payload(paths))
 
 
 def _windows_result(row: object) -> AclSurfaceResult:

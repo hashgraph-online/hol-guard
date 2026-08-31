@@ -6,7 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.runtime.audit_workspace import audit_workspace_is_bound_to_context
 from codex_plugin_scanner.guard.runtime.command_executors import (
     APP_OPERATIONS,
     execute_guard_command_job,
@@ -35,12 +38,16 @@ class _FakeStore:
 
     def __init__(self) -> None:
         self._kv_data: dict[str, object] = {}
+        self.guard_home = Path("/opt/guard-test")
 
     def get_sync_payload(self, key: str) -> object:
         return self._kv_data.get(key)
 
     def set_sync_payload(self, key: str, payload: object, now: str) -> None:
         self._kv_data[key] = payload
+
+    def list_managed_installs(self) -> list[object]:
+        return []
 
 
 class TestAppUpdateOperations:
@@ -115,6 +122,58 @@ class TestAppUpdateOperations:
         job = _make_job("guard.app.unknownOperation")
         result = execute_guard_command_job(job, context=context, store=store, now=lambda: "2026-07-04T00:00:00Z")
         assert result["failureCode"] == "unsupported_operation"
+
+
+def test_cloud_audit_rejects_workspace_override_outside_active_context(tmp_path: Path) -> None:
+    context = _make_context(tmp_path)
+    assert context.workspace_dir is not None
+    context.workspace_dir.mkdir()
+    other_workspace = tmp_path / "other-workspace"
+    other_workspace.mkdir()
+
+    result = execute_guard_command_job(
+        _make_job("guard.packageShims.audit", {"workspace_dir": str(other_workspace)}),
+        context=context,
+        store=_FakeStore(),
+        now=lambda: "2026-07-04T00:00:00Z",
+    )
+
+    assert result["failureCode"] == "workspace_scope_mismatch"
+
+
+def test_cloud_audit_accepts_relative_active_workspace_without_approval(tmp_path: Path) -> None:
+    context = _make_context(tmp_path)
+    assert context.workspace_dir is not None
+    context.workspace_dir.mkdir()
+
+    assert audit_workspace_is_bound_to_context({"workspace_dir": "."}, context)
+
+
+def test_cloud_audit_executes_relative_dot_in_active_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    context = _make_context(tmp_path)
+    assert context.workspace_dir is not None
+    context.workspace_dir.mkdir()
+    unrelated_cwd = tmp_path / "unrelated"
+    unrelated_cwd.mkdir()
+    monkeypatch.chdir(unrelated_cwd)
+
+    with (
+        patch(
+            "codex_plugin_scanner.guard.runtime.command_executors.build_workspace_audit_payload",
+            return_value=({"workspace": str(context.workspace_dir)}, 0),
+        ) as audit,
+        patch("codex_plugin_scanner.guard.runtime.command_executors.load_guard_config", return_value=object()),
+        patch("codex_plugin_scanner.guard.runtime.command_executors.record_package_shim_audit_result"),
+    ):
+        result = execute_guard_command_job(
+            _make_job("guard.packageShims.audit", {"workspace_dir": "."}),
+            context=context,
+            store=_FakeStore(),
+            now=lambda: "2026-07-04T00:00:00Z",
+        )
+
+    assert result["data"]["workspace"] == str(context.workspace_dir)
+    assert audit.call_args.kwargs["workspace_dir"] == context.workspace_dir.resolve()
 
 
 class TestAutoUpdateThrottle:

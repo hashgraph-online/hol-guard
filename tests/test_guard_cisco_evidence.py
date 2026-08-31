@@ -6,7 +6,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 from typing import Any, cast
 
 import pytest
@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.integrations import cisco_mcp_scanner, cisco_skill_scanner
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
+from codex_plugin_scanner.integrations.scanner_subprocess import ScannerProcessResult
 from codex_plugin_scanner.models import Finding, Severity
 
 
@@ -188,14 +189,14 @@ def test_skill_scanner_subprocess_run_success(monkeypatch, tmp_path: Path) -> No
     monkeypatch.setattr(cisco_skill_scanner.tempfile, "mkstemp", lambda prefix, suffix: (123, str(output_path)))
     monkeypatch.setattr(cisco_skill_scanner.os, "close", lambda fd: None)
 
-    def fake_run(*args: object, **kwargs: object) -> object:
+    def fake_run(*args: object, **kwargs: object) -> ScannerProcessResult:
         output_path.write_text(
             json.dumps({"summary": {"total_skills_scanned": 0}, "results": []}),
             encoding="utf-8",
         )
-        return SimpleNamespace(returncode=0, stderr="", stdout="")
+        return ScannerProcessResult(0, "", "")
 
-    monkeypatch.setattr(cisco_skill_scanner.subprocess, "run", fake_run)
+    monkeypatch.setattr(cisco_skill_scanner, "run_bounded_scanner_process", fake_run)
 
     payload = cisco_skill_scanner._scan_directory_with_timeout(tmp_path, "balanced", 0.1)
 
@@ -209,11 +210,11 @@ def test_skill_scanner_timeout_path_cleans_temp_file_on_timeout(monkeypatch, tmp
     monkeypatch.setattr(cisco_skill_scanner.tempfile, "mkstemp", lambda prefix, suffix: (123, str(output_path)))
     monkeypatch.setattr(cisco_skill_scanner.os, "close", lambda fd: None)
 
-    def fake_run(*args: object, **kwargs: object) -> object:
+    def fake_run(*args: object, **kwargs: object) -> ScannerProcessResult:
         output_path.write_text("{}", encoding="utf-8")
-        raise cisco_skill_scanner.subprocess.TimeoutExpired(cmd="skill-scanner", timeout=0.1)
+        return ScannerProcessResult(-9, "", "", timed_out=True)
 
-    monkeypatch.setattr(cisco_skill_scanner.subprocess, "run", fake_run)
+    monkeypatch.setattr(cisco_skill_scanner, "run_bounded_scanner_process", fake_run)
 
     with pytest.raises(TimeoutError, match="timed out"):
         cisco_skill_scanner._scan_directory_with_timeout(tmp_path, "balanced", 0.1)
@@ -221,21 +222,50 @@ def test_skill_scanner_timeout_path_cleans_temp_file_on_timeout(monkeypatch, tmp
     assert output_path.exists() is False
 
 
+def test_skill_scanner_none_timeout_still_uses_isolated_default(monkeypatch, tmp_path: Path) -> None:
+    output_path = tmp_path / "scan-result.json"
+    observed_timeouts: list[float] = []
+    monkeypatch.setattr(cisco_skill_scanner.tempfile, "mkstemp", lambda prefix, suffix: (123, str(output_path)))
+    monkeypatch.setattr(cisco_skill_scanner.os, "close", lambda fd: None)
+
+    def fake_run(*args: object, **kwargs: object) -> ScannerProcessResult:
+        observed_timeouts.append(float(kwargs["timeout_seconds"]))
+        output_path.write_text('{"summary": {}, "results": []}', encoding="utf-8")
+        return ScannerProcessResult(0, "", "")
+
+    monkeypatch.setattr(cisco_skill_scanner, "run_bounded_scanner_process", fake_run)
+
+    cisco_skill_scanner._scan_directory_with_timeout(tmp_path, "balanced", None)
+
+    assert observed_timeouts == [cisco_skill_scanner.DEFAULT_CISCO_SKILL_TIMEOUT_SECONDS]
+
+
 def test_mcp_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tmp_path: Path) -> None:
     (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
 
-    class SlowAnalyzer:
-        async def analyze(self, content: str, metadata: dict[str, str]) -> tuple[object, ...]:
-            await cisco_mcp_scanner.asyncio.sleep(0.05)
-            return ()
-
     monkeypatch.setattr(
         cisco_mcp_scanner,
-        "_load_mcp_scanner_components",
-        lambda blocked_root=None: {"YaraAnalyzer": SlowAnalyzer},
+        "run_bounded_scanner_process",
+        lambda *_args, **_kwargs: ScannerProcessResult(-9, "", "", timed_out=True),
     )
 
     summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, timeout_seconds=0.001)
 
     assert summary.status is CiscoIntegrationStatus.TIMED_OUT
     assert "timed out" in summary.message
+
+
+def test_mcp_scanner_none_timeout_still_uses_isolated_default(monkeypatch, tmp_path: Path) -> None:
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    observed_timeouts: list[float] = []
+
+    def fake_run(*_args: object, **kwargs: object) -> ScannerProcessResult:
+        observed_timeouts.append(float(kwargs["timeout_seconds"]))
+        return ScannerProcessResult(-9, "", "", timed_out=True)
+
+    monkeypatch.setattr(cisco_mcp_scanner, "run_bounded_scanner_process", fake_run)
+
+    summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, timeout_seconds=None)
+
+    assert summary.status is CiscoIntegrationStatus.TIMED_OUT
+    assert observed_timeouts == [cisco_mcp_scanner.DEFAULT_CISCO_MCP_TIMEOUT_SECONDS]

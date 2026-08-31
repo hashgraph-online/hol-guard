@@ -326,6 +326,16 @@ def test_connect_status_surfaces_quarantined_review_event_recovery(
         "hol-guard connect reassign-quarantined --confirm-source default --confirm-workspace workspace-1"
     )
 
+    binding["oauth_source"] = "default; touch /opt/guard-test/unsafe"
+    binding["workspace_id"] = "workspace-$(id)"
+    quoted_payload = build_connect_status_payload(
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+    )
+    assert "review_event_recovery_command" not in quoted_payload
+    assert quoted_payload["review_event_recovery_command_unavailable"] == "binding_identifiers_invalid"
+
 
 def test_connect_status_requires_retry_when_oauth_not_configured(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")

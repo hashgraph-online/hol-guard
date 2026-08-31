@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import codex_plugin_scanner.checks.security as security
 from codex_plugin_scanner.checks.security import (
     _scan_all_files,
     check_license,
@@ -39,6 +40,15 @@ class TestLicense:
     def test_passes_for_apache(self):
         r = check_license(FIXTURES / "good-plugin")
         assert r.passed and r.points == 3
+
+    def test_rejects_symlinked_license(self, tmp_path: Path):
+        outside = tmp_path.parent / f"{tmp_path.name}-license"
+        outside.write_text("Apache License, Version 2.0", encoding="utf-8")
+        _symlink_or_skip(tmp_path / "LICENSE", outside)
+
+        result = check_license(tmp_path)
+
+        assert result.passed is False
 
     def test_passes_for_apache_canonical_url(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -263,6 +273,30 @@ class TestNoDangerousMcp:
             r = check_no_dangerous_mcp(Path(tmpdir))
             assert r.passed and r.points == 4
 
+    def test_rejects_symlinked_mcp_config(self, tmp_path: Path):
+        outside = tmp_path.parent / f"{tmp_path.name}-mcp.json"
+        outside.write_text('{"mcpServers": {}}', encoding="utf-8")
+        _symlink_or_skip(tmp_path / ".mcp.json", outside)
+
+        dangerous = check_no_dangerous_mcp(tmp_path)
+        transport = check_mcp_transport_security(tmp_path)
+
+        assert dangerous.passed is False
+        assert dangerous.findings[0].rule_id == "MCP_CONFIG_UNREADABLE"
+        assert transport.passed is False
+
+    def test_rejects_dangling_mcp_config_symlink(self, tmp_path: Path):
+        _symlink_or_skip(tmp_path / ".mcp.json", tmp_path / "host-only-mcp.json")
+
+        dangerous = check_no_dangerous_mcp(tmp_path)
+        transport = check_mcp_transport_security(tmp_path)
+
+        assert dangerous.passed is False
+        assert dangerous.applicable is True
+        assert dangerous.findings[0].rule_id == "MCP_CONFIG_UNREADABLE"
+        assert transport.passed is False
+        assert transport.applicable is True
+
 
 class TestMcpTransportSecurity:
     def test_not_applicable_for_stdio_only_configs(self):
@@ -365,6 +399,49 @@ class TestScanAllFiles:
             _symlink_or_skip(root / "linked-secret.js", outside)
             result = check_no_hardcoded_secrets(root)
             assert result.passed is True
+
+    def test_explicit_scan_paths_are_normalized_under_a_symlinked_root(self, tmp_path: Path):
+        root = tmp_path / "plugin"
+        root.mkdir()
+        candidate = root / "README.md"
+        candidate.write_text("safe", encoding="utf-8")
+        alias = tmp_path / "plugin-alias"
+        try:
+            alias.symlink_to(root, target_is_directory=True)
+        except (NotImplementedError, OSError):
+            pytest.skip("directory symlinks are not supported in this environment")
+
+        result = check_no_hardcoded_secrets(alias, (alias / candidate.name,))
+
+        assert result.passed is True
+
+    def test_missing_explicit_scan_path_fails_closed(self, tmp_path: Path):
+        result = check_no_hardcoded_secrets(tmp_path, (tmp_path / "missing.md",))
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
+
+    def test_resource_budget_exhaustion_blocks_incomplete_secret_scan(self, tmp_path, monkeypatch):
+        (tmp_path / "one.txt").write_text("safe", encoding="utf-8")
+        (tmp_path / "two.txt").write_text("safe", encoding="utf-8")
+        monkeypatch.setattr(security, "MAX_SCAN_FILES", 1)
+
+        result = check_no_hardcoded_secrets(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "SCAN_RESOURCE_BUDGET_EXCEEDED"
+
+    def test_match_budget_exhaustion_blocks_incomplete_secret_scan(self, tmp_path, monkeypatch):
+        (tmp_path / "README.md").write_text(
+            "\n".join('token = "your-api-token"' for _index in range(4)),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(security, "MAX_SECRET_MATCHES_PER_FILE", 2)
+
+        result = check_no_hardcoded_secrets(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "SCAN_RESOURCE_BUDGET_EXCEEDED"
 
 
 class TestRunSecurityChecks:

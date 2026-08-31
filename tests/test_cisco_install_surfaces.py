@@ -31,12 +31,12 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-mcp-scanner" not in dependencies
     assert "cisco-ai-mcp-scanner" not in cisco_extra
     assert "cisco-ai-mcp-scanner==4.8.1" in cisco_mcp_group
-    assert "litellm==1.93.0" in cisco_extra
-    assert "python_version >= '3.11'" in cisco_extra
+    assert "cisco-ai-skill-scanner~=2.0.12" in cisco_extra
+    assert "litellm==1.93.2" in cisco_extra
     assert "python_version < '3.15'" in cisco_extra
     assert "python_full_version >= '3.11.4'" in cisco_mcp_group
-    assert "cisco-ai-skill-scanner~=2.0.12" in dependency_entries
-    assert "litellm==1.93.0; python_version < '3.15'" in dependency_entries
+    assert "cisco-ai-skill-scanner" not in dependencies
+    assert "litellm" not in dependencies
     assert "requests>=2.32,<3" in dependency_entries
     assert "cryptography>=50.0.0" in dependency_entries
     assert "aiohttp==3.14.3" in override_entries
@@ -44,7 +44,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-skill-scanner==2.0.12" in override_entries
     assert "importlib-metadata==8.9.0" in override_entries
     assert "jsonschema==4.26.0" in override_entries
-    assert "litellm==1.93.0" in override_entries
+    assert "litellm==1.93.2" in override_entries
     assert "magika==1.0.3" in override_entries
     assert "openai==2.41.1" in override_entries
     assert "pyjwt==2.13.0" in override_entries
@@ -59,15 +59,15 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "rich>=15.0.0" not in dependency_entries
 
 
-def test_installed_metadata_constrains_baseline_litellm_on_python_314() -> None:
+def test_installed_metadata_constrains_optional_litellm_on_python_314() -> None:
     requirements = [Requirement(value) for value in metadata("hol-guard").get_all("Requires-Dist", [])]
-    baseline_litellm = [
+    optional_litellm = [
         requirement
         for requirement in requirements
-        if requirement.name == "litellm" and "extra" not in str(requirement.marker)
+        if requirement.name == "litellm" and "extra" in str(requirement.marker)
     ]
-    assert len(baseline_litellm) == 1
-    assert str(baseline_litellm[0].specifier) == "==1.93.0"
+    assert len(optional_litellm) == 1
+    assert str(optional_litellm[0].specifier) == "==1.93.2"
 
     python_314: dict[str, str] = default_environment() | {
         "python_full_version": "3.14.6",
@@ -77,9 +77,10 @@ def test_installed_metadata_constrains_baseline_litellm_on_python_314() -> None:
         "python_full_version": "3.15.0",
         "python_version": "3.15",
     }
-    assert baseline_litellm[0].marker is not None
-    assert baseline_litellm[0].marker.evaluate(python_314)
-    assert not baseline_litellm[0].marker.evaluate(python_315)
+    assert optional_litellm[0].marker is not None
+    assert optional_litellm[0].marker.evaluate(python_314 | {"extra": "cisco"})
+    assert not optional_litellm[0].marker.evaluate(python_314 | {"extra": ""})
+    assert not optional_litellm[0].marker.evaluate(python_315 | {"extra": "cisco"})
 
 
 def test_pyproject_exposes_guard_and_scanner_commands_without_codex_alias() -> None:
@@ -145,7 +146,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "aiohttp==3.14.3" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==8.9.0" in docker_requirements
-    assert "litellm==1.93.0" in docker_requirements
+    assert "litellm==1.93.2" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
     assert "python-multipart==0.0.32" in docker_requirements
     assert "pyjwt==2.13.0" in docker_requirements

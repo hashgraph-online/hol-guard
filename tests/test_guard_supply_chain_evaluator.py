@@ -48,6 +48,7 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     evaluate_package_request_artifact,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.support.network import stub_authenticated_urlopen
 
 
 def _seed_guard_cloud(
@@ -2771,7 +2772,7 @@ def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
     def timeout_urlopen(*args: object, **kwargs: object) -> object:
         raise TimeoutError("timed out")
 
-    monkeypatch.setattr(urllib.request, "urlopen", timeout_urlopen)
+    stub_authenticated_urlopen(monkeypatch, timeout_urlopen)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("minimist@^1.2.0"),
         store=store,

@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from codex_plugin_scanner.guard.mdm import network_transport as transport_module
+from codex_plugin_scanner.guard.mdm import network_trust as trust_module
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.mdm.network import diagnose_endpoint, managed_requests_session, managed_urlopen
 
@@ -208,8 +209,9 @@ def _write_certificates(tmp_path: Path) -> tuple[Path, Path, Path]:
 
 
 @pytest.fixture
-def network_lab(tmp_path: Path) -> Iterator[_NetworkLab]:
+def network_lab(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[_NetworkLab]:
     ca_path, cert_path, key_path = _write_certificates(tmp_path)
+    monkeypatch.setattr(trust_module, "machine_controlled_file_is_trusted", lambda path: path == ca_path)
     server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     server_context.minimum_version = ssl.TLSVersion.TLSv1_2
     server_context.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))

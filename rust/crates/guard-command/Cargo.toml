@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 
 [lints]
