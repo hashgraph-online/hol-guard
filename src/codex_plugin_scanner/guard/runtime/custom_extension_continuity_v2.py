@@ -169,10 +169,13 @@ def _plan_projection_items(store: GuardStore, preflight: _V2Preflight, *, worksp
         for local in matches:
             cli_id = cast(str, local["cli_id"])
             raw_identity_hash = local.get("identity_hash")
+            observed_count = local.get("observed_count")
             status, reason = "pending_observation", "local_identity_not_observed"
             if isinstance(raw_identity_hash, str):
                 plan.observation_preconditions[cli_id] = _observation_precondition(local)
-            if preflight.stale:
+            if type(observed_count) is not int or observed_count < 1:
+                pass
+            elif preflight.stale:
                 status, reason = "stale", "cloud_observation_expired"
             elif not isinstance(raw_identity_hash, str):
                 pass
@@ -267,6 +270,9 @@ def _plan_context_cleanup(
         local = local_items.get(cli_id)
         prior_identity = raw.get("local_identity_hash", raw.get("identity_hash"))
         if local is None or local.get("identity_hash") != prior_identity or not isinstance(prior_identity, str):
+            continue
+        observed_count = local.get("observed_count")
+        if type(observed_count) is not int or observed_count < 1:
             continue
         if _local_override_matches(removals.get(cli_id), identity_hash=prior_identity, cloud_revision=cloud_revision):
             continue
