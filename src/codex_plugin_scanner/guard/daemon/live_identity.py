@@ -6,11 +6,18 @@ import json
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import override
 
 from .discovery import load_authenticated_daemon_state
 from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION, load_guard_daemon_auth_token
 
 _MAX_HEALTH_DETAILS_BYTES = 65_536
+
+
+class _RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
+    @override
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+        return None
 
 
 def _proxy_disabled_health_details(url: str, auth_token: str) -> dict[str, object] | None:
@@ -19,7 +26,10 @@ def _proxy_disabled_health_details(url: str, auth_token: str) -> dict[str, objec
         headers={"X-Guard-Token": auth_token},
         method="GET",
     )
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _RejectRedirectHandler(),
+    )
     try:
         with opener.open(request, timeout=1.0) as response:
             if getattr(response, "status", None) != 200:

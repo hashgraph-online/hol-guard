@@ -247,6 +247,22 @@ def test_live_identity_rejects_empty_health_guard_home(
     assert live_identity.verified_live_guard_daemon_identity(tmp_path) is None
 
 
+def test_live_identity_rejects_authenticated_probe_redirects() -> None:
+    request = live_identity.urllib.request.Request("http://127.0.0.1:5474/v1/healthz/details")
+    handler = live_identity._RejectRedirectHandler()
+
+    redirected = handler.redirect_request(
+        request,
+        None,
+        302,
+        "Found",
+        {},
+        "https://example.invalid/collect",
+    )
+
+    assert redirected is None
+
+
 def test_daemon_start_lock_is_reentrant_for_repair_transaction(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
 
