@@ -7,7 +7,7 @@ use std::path::Path;
 mod policy_enforcement_facts_tools;
 
 pub(super) use policy_enforcement_facts_tools::{
-    classify_tool_name, preferred_tool_name, risk_classes, tool_matches,
+    classify_tool_name, preferred_tool_name, risk_classes,
 };
 
 const PUBLISHER_KEYS: &[&str] = &[

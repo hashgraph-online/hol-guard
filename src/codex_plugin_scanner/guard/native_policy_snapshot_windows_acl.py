@@ -10,6 +10,7 @@ from .native_policy_snapshot_constants import (
     _WINDOWS_DACL_SECURITY_INFORMATION,
     _WINDOWS_FILE_ALL_ACCESS,
     _WINDOWS_INHERITED_ACE,
+    _WINDOWS_OWNER_SECURITY_INFORMATION,
     _WINDOWS_SE_DACL_PROTECTED,
     _WINDOWS_SE_FILE_OBJECT,
     _WINDOWS_SYSTEM_SID,
@@ -53,7 +54,7 @@ def _read_security_descriptor(
             get_security_info(
                 handle,
                 _WINDOWS_SE_FILE_OBJECT,
-                _WINDOWS_DACL_SECURITY_INFORMATION,
+                _WINDOWS_OWNER_SECURITY_INFORMATION | _WINDOWS_DACL_SECURITY_INFORMATION,
                 ctypes_module.byref(owner),
                 ctypes_module.byref(group),
                 ctypes_module.byref(dacl),

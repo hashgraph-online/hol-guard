@@ -319,7 +319,7 @@ impl PolicySnapshotStore {
                 return Err("native_policy_snapshot_request_mismatch".to_owned());
             }
         }
-        if normalize_scope_text(guard_home) != self.expected_guard_home
+        if canonical_scope_text(guard_home) != self.expected_guard_home
             || current.scope_contract.scope_digest != self.expected_scope_digest
         {
             return Err("native_policy_snapshot_scope_mismatch".to_owned());

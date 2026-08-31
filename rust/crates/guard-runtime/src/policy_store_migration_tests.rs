@@ -89,7 +89,7 @@ fn floor_only_migration_preserves_generation_and_allows_only_newer_push() {
         "snapshot": equal_snapshot,
     });
     let equal_ack: PolicySnapshotAckV1 = serde_json::from_slice(
-        &crate::evaluate_resident_bytes(
+        &crate::resident_protocol::evaluate_resident_bytes(
             &canonical_json_bytes(&serde_json::json!({
                 "operation": "policy_snapshot_push",
                 "request": equal_request,

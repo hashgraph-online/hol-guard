@@ -3,12 +3,15 @@
 use crate::resident_state_encoding::{decode_hex, hex_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fs::{self, File, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
+#[path = "resident_state_files.rs"]
 mod resident_state_files;
 
 use resident_state_files::{ensure_private_directory, private_file};

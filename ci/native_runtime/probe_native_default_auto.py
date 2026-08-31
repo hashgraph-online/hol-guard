@@ -112,6 +112,41 @@ def _ownership_routes() -> dict[str, dict[str, str]]:
     return decoded
 
 
+def _installed_hook_request(
+    daemon: GuardDaemonServer,
+    guard_home: Path,
+    workspace: Path,
+    harness: str,
+    event: str,
+    payload: dict[str, object],
+) -> dict[str, object] | None:
+    query = urllib.parse.urlencode({"home": str(guard_home), "workspace": str(workspace)})
+    encoded = json.dumps(payload, separators=(",", ":"))
+    if harness == "codex":
+        return _daemon_response_once(
+            state_path=guard_home / "daemon-state.json",
+            query=query,
+            data=encoded,
+            timeout_seconds=5,
+        )
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
+        data=encoded.encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            decoded = json.loads(response.read().decode("utf-8"))
+            return decoded if isinstance(decoded, dict) else None
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")[:512]
+        raise RuntimeError(
+            "installed hook corpus request failed: "
+            f"harness={harness} event={event} status={error.code} body={detail}"
+        ) from error
+
+
 def _installed_hook_corpus(root: Path) -> dict[str, object]:
     guard_home = root / "hook-home"
     workspace = root / "hook-workspace"
@@ -154,36 +189,14 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
                     )
                 )
             for event, payload in events:
-                query = urllib.parse.urlencode(
-                    {
-                        "home": str(guard_home),
-                        "workspace": str(workspace),
-                    }
+                response_payload = _installed_hook_request(
+                    daemon,
+                    guard_home,
+                    workspace,
+                    harness,
+                    event,
+                    payload,
                 )
-                if harness == "codex":
-                    response_payload = _daemon_response_once(
-                        state_path=guard_home / "daemon-state.json",
-                        query=query,
-                        data=json.dumps(payload, separators=(",", ":")),
-                        timeout_seconds=5,
-                    )
-                else:
-                    request = urllib.request.Request(
-                        f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
-                        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-                        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
-                        method="POST",
-                    )
-                    try:
-                        with urllib.request.urlopen(request, timeout=5) as response:
-                            decoded = json.loads(response.read().decode("utf-8"))
-                            response_payload = decoded if isinstance(decoded, dict) else None
-                    except urllib.error.HTTPError as error:
-                        detail = error.read().decode("utf-8", errors="replace")[:512]
-                        raise RuntimeError(
-                            "installed hook corpus request failed: "
-                            f"harness={harness} event={event} status={error.code} body={detail}"
-                        ) from error
                 if response_payload is None:
                     raise RuntimeError(f"empty response for {harness} {event}")
                 reason = response_payload.get("reason_code")

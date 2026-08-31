@@ -3,7 +3,7 @@ use serde_json::{Map, Value};
 
 use super::bounded_selector_value;
 
-pub(super) fn preferred_tool_name(maps: &[&Map<String, Value>]) -> Result<Option<String>, String> {
+pub(crate) fn preferred_tool_name(maps: &[&Map<String, Value>]) -> Result<Option<String>, String> {
     for keys in [
         &["tool_name", "toolName", "toolname", "tool"][..],
         &["name"][..],
@@ -34,7 +34,7 @@ pub(super) fn preferred_tool_name(maps: &[&Map<String, Value>]) -> Result<Option
     Ok(None)
 }
 
-pub(super) fn tool_matches(tool: &str, terms: &[&str]) -> bool {
+pub(crate) fn tool_matches(tool: &str, terms: &[&str]) -> bool {
     let normalized: String = tool
         .chars()
         .filter(|character| character.is_ascii_alphanumeric())
@@ -66,7 +66,7 @@ pub(super) fn tool_matches(tool: &str, terms: &[&str]) -> bool {
     })
 }
 
-pub(super) fn classify_tool_name(tool: &str) -> PreToolActionTypeV1 {
+pub(crate) fn classify_tool_name(tool: &str) -> PreToolActionTypeV1 {
     let lowered = tool.to_ascii_lowercase();
     if lowered.starts_with("mcp__")
         || lowered.starts_with("mcp_")
@@ -142,7 +142,7 @@ pub(super) fn classify_tool_name(tool: &str) -> PreToolActionTypeV1 {
     }
 }
 
-pub(super) fn risk_classes(
+pub(crate) fn risk_classes(
     action_type: PreToolActionTypeV1,
     sensitive_target: bool,
     reason_code: &str,

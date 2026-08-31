@@ -29,11 +29,6 @@ pub(crate) fn resident_parent_liveness() -> Result<Arc<AtomicBool>, String> {
     Ok(alive)
 }
 
-#[cfg(not(unix))]
-pub(crate) fn resident_parent_liveness() -> Result<Arc<AtomicBool>, String> {
-    Ok(Arc::new(AtomicBool::new(true)))
-}
-
 #[cfg(unix)]
 pub(crate) fn serve(socket_path: &str) -> Result<(), String> {
     use std::fs;

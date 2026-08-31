@@ -14,18 +14,15 @@ mod resident_transport;
 mod resident_transport_service;
 mod strict_json;
 
-pub(crate) use resident_protocol::{
-    capabilities, encode_response, error_response, evaluate_resident_bytes, strict_json_value,
-};
+pub(crate) use resident_protocol::{capabilities, encode_response, strict_json_value};
 pub(crate) use resident_transport::{
-    admit_connection, constant_time_eq, hmac_sha256, start_resident_workers, BoxedResidentStream,
-    ResidentStream,
+    constant_time_eq, hmac_sha256, BoxedResidentStream, ResidentStream,
 };
 pub(crate) use resident_transport_service::{
     read_resident_auth_token, resident_stdin_liveness, serve, serve_loopback,
 };
 
-use guard_contracts::MAX_NATIVE_REQUEST_BYTES;
+pub(crate) use guard_contracts::{MAX_NATIVE_REQUEST_BYTES, MAX_NATIVE_RESPONSE_BYTES};
 use std::env;
 use std::io::{self, Read, Write};
 use std::time::Duration;
@@ -260,7 +257,7 @@ mod tests {
     #[test]
     fn overload_response_is_constant_and_retryable() {
         assert_eq!(
-            error_response("native_overloaded", true),
+            resident_protocol::error_response("native_overloaded", true),
             b"{\"error\":\"native_overloaded\",\"retryable\":true}".to_vec()
         );
     }

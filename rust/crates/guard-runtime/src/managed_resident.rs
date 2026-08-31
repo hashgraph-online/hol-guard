@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[path = "managed_resident_transport.rs"]
 mod managed_resident_transport;
 #[cfg(windows)]
 #[path = "managed_resident_windows.rs"]

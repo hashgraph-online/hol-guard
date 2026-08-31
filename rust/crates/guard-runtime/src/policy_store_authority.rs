@@ -46,11 +46,9 @@ pub(super) fn now_ms() -> Result<u64, String> {
     u64::try_from(value).map_err(|_| "native_resident_clock_invalid".to_owned())
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn scope_digest(guard_home: &str) -> String {
-    let canonical = fs::canonicalize(guard_home)
-        .map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| guard_home.to_owned());
-    scope_digest_string(&normalize_scope_text(&canonical))
+    scope_digest_string(&canonical_scope_text(guard_home))
 }
 
 pub(super) fn scope_digest_string(guard_home: &str) -> String {
@@ -72,13 +70,23 @@ pub(super) fn normalize_scope_text(value: &str) -> String {
         while normalized.len() > 3 && normalized.ends_with('\\') {
             normalized.pop();
         }
-        return normalized.to_ascii_lowercase();
+        normalized.to_ascii_lowercase()
     }
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    if let Some(stripped) = value.strip_prefix("/private/") {
-        return format!("/{stripped}");
+    #[cfg(not(windows))]
+    {
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if let Some(stripped) = value.strip_prefix("/private/") {
+            return format!("/{stripped}");
+        }
+        value.to_owned()
     }
-    value.to_owned()
+}
+
+pub(super) fn canonical_scope_text(value: &str) -> String {
+    let canonical = fs::canonicalize(value)
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| value.to_owned());
+    normalize_scope_text(&canonical)
 }
 
 pub(super) fn scope_binding_for_state_base(state_base: &Path) -> (String, String) {
@@ -90,11 +98,8 @@ pub(super) fn scope_binding_for_state_base(state_base: &Path) -> (String, String
     } else {
         state_base
     };
-    let canonical = fs::canonicalize(guard_home)
-        .map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| guard_home.to_string_lossy().into_owned());
-    let canonical = normalize_scope_text(&canonical);
-    let digest = scope_digest(&canonical);
+    let canonical = canonical_scope_text(&guard_home.to_string_lossy());
+    let digest = scope_digest_string(&canonical);
     (canonical, digest)
 }
 

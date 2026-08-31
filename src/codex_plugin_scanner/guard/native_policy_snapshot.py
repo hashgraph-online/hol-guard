@@ -74,6 +74,7 @@ _windows_file_information_type = _windows_support._windows_file_information_type
 _windows_owner_sid = _windows_support._windows_owner_sid
 _windows_security_attributes_type = _windows_support._windows_security_attributes_type
 _windows_private_descriptor = _windows_support._windows_private_descriptor
+_windows_path_has_reparse_component = _windows_support._windows_path_has_reparse_component
 _windows_close_handle = _windows_io._windows_close_handle
 _windows_open_handle = _windows_io._windows_open_handle
 _windows_apply_private_dacl = _windows_io._windows_apply_private_dacl
@@ -111,22 +112,6 @@ _stricter_action = _policy._stricter_action
 
 if TYPE_CHECKING:
     from .store import GuardStore
-
-
-def _windows_path_has_reparse_component(path: Path) -> bool:
-    """Reject final and parent reparse points before traversing a state path."""
-
-    for candidate in (path, *path.parents):
-        try:
-            metadata = candidate.lstat()
-        except FileNotFoundError:
-            continue
-        file_attributes: object = getattr(metadata, "st_file_attributes", 0)
-        if candidate.is_symlink() or (
-            isinstance(file_attributes, int) and bool(file_attributes & _WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT)
-        ):
-            return True
-    return False
 
 
 def _policy_digest(*, config_digest: str, rule_digest: str) -> str:

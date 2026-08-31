@@ -81,7 +81,7 @@ fn managed_accept_loop(
     owner_alive: Arc<AtomicBool>,
     policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
 ) -> Result<(), String> {
-    let sender = crate::start_resident_workers(token, Some(policy_store));
+    let sender = crate::resident_transport::start_resident_workers(token, Some(policy_store));
     let mut last_activity = Instant::now();
     let mut failures = 0;
     while owner_alive.load(Ordering::Acquire)
@@ -95,7 +95,7 @@ fn managed_accept_loop(
                 if stream.set_nonblocking(false).is_err() {
                     continue;
                 }
-                crate::admit_connection(&sender, Box::new(stream))?;
+                crate::resident_transport::admit_connection(&sender, Box::new(stream))?;
             }
             Err(error)
                 if crate::hardening::classify_io_error(&error)
@@ -139,7 +139,8 @@ pub(super) fn serve_loopback_managed(
         address.to_string(),
         &token,
     )?;
-    let sender = crate::start_resident_workers(Arc::new(token), Some(policy_store));
+    let sender =
+        crate::resident_transport::start_resident_workers(Arc::new(token), Some(policy_store));
     let mut last_activity = Instant::now();
     let mut failures = 0;
     while owner_alive.load(Ordering::Acquire)
@@ -156,7 +157,7 @@ pub(super) fn serve_loopback_managed(
                 if stream.set_nonblocking(false).is_err() {
                     continue;
                 }
-                crate::admit_connection(&sender, Box::new(stream))?;
+                crate::resident_transport::admit_connection(&sender, Box::new(stream))?;
             }
             Err(error)
                 if crate::hardening::classify_io_error(&error)

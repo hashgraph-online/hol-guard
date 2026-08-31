@@ -168,6 +168,7 @@
         "src/codex_plugin_scanner/guard/daemon/hook_process_slot_review.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_spawner.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_worker.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_deadline.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler_contracts.py",
@@ -195,6 +196,7 @@
       "class": "python_transport",
       "paths": [
         "src/codex_plugin_scanner/guard/native_hook_edge.py",
+        "src/codex_plugin_scanner/guard/native_response_decoder.py",
         "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py"
       ],
       "current": "mechanical bounded guard-hook-envelope.v2 serialization, package-bound native invocation, typed result decoding, and harness response projection",
@@ -245,7 +247,9 @@
       "paths": [
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/config.py",
+        "src/codex_plugin_scanner/guard/config_mutation.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
         "src/codex_plugin_scanner/guard/store_approvals.py"
       ],
       "current": "asynchronous effective-policy compilation/publication plus approval presentation, persistence, and continuation",

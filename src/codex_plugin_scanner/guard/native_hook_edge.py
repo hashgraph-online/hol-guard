@@ -204,6 +204,54 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
     return payload
 
 
+def _encode_hook_envelope(
+    *,
+    payload: dict[str, object],
+    harness: str,
+    event: str,
+    guard_home: Path,
+    home_dir: Path,
+    cwd: Path | None,
+    source_ref_external_allowed: bool,
+    deadline_budget_ms: int,
+    snapshot: Mapping[str, object],
+) -> bytes | None:
+    envelope = {
+        "schema": "guard-hook-envelope.v2",
+        "request_id": None,
+        "harness": harness,
+        "event": event,
+        "raw_payload": payload,
+        "deadline_budget_ms": deadline_budget_ms,
+        "policy_generation": snapshot["generation"],
+        # The resident already authenticated and cached the full snapshot at
+        # push/startup. Keep the request binding compact so each hook only
+        # carries the generation and identity it must match, rather than
+        # re-deserializing and re-authenticating the complete policy.
+        "policy_snapshot": {
+            "generation": snapshot["generation"],
+            "policy_digest": snapshot.get("policy_digest"),
+            "runtime_identity": snapshot.get("runtime_identity"),
+        },
+        "source": {
+            "cwd": str(cwd) if cwd is not None else None,
+            "home_dir": str(home_dir),
+            "guard_home": str(guard_home),
+            "source_ref_external_allowed": source_ref_external_allowed,
+        },
+    }
+    try:
+        encoded = json.dumps(
+            envelope,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode()
+    except (TypeError, ValueError):
+        return None
+    return encoded if len(encoded) <= _MAX_REQUEST_BYTES else None
+
+
 def review_raw_hook_native(
     *,
     payload: dict[str, object],
@@ -247,40 +295,18 @@ def review_raw_hook_native(
     generation = snapshot.get("generation")
     if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
         return record_native_hook_result("native_fail_safe", None)
-    envelope = {
-        "schema": "guard-hook-envelope.v2",
-        "request_id": None,
-        "harness": harness,
-        "event": event,
-        "raw_payload": payload,
-        "deadline_budget_ms": deadline_budget_ms,
-        "policy_generation": snapshot["generation"],
-        # The resident already authenticated and cached the full snapshot at
-        # push/startup. Keep the request binding compact so each hook only
-        # carries the generation and identity it must match, rather than
-        # re-deserializing and re-authenticating the complete policy.
-        "policy_snapshot": {
-            "generation": snapshot["generation"],
-            "policy_digest": snapshot.get("policy_digest"),
-            "runtime_identity": snapshot.get("runtime_identity"),
-        },
-        "source": {
-            "cwd": str(cwd) if cwd is not None else None,
-            "home_dir": str(home_dir),
-            "guard_home": str(guard_home),
-            "source_ref_external_allowed": source_ref_external_allowed,
-        },
-    }
-    try:
-        encoded = json.dumps(
-            envelope,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode()
-    except (TypeError, ValueError):
-        return record_native_hook_result("native_fail_safe", None)
-    if len(encoded) > _MAX_REQUEST_BYTES:
+    encoded = _encode_hook_envelope(
+        payload=payload,
+        harness=harness,
+        event=event,
+        guard_home=guard_home,
+        home_dir=home_dir,
+        cwd=cwd,
+        source_ref_external_allowed=source_ref_external_allowed,
+        deadline_budget_ms=deadline_budget_ms,
+        snapshot=snapshot,
+    )
+    if encoded is None:
         return record_native_hook_result("native_fail_safe", None)
     output = native_resident_client_request(
         executable=status.identity.path,
