@@ -226,11 +226,14 @@ pub(crate) fn evaluate_envelope_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
 mod tests {
     use super::*;
 
+    static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
         let digest = "a".repeat(64);
         let guard_home = std::env::temp_dir().join(format!(
-            "hol-guard-native-edge-generation-test-{}",
-            std::process::id()
+            "hol-guard-native-edge-generation-test-{}-{}",
+            std::process::id(),
+            EDGE_FIXTURE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&guard_home).expect("create edge generation fixture");
         std::fs::write(
@@ -269,12 +272,14 @@ mod tests {
     }
 
     fn evaluate_isolated(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
+        let guard_home = std::path::PathBuf::from(&envelope.source.guard_home);
         let _guard = crate::oneshot::POLICY_TEST_LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         crate::oneshot::reset_policy_generation_for_test();
         let result = evaluate_envelope(envelope);
         crate::oneshot::reset_policy_generation_for_test();
+        std::fs::remove_dir_all(guard_home).expect("remove edge generation fixture");
         result
     }
 
