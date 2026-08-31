@@ -2131,6 +2131,22 @@ export async function fetchInventory(): Promise<GuardInventoryItem[]> {
   return normalizeInventory(payload.items);
 }
 
+export async function fetchGuardNetworkStatus(signal?: AbortSignal): Promise<unknown> {
+  return readJson<unknown>("/v1/network/status", {
+    cache: "no-store",
+    method: "GET",
+    signal,
+  });
+}
+
+export async function fetchGuardContainmentHealth(signal?: AbortSignal): Promise<unknown> {
+  return readJson<unknown>("/v1/runtime/containment-health", {
+    cache: "no-store",
+    method: "GET",
+    signal,
+  });
+}
+
 export async function fetchSettings(): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     return {

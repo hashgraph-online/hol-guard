@@ -1,4 +1,4 @@
-import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as remainingProtectionRepairParts, V as ProtectionRepairFlowError, X as openPackageFirewallAuthorizeFallback, Y as activeFailedHarnesses, j as jsxRuntimeExports, Z as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, _ as HiMiniExclamationCircle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, $ as ProofStrip, S as SectionLabel, m as EmptyState, c as HiMiniChevronRight, a0 as HiMiniEye, a1 as HiMiniXCircle, a2 as HiMiniClipboardDocumentCheck, a3 as HiMiniClipboard } from "../guard-dashboard.js";
+import { R as startGuardCloudConnect, T as fetchGuardCloudConnectStatus, r as reactExports, U as remainingProtectionRepairParts, V as ProtectionRepairFlowError, X as openPackageFirewallAuthorizeFallback, Y as activeFailedHarnesses, j as jsxRuntimeExports, Z as HiMiniWrenchScrewdriver, A as ActionButton, o as HiMiniCheckCircle, C as HiMiniChevronDown, i as harnessDisplayName, _ as HiMiniExclamationCircle, $ as fetchGuardContainmentHealth, a0 as fetchGuardNetworkStatus, S as SectionLabel, a1 as HiMiniArrowPath, a2 as HiMiniGlobeAlt, a3 as HiMiniShieldExclamation, M as HiMiniExclamationTriangle, p as protectionHealthFor, k as useProtectionPresentationState, q as GuardHero, a4 as ProofStrip, m as EmptyState, c as HiMiniChevronRight, a5 as HiMiniEye, a6 as HiMiniXCircle, a7 as HiMiniClipboardDocumentCheck, a8 as HiMiniClipboard } from "../guard-dashboard.js";
 import { d as defaultConnectHarness, S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
 import { i as isConnectableAppHarness } from "./harness-setup-target.js";
 import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
@@ -463,6 +463,394 @@ function FleetProtectionRecovery(props) {
     }
   );
 }
+const NETWORK_GRADES = [
+  "unavailable",
+  "observe",
+  "deny-all",
+  "proxy-only",
+  "tcp-ip-destination-enforced",
+  "udp-dns-destination-enforced",
+  "destination-enforced"
+];
+const NETWORK_PHASES = ["healthy", "degraded", "recovering", "unavailable"];
+const HOST_PLATFORMS = ["linux", "macos", "windows", "unsupported"];
+const CONTAINMENT_BACKENDS = ["unsupported", "macos-sandbox", "linux-bwrap"];
+const SHA256 = /^[0-9a-f]{64}$/;
+const CONTAINMENT_POLICY_CONTRACT_DIGEST = "8861db0285235c9f06ca2c8443b0899928890cd63ba5d0f9873c9514e4614ee4";
+const STATUS_REQUEST_TIMEOUT_MS = 8e3;
+const DEFAULT_STATUS_LOADERS = {
+  network: fetchGuardNetworkStatus,
+  containment: fetchGuardContainmentHealth
+};
+const EMPTY_RESOURCE = {
+  value: null,
+  loadState: "idle",
+  refreshing: false
+};
+const INITIAL_NETWORK_SANDBOX_STATUS = {
+  network: EMPTY_RESOURCE,
+  containment: EMPTY_RESOURCE
+};
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function exactBoolean(value) {
+  return typeof value === "boolean" ? value : null;
+}
+function enumValue(value, choices) {
+  if (typeof value !== "string") return null;
+  return choices.find((choice) => choice === value) ?? null;
+}
+function finiteTimestamp(value) {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+function normalizeGuardNetworkStatus(value) {
+  if (!isRecord(value) || value["schema"] !== "guard.network-status.v1") return null;
+  const hostPlatform = enumValue(value["host_platform"], HOST_PLATFORMS);
+  const effectiveGrade = enumValue(value["effective_grade"], NETWORK_GRADES);
+  const protectionActive = exactBoolean(value["protection_active"]);
+  const independentlyObserved = exactBoolean(value["independently_observed"]);
+  const supervisorValue = value["supervisor"];
+  if (hostPlatform === null || effectiveGrade === null || protectionActive === null || independentlyObserved === null || !isRecord(supervisorValue)) {
+    return null;
+  }
+  const phase = enumValue(supervisorValue["phase"], NETWORK_PHASES);
+  const supervisorGrade = enumValue(supervisorValue["effective_grade"], NETWORK_GRADES);
+  const healthyUntilEpochMs = finiteTimestamp(supervisorValue["healthy_until_epoch_ms"]);
+  const permitsEnforcement = exactBoolean(supervisorValue["permits_enforcement"]);
+  const supervisorObserved = exactBoolean(supervisorValue["independently_observed"]);
+  if (phase === null || supervisorGrade === null || permitsEnforcement === null || supervisorObserved === null) return null;
+  if (supervisorValue["healthy_until_epoch_ms"] !== null && healthyUntilEpochMs === null) return null;
+  if (protectionActive !== permitsEnforcement || independentlyObserved !== supervisorObserved || effectiveGrade !== supervisorGrade || protectionActive && phase !== "healthy" || protectionActive && healthyUntilEpochMs === null || protectionActive && (effectiveGrade === "unavailable" || effectiveGrade === "observe") || hostPlatform === "unsupported" && protectionActive) {
+    return null;
+  }
+  return {
+    hostPlatform,
+    effectiveGrade,
+    protectionActive,
+    independentlyObserved,
+    supervisor: {
+      phase,
+      effectiveGrade: supervisorGrade,
+      healthyUntilEpochMs,
+      permitsEnforcement,
+      independentlyObserved: supervisorObserved
+    }
+  };
+}
+function normalizeGuardContainmentHealth(value) {
+  if (!isRecord(value) || !isRecord(value["containment_health"])) return null;
+  const evidence = value["containment_health"];
+  if (evidence["schema_version"] !== "guard.containment-health.v1" || evidence["containment_schema_version"] !== "guard.containment.v1" || evidence["policy_version"] !== "guard.containment-policy.v1" || evidence["effect_contract_schema_version"] !== "1.0.0" || evidence["effect_decision_schema_version"] !== "1.1.0") {
+    return null;
+  }
+  const backend = enumValue(evidence["backend"], CONTAINMENT_BACKENDS);
+  const probeEnforced = exactBoolean(evidence["probe_enforced"]);
+  const probeAt = evidence["probe_at"];
+  const timestampHasTimezone = typeof probeAt === "string" && /(?:Z|[+-][0-9]{2}:[0-9]{2})$/.test(probeAt);
+  const probeAtEpochMs = timestampHasTimezone ? Date.parse(probeAt) : Number.NaN;
+  const backendDigest = evidence["backend_digest"];
+  const policyDigest = evidence["policy_contract_digest"];
+  const daemonFingerprint = evidence["daemon_fingerprint"];
+  const runtimeFingerprint = evidence["runtime_fingerprint"];
+  if (backend === null || probeEnforced === null || !Number.isFinite(probeAtEpochMs) || typeof backendDigest !== "string" || !SHA256.test(backendDigest) || policyDigest !== CONTAINMENT_POLICY_CONTRACT_DIGEST || typeof daemonFingerprint !== "string" || !SHA256.test(daemonFingerprint) || runtimeFingerprint !== daemonFingerprint) {
+    return null;
+  }
+  if (backend === "unsupported" && probeEnforced) return null;
+  return { backend, probeAtEpochMs, probeEnforced };
+}
+function beginNetworkSandboxRefresh(state) {
+  const begin = (resource) => ({
+    ...resource,
+    loadState: resource.value === null ? "loading" : resource.loadState,
+    refreshing: true
+  });
+  return {
+    network: begin(state.network),
+    containment: begin(state.containment)
+  };
+}
+function settleResource(previous, result, normalize) {
+  const normalized = result.status === "fulfilled" ? normalize(result.value) : null;
+  if (normalized !== null) return { value: normalized, loadState: "ready", refreshing: false };
+  if (previous.value !== null) return { value: previous.value, loadState: "stale", refreshing: false };
+  return { value: null, loadState: "error", refreshing: false };
+}
+function settleNetworkSandboxStatus(previous, networkResult, containmentResult) {
+  return {
+    network: settleResource(previous.network, networkResult, normalizeGuardNetworkStatus),
+    containment: settleResource(previous.containment, containmentResult, normalizeGuardContainmentHealth)
+  };
+}
+function loadWithTimeout(loader, parentSignal, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const requestController = new AbortController();
+    let settled = false;
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timer);
+      parentSignal.removeEventListener("abort", handleParentAbort);
+      callback();
+    };
+    const handleParentAbort = () => {
+      requestController.abort();
+      finish(() => reject(new Error("guard_status_request_aborted")));
+    };
+    const timer = globalThis.setTimeout(() => {
+      requestController.abort();
+      finish(() => reject(new Error("guard_status_request_timed_out")));
+    }, timeoutMs);
+    parentSignal.addEventListener("abort", handleParentAbort, { once: true });
+    if (parentSignal.aborted) {
+      handleParentAbort();
+      return;
+    }
+    void Promise.resolve().then(() => loader(requestController.signal)).then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error))
+    );
+  });
+}
+async function loadNetworkSandboxStatus(parentSignal, timeoutMs = STATUS_REQUEST_TIMEOUT_MS, loaders = DEFAULT_STATUS_LOADERS) {
+  return Promise.allSettled([
+    loadWithTimeout(loaders.network, parentSignal, timeoutMs),
+    loadWithTimeout(loaders.containment, parentSignal, timeoutMs)
+  ]);
+}
+function networkPresentationState(resource, nowEpochMs) {
+  if (resource.value === null) return resource.loadState === "error" ? "error" : "checking";
+  const status = resource.value;
+  if (status.hostPlatform === "unsupported") return "unsupported";
+  if (resource.loadState === "stale") return "stale";
+  if (status.supervisor.healthyUntilEpochMs !== null && status.supervisor.healthyUntilEpochMs <= nowEpochMs) {
+    return "stale";
+  }
+  const independentlyVerified = status.independentlyObserved && status.supervisor.independentlyObserved;
+  const activelyEnforcing = status.protectionActive && status.supervisor.permitsEnforcement;
+  return independentlyVerified && activelyEnforcing ? "ready" : "unavailable";
+}
+function containmentPresentationState(resource, nowEpochMs) {
+  if (resource.value === null) return resource.loadState === "error" ? "error" : "checking";
+  if (resource.value.backend === "unsupported") return "unsupported";
+  if (resource.loadState === "stale") return "stale";
+  if (nowEpochMs - resource.value.probeAtEpochMs > 5 * 60 * 1e3 || resource.value.probeAtEpochMs > nowEpochMs + 5e3) {
+    return "stale";
+  }
+  return resource.value.probeEnforced ? "ready" : "unavailable";
+}
+function useNetworkSandboxStatus() {
+  const [state, setState] = reactExports.useState(INITIAL_NETWORK_SANDBOX_STATUS);
+  const controllerRef = reactExports.useRef(null);
+  const refresh = reactExports.useCallback(async () => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setState(beginNetworkSandboxRefresh);
+    const [networkResult, containmentResult] = await loadNetworkSandboxStatus(controller.signal);
+    if (controller.signal.aborted) return;
+    setState((previous) => settleNetworkSandboxStatus(previous, networkResult, containmentResult));
+  }, []);
+  reactExports.useEffect(() => {
+    void refresh();
+    return () => controllerRef.current?.abort();
+  }, [refresh]);
+  return { state, refresh };
+}
+function qualifyLastKnownUnsupported(copy, loadState) {
+  if (loadState !== "stale") return copy;
+  return {
+    label: "Unsupported · last checked",
+    detail: `${copy.detail} The latest status check did not complete.`
+  };
+}
+const STATUS_STYLE = {
+  checking: "bg-slate-100 text-slate-600",
+  ready: "bg-emerald-50 text-emerald-700",
+  unsupported: "bg-slate-100 text-slate-600",
+  unavailable: "bg-amber-50 text-amber-700",
+  stale: "bg-amber-50 text-amber-700",
+  error: "bg-red-50 text-red-700"
+};
+function networkStatusCopy(state) {
+  if (state === "ready") {
+    return {
+      label: "Active",
+      detail: "Guard has current, independently observed proof that a local provider is enforcing network boundaries."
+    };
+  }
+  if (state === "unsupported") {
+    return {
+      label: "Unsupported",
+      detail: "Selective network isolation is not available on this operating system."
+    };
+  }
+  if (state === "stale") {
+    return {
+      label: "Proof needs refresh",
+      detail: "The last provider proof is no longer current. Guard is not treating selective network isolation as active."
+    };
+  }
+  if (state === "error") {
+    return {
+      label: "Couldn’t check",
+      detail: "Guard could not read network provider status. No network-isolation claim is being made."
+    };
+  }
+  if (state === "unavailable") {
+    return {
+      label: "Not active",
+      detail: "No independently verified network provider is active. Other Guard protections continue separately."
+    };
+  }
+  return {
+    label: "Checking",
+    detail: "Guard is checking for current, independently observed network enforcement."
+  };
+}
+function containmentStatusCopy(state) {
+  if (state === "ready") {
+    return {
+      label: "Available",
+      detail: "A current local probe confirms supported actions can run inside a bounded sandbox."
+    };
+  }
+  if (state === "unsupported") {
+    return {
+      label: "Unsupported",
+      detail: "Bounded local execution is not available on this operating system."
+    };
+  }
+  if (state === "stale") {
+    return {
+      label: "Proof needs refresh",
+      detail: "The last sandbox probe is no longer current. Guard will not rely on it as positive proof."
+    };
+  }
+  if (state === "error") {
+    return {
+      label: "Couldn’t check",
+      detail: "Guard could not read sandbox health. It is not claiming contained execution is available."
+    };
+  }
+  if (state === "unavailable") {
+    return {
+      label: "Not available",
+      detail: "The local sandbox probe did not confirm enforcement. Guard will not rely on it as positive proof."
+    };
+  }
+  return {
+    label: "Checking",
+    detail: "Guard is running a local sandbox compatibility check."
+  };
+}
+function StatusIcon$1(props) {
+  if (props.state === "ready") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "size-5 text-emerald-600", "aria-hidden": "true" });
+  }
+  if (props.state === "checking") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-5 animate-spin text-slate-500 motion-reduce:animate-none", "aria-hidden": "true" });
+  }
+  if (props.state === "error") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "size-5 text-red-600", "aria-hidden": "true" });
+  }
+  if (props.state === "unsupported") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "size-5 text-slate-500", "aria-hidden": "true" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-5 text-amber-600", "aria-hidden": "true" });
+}
+function StatusRow(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 py-4 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.25fr)] sm:items-start sm:gap-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500", "aria-hidden": "true", children: props.icon }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: props.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-5 text-slate-500", children: props.description })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-3 sm:justify-self-stretch", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatusIcon$1, { state: props.state }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[props.state]}`, children: props.copy.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-[70ch] text-sm leading-6 text-slate-600", children: props.copy.detail })
+      ] })
+    ] })
+  ] });
+}
+function NetworkSandboxStatusPanelView(props) {
+  const { state } = props;
+  const nowEpochMs = props.nowEpochMs;
+  const networkState = networkPresentationState(state.network, nowEpochMs);
+  const containmentState = containmentPresentationState(state.containment, nowEpochMs);
+  const networkCopy = networkState === "unsupported" ? qualifyLastKnownUnsupported(networkStatusCopy(networkState), state.network.loadState) : networkStatusCopy(networkState);
+  const containmentCopy = containmentState === "unsupported" ? qualifyLastKnownUnsupported(containmentStatusCopy(containmentState), state.containment.loadState) : containmentStatusCopy(containmentState);
+  const refreshing = state.network.refreshing || state.containment.refreshing;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-2xl border border-slate-200 bg-white px-4 py-5 sm:px-6", "aria-labelledby": "network-sandbox-heading", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Execution boundaries" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "network-sandbox-heading", className: "mt-1 text-lg font-semibold text-brand-dark", children: "Network & sandboxing" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-[70ch] text-sm leading-6 text-slate-500", children: "Live proof from this machine. Each boundary is checked independently and may have a different status." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: props.onRefresh,
+          disabled: refreshing,
+          className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: `size-4 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`, "aria-hidden": "true" }),
+            refreshing ? "Refreshing…" : "Refresh status"
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 divide-y divide-slate-100 border-y border-slate-100", "aria-live": "polite", "aria-busy": refreshing, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        StatusRow,
+        {
+          title: "Selective network isolation",
+          description: "When available, limits where supported processes may connect.",
+          state: networkState,
+          copy: networkCopy,
+          icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniGlobeAlt, { className: "size-5" })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        StatusRow,
+        {
+          title: "Contained-action sandboxing",
+          description: "When available, runs supported actions with bounded file and network access.",
+          state: containmentState,
+          copy: containmentCopy,
+          icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "size-5" })
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs leading-5 text-slate-500", children: "These checks report verified local capability. They do not mean every app action is isolated." })
+  ] });
+}
+function NetworkSandboxStatusPanel() {
+  const { state, refresh } = useNetworkSandboxStatus();
+  const [nowEpochMs, setNowEpochMs] = reactExports.useState(() => Date.now());
+  const handleRefresh = reactExports.useCallback(() => {
+    void refresh().finally(() => setNowEpochMs(Date.now()));
+  }, [refresh]);
+  reactExports.useEffect(() => {
+    const timer = window.setInterval(() => setNowEpochMs(Date.now()), 3e4);
+    return () => window.clearInterval(timer);
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    NetworkSandboxStatusPanelView,
+    {
+      state,
+      onRefresh: handleRefresh,
+      nowEpochMs
+    }
+  );
+}
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
   const hasApps = activeInstallCount > 0;
@@ -673,6 +1061,7 @@ function FleetWorkspace(props) {
         ]
       }
     ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(NetworkSandboxStatusPanel, {}),
     protectionState !== "checking" && protectionHealth.state !== "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       FleetProtectionRecovery,
       {

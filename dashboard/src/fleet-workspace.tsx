@@ -35,6 +35,7 @@ import { protectionHealthFor, useProtectionPresentationState } from "./protectio
 import {
   FleetProtectionRecovery,
 } from "./fleet-protection-recovery";
+import { NetworkSandboxStatusPanel } from "./network-sandbox-status-panel";
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
@@ -330,6 +331,8 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
           { label: "Runtime", value: runtimeState ? "active" : "offline", tone: runtimeState ? "green" : "slate" },
         ]}
       />
+
+      <NetworkSandboxStatusPanel />
 
       {protectionState !== "checking" && protectionHealth.state !== "protected" ? (
         <FleetProtectionRecovery
