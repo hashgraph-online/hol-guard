@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import commands_dispatch_local
+from codex_plugin_scanner.guard.cli import commands_dispatch_local, network_status_command
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_parser
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon.client import (
@@ -58,7 +58,7 @@ def _run_network_status(
         raising=False,
     )
     monkeypatch.setattr(
-        commands_dispatch_local,
+        network_status_command,
         "load_running_guard_surface_daemon_client",
         lambda _guard_home: Client(),
     )
@@ -323,6 +323,55 @@ def test_active_network_status_requires_fresh_consistent_supervisor_proof(
 
     with pytest.raises(NetworkStatusSchemaError):
         validate_network_status(status, now_epoch_ms=1_000)
+
+
+def test_inactive_backend_cannot_claim_an_enforcing_grade() -> None:
+    status = build_network_status(platform_name="linux")
+    backend = cast(list[dict[str, object]], status["backends"])[0]
+    backend["effective_grade"] = "proxy-only"
+
+    with pytest.raises(NetworkStatusSchemaError, match=r"inactive.*cannot enforce"):
+        validate_network_status(status)
+
+
+def test_observed_grade_must_match_observed_backend_truth() -> None:
+    status = build_network_status(platform_name="linux")
+    backend = cast(list[dict[str, object]], status["backends"])[0]
+    backend.update(observed=True, effective_grade="observe")
+    status.update(independently_observed=True, independently_observed_grade="destination-enforced")
+
+    with pytest.raises(NetworkStatusSchemaError, match="observer grade"):
+        validate_network_status(status)
+
+
+def test_consistent_observe_only_backend_is_accepted() -> None:
+    status = build_network_status(platform_name="linux")
+    backend = cast(list[dict[str, object]], status["backends"])[0]
+    backend.update(observed=True, effective_grade="observe")
+    status.update(independently_observed=True, independently_observed_grade="observe")
+
+    projected = validate_network_status(status)
+
+    assert projected["independently_observed_grade"] == "observe"
+
+
+def test_partial_supervisor_fails_safe_before_projection() -> None:
+    status = _active_network_status(production_ready=True)
+    cast(dict[str, object], status["supervisor"]).pop("backend_id")
+
+    with pytest.raises(NetworkStatusSchemaError, match="incomplete"):
+        validate_network_status(status)
+
+
+def test_one_supervisor_cannot_prove_multiple_active_backends() -> None:
+    status = _active_network_status(production_ready=True)
+    first = cast(list[dict[str, object]], status["backends"])[0]
+    second = dict(first)
+    second["backend_id"] = "linux.secondary"
+    cast(list[dict[str, object]], status["backends"]).append(second)
+
+    with pytest.raises(NetworkStatusSchemaError, match="one active backend"):
+        validate_network_status(status)
 
 
 def test_network_status_client_uses_bounded_one_second_deadline(

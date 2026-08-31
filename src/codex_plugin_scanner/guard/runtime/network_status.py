@@ -95,11 +95,16 @@ def validate_network_status(
         raise NetworkStatusSchemaError("network status backends are invalid")
     active_backends: list[Mapping[str, object]] = []
     validated_backends: list[Mapping[str, object]] = []
+    backend_ids: set[str] = set()
     for raw_backend in raw_backends:
         if not _is_object(raw_backend):
             raise NetworkStatusSchemaError("network status backend is invalid")
         if not _is_safe_identifier(raw_backend.get("backend_id")):
             raise NetworkStatusSchemaError("network status backend id is invalid")
+        backend_id = cast(str, raw_backend["backend_id"])
+        if backend_id in backend_ids:
+            raise NetworkStatusSchemaError("network status backend id is duplicated")
+        backend_ids.add(backend_id)
         _require_enum(raw_backend.get("platform"), PlatformFamily)
         _require_enum(raw_backend.get("advertised_maximum_grade"), EnforcementGrade)
         _require_enum(raw_backend.get("effective_grade"), EnforcementGrade)
@@ -134,12 +139,16 @@ def validate_network_status(
             if backend_grade not in _ENFORCING_GRADES:
                 raise NetworkStatusSchemaError("active network backend must enforce")
             active_backends.append(raw_backend)
+        elif backend_grade in _ENFORCING_GRADES:
+            raise NetworkStatusSchemaError("inactive network backend cannot enforce")
         validated_backends.append(raw_backend)
 
     protection_active = bool(payload["protection_active"])
     effective_grade = EnforcementGrade(str(payload["effective_grade"]))
     if protection_active != bool(active_backends):
         raise NetworkStatusSchemaError("network protection summary is inconsistent")
+    if protection_active and len(active_backends) != 1:
+        raise NetworkStatusSchemaError("network protection requires one active backend")
     if not protection_active and effective_grade is not EnforcementGrade.UNAVAILABLE:
         raise NetworkStatusSchemaError("inactive network protection must be unavailable")
     if protection_active and all(
@@ -151,8 +160,16 @@ def validate_network_status(
     observed_grade = EnforcementGrade(str(payload["independently_observed_grade"]))
     if independently_observed != (observed_grade is not EnforcementGrade.UNAVAILABLE):
         raise NetworkStatusSchemaError("network observer summary is inconsistent")
-    if any(bool(backend["observed"]) for backend in validated_backends) != independently_observed:
+    observed_backends = [backend for backend in validated_backends if bool(backend["observed"])]
+    if bool(observed_backends) != independently_observed:
         raise NetworkStatusSchemaError("network backend observer summary is inconsistent")
+    if independently_observed:
+        observed_backend_grades = [EnforcementGrade(str(backend["effective_grade"])) for backend in observed_backends]
+        if any(grade is EnforcementGrade.UNAVAILABLE for grade in observed_backend_grades):
+            raise NetworkStatusSchemaError("observed network backend grade is invalid")
+        maximum_observed_grade = max(observed_backend_grades, key=enforcement_grade_rank)
+        if observed_grade is not maximum_observed_grade:
+            raise NetworkStatusSchemaError("network observer grade is inconsistent")
 
     supervisor = payload.get("supervisor")
     if protection_active and supervisor is None:
@@ -160,6 +177,19 @@ def validate_network_status(
     if supervisor is not None:
         if not _is_object(supervisor):
             raise NetworkStatusSchemaError("network supervisor is invalid")
+        supervisor_fields = {
+            "phase",
+            "backend_id",
+            "backend_digest",
+            "effective_grade",
+            "healthy_until_epoch_ms",
+            "retry_attempt",
+            "next_retry_seconds",
+            "permits_enforcement",
+            "independently_observed",
+        }
+        if not supervisor_fields.issubset(supervisor):
+            raise NetworkStatusSchemaError("network supervisor is incomplete")
         _require_enum(supervisor.get("phase"), RecoveryPhase)
         _require_enum(supervisor.get("effective_grade"), EnforcementGrade)
         for field in ("backend_id", "backend_digest"):
@@ -323,7 +353,7 @@ def build_network_status(
         )
         active = selected_health is not None and selected_health.permits_enforcement
         effective_grade = (
-            selected_health.effective_grade if selected_health is not None else EnforcementGrade.UNAVAILABLE
+            selected_health.effective_grade if selected_health is not None and active else EnforcementGrade.UNAVAILABLE
         )
         if active:
             active_grade = effective_grade
