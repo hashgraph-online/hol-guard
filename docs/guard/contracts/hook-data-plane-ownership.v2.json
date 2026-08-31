@@ -233,7 +233,8 @@
         "src/codex_plugin_scanner/guard/native_runtime_admission.py",
         "src/codex_plugin_scanner/guard/native_route_receipt.py",
         "src/codex_plugin_scanner/guard/native_runtime_resident.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resilience.py"
+        "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+        "src/codex_plugin_scanner/guard/native_mode.py"
       ],
       "current": "binary identity and mechanical client launch remain Python; authentication, framing, process and peer attestation, bounded generation retirement, supervisor liveness, reconnect, restart, and generation state are Rust-owned; the legacy Python resident module is unreachable from the ordinary graph",
       "target": "binary identity and minimal Rust client launch only"

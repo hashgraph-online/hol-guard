@@ -136,6 +136,9 @@ def test_observe_mode_uses_native_nonblocking_claude_responses(
     event: str,
     expected: dict[str, object],
 ) -> None:
+    # This contract exercises the isolated compatibility worker. The stable
+    # default fast path handles PostToolUse before that worker is consulted.
+    monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir(parents=True)
