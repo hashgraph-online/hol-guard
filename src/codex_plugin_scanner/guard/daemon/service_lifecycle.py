@@ -17,6 +17,16 @@ def startup_generation_is_current(server: GuardDaemonServer, generation: int | N
         return generation == server._lifecycle_generation and not server._shutdown_started.is_set()
 
 
+def _preflight_existing_service_workers(server: GuardDaemonServer) -> None:
+    """Reject a restart while retained workers still need shutdown containment."""
+
+    if server._aibom_refresh_thread is not None:
+        if server._aibom_refresh_thread.is_alive():
+            raise RuntimeError("AIBOM inventory refresh is still stopping")
+        server._aibom_refresh_thread = None
+    server._require_command_activity_maintenance_stopped()
+
+
 def begin_service(server: GuardDaemonServer) -> None:
     """Claim ownership and initialize background services for one generation."""
 
@@ -27,16 +37,18 @@ def begin_service(server: GuardDaemonServer) -> None:
             server._lifecycle_generation += 1
             generation = server._lifecycle_generation
             server._active_start_generation = generation
-            server._shutdown_started.clear()
         server._finish_service_completed = False
     server._record_lifecycle("start_requested")
     if server._is_quarantined():
-        if server._aibom_refresh_thread is not None and server._aibom_refresh_thread.is_alive():
-            raise RuntimeError("AIBOM inventory refresh is still stopping")
-        server._require_command_activity_maintenance_stopped()
+        _preflight_existing_service_workers(server)
         raise RuntimeError("This Guard daemon is quarantined after unconfirmed containment.")
     try:
         with server._finish_service_lock:
+            _preflight_existing_service_workers(server)
+            with server._lifecycle_lock:
+                if generation != server._lifecycle_generation:
+                    raise RuntimeError("Guard daemon stopped during startup")
+                server._shutdown_started.clear()
             if not startup_generation_is_current(server, generation):
                 raise RuntimeError("Guard daemon stopped during startup")
             server._owner_lock = acquire_guard_daemon_owner_lock(server._server.store.guard_home)
