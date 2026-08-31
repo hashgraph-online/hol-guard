@@ -200,7 +200,7 @@ type QueueResolutionPayload = Omit<
   codexResume?: unknown;
 };
 
-async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+export async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetchWithGuardAuth(input, init);
   if (!response.ok) {
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));

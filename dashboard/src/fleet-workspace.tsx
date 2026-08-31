@@ -32,9 +32,8 @@ import {
   type DetectedAppStatus,
 } from "./harness-detection";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
-import {
-  FleetProtectionRecovery,
-} from "./fleet-protection-recovery";
+import { FleetProtectionRecovery } from "./fleet-protection-recovery";
+import { NetworkSandboxStatusPanel } from "./network-sandbox-status-panel";
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
@@ -43,7 +42,6 @@ import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
 } from "./guard-types";
-
 type FleetWorkspaceProps = {
   runtime: GuardRuntimeSnapshot;
   policies: GuardPolicyDecision[];
@@ -330,6 +328,8 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
           { label: "Runtime", value: runtimeState ? "active" : "offline", tone: runtimeState ? "green" : "slate" },
         ]}
       />
+
+      <NetworkSandboxStatusPanel />
 
       {protectionState !== "checking" && protectionHealth.state !== "protected" ? (
         <FleetProtectionRecovery
