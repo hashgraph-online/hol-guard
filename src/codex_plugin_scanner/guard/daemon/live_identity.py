@@ -6,7 +6,8 @@ import json
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import override
+
+from typing_extensions import override
 
 from .discovery import load_authenticated_daemon_state
 from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION, load_guard_daemon_auth_token
