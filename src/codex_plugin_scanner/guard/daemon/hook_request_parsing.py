@@ -106,12 +106,13 @@ def build_hook_review_request(
     workspace: Path | None,
     deadline: float | None = None,
 ) -> HookReviewRequest:
+    config_path = payload.get("config_path")
     return HookReviewRequest(
         harness=harness,
         event_name=runtime_hook_event_name(payload),
         payload=payload,
         payload_kind=payload_kind(payload),
-        config_path=payload.get("config_path") if isinstance(payload.get("config_path"), str) else None,
+        config_path=config_path if isinstance(config_path, str) else None,
         cwd=workspace,
         home_dir=home_dir,
         guard_home=guard_home,

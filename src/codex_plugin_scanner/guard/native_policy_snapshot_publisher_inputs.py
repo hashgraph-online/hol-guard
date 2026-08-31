@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Condition
 from typing import cast
 
 from .native_policy_snapshot_codec import _digest_v3
@@ -16,6 +17,11 @@ from .native_policy_snapshot_policy import _merge_effective_native_policies, eff
 
 class NativePolicySnapshotPublisherInputs:
     """Mixin containing filesystem observation outside synchronous hooks."""
+
+    guard_home: Path  # pyright: ignore[reportUninitializedInstanceVariable]
+    _condition: Condition  # pyright: ignore[reportUninitializedInstanceVariable]
+    _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _published_policy_fingerprint: tuple[str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
 
     def _current_input_fingerprint(
         self,

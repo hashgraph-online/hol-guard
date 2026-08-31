@@ -132,7 +132,8 @@ class HookWorker:
                 _ = wait_until_ready(time.monotonic() + 0.25)
         current_snapshot_binding = getattr(self.policy_snapshot_publisher, "current_snapshot_binding", None)
         if callable(current_snapshot_binding):
-            return current_snapshot_binding()
+            snapshot = current_snapshot_binding()
+            return snapshot if isinstance(snapshot, dict) else None
         return self.policy_snapshot_publisher.current_snapshot()
 
     def review_http_payload(

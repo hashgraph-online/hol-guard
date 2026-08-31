@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewResponse
+from typing import Literal, cast
+
+from codex_plugin_scanner.guard.runtime.hook_review_types import HookDecision, HookReviewResponse, ModelOutputAction
 
 _NATIVE_ERROR_CODES = frozenset(
     {
@@ -22,8 +24,9 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
 
     if not isinstance(payload, dict):
         return None
-    if payload.get("schema") == "guard-hook-edge-result.v2":
-        if set(payload) - {
+    decoded = cast(dict[str, object], payload)
+    if decoded.get("schema") == "guard-hook-edge-result.v2":
+        if set(decoded) - {
             "schema",
             "authority",
             "request_id",
@@ -33,24 +36,28 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
             "result",
         }:
             return None
+        harness = decoded.get("harness")
         if (
-            payload.get("authority") != "rust"
-            or payload.get("event_name") != "PostToolUse"
-            or payload.get("payload_kind") not in {"inline", "source_file_ref", "encrypted_payload_ref"}
-            or not isinstance(payload.get("harness"), str)
-            or not payload["harness"]
-            or len(payload["harness"]) > 64
-            or not isinstance(payload.get("result"), dict)
+            decoded.get("authority") != "rust"
+            or decoded.get("event_name") != "PostToolUse"
+            or decoded.get("payload_kind") not in {"inline", "source_file_ref", "encrypted_payload_ref"}
+            or not isinstance(harness, str)
+            or not harness
+            or len(harness) > 64
+            or not isinstance(decoded.get("result"), dict)
         ):
             return None
-        request_id = payload.get("request_id")
+        request_id = decoded.get("request_id")
         if request_id is not None and (not isinstance(request_id, str) or len(request_id) > 256):
             return None
-        payload = payload["result"]
-    decision = payload.get("decision")
-    model_output_action = payload.get("model_output_action")
-    notice = payload.get("notice")
-    reason_code = payload.get("reason_code")
+        result = decoded.get("result")
+        if not isinstance(result, dict):
+            return None
+        decoded = cast(dict[str, object], result)
+    decision = decoded.get("decision")
+    model_output_action = decoded.get("model_output_action")
+    notice = decoded.get("notice")
+    reason_code = decoded.get("reason_code")
     if decision not in {"allow", "deny"}:
         return None
     if model_output_action not in {
@@ -62,22 +69,25 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
         return None
     if notice not in {"none", "excerpt", "warning"} or not isinstance(reason_code, str):
         return None
-    reason = payload.get("reason")
-    reviewed_output_sha256 = payload.get("reviewed_output_sha256")
-    reviewed_excerpt = payload.get("reviewed_excerpt")
-    policy_action = payload.get("policy_action")
-    observed_policy_action = payload.get("observed_policy_action")
+    decision_value = cast(HookDecision, decision)
+    model_output_action_value = cast(ModelOutputAction, model_output_action)
+    notice_value = cast(Literal["none", "excerpt", "warning"], notice)
+    reason = decoded.get("reason")
+    reviewed_output_sha256 = decoded.get("reviewed_output_sha256")
+    reviewed_excerpt = decoded.get("reviewed_excerpt")
+    policy_action = decoded.get("policy_action")
+    observed_policy_action = decoded.get("observed_policy_action")
     return HookReviewResponse(
-        decision=decision,
+        decision=decision_value,
         reason=reason if isinstance(reason, str) else None,
-        model_output_action=model_output_action,
+        model_output_action=model_output_action_value,
         reviewed_output_sha256=reviewed_output_sha256 if isinstance(reviewed_output_sha256, str) else None,
         reviewed_excerpt=reviewed_excerpt if isinstance(reviewed_excerpt, str) else None,
-        notice=notice,
+        notice=notice_value,
         reason_code=reason_code,
         policy_action=policy_action if isinstance(policy_action, str) else None,
         observed_policy_action=observed_policy_action if isinstance(observed_policy_action, str) else None,
-        observe_mode=payload.get("observe_mode") is True,
+        observe_mode=decoded.get("observe_mode") is True,
     )
 
 

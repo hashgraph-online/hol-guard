@@ -192,7 +192,7 @@ _SCALAR_ACTION_FIELDS = (
     "new_network_domain_action",
     "subprocess_action",
 )
-_MAP_FIELDS = ("risk_actions", "harness_actions", "publisher_actions", "artifact_actions")
+_MAP_FIELDS = ("risk_actions", "publisher_actions", "artifact_actions")
 
 
 def _merge_scalar_actions(
@@ -223,10 +223,35 @@ def _merge_action_maps(
         merged[field] = values
 
 
+def _merge_harness_actions(
+    policies: tuple[Mapping[str, object], ...],
+) -> dict[str, str]:
+    actions_by_selector: dict[str, str] = {}
+    aliases_by_selector: dict[str, list[str]] = {}
+    for policy in policies:
+        mapping = policy.get("harness_actions")
+        if not isinstance(mapping, Mapping):
+            raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
+        for harness, action in mapping.items():
+            if not isinstance(harness, str):
+                raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
+            selector = _normalized_harness_selector_v3(harness)
+            if selector is None:
+                raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
+            actions_by_selector[selector] = _stricter_action(actions_by_selector.get(selector, "allow"), action)
+            aliases = aliases_by_selector.setdefault(selector, [])
+            if harness not in aliases:
+                aliases.append(harness)
+    return {
+        alias: actions_by_selector[selector] for selector, aliases in aliases_by_selector.items() for alias in aliases
+    }
+
+
 def _merge_harness_risk_actions(
     policies: tuple[Mapping[str, object], ...],
 ) -> dict[str, dict[str, str]]:
-    merged: dict[str, dict[str, str]] = {}
+    actions_by_selector: dict[str, dict[str, str]] = {}
+    aliases_by_selector: dict[str, list[str]] = {}
     for policy in policies:
         mapping = policy.get("harness_risk_actions")
         if not isinstance(mapping, Mapping):
@@ -234,12 +259,22 @@ def _merge_harness_risk_actions(
         for harness, risk_actions in mapping.items():
             if not isinstance(harness, str) or not isinstance(risk_actions, Mapping):
                 raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
-            target = merged.setdefault(harness, {})
+            selector = _normalized_harness_selector_v3(harness)
+            if selector is None:
+                raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
+            target = actions_by_selector.setdefault(selector, {})
+            aliases = aliases_by_selector.setdefault(selector, [])
+            if harness not in aliases:
+                aliases.append(harness)
             for risk_class, action in risk_actions.items():
                 if not isinstance(risk_class, str):
                     raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
                 target[risk_class] = _stricter_action(target.get(risk_class, "allow"), action)
-    return merged
+    return {
+        alias: dict(actions_by_selector[selector])
+        for selector, aliases in aliases_by_selector.items()
+        for alias in aliases
+    }
 
 
 def _merge_named_floor(
@@ -272,6 +307,7 @@ def _merge_effective_native_policies(
     merged = dict(policies[0])
     _merge_scalar_actions(policies, merged)
     _merge_action_maps(policies, merged)
+    merged["harness_actions"] = _merge_harness_actions(policies)
     merged["harness_risk_actions"] = _merge_harness_risk_actions(policies)
     _merge_named_floor(policies, merged, "protection_posture", _POSTURE_SEVERITY)
     _merge_named_floor(policies, merged, "security_level", _SECURITY_LEVEL_SEVERITY)

@@ -15,6 +15,7 @@ from typing import Literal, cast
 from cryptography.hazmat.primitives.asymmetric import utils
 
 from .contracts import KeyProtectionLevel, MachinePaths
+from .device_key_windows_api import load_windows_token_api
 
 _MAX_HELPER_OUTPUT_BYTES = 16 * 1024
 _MAX_HELPER_STDERR_BYTES = 4096
@@ -408,56 +409,25 @@ def windows_current_user_sid() -> str:
     import ctypes
     from ctypes import wintypes
 
-    win_dll = getattr(ctypes, "WinDLL", None)
-    if not callable(win_dll):
-        raise OSError("device_key_system_context_required")
-    try:
-        advapi32 = win_dll("advapi32", use_last_error=True)
-        kernel32 = win_dll("kernel32", use_last_error=True)
-    except (OSError, RuntimeError, TypeError, ValueError) as error:
-        raise OSError("device_key_system_context_required") from error
-    get_current_process = kernel32.GetCurrentProcess
-    get_current_process.argtypes = []
-    get_current_process.restype = wintypes.HANDLE
-    open_process_token = advapi32.OpenProcessToken
-    open_process_token.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)]
-    open_process_token.restype = wintypes.BOOL
-    get_token_information = advapi32.GetTokenInformation
-    get_token_information.argtypes = [
-        wintypes.HANDLE,
-        wintypes.DWORD,
-        wintypes.LPVOID,
-        wintypes.DWORD,
-        ctypes.POINTER(wintypes.DWORD),
-    ]
-    get_token_information.restype = wintypes.BOOL
-    convert_sid = advapi32.ConvertSidToStringSidW
-    convert_sid.argtypes = [wintypes.LPVOID, ctypes.POINTER(wintypes.LPWSTR)]
-    convert_sid.restype = wintypes.BOOL
-    local_free = kernel32.LocalFree
-    local_free.argtypes = [wintypes.HLOCAL]
-    local_free.restype = wintypes.HLOCAL
-    close_handle = kernel32.CloseHandle
-    close_handle.argtypes = [wintypes.HANDLE]
-    close_handle.restype = wintypes.BOOL
+    windows_token_api = load_windows_token_api()
 
     token = wintypes.HANDLE()
-    if not open_process_token(get_current_process(), 0x0008, ctypes.byref(token)):
+    if not windows_token_api.open_process_token(windows_token_api.get_current_process(), 0x0008, ctypes.byref(token)):
         raise OSError("device_key_system_context_required")
     try:
         needed = wintypes.DWORD()
-        if get_token_information(token, 1, None, 0, ctypes.byref(needed)):
+        if windows_token_api.get_token_information(token, 1, None, 0, ctypes.byref(needed)):
             raise OSError("device_key_system_context_required")
         if ctypes.get_last_error() != 122 or not 0 < needed.value <= 64 * 1024:
             raise OSError("device_key_system_context_required")
         buffer = ctypes.create_string_buffer(needed.value)
-        if not get_token_information(token, 1, buffer, needed, ctypes.byref(needed)):
+        if not windows_token_api.get_token_information(token, 1, buffer, needed, ctypes.byref(needed)):
             raise OSError("device_key_system_context_required")
         sid_pointer = ctypes.cast(buffer, ctypes.POINTER(wintypes.LPVOID)).contents
         if not sid_pointer.value:
             raise OSError("device_key_system_context_required")
         sid_string = wintypes.LPWSTR()
-        if not convert_sid(sid_pointer, ctypes.byref(sid_string)):
+        if not windows_token_api.convert_sid(sid_pointer, ctypes.byref(sid_string)):
             raise OSError("device_key_system_context_required")
         try:
             value = sid_string.value
@@ -465,9 +435,9 @@ def windows_current_user_sid() -> str:
                 raise OSError("device_key_system_context_required")
             return str(value)
         finally:
-            _ = local_free(ctypes.cast(sid_string, wintypes.HLOCAL))
+            _ = windows_token_api.local_free(ctypes.cast(sid_string, wintypes.HLOCAL))
     finally:
-        _ = close_handle(token)
+        _ = windows_token_api.close_handle(token)
 
 
 def require_machine_context(system_name: str) -> None:
