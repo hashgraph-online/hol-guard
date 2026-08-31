@@ -14,7 +14,7 @@ _FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
 _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 _FILE_LIST_DIRECTORY = 0x0001
 _FILE_TRAVERSE = 0x0020
-_FILE_RENAME_INFO_CLASS = 3
+_FILE_RENAME_INFORMATION_CLASS = 10
 _FILE_SHARE_READ = 0x00000001
 _GENERIC_WRITE = 0x40000000
 _CREATE_NEW = 1
@@ -41,9 +41,19 @@ class _FileRenameInfo(ctypes.Structure):
     ]
 
 
+class _IoStatusValue(ctypes.Union):
+    _fields_ = [("status", ctypes.c_long), ("pointer", ctypes.c_void_p)]  # noqa: RUF012
+
+
+class _IoStatusBlock(ctypes.Structure):
+    _anonymous_ = ("value",)
+    _fields_ = [("value", _IoStatusValue), ("information", ctypes.c_size_t)]
+
+
 class _WindowsApi:
     def __init__(self) -> None:
         library = ctypes.WinDLL("kernel32", use_last_error=True)
+        native_library = ctypes.WinDLL("ntdll", use_last_error=True)
         library.CloseHandle.argtypes = [ctypes.c_void_p]
         library.CloseHandle.restype = ctypes.c_int
         library.CreateDirectoryW.argtypes = [ctypes.c_wchar_p, ctypes.c_void_p]
@@ -69,13 +79,16 @@ class _WindowsApi:
             ctypes.c_uint32,
         ]
         library.GetFileInformationByHandleEx.restype = ctypes.c_int
-        library.SetFileInformationByHandle.argtypes = [
+        native_library.NtSetInformationFile.argtypes = [
             ctypes.c_void_p,
-            ctypes.c_int,
+            ctypes.POINTER(_IoStatusBlock),
             ctypes.c_void_p,
             ctypes.c_uint32,
+            ctypes.c_int,
         ]
-        library.SetFileInformationByHandle.restype = ctypes.c_int
+        native_library.NtSetInformationFile.restype = ctypes.c_long
+        native_library.RtlNtStatusToDosError.argtypes = [ctypes.c_long]
+        native_library.RtlNtStatusToDosError.restype = ctypes.c_uint32
         library.WriteFile.argtypes = [
             ctypes.c_void_p,
             ctypes.c_void_p,
@@ -85,6 +98,7 @@ class _WindowsApi:
         ]
         library.WriteFile.restype = ctypes.c_int
         self._library = library
+        self._native_library = native_library
 
     def close_handle(self, handle: int) -> None:
         self._library.CloseHandle(ctypes.c_void_p(handle))
@@ -121,14 +135,20 @@ class _WindowsApi:
         )
 
     def rename_file(self, handle: int, buffer: ctypes.Array[ctypes.c_char]) -> bool:
-        return bool(
-            self._library.SetFileInformationByHandle(
+        status_block = _IoStatusBlock()
+        status = int(
+            self._native_library.NtSetInformationFile(
                 ctypes.c_void_p(handle),
-                _FILE_RENAME_INFO_CLASS,
+                ctypes.byref(status_block),
                 buffer,
                 len(buffer),
+                _FILE_RENAME_INFORMATION_CLASS,
             )
         )
+        if status < 0:
+            ctypes.set_last_error(int(self._native_library.RtlNtStatusToDosError(status)))
+            return False
+        return True
 
     def write_file(
         self,
@@ -216,15 +236,15 @@ def _write_file(api: _WindowsApi, handle: int, payload: bytes) -> None:
         _raise_windows_error("unable to flush output file")
 
 
-def _rename_file_handle(api: _WindowsApi, handle: int, target: Path) -> None:
-    encoded_name = str(target).encode("utf-16-le")
+def _rename_file_handle(api: _WindowsApi, handle: int, parent_handle: int, name: str) -> None:
+    encoded_name = name.encode("utf-16-le")
     file_name_offset = _FileRenameInfo.file_name.offset
     # Windows requires the full FILE_RENAME_INFO structure plus the variable
     # filename payload, even though FileNameLength excludes the placeholder.
     buffer = ctypes.create_string_buffer(ctypes.sizeof(_FileRenameInfo) + len(encoded_name))
     info = ctypes.cast(buffer, ctypes.POINTER(_FileRenameInfo)).contents
     info.replace_if_exists = True
-    info.root_directory = None
+    info.root_directory = parent_handle
     info.file_name_length = len(encoded_name)
     ctypes.memmove(ctypes.addressof(buffer) + file_name_offset, encoded_name, len(encoded_name))
     if not api.rename_file(handle, buffer):
@@ -251,12 +271,7 @@ def write_bytes_atomic_no_follow_windows(path: Path, payload: bytes) -> None:
             _raise_windows_error("unable to create temporary output file")
         temporary_handle = int(opened)
         _write_file(api, temporary_handle, payload)
-        # SetFileInformationByHandle resolves an absolute target by opening the
-        # final directory for mutation, which conflicts with our own lock. Its
-        # parent remains locked, so this verified directory cannot be replaced;
-        # racing the leaf is safe because the source handle replaces that entry.
-        api.close_handle(directory_handles.pop())
-        _rename_file_handle(api, temporary_handle, absolute)
+        _rename_file_handle(api, temporary_handle, directory_handles[-1], absolute.name)
         renamed = True
     finally:
         if temporary_handle is not None:
