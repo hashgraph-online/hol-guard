@@ -192,9 +192,13 @@ class HookWorker:
         native_required = mode in {"auto", "force"}
         if native_required:
             config = self._load_config(guard_home, workspace)
+            recording_only = protection_is_off(
+                posture=config.protection_posture,
+                mode=config.mode,
+            )
             response = review_post_tool_native(
                 request,
-                observe_mode=config.mode == "observe",
+                observe_mode=recording_only,
             )
             if response is None:
                 self._record_post_tool_activity(
@@ -202,6 +206,12 @@ class HookWorker:
                     payload=payload,
                     succeeded=hook_post_succeeded(event_name, payload),
                 )
+                if recording_only:
+                    return {
+                        "policy_action": "allow",
+                        "reason_code": "native_post_tool_unavailable",
+                        "hookSpecificOutput": {"hookEventName": event_name},
+                    }
                 return post_tool_fail_safe_response(
                     harness,
                     reason="HOL Guard could not complete the native local hook review safely.",
