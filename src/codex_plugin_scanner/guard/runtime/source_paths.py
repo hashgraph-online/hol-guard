@@ -207,6 +207,8 @@ def source_path_is_allowed(
         return SourcePathDecision(allowed=False, reason_code="glob_pattern")
     if classify_secret_path(stripped, cwd=cwd, home_dir=home_dir) is not None:
         return SourcePathDecision(allowed=False, reason_code="sensitive_basename")
+    if any(part.lower() in _SENSITIVE_SEARCH_BASENAMES for part in lexical_parts):
+        return SourcePathDecision(allowed=False, reason_code="sensitive_basename")
 
     if target_is_known_skill_doc_path(stripped, home_dir=home_dir):
         resolved = resolve_known_skill_doc_path(stripped, home_dir=home_dir)

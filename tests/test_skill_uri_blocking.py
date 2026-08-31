@@ -151,11 +151,14 @@ def test_known_skill_paths_reject_sensitive_glob_and_traversal_targets(tmp_path)
     (skill / "SKILL.md").write_text("# Safe\n")
     (skill / ".env").write_text("SECRET=value\n")
     (skill / "notes.md").write_text("notes\n")
+    (skill / "credentials").mkdir()
+    (skill / "credentials" / "config.ts").write_text("export const value = 1\n")
 
     for target in (
         "~/.claude/skills/safe/.env",
         "~/.claude/skills/safe/*.md",
         "~/.claude/skills/safe/../secret.py",
+        "~/.claude/skills/safe/credentials/config.ts",
     ):
         decision = source_path_is_allowed(target, cwd=tmp_path / "workspace", home_dir=home)
         assert not decision.allowed

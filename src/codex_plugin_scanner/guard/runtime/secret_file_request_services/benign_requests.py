@@ -8,7 +8,6 @@ import os
 import re
 import shlex
 from pathlib import Path
-from typing import cast
 
 from ...models import GuardArtifact
 from ..command_decision_adapter import effect_decision_to_dict
@@ -79,7 +78,9 @@ def is_explicitly_benign_native_file_read_request(
 
     if _normalize_tool_name(tool_name) != "read" or not isinstance(arguments, dict):
         return False
-    typed_arguments = cast(dict[str, object], arguments)
+    typed_arguments: dict[str, object] = {
+        key: value for key, value in arguments.items() if isinstance(key, str)
+    }
     if any(key in typed_arguments for key in _PATH_LIST_KEYS):
         return False
     candidates = [

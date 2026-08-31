@@ -165,7 +165,7 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
             real_file = candidate_file.resolve(strict=True)
         except (OSError, RuntimeError):
             continue
-        if candidate_file.is_file() and (real_file == real_candidate or real_candidate in real_file.parents):
+        if candidate_file.is_file() and real_candidate in real_file.parents:
             return True
     for suffix in KNOWN_AGENT_DOC_SUFFIXES:
         expected = f"{home}/{suffix}"

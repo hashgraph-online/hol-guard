@@ -253,12 +253,6 @@ def should_unsuppress_local_sample_secrets(
     """
     if path is None:
         return True
-    normalized_resource = path.strip().replace("\\", "/").lower()
-    if normalized_resource.startswith("skill://"):
-        return False
-    resource_path = normalized_resource.split("?", maxsplit=1)[0].split("#", maxsplit=1)[0].rstrip("/")
-    if resource_path.startswith("mcp://") and ("/describe/" in resource_path or resource_path.endswith("/describe")):
-        return False
     normalized = _normalize_scan_context_path(path, cwd=cwd)
     segments = tuple(segment for segment in normalized.split("/") if segment)
     if not segments:
