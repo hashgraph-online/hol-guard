@@ -61,12 +61,16 @@ def native_resident_client_request(
     guard_home: Path,
     environment: Mapping[str, str],
     payload: bytes,
-    timeout_seconds: float,
+    timeout_seconds: float | None = None,
     raw_hook_envelope: bool = False,
+    deadline_monotonic: float | None = None,
 ) -> bytes | None:
     """Invoke the native client without interpreting its protocol."""
     _LAST_FAILURE_CODE.set(None)
-    if not payload or timeout_seconds <= 0:
+    if not payload or (
+        deadline_monotonic is None
+        and (timeout_seconds is None or timeout_seconds <= 0)
+    ):
         _LAST_FAILURE_CODE.set("native_client_request_invalid")
         return None
     try:
@@ -77,15 +81,28 @@ def native_resident_client_request(
     state_dir = guard_home / "native-runtime"
     command = "hook-client" if raw_hook_envelope else "resident-client"
     try:
-        result = run_isolated_hook_process(
-            (str(executable), command, "--stdin", str(state_dir)),
-            input_text=input_text,
-            cwd=executable.parent,
-            environment=dict(environment),
-            timeout_seconds=timeout_seconds,
-            output_limit=_MAX_RESPONSE_BYTES,
-            windows_kill_on_job_close=False,
-        )
+        if deadline_monotonic is not None:
+            result = run_isolated_hook_process(
+                (str(executable), command, "--stdin", str(state_dir)),
+                input_text=input_text,
+                cwd=executable.parent,
+                environment=dict(environment),
+                timeout_seconds=None,
+                deadline_monotonic=deadline_monotonic,
+                output_limit=_MAX_RESPONSE_BYTES,
+                windows_kill_on_job_close=False,
+            )
+        else:
+            assert timeout_seconds is not None
+            result = run_isolated_hook_process(
+                (str(executable), command, "--stdin", str(state_dir)),
+                input_text=input_text,
+                cwd=executable.parent,
+                environment=dict(environment),
+                timeout_seconds=timeout_seconds,
+                output_limit=_MAX_RESPONSE_BYTES,
+                windows_kill_on_job_close=False,
+            )
     except (OSError, RuntimeError, ValueError):
         _LAST_FAILURE_CODE.set("native_client_launcher_failed")
         return None

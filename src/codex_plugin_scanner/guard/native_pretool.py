@@ -8,6 +8,7 @@ in native_command_model and is not a PreToolUse authority.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +75,10 @@ def review_pre_tool_native(
         if status.mode in {"auto", "force"}:
             return record_native_hook_result("native_fail_safe", None)
         return None
+    timeout_seconds = min(timeout_seconds, 1.0)
+    deadline_started = time.monotonic()
+    deadline_monotonic = deadline_started + timeout_seconds
+    deadline_budget_ms = max(1, min(9_000, int(timeout_seconds * 1_000)))
     request = {
         "command": command,
         "dialect": "posix",
@@ -83,11 +88,14 @@ def review_pre_tool_native(
     encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(encoded) > _MAX_REQUEST_BYTES:
         return record_native_hook_result("native_fail_safe", None)
-    timeout_seconds = min(timeout_seconds, 1.0)
     environment = _isolated_environment()
     if _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
         resident = json.dumps(
-            {"operation": "pre_tool_use", "request": request},
+            {
+                "operation": "pre_tool_use",
+                "deadline_budget_ms": deadline_budget_ms,
+                "request": request,
+            },
             separators=(",", ":"),
             ensure_ascii=False,
         ).encode("utf-8")
@@ -96,7 +104,7 @@ def review_pre_tool_native(
             guard_home=guard_home,
             environment=environment,
             payload=resident,
-            timeout_seconds=timeout_seconds,
+            deadline_monotonic=deadline_monotonic,
         )
         if output is not None:
             try:

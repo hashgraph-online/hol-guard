@@ -15,6 +15,7 @@ guard-contracts = { path = "../guard-contracts" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-rule-contract = { path = "../guard-rule-contract" }
+guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 getrandom.workspace = true
 libc.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }

@@ -157,6 +157,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-runtime-windows-process"
+version = "0.1.0"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "guard-scanner"
 version = "0.1.0"
 dependencies = [
@@ -191,6 +198,7 @@ dependencies = [
  "guard-hook-core",
  "guard-policy-snapshot",
  "guard-rule-contract",
+ "guard-runtime-windows-process",
  "guard-secure-fs",
  "libc",
  "nix",

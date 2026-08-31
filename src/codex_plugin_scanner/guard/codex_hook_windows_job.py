@@ -182,7 +182,7 @@ def assign_current_process_to_windows_hook_job(
 
 
 def close_windows_hook_job(job: WindowsHookJob) -> None:
-    """Close the job, deterministically terminating any remaining descendants."""
+    """Close the job, terminating descendants when kill-on-close is enabled."""
 
     try:
         job.close()

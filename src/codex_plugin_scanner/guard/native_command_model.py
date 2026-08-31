@@ -8,6 +8,7 @@ Rust runtime and native_pretool transport.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -246,6 +247,9 @@ def review_command_model_native(
         return None
     request, _request_bytes = prepared
     timeout_seconds = min(timeout_seconds, 1.0)
+    deadline_started = time.monotonic()
+    deadline_monotonic = deadline_started + timeout_seconds
+    deadline_budget_ms = max(1, min(9_000, int(timeout_seconds * 1_000)))
     environment = _isolated_environment()
     decoder_arguments = {
         "command": command,
@@ -256,7 +260,11 @@ def review_command_model_native(
 
     if {_RESIDENT_FEATURE, _RESIDENT_PROTOCOL_FEATURE} <= set(status.capabilities.features):
         resident_envelope = json.dumps(
-            {"operation": "command_model", "request": request},
+            {
+                "operation": "command_model",
+                "deadline_budget_ms": deadline_budget_ms,
+                "request": request,
+            },
             separators=(",", ":"),
             ensure_ascii=False,
         ).encode("utf-8")
@@ -265,7 +273,7 @@ def review_command_model_native(
             guard_home=guard_home,
             environment=environment,
             payload=resident_envelope,
-            timeout_seconds=timeout_seconds,
+            deadline_monotonic=deadline_monotonic,
         )
         if resident_output is not None:
             try:

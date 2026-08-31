@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_command_model
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
 from codex_plugin_scanner.guard.native_resident_client import (
@@ -72,6 +74,98 @@ def test_python_launcher_only_invokes_package_bound_native_client(
     assert captured["output_limit"] == 2 * 1024 * 1024
     assert captured["windows_kill_on_job_close"] is False
     assert native_resident_client_failure_code() is None
+
+
+def test_native_client_forwards_absolute_deadline_without_relative_floor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(command: tuple[str, ...], **kwargs: object) -> BoundedHookProcessResult:
+        captured.update(command=tuple(command), **kwargs)
+        return BoundedHookProcessResult(0, '{"ok":true}\n', False, False)
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_resident_client.run_isolated_hook_process",
+        fake_run,
+    )
+    deadline = time.monotonic() + 0.001
+    result = native_resident_client_request(
+        executable=tmp_path / "runtime",
+        guard_home=tmp_path / "guard-home",
+        environment={},
+        payload=b"{}",
+        deadline_monotonic=deadline,
+    )
+
+    assert result == b'{"ok":true}\n'
+    assert captured["deadline_monotonic"] == deadline
+    assert captured["timeout_seconds"] is None
+
+
+def test_command_model_budget_is_bound_at_resident_envelope_top_level(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.write_bytes(b"runtime")
+    identity = NativeRuntimeIdentity(
+        path=runtime,
+        size=runtime.stat().st_size,
+        mtime_ns=runtime.stat().st_mtime_ns,
+        sha256="a" * 64,
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=1,
+        runtime_version="test",
+        rule_digest="b" * 64,
+        build_sha="c" * 40,
+        target="test",
+        features=(
+            "pre-tool-command-model-shadow-v1",
+            "resident-command-model-shadow-v1",
+            "resident-protocol-v2",
+        ),
+    )
+    monkeypatch.setattr(
+        native_command_model,
+        "native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="shadow",
+            available=True,
+            compatible=True,
+            reason="ready",
+            identity=identity,
+            capabilities=capabilities,
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> bytes:
+        captured.update(kwargs)
+        return b"{}"
+
+    monkeypatch.setattr(native_command_model, "native_resident_client_request", fake_client)
+    monkeypatch.setattr(
+        native_command_model,
+        "_decode_command_model",
+        lambda *_args, **_kwargs: {"confidence": "exact"},
+    )
+
+    result = native_command_model.review_command_model_native(
+        "git status",
+        guard_home=tmp_path / "guard-home",
+        timeout_seconds=0.25,
+    )
+
+    assert result == {"confidence": "exact"}
+    encoded = captured["payload"]
+    assert isinstance(encoded, bytes)
+    envelope = json.loads(encoded)
+    assert envelope["deadline_budget_ms"] == 250
+    assert "deadline_monotonic" in captured
+    assert "timeout_seconds" not in captured
 
 
 def test_native_client_records_only_allowlisted_failure_code(

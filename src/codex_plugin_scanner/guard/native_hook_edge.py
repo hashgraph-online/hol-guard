@@ -21,10 +21,11 @@ _CLIENT_FEATURE = "native-resident-client-v1"
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 
 
-def _deadline_budget_ms(deadline: float | None) -> int:
-    if deadline is None:
-        return 750
-    return max(1, min(9_000, int((deadline - time.monotonic()) * 1_000)))
+def _capture_deadline(deadline: float | None) -> tuple[float, int]:
+    now = time.monotonic()
+    effective_deadline = deadline if deadline is not None else now + 0.75
+    budget_ms = max(1, min(9_000, int((effective_deadline - now) * 1_000)))
+    return effective_deadline, budget_ms
 
 
 def _decode_edge(payload: object) -> dict[str, Any] | None:
@@ -74,12 +75,13 @@ def review_raw_hook_native(
         or not {_EDGE_FEATURE, _CLIENT_FEATURE} <= set(status.capabilities.features)
     ):
         return record_native_hook_result("native_fail_safe", None)
+    deadline_monotonic, deadline_budget_ms = _capture_deadline(deadline)
     try:
         snapshot = native_policy_snapshot(
             rule_digest=status.capabilities.rule_digest,
             observe_mode=observe_mode,
             guard_home=guard_home,
-            deadline_monotonic=deadline,
+            deadline_monotonic=deadline_monotonic,
         )
     except (NativePolicySnapshotError, OSError):
         return record_native_hook_result("native_fail_safe", None)
@@ -89,7 +91,7 @@ def review_raw_hook_native(
         "harness": harness,
         "event": event,
         "raw_payload": payload,
-        "deadline_budget_ms": _deadline_budget_ms(deadline),
+        "deadline_budget_ms": deadline_budget_ms,
         "policy_generation": snapshot["generation"],
         "policy_snapshot": snapshot,
         "source": {
@@ -115,7 +117,7 @@ def review_raw_hook_native(
         guard_home=guard_home,
         environment=_isolated_environment(),
         payload=encoded,
-        timeout_seconds=max(0.05, min(9.0, _deadline_budget_ms(deadline) / 1_000)),
+        deadline_monotonic=deadline_monotonic,
         raw_hook_envelope=True,
     )
     if output is None:

@@ -10,6 +10,7 @@ import functools
 import hashlib
 import importlib.metadata
 import json
+import math
 import os
 import stat
 import time
@@ -530,13 +531,18 @@ def _native_error(payload: object) -> str | None:
     return error
 
 
+def _capture_native_deadline(request: HookReviewRequest) -> tuple[float, int]:
+    """Capture one absolute native deadline and its bounded envelope budget."""
+    now = time.monotonic()
+    requested = request.deadline_monotonic
+    deadline = requested if requested is not None and math.isfinite(requested) else now + 0.75
+    budget_ms = max(1, min(9_000, int((deadline - now) * 1_000)))
+    return deadline, budget_ms
+
+
 def _deadline_budget_ms(request: HookReviewRequest) -> int:
-    if request.deadline_monotonic is None:
-        return 750
-    return max(
-        1,
-        min(9_000, int((request.deadline_monotonic - time.monotonic()) * 1_000)),
-    )
+    """Return a bounded budget for compatibility with existing callers."""
+    return _capture_native_deadline(request)[1]
 
 
 def _identity_key(status: NativeRuntimeStatus) -> str:
@@ -569,6 +575,7 @@ def review_post_tool_native(
             )
         return record_native_hook_result("native_fail_safe", None)
 
+    deadline_monotonic, deadline_budget_ms = _capture_native_deadline(request)
     try:
         policy_snapshot = (
             None
@@ -577,7 +584,7 @@ def review_post_tool_native(
                 guard_home=request.guard_home,
                 rule_digest=status.capabilities.rule_digest,
                 observe_mode=observe_mode,
-                deadline_monotonic=request.deadline_monotonic,
+                deadline_monotonic=deadline_monotonic,
             )
         )
     except (NativePolicySnapshotError, OSError):
@@ -594,17 +601,12 @@ def review_post_tool_native(
         "guard_home": str(request.guard_home),
         "source_ref_external_allowed": request.source_ref_external_allowed,
         "observe_mode": observe_mode,
-        "deadline_budget_ms": _deadline_budget_ms(request),
+        "deadline_budget_ms": deadline_budget_ms,
         "policy_snapshot": policy_snapshot,
     }
     input_text = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
     if len(encoded := input_text.encode("utf-8")) > _MAX_REQUEST_BYTES:
         return record_native_hook_result("native_fail_safe", None)
-    timeout_seconds = max(
-        0.05,
-        min(9.0, _deadline_budget_ms(request) / 1_000.0),
-    )
-
     resident_output = None
     if status.capabilities is not None and _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
         resident_output = native_resident_client_request(
@@ -612,7 +614,7 @@ def review_post_tool_native(
             guard_home=request.guard_home,
             environment=_isolated_environment(),
             payload=encoded,
-            timeout_seconds=timeout_seconds,
+            deadline_monotonic=deadline_monotonic,
         )
     if resident_output is not None:
         try:
