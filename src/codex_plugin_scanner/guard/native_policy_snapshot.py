@@ -1220,13 +1220,29 @@ def provision_native_policy_verifier_key(
     return path
 
 
+def _normalize_scope_text_v3(value: str) -> str:
+    """Canonicalize a guard-home identity across Windows path aliases."""
+    if os.name == "nt":
+        normalized = value.replace("/", "\\")
+        folded = normalized.casefold()
+        if folded.startswith("\\\\?\\unc\\"):
+            normalized = "\\\\" + normalized[8:]
+        elif folded.startswith("\\\\?\\"):
+            normalized = normalized[4:]
+        while len(normalized) > 3 and normalized.endswith("\\"):
+            normalized = normalized[:-1]
+        return normalized.casefold()
+    if value.startswith("/private/"):
+        return value[len("/private") :]
+    return value
+
+
 def _scope_digest_v3(guard_home: Path) -> str:
     try:
         canonical = str(guard_home.expanduser().resolve(strict=False))
     except (OSError, RuntimeError, ValueError):
         canonical = str(guard_home)
-    if os.name != "nt" and canonical.startswith("/private/"):
-        canonical = canonical[len("/private") :]
+    canonical = _normalize_scope_text_v3(canonical)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -2575,6 +2591,25 @@ class NativePolicySnapshotPublisher:
             if not self._acked or self._snapshot is None or self._closed:
                 return None
             return cast(dict[str, object], json.loads(json.dumps(self._snapshot)))
+
+    def current_snapshot_binding(self) -> dict[str, object] | None:
+        """Return the small immutable request binding for the hot hook path.
+
+        The resident owns the authenticated full snapshot after publication.
+        Hook requests only need the values that bind them to that resident
+        snapshot; avoid serializing and copying policy rules on every hook.
+        """
+        with self._condition:
+            self._mark_expired_locked()
+            if not self._acked or self._snapshot is None or self._closed:
+                return None
+            snapshot = self._snapshot
+            return {
+                "generation": snapshot.get("generation"),
+                "policy_digest": snapshot.get("policy_digest"),
+                "runtime_identity": snapshot.get("runtime_identity"),
+                "mode": snapshot.get("mode"),
+            }
 
     @property
     def last_error(self) -> str | None:

@@ -328,6 +328,9 @@ def test_full_cli_review_keeps_native_terminal_provenance(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The shared test fixture intentionally disables native mode by default.
+    # This regression exercises the production native terminal path explicitly.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     home = tmp_path / "home"

@@ -51,6 +51,16 @@ def _config() -> dict[str, object]:
     }
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows path aliases are platform-specific")
+def test_windows_scope_aliases_share_one_digest_identity() -> None:
+    normal = snapshot_module._normalize_scope_text_v3(r"C:\Users\Guard\State")
+    assert normal == r"c:\users\guard\state"
+    assert snapshot_module._normalize_scope_text_v3(r"\\?\C:\Users\Guard\State") == normal
+    assert snapshot_module._normalize_scope_text_v3(r"\\?\UNC\Server\Share\State\\") == (
+        snapshot_module._normalize_scope_text_v3(r"\\server\share\state")
+    )
+
+
 def test_policy_merge_never_downgrades_enforcing_posture_to_watch() -> None:
     protected = {**_config(), "mode": "enforce", "protection_posture": "protected"}
     watch = {**_config(), "mode": "observe", "protection_posture": "watch"}
@@ -323,7 +333,7 @@ def test_auto_hook_uses_barrier_without_loading_config_per_request(
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_pre_tool_unavailable"
-    assert len(wait_deadlines) == 1
+    assert len(wait_deadlines) == 2
     assert 0 < wait_deadlines[0] - started_at <= 1.0
 
 

@@ -60,6 +60,20 @@ pub(super) fn scope_digest_string(guard_home: &str) -> String {
 }
 
 pub(super) fn normalize_scope_text(value: &str) -> String {
+    #[cfg(windows)]
+    {
+        let mut normalized = value.replace('/', "\\");
+        let folded = normalized.to_ascii_lowercase();
+        if folded.starts_with("\\\\?\\unc\\") {
+            normalized = format!("\\\\{}", &normalized[8..]);
+        } else if folded.starts_with("\\\\?\\") {
+            normalized = normalized[4..].to_owned();
+        }
+        while normalized.len() > 3 && normalized.ends_with('\\') {
+            normalized.pop();
+        }
+        return normalized.to_ascii_lowercase();
+    }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     if let Some(stripped) = value.strip_prefix("/private/") {
         return format!("/{stripped}");

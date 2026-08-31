@@ -190,7 +190,11 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
                 if isinstance(reason, str):
                     reason_codes[reason] = reason_codes.get(reason, 0) + 1
                 route_receipts.append({"harness": harness, "event": event, "route": "native_resident"})
-        worker_stats = daemon._server.hook_process_runner.stats()
+        # Native edge requests execute in the resident HookWorker and do not
+        # traverse the compatibility subprocess runner. Read its bounded
+        # route receipt instead of attributing native traffic to that idle
+        # Python-only worker pool.
+        worker_stats = daemon._server.hook_worker.metrics.snapshot()
     finally:
         daemon.stop()
 

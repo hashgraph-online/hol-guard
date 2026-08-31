@@ -263,7 +263,7 @@ pub(crate) fn evaluate_envelope_with_store(
         &envelope.source.guard_home,
         envelope.policy_generation,
     )?;
-    evaluate_validated_envelope(envelope, Some(&snapshot))
+    evaluate_validated_envelope(envelope, Some(snapshot.as_ref()))
 }
 
 #[cfg(test)]

@@ -21,6 +21,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+#[cfg(windows)]
+use super::normalize_scope_text;
+
 fn policy() -> EffectiveNativePolicyV3 {
     EffectiveNativePolicyV3 {
         protection_posture: "protected".into(),
@@ -117,6 +120,18 @@ fn protect_test_file(path: &Path) {
     crate::resident_state::protect_windows_private_path(path, false).unwrap();
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_scope_aliases_share_one_digest_identity() {
+    let normal = normalize_scope_text(r"C:\Users\Guard\State");
+    assert_eq!(normal, r"c:\users\guard\state");
+    assert_eq!(normalize_scope_text(r"\\?\C:\Users\Guard\State"), normal);
+    assert_eq!(
+        normalize_scope_text(r"\\?\UNC\Server\Share\State\\"),
+        normalize_scope_text(r"\\server\share\state")
+    );
+}
+
 fn legacy_floor_value(generation: u64, policy_digest: &str, key: &[u8]) -> Value {
     serde_json::to_value(GenerationFloorV1 {
         schema: GENERATION_FLOOR_SCHEMA.to_owned(),
@@ -196,6 +211,14 @@ fn restart_rehydrates_snapshot_and_hook_validation_uses_memory() {
     let snapshot_value = request["snapshot"].clone();
     assert!(restored
         .validate_request_snapshot(&snapshot_value, root.to_string_lossy().as_ref(), 4,)
+        .is_ok());
+    let compact_reference = serde_json::json!({
+        "generation": snapshot.generation,
+        "policy_digest": snapshot.policy_digest.clone(),
+        "runtime_identity": snapshot.runtime_identity.clone(),
+    });
+    assert!(restored
+        .validate_request_snapshot(&compact_reference, root.to_string_lossy().as_ref(), 4,)
         .is_ok());
     fs::remove_file(root.join(SNAPSHOT_FILE_NAME)).unwrap();
     assert!(restored

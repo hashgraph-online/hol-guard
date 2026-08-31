@@ -255,7 +255,15 @@ def review_raw_hook_native(
         "raw_payload": payload,
         "deadline_budget_ms": deadline_budget_ms,
         "policy_generation": snapshot["generation"],
-        "policy_snapshot": snapshot,
+        # The resident already authenticated and cached the full snapshot at
+        # push/startup. Keep the request binding compact so each hook only
+        # carries the generation and identity it must match, rather than
+        # re-deserializing and re-authenticating the complete policy.
+        "policy_snapshot": {
+            "generation": snapshot["generation"],
+            "policy_digest": snapshot.get("policy_digest"),
+            "runtime_identity": snapshot.get("runtime_identity"),
+        },
         "source": {
             "cwd": str(cwd) if cwd is not None else None,
             "home_dir": str(home_dir),

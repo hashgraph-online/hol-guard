@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[path = "policy_store_authority.rs"]
 mod policy_store_authority;
@@ -96,7 +96,7 @@ struct GenerationFloorV1 {
 }
 
 struct PolicyState {
-    pub(super) snapshot: Option<PolicySnapshotV3>,
+    pub(super) snapshot: Option<Arc<PolicySnapshotV3>>,
     pub(super) canonical_bytes: Vec<u8>,
     pub(super) generation_floor: u64,
     /// Digest authenticated together with `generation_floor`.  It remains
@@ -151,7 +151,7 @@ impl PolicySnapshotStore {
             expected_scope_digest,
             verifier_key,
             state: Mutex::new(PolicyState {
-                snapshot: loaded.snapshot,
+                snapshot: loaded.snapshot.map(Arc::new),
                 canonical_bytes: loaded.canonical_bytes,
                 generation_floor: loaded.generation_floor,
                 policy_digest: loaded.policy_digest,
@@ -238,7 +238,7 @@ impl PolicySnapshotStore {
                 if snapshot_bytes != state.canonical_bytes {
                     return Err("native_policy_snapshot_generation_reused".to_owned());
                 }
-                return encode_ack(current, true);
+                return encode_ack(current.as_ref(), true);
             }
         } else if request.snapshot.generation <= state.generation_floor {
             // There is no current snapshot to compare for normal idempotent
@@ -256,7 +256,7 @@ impl PolicySnapshotStore {
         )?;
         state.generation_floor = request.snapshot.generation;
         state.policy_digest = Some(request.snapshot.policy_digest.clone());
-        state.snapshot = Some(request.snapshot.clone());
+        state.snapshot = Some(Arc::new(request.snapshot.clone()));
         state.canonical_bytes = snapshot_bytes;
         state.invalid_on_startup = false;
         encode_ack(&request.snapshot, false)
@@ -267,10 +267,7 @@ impl PolicySnapshotStore {
         value: &Value,
         guard_home: &str,
         generation: u64,
-    ) -> Result<PolicySnapshotV3, String> {
-        let incoming: PolicySnapshotV3 = serde_json::from_value(value.clone())
-            .map_err(|_| "native_policy_snapshot_invalid".to_owned())?;
-        let incoming_bytes = snapshot_bytes(&incoming).map_err(snapshot_error)?;
+    ) -> Result<Arc<PolicySnapshotV3>, String> {
         let now = now_ms()?;
         let state = self
             .state
@@ -282,27 +279,52 @@ impl PolicySnapshotStore {
         let Some(current) = state.snapshot.as_ref() else {
             return Err("native_policy_snapshot_missing".to_owned());
         };
-        validate_v3(
-            current,
-            state.generation_floor.max(1),
-            &self.expected_runtime_identity,
-            &self.expected_rule_digest,
-            &self.verifier_key,
-            now,
-        )
-        .map_err(snapshot_error)?;
-        if generation != current.generation || incoming.generation != current.generation {
+        if current.expires_at_ms <= now {
+            return Err("snapshot_expired".to_owned());
+        }
+        if generation != current.generation {
             return Err("native_policy_snapshot_not_current".to_owned());
         }
-        if incoming_bytes != state.canonical_bytes {
-            return Err("native_policy_snapshot_request_mismatch".to_owned());
+        let Some(reference) = value.as_object() else {
+            return Err("native_policy_snapshot_invalid".to_owned());
+        };
+        let compact_keys = ["generation", "policy_digest", "runtime_identity"];
+        let is_compact_reference = reference.len() == compact_keys.len()
+            && compact_keys.iter().all(|key| reference.contains_key(*key));
+        if is_compact_reference {
+            let reference_generation = reference
+                .get("generation")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| "native_policy_snapshot_invalid".to_owned())?;
+            let policy_digest = reference
+                .get("policy_digest")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "native_policy_snapshot_invalid".to_owned())?;
+            let runtime_identity = reference
+                .get("runtime_identity")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "native_policy_snapshot_invalid".to_owned())?;
+            if reference_generation != current.generation
+                || policy_digest != current.policy_digest
+                || runtime_identity != self.expected_runtime_identity
+            {
+                return Err("native_policy_snapshot_request_mismatch".to_owned());
+            }
+        } else {
+            let incoming: PolicySnapshotV3 = serde_json::from_value(value.clone())
+                .map_err(|_| "native_policy_snapshot_invalid".to_owned())?;
+            let incoming_bytes = snapshot_bytes(&incoming).map_err(snapshot_error)?;
+            if incoming.generation != current.generation || incoming_bytes != state.canonical_bytes
+            {
+                return Err("native_policy_snapshot_request_mismatch".to_owned());
+            }
         }
         if normalize_scope_text(guard_home) != self.expected_guard_home
             || current.scope_contract.scope_digest != self.expected_scope_digest
         {
             return Err("native_policy_snapshot_scope_mismatch".to_owned());
         }
-        Ok(current.clone())
+        Ok(Arc::clone(current))
     }
 
     #[cfg(test)]

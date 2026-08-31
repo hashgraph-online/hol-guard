@@ -608,8 +608,7 @@ def review_post_tool_native(
     deadline_monotonic, deadline_budget_ms = _capture_native_deadline(request)
     if policy_snapshot is None:
         return record_native_hook_result("native_fail_safe", None)
-    policy_snapshot_payload = dict(policy_snapshot)
-    generation = policy_snapshot_payload.get("generation")
+    generation = policy_snapshot.get("generation")
     if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
         return record_native_hook_result("native_fail_safe", None)
     envelope = {
@@ -620,7 +619,14 @@ def review_post_tool_native(
         "raw_payload": request.payload,
         "deadline_budget_ms": deadline_budget_ms,
         "policy_generation": generation,
-        "policy_snapshot": policy_snapshot_payload,
+        # The resident already authenticated and cached the full snapshot at
+        # push/startup. Bind each request to that snapshot without copying
+        # policy rules or re-running their integrity checks on the hot path.
+        "policy_snapshot": {
+            "generation": generation,
+            "policy_digest": policy_snapshot.get("policy_digest"),
+            "runtime_identity": policy_snapshot.get("runtime_identity"),
+        },
         "source": {
             "cwd": str(request.cwd) if request.cwd is not None else None,
             "home_dir": str(request.home_dir),

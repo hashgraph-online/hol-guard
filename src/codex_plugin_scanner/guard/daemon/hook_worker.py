@@ -148,14 +148,16 @@ class HookWorker:
         if native_mode() not in {"auto", "force", "shadow"}:
             return None
         register_workspace = getattr(self.policy_snapshot_publisher, "register_workspace", None)
-        workspace_registered = False
         if callable(register_workspace):
-            workspace_registered = register_workspace(workspace) is True
+            _ = register_workspace(workspace)
         self.policy_snapshot_publisher.start()
-        if workspace_registered and native_mode() in {"auto", "force"}:
+        if native_mode() in {"auto", "force"}:
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
                 _ = wait_until_ready(time.monotonic() + 0.25)
+        current_snapshot_binding = getattr(self.policy_snapshot_publisher, "current_snapshot_binding", None)
+        if callable(current_snapshot_binding):
+            return current_snapshot_binding()
         return self.policy_snapshot_publisher.current_snapshot()
 
     def review_http_payload(
@@ -271,6 +273,7 @@ class HookWorker:
             policy_snapshot=policy_snapshot,
         )
         if edge is None:
+            self.metrics.record_route("native_fail_safe")
             if event_name == "PostToolUse":
                 self._record_post_tool_activity(
                     harness=harness,
@@ -290,7 +293,9 @@ class HookWorker:
         native_harness = str(edge["harness"])
         native_result = edge["result"]
         if not isinstance(native_result, Mapping):
+            self.metrics.record_route("native_fail_safe")
             return post_tool_fail_safe_response(harness, reason_code="native_hook_edge_invalid_response")
+        self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
             return harness_json_from_native_pre_tool(native_harness, native_result)
         self._record_post_tool_activity(

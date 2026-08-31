@@ -22,8 +22,8 @@ pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), S
     SetNamedSecurityInfo(
         path.as_os_str(),
         SeObjectType::SE_FILE_OBJECT,
-        SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
-        None,
+        SecurityInformation::Dacl | SecurityInformation::Owner | SecurityInformation::ProtectedDacl,
+        Some(owner.as_ref()),
         None,
         Some(dacl),
         None,
