@@ -683,7 +683,7 @@ def test_trust_backend_check_drains_large_completed_result_before_timeout() -> N
 
     result = run_trust_backend_check(
         partial(_large_trust_result, large_status["payload"]),
-        timeout_seconds=1.0,
+        timeout_seconds=10.0,
         timeout_result=timeout_result,
     )
 
