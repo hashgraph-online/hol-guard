@@ -388,9 +388,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
             _HOOK_PROCESS_READY_TIMEOUT_SECONDS,
         )
         deadline = time.monotonic() + _HOOK_PROCESS_READY_TIMEOUT_SECONDS + containment_grace_seconds
-        creation_lock_acquired = self._process_creation_lock.acquire(
-            timeout=max(0.0, deadline - time.monotonic())
-        )
+        creation_lock_acquired = self._process_creation_lock.acquire(timeout=max(0.0, deadline - time.monotonic()))
         with self._state_lock:
             self._closed = True
             self._started = False

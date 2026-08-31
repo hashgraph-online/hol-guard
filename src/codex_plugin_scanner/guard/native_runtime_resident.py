@@ -25,8 +25,30 @@ from pathlib import Path
 from .codex_hook_launch_runtime import run_isolated_hook_process
 from .native_runtime_admission import native_resident_admission
 from .native_runtime_resident_transport import (
-    _AUTH_TOKEN_BYTES,
-    _MAX_REQUEST_BYTES,
+    _AUTH_NONCE_BYTES as _AUTH_NONCE_BYTES,
+)
+from .native_runtime_resident_transport import (
+    _AUTH_PROOF_BYTES as _AUTH_PROOF_BYTES,
+)
+from .native_runtime_resident_transport import (
+    _AUTH_TOKEN_BYTES as _AUTH_TOKEN_BYTES,
+)
+from .native_runtime_resident_transport import (
+    _CLIENT_PROOF_LABEL as _CLIENT_PROOF_LABEL,
+)
+from .native_runtime_resident_transport import (
+    _MAX_REQUEST_BYTES as _MAX_REQUEST_BYTES,
+)
+from .native_runtime_resident_transport import (
+    _SERVER_PROOF_LABEL as _SERVER_PROOF_LABEL,
+)
+from .native_runtime_resident_transport import (
+    _authenticated_loopback_client as _authenticated_loopback_client,
+)
+from .native_runtime_resident_transport import (
+    _proof as _proof,
+)
+from .native_runtime_resident_transport import (
     _prune_socket_credentials,
     _publish_socket_credential,
     _read_socket_credential,
@@ -39,6 +61,9 @@ from .native_runtime_resident_transport import (
     _unix_socket_accepts_connections,
     _unlink_owned_socket,
     _unlink_socket_credential,
+)
+from .native_runtime_resident_transport import (
+    _read_exact as _read_exact,
 )
 from .native_runtime_resilience import (
     native_record_resident_failure,

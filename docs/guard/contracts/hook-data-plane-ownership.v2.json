@@ -240,6 +240,7 @@
         "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_protocol.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_request.py",
+        "src/codex_plugin_scanner/guard/daemon/hook_process_creation.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_runner.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_runner_lifecycle.py",
         "src/codex_plugin_scanner/guard/daemon/hook_process_slot_review.py",
