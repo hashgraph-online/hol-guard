@@ -27,6 +27,7 @@ from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_cli_facade_isolation import isolate_terminal_block_patches
 
 
 def _context_token() -> str:
@@ -407,9 +408,7 @@ def test_current_terminal_block_is_not_queued_or_browser_approved(
     def unexpected(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("terminal Codex actions must not enter the approval queue or browser wait")
 
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", unexpected)
-    monkeypatch.setattr(guard_commands_module, "queue_blocked_approvals", unexpected)
-    monkeypatch.setattr(interaction_module, "wait_for_approval_requests", unexpected)
+    isolate_terminal_block_patches(monkeypatch, unexpected)
     output = StringIO()
     stdout = StringIO()
     with redirect_stdout(stdout):
