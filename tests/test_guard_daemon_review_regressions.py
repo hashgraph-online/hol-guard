@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -10,6 +11,8 @@ import pytest
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import recovery_worker
 from codex_plugin_scanner.guard.daemon import server as server_module
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def test_invalid_remaining_seconds_falls_back_to_valid_milliseconds() -> None:
@@ -372,3 +375,61 @@ def test_frozen_recovery_scheduler_spawns_private_worker(
     command, kwargs = spawned[0]
     assert command[:2] == [str(executable), "--_hol-guard-codex-daemon-recovery-worker"]
     assert kwargs["start_new_session"] is True
+
+
+def test_stop_invalidates_owned_service_begin_before_workers_start(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    daemon = GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home"),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=0,
+    )
+    original_begin_owned_service = daemon._begin_owned_service
+    begin_entered = threading.Event()
+    release_begin = threading.Event()
+    start_errors: list[BaseException] = []
+    stop_errors: list[BaseException] = []
+
+    def delayed_begin_owned_service(generation: int | None = None) -> None:
+        begin_entered.set()
+        assert release_begin.wait(timeout=5)
+        original_begin_owned_service(generation)
+
+    def start_daemon() -> None:
+        try:
+            daemon.start()
+        except BaseException as error:
+            start_errors.append(error)
+
+    def stop_daemon() -> None:
+        try:
+            daemon.stop()
+        except BaseException as error:
+            stop_errors.append(error)
+
+    monkeypatch.setattr(daemon, "_begin_owned_service", delayed_begin_owned_service)
+    starter = threading.Thread(target=start_daemon)
+    stopper = threading.Thread(target=stop_daemon)
+    try:
+        starter.start()
+        assert begin_entered.wait(timeout=10)
+        stopper.start()
+        stopper.join(timeout=0.5)
+        assert stopper.is_alive()
+        release_begin.set()
+        starter.join(timeout=10)
+        stopper.join(timeout=10)
+
+        assert not starter.is_alive()
+        assert not stopper.is_alive()
+        assert stop_errors == []
+        assert len(start_errors) == 1
+        assert str(start_errors[0]) == "Guard daemon stopped during startup"
+        assert daemon._owner_lock is None
+        assert daemon._server.hook_process_runner.stats()["workers"] == 0
+    finally:
+        release_begin.set()
+        daemon.stop()

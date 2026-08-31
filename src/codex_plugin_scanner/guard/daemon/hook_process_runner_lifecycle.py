@@ -23,6 +23,7 @@ class HookProcessRunnerLifecycleMixin:
     _slots: queue.Queue[HookWorkerSlot]
     _all_slots: dict[int, HookWorkerSlot]
     _spawn_threads: set[threading.Thread]
+    _process_creation_lock: threading.Lock
     _supervisor_thread: threading.Thread | None
     _retirement_threads: set[threading.Thread]
     _state_lock: threading.Lock

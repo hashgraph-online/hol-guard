@@ -11,9 +11,11 @@ from typing import final
 from .hook_process_capacity import (
     AdaptiveHookProcessCapacity,
     HookProcessStats,
+    backfill_window_after_capacity_enable,
     initial_hook_worker_target,
     process_cpu_ratio,
 )
+from .hook_process_creation import start_hook_worker_slot
 from .hook_process_protocol import as_string_object_dict, is_pair
 from .hook_process_request import build_hook_process_review_request, runtime_hook_review_is_idempotent
 from .hook_process_runner_lifecycle import _HOOK_PROCESS_READY_TIMEOUT_SECONDS, HookProcessRunnerLifecycleMixin
@@ -60,6 +62,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         self._all_slots: dict[int, HookWorkerSlot] = {}
         self._recovery_event: threading.Event = threading.Event()
         self._spawn_threads: set[threading.Thread] = set()
+        self._process_creation_lock: threading.Lock = threading.Lock()
         self._supervisor_thread: threading.Thread | None = None
         self._retirement_threads: set[threading.Thread] = set()
         self._state_lock: threading.Lock = threading.Lock()
@@ -157,14 +160,14 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         with self._state_lock:
             if self._closed or not self._started:
                 return
-            now = time.monotonic()
             self._capacity_target = self._initial_target
             self._adaptive_refresh_enabled = True
-            requested_not_before = now + max(0.0, delay_seconds)
-            self._backfill_not_before = max(self._backfill_not_before, requested_not_before)
-            self._backfill_force_after = max(
-                self._backfill_force_after,
-                self._backfill_not_before + active_deferral_seconds,
+            self._backfill_not_before, self._backfill_force_after = backfill_window_after_capacity_enable(
+                now=time.monotonic(),
+                delay_seconds=delay_seconds,
+                active_deferral_seconds=active_deferral_seconds,
+                current_not_before=self._backfill_not_before,
+                current_force_after=self._backfill_force_after,
             )
         self._recovery_event.set()
 
@@ -380,17 +383,21 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         _ = self.close_contained()
 
     def close_contained(self) -> bool:
-        with self._state_lock:
-            self._closed = True
-            self._started = False
-            self._generation += 1
-            self._recovery_event.set()
-
         containment_grace_seconds = min(
             _HOOK_PROCESS_CLOSE_CONTAINMENT_GRACE_SECONDS,
             _HOOK_PROCESS_READY_TIMEOUT_SECONDS,
         )
         deadline = time.monotonic() + _HOOK_PROCESS_READY_TIMEOUT_SECONDS + containment_grace_seconds
+        creation_lock_acquired = self._process_creation_lock.acquire(
+            timeout=max(0.0, deadline - time.monotonic())
+        )
+        with self._state_lock:
+            self._closed = True
+            self._started = False
+            self._generation += 1
+            self._recovery_event.set()
+        if creation_lock_acquired:
+            self._process_creation_lock.release()
         attempted_slot_ids: set[int] = set()
         while True:
             with self._state_lock:
@@ -432,19 +439,12 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         return self._containment_status(attempted_slot_ids)[0]
 
     def _start_slot(self, *, generation: int) -> HookWorkerSlot:
-        slot = spawn_hook_worker(self._guard_home)
-        process = slot.process
-        with self._state_lock:
-            stale = self._closed or generation != self._generation
-            if not stale:
-                self._all_slots[process.pid or id(slot)] = slot
-        if stale:
-            _ = hook_worker_became_isolated(slot, _HOOK_PROCESS_READY_TIMEOUT_SECONDS)
-            if not self._retire_slot(slot):
-                with self._state_lock:
-                    self._all_slots[process.pid or id(slot)] = slot
-                self._mark_containment_failed()
-        return slot
+        return start_hook_worker_slot(
+            self,
+            generation=generation,
+            spawn=spawn_hook_worker,
+            isolation_timeout=_HOOK_PROCESS_READY_TIMEOUT_SECONDS,
+        )
 
     def _supervise_capacity(self, generation: int) -> None:
         retry_delay = 0.05

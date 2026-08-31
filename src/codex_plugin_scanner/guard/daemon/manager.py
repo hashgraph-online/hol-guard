@@ -552,112 +552,14 @@ def recover_guard_daemon_after_hook_failure(
     failure_kind: GuardDaemonHookFailureKind = "authenticated-control-plane-failure",
     recovery_lock_timeout_seconds: float | None = None,
 ) -> str:
-    """Recover daemon service after a classified hook endpoint failure.
+    from .recovery_lifecycle import recover_guard_daemon_after_hook_failure as recover
 
-    Recovery is single-flight across threads and processes for one Guard home.
-    A hook authentication failure is client evidence, not daemon-health evidence.
-    Recovery therefore preserves every authenticated live generation. A daemon
-    is replaced only when neither the health probe nor signed process identity
-    can prove that generation is still running.
-    """
-
-    if failure_kind not in {
-        "authenticated-control-plane-failure",
-        "overload",
-        "transport-failure",
-    }:
-        raise ValueError(f"Unsupported Guard daemon hook failure kind: {failure_kind}")
-    if _guard_recovery_is_disabled(guard_home):
-        current_url = load_guard_daemon_url(guard_home)
-        if current_url is not None:
-            return current_url
-        raise RuntimeError("Guard daemon recovery is disabled by local protection posture.")
-
-    with suppress(Exception):
-        record_daemon_lifecycle_event(
-            guard_home,
-            event="recovery_requested",
-            reason=failure_kind,
-        )
-    recovery_deadline = (
-        None if recovery_lock_timeout_seconds is None else time.monotonic() + max(0.0, recovery_lock_timeout_seconds)
+    return recover(
+        guard_home,
+        home_dir=home_dir,
+        failure_kind=failure_kind,
+        recovery_lock_timeout_seconds=recovery_lock_timeout_seconds,
     )
-    recovery_lock = (
-        _guard_daemon_recovery_lock(guard_home)
-        if recovery_lock_timeout_seconds is None
-        else _guard_daemon_recovery_lock(
-            guard_home,
-            timeout_seconds=recovery_lock_timeout_seconds,
-        )
-    )
-    with recovery_lock:
-        start_lock = (
-            _guard_daemon_start_lock(guard_home)
-            if recovery_deadline is None
-            else _guard_daemon_start_lock(guard_home, deadline=recovery_deadline)
-        )
-        with start_lock:
-            state = load_authenticated_daemon_state(guard_home)
-            if isinstance(state, dict):
-                state_pid = state.get("pid")
-                state_id = state.get("state_id")
-                if isinstance(state_pid, int) and state_pid > 0 and not _guard_daemon_pid_is_running(state_pid):
-                    with suppress(Exception):
-                        record_daemon_lifecycle_event(
-                            guard_home,
-                            event="death_observed",
-                            reason="process_missing",
-                            pid=state_pid,
-                            session_id=state_id if isinstance(state_id, str) else None,
-                        )
-            current_url = load_guard_daemon_url(guard_home)
-            live_process_url = _authenticated_live_current_daemon_url(guard_home, state)
-            if current_url is not None:
-                return current_url
-            if live_process_url is not None:
-                return live_process_url
-        if _guard_recovery_is_disabled(guard_home):
-            current_url = load_guard_daemon_url(guard_home)
-            if current_url is not None:
-                return current_url
-            raise RuntimeError("Guard daemon recovery is disabled by local protection posture.")
-        remaining: float | None = None
-        if recovery_deadline is not None:
-            remaining = max(0.0, recovery_deadline - time.monotonic())
-            if remaining <= 0:
-                raise RuntimeError("Guard daemon recovery exceeded its bounded worker lifetime.")
-        if os.name == "nt":
-            if remaining is None:
-                recovered_url = ensure_guard_daemon(
-                    guard_home,
-                    home_dir=home_dir,
-                    allow_windows_job_breakaway=True,
-                )
-            else:
-                recovered_url = ensure_guard_daemon(
-                    guard_home,
-                    home_dir=home_dir,
-                    start_timeout=remaining,
-                    allow_windows_job_breakaway=True,
-                )
-        elif remaining is None:
-            recovered_url = ensure_guard_daemon(guard_home, home_dir=home_dir)
-        else:
-            recovered_url = ensure_guard_daemon(
-                guard_home,
-                home_dir=home_dir,
-                start_timeout=remaining,
-            )
-        try:
-            _ = publish_approval_center_locator(guard_home, recovered_url)
-        except (OSError, RuntimeError):
-            with suppress(Exception):
-                record_daemon_lifecycle_event(
-                    guard_home,
-                    event="locator_publish_failed",
-                    reason="recovery",
-                )
-        return recovered_url
 
 
 def schedule_guard_daemon_recovery(
@@ -667,148 +569,35 @@ def schedule_guard_daemon_recovery(
     failure_kind: GuardDaemonHookFailureKind = "authenticated-control-plane-failure",
     executable: Path | None = None,
 ) -> None:
-    """Run classified daemon recovery independently of a bounded hook process."""
+    from .recovery_lifecycle import schedule_guard_daemon_recovery as schedule
 
-    if failure_kind not in {
-        "authenticated-control-plane-failure",
-        "overload",
-        "transport-failure",
-    }:
-        raise ValueError(f"Unsupported Guard daemon hook failure kind: {failure_kind}")
-    if _guard_recovery_is_disabled(guard_home):
-        return
-    try:
-        recovery_token = _claim_guard_daemon_recovery_reservation(guard_home)
-    except (OSError, RuntimeError, ValueError):
-        return
-    if recovery_token is None:
-        return
-    try:
-        trusted_home = _trusted_daemon_home(home_dir)
-        if bool(getattr(sys, "frozen", False)) or executable is not None:
-            from ..frozen_runtime_commands import frozen_daemon_recovery_worker_command
-
-            recovery_executable = executable or _trusted_daemon_interpreter()
-            command = list(
-                frozen_daemon_recovery_worker_command(
-                    guard_home,
-                    trusted_home,
-                    failure_kind,
-                    recovery_token,
-                    executable=str(recovery_executable),
-                )
-            )
-        else:
-            command = _isolated_python_module_command(
-                "codex_plugin_scanner.guard.daemon.recovery_worker",
-                _trusted_daemon_import_paths(),
-                [str(guard_home), str(trusted_home), failure_kind, recovery_token],
-            )
-        launcher_env = _daemon_launcher_env(
-            home_dir=trusted_home,
-            guard_home=guard_home,
-            executable=executable,
-        )
-        if os.name == "nt":
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                cwd=trusted_home,
-                env=launcher_env,
-                creationflags=_windows_daemon_creation_flags(allow_job_breakaway=True),
-            )
-        else:
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                cwd=trusted_home,
-                env=launcher_env,
-                start_new_session=True,
-            )
-        process_pid = getattr(process, "pid", None)
-        if type(process_pid) is int and process_pid > 0:
-            process_creation_time = windows_process_creation_time(process_pid) if os.name == "nt" else None
-            try:
-                reservation_bound = _bind_guard_daemon_recovery_reservation(
-                    guard_home,
-                    token=recovery_token,
-                    pid=process_pid,
-                    process_creation_time=process_creation_time,
-                )
-            except Exception:
-                # A reservation write/query failure must never leave the detached child running.
-                reservation_bound = False
-            if not reservation_bound:
-                _terminate_recovery_worker(process)
-                with suppress(OSError, RuntimeError, ValueError):
-                    clear_guard_daemon_recovery_reservation(guard_home, token=recovery_token)
-    except (OSError, RuntimeError, subprocess.SubprocessError, ValueError):
-        with suppress(OSError, RuntimeError, ValueError):
-            clear_guard_daemon_recovery_reservation(guard_home, token=recovery_token)
+    schedule(
+        guard_home,
+        home_dir=home_dir,
+        failure_kind=failure_kind,
+        executable=executable,
+    )
 
 
 def _guard_recovery_is_disabled(guard_home: Path) -> bool:
-    """Do not restart a daemon when local protection is explicitly off."""
+    from .recovery_lifecycle import guard_recovery_is_disabled
 
-    try:
-        from ..config import load_guard_config
-        from ..protection_posture import protection_is_off
-
-        config = load_guard_config(guard_home)
-    except Exception:
-        return False
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
+    return guard_recovery_is_disabled(guard_home)
 
 
 def _terminate_recovery_worker(process: subprocess.Popen[bytes]) -> bool:
-    """Contain a recovery worker whose reservation could not be bound."""
+    from .recovery_lifecycle import terminate_recovery_worker
 
-    if process.poll() is not None:
-        return True
-    if os.name != "nt":
-        with suppress(OSError, ProcessLookupError):
-            os.killpg(process.pid, signal.SIGTERM)
-    else:
-        with suppress(OSError, ProcessLookupError):
-            process.terminate()
-    try:
-        process.wait(timeout=0.25)
-    except subprocess.TimeoutExpired:
-        if os.name != "nt":
-            with suppress(OSError, ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-        else:
-            with suppress(OSError, ProcessLookupError):
-                process.kill()
-        with suppress(subprocess.TimeoutExpired):
-            process.wait(timeout=0.25)
-    return process.poll() is not None
+    return terminate_recovery_worker(process)
 
 
 def _authenticated_live_current_daemon_url(
     guard_home: Path,
     state: dict[str, object] | None,
 ) -> str | None:
-    """Locate an authenticated current process for overload preservation."""
+    from .recovery_lifecycle import authenticated_live_current_daemon_url
 
-    if not isinstance(state, dict) or not _guard_daemon_state_matches_current_runtime(state):
-        return None
-    pid = state.get("pid")
-    port = state.get("port")
-    if (
-        not isinstance(pid, int)
-        or pid <= 0
-        or not isinstance(port, int)
-        or not 1 <= port <= 65_535
-        or not _guard_daemon_pid_is_running(pid)
-        or not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
-    ):
-        return None
-    return f"http://127.0.0.1:{port}"
+    return authenticated_live_current_daemon_url(guard_home, state)
 
 
 def _daemon_generation_is_recent(state: dict[str, object] | None) -> bool:

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon import hook_process_runner as hook_runner_module
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookWorkerSlot
 
@@ -49,8 +50,8 @@ def test_adaptive_deferred_start_returns_before_startup_floor_is_ready(monkeypat
     with runner._state_lock:
         enabled_not_before = runner._backfill_not_before
 
-    assert enabled_not_before >= startup_not_before
-    assert enabled_not_before > time.monotonic()
+    assert enabled_not_before < startup_not_before
+    assert enabled_not_before <= time.monotonic()
     release_spawn.set()
     assert runner.close_contained()
 
@@ -65,6 +66,38 @@ def test_queued_work_releases_deferred_backfill() -> None:
     assert runner._backfill_not_before == 0.0  # pyright: ignore[reportPrivateUsage]
     assert runner._backfill_force_after == 0.0  # pyright: ignore[reportPrivateUsage]
     assert runner._recovery_event.is_set()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_default_full_capacity_preserves_quiet_startup_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = HookProcessRunner()
+    with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
+        runner._started = True  # pyright: ignore[reportPrivateUsage]
+        runner._backfill_not_before = 130.0  # pyright: ignore[reportPrivateUsage]
+        runner._backfill_force_after = 135.0  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(hook_runner_module.time, "monotonic", lambda: 100.0)
+
+    runner.enable_full_capacity()
+
+    assert runner._backfill_not_before == 130.0  # pyright: ignore[reportPrivateUsage]
+    assert runner._backfill_force_after == 135.0  # pyright: ignore[reportPrivateUsage]
+
+
+def test_zero_delay_full_capacity_bounds_active_review_deferral(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = HookProcessRunner()
+    with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
+        runner._started = True  # pyright: ignore[reportPrivateUsage]
+        runner._generation = 1  # pyright: ignore[reportPrivateUsage]
+        runner._active_reviews[1] = 1  # pyright: ignore[reportPrivateUsage]
+        runner._backfill_not_before = 130.0  # pyright: ignore[reportPrivateUsage]
+        runner._backfill_force_after = 135.0  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(hook_runner_module.time, "monotonic", lambda: 100.0)
+
+    runner.enable_full_capacity(delay_seconds=0, active_deferral_seconds=0.2)
+
+    assert runner._backfill_not_before == 100.0  # pyright: ignore[reportPrivateUsage]
+    assert runner._backfill_force_after == 100.2  # pyright: ignore[reportPrivateUsage]
 
 
 def test_close_waits_for_inflight_spawn_thread_and_leaves_no_runner_threads(
@@ -111,3 +144,48 @@ def test_close_waits_for_inflight_spawn_thread_and_leaves_no_runner_threads(
     with runner._state_lock:
         assert not runner._spawn_threads
         assert runner._supervisor_thread is None
+
+
+def test_close_waits_for_process_bootstrap_before_containment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runner = HookProcessRunner(guard_home=tmp_path, process_limit=1)
+    spawn_entered = threading.Event()
+    release_spawn = threading.Event()
+
+    def delayed_spawn(_guard_home: Path | None) -> HookWorkerSlot:
+        spawn_entered.set()
+        assert release_spawn.wait(timeout=2.0)
+        raise EOFError("bootstrap interrupted")
+
+    monkeypatch.setattr(hook_runner_module, "spawn_hook_worker", delayed_spawn)
+    with runner._state_lock:
+        runner._closed = False
+        runner._started = True
+        runner._generation = 1
+
+    spawn_result: list[HookWorkerSlot | None] = []
+    starter = threading.Thread(
+        target=lambda: spawn_result.append(runner._start_slot_interruptibly(1)),
+        name="test-hook-bootstrap-owner",
+    )
+    starter.start()
+    assert spawn_entered.wait(timeout=1.0)
+
+    close_result: list[bool] = []
+    closer = threading.Thread(target=lambda: close_result.append(runner.close_contained()))
+    closer.start()
+    time.sleep(0.05)
+    assert closer.is_alive()
+
+    release_spawn.set()
+    starter.join(timeout=2.0)
+    closer.join(timeout=2.0)
+
+    assert not starter.is_alive()
+    assert not closer.is_alive()
+    assert spawn_result == [None]
+    assert close_result == [True]
+    with runner._state_lock:
+        assert not runner._spawn_threads

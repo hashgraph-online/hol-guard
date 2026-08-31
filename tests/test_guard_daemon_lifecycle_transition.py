@@ -68,3 +68,60 @@ def test_stop_during_capacity_activation_prevents_successful_start(
     finally:
         release_activation.set()
         daemon.stop()
+
+
+def test_serve_base_exception_is_contained_when_stop_races_serve_loop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    daemon = GuardDaemonServer(
+        GuardStore(tmp_path / "guard-home"),
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=0,
+    )
+    serve_entered = threading.Event()
+    release_serve = threading.Event()
+    serve_errors: list[BaseException] = []
+    stop_errors: list[BaseException] = []
+
+    def failing_serve_forever() -> None:
+        serve_entered.set()
+        assert release_serve.wait(timeout=10)
+        raise KeyboardInterrupt()
+
+    def serve_daemon() -> None:
+        try:
+            daemon.serve()
+        except BaseException as error:
+            serve_errors.append(error)
+
+    def stop_daemon() -> None:
+        try:
+            daemon.stop()
+        except BaseException as error:
+            stop_errors.append(error)
+
+    monkeypatch.setattr(daemon, "_serve_forever", failing_serve_forever)
+    server_thread = threading.Thread(target=serve_daemon)
+    stopper = threading.Thread(target=stop_daemon)
+    try:
+        server_thread.start()
+        assert serve_entered.wait(timeout=30)
+        stopper.start()
+        assert daemon._shutdown_started.wait(timeout=10)
+        release_serve.set()
+        server_thread.join(timeout=30)
+        stopper.join(timeout=30)
+
+        assert not server_thread.is_alive()
+        assert not stopper.is_alive()
+        assert len(serve_errors) == 1
+        assert isinstance(serve_errors[0], KeyboardInterrupt)
+        assert stop_errors == []
+        assert daemon._thread is None
+        assert daemon._owner_lock is None
+        assert daemon._server.hook_process_runner.stats()["workers"] == 0
+    finally:
+        release_serve.set()
+        daemon.stop()

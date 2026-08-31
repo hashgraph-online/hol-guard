@@ -33,6 +33,23 @@ _CGROUP_V2_MEMORY_MAX = Path("/sys/fs/cgroup/memory.max")
 _CGROUP_V1_MEMORY_MAX = Path("/sys/fs/cgroup/memory/memory.limit_in_bytes")
 
 
+def backfill_window_after_capacity_enable(
+    *,
+    now: float,
+    delay_seconds: float,
+    active_deferral_seconds: float,
+    current_not_before: float,
+    current_force_after: float,
+) -> tuple[float, float]:
+    """Apply a capacity-enable delay without extending an explicit immediate wake."""
+
+    requested_not_before = now + max(0.0, delay_seconds)
+    if delay_seconds <= 0:
+        return requested_not_before, requested_not_before + active_deferral_seconds
+    not_before = max(current_not_before, requested_not_before)
+    return not_before, max(current_force_after, not_before + active_deferral_seconds)
+
+
 def _read_text(path: Path) -> str | None:
     try:
         value = path.read_text(encoding="utf-8").strip()
