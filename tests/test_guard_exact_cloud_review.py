@@ -358,21 +358,23 @@ def test_cloud_review_requeue_database_failure_is_retryable(
 
     monkeypatch.setattr(store, "requeue_pending_review_events", fail_requeue)
 
-    assert cloud_review_dispatch._requeue_pending_cloud_review_requests(store) == (
-        0,
-        "retry_required",
-    )
+    with pytest.raises(cloud_review_dispatch.PendingReviewRequeueError):
+        cloud_review_dispatch._requeue_pending_cloud_review_requests(store)
 
 
-def test_connect_consent_preserves_enabled_capability_when_requeue_needs_retry(
+def test_connect_consent_does_not_enable_capability_when_requeue_needs_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _connected_store(tmp_path)
+
+    def fail_requeue(_store: GuardStore) -> int:
+        raise cloud_review_dispatch.PendingReviewRequeueError
+
     monkeypatch.setattr(
         cloud_review_dispatch,
         "_requeue_pending_cloud_review_requests",
-        lambda _store: (0, "retry_required"),
+        fail_requeue,
     )
     monkeypatch.setattr(
         cloud_review_dispatch,
@@ -390,11 +392,11 @@ def test_connect_consent_preserves_enabled_capability_when_requeue_needs_retry(
 
     cloud_review = connected["cloud_review"]
     assert isinstance(cloud_review, dict)
-    assert cloud_review["capability_enabled"] is True
-    assert cloud_review["enabled"] is True
+    assert cloud_review["capability_enabled"] is False
+    assert cloud_review["enabled"] is False
     assert cloud_review["reason"] == "pending_request_requeue_failed"
     assert cloud_review["pending_request_requeue_status"] == "retry_required"
-    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
+    assert exact_cloud_review_operations(store) == ()
 
 
 def test_cloud_review_enable_reports_requeue_retry_without_crashing(
@@ -403,10 +405,14 @@ def test_cloud_review_enable_reports_requeue_retry_without_crashing(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     store = _connected_store(tmp_path)
+
+    def fail_requeue(_store: GuardStore) -> int:
+        raise cloud_review_dispatch.PendingReviewRequeueError
+
     monkeypatch.setattr(
         cloud_review_dispatch,
         "_requeue_pending_cloud_review_requests",
-        lambda _store: (0, "retry_required"),
+        fail_requeue,
     )
     monkeypatch.setattr(
         cloud_review_dispatch,
@@ -421,11 +427,12 @@ def test_cloud_review_enable_reports_requeue_retry_without_crashing(
     )
 
     payload = json.loads(capsys.readouterr().out)
-    assert exit_code == 0
-    assert payload["status"] == "enabled"
+    assert exit_code == 2
+    assert payload["status"] == "error"
+    assert payload["error"] == "pending_request_requeue_failed"
     assert payload["pending_requests_requeued"] == 0
     assert payload["pending_request_requeue_status"] == "retry_required"
-    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
+    assert exact_cloud_review_operations(store) == ()
 
 
 def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_approval(tmp_path: Path) -> None:
