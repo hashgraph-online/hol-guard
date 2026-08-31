@@ -36,6 +36,26 @@ def teardown_module() -> None:
     _sync_namespace()
 
 
+def test_decision_diff_import_does_not_shadow_scanner_package_exports() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import tests.guard_command_decision_diff; "
+                "from codex_plugin_scanner import __version__, scan_plugin; "
+                "from codex_plugin_scanner.submission import build_submission_payload; "
+                "assert __version__; assert callable(scan_plugin); "
+                "assert callable(build_submission_payload)"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
     report = generate_decision_diff_report()
     assert REPORT_PATH.read_bytes() == canonical_json_bytes(report)
