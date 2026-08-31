@@ -438,6 +438,38 @@ def test_cloud_review_enable_reports_requeue_retry_without_crashing(
     assert exact_cloud_review_operations(store) == ()
 
 
+def test_connect_consent_reports_retained_capability_as_failed_activation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    enable_exact_cloud_review(store)
+
+    def fail_requeue(_store: GuardStore) -> int:
+        raise cloud_review_dispatch.PendingReviewRequeueError
+
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "_requeue_pending_cloud_review_requests",
+        fail_requeue,
+    )
+
+    connected = cloud_review_dispatch.apply_connect_time_cloud_review_consent(
+        args=argparse.Namespace(enable_cloud_review=True),
+        store=store,
+        guard_home=store.guard_home,
+        payload={"status": "connected"},
+        exit_code=0,
+    )
+
+    cloud_review = connected["cloud_review"]
+    assert isinstance(cloud_review, dict)
+    assert cloud_review["enabled"] is False
+    assert cloud_review["capability_enabled"] is True
+    assert cloud_review["retained_existing_capability"] is True
+    assert cloud_review["reason"] == "pending_request_requeue_failed"
+
+
 def test_cloud_review_enable_reports_retained_capability_when_requeue_retry_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

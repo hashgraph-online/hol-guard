@@ -63,7 +63,7 @@ def apply_connect_time_cloud_review_consent(
             **payload,
             "cloud_review": {
                 "capability_enabled": previously_enabled,
-                "enabled": previously_enabled,
+                "enabled": False,
                 "reason": "pending_request_requeue_failed",
                 "pending_requests_requeued": 0,
                 "pending_request_requeue_status": "retry_required",
