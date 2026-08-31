@@ -124,7 +124,7 @@ const PATTERNS: &[PatternDef] = &[
         family: "credential assignment",
         sensitivity: "medium",
         reason: "Guard found credential-looking assignment text.",
-        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*(?:[fF](?:\"[^\"\r\n]+\"|'[^'\r\n]+')|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
+        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
         case_insensitive: true,
         multi_line: true,
     },
@@ -171,7 +171,7 @@ fn doc_sample_regex() -> &'static Regex {
 fn inert_code_expression_regex() -> &'static Regex {
     INERT_CODE_EXPRESSION.get_or_init(|| {
         Regex::new(
-            r#"^(?:get_secret\(|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)|[fF]"\{[A-Za-z_][A-Za-z0-9_.]*\}"|[fF]'\{[A-Za-z_][A-Za-z0-9_.]*\}')$"#,
+            r#"^(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF]"\{[A-Za-z_][A-Za-z0-9_.]*\}"|[fF]'\{[A-Za-z_][A-Za-z0-9_.]*\}')$"#,
         )
         .expect("inert code-expression rule must compile")
     })
@@ -458,6 +458,8 @@ mod tests {
             "password = example-production-value",
             "password = {user.password}",
             "api_key = {token: \"AIza-realistic-value\"}",
+            "secret = f\"{config.token}\" + \"prod-live-value\"",
+            "secret = get_secret(\"deployment-config\") + \"prod-live-value\"",
         ] {
             let result = scan_text(text, true, true, MAX_SCAN_BYTES, None);
             assert!(

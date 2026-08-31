@@ -341,6 +341,37 @@ def test_skill_with_dotted_fstring_expression_is_allowed(context: Context) -> No
     assert result["reason_code"] == "source_full_scan_allow"
 
 
+@pytest.mark.parametrize(
+    "content",
+    (
+        'secret = f"{config.token}" + "prod-live-value"\n',
+        'secret = get_secret("deployment-config") + "prod-live-value"\n',
+    ),
+)
+def test_skill_with_composed_credential_expression_is_blocked(context: Context, content: str) -> None:
+    _, home_dir, *_ = context
+    _ = _install_skill(home_dir, content)
+
+    result = _review(context, output=content.rstrip("\n"))
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "source_secret_match"
+
+
+@pytest.mark.parametrize(
+    "content",
+    (
+        'secret = f"{config.token}" + "prod-live-value"',
+        'secret = get_secret("deployment-config") + "prod-live-value"',
+    ),
+)
+def test_mcp_describe_with_composed_credential_expression_is_blocked(context: Context, content: str) -> None:
+    result = _review(context, output=content, uri="mcp://hub/describe/guard-dev-testing")
+
+    assert result["decision"] == "deny"
+    assert result["reason_code"] == "output_secret_match"
+
+
 def test_skill_with_generic_credential_object_literal_is_blocked(context: Context) -> None:
     _, home_dir, *_ = context
     content = 'api_key = {token: "AIza-realistic-value"}\n'

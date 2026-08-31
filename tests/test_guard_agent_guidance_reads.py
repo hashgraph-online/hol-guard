@@ -84,6 +84,7 @@ def test_agent_guidance_read_rejects_skill_symlink_escape(guidance_home: Path, t
     (
         "~/.agents/skills/github-pr-review-loop/credentials/config.ts",
         "~/.agents/skills/github-pr-review-loop/*.md",
+        "~/.agents/skills/github-pr-review-loop/[.]env",
         "~/.agents/skills/github-pr-review-loop/../secret.py",
     ),
 )

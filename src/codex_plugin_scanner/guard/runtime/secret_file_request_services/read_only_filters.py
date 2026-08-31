@@ -386,7 +386,7 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir:
     lowered_parts = [part.lower() for part in parts]
     if not parts:
         return allow_dirs
-    if ".." in parts or any(marker in stripped for marker in ("*", "?", "{", "}")):
+    if ".." in parts or any(marker in stripped for marker in ("*", "?", "[", "]", "{", "}")):
         return False
     if any(part in SOURCE_INSPECTION_SENSITIVE_PARTS for part in lowered_parts):
         return False
