@@ -41,6 +41,7 @@ def native_resident_client_request(
             environment=dict(environment),
             timeout_seconds=timeout_seconds,
             output_limit=_MAX_RESPONSE_BYTES,
+            allow_windows_breakaway=True,
         )
     except (OSError, RuntimeError, ValueError):
         return None

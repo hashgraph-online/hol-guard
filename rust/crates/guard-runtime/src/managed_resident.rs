@@ -26,6 +26,8 @@ use crate::resident_state::{
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+#[cfg(windows)]
+const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn request_shutdown() {
@@ -78,7 +80,8 @@ fn spawn_managed(
 ) -> Result<(), String> {
     let executable =
         std::env::current_exe().map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .arg("supervise-managed")
         .arg("--state-dir")
         .arg(state_base)
@@ -88,7 +91,13 @@ fn spawn_managed(
         .arg(digest)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_BREAKAWAY_FROM_JOB);
+    }
+    let mut child = command
         .spawn()
         .map_err(|_| "native_resident_spawn_failed".to_owned())?;
     let mut stdin = child
