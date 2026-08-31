@@ -1749,6 +1749,7 @@ class TestGuardSurfaceServer:
                 return {"decision": "allow"}
 
             monkeypatch.setattr(payload_reference_module, "hydrate_hook_payload_reference", fail_hydration)
+            monkeypatch.setattr(daemon_server_module, "prepare_native_hook_policy", lambda *_args, **_kwargs: True)
             monkeypatch.setattr(daemon_server_module._GuardDaemonHandler, "_handle_runtime_hook_fast", native_dispatch)
             daemon.start()
 
