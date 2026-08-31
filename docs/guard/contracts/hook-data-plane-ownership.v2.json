@@ -270,6 +270,7 @@
         "ci/native_runtime/**",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
         "scripts/ci/hook_data_plane_ownership_contract.py",
+        "scripts/ci/rust_pretool_no_python_gate.py",
         "scripts/ci/rust_authority_ownership_gate.py",
         "tests/test_native_hook_edge.py"
       ],
@@ -330,8 +331,9 @@
     ".github/workflows/rust-authority-ownership.yml",
     "ci/native_runtime/**",
     "docs/guard/contracts/hook-data-plane-ownership.v2.json",
-    "scripts/ci/hook_data_plane_ownership_contract.py",
-    "scripts/ci/rust_authority_ownership_gate.py",
+      "scripts/ci/hook_data_plane_ownership_contract.py",
+      "scripts/ci/rust_pretool_no_python_gate.py",
+      "scripts/ci/rust_authority_ownership_gate.py",
     "tests/test_native_hook_edge.py"
   ],
   "installed_artifacts": [

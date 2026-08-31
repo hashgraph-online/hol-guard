@@ -53,7 +53,7 @@ def run(root: Path) -> dict[str, object]:
             command_bridge,
             (
                 "def review_pre_tool_native(",
-                '"pre-tool"',
+                "native_resident_client_request",
                 '"operation": "pre_tool_use"',
                 "def native_pre_tool_policy_floor(",
             ),
@@ -69,11 +69,15 @@ def run(root: Path) -> dict[str, object]:
     review_body = bridge_source[review_start:review_end] if review_start >= 0 and review_end > review_start else ""
     if "evaluate_command(" in review_body:
         failures.append("review_pre_tool_native invokes the Python command evaluator")
+    for retired_transport in ("run_isolated_hook_process", "resident_native_request"):
+        if retired_transport in review_body:
+            failures.append(f"review_pre_tool_native still invokes {retired_transport}")
     failures.extend(
         required_tokens(
             root / "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
             (
-                "from ..native_pretool import review_pre_tool_native",
+                "from ..native_hook_edge import review_raw_hook_native",
+                "review_raw_hook_native(",
                 'if event_name == "PreToolUse":',
                 "native_pre_tool_unavailable",
             ),
