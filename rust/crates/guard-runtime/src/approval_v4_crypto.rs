@@ -331,12 +331,10 @@ fn verify_client_data(
     if object.get("origin").and_then(serde_json::Value::as_str) != Some(expected_origin) {
         return Err("native_approval_v4_origin_mismatch".to_owned());
     }
-    if object
-        .get("crossOrigin")
-        .and_then(serde_json::Value::as_bool)
-        != Some(false)
-    {
-        return Err("native_approval_v4_client_data_invalid".to_owned());
+    if let Some(cross_origin) = object.get("crossOrigin") {
+        if cross_origin.as_bool() != Some(false) {
+            return Err("native_approval_v4_client_data_invalid".to_owned());
+        }
     }
     Ok(Sha256::digest(bytes).into())
 }

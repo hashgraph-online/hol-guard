@@ -184,7 +184,12 @@ impl PolicySnapshotStore {
         let approval_v4_authority_observed = Arc::new(Mutex::new(
             approval_v4_authority
                 .as_ref()
-                .map(|authority| authority.fingerprint.clone()),
+                .map(|authority| authority.fingerprint.clone())
+                .or_else(|| {
+                    authority_fingerprint(
+                        &state_base.join(approval_v4_authority::AUTHORITY_FILE_NAME),
+                    )
+                }),
         ));
         let approval_replay_memory = crate::approval::ApprovalReplayMemory::new()?;
         let authority_observed = Arc::new(Mutex::new(authority_fingerprint(&authority_path)));

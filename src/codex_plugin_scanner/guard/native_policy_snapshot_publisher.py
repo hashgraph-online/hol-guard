@@ -409,6 +409,16 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 # newer policy appear ready.
                 if self._closed or self._epoch != publish_epoch:
                     return
+                # The first client request may create the resident generation
+                # state files. Treat those files as the state of this ACK,
+                # otherwise the observer loop immediately mistakes its own
+                # startup for a resident restart and withdraws the barrier
+                # under a concurrent hook. Keep the policy-input half from
+                # before publication so a config change observed during the
+                # request still forces a republish on the next poll.
+                resident_fingerprint = self._current_input_fingerprint()[1]
+                if self._input_fingerprint is not None:
+                    self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint)
                 self._snapshot = snapshot
                 self._published_config_digest = cast(str, snapshot["config_digest"])
                 self._published_policy_fingerprint = (

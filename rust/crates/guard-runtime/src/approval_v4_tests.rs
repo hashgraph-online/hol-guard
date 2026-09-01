@@ -271,7 +271,7 @@ fn ed25519_assertion_validates_and_persists_counter_zero_and_one() {
 }
 
 #[test]
-fn es256_assertion_validates_and_synced_zero_is_not_a_counter_replay() {
+fn es256_assertion_validates_and_rejects_zero_after_counter_established() {
     let rng = SystemRandom::new();
     let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &rng).unwrap();
     let key_pair =
@@ -328,12 +328,62 @@ fn es256_assertion_validates_and_synced_zero_is_not_a_counter_replay() {
             key_pair.sign(&rng, message).unwrap().as_ref().to_vec()
         }),
     );
+    assert_eq!(
+        validate_approval(
+            ApprovalValidateRequestV4 {
+                schema: NATIVE_APPROVAL_VALIDATE_REQUEST_V4_SCHEMA.to_owned(),
+                version: 4,
+                envelope,
+                artifact: synced,
+            },
+            &store,
+        )
+        .unwrap_err(),
+        "native_approval_v4_counter_replay"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn webauthn_optional_cross_origin_is_treated_as_false() {
+    let credential_id = [4u8; 32];
+    let key_pair = Ed25519KeyPair::from_seed_unchecked(&[11u8; 32]).unwrap();
+    let cose = cose_ed25519(key_pair.public_key().as_ref());
+    let (root, store, envelope) = store_and_envelope_v4(
+        "v4-optional-cross-origin",
+        &cose,
+        NATIVE_APPROVAL_V4_ALGORITHM_ED25519,
+        &credential_id,
+    );
+    let challenge = challenge_for(&store, &envelope, &credential_id);
+    let mut artifact = artifact_from_challenge(
+        &challenge,
+        assertion(&challenge, &credential_id, 0, |message| {
+            key_pair.sign(message).as_ref().to_vec()
+        }),
+    );
+    let client_data = format!(
+        "{{\"type\":\"webauthn.get\",\"challenge\":\"{}\",\"origin\":\"{}\"}}",
+        challenge.webauthn.challenge, challenge.webauthn.origin
+    )
+    .into_bytes();
+    let authenticator_data = crate::approval::approval_v4_crypto::decode_base64url(
+        &artifact.webauthn.response.authenticator_data,
+        4 * 1024,
+        "test",
+    )
+    .unwrap();
+    let client_hash = Sha256::digest(&client_data);
+    let mut signed = authenticator_data.clone();
+    signed.extend_from_slice(&client_hash);
+    artifact.webauthn.response.client_data_json = encode_base64url(&client_data);
+    artifact.webauthn.response.signature = encode_base64url(key_pair.sign(&signed).as_ref());
     validate_approval(
         ApprovalValidateRequestV4 {
             schema: NATIVE_APPROVAL_VALIDATE_REQUEST_V4_SCHEMA.to_owned(),
             version: 4,
             envelope,
-            artifact: synced,
+            artifact,
         },
         &store,
     )

@@ -162,6 +162,13 @@ pub(super) fn authorities_unchanged(store: &PolicySnapshotStore) -> bool {
         .approval_v4_authority
         .as_ref()
         .and_then(|authority| authority_fingerprint(&authority.path));
+    let approval_v4_current = approval_v4_current.or_else(|| {
+        authority_fingerprint(
+            &store
+                .authority_path
+                .with_file_name(approval_v4_authority::AUTHORITY_FILE_NAME),
+        )
+    });
     let approval_v4_matches = store
         .approval_v4_authority_observed
         .lock()

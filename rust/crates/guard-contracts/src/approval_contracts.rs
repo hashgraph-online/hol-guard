@@ -161,6 +161,7 @@ pub const NATIVE_APPROVAL_ERROR_CODES: &[&str] = &[
     "native_approval_v4_authority_generation_rollback",
     "native_approval_v4_authority_provenance_mismatch",
     "native_approval_v4_authority_unavailable",
+    "native_approval_v4_authority_key_id_mismatch",
     "native_approval_v4_algorithm_invalid",
     "native_approval_v4_artifact_invalid",
     "native_approval_v4_artifact_schema_mismatch",

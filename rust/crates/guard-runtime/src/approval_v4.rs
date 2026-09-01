@@ -346,7 +346,7 @@ pub(crate) fn validate_approval(
     let (context, authority, nonce, verified) =
         validate_common(&request.envelope, &request.artifact, store)?;
     let current = authority::sign_count(&authority)?;
-    if current != 0 && verified.sign_count != 0 && verified.sign_count <= current {
+    if current != 0 && verified.sign_count <= current {
         return Err("native_approval_v4_counter_replay".to_owned());
     }
     let assertion_digest = hex::encode(verified.assertion_digest);
@@ -365,8 +365,14 @@ pub(crate) fn validate_approval(
         now_ms()?,
         &fence,
         || {
-            authority::advance_sign_count(&authority, verified.sign_count)?;
-            authority::remember_assertion(&authority, &nonce_digest, assertion_digest.clone())?;
+            let now = now_ms()?;
+            authority::remember_assertion(
+                &authority,
+                &nonce_digest,
+                assertion_digest.clone(),
+                request.artifact.expires_at_ms,
+                now,
+            )?;
             let result = receipt(
                 &context,
                 &request.artifact,
@@ -376,7 +382,18 @@ pub(crate) fn validate_approval(
                 nonce_digest.clone(),
                 verified.sign_count,
             );
-            encode_response(&result)
+            let encoded = match encode_response(&result) {
+                Ok(encoded) => encoded,
+                Err(error) => {
+                    authority::forget_assertion(&authority, &nonce_digest)?;
+                    return Err(error);
+                }
+            };
+            if let Err(error) = authority::advance_sign_count(&authority, verified.sign_count) {
+                authority::forget_assertion(&authority, &nonce_digest)?;
+                return Err(error);
+            }
+            Ok(encoded)
         },
     )
 }
@@ -392,7 +409,7 @@ pub(crate) fn consume_approval(
         validate_common(&request.envelope, &request.artifact, store)?;
     let assertion_digest = hex::encode(verified.assertion_digest);
     let nonce_digest = super::approval_context::encode_digest(&nonce);
-    if !authority::assertion_matches(&authority, &nonce_digest, &assertion_digest)? {
+    if !authority::assertion_matches(&authority, &nonce_digest, &assertion_digest, now_ms()?)? {
         return Err("native_approval_v4_artifact_invalid".to_owned());
     }
     let binding = replay_binding(&context, request.artifact.expires_at_ms);
@@ -409,8 +426,7 @@ pub(crate) fn consume_approval(
         now_ms()?,
         &fence,
         || {
-            authority::forget_assertion(&authority, &nonce_digest)?;
-            encode_response(&receipt(
+            let encoded = encode_response(&receipt(
                 &context,
                 &request.artifact,
                 &authority,
@@ -418,7 +434,9 @@ pub(crate) fn consume_approval(
                 "native_approval_v4_consumed",
                 nonce_digest.clone(),
                 verified.sign_count,
-            ))
+            ))?;
+            authority::forget_assertion(&authority, &nonce_digest)?;
+            Ok(encoded)
         },
     )
 }

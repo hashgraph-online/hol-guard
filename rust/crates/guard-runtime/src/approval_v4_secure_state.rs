@@ -51,7 +51,7 @@ pub(super) fn load(state_base: &Path) -> Result<Option<String>, String> {
             super::approval_enrollment::account_for_state_base(state_base)?,
             V4_SECURE_STATE_ACCOUNT_SUFFIX
         );
-        read_platform_secret_for_v4(&account)
+        read_platform_secret_for_v4(&account).map_err(map_platform_error)
     }
 }
 
@@ -80,7 +80,19 @@ pub(super) fn store(state_base: &Path, value: &str) -> Result<(), String> {
             super::approval_enrollment::account_for_state_base(state_base)?,
             V4_SECURE_STATE_ACCOUNT_SUFFIX
         );
-        write_platform_secret_for_v4(&account, value)
-            .map_err(|_| "native_approval_v4_secure_state_unavailable".to_owned())
+        write_platform_secret_for_v4(&account, value).map_err(map_platform_error)
+    }
+}
+
+#[cfg(not(test))]
+fn map_platform_error(error: String) -> String {
+    match error.as_str() {
+        "native_approval_secure_state_invalid" => {
+            "native_approval_v4_secure_state_invalid".to_owned()
+        }
+        "native_approval_secure_state_unavailable" => {
+            "native_approval_v4_secure_state_unavailable".to_owned()
+        }
+        _ => error,
     }
 }

@@ -7,6 +7,7 @@
 //! credential key, and sign counter are mirrored in a purpose-scoped secure
 //! resident account; Python and cloud persistence have no write path.
 
+use super::approval_v4_assertion_state::AssertionBinding;
 use guard_contracts::{ApprovalAuthorityV4, NATIVE_APPROVAL_V4_ENROLLMENT_DOMAIN};
 use guard_policy_snapshot::canonical_json_bytes;
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,7 @@ pub(super) const AUTHORITY_FILE_NAME: &str = "approval-authority-v4.json";
 const AUTHORITY_MAX_BYTES: u64 = 32 * 1024;
 const SECURE_STATE_SCHEMA: &str = "guard-native-approval-webauthn-secure-state.v1";
 const SECURE_STATE_VERSION: u16 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SecureState {
@@ -53,9 +55,8 @@ pub(crate) struct ApprovalV4Authority {
     record_digest: String,
     state_base: PathBuf,
     sign_count: Arc<Mutex<u32>>,
-    pub(crate) assertions: Arc<Mutex<HashMap<String, String>>>,
+    pub(crate) assertions: Arc<Mutex<HashMap<String, AssertionBinding>>>,
 }
-
 use super::approval_v4_enrollment::{origin_matches_rp_id, valid_origin, valid_rp_id};
 /// Verify the V4 record with the release-pinned root and a domain distinct
 /// from the V3 authority contract. Production has no private-root material.
@@ -379,11 +380,8 @@ pub(crate) fn install_record(state_base: &Path, record_path: &Path) -> Result<()
         {
             return Err("native_approval_v4_authority_generation_rollback".to_owned());
         }
-        // The counter record is written before the public authority file so
-        // that the next explicit enrollment attempt can recover a crash
-        // between those two durable replacements. Only a root-authenticated
-        // candidate whose exact digest is already pinned in secure state may
-        // take this recovery branch.
+        // Write the counter record before the public authority file so an
+        // explicit enrollment attempt can recover an interrupted replacement.
         let initial_counter = match existing_secure_state.as_ref() {
             Some(state)
                 if secure_state_matches_record(
@@ -480,7 +478,7 @@ pub(crate) fn advance_sign_count(
         .sign_count
         .lock()
         .map_err(|_| "native_approval_v4_secure_state_unavailable".to_owned())?;
-    if *counter != 0 && candidate != 0 && candidate <= *counter {
+    if *counter != 0 && candidate <= *counter {
         return Err("native_approval_v4_counter_replay".to_owned());
     }
     if candidate > *counter {
