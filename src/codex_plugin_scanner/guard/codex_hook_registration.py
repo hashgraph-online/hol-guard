@@ -148,6 +148,92 @@ def _looks_like_guard_codex_hook(blob: str) -> bool:
     return "codex_plugin_scanner.cli" in blob and "guard hook" in blob
 
 
+def _command_tokens(command: str) -> list[str]:
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.split()
+
+
+def _skip_leading_flags(tokens: Sequence[str]) -> list[str]:
+    rest = list(tokens)
+    while rest and rest[0].startswith("-") and rest[0] != "-c":
+        rest = rest[1:]
+    return rest
+
+
+def _is_live_guard_codex_hook_command(command: str) -> bool:
+    tokens = _command_tokens(command)
+    if not tokens:
+        return False
+    first = Path(tokens[0]).name.lower()
+    rest = tokens[1:]
+    if Path(tokens[0]).name == "codex_daemon_hook_bridge.py":
+        return True
+    if first.startswith("python"):
+        payload = _skip_leading_flags(rest)
+        if not payload:
+            return False
+        if payload[0] == "-c":
+            script = " ".join(payload[1:])
+            return "codex_plugin_scanner.cli" in script and "guard" in script.split() and "hook" in script.split()
+        return Path(payload[0]).name == "codex_daemon_hook_bridge.py"
+    if first in {"hol-guard", "hol-guard.exe"}:
+        return "hook" in rest and _has_codex_harness(" ".join(rest))
+    return False
+
+
+_HEALTH_INTERCEPT_EVENTS = ("PreToolUse", "PermissionRequest")
+
+
+def _hook_entry_is_active(entry: Mapping[str, object]) -> bool:
+    return entry.get("enabled") is not False and entry.get("disabled") is not True
+
+
+def _matcher_covers_shell(matcher: object) -> bool:
+    if matcher is None:
+        return True
+    if not isinstance(matcher, str):
+        return False
+    text = matcher.strip()
+    return text in {"", "*"} or "Bash" in text
+
+
+def _group_has_active_guard_shell_handler(group: Mapping[str, object]) -> bool:
+    if not _hook_entry_is_active(group) or not _matcher_covers_shell(group.get("matcher")):
+        return False
+    handlers = group.get("hooks")
+    if isinstance(handlers, list):
+        return any(
+            isinstance(handler, dict)
+            and _hook_entry_is_active(handler)
+            and isinstance(handler.get("command"), str)
+            and _is_live_guard_codex_hook_command(str(handler.get("command")))
+            for handler in handlers
+        )
+    command = group.get("command")
+    return isinstance(command, str) and _is_live_guard_codex_hook_command(command)
+
+
+def live_guard_codex_hooks_intercept(hooks: object) -> bool:
+    """Return whether live Codex config still routes Guard intercept hooks.
+
+    Authenticated manifest mismatches stay repair work. They must not fail
+    machine-wide protection health while Guard still intercepts PreToolUse and
+    PermissionRequest.
+    """
+
+    if not isinstance(hooks, dict):
+        return False
+    for event_name in _HEALTH_INTERCEPT_EVENTS:
+        groups = hooks.get(event_name)
+        if not isinstance(groups, list) or not any(
+            isinstance(group, dict) and _group_has_active_guard_shell_handler(group) for group in groups
+        ):
+            return False
+    return True
+
+
 def _normalize_guard_home_path(value: str) -> Path | None:
     stripped = value.strip().strip("'\"")
     if not stripped:
@@ -269,6 +355,7 @@ __all__ = [
     "exact_legacy_hook_bindings",
     "install_managed_codex_hook_groups",
     "is_foreign_guard_codex_hook_group",
+    "live_guard_codex_hooks_intercept",
     "prune_foreign_guard_codex_hook_groups",
     "remove_manifest_bound_hook_events",
 ]
