@@ -207,6 +207,12 @@ def _skip_leading_flags(tokens: Sequence[str]) -> list[str]:
     return rest
 
 
+def _accepted_live_cursor_hook_script(path: Path) -> Path | None:
+    if not _is_managed_cursor_hook_script(path) or _cursor_hook_path_contains_symlink(path):
+        return None
+    return path
+
+
 def _live_cursor_hook_script_path(command: str) -> Path | None:
     try:
         tokens = shlex.split(command)
@@ -216,19 +222,14 @@ def _live_cursor_hook_script_path(command: str) -> Path | None:
         return None
     first = Path(tokens[0]).name
     if first == HOOK_SCRIPT_NAME:
-        return Path(tokens[0])
+        return _accepted_live_cursor_hook_script(Path(tokens[0]))
     if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
-        candidate = Path(tokens[2])
-        if _is_managed_cursor_hook_script(candidate):
-            return candidate
-        return None
+        return _accepted_live_cursor_hook_script(Path(tokens[2]))
     if first.lower().startswith("python"):
         payload = _skip_leading_flags(tokens[1:])
         if not payload or payload[0] == "-c":
             return None
-        candidate = Path(payload[0])
-        if candidate.name == HOOK_SCRIPT_NAME:
-            return candidate
+        return _accepted_live_cursor_hook_script(Path(payload[0]))
     return None
 
 

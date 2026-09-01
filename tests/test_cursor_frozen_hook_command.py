@@ -10,9 +10,20 @@ import pytest
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     FROZEN_CURSOR_HOOK_COMMAND,
     HOOK_SCRIPT_NAME,
+    _live_cursor_hook_script_path,
     _managed_hook_command,
+    live_guard_cursor_hooks_intercept,
     run_frozen_cursor_hook,
 )
+
+
+def _blocking_cursor_hooks(command: str) -> dict[str, list[dict[str, str]]]:
+    entry = [{"command": command}]
+    return {
+        "beforeShellExecution": entry,
+        "beforeMCPExecution": entry,
+        "beforeReadFile": entry,
+    }
 
 
 def test_frozen_cursor_hook_command_uses_supported_launcher(monkeypatch, tmp_path: Path) -> None:
@@ -72,3 +83,32 @@ def test_run_frozen_cursor_hook_rejects_symlink(tmp_path: Path) -> None:
 def test_run_frozen_cursor_hook_rejects_wrong_argc() -> None:
     assert run_frozen_cursor_hook([]) == 2
     assert run_frozen_cursor_hook(["a", "b"]) == 2
+
+
+def test_live_cursor_hook_script_path_rejects_symlink(tmp_path: Path) -> None:
+    target = tmp_path / "payload.py"
+    target.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    script.parent.mkdir(parents=True)
+    try:
+        script.symlink_to(target)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symlink creation unavailable: {error}")
+    frozen_command = shlex.join(["hol-guard", FROZEN_CURSOR_HOOK_COMMAND, str(script)])
+    python_command = shlex.join(["python3", str(script)])
+    assert _live_cursor_hook_script_path(frozen_command) is None
+    assert _live_cursor_hook_script_path(python_command) is None
+    assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(frozen_command)) is False
+    assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(python_command)) is False
+
+
+def test_live_cursor_hook_script_path_accepts_regular_managed_script(tmp_path: Path) -> None:
+    script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    script.parent.mkdir(parents=True)
+    script.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    frozen_command = shlex.join(["hol-guard", FROZEN_CURSOR_HOOK_COMMAND, str(script)])
+    python_command = shlex.join(["python3", str(script)])
+    assert _live_cursor_hook_script_path(frozen_command) == script
+    assert _live_cursor_hook_script_path(python_command) == script
+    assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(frozen_command)) is True
+    assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(python_command)) is True
