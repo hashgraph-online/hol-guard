@@ -91,17 +91,21 @@ async function waitForCloudConnection(initialStatus, {
   }
   return status;
 }
-function recoverySummary(failCount, unknownCount, needsConnectedApp) {
+function recoverySummary(failCount, unknownCount, needsConnectedApp, failedLabels = []) {
   if (needsConnectedApp) {
     return "Connect an AI app to start local protection. Repair cannot finish until at least one app is connected.";
   }
   if (failCount === 0) {
     return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
   }
-  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
+  const namedFail = failedLabels[0]?.trim();
+  const failedChecks = failCount === 1 && namedFail ? namedFail : `${failCount} failed check${failCount === 1 ? "" : "s"}`;
   let remainingProofs = "";
   if (unknownCount > 0) {
     remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
+  }
+  if (failCount === 1 && namedFail) {
+    return `Repair ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
   }
   return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
 }
@@ -150,8 +154,10 @@ const PROTECTION_CHECK_ACTIONS = {
   }
 };
 function cloudPolicyRecoveryHint(input) {
-  const cloudProofUnavailable = input.cloudState !== "paired_active" || input.cloudSyncState !== "healthy" || Boolean(input.cloudPolicySyncError);
-  if (!cloudProofUnavailable) return null;
+  const cloudFailed = input.cloudSyncState === "failed" || Boolean(input.cloudPolicySyncError);
+  if (input.cloudState !== "local_only" && !cloudFailed) {
+    return null;
+  }
   return {
     actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
     detail: "Local Guard remains active. Guard Cloud policy proof is separate from local repair and is not changed here.",
@@ -386,11 +392,16 @@ function FleetProtectionRecovery(props) {
               ),
               /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-brand-dark", children: "Restore local protection" })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(failCount, unknownCount, needsConnectedApp) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: recoverySummary(
+              failCount,
+              unknownCount,
+              needsConnectedApp,
+              gaps.filter((check) => check.status === "fail").map((check) => actionForCheck(check, props.repairHarness).label)
+            ) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairClick, disabled: working, children: repairButtonLabel(repairState, needsConnectedApp) })
         ] }),
-        cloudPolicyHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600", children: [
+        cloudPolicyHint ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: cloudPolicyHint.title }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1", children: cloudPolicyHint.detail }),
           cloudPolicyHint.startsOAuth ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap items-center gap-3", children: [

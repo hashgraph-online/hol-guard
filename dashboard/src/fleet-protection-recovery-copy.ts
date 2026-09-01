@@ -8,6 +8,7 @@ export function recoverySummary(
   failCount: number,
   unknownCount: number,
   needsConnectedApp: boolean,
+  failedLabels: string[] = [],
 ): string {
   if (needsConnectedApp) {
     return "Connect an AI app to start local protection. Repair cannot finish until at least one app is connected.";
@@ -15,10 +16,17 @@ export function recoverySummary(
   if (failCount === 0) {
     return "Complete the remaining local proof here. Guard repairs and rechecks every local protection layer in one pass.";
   }
-  const failedChecks = `${failCount} failed check${failCount === 1 ? "" : "s"}`;
+  const namedFail = failedLabels[0]?.trim();
+  const failedChecks =
+    failCount === 1 && namedFail
+      ? namedFail
+      : `${failCount} failed check${failCount === 1 ? "" : "s"}`;
   let remainingProofs = "";
   if (unknownCount > 0) {
     remainingProofs = `, then confirm the remaining ${unknownCount} proof${unknownCount === 1 ? "" : "s"}`;
+  }
+  if (failCount === 1 && namedFail) {
+    return `Repair ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
   }
   return `Repair the ${failedChecks} here${remainingProofs}. Guard repairs and rechecks every local protection layer in one pass.`;
 }

@@ -1,4 +1,5 @@
 import { cloudPolicyRecoveryHint } from "./fleet-protection-recovery";
+import { recoverySummary } from "./fleet-protection-recovery-copy";
 import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor, resolveFleetHeroCopy } from "./fleet-workspace";
@@ -151,11 +152,30 @@ const pendingCloudProof = cloudPolicyRecoveryHint({
   cloudPolicySyncError: null,
   connectUrl: urls.fleet_url,
 });
+assert(pendingCloudProof === null, "queued Cloud sync must not appear on local protection repair");
+const staleCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "stale",
+  cloudPolicySyncError: null,
+  connectUrl: urls.fleet_url,
+});
+assert(staleCloudProof === null, "stale Cloud sync must not appear on local protection repair");
+const failedCloudProof = cloudPolicyRecoveryHint({
+  cloudState: "paired_active",
+  cloudSyncState: "failed",
+  cloudPolicySyncError: null,
+  connectUrl: urls.fleet_url,
+});
 assert(
-  pendingCloudProof?.actionLabel === "Open Guard Cloud" &&
-    pendingCloudProof.detail.includes("separate from local repair") &&
-    pendingCloudProof.startsOAuth === false,
-  "incomplete Cloud proof remains an independent Cloud action",
+  failedCloudProof?.actionLabel === "Open Guard Cloud" &&
+    failedCloudProof.detail.includes("separate from local repair") &&
+    failedCloudProof.startsOAuth === false,
+  "failed Cloud proof remains an independent Cloud action",
+);
+assert(
+  recoverySummary(1, 0, false, ["App hooks"]) ===
+    "Repair App hooks here. Guard repairs and rechecks every local protection layer in one pass.",
+  "a single failed local check is named instead of a generic count",
 );
 
 const degradedWithApps = resolveFleetHeroCopy("paired_active", 2, "degraded", urls);

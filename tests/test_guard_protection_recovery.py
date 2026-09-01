@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
+from codex_plugin_scanner.guard.adapters.grok import grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.cli.install_commands import (
     _grok_hook_command_is_guard,
     _grok_managed_config_is_active,
@@ -65,27 +66,49 @@ def test_protection_repair_probe_avoids_force_push() -> None:
     assert "git status --porcelain=v1" in _PROTECTION_REPAIR_PROBE_COMMAND
 
 
-def test_live_grok_hooks_fail_when_managed_config_is_missing(
+def _write_intercepting_grok_hooks(hooks_dir: Path) -> None:
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    command = "hol-guard hook grok"
+    (hooks_dir / "hol-guard-pretooluse.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"hooks": [{"type": "command", "command": command, "timeout": 30}]},
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    observe = {"hooks": [{"type": "command", "command": command, "timeout": 15}]}
+    (hooks_dir / "hol-guard-prompt.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "UserPromptSubmit": [observe],
+                    "SubagentStart": [observe],
+                    "SessionStart": [observe],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_live_grok_hooks_pass_when_managed_config_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ctx = _ctx(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
-    hooks_dir = ctx.home_dir / ".grok" / "hooks"
-    hooks_dir.mkdir(parents=True)
-    (hooks_dir / "hol-guard-pretooluse.json").write_text(
-        json.dumps({"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "true"}]}]}}),
-        encoding="utf-8",
-    )
-    (hooks_dir / "hol-guard-prompt.json").write_text(
-        json.dumps({"hooks": {"UserPromptSubmit": []}}),
-        encoding="utf-8",
-    )
+    _write_intercepting_grok_hooks(ctx.home_dir / ".grok" / "hooks")
     store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
     store.set_managed_install("grok", True, None, {"harness": "grok", "active": True}, "2026-08-17T12:00:00+00:00")
 
     assert grok_hooks_protection_ready(ctx) is False
-    assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": False}
+    assert grok_runtime_hooks_verified(ctx) is True
+    assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": True}
 
 
 def test_live_grok_hooks_reject_empty_observe_events(

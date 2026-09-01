@@ -99,11 +99,10 @@ const PROTECTION_CHECK_ACTIONS: Record<string, GapAction> = {
 };
 
 export function cloudPolicyRecoveryHint(input: CloudPolicyRecoveryInput): CloudPolicyRecoveryHint | null {
-  const cloudProofUnavailable =
-    input.cloudState !== "paired_active"
-    || input.cloudSyncState !== "healthy"
-    || Boolean(input.cloudPolicySyncError);
-  if (!cloudProofUnavailable) return null;
+  const cloudFailed = input.cloudSyncState === "failed" || Boolean(input.cloudPolicySyncError);
+  if (input.cloudState !== "local_only" && !cloudFailed) {
+    return null;
+  }
   return {
     actionLabel: input.cloudState === "local_only" ? "Connect Guard Cloud" : "Open Guard Cloud",
     detail:
@@ -394,7 +393,14 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
             </h2>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            {recoverySummary(failCount, unknownCount, needsConnectedApp)}
+            {recoverySummary(
+              failCount,
+              unknownCount,
+              needsConnectedApp,
+              gaps
+                .filter((check) => check.status === "fail")
+                .map((check) => actionForCheck(check, props.repairHarness).label),
+            )}
           </p>
         </div>
         <ActionButton onClick={handleRepairClick} disabled={working}>
@@ -402,7 +408,7 @@ export function FleetProtectionRecovery(props: FleetProtectionRecoveryProps) {
         </ActionButton>
       </div>
       {cloudPolicyHint ? (
-        <div className="mt-3 border-t border-brand-attention/10 pt-3 text-sm text-slate-600">
+        <div className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
           <p className="font-medium text-brand-dark">{cloudPolicyHint.title}</p>
           <p className="mt-1">{cloudPolicyHint.detail}</p>
           {cloudPolicyHint.startsOAuth ? (
