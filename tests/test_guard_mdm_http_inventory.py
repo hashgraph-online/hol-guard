@@ -26,6 +26,7 @@ _RAW_HTTP_BOUNDARIES = frozenset(
     {
         "mdm/network_transport.py",
         "daemon/client.py",
+        "daemon/live_identity.py",
         "daemon/manager.py",
         "bridge/__init__.py",
         "adapters/bounded_cli_hook_bridge.py",

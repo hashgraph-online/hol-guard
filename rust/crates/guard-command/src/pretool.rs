@@ -7,6 +7,10 @@ mod search;
 
 use search::safe_search_arguments;
 
+pub mod generic;
+
+pub use generic::evaluate_pre_tool_envelope;
+
 fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)
 }
@@ -42,11 +46,11 @@ fn pretool_decision(
     }
 }
 
-fn normalized_haystack(value: &str) -> String {
+pub(super) fn normalized_haystack(value: &str) -> String {
     value.to_ascii_lowercase().replace('\\', "/")
 }
 
-fn sensitive_command(value: &str) -> bool {
+pub(super) fn sensitive_command(value: &str) -> bool {
     let lowered = normalized_haystack(value);
     let needles = [
         "/.ssh/",
@@ -71,6 +75,12 @@ fn sensitive_command(value: &str) -> bool {
         "id_ed25519",
         "aws_secret_access_key",
         "private_key",
+        ".env",
+        "api key",
+        "api_key",
+        "api-key",
+        "password",
+        "secret",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
         || lowered.contains("printenv")
@@ -243,6 +253,14 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "HOL Guard blocked a command that combines sensitive data access with network transfer.",
         ));
     }
+    if exact_safe_command(&model, false) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this bounded command explicitly benign.",
+        ));
+    }
     if sensitive_command(normalized) {
         return Ok(pretool_decision(
             model,
@@ -265,14 +283,6 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
             "review",
             "native_git_helper_context_review",
             "HOL Guard is checking repository Git-helper configuration before allowing this read-only command.",
-        ));
-    }
-    if exact_safe_command(&model, false) {
-        return Ok(pretool_decision(
-            model,
-            "allow",
-            "native_exact_safe_command",
-            "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
     Ok(pretool_decision(
@@ -335,7 +345,6 @@ mod tests {
             "rg -g*.ts authority src",
             "rg --glob '*.{ts,tsx}' authority src",
             "rg --line-number --color=never authority src",
-            "rg -e '.env.local' src",
             "grep -n authority README.md",
             "grep --line-number --color=never authority README.md",
             "grep -eerror README.md",
@@ -365,6 +374,9 @@ mod tests {
             r"rg --glob 'nested/[\.]env' TOKEN .",
             "rg --glob 'nested/{safe,.env}' TOKEN .",
             "rg TOKEN .env.local",
+            "rg -e '.env.local' src",
+            "grep -r password .",
+            "rg id_rsa /home",
             "rg --glob 'nested/[.]env.local' TOKEN .",
             "rg --glob 'nested/[.]env.production' TOKEN .",
             "rg --glob 'nested/[.]e[n]v.production' TOKEN .",

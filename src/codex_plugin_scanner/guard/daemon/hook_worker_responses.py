@@ -3,6 +3,39 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+
+def prepare_native_hook_policy(
+    handler: Any,
+    daemon_server: Any,
+    payload: dict[str, object],
+    params: Mapping[str, list[str]],
+    default_harness: str,
+    workspace: str | None,
+    deadline: float,
+) -> bool:
+    """Apply the production native-policy barrier before hook admission."""
+
+    prepared_policy = daemon_server.hook_worker.prepare_workspace_policy(
+        Path(workspace) if workspace is not None else None,
+        deadline=deadline,
+    )
+    if prepared_policy is not None:
+        return True
+    daemon_server.hook_worker.metrics.record_route("native_fail_safe")
+    handler._write_json(
+        handler._runtime_hook_fail_safe_response(
+            payload,
+            params,
+            default_harness=default_harness,
+            reason="HOL Guard could not prepare the native policy safely.",
+            reason_code="native_policy_not_ready",
+            native_authoritative=True,
+        )
+    )
+    return False
 
 
 def _canonical_hook_harness(harness: str) -> str:
@@ -13,18 +46,28 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
     action = response.get("minimum_action")
     reason = str(response.get("reason") or "HOL Guard requires native review before execution.")
     reason_code = str(response.get("reason_code") or "native_pre_tool_review")
-    if action == "allow" and response.get("decision") == "allow":
+    if action in {"allow", "warn"} and response.get("decision") == "allow":
         if _canonical_hook_harness(harness) in {"pi", "omp"}:
-            return {
+            output: dict[str, object] = {
                 "decision": "allow",
-                "policy_action": "allow",
+                "policy_action": action,
                 "reason_code": reason_code,
             }
+            if action == "warn":
+                output["reason"] = reason
+                output["notice"] = "warning"
+            return output
+        hook_specific: dict[str, object] = {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+        }
+        if action == "warn":
+            hook_specific["permissionDecisionReason"] = reason
         return {
             "continue": True,
-            "policy_action": "allow",
+            "policy_action": action,
             "reason_code": reason_code,
-            "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"},
+            "hookSpecificOutput": hook_specific,
         }
     if _canonical_hook_harness(harness) in {"pi", "omp"}:
         return {
@@ -51,10 +94,22 @@ def harness_json_from_native_post_tool(
     if _canonical_hook_harness(harness) in {"pi", "omp"}:
         return dict(response)
     if response.get("decision") == "allow" and response.get("model_output_action") == "allow_original":
-        return {
-            "policy_action": "allow",
+        action = response.get("policy_action")
+        if action not in {"allow", "warn"}:
+            action = "allow"
+        output: dict[str, object] = {
+            "policy_action": action,
             "hookSpecificOutput": {"hookEventName": "PostToolUse"},
         }
+        if action == "warn":
+            output["hookSpecificOutput"] = {
+                "hookEventName": "PostToolUse",
+                "permissionDecisionReason": str(
+                    response.get("reason")
+                    or "HOL Guard raised a non-blocking warning under the installed native policy."
+                ),
+            }
+        return output
     reason = str(response.get("reason") or "HOL Guard blocked this tool output because it could not be proven safe.")
     reason_code = str(response.get("reason_code") or "native_hook_edge_block")
     return post_tool_native_block_response(reason=reason, reason_code=reason_code)

@@ -21,6 +21,7 @@ from scripts.ci.hook_data_plane_ownership_contract import (
     load_manifest,
     registered_harnesses,
 )
+from scripts.ci.rust_pretool_no_python_gate import _graph_failures
 
 MANIFEST = Path("docs/guard/contracts/hook-data-plane-ownership.v2.json")
 SELF_PROTECTED_PATHS: Final = frozenset(
@@ -29,7 +30,9 @@ SELF_PROTECTED_PATHS: Final = frozenset(
         ".github/workflows/rust-authority-ownership.yml",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
         "scripts/ci/hook_data_plane_ownership_contract.py",
+        "scripts/ci/native_approval_contract_gate.py",
         "scripts/ci/rust_authority_ownership_gate.py",
+        ".github/workflows/publish.yml",
     }
 )
 
@@ -215,13 +218,16 @@ def _coverage_narrowing_gate(
 
 
 def _pretool_gate() -> None:
+    graph_failures = _graph_failures(Path("."))
+    if graph_failures:
+        raise RuntimeError("; ".join(graph_failures))
+
     pretool = Path("src/codex_plugin_scanner/guard/native_pretool.py")
     if _python_imports_function(pretool, "command_evaluation", "evaluate_command"):
         raise RuntimeError("native PreToolUse transport imports the Python command evaluator")
     if "evaluate_command(" in _read(pretool):
         raise RuntimeError("native PreToolUse transport calls the Python command evaluator")
     _assert_policy_floor_fail_closed(pretool)
-
     hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker.py"))
     if "review_pre_tool_native" not in hook:
         raise RuntimeError("PreToolUse hook path is not bound to the native runtime")
@@ -253,7 +259,13 @@ def _pretool_gate() -> None:
         if "Python remains authoritative" in model:
             raise RuntimeError("command-model bridge still declares Python authority")
 
-    runtime = _read(Path("rust/crates/guard-runtime/src/main.rs"))
+    runtime = "\n".join(
+        _read(path)
+        for path in (
+            Path("rust/crates/guard-runtime/src/main.rs"),
+            Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
+        )
+    )
     command = _read(Path("rust/crates/guard-command/src/lib.rs"))
     combined = runtime + "\n" + command
     if not re.search(r"PreToolUse|pre_tool|pre-tool", combined):
@@ -300,7 +312,13 @@ def _mode_gate() -> None:
 
 def _policy_and_identity_gate() -> None:
     cargo = _read(Path("rust/crates/guard-runtime/Cargo.toml"))
-    runtime = _read(Path("rust/crates/guard-runtime/src/main.rs"))
+    runtime = "\n".join(
+        _read(path)
+        for path in (
+            Path("rust/crates/guard-runtime/src/main.rs"),
+            Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
+        )
+    )
     native = _read(Path("src/codex_plugin_scanner/guard/native_runtime.py"))
     release = _read(Path("scripts/verify_native_runtime_release.py"))
     if "guard-policy-snapshot" not in cargo:

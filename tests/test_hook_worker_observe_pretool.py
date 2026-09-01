@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -38,6 +38,30 @@ def _native_block(command: str) -> dict[str, Any]:
     }
 
 
+def _native_generic_block() -> dict[str, Any]:
+    return {
+        "schema": "guard-pre-tool-result.v1",
+        "version": 1,
+        "authority": "rust",
+        "action": {
+            "schema": "guard-pre-tool-action.v1",
+            "version": 1,
+            "harness": "cursor",
+            "event": "PreToolUse",
+            "action_type": "process_service",
+            "operation": "stop",
+            "bounded": True,
+            "sensitive_target": False,
+        },
+        "decision": "deny",
+        "minimum_action": "block",
+        "policy_action": "block",
+        "reason_code": "native_process_service_dangerous",
+        "reason": "HOL Guard blocked a destructive process or service action before execution.",
+        "explicitly_benign": False,
+    }
+
+
 def _write_watch_config(guard_home: Path) -> None:
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text(
@@ -46,7 +70,7 @@ def _write_watch_config(guard_home: Path) -> None:
     )
 
 
-def test_hook_worker_watch_native_block_uses_cli_recording(
+def test_hook_worker_watch_native_block_stays_native_and_denies(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -63,7 +87,7 @@ def test_hook_worker_watch_native_block_uses_cli_recording(
         return {
             "event_name": "PreToolUse",
             "harness": "cursor",
-            "result": _native_block("rm -rf /"),
+            "result": _native_generic_block(),
         }
 
     monkeypatch.setattr(
@@ -71,8 +95,9 @@ def test_hook_worker_watch_native_block_uses_cli_recording(
         native_block_edge,
     )
     worker = HookWorker(store=GuardStore(guard_home))
-    with pytest.raises(HookWorkerUnsupported, match="CLI approval coordination"):
-        worker.review_http_payload(
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace: {"mode": "observe"})
+    try:
+        result = worker.review_http_payload(
             payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "rm -rf /"}},
             params={},
             default_harness="cursor",
@@ -80,10 +105,15 @@ def test_hook_worker_watch_native_block_uses_cli_recording(
             guard_home=guard_home,
             workspace=tmp_path / "workspace",
         )
+    finally:
+        worker.close()
     assert captured["observe_mode"] is True
+    hook_output = result["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "deny"
 
 
-def test_hook_worker_watch_native_unavailable_uses_cli_recording(
+def test_hook_worker_watch_native_unavailable_fails_closed_without_cli_escape(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -107,15 +137,16 @@ def test_hook_worker_watch_native_unavailable_uses_cli_recording(
         ),
     )
     worker = HookWorker(store=GuardStore(guard_home))
-    with pytest.raises(HookWorkerUnsupported, match="CLI recording"):
-        worker.review_http_payload(
-            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
-            params={},
-            default_harness="cursor",
-            home_dir=tmp_path / "home",
-            guard_home=guard_home,
-            workspace=tmp_path / "workspace",
-        )
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        params={},
+        default_harness="cursor",
+        home_dir=tmp_path / "home",
+        guard_home=guard_home,
+        workspace=tmp_path / "workspace",
+    )
+    assert result["reason_code"] == "native_pre_tool_unavailable"
+    assert result["decision"] == "block"
 
 
 def test_hook_worker_watch_native_allow_still_allows(
@@ -146,7 +177,9 @@ def test_hook_worker_watch_native_allow_still_allows(
         workspace=tmp_path / "workspace",
     )
     assert result["policy_action"] == "allow"
-    assert result["hookSpecificOutput"]["permissionDecision"] == "allow"
+    hook_output = result["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"
 
 
 def test_hook_worker_watch_posttool_native_unavailable_fails_closed(

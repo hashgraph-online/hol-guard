@@ -15634,6 +15634,50 @@ def test_guard_hook_codex_strict_default_allows_verified_benign_git_status(
     assert store.list_receipts(limit=1) == []
 
 
+@pytest.mark.parametrize(
+    "strict_config",
+    (
+        'default_action = "require-reapproval"\n',
+        '[harnesses.codex]\ndefault_action = "require-reapproval"\n',
+    ),
+    ids=("global", "harness"),
+)
+def test_guard_hook_codex_strict_default_allows_verified_native_source_read(
+    strict_config,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    source_file = workspace_dir / "src" / "service.py"
+    _write_text(source_file, "value = 1\n")
+    _write_text(home_dir / "config.toml", strict_config)
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(source_file)},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+    store = GuardStore(home_dir)
+
+    assert rc == 0
+    assert output["policy_action"] == "warn"
+    assert store.list_approval_requests(limit=10) == []
+
+
 @pytest.mark.parametrize("explicit_action", ("block", "require-reapproval"))
 def test_guard_hook_codex_verified_benign_does_not_override_explicit_policy(
     explicit_action,
@@ -23844,8 +23888,9 @@ def test_resolve_guard_sync_auth_context_serializes_refresh_token_rotation(tmp_p
         client_id: str,
         refresh_token: str,
         dpop_key_material,
+        credential_reloader=None,
     ) -> dict[str, object]:
-        del token_endpoint, client_id, dpop_key_material
+        del token_endpoint, client_id, dpop_key_material, credential_reloader
         observed_refresh_tokens.append(refresh_token)
         if refresh_token == "refresh-token-1":
             first_refresh_started.set()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import threading
 import time
@@ -24,6 +25,14 @@ from ..runtime.command_activity_correlation import (
 from ..runtime.command_activity_privacy import InstallationCorrelationKey
 from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..store import GuardStore
+
+_EVIDENCE_SCHEMA = "hol-guard-native-hook-evidence.v1"
+_SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+
+
+def _safe_identifier(value: str, fallback: str = "unknown") -> str:
+    normalized = value.strip()
+    return normalized if _SAFE_IDENTIFIER.fullmatch(normalized) else fallback
 
 
 class RuntimeHookEvidenceWriterStats(TypedDict):
@@ -54,15 +63,16 @@ class _CommandActivityRecord:
         return (
             json.dumps(
                 {
-                    "record_id": self.record_id,
-                    "harness": self.harness,
-                    "event": self.event,
+                    "schema": _EVIDENCE_SCHEMA,
+                    "record_id": _safe_identifier(self.record_id, "redacted"),
+                    "harness": _safe_identifier(self.harness),
+                    "event": _safe_identifier(self.event),
                     "correlation": (
                         {
-                            "kind": self.correlation.kind.value,
-                            "harness": self.correlation.harness,
-                            "key_id": self.correlation.key_id,
-                            "digest": self.correlation.digest,
+                            "kind": _safe_identifier(self.correlation.kind.value),
+                            "harness": _safe_identifier(self.correlation.harness),
+                            "key_id": _safe_identifier(self.correlation.key_id, "redacted"),
+                            "digest": _safe_identifier(self.correlation.digest, "redacted"),
                         }
                         if self.correlation is not None
                         else None

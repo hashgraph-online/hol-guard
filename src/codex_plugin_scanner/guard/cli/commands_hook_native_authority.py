@@ -9,8 +9,9 @@ from typing import Any
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from ..daemon.hook_worker_responses import post_tool_fail_safe_response
+from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..native_route_receipt import record_python_semantic_hook_route
-from ..native_runtime import native_mode
 from ..store import GuardStore
 from .commands_hook_source_ref import _try_source_ref_fast_path
 from .commands_support_interaction import _emit
@@ -27,15 +28,16 @@ def try_native_hook_authority(
 ) -> dict[str, Any] | None:
     """Return native harness JSON, or None when Python CLI must continue.
 
-    ``auto`` and ``force`` send supported command PreToolUse and PostToolUse
-    through the same fail-closed Rust worker as the daemon. File PreToolUse
-    and other events still raise ``HookWorkerUnsupported`` so the existing
-    CLI path can handle them.
+    ``auto`` and ``force`` send supported generic PreToolUse and PostToolUse
+    through the same fail-closed Rust worker as the daemon. Out-of-scope
+    events still return ``None`` for their compatibility handlers.
     """
-    if native_mode() not in {"auto", "force"}:
+    if not _native_mode_requires_rust():
         return None
+    worker: HookWorker | None = None
     try:
-        return HookWorker(store=store).review_http_payload(
+        worker = HookWorker(store=store)
+        return worker.review_http_payload(
             payload=payload,
             params={},
             default_harness=harness,
@@ -45,6 +47,17 @@ def try_native_hook_authority(
         )
     except HookWorkerUnsupported:
         return None
+    except Exception:
+        return post_tool_fail_safe_response(
+            harness,
+            reason="HOL Guard could not complete the native hook decision safely.",
+            reason_code="native_hook_worker_exception",
+        )
+    finally:
+        if worker is not None:
+            close = getattr(worker, "close", None)
+            if callable(close):
+                close()
 
 
 def try_native_or_source_ref_hook(
@@ -55,12 +68,14 @@ def try_native_or_source_ref_hook(
     payload: dict[str, object],
     runtime_workspace: Path | None,
     store: GuardStore,
+    allow_compatibility: bool = True,
 ) -> int | None:
     """Prefer native authority, then Python source-ref when native does not apply.
 
     ``off`` and ``shadow`` stay on the Python source-ref path. ``auto`` and
-    ``force`` use that path only after the native worker reports the event as
-    unsupported, such as file PreToolUse with a source reference.
+    ``force`` keep every hook result native or fail-safe. Callers that have
+    not yet performed compatibility normalization set ``allow_compatibility``
+    to false so no native request can escape into a Python source-ref path.
     """
     native_result = try_native_hook_authority(
         payload=payload,
@@ -73,6 +88,27 @@ def try_native_or_source_ref_hook(
     if native_result is not None:
         _emit("hook", native_result, getattr(args, "json", False))
         return 0
+    if _native_mode_requires_rust():
+        # Native mode never escapes to Python semantics, including unknown or
+        # malformed event labels. The worker normally returns this floor;
+        # retain a deterministic terminal result for transport failure.
+        reason_code = (
+            "native_hook_worker_unavailable"
+            if allow_compatibility
+            else "native_hook_worker_unavailable_before_compatibility"
+        )
+        _emit(
+            "hook",
+            post_tool_fail_safe_response(
+                args.harness,
+                reason="HOL Guard could not complete the native hook decision safely.",
+                reason_code=reason_code,
+            ),
+            getattr(args, "json", False),
+        )
+        return 0
+    if not allow_compatibility:
+        return None
     # Any path beyond native authority is a Python terminal semantic path.
     # Preserve that final provenance even when Python asks Rust for a floor.
     record_python_semantic_hook_route()

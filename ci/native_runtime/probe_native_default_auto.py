@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,6 +20,7 @@ from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
 )
 from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
@@ -111,6 +113,41 @@ def _ownership_routes() -> dict[str, dict[str, str]]:
     return decoded
 
 
+def _installed_hook_request(
+    daemon: GuardDaemonServer,
+    guard_home: Path,
+    workspace: Path,
+    harness: str,
+    event: str,
+    payload: dict[str, object],
+) -> dict[str, object] | None:
+    query = urllib.parse.urlencode({"home": str(guard_home), "workspace": str(workspace)})
+    encoded = json.dumps(payload, separators=(",", ":"))
+    if harness == "codex":
+        return _daemon_response_once(
+            state_path=guard_home / "daemon-state.json",
+            query=query,
+            data=encoded,
+            timeout_seconds=5,
+        )
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
+        data=encoded.encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            decoded = json.loads(response.read().decode("utf-8"))
+            return decoded if isinstance(decoded, dict) else None
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")[:512]
+        raise RuntimeError(
+            "installed hook corpus request failed: "
+            f"harness={harness} event={event} status={error.code} body={detail}"
+        ) from error
+
+
 def _installed_hook_corpus(root: Path) -> dict[str, object]:
     guard_home = root / "hook-home"
     workspace = root / "hook-workspace"
@@ -128,6 +165,19 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
     routes = _ownership_routes()
     daemon.start()
     try:
+        readiness_started = time.monotonic()
+        prepared_policy = daemon._server.hook_worker.prepare_workspace_policy(
+            workspace,
+            deadline=readiness_started + 0.25,
+        )
+        readiness_elapsed = time.monotonic() - readiness_started
+        _require(
+            prepared_policy is not None and readiness_elapsed <= 0.25,
+            {
+                "elapsed_ms": round(readiness_elapsed * 1_000, 2),
+                "policy_ready": prepared_policy is not None,
+            },
+        )
         for harness, route in sorted(routes.items()):
             events: list[tuple[str, dict[str, object]]] = []
             if route["pre_tool_use"].startswith("installed_"):
@@ -153,49 +203,32 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
                     )
                 )
             for event, payload in events:
-                query = urllib.parse.urlencode(
-                    {
-                        "home": str(guard_home),
-                        "workspace": str(workspace),
-                    }
+                response_payload = _installed_hook_request(
+                    daemon,
+                    guard_home,
+                    workspace,
+                    harness,
+                    event,
+                    payload,
                 )
-                if harness == "codex":
-                    response_payload = _daemon_response_once(
-                        state_path=guard_home / "daemon-state.json",
-                        query=query,
-                        data=json.dumps(payload, separators=(",", ":")),
-                        timeout_seconds=5,
-                    )
-                else:
-                    request = urllib.request.Request(
-                        f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
-                        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-                        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
-                        method="POST",
-                    )
-                    try:
-                        with urllib.request.urlopen(request, timeout=5) as response:
-                            decoded = json.loads(response.read().decode("utf-8"))
-                            response_payload = decoded if isinstance(decoded, dict) else None
-                    except urllib.error.HTTPError as error:
-                        detail = error.read().decode("utf-8", errors="replace")[:512]
-                        raise RuntimeError(
-                            "installed hook corpus request failed: "
-                            f"harness={harness} event={event} status={error.code} body={detail}"
-                        ) from error
                 if response_payload is None:
                     raise RuntimeError(f"empty response for {harness} {event}")
                 reason = response_payload.get("reason_code")
                 if isinstance(reason, str):
                     reason_codes[reason] = reason_codes.get(reason, 0) + 1
                 route_receipts.append({"harness": harness, "event": event, "route": "native_resident"})
-        worker_stats = daemon._server.hook_process_runner.stats()
+        # Native edge requests execute in the resident HookWorker and do not
+        # traverse the compatibility subprocess runner. Read its bounded
+        # route receipt instead of attributing native traffic to that idle
+        # Python-only worker pool.
+        worker_stats = daemon._server.hook_worker.metrics.snapshot()
     finally:
         daemon.stop()
 
     expected = len(route_receipts)
     observed_routes = worker_stats["routes"]
     _require(expected > 0, "installed hook corpus is empty")
+    _require(expected == 21, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
     return {
@@ -243,25 +276,28 @@ def main(*, json_path: Path | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="hg-auto-", dir=_short_temp_parent()) as temporary:
         root = Path(temporary)
         try:
-            clean = review_post_tool_native(
-                _request(root, "const value = 1;\n", "default-auto-clean"),
-                observe_mode=False,
-            )
-            if clean is None:
-                raise RuntimeError(
-                    f"native_default_auto_probe_failed: clean response missing: {native_resident_client_failure_code()}"
+            with native_policy_snapshot(root / "guard-home") as snapshot:
+                clean = review_post_tool_native(
+                    _request(root, "const value = 1;\n", "default-auto-clean"),
+                    observe_mode=False,
+                    policy_snapshot=snapshot,
                 )
-            _require(clean.decision == "allow", clean)
-            _require(clean.reason_code == "output_scan_allow", clean)
+                if clean is None:
+                    raise RuntimeError(
+                        "native_default_auto_probe_failed: clean response missing: "
+                        f"{native_resident_client_failure_code()}"
+                    )
+                _require(clean.decision == "allow", clean)
 
-            secret = review_post_tool_native(
-                _request(root, _synthetic_github_token(), "default-auto-secret"),
-                observe_mode=False,
-            )
-            if secret is None:
-                raise RuntimeError("native_default_auto_probe_failed: secret response missing")
-            _require(secret.decision == "deny", secret)
-            _require(secret.reason_code == "output_secret_match", secret)
+                secret = review_post_tool_native(
+                    _request(root, _synthetic_github_token(), "default-auto-secret"),
+                    observe_mode=False,
+                    policy_snapshot=snapshot,
+                )
+                if secret is None:
+                    raise RuntimeError("native_default_auto_probe_failed: secret response missing")
+                _require(secret.decision == "deny", secret)
+                _require(secret.reason_code == "output_secret_match", secret)
 
             health = native_runtime_health(root / "guard-home")
             _require(health.state == "healthy", health)

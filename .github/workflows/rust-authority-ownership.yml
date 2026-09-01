@@ -44,6 +44,8 @@ jobs:
             args+=(--base-ref "$OWNERSHIP_BASE_REF")
           fi
           uv run --no-sync python scripts/ci/rust_authority_ownership_gate.py "${args[@]}"
+      - name: Enforce native approval contract ownership
+        run: uv run --no-sync python scripts/ci/native_approval_contract_gate.py --root .
       - name: Compile and lint complete Rust workspace
         env:
           HOL_GUARD_BUILD_SHA: ${{ github.sha }}

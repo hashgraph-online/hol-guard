@@ -667,6 +667,16 @@ def _should_relax_configured_default(
         runtime_workspace=runtime_workspace,
     ):
         return True
+    if event_name == "PreToolUse" and _canonical_harness_name(harness) in {"claude-code", "codex"}:
+        from ..runtime.secret_file_requests import is_explicitly_benign_native_file_read_request
+
+        if is_explicitly_benign_native_file_read_request(
+            payload.get("tool_name"),
+            payload.get("tool_input", payload.get("arguments")),
+            cwd=runtime_workspace,
+            home_dir=home_dir,
+        ):
+            return True
     return event_name == "PreToolUse" and is_explicitly_benign_tool_action_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),
@@ -729,6 +739,8 @@ def _run_hook_generic_payload(
     verified_benign_classifier = "is_explicitly_benign_tool_action_request"
     if hook_event_name == "PostToolUse":
         verified_benign_classifier = "_codex_post_tool_command_is_read_only_source_inspection"
+    elif hook_event_name == "PreToolUse" and str(payload_map.get("tool_name", "")).strip().lower() == "read":
+        verified_benign_classifier = "is_explicitly_benign_native_file_read_request"
     elif hook_event_name == "PreToolUse" and str(payload_map.get("tool_name", "")).strip().lower() == "apply_patch":
         verified_benign_classifier = "runtime_artifact_verified_non_sensitive_apply_patch"
     verified_benign_default = _should_relax_configured_default(

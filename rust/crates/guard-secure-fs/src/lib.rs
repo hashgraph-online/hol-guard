@@ -2,17 +2,19 @@
 
 use guard_rules::MAX_SCAN_BYTES;
 use sha2::{Digest, Sha256};
-use std::fs::{self, File, Metadata, OpenOptions};
+use std::fs::{self, Metadata};
 use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 use std::time::SystemTime;
 use thiserror::Error;
 
 #[cfg(unix)]
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::MetadataExt;
 
+mod secure_open;
 mod source_path;
 
+use secure_open::{secure_open, SecureOpenError};
 pub use source_path::{classify_source_path, sensitive_path_family, source_like};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +23,12 @@ pub struct FileIdentity {
     pub ino: Option<u64>,
     pub size: u64,
     pub mtime_ns: u128,
+    /// The permission/type bits are part of identity so a permission change
+    /// during a read cannot be mistaken for an unchanged source file.
+    pub mode: u32,
+    /// A decision-critical source read must not follow a multiply-linked file:
+    /// another pathname could mutate the bytes after the path was classified.
+    pub nlink: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,12 +71,18 @@ pub enum SecureReadError {
     SymlinkInPath,
     #[error("not_regular_file")]
     NotRegularFile,
+    #[error("hard_linked_file")]
+    HardLinkedFile,
+    #[error("permission_denied")]
+    PermissionDenied,
     #[error("source_file_too_large")]
     TooLarge,
     #[error("read_failed")]
     ReadFailed,
     #[error("source_stat_changed")]
     Changed,
+    #[error("source_path_changed")]
+    PathChanged,
 }
 
 pub fn resolve_candidate(
@@ -141,20 +155,28 @@ fn identity(metadata: &Metadata) -> FileIdentity {
     let (dev, ino) = (Some(metadata.dev()), Some(metadata.ino()));
     #[cfg(not(unix))]
     let (dev, ino) = (None, None);
+    #[cfg(unix)]
+    let (mode, nlink) = (metadata.mode(), metadata.nlink());
+    #[cfg(not(unix))]
+    let (mode, nlink) = (0, 0);
     FileIdentity {
         dev,
         ino,
         size: metadata.len(),
         mtime_ns,
+        mode,
+        nlink,
     }
 }
 
-fn secure_open(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    options.open(path)
+fn map_secure_open_error(error: SecureOpenError) -> SecureReadError {
+    match error {
+        SecureOpenError::PathChanged => SecureReadError::PathChanged,
+        SecureOpenError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            SecureReadError::PermissionDenied
+        }
+        SecureOpenError::Io(_) => SecureReadError::ReadFailed,
+    }
 }
 
 pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureReadError> {
@@ -162,10 +184,26 @@ pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureR
     if contains_symlink_component(path) {
         return Err(SecureReadError::SymlinkInPath);
     }
-    let mut file = secure_open(path).map_err(|_| SecureReadError::ReadFailed)?;
+    // Resolve once before opening and once after reading.  O_NOFOLLOW closes
+    // the final-component race on Unix; the paired canonical checks also
+    // catch a parent-directory replacement or a path substitution observed
+    // after the descriptor was opened.  The descriptor remains the source of
+    // truth for bytes and stat identity.
+    let canonical_before = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
+    let mut file = secure_open(path, &canonical_before).map_err(map_secure_open_error)?;
     let before_metadata = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
     if !before_metadata.is_file() {
         return Err(SecureReadError::NotRegularFile);
+    }
+    #[cfg(unix)]
+    {
+        let mode = before_metadata.mode();
+        if mode & 0o444 == 0 {
+            return Err(SecureReadError::PermissionDenied);
+        }
+        if before_metadata.nlink() != 1 {
+            return Err(SecureReadError::HardLinkedFile);
+        }
     }
     if before_metadata.len() > max_bytes as u64 {
         return Err(SecureReadError::TooLarge);
@@ -183,6 +221,13 @@ pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureR
     if before != after {
         return Err(SecureReadError::Changed);
     }
+    if contains_symlink_component(path) {
+        return Err(SecureReadError::SymlinkInPath);
+    }
+    let canonical_after = fs::canonicalize(path).map_err(|_| SecureReadError::PathChanged)?;
+    if canonical_before != canonical_after {
+        return Err(SecureReadError::PathChanged);
+    }
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
     Ok(SecureRead {
@@ -195,7 +240,11 @@ pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureR
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
     use std::io::Write;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     fn fixture_root(name: &str) -> PathBuf {
         #[cfg(unix)]
@@ -217,6 +266,100 @@ mod tests {
         let read = read_bounded(&path, MAX_SCAN_BYTES).unwrap();
         assert_eq!(read.bytes, b"fn main() {}\n");
         assert_eq!(read.sha256.len(), 64);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_read_rejects_hard_linked_source() {
+        let dir = fixture_root("hard-link");
+        fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("source.rs");
+        let alias = dir.join("alias.rs");
+        fs::write(&source, b"fn source() {}\n").unwrap();
+        fs::hard_link(&source, &alias).unwrap();
+
+        assert!(matches!(
+            read_bounded(&alias, MAX_SCAN_BYTES),
+            Err(SecureReadError::HardLinkedFile)
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_read_rejects_file_without_read_permission_even_for_root() {
+        let dir = fixture_root("permissions");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("source.rs");
+        fs::write(&path, b"fn source() {}\n").unwrap();
+        let original_mode = path.metadata().unwrap().permissions().mode();
+        let mut permissions = path.metadata().unwrap().permissions();
+        permissions.set_mode(original_mode & !0o444);
+        fs::set_permissions(&path, permissions).unwrap();
+
+        assert!(matches!(
+            read_bounded(&path, MAX_SCAN_BYTES),
+            Err(SecureReadError::PermissionDenied)
+        ));
+
+        let mut permissions = path.metadata().unwrap().permissions();
+        permissions.set_mode(original_mode);
+        fs::set_permissions(&path, permissions).unwrap();
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_read_rejects_symlink_source() {
+        let dir = fixture_root("symlink");
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target.rs");
+        let link = dir.join("source.rs");
+        fs::write(&target, b"fn target() {}\n").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        assert!(matches!(
+            read_bounded(&link, MAX_SCAN_BYTES),
+            Err(SecureReadError::SymlinkInPath)
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_read_rejects_parent_symlink_source_replacement() {
+        let dir = fixture_root("parent-replacement");
+        let real = dir.join("real");
+        let alias = dir.join("alias");
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join("source.rs"), b"fn source() {}\n").unwrap();
+        std::os::unix::fs::symlink(&real, &alias).unwrap();
+
+        assert!(matches!(
+            read_bounded(&alias.join("source.rs"), MAX_SCAN_BYTES),
+            Err(SecureReadError::SymlinkInPath)
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_identity_changes_when_source_permissions_change() {
+        let dir = fixture_root("identity-permissions");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("source.rs");
+        fs::write(&path, b"fn source() {}\n").unwrap();
+        let before = identity(&path.metadata().unwrap());
+        let original_mode = before.mode;
+
+        let mut permissions = path.metadata().unwrap().permissions();
+        permissions.set_mode(original_mode ^ 0o001);
+        fs::set_permissions(&path, permissions).unwrap();
+        let after = identity(&path.metadata().unwrap());
+
+        assert_ne!(before, after);
+        assert_ne!(before.mode, after.mode);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -244,6 +387,10 @@ mod tests {
         fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
         fs::write(workspace.join(".secret/config.ts"), "value = 1\n").unwrap();
         fs::write(workspace.join(".env"), "fixture=value\n").unwrap();
+        let skill = home.join(".claude/skills/safe");
+        fs::create_dir_all(skill.join("credentials")).unwrap();
+        fs::write(skill.join("SKILL.md"), "# Safe\n").unwrap();
+        fs::write(skill.join("credentials/config.ts"), "value = 1\n").unwrap();
 
         assert!(classify_source_path("src/main.rs", &workspace, Some(&home), false).allowed);
         assert_eq!(
@@ -256,7 +403,27 @@ mod tests {
         );
         assert_eq!(
             classify_source_path("../../outside.rs", &workspace, Some(&home), true).reason_code,
-            "external_target_not_readable"
+            "path_traversal"
+        );
+        assert_eq!(
+            classify_source_path(
+                "~/.claude/skills/safe/../../src/app.py",
+                &workspace,
+                Some(&home),
+                false,
+            )
+            .reason_code,
+            "path_traversal"
+        );
+        assert_eq!(
+            classify_source_path(
+                "~/.claude/skills/safe/credentials/config.ts",
+                &workspace,
+                Some(&home),
+                false,
+            )
+            .reason_code,
+            "sensitive_basename"
         );
         let _ = fs::remove_dir_all(root);
     }

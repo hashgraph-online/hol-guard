@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import importlib
 import json
 import multiprocessing
@@ -10,13 +9,13 @@ import os
 import signal
 import time
 from contextlib import suppress
-from dataclasses import dataclass
 from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
-from ..native_route_receipt import native_hook_route, reset_native_hook_route
+from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
+from ..native_route_receipt import native_hook_route, record_native_hook_route, reset_native_hook_route
 from ..sqlite_profile import sqlite_error_is_busy_locked
 from .hook_process_protocol import (
     applied_hook_environment,
@@ -24,6 +23,15 @@ from .hook_process_protocol import (
     capture_hook_command,
     is_pair,
 )
+from .hook_process_request import (
+    ResidentHookRequest,
+    coerce_resident_hook_request,
+    compatibility_hook_args,
+    resident_hook_store_and_context,
+)
+
+_ResidentHookRequest = ResidentHookRequest
+_coerce_resident_hook_request = coerce_resident_hook_request
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -31,19 +39,6 @@ if TYPE_CHECKING:
 
 _HOOK_SQLITE_TIMEOUT_ENV = "HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS"
 _HOOK_EVALUATOR_READY_TIMEOUT_SECONDS = 12.0
-
-
-@dataclass(frozen=True)
-class _ResidentHookRequest:
-    payload: dict[str, object]
-    harness: str
-    home_dir: Path
-    guard_home: Path
-    workspace: Path | None
-    claim_saved_approval: bool
-    claimed_saved_allow_hash: str | None
-    claimed_trusted_request_override: bool
-    claimed_approval_request_id: str | None
 
 
 def hook_worker_main(connection: Connection, configured_guard_home: str | None) -> None:
@@ -152,6 +147,26 @@ def _hook_evaluator_main(connection: Connection, configured_guard_home: str | No
                 daemon_managed_schema=True,
             )
     try:
+        _hook_evaluator_loop(
+            connection,
+            stores=stores,
+            hook_workers=hook_workers,
+            configured_guard_home=configured_guard_home,
+        )
+    finally:
+        for worker in tuple(hook_workers.values()):
+            with suppress(Exception):
+                worker.close()
+
+
+def _hook_evaluator_loop(
+    connection: Connection,
+    *,
+    stores: dict[str, GuardStore],
+    hook_workers: dict[str, HookWorker],
+    configured_guard_home: str | None,
+) -> None:
+    try:
         connection.send(("ready", None))
     except (BrokenPipeError, EOFError, OSError):
         return
@@ -201,37 +216,21 @@ def _run_resident_hook_request(
     hook_workers: dict[str, HookWorker],
     configured_guard_home: str | None,
 ) -> dict[str, object]:
-    from ..adapters.base import HarnessContext
     from ..cli.commands_hook import _run_guard_hook_command
     from ..cli.commands_support_connect import _synced_policy_payload
     from ..config import load_guard_config, overlay_synced_guard_policy
-    from ..store import GuardStore
-    from .hook_worker import HookWorker, HookWorkerUnsupported
+    from .hook_worker import HookWorker, HookWorkerUnsupported, post_tool_fail_safe_response, runtime_hook_event_name
 
-    parsed = _coerce_resident_hook_request(request)
+    parsed = coerce_resident_hook_request(request)
     if parsed is None:
         return {"payload": None, "reason_code": "daemon_hook_process_invalid_request"}
     reset_native_hook_route()
     if configured_guard_home is not None and parsed.guard_home != Path(configured_guard_home):
         return {"payload": None, "reason_code": "daemon_hook_process_guard_home_mismatch"}
     store_key = str(parsed.guard_home)
-    store = stores.get(store_key)
-    if store is None:
-        store = GuardStore(
-            parsed.guard_home,
-            prime_policy_integrity=False,
-            daemon_managed_schema=True,
-        )
-        stores[store_key] = store
-    context = HarnessContext(
-        home_dir=parsed.home_dir,
-        workspace_dir=parsed.workspace,
-        guard_home=parsed.guard_home,
-        home_override_explicit=True,
-        workspace_override_explicit=parsed.workspace is not None,
-    )
-    event_name = parsed.payload.get("hook_event_name", parsed.payload.get("event"))
-    if event_name == "PostToolUse":
+    store, context = resident_hook_store_and_context(parsed, stores)
+    event_name = runtime_hook_event_name(parsed.payload)
+    if _native_mode_requires_rust() or event_name in {"PreToolUse", "PostToolUse"}:
         worker = hook_workers.get(store_key)
         if worker is None:
             worker = HookWorker(store=store)
@@ -246,7 +245,30 @@ def _run_resident_hook_request(
                 workspace=parsed.workspace,
             )
         except HookWorkerUnsupported:
-            pass
+            if _native_mode_requires_rust():
+                record_native_hook_route("native_fail_safe")
+                return {
+                    "payload": post_tool_fail_safe_response(
+                        parsed.harness,
+                        reason="HOL Guard could not complete the native hook decision safely.",
+                        reason_code="native_hook_worker_unsupported",
+                    ),
+                    "reason_code": "native_hook_worker_unsupported",
+                    "route": "native_fail_safe",
+                }
+        except Exception:
+            if _native_mode_requires_rust():
+                record_native_hook_route("native_fail_safe")
+                return {
+                    "payload": post_tool_fail_safe_response(
+                        parsed.harness,
+                        reason="HOL Guard could not complete the native hook decision safely.",
+                        reason_code="native_hook_worker_exception",
+                    ),
+                    "reason_code": "native_hook_worker_exception",
+                    "route": "native_fail_safe",
+                }
+            raise
         else:
             return {
                 "payload": worker_payload,
@@ -258,19 +280,7 @@ def _run_resident_hook_request(
             load_guard_config(parsed.guard_home, workspace=parsed.workspace),
             _synced_policy_payload(store),
         )
-        args = argparse.Namespace(
-            guard_command="hook",
-            home=str(parsed.home_dir),
-            guard_home=str(parsed.guard_home),
-            workspace=str(parsed.workspace) if parsed.workspace is not None else None,
-            runtime_harness=parsed.harness,
-            harness=parsed.harness,
-            artifact_id=None,
-            artifact_name=None,
-            policy_action=None,
-            event_file=None,
-            json=True,
-        )
+        args = compatibility_hook_args(parsed)
         response = capture_hook_command(
             lambda output: _run_guard_hook_command(
                 args,
@@ -291,52 +301,10 @@ def _run_resident_hook_request(
         return response
 
 
-def _native_mode_requires_rust() -> bool:
-    from ..native_runtime import native_mode
-
-    return native_mode() in {"auto", "force"}
-
-
 def _current_decision_route() -> str:
     if not _native_mode_requires_rust():
         return "python_semantic"
     return native_hook_route() or "python_semantic"
-
-
-def _coerce_resident_hook_request(request: dict[str, object]) -> _ResidentHookRequest | None:
-    payload = request.get("payload")
-    harness = request.get("harness")
-    home_value = request.get("home_dir")
-    guard_home_value = request.get("guard_home")
-    workspace_value = request.get("workspace")
-    claim_saved_approval = request.get("claim_saved_approval", True)
-    claimed_saved_allow_hash = request.get("claimed_saved_allow_hash")
-    claimed_trusted_request_override = request.get("claimed_trusted_request_override", False)
-    claimed_approval_request_id = request.get("claimed_approval_request_id")
-    typed_payload = as_string_object_dict(payload)
-    if typed_payload is None or not isinstance(harness, str):
-        return None
-    if not isinstance(home_value, str) or not isinstance(guard_home_value, str):
-        return None
-    if workspace_value is not None and not isinstance(workspace_value, str):
-        return None
-    if not isinstance(claim_saved_approval, bool) or not isinstance(claimed_trusted_request_override, bool):
-        return None
-    if claimed_saved_allow_hash is not None and not isinstance(claimed_saved_allow_hash, str):
-        return None
-    if claimed_approval_request_id is not None and not isinstance(claimed_approval_request_id, str):
-        return None
-    return _ResidentHookRequest(
-        payload=typed_payload,
-        harness=harness,
-        home_dir=Path(home_value),
-        guard_home=Path(guard_home_value).resolve(strict=False),
-        workspace=Path(workspace_value) if isinstance(workspace_value, str) else None,
-        claim_saved_approval=claim_saved_approval,
-        claimed_saved_allow_hash=claimed_saved_allow_hash,
-        claimed_trusted_request_override=claimed_trusted_request_override,
-        claimed_approval_request_id=claimed_approval_request_id,
-    )
 
 
 __all__ = ["hook_worker_main"]

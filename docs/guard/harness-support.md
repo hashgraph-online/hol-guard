@@ -193,8 +193,8 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 ## Rust Authority Boundary
 
 Every supported harness routes security semantics through the bundled,
-version-matched Rust runtime. `PreToolUse` command decisions and supported
-`PostToolUse` output review do not use a Python semantic fallback. Native
+version-matched Rust runtime. Generic `PreToolUse` action decisions and
+supported `PostToolUse` output review do not use a Python semantic fallback. Native
 identity, protocol, rule-digest, policy-snapshot, overload, timeout, transport,
 and response failures fail closed.
 

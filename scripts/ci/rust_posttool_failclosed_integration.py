@@ -130,7 +130,7 @@ def main() -> int:
     features = capabilities.get("features")
     if not isinstance(rule_digest, str) or len(rule_digest) != 64:
         raise SystemExit("native rule digest missing")
-    if not isinstance(features, list) or "policy-snapshot-v1" not in features:
+    if not isinstance(features, list) or "policy-snapshot-v3" not in features:
         raise SystemExit("native policy snapshot capability missing")
 
     evidence: list[dict[str, Any]] = []

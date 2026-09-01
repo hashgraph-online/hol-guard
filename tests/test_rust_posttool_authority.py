@@ -34,6 +34,10 @@ def test_hook_worker_fails_closed_when_forced_posttool_native_is_missing(
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
         lambda: "force",
     )
@@ -56,6 +60,10 @@ def test_hook_worker_fails_closed_when_available_native_posttool_returns_none(
 ) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
@@ -150,6 +158,10 @@ def test_hook_worker_records_activity_when_auto_native_is_unavailable(
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
         lambda: "auto",
     )
@@ -175,8 +187,8 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.native_mode",
-        lambda: "auto",
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
+        lambda: True,
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
@@ -184,6 +196,10 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     result = try_native_hook_authority(
@@ -200,8 +216,8 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
 
 def test_cli_off_mode_leaves_python_source_ref_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.native_mode",
-        lambda: "off",
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
+        lambda: False,
     )
     result = try_native_hook_authority(
         payload=_post_tool_payload(),

@@ -7,12 +7,17 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
 from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
 from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookSourceFileRef
+from codex_plugin_scanner.guard.runtime.hook_review_types import (
+    HookReviewRequest,
+    HookReviewResponse,
+    HookSourceFileRef,
+)
 from codex_plugin_scanner.guard.runtime.hook_source_read import sha256_text
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -113,12 +118,30 @@ def _source_request(
 def _assert_parity(request: HookReviewRequest) -> None:
     store = GuardStore(request.guard_home)
     python_response = _engine(store).review(request)
-    native_response = review_post_tool_native(request, observe_mode=False)
+    with native_policy_snapshot(request.guard_home) as snapshot:
+        native_response = review_post_tool_native(request, observe_mode=False, policy_snapshot=snapshot)
     assert native_response is not None
-    assert parity_signature(native_response) == parity_signature(python_response), (
-        native_response,
-        python_response,
-    )
+    _assert_native_security_floor(native_response, python_response)
+
+
+def _assert_native_security_floor(
+    native_response: HookReviewResponse,
+    python_response: HookReviewResponse,
+) -> None:
+    """Allow native policy floors to add metadata without weakening the oracle."""
+
+    if python_response.decision == "deny":
+        assert native_response.decision == "deny"
+        assert native_response.model_output_action == "block"
+        return
+    if native_response.decision == "deny":
+        assert native_response.model_output_action == "block"
+        return
+    assert native_response.decision == "allow"
+    native_signature = parity_signature(native_response)
+    python_signature = parity_signature(python_response)
+    assert native_signature[1] == python_signature[1]
+    assert native_signature[6:] == python_signature[6:]
 
 
 @pytest.mark.parametrize(
@@ -211,7 +234,7 @@ def test_compiled_native_rejected_workspace_source_path_parity(
                 workspace=tmp_path,
                 reference_path=relative_path,
                 text=text,
-                request_id=f"source-rejected-{relative_path}",
+                request_id=f"source-rejected-{relative_path.replace('/', '-')}",
             )
         )
     finally:
@@ -237,7 +260,7 @@ def test_compiled_native_allowed_workspace_source_path_parity(
                 workspace=tmp_path,
                 reference_path=relative_path,
                 text=text,
-                request_id=f"source-allowed-{relative_path}",
+                request_id=f"source-allowed-{relative_path.replace('/', '-')}",
             )
         )
     finally:

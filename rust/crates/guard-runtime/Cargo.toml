@@ -17,7 +17,10 @@ guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-rule-contract = { path = "../guard-rule-contract" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 getrandom.workspace = true
+hex.workspace = true
+fs2.workspace = true
 libc.workspace = true
+ring.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true
@@ -26,6 +29,9 @@ sysinfo.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-permissions.workspace = true

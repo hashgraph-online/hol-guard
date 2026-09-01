@@ -60,13 +60,6 @@ fn validate_durable_policy_generation(
 #[cfg(test)]
 pub(crate) static POLICY_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-#[cfg(test)]
-pub(crate) fn reset_policy_generation_for_test() {
-    *ACCEPTED_POLICY_SNAPSHOT
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
-}
-
 pub(crate) fn validate_request_policy_snapshot(value: &Value) -> Result<(), String> {
     let Some(snapshot_value) = value.get("policy_snapshot") else {
         return Ok(());

@@ -27,7 +27,27 @@ def _edge_result() -> dict[str, object]:
         "harness": "claude-code",
         "event_name": "PreToolUse",
         "payload_kind": "inline",
-        "result": {"minimum_action": "allow"},
+        "result": {
+            "schema": "guard-pre-tool-result.v1",
+            "version": 1,
+            "authority": "rust",
+            "action": {
+                "schema": "guard-pre-tool-action.v1",
+                "version": 1,
+                "harness": "claude-code",
+                "event": "PreToolUse",
+                "action_type": "command",
+                "operation": "execute",
+                "bounded": True,
+                "sensitive_target": False,
+            },
+            "decision": "allow",
+            "policy_action": "allow",
+            "minimum_action": "allow",
+            "reason_code": "native_exact_safe_command",
+            "reason": "bounded command allowed by Rust",
+            "explicitly_benign": True,
+        },
     }
 
 
@@ -252,7 +272,11 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
         rule_digest="b" * 64,
         build_sha="c" * 40,
         target="test",
-        features=("hook-envelope-v2", "native-resident-client-v1"),
+        features=(
+            "hook-envelope-v2",
+            "native-resident-client-v1",
+            "pre-tool-generic-authority-v1",
+        ),
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_hook_edge.native_runtime_status",
@@ -289,6 +313,7 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
         source_ref_external_allowed=False,
         observe_mode=False,
         deadline=None,
+        policy_snapshot={"generation": 1},
     )
     assert result == _edge_result()
     encoded = captured["payload"]
@@ -313,6 +338,7 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
                 source_ref_external_allowed=False,
                 observe_mode=False,
                 deadline=None,
+                policy_snapshot={"generation": 1},
             )
             is None
         )

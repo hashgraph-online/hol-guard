@@ -1,37 +1,148 @@
 #![forbid(unsafe_code)]
 
-#[cfg(unix)]
-use std::fs;
+use std::fs::{File, OpenOptions};
 #[cfg(not(windows))]
 use std::io::Write;
-use std::net::{Ipv4Addr, TcpListener};
 use std::path::Path;
 #[cfg(not(windows))]
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[path = "managed_resident_transport.rs"]
+mod managed_resident_transport;
 #[cfg(windows)]
 #[path = "managed_resident_windows.rs"]
 mod managed_resident_windows;
 #[path = "resident_restart_budget.rs"]
 mod restart_budget;
 
-#[cfg(unix)]
-use crate::resident_state::socket_directory;
 #[cfg(not(windows))]
 use crate::resident_state::validate_package_process_identity;
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_states, next_generation,
-    publish_state, runtime_digest, state_scope, token_from_state,
+    runtime_digest, state_scope, token_from_state,
 };
 
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const MANAGED_OWNER_LOCK_FILE_NAME: &str = "managed-resident-owner.v1.lock";
 static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Lifetime owner lock for the resident scope.
+///
+/// Unix keeps an open, verified directory descriptor and locks both the
+/// directory and its named marker. This prevents an ordinary second process
+/// from starting a second resident even if the marker pathname is replaced.
+/// A same-UID actor that can deliberately mutate the private directory while
+/// this process runs remains an OS-account trust limitation; callers must
+/// still validate published state and process identity on every connection.
+struct ManagedOwnerLock {
+    _file: File,
+    #[cfg(unix)]
+    _directory: File,
+}
+
+fn acquire_managed_owner_lock(scope: &Path) -> Result<ManagedOwnerLock, String> {
+    #[cfg(unix)]
+    let directory = {
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+        let mut directory_options = OpenOptions::new();
+        directory_options
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        let directory = directory_options
+            .open(scope)
+            .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
+        let metadata = directory
+            .metadata()
+            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
+        let path_metadata = std::fs::symlink_metadata(scope)
+            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
+        if !metadata.is_dir()
+            || path_metadata.file_type().is_symlink()
+            || !path_metadata.is_dir()
+            || metadata.dev() != path_metadata.dev()
+            || metadata.ino() != path_metadata.ino()
+            || metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err("native_resident_owner_lock_not_private".to_owned());
+        }
+        fs2::FileExt::try_lock_exclusive(&directory).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::WouldBlock {
+                "native_resident_owner_busy".to_owned()
+            } else {
+                "native_resident_owner_lock_failed".to_owned()
+            }
+        })?;
+        directory
+    };
+    let path = scope.join(MANAGED_OWNER_LOCK_FILE_NAME);
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        const FILE_SHARE_READ: u32 = 0x0000_0001;
+        const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+        options
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    let file = options
+        .open(&path)
+        .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
+    if !metadata.is_file() {
+        return Err("native_resident_owner_lock_invalid".to_owned());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let path_metadata = std::fs::symlink_metadata(&path)
+            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
+        let parent_uid = path
+            .parent()
+            .and_then(|parent| std::fs::symlink_metadata(parent).ok())
+            .map(|parent| parent.uid());
+        if path_metadata.file_type().is_symlink()
+            || !path_metadata.is_file()
+            || path_metadata.dev() != metadata.dev()
+            || path_metadata.ino() != metadata.ino()
+            || metadata.nlink() != 1
+            || parent_uid != Some(metadata.uid())
+            || metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err("native_resident_owner_lock_not_private".to_owned());
+        }
+    }
+    #[cfg(windows)]
+    crate::resident_state::verify_windows_private_path(&path, false)?;
+    fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::WouldBlock {
+            "native_resident_owner_busy".to_owned()
+        } else {
+            "native_resident_owner_lock_failed".to_owned()
+        }
+    })?;
+    Ok(ManagedOwnerLock {
+        _file: file,
+        #[cfg(unix)]
+        _directory: directory,
+    })
+}
 
 pub(crate) fn request_shutdown() {
     MANAGED_SHUTDOWN_REQUESTED.store(true, Ordering::Release);
@@ -214,160 +325,6 @@ pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
     Err("native_resident_stop_unavailable".to_owned())
 }
 
-#[cfg(unix)]
-fn serve_unix_managed(
-    scope: &Path,
-    generation: u64,
-    owner_process_id: u32,
-    digest: &str,
-    token: [u8; crate::AUTH_TOKEN_BYTES],
-    owner_alive: Arc<AtomicBool>,
-) -> Result<(), String> {
-    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-    use std::os::unix::net::UnixListener;
-
-    let socket_parent = socket_directory(scope, digest)?;
-    let path = socket_parent.join(format!("h3-{}-{generation:016x}.sock", &digest[..8]));
-    if path.as_os_str().as_encoded_bytes().len() > 100 {
-        return Err("native_socket_path_too_long".to_owned());
-    }
-    match fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Ok(metadata) if metadata.file_type().is_socket() => {
-            return Err("native_socket_generation_collision".to_owned())
-        }
-        Ok(_) => return Err("native_socket_existing_path_rejected".to_owned()),
-        Err(_) => return Err("native_socket_stat_failed".to_owned()),
-    }
-    let listener = UnixListener::bind(&path).map_err(|_| "native_socket_bind_failed".to_owned())?;
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
-        .map_err(|_| "native_socket_permissions_failed".to_owned())?;
-    listener
-        .set_nonblocking(true)
-        .map_err(|_| "native_socket_nonblocking_failed".to_owned())?;
-    publish_state(
-        scope,
-        generation,
-        owner_process_id,
-        digest,
-        "unix",
-        path.to_string_lossy().into_owned(),
-        &token,
-    )?;
-    let result = managed_accept_loop(listener, Arc::new(token), owner_alive);
-    if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_socket()) {
-        let _ = fs::remove_file(path);
-    }
-    result
-}
-
-#[cfg(unix)]
-fn managed_accept_loop(
-    listener: std::os::unix::net::UnixListener,
-    token: Arc<[u8; crate::AUTH_TOKEN_BYTES]>,
-    owner_alive: Arc<AtomicBool>,
-) -> Result<(), String> {
-    let sender = crate::start_resident_workers(token);
-    let mut last_activity = Instant::now();
-    let mut failures = 0;
-    while owner_alive.load(Ordering::Acquire)
-        && last_activity.elapsed() < MANAGED_IDLE_TIMEOUT
-        && !shutdown_requested()
-    {
-        match listener.accept() {
-            Ok((stream, _)) => {
-                failures = 0;
-                last_activity = Instant::now();
-                if stream.set_nonblocking(false).is_err() {
-                    continue;
-                }
-                crate::admit_connection(&sender, Box::new(stream))?;
-            }
-            Err(error)
-                if crate::hardening::classify_io_error(&error)
-                    != crate::hardening::IoFailureClass::Other =>
-            {
-                failures += 1;
-                thread::sleep(crate::hardening::accept_retry_delay(failures, &error));
-            }
-            Err(_) => return Err("native_socket_accept_failed".to_owned()),
-        }
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn serve_unix_managed(
-    _scope: &Path,
-    _generation: u64,
-    _owner_process_id: u32,
-    _digest: &str,
-    _token: [u8; crate::AUTH_TOKEN_BYTES],
-    _owner_alive: Arc<AtomicBool>,
-) -> Result<(), String> {
-    Err("native_unix_socket_not_available".to_owned())
-}
-
-fn serve_loopback_managed(
-    scope: &Path,
-    generation: u64,
-    owner_process_id: u32,
-    digest: &str,
-    token: [u8; crate::AUTH_TOKEN_BYTES],
-    owner_alive: Arc<AtomicBool>,
-) -> Result<(), String> {
-    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-        .map_err(|_| "native_resident_loopback_bind_failed".to_owned())?;
-    let address = listener
-        .local_addr()
-        .map_err(|_| "native_resident_loopback_addr_failed".to_owned())?;
-    if address.ip() != Ipv4Addr::LOCALHOST || address.port() == 0 {
-        return Err("native_resident_loopback_addr_invalid".to_owned());
-    }
-    listener
-        .set_nonblocking(true)
-        .map_err(|_| "native_resident_loopback_nonblocking_failed".to_owned())?;
-    publish_state(
-        scope,
-        generation,
-        owner_process_id,
-        digest,
-        "loopback",
-        address.to_string(),
-        &token,
-    )?;
-    let sender = crate::start_resident_workers(Arc::new(token));
-    let mut last_activity = Instant::now();
-    let mut failures = 0;
-    while owner_alive.load(Ordering::Acquire)
-        && last_activity.elapsed() < MANAGED_IDLE_TIMEOUT
-        && !shutdown_requested()
-    {
-        match listener.accept() {
-            Ok((stream, peer)) => {
-                if peer.ip() != Ipv4Addr::LOCALHOST {
-                    continue;
-                }
-                failures = 0;
-                last_activity = Instant::now();
-                if stream.set_nonblocking(false).is_err() {
-                    continue;
-                }
-                crate::admit_connection(&sender, Box::new(stream))?;
-            }
-            Err(error)
-                if crate::hardening::classify_io_error(&error)
-                    != crate::hardening::IoFailureClass::Other =>
-            {
-                failures += 1;
-                thread::sleep(crate::hardening::accept_retry_delay(failures, &error));
-            }
-            Err(_) => return Err("native_resident_loopback_accept_failed".to_owned()),
-        }
-    }
-    Ok(())
-}
-
 pub(crate) fn serve_managed(
     state_base: &Path,
     generation: u64,
@@ -379,11 +336,17 @@ pub(crate) fn serve_managed(
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }
     let scope = state_scope(state_base, expected_digest)?;
+    let _owner_lock = acquire_managed_owner_lock(&scope)?;
+    let policy_store = std::sync::Arc::new(crate::policy_store::PolicySnapshotStore::new(
+        state_base,
+        expected_digest,
+    )?);
     let token = crate::read_resident_auth_token()?;
     let owner_alive = crate::resident_stdin_liveness();
     if cfg!(unix) {
-        serve_unix_managed(
+        managed_resident_transport::serve_unix_managed(
             &scope,
+            policy_store,
             generation,
             owner_process_id,
             expected_digest,
@@ -391,8 +354,9 @@ pub(crate) fn serve_managed(
             owner_alive,
         )
     } else {
-        serve_loopback_managed(
+        managed_resident_transport::serve_loopback_managed(
             &scope,
+            policy_store,
             generation,
             owner_process_id,
             expected_digest,

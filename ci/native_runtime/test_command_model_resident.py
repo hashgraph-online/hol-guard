@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.native_command_model import (
     _decode_command_model,
     review_command_model_native,
 )
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="resident native service is POSIX-only in this wave")
@@ -157,8 +158,9 @@ def test_command_model_reuses_version_matched_resident_runtime(monkeypatch: pyte
         guard_home = Path(short_tmp) / "guard-home"
         guard_home.mkdir(mode=0o700)
         try:
-            first = review_command_model_native("git status --short", guard_home=guard_home)
-            second = review_command_model_native("printf 'a|b' | grep b", guard_home=guard_home)
+            with native_policy_snapshot(guard_home):
+                first = review_command_model_native("git status --short", guard_home=guard_home)
+                second = review_command_model_native("printf 'a|b' | grep b", guard_home=guard_home)
             assert first is not None
             assert first["confidence"] == "exact"
             assert first["segments"][0]["executable"] == "git"
@@ -180,7 +182,8 @@ def test_complex_command_remains_non_authoritative(tmp_path: Path, monkeypatch: 
     guard_home.mkdir(mode=0o700)
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     try:
-        model = review_command_model_native("echo $(uname) > out.txt", guard_home=guard_home)
+        with native_policy_snapshot(guard_home):
+            model = review_command_model_native("echo $(uname) > out.txt", guard_home=guard_home)
         assert model is not None
         assert model["confidence"] == "uncertain"
         assert model["segments"] == []

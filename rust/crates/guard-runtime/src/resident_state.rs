@@ -3,15 +3,22 @@
 use crate::resident_state_encoding::{decode_hex, hex_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fs::{self, File, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
+#[path = "resident_state_files.rs"]
+mod resident_state_files;
+
+use resident_state_files::{ensure_private_directory, private_file};
 #[cfg(windows)]
-#[path = "resident_state_windows.rs"]
-mod windows_security;
+pub(crate) use resident_state_files::{
+    open_private_read, protect_windows_private_path, verify_windows_private_path,
+};
 
 const STATE_SCHEMA: &str = "hol-guard-resident-state.v3";
 const STATE_FILE_PREFIX: &str = "generation-";
@@ -60,81 +67,6 @@ fn now_ms() -> Result<u64, String> {
         .map_err(|_| "native_resident_clock_invalid".to_owned())?
         .as_millis();
     u64::try_from(millis).map_err(|_| "native_resident_clock_invalid".to_owned())
-}
-
-fn private_file(path: &Path, create_new: bool) -> Result<File, String> {
-    let mut options = OpenOptions::new();
-    options.write(true).create(true).create_new(create_new);
-    if !create_new {
-        options.truncate(true);
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
-    }
-    let file = options
-        .open(path)
-        .map_err(|_| "native_resident_state_write_failed".to_owned())?;
-    #[cfg(windows)]
-    windows_security::protect_windows_path(path, false)?;
-    Ok(file)
-}
-
-fn ensure_private_directory(path: &Path, protect_windows: bool) -> Result<PathBuf, String> {
-    #[cfg(not(windows))]
-    let _ = protect_windows;
-    let created = match fs::create_dir(path) {
-        Ok(()) => true,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
-        Err(_) => return Err("native_resident_state_dir_create_failed".to_owned()),
-    };
-    #[cfg(not(windows))]
-    let _ = created;
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| "native_resident_state_dir_stat_failed".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err("native_resident_state_dir_invalid".to_owned());
-    }
-    #[cfg(windows)]
-    if protect_windows {
-        if created {
-            windows_security::protect_windows_path(path, true)?;
-        } else {
-            use windows_permissions::utilities::current_process_sid;
-            let owner = current_process_sid()
-                .map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-            windows_security::verify_windows_path(path, owner.as_ref())?;
-        }
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o077 != 0 {
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700))
-                .map_err(|_| "native_resident_state_dir_permissions_failed".to_owned())?;
-        }
-        let updated = fs::symlink_metadata(path)
-            .map_err(|_| "native_resident_state_dir_stat_failed".to_owned())?;
-        if updated.permissions().mode() & 0o077 != 0 {
-            return Err("native_resident_state_dir_not_private".to_owned());
-        }
-    }
-    let resolved = path
-        .canonicalize()
-        .map_err(|_| "native_resident_state_dir_resolve_failed".to_owned())?;
-    #[cfg(windows)]
-    {
-        let profile = std::env::var_os("USERPROFILE")
-            .map(PathBuf::from)
-            .ok_or_else(|| "native_resident_user_profile_missing".to_owned())?
-            .canonicalize()
-            .map_err(|_| "native_resident_user_profile_invalid".to_owned())?;
-        if !resolved.starts_with(profile) {
-            return Err("native_resident_state_dir_outside_user_profile".to_owned());
-        }
-    }
-    Ok(resolved)
 }
 
 fn executable_digest(executable: &Path) -> Result<String, String> {
@@ -308,15 +240,38 @@ fn read_state_file(
     scope: &Path,
     expected_digest: &str,
 ) -> Result<ResidentState, String> {
-    let metadata =
-        fs::symlink_metadata(path).map_err(|_| "native_resident_state_stat_failed".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > MAX_STATE_BYTES
-    {
-        return Err("native_resident_state_invalid".to_owned());
-    }
+    #[cfg(windows)]
+    let file = resident_state_files::open_private_read(path, MAX_STATE_BYTES, "state")?
+        .ok_or_else(|| "native_resident_state_stat_failed".to_owned())?;
+    #[cfg(not(windows))]
+    let file = {
+        let metadata = fs::symlink_metadata(path)
+            .map_err(|_| "native_resident_state_stat_failed".to_owned())?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > MAX_STATE_BYTES
+        {
+            return Err("native_resident_state_invalid".to_owned());
+        }
+        #[cfg(unix)]
+        let mut options = {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut options = OpenOptions::new();
+            options
+                .read(true)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+            options
+        };
+        #[cfg(not(unix))]
+        let mut options = OpenOptions::new();
+        options.read(true);
+        options
+            .open(path)
+            .map_err(|_| "native_resident_state_read_failed".to_owned())?
+    };
     let mut bytes = Vec::new();
-    File::open(path)
-        .and_then(|file| file.take(MAX_STATE_BYTES + 1).read_to_end(&mut bytes))
+    file.take(MAX_STATE_BYTES + 1)
+        .read_to_end(&mut bytes)
         .map_err(|_| "native_resident_state_read_failed".to_owned())?;
     if bytes.len() as u64 > MAX_STATE_BYTES {
         return Err("native_resident_state_invalid".to_owned());

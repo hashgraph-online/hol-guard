@@ -24,18 +24,28 @@ harness launcher or managed hook
   -> Python bridge: bounded stdin, daemon authentication, HTTP transport
   -> Python daemon ingress: JSON decode, path/query projection, deadline
   -> Python HookWorker: mechanical raw-envelope launch
-     -> command PreToolUse
+     -> PreToolUse (complete raw envelope)
         -> Rust edge normalization and resident client/supervisor
-        -> Rust command extraction, parser, classifier, policy floor, decision
+        -> Rust bounded action extraction, command parser/floors, classifier, decision
         -> Python harness response rendering
      -> PostToolUse
-        -> Python config load and policy-snapshot construction
         -> Rust edge normalization and resident client/supervisor
-        -> Rust output traversal, source I/O, hashing, scanning, policy, decision
+        -> Rust output traversal, source I/O, hashing, scanning, effective-policy floors, decision
         -> Python harness response rendering
-     -> non-command/review/off/shadow/unsupported
-        -> Python CLI evaluator, approval, and compatibility paths
+     -> explicit off/shadow/test-oracle compatibility boundaries only
+        -> Python CLI evaluator and approval presentation
   -> Python asynchronous evidence writer or synchronous CLI persistence
+```
+
+Native approval path (when a hook requires approval):
+
+```text
+Rust raw envelope
+  -> Rust action/floor reconstruction and SHA-256 request identity
+  -> Rust challenge for an external-authority artifact signed outside Python
+  -> Rust resident-memory pending/claimed/consumed table
+  -> Rust Ed25519 validation and final consume fence
+  -> opaque challenge/receipt only to Python presentation
 ```
 
 ## Ownership classification
@@ -49,10 +59,43 @@ harness launcher or managed hook
 | CLI hook evaluation | Python semantic | Presentation and orchestration only |
 | Python reference oracle | Python semantic | Differential tests only |
 | Resident client and supervisor | Rust transport/lifecycle with a minimal Python process launcher | Rust native edge and launcher |
-| Policy and approval control | Python control | Snapshot publication and presentation only |
+| Policy and approval control | Python control | Snapshot publication and approval presentation only; Rust owns approval challenge, validation, replay, and consume |
 | Evidence persistence | Persistence-only | Non-blocking receipt consumption |
 | Native command, policy, rules, runtime, scanner | Rust semantic | Complete supported hook authority |
 | Native hook core and secure filesystem | Rust I/O | Complete decision-critical I/O |
+
+## NHD-061–070 decision-critical I/O contract
+
+The `decision_critical_io` section of the v2 JSON contract makes this boundary
+machine-checkable. In `auto` and `force`, Rust exclusively owns:
+
+- PostToolUse source reads and bounded output extraction;
+- sensitive-path, symlink, regular-file, permission, and hard-link
+  classification;
+- pre/post file identity, replacement detection, hashing, and content
+  equivalence;
+- archive/decode/package inspection whenever such content is reachable from a
+  supported hook; and
+- policy-snapshot admission and its fail-closed decision binding.
+
+Python source readers and scanners remain compatibility-only (`off`/`shadow`)
+and differential-test fixtures. Python may inspect the package-bound native
+executable to establish transport identity, and the policy publisher may read
+configuration on its background thread; neither is a source decision or a
+request-time policy read. Unknown, changed, unreadable, oversized, malformed,
+or encoding-invalid input is not eligible for an allow result.
+
+`scripts/ci/rust_io_ownership_gate.py` builds an AST inventory of synchronous
+Python filesystem, hash, decode, and archive operations and walks supported
+hook entrypoints. `scripts/ci/rust_io_privacy_gate.py` statically checks route,
+metrics, journal, and enrichment serializers and dynamically probes raw source,
+command, secret, and private-path payloads. Both gates emit versioned,
+aggregate-only JSON evidence.
+
+Route and evidence artifacts contain only bounded dimensions, reason codes,
+counts, hashes, and booleans. They exclude raw payloads, source, commands,
+prompts, content, secrets, tokens, and paths. The `workspace_bound` boolean may
+record that a workspace was present without disclosing its name or location.
 
 ## Harness route inventory
 
@@ -63,8 +106,9 @@ events.
 
 Current material gaps include:
 
-- Copilot and Cursor event aliases do not enter the exact fast-worker event path.
-- Non-command PreToolUse and native `review` escape through Python CLI handling.
+- Copilot and Cursor event aliases are normalized by the Rust raw edge.
+- Non-command PreToolUse and native `review` remain native decisions; the
+  harness bridge renders an unsupported review as a conservative deny.
 - OpenCode, Grok, Hermes, OpenClaw, ZCode, Gemini, and Antigravity expose partial
   or detection-only production hook surfaces.
 - The native client now owns authentication, framing, runtime-digest-keyed
@@ -74,8 +118,14 @@ Current material gaps include:
   owner-and-SYSTEM-only DACL, verifies the exact package process, and mutually
   authenticates loopback frames. The legacy Python resident module is not
   reachable from the ordinary graph.
-- Python constructs policy snapshots per PostToolUse request.
-- Rust has no request-bound approval artifact or replay validation.
+- Python compiles and publishes authenticated policy snapshots asynchronously;
+  the resident validates and applies the installed effective policy from memory
+  for each hook request. Workspace and managed-policy overlays are composed
+  before publication; no hook request loads Python configuration.
+- Rust owns the request-bound approval artifact, external Ed25519 authority,
+  resident-memory replay state, and final consume fence. Python may present
+  the opaque challenge and forward the external artifact, but it never signs,
+  authorizes, or persists approval state.
 
 ## No-environment production contract
 

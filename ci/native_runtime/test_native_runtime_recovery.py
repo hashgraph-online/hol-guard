@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
 from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
@@ -110,7 +111,8 @@ def test_poisoned_socket_symlink_falls_back_without_touching_target(tmp_path: Pa
         socket_path = runtime_dir / f"hook-v2-{status.identity.sha256[:16]}.sock"
         socket_path.symlink_to(victim)
         try:
-            response = review_post_tool_native(request, observe_mode=False)
+            with native_policy_snapshot(guard_home) as snapshot:
+                response = review_post_tool_native(request, observe_mode=False, policy_snapshot=snapshot)
             assert response is not None
             assert response.decision == "allow"
             assert victim.read_text(encoding="utf-8") == "keep"
@@ -130,17 +132,18 @@ def test_resident_runtime_restarts_after_contained_shutdown(tmp_path: Path) -> N
             guard_home=guard_home,
             request_id="before-shutdown",
         )
-        first = review_post_tool_native(first_request, observe_mode=False)
-        assert first is not None and first.decision == "allow"
-        close_resident_native_runtimes()
-
-        second_request = _request(
-            tmp_path,
-            guard_home=guard_home,
-            request_id="after-shutdown",
-        )
-        second = review_post_tool_native(second_request, observe_mode=False)
         try:
-            assert second is not None and second.decision == "allow"
+            with native_policy_snapshot(guard_home) as snapshot:
+                first = review_post_tool_native(first_request, observe_mode=False, policy_snapshot=snapshot)
+                assert first is not None and first.decision == "allow"
+                close_resident_native_runtimes()
+
+                second_request = _request(
+                    tmp_path,
+                    guard_home=guard_home,
+                    request_id="after-shutdown",
+                )
+                second = review_post_tool_native(second_request, observe_mode=False, policy_snapshot=snapshot)
+                assert second is not None and second.decision == "allow"
         finally:
             close_resident_native_runtimes()
