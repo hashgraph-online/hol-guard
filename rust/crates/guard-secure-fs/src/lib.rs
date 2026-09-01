@@ -172,9 +172,11 @@ fn identity(metadata: &Metadata) -> FileIdentity {
 fn map_secure_open_error(error: SecureOpenError) -> SecureReadError {
     match error {
         SecureOpenError::PathChanged => SecureReadError::PathChanged,
+        #[cfg(unix)]
         SecureOpenError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
             SecureReadError::PermissionDenied
         }
+        #[cfg(unix)]
         SecureOpenError::Io(_) => SecureReadError::ReadFailed,
     }
 }

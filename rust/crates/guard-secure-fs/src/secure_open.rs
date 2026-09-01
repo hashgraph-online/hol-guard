@@ -1,6 +1,7 @@
 use std::fs::File;
 #[cfg(unix)]
 use std::fs::{self, Metadata};
+#[cfg(unix)]
 use std::io;
 use std::path::Path;
 #[cfg(unix)]
@@ -15,6 +16,7 @@ use std::os::unix::fs::MetadataExt;
 
 #[derive(Debug)]
 pub(crate) enum SecureOpenError {
+    #[cfg(unix)]
     Io(io::Error),
     PathChanged,
 }
