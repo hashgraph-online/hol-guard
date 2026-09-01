@@ -134,6 +134,20 @@ def _hooks_state_path(target_path: Path, context: HarnessContext) -> Path:
 _backup_payload = load_backup_payload
 
 
+def _cursor_hook_command_target_exists(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    if not tokens:
+        return False
+    candidates = [Path(tokens[0])]
+    first_name = Path(tokens[0]).name.lower()
+    if first_name.startswith("python") and len(tokens) > 1:
+        candidates.append(Path(tokens[1]))
+    return any(path.is_file() for path in candidates)
+
+
 def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
     """Return whether live Cursor config still routes Guard blocking hooks.
 
@@ -146,7 +160,22 @@ def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
         return False
     for event_name in _BLOCKING_MANAGED_HOOK_EVENTS:
         entries = hooks.get(event_name)
-        if not isinstance(entries, list) or not any(_is_managed_hook_entry(entry, command="") for entry in entries):
+        if not isinstance(entries, list):
+            return False
+        matched = False
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            command = entry.get("command")
+            if not isinstance(command, str) or not command.strip():
+                continue
+            if not _is_managed_hook_command(command):
+                continue
+            if not _cursor_hook_command_target_exists(command):
+                continue
+            matched = True
+            break
+        if not matched:
             return False
     return True
 

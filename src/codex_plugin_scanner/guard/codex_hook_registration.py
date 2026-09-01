@@ -151,6 +151,34 @@ def _looks_like_guard_codex_hook(blob: str) -> bool:
 _HEALTH_INTERCEPT_EVENTS = ("PreToolUse", "PermissionRequest")
 
 
+def _hook_entry_is_active(entry: Mapping[str, object]) -> bool:
+    return entry.get("enabled") is not False and entry.get("disabled") is not True
+
+
+def _matcher_covers_shell(matcher: object) -> bool:
+    if matcher is None:
+        return True
+    if not isinstance(matcher, str):
+        return False
+    text = matcher.strip()
+    return text in {"", "*"} or "Bash" in text
+
+
+def _group_has_active_guard_shell_handler(group: Mapping[str, object]) -> bool:
+    if not _hook_entry_is_active(group) or not _matcher_covers_shell(group.get("matcher")):
+        return False
+    handlers = group.get("hooks")
+    if isinstance(handlers, list):
+        return any(
+            isinstance(handler, dict)
+            and _hook_entry_is_active(handler)
+            and isinstance(handler.get("command"), str)
+            and _looks_like_guard_codex_hook(str(handler.get("command")))
+            for handler in handlers
+        )
+    return _looks_like_guard_codex_hook(_hook_group_command_blob(group))
+
+
 def live_guard_codex_hooks_intercept(hooks: object) -> bool:
     """Return whether live Codex config still routes Guard intercept hooks.
 
@@ -164,7 +192,7 @@ def live_guard_codex_hooks_intercept(hooks: object) -> bool:
     for event_name in _HEALTH_INTERCEPT_EVENTS:
         groups = hooks.get(event_name)
         if not isinstance(groups, list) or not any(
-            _looks_like_guard_codex_hook(_hook_group_command_blob(group)) for group in groups
+            isinstance(group, dict) and _group_has_active_guard_shell_handler(group) for group in groups
         ):
             return False
     return True
