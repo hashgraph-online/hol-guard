@@ -1,6 +1,6 @@
 use super::{
-    now_ms, read_private_json, scope_digest, GenerationFloorV1, PersistBoundary,
-    PolicySnapshotStore, AUTHORITY_RECORD_MAX_BYTES, AUTHORITY_RECORD_SCHEMA,
+    authority_fingerprint, now_ms, read_private_json, scope_digest, GenerationFloorV1,
+    PersistBoundary, PolicySnapshotStore, AUTHORITY_RECORD_MAX_BYTES, AUTHORITY_RECORD_SCHEMA,
     GENERATION_FLOOR_FILE_NAME, GENERATION_FLOOR_SCHEMA, PERSIST_FAILPOINT, SNAPSHOT_FILE_NAME,
     VERIFIER_KEY_BYTES, VERIFIER_KEY_FILE_NAME,
 };
@@ -17,6 +17,7 @@ use guard_policy_snapshot::{
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -226,9 +227,12 @@ fn restart_rehydrates_snapshot_and_hook_validation_uses_memory() {
         .validate_request_snapshot(&compact_reference, root.to_string_lossy().as_ref(), 4,)
         .is_ok());
     fs::remove_file(root.join(SNAPSHOT_FILE_NAME)).unwrap();
-    assert!(restored
-        .validate_request_snapshot(&snapshot_value, root.to_string_lossy().as_ref(), 4,)
-        .is_ok());
+    assert_eq!(
+        restored
+            .validate_request_snapshot(&snapshot_value, root.to_string_lossy().as_ref(), 4,)
+            .unwrap_err(),
+        "native_policy_snapshot_context_mismatch"
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -371,5 +375,41 @@ fn push_rejects_unknown_fields_without_mutating_state() {
     );
     assert_eq!(store.current_generation(), None);
     assert!(!root.join(SNAPSHOT_FILE_NAME).exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn authority_fingerprint_detects_same_size_in_place_rewrite() {
+    let root = test_root("authority-fingerprint");
+    let key = install_test_key(&root, 19);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let snapshot = signed_snapshot(1, &key, &root);
+    store
+        .push(&serde_json::json!({
+            "schema": POLICY_SNAPSHOT_PUSH_SCHEMA,
+            "snapshot": snapshot,
+        }))
+        .unwrap();
+
+    let path = root.join(SNAPSHOT_FILE_NAME);
+    let before = authority_fingerprint(&path).unwrap();
+    let mut bytes = Vec::new();
+    fs::File::open(&path)
+        .unwrap()
+        .read_to_end(&mut bytes)
+        .unwrap();
+    let offset = bytes
+        .iter()
+        .position(|byte| *byte == b'1')
+        .expect("authority record contains a generation digit");
+    let replacement = if bytes[offset] == b'1' { b'2' } else { b'1' };
+    let mut file = fs::OpenOptions::new().write(true).open(&path).unwrap();
+    file.seek(SeekFrom::Start(offset as u64)).unwrap();
+    file.write_all(&[replacement]).unwrap();
+    file.sync_all().unwrap();
+
+    let after = authority_fingerprint(&path).unwrap();
+    assert_ne!(before, after);
+    assert!(!store.test_authorities_unchanged());
     fs::remove_dir_all(root).unwrap();
 }

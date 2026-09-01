@@ -30,7 +30,9 @@ SELF_PROTECTED_PATHS: Final = frozenset(
         ".github/workflows/rust-authority-ownership.yml",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
         "scripts/ci/hook_data_plane_ownership_contract.py",
+        "scripts/ci/native_approval_contract_gate.py",
         "scripts/ci/rust_authority_ownership_gate.py",
+        ".github/workflows/publish.yml",
     }
 )
 

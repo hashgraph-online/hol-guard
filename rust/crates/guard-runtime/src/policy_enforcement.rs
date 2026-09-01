@@ -70,16 +70,77 @@ const MAX_SELECTOR_VALUE_BYTES: usize = 4 * 1024;
 const MAX_FACT_DEPTH: usize = 32;
 const MAX_FACT_NODES: usize = 2_048;
 
+/// The native action lattice is intentionally typed at the enforcement
+/// boundary.  String values remain the wire representation for compatibility
+/// with existing hook contracts, but no decision is made by comparing raw
+/// strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+enum ActionFloor {
+    Allow,
+    Warn,
+    Review,
+    RequireReapproval,
+    SandboxRequired,
+    Block,
+}
+
+impl ActionFloor {
+    fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "allow" => Self::Allow,
+            "warn" => Self::Warn,
+            "review" => Self::Review,
+            "require-reapproval" => Self::RequireReapproval,
+            "sandbox-required" => Self::SandboxRequired,
+            "block" => Self::Block,
+            _ => return None,
+        })
+    }
+
+    fn is_non_overridable(self) -> bool {
+        matches!(self, Self::SandboxRequired | Self::Block)
+    }
+
+    fn decision(self) -> &'static str {
+        if matches!(self, Self::Allow | Self::Warn) {
+            "allow"
+        } else {
+            "deny"
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ActionFloorMatrix {
+    policy: ActionFloor,
+    minimum: ActionFloor,
+}
+
+impl ActionFloorMatrix {
+    fn from_result(result: &PreToolResultV1) -> Result<Self, String> {
+        Ok(Self {
+            policy: ActionFloor::parse(&result.policy_action)
+                .ok_or_else(|| "native_policy_action_invalid".to_owned())?,
+            minimum: ActionFloor::parse(&result.minimum_action)
+                .ok_or_else(|| "native_policy_action_invalid".to_owned())?,
+        })
+    }
+
+    fn validate(self, result: &PreToolResultV1) -> Result<(), String> {
+        if self.policy < self.minimum
+            || (self.policy.is_non_overridable() && self.policy != self.minimum)
+            || result.decision != self.minimum.decision()
+            || result.explicitly_benign != (self.minimum == ActionFloor::Allow)
+        {
+            return Err("native_policy_decision_inconsistent".to_owned());
+        }
+        Ok(())
+    }
+}
+
 fn action_rank(action: &str) -> Option<u8> {
-    Some(match action {
-        "allow" => 0,
-        "warn" => 1,
-        "review" => 2,
-        "require-reapproval" => 3,
-        "sandbox-required" => 4,
-        "block" => 5,
-        _ => return None,
-    })
+    ActionFloor::parse(action).map(|floor| floor as u8)
 }
 
 fn join_action(left: &str, right: &str) -> Result<String, String> {
@@ -90,6 +151,14 @@ fn join_action(left: &str, right: &str) -> Result<String, String> {
     } else {
         right.to_owned()
     })
+}
+
+/// Validate the typed relationship between the effective action fields.  The
+/// policy action is not a second, weaker authority: it must describe the same
+/// or stronger floor, and a terminal policy block must be reflected by the
+/// minimum floor before any approval path can inspect the result.
+pub(crate) fn validate_pre_tool_result_matrix(result: &PreToolResultV1) -> Result<(), String> {
+    ActionFloorMatrix::from_result(result)?.validate(result)
 }
 
 fn canonical_harness(value: &str) -> Option<&str> {
@@ -206,6 +275,7 @@ pub(crate) fn apply_pre_tool_policy(
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
     }
+    validate_pre_tool_result_matrix(&result)?;
     let harness = normalized_harness(&result.action.harness);
     let mut facts = payload_facts(payload, result.action.action_type, &result.reason_code)?;
     facts.sensitive_target |= result.action.sensitive_target;
@@ -239,12 +309,17 @@ pub(crate) fn apply_pre_tool_policy(
             output.decision = "allow".to_owned();
             output.explicitly_benign = false;
         } else {
-            output.policy_action = effective;
-            if intrinsic_rank >= action_rank("block").unwrap_or(5) && output.decision == "allow" {
-                output.decision = "deny".to_owned();
-                output.explicitly_benign = false;
-            }
+            output.policy_action = effective.clone();
+            output.minimum_action = effective.clone();
+            output.decision =
+                if action_rank(&effective).unwrap_or(5) <= action_rank("warn").unwrap_or(1) {
+                    "allow".to_owned()
+                } else {
+                    "deny".to_owned()
+                };
+            output.explicitly_benign = effective == "allow";
         }
+        validate_pre_tool_result_matrix(&output)?;
         return Ok(output);
     }
 
@@ -261,6 +336,7 @@ pub(crate) fn apply_pre_tool_policy(
         "deny".to_owned()
     };
     output.explicitly_benign = effective == "allow";
+    validate_pre_tool_result_matrix(&output)?;
     Ok(output)
 }
 

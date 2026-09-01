@@ -1,7 +1,9 @@
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
+    ApprovalChallengeRequestV3, ApprovalConsumeRequestV3, ApprovalValidateRequestV3,
     GuardHookEnvelopeV2, NativeHookRequestV1, RuntimeCapabilitiesV1, GUARD_HOOK_ENVELOPE_V2_SCHEMA,
-    MAX_NATIVE_RESPONSE_BYTES, NATIVE_PROTOCOL_VERSION,
+    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_APPROVAL_MAX_BYTES,
+    NATIVE_PROTOCOL_VERSION,
 };
 use guard_hook_core::review_post_tool;
 use serde::Deserialize;
@@ -15,6 +17,9 @@ pub(crate) enum ResidentOperationV1 {
     CommandModel(CommandModelRequestV1),
     PreToolUse(CommandModelRequestV1),
     PolicySnapshotPush(Value),
+    ApprovalChallenge(ApprovalChallengeRequestV3),
+    ApprovalValidate(ApprovalValidateRequestV3),
+    ApprovalConsume(ApprovalConsumeRequestV3),
     Health(Value),
     Shutdown(Value),
 }
@@ -22,7 +27,7 @@ pub(crate) enum ResidentOperationV1 {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub(crate) enum ResidentRequestV1 {
-    Operation(ResidentOperationV1),
+    Operation(Box<ResidentOperationV1>),
     Edge(GuardHookEnvelopeV2),
     Hook(NativeHookRequestV1),
 }
@@ -44,6 +49,11 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "pre-tool-generic-authority-v1".into(),
         "policy-snapshot-v3".into(),
         "policy-snapshot-push-v1".into(),
+        "native-approval-artifact-v3".into(),
+        "native-approval-challenge-v3".into(),
+        "native-approval-validation-v3".into(),
+        "native-approval-consume-v3".into(),
+        "native-approval-replay-memory-v1".into(),
         "native-policy-in-memory-v1".into(),
         "hook-envelope-v2".into(),
         "native-resident-client-v1".into(),
@@ -70,6 +80,14 @@ pub(crate) fn evaluate_resident_bytes(
     policy_store: Option<&PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
     let value = strict_json_value(bytes)?;
+    if bytes.len() > NATIVE_APPROVAL_MAX_BYTES
+        && matches!(
+            value.get("operation").and_then(Value::as_str),
+            Some("approval_challenge" | "approval_validate" | "approval_consume")
+        )
+    {
+        return Err("native_approval_request_bounds_exceeded".to_owned());
+    }
     if value.get("operation").and_then(Value::as_str) == Some("policy_snapshot_push") {
         let object = value
             .as_object()
@@ -94,27 +112,42 @@ pub(crate) fn evaluate_resident_bytes(
                 policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
             crate::edge::evaluate_envelope_with_store(request, policy_store)
         }
-        ResidentRequestV1::Operation(ResidentOperationV1::CommandModel(request)) => {
-            crate::oneshot::evaluate_command_model_request(&request)
-        }
-        ResidentRequestV1::Operation(ResidentOperationV1::PreToolUse(request)) => {
-            crate::oneshot::evaluate_pre_tool_request(&request)
-        }
-        ResidentRequestV1::Operation(ResidentOperationV1::PolicySnapshotPush(request)) => {
-            let policy_store =
-                policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-            policy_store.push(&request)
-        }
-        ResidentRequestV1::Operation(ResidentOperationV1::Health(_request)) => {
-            encode_response(&serde_json::json!({
+        ResidentRequestV1::Operation(request) => match *request {
+            ResidentOperationV1::CommandModel(request) => {
+                crate::oneshot::evaluate_command_model_request(&request)
+            }
+            ResidentOperationV1::PreToolUse(request) => {
+                crate::oneshot::evaluate_pre_tool_request(&request)
+            }
+            ResidentOperationV1::PolicySnapshotPush(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                policy_store.push(&request)
+            }
+            ResidentOperationV1::ApprovalChallenge(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::approval::create_challenge(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalValidate(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::approval::validate_approval(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalConsume(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::approval::consume_approval(request, policy_store)
+            }
+            ResidentOperationV1::Health(_request) => encode_response(&serde_json::json!({
                 "status": "ready",
                 "protocol_version": crate::RESIDENT_PROTOCOL_VERSION,
-            }))
-        }
-        ResidentRequestV1::Operation(ResidentOperationV1::Shutdown(_request)) => {
-            crate::managed_resident::request_shutdown();
-            encode_response(&serde_json::json!({"status": "stopping"}))
-        }
+            })),
+            ResidentOperationV1::Shutdown(_request) => {
+                crate::managed_resident::request_shutdown();
+                encode_response(&serde_json::json!({"status": "stopping"}))
+            }
+        },
         ResidentRequestV1::Hook(request) => {
             // Managed residents always carry a v3 policy store. The legacy
             // request has no generation-bound snapshot and must never reach a
@@ -148,7 +181,10 @@ pub(crate) fn error_response(code: &'static str, retryable: bool) -> Vec<u8> {
 }
 
 pub(crate) fn safe_error_response(code: &str, retryable: bool) -> Vec<u8> {
-    if code.starts_with("native_policy_snapshot_") || code.starts_with("snapshot_") {
+    if code.starts_with("native_policy_snapshot_")
+        || NATIVE_APPROVAL_ERROR_CODES.contains(&code)
+        || code.starts_with("snapshot_")
+    {
         return serde_json::to_vec(&serde_json::json!({
             "error": code,
             "retryable": retryable,
@@ -156,4 +192,36 @@ pub(crate) fn safe_error_response(code: &str, retryable: bool) -> Vec<u8> {
         .unwrap_or_else(|_| error_response("native_response_encode_failed", false));
     }
     error_response("native_request_invalid_json", retryable)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{evaluate_resident_bytes, safe_error_response};
+    use serde_json::Value;
+
+    #[test]
+    fn approval_error_transport_is_finite() {
+        let known: Value =
+            serde_json::from_slice(&safe_error_response("native_approval_replay", false))
+                .expect("known approval error is JSON");
+        assert_eq!(known["error"], "native_approval_replay");
+
+        let unknown: Value = serde_json::from_slice(&safe_error_response(
+            "native_approval_future_unregistered_code",
+            false,
+        ))
+        .expect("redacted approval error is JSON");
+        assert_eq!(unknown["error"], "native_request_invalid_json");
+    }
+
+    #[test]
+    fn approval_requests_have_a_smaller_raw_payload_bound() {
+        let padding = "x".repeat(super::NATIVE_APPROVAL_MAX_BYTES);
+        let request =
+            format!(r#"{{"operation":"approval_challenge","request":{{"padding":"{padding}"}}}}"#);
+        assert_eq!(
+            evaluate_resident_bytes(request.as_bytes(), None).unwrap_err(),
+            "native_approval_request_bounds_exceeded"
+        );
+    }
 }

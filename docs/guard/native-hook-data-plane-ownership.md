@@ -37,6 +37,17 @@ harness launcher or managed hook
   -> Python asynchronous evidence writer or synchronous CLI persistence
 ```
 
+Native approval path (when a hook requires approval):
+
+```text
+Rust raw envelope
+  -> Rust action/floor reconstruction and SHA-256 request identity
+  -> Rust challenge for an external-authority artifact signed outside Python
+  -> Rust resident-memory pending/claimed/consumed table
+  -> Rust Ed25519 validation and final consume fence
+  -> opaque challenge/receipt only to Python presentation
+```
+
 ## Ownership classification
 
 | Node | Current class | Target |
@@ -48,7 +59,7 @@ harness launcher or managed hook
 | CLI hook evaluation | Python semantic | Presentation and orchestration only |
 | Python reference oracle | Python semantic | Differential tests only |
 | Resident client and supervisor | Rust transport/lifecycle with a minimal Python process launcher | Rust native edge and launcher |
-| Policy and approval control | Python control | Snapshot publication and presentation only |
+| Policy and approval control | Python control | Snapshot publication and approval presentation only; Rust owns approval challenge, validation, replay, and consume |
 | Evidence persistence | Persistence-only | Non-blocking receipt consumption |
 | Native command, policy, rules, runtime, scanner | Rust semantic | Complete supported hook authority |
 | Native hook core and secure filesystem | Rust I/O | Complete decision-critical I/O |
@@ -78,8 +89,10 @@ Current material gaps include:
   the resident validates and applies the installed effective policy from memory
   for each hook request. Workspace and managed-policy overlays are composed
   before publication; no hook request loads Python configuration.
-- Rust has no request-bound approval artifact or replay validation; full
-  approval-artifact validation is the next migration slice.
+- Rust owns the request-bound approval artifact, external Ed25519 authority,
+  resident-memory replay state, and final consume fence. Python may present
+  the opaque challenge and forward the external artifact, but it never signs,
+  authorizes, or persists approval state.
 
 ## No-environment production contract
 

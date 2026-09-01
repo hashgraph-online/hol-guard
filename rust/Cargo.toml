@@ -21,6 +21,8 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 hex = "0.4.3"
+fs2 = "0.4.3"
+ring = "0.17.14"
 getrandom = "0.3.3"
 libc = "0.2.175"
 nix = { version = "0.31.3", features = ["fs", "poll", "socket"] }

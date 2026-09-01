@@ -13,10 +13,18 @@ use guard_policy_snapshot::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 
+#[path = "approval_authority.rs"]
+pub(crate) mod approval_authority;
+#[path = "approval_enrollment.rs"]
+pub(crate) mod approval_enrollment;
+#[path = "policy_store_approval.rs"]
+mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
 mod policy_store_authority;
 #[path = "policy_store_migration.rs"]
@@ -24,6 +32,8 @@ mod policy_store_migration;
 #[path = "policy_store_persistence.rs"]
 mod policy_store_persistence;
 
+use approval_authority::ApprovalAuthority;
+pub(crate) use policy_store_approval::ApprovalPolicyFence;
 use policy_store_authority::*;
 use policy_store_persistence::*;
 
@@ -125,6 +135,11 @@ pub(crate) struct PolicySnapshotStore {
     expected_guard_home: String,
     expected_scope_digest: String,
     verifier_key: [u8; VERIFIER_KEY_BYTES],
+    approval_authority: Option<ApprovalAuthority>,
+    approval_authority_observed: Arc<Mutex<Option<String>>>,
+    approval_replay_memory: crate::approval::ApprovalReplayMemory,
+    authority_observed: Arc<Mutex<Option<String>>>,
+    authority_changed: Arc<AtomicBool>,
     state: Mutex<PolicyState>,
 }
 
@@ -143,6 +158,30 @@ impl PolicySnapshotStore {
             &expected_scope_digest,
             &verifier_key,
         )?;
+        let approval_authority = approval_authority::load(state_base)?;
+        let approval_authority_observed = Arc::new(Mutex::new(
+            approval_authority
+                .as_ref()
+                .map(|authority| authority.fingerprint.clone())
+                .or_else(|| {
+                    authority_fingerprint(
+                        &state_base.join(approval_authority::APPROVAL_AUTHORITY_FILE_NAME),
+                    )
+                }),
+        ));
+        let approval_replay_memory = crate::approval::ApprovalReplayMemory::new()?;
+        let authority_observed = Arc::new(Mutex::new(authority_fingerprint(&authority_path)));
+        let authority_changed = Arc::new(AtomicBool::new(false));
+        start_authority_watcher(
+            authority_path.clone(),
+            Arc::clone(&authority_observed),
+            Arc::downgrade(&authority_changed),
+        );
+        start_authority_watcher(
+            state_base.join(approval_authority::APPROVAL_AUTHORITY_FILE_NAME),
+            Arc::clone(&approval_authority_observed),
+            Arc::downgrade(&authority_changed),
+        );
         Ok(Self {
             authority_path,
             expected_runtime_identity: runtime_identity.to_owned(),
@@ -150,6 +189,11 @@ impl PolicySnapshotStore {
             expected_guard_home,
             expected_scope_digest,
             verifier_key,
+            approval_authority,
+            approval_authority_observed,
+            approval_replay_memory,
+            authority_observed,
+            authority_changed,
             state: Mutex::new(PolicyState {
                 snapshot: loaded.snapshot.map(Arc::new),
                 canonical_bytes: loaded.canonical_bytes,
@@ -259,6 +303,15 @@ impl PolicySnapshotStore {
         state.snapshot = Some(Arc::new(request.snapshot.clone()));
         state.canonical_bytes = snapshot_bytes;
         state.invalid_on_startup = false;
+        if let Ok(mut observed) = self.authority_observed.lock() {
+            *observed = authority_fingerprint(&self.authority_path);
+        } else {
+            self.authority_changed.store(true, Ordering::SeqCst);
+        }
+        self.authority_changed.store(
+            !policy_store_authority::authorities_unchanged(self),
+            Ordering::SeqCst,
+        );
         encode_ack(&request.snapshot, false)
     }
 
@@ -273,6 +326,22 @@ impl PolicySnapshotStore {
             .state
             .lock()
             .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
+        self.validate_request_snapshot_locked(&state, value, guard_home, generation, now)
+    }
+
+    fn validate_request_snapshot_locked(
+        &self,
+        state: &PolicyState,
+        value: &Value,
+        guard_home: &str,
+        generation: u64,
+        now: u64,
+    ) -> Result<Arc<PolicySnapshotV3>, String> {
+        if self.authority_changed.load(Ordering::SeqCst)
+            || !policy_store_authority::authority_unchanged_fenced(self)
+        {
+            return Err("native_policy_snapshot_context_mismatch".to_owned());
+        }
         if state.invalid_on_startup {
             return Err("native_policy_snapshot_invalid".to_owned());
         }
@@ -325,6 +394,63 @@ impl PolicySnapshotStore {
             return Err("native_policy_snapshot_scope_mismatch".to_owned());
         }
         Ok(Arc::clone(current))
+    }
+
+    /// Fence an approval challenge to the resident's current authenticated
+    /// snapshot. The callback runs while the state mutex is held, so action
+    /// reconstruction and binding derivation cannot observe a policy push in
+    /// between. The callback must not call APIs that reacquire `state`.
+    pub(crate) fn with_approval_fence<F, T>(
+        &self,
+        envelope: &guard_contracts::GuardHookEnvelopeV2,
+        callback: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce(&PolicySnapshotV3) -> Result<T, String>,
+    {
+        let now = now_ms()?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
+        let snapshot = self.validate_request_snapshot_locked(
+            &state,
+            &envelope.policy_snapshot,
+            &envelope.source.guard_home,
+            envelope.policy_generation,
+            now,
+        )?;
+        callback(snapshot.as_ref())
+    }
+
+    pub(crate) fn current_snapshot(&self) -> Result<PolicySnapshotV3, String> {
+        let now = now_ms()?;
+        if self.authority_changed.load(Ordering::SeqCst)
+            || !policy_store_authority::authority_unchanged_fenced(self)
+        {
+            return Err("native_policy_snapshot_context_mismatch".to_owned());
+        }
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
+        if state.invalid_on_startup {
+            return Err("native_policy_snapshot_invalid".to_owned());
+        }
+        let snapshot = state
+            .snapshot
+            .as_ref()
+            .ok_or_else(|| "native_policy_snapshot_missing".to_owned())?;
+        validate_v3(
+            snapshot,
+            state.generation_floor.max(1),
+            &self.expected_runtime_identity,
+            &self.expected_rule_digest,
+            &self.verifier_key,
+            now,
+        )
+        .map_err(snapshot_error)?;
+        Ok(snapshot.as_ref().clone())
     }
 
     #[cfg(test)]

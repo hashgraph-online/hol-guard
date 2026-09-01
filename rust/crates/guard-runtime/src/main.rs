@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod approval;
 mod edge;
 mod hardening;
 mod managed_resident;
@@ -119,6 +120,24 @@ fn run() -> Result<(), String> {
                 &runtime_identity,
             )
         }
+        [command, state_flag, state_dir, record_flag, record_path]
+            if command == "enroll-approval-authority"
+                && state_flag == "--state-dir"
+                && record_flag == "--record" =>
+        {
+            policy_store::approval_authority::install_record(
+                std::path::Path::new(state_dir),
+                std::path::Path::new(record_path),
+            )
+        }
+        [command, state_flag, state_dir]
+            if command == "prepare-approval-enrollment" && state_flag == "--state-dir" =>
+        {
+            let request = policy_store::approval_authority::prepare_enrollment(
+                std::path::Path::new(state_dir),
+            )?;
+            write_bytes_response(&request)
+        }
         [command, flag, state_dir]
             if matches!(command.as_str(), "hook-client" | "resident-client")
                 && flag == "--stdin" =>
@@ -186,7 +205,7 @@ fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --runtime-sha256 SHA"
+            "usage: hol-guard-runtime capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --runtime-sha256 SHA"
                 .into(),
         ),
     }

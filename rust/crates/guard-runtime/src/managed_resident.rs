@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use std::fs::{File, OpenOptions};
 #[cfg(not(windows))]
 use std::io::Write;
 use std::path::Path;
@@ -27,7 +28,121 @@ use crate::resident_state::{
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const MANAGED_OWNER_LOCK_FILE_NAME: &str = "managed-resident-owner.v1.lock";
 static MANAGED_SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Lifetime owner lock for the resident scope.
+///
+/// Unix keeps an open, verified directory descriptor and locks both the
+/// directory and its named marker. This prevents an ordinary second process
+/// from starting a second resident even if the marker pathname is replaced.
+/// A same-UID actor that can deliberately mutate the private directory while
+/// this process runs remains an OS-account trust limitation; callers must
+/// still validate published state and process identity on every connection.
+struct ManagedOwnerLock {
+    _file: File,
+    #[cfg(unix)]
+    _directory: File,
+}
+
+fn acquire_managed_owner_lock(scope: &Path) -> Result<ManagedOwnerLock, String> {
+    #[cfg(unix)]
+    let directory = {
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+        let mut directory_options = OpenOptions::new();
+        directory_options
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC);
+        let directory = directory_options
+            .open(scope)
+            .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
+        let metadata = directory
+            .metadata()
+            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
+        let path_metadata = std::fs::symlink_metadata(scope)
+            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
+        if !metadata.is_dir()
+            || path_metadata.file_type().is_symlink()
+            || !path_metadata.is_dir()
+            || metadata.dev() != path_metadata.dev()
+            || metadata.ino() != path_metadata.ino()
+            || metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err("native_resident_owner_lock_not_private".to_owned());
+        }
+        fs2::FileExt::try_lock_exclusive(&directory).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::WouldBlock {
+                "native_resident_owner_busy".to_owned()
+            } else {
+                "native_resident_owner_lock_failed".to_owned()
+            }
+        })?;
+        directory
+    };
+    let path = scope.join(MANAGED_OWNER_LOCK_FILE_NAME);
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        const FILE_SHARE_READ: u32 = 0x0000_0001;
+        const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+        options
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    let file = options
+        .open(&path)
+        .map_err(|_| "native_resident_owner_lock_failed".to_owned())?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
+    if !metadata.is_file() {
+        return Err("native_resident_owner_lock_invalid".to_owned());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let path_metadata = std::fs::symlink_metadata(&path)
+            .map_err(|_| "native_resident_owner_lock_invalid".to_owned())?;
+        let parent_uid = path
+            .parent()
+            .and_then(|parent| std::fs::symlink_metadata(parent).ok())
+            .map(|parent| parent.uid());
+        if path_metadata.file_type().is_symlink()
+            || !path_metadata.is_file()
+            || path_metadata.dev() != metadata.dev()
+            || path_metadata.ino() != metadata.ino()
+            || metadata.nlink() != 1
+            || parent_uid != Some(metadata.uid())
+            || metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err("native_resident_owner_lock_not_private".to_owned());
+        }
+    }
+    #[cfg(windows)]
+    crate::resident_state::verify_windows_private_path(&path, false)?;
+    fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::WouldBlock {
+            "native_resident_owner_busy".to_owned()
+        } else {
+            "native_resident_owner_lock_failed".to_owned()
+        }
+    })?;
+    Ok(ManagedOwnerLock {
+        _file: file,
+        #[cfg(unix)]
+        _directory: directory,
+    })
+}
 
 pub(crate) fn request_shutdown() {
     MANAGED_SHUTDOWN_REQUESTED.store(true, Ordering::Release);
@@ -221,6 +336,7 @@ pub(crate) fn serve_managed(
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }
     let scope = state_scope(state_base, expected_digest)?;
+    let _owner_lock = acquire_managed_owner_lock(&scope)?;
     let policy_store = std::sync::Arc::new(crate::policy_store::PolicySnapshotStore::new(
         state_base,
         expected_digest,

@@ -2,11 +2,100 @@ use super::policy_store_migration::load_legacy_authority;
 use super::policy_store_persistence::{read_generation_floor, read_private_json};
 use super::*;
 use guard_policy_snapshot::{canonical_json_bytes, generation_floor_mac, SnapshotError};
+use sha2::{Digest, Sha256};
 use std::fs;
-#[cfg(not(windows))]
 use std::fs::OpenOptions;
 use std::io::Read;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, Weak};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+const AUTHORITY_WATCH_INTERVAL: Duration = Duration::from_millis(5);
+
+/// Return a cryptographic identity for the complete authority object.
+///
+/// Metadata alone is insufficient: a same-size in-place rewrite can restore
+/// its mtime. Include the bounded bytes in a SHA-256 digest, together with
+/// the opened object's identity, so both semantic replacement and object
+/// replacement invalidate the resident fence. The digest is only a change
+/// detector; the authenticated record parser remains the source of truth.
+pub(super) fn authority_fingerprint(path: &Path) -> Option<String> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return None;
+    }
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    }
+    let mut file = options.open(path).ok()?;
+    let opened = file.metadata().ok()?;
+    if !opened.is_file() || opened.len() != metadata.len() {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(AUTHORITY_RECORD_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() as u64 > AUTHORITY_RECORD_MAX_BYTES {
+        return None;
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(b"hol-guard-authority-fingerprint-v2\0");
+    hasher.update(metadata.len().to_be_bytes());
+    hasher.update([u8::from(metadata.permissions().readonly())]);
+    if let Ok(modified) = metadata.modified() {
+        if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
+            hasher.update(duration.as_secs().to_be_bytes());
+            hasher.update(duration.subsec_nanos().to_be_bytes());
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        hasher.update(metadata.dev().to_be_bytes());
+        hasher.update(metadata.ino().to_be_bytes());
+        hasher.update(metadata.permissions().mode().to_be_bytes());
+        hasher.update(metadata.uid().to_be_bytes());
+        hasher.update(metadata.gid().to_be_bytes());
+        hasher.update(metadata.nlink().to_be_bytes());
+        hasher.update(opened.dev().to_be_bytes());
+        hasher.update(opened.ino().to_be_bytes());
+    }
+    hasher.update((bytes.len() as u64).to_be_bytes());
+    hasher.update(bytes);
+    Some(hex::encode(hasher.finalize()))
+}
+
+/// Watch durable authority identities without reparsing policy on requests.
+pub(super) fn start_authority_watcher(
+    path: PathBuf,
+    observed: Arc<Mutex<Option<String>>>,
+    changed: Weak<AtomicBool>,
+) {
+    let _ = thread::Builder::new()
+        .name("hol-guard-policy-authority-watch".to_owned())
+        .spawn(move || loop {
+            let Some(changed) = changed.upgrade() else {
+                break;
+            };
+            let current = authority_fingerprint(&path);
+            let different = observed
+                .lock()
+                .map(|expected| *expected != current)
+                .unwrap_or(true);
+            if different {
+                changed.store(true, Ordering::SeqCst);
+            }
+            thread::sleep(AUTHORITY_WATCH_INTERVAL);
+        });
+}
 
 pub(super) fn encode_ack(snapshot: &PolicySnapshotV3, idempotent: bool) -> Result<Vec<u8>, String> {
     serde_json::to_vec(&PolicySnapshotAckV1 {
@@ -44,6 +133,40 @@ pub(super) fn now_ms() -> Result<u64, String> {
         .map_err(|_| "native_resident_clock_invalid".to_owned())?
         .as_millis();
     u64::try_from(value).map_err(|_| "native_resident_clock_invalid".to_owned())
+}
+
+pub(super) fn authorities_unchanged(store: &PolicySnapshotStore) -> bool {
+    let policy_current = authority_fingerprint(&store.authority_path);
+    let approval_current = store
+        .approval_authority
+        .as_ref()
+        .map(|authority| authority_fingerprint(&authority.path))
+        .unwrap_or_else(|| {
+            authority_fingerprint(
+                &store
+                    .authority_path
+                    .with_file_name(approval_authority::APPROVAL_AUTHORITY_FILE_NAME),
+            )
+        });
+    let policy_matches = store
+        .authority_observed
+        .lock()
+        .map(|observed| *observed == policy_current)
+        .unwrap_or(false);
+    let approval_matches = store
+        .approval_authority_observed
+        .lock()
+        .map(|observed| *observed == approval_current)
+        .unwrap_or(false);
+    policy_matches && approval_matches
+}
+
+pub(super) fn authority_unchanged_fenced(store: &PolicySnapshotStore) -> bool {
+    let unchanged = authorities_unchanged(store);
+    if !unchanged {
+        store.authority_changed.store(true, Ordering::SeqCst);
+    }
+    unchanged
 }
 
 #[cfg_attr(not(test), allow(dead_code))]

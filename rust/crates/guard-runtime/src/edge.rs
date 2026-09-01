@@ -3,16 +3,131 @@
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
     HookSourceFileRefV1, NativeHookRequestV1, GUARD_HOOK_EDGE_RESULT_V2_SCHEMA,
-    GUARD_HOOK_ENVELOPE_V2_SCHEMA, NATIVE_PROTOCOL_VERSION,
+    GUARD_HOOK_ENVELOPE_V2_SCHEMA, MAX_NATIVE_REQUEST_BYTES, NATIVE_PROTOCOL_VERSION,
 };
 use guard_hook_core::review_post_tool;
 use guard_policy_snapshot::PolicySnapshotV3;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 const MAX_HARNESS_BYTES: usize = 64;
 const MAX_EVENT_BYTES: usize = 64;
 const MAX_PATH_BYTES: usize = 32 * 1024;
-const MAX_REQUEST_ID_BYTES: usize = 256;
+fn request_id_is_safe(value: &str) -> bool {
+    let opaque_token = !value.is_empty()
+        && value.len() <= 256
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
+        });
+    let compact_uuid = value.len() == 32
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+    let dashed_uuid = value.len() == 36
+        && value.bytes().enumerate().all(|(index, byte)| {
+            matches!(index, 8 | 13 | 18 | 23)
+                .then_some(byte == b'-')
+                .unwrap_or_else(|| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        });
+    opaque_token || compact_uuid || dashed_uuid
+}
+
+fn request_payload_identity(payload: &Value) -> Result<Value, String> {
+    let Some(record) = payload.as_object() else {
+        return Err("native_hook_payload_invalid".to_owned());
+    };
+    // Event aliases and adapter timestamps are transport metadata, not request
+    // semantics. Event aliases are validated for agreement by
+    // `authoritative_event`, then omitted here so a harness spelling change
+    // cannot change an otherwise identical request. Timestamps are removed
+    // only at the envelope root: a nested timestamp may be an actual tool
+    // argument and must remain part of the action commitment.
+    let mut identity = record.clone();
+    for key in [
+        "event",
+        "eventName",
+        "hook_event_name",
+        "hookEventName",
+        "hook_name",
+        "hookName",
+        "timestamp",
+        "timestamp_ms",
+        "timestampMs",
+        "created_at",
+        "createdAt",
+        "received_at",
+        "receivedAt",
+    ] {
+        identity.remove(key);
+    }
+    Ok(Value::Object(identity))
+}
+
+fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
+    let object = snapshot.as_object();
+    let runtime_identity = object
+        .and_then(|value| value.get("runtime_identity"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let policy_digest = object
+        .and_then(|value| value.get("policy_digest"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let rule_digest = object
+        .and_then(|value| value.get("rule_digest"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let scope_digest = object
+        .and_then(|value| value.get("scope_contract"))
+        .and_then(Value::as_object)
+        .and_then(|scope| scope.get("scope_digest"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    serde_json::json!({
+        "generation": generation,
+        "policy_digest": policy_digest,
+        "rule_digest": rule_digest,
+        "runtime_identity": runtime_identity,
+        "scope_digest": scope_digest,
+    })
+}
+
+/// Derive a stable opaque identity when the harness omitted a request ID.
+/// The digest covers semantic request inputs only. Transport deadlines,
+/// object field order, and event-alias spelling are deliberately excluded.
+/// Raw request material remains inside the resident and never appears in an
+/// approval result.
+pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String, String), String> {
+    let harness = canonical_harness(&envelope.harness)?;
+    let event = authoritative_event(envelope)?;
+    let payload = request_payload_identity(&envelope.raw_payload)?;
+    let source = serde_json::json!({
+        "cwd": envelope.source.cwd,
+        "guard_home": envelope.source.guard_home,
+        "home_dir": envelope.source.home_dir,
+        "source_ref_external_allowed": envelope.source.source_ref_external_allowed,
+    });
+    let value = serde_json::json!({
+        "schema": "guard-native-request-identity.v3",
+        "version": 3,
+        "event": event,
+        "harness": harness,
+        "payload": payload,
+        "policy": stable_policy_identity(&envelope.policy_snapshot, envelope.policy_generation),
+        "source": source,
+    });
+    let value =
+        serde_json::to_value(value).map_err(|_| "native_hook_request_digest_failed".to_owned())?;
+    let canonical = guard_policy_snapshot::canonical_json_bytes(&value)
+        .map_err(|_| "native_hook_request_digest_failed".to_owned())?;
+    let digest = hex::encode(Sha256::digest(&canonical));
+    let request_id = match envelope.request_id.as_deref() {
+        Some(value) if request_id_is_safe(value) => value.to_owned(),
+        Some(_) => return Err("native_hook_request_id_invalid".to_owned()),
+        None => format!("sha256:{digest}"),
+    };
+    Ok((request_id, digest))
+}
 
 fn bounded_nonempty(value: &str, maximum: usize, code: &str) -> Result<(), String> {
     if value.trim().is_empty() || value.len() > maximum {
@@ -156,13 +271,12 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     {
         return Err("native_hook_policy_generation_mismatch".to_owned());
     }
-    if let Some(request_id) = envelope.request_id.as_deref() {
-        bounded_nonempty(
-            request_id,
-            MAX_REQUEST_ID_BYTES,
-            "native_hook_request_id_invalid",
-        )?;
+    let encoded = serde_json::to_vec(envelope)
+        .map_err(|_| "native_hook_request_bounds_exceeded".to_owned())?;
+    if encoded.len() > MAX_NATIVE_REQUEST_BYTES {
+        return Err("native_hook_request_bounds_exceeded".to_owned());
     }
+    let _ = request_identity(envelope)?;
     for path in [
         envelope.source.cwd.as_deref(),
         Some(envelope.source.home_dir.as_str()),
@@ -183,6 +297,7 @@ fn evaluate_validated_envelope(
     let harness = canonical_harness(&envelope.harness)?;
     let event_name = authoritative_event(&envelope)?;
     let kind = payload_kind(&envelope.raw_payload)?;
+    let (request_id, _request_digest) = request_identity(&envelope)?;
     if kind == GuardHookPayloadKindV2::EncryptedPayloadRef {
         return Err("native_hook_encrypted_payload_unsupported".to_owned());
     }
@@ -243,7 +358,7 @@ fn evaluate_validated_envelope(
     crate::encode_response(&GuardHookEdgeResultV2 {
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
-        request_id: envelope.request_id,
+        request_id: Some(request_id),
         harness,
         event_name,
         payload_kind: kind,
@@ -266,193 +381,17 @@ pub(crate) fn evaluate_envelope_with_store(
     evaluate_validated_envelope(envelope, Some(snapshot.as_ref()))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-    fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
-        let digest = "a".repeat(64);
-        let guard_home = std::env::temp_dir().join(format!(
-            "hol-guard-native-edge-generation-test-{}-{}",
-            std::process::id(),
-            EDGE_FIXTURE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&guard_home).expect("create edge generation fixture");
-        std::fs::write(
-            guard_home.join("native-policy-generation.json"),
-            serde_json::to_vec(&serde_json::json!({
-                "schema": "hol-guard-native-policy-generation.v1",
-                "generation": 1,
-                "policy_digest": digest.clone(),
-            }))
-            .expect("encode edge generation fixture"),
-        )
-        .expect("write edge generation fixture");
-        GuardHookEnvelopeV2 {
-            schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
-            request_id: Some("edge-test".to_owned()),
-            harness: "Claude".to_owned(),
-            event: event.to_owned(),
-            raw_payload: payload,
-            deadline_budget_ms: Some(100),
-            policy_generation: 1,
-            policy_snapshot: serde_json::json!({
-                "schema": "hol-guard-native-policy.v1",
-                "generation": 1,
-                "policy_digest": digest,
-                "config_digest": "b".repeat(64),
-                "rule_digest": guard_rule_contract::rule_digest(),
-                "mode": "enforce"
-            }),
-            source: guard_contracts::GuardHookSourceMetadataV2 {
-                cwd: Some("/workspace".to_owned()),
-                home_dir: "/home/test".to_owned(),
-                guard_home: guard_home.to_string_lossy().into_owned(),
-                source_ref_external_allowed: false,
-            },
-        }
-    }
-
-    fn evaluate_isolated(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
-        let guard_home = std::path::PathBuf::from(&envelope.source.guard_home);
-        let result = validate_envelope_shape(&envelope)
-            .and_then(|_| evaluate_validated_envelope(envelope, None));
-        std::fs::remove_dir_all(guard_home).expect("remove edge generation fixture");
-        result
-    }
-
-    #[test]
-    fn normalizes_harness_event_and_extracts_pretool_command() {
-        let bytes = evaluate_isolated(envelope(
-            "pre_tool_use",
-            serde_json::json!({
-                "hook_event_name": "PreToolUse",
-                "tool_input": {"command": "pwd"}
-            }),
-        ))
-        .unwrap();
-        let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(result.harness, "claude-code");
-        assert_eq!(result.event_name, "PreToolUse");
-        assert_eq!(result.result["minimum_action"], "allow");
-    }
-
-    #[test]
-    fn rejects_declared_and_payload_event_mismatch() {
-        let error = evaluate_isolated(envelope(
-            "PreToolUse",
-            serde_json::json!({"hook_event_name": "PostToolUse"}),
-        ))
-        .unwrap_err();
-        assert_eq!(error, "native_hook_event_mismatch");
-    }
-
-    #[test]
-    fn rejects_conflicting_payload_event_aliases() {
-        let error = evaluate_isolated(envelope(
-            "PreToolUse",
-            serde_json::json!({
-                "event": "PreToolUse",
-                "hook_event_name": "PostToolUse",
-                "tool_input": {"command": "pwd"}
-            }),
-        ))
-        .unwrap_err();
-        assert_eq!(error, "native_hook_event_mismatch");
-    }
-
-    #[test]
-    fn rejects_unknown_harness_before_command_evaluation() {
-        let mut request = envelope(
-            "PreToolUse",
-            serde_json::json!({"tool_input": {"command": "pwd"}}),
-        );
-        request.harness = "unknown-agent".to_owned();
-        let error = evaluate_isolated(request).unwrap_err();
-        assert_eq!(error, "native_hook_harness_unsupported");
-    }
-
-    #[test]
-    fn rejects_malformed_source_reference_before_review() {
-        let error = evaluate_isolated(envelope(
-            "PostToolUse",
-            serde_json::json!({"guard_source_ref": {"path": 1}}),
-        ))
-        .unwrap_err();
-        assert_eq!(error, "native_hook_source_ref_invalid");
-    }
-
-    #[test]
-    fn evaluates_complete_cursor_file_envelope_as_native_generic_result() {
-        let bytes = evaluate_isolated(envelope(
-            "beforeReadFile",
-            serde_json::json!({
-                "event": "beforeReadFile",
-                "toolName": "read_file",
-                "toolInput": {"file_path": "README.md"}
-            }),
-        ))
-        .unwrap();
-        let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(result.event_name, "PreToolUse");
-        assert_eq!(result.result["schema"], "guard-pre-tool-result.v1");
-        assert_eq!(result.result["authority"], "rust");
-        assert_eq!(result.result["action"]["action_type"], "file_read");
-        assert_eq!(result.result["minimum_action"], "review");
-        assert!(result.result.get("raw_payload").is_none());
-    }
-
-    #[test]
-    fn evaluates_generic_pretool_for_supported_harness_aliases() {
-        for (harness, expected) in [
-            ("Claude", "claude-code"),
-            ("Codex", "codex"),
-            ("Cline", "cline"),
-            ("Cursor", "cursor"),
-            ("Copilot", "copilot"),
-            ("Grok", "grok"),
-            ("Z-Code", "zcode"),
-        ] {
-            let mut request = envelope(
-                "PreToolUse",
-                serde_json::json!({
-                    "hook_event_name": "PreToolUse",
-                    "toolName": "read_file",
-                    "toolInput": {"file_path": "README.md"}
-                }),
-            );
-            request.harness = harness.to_owned();
-            let bytes = evaluate_isolated(request).unwrap();
-            let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
-            assert_eq!(result.harness, expected);
-            assert_eq!(result.result["action"]["harness"], expected);
-            assert_eq!(result.result["action"]["action_type"], "file_read");
-            assert_eq!(result.result["minimum_action"], "review");
-        }
-    }
-
-    #[test]
-    fn unknown_and_ambiguous_pretool_payloads_never_receive_an_allow_floor() {
-        let unknown = evaluate_isolated(envelope(
-            "PreToolUse",
-            serde_json::json!({"toolName": "future_tool", "opaque": true}),
-        ))
-        .unwrap();
-        let unknown_result: GuardHookEdgeResultV2 = serde_json::from_slice(&unknown).unwrap();
-        assert_eq!(unknown_result.result["minimum_action"], "review");
-
-        let ambiguous = evaluate_isolated(envelope(
-            "PreToolUse",
-            serde_json::json!({"command": "pwd", "cmd": "whoami"}),
-        ))
-        .unwrap();
-        let ambiguous_result: GuardHookEdgeResultV2 = serde_json::from_slice(&ambiguous).unwrap();
-        assert_eq!(ambiguous_result.result["minimum_action"], "block");
-        assert_eq!(
-            ambiguous_result.result["reason_code"],
-            "native_pre_tool_ambiguous_payload"
-        );
-    }
+/// Evaluate against a snapshot while the policy store's request fence is
+/// held. Approval challenge creation uses this entry point so the action,
+/// snapshot, and derived bindings describe one coherent state.
+pub(crate) fn evaluate_envelope_with_snapshot(
+    envelope: GuardHookEnvelopeV2,
+    snapshot: &PolicySnapshotV3,
+) -> Result<Vec<u8>, String> {
+    validate_envelope_shape(&envelope)?;
+    evaluate_validated_envelope(envelope, Some(snapshot))
 }
+
+#[cfg(test)]
+#[path = "edge_tests.rs"]
+mod tests;

@@ -124,7 +124,7 @@ fn observe_pre_policy_floor_is_non_blocking_but_intrinsic_block_is_hard() {
 
 #[test]
 fn observe_preserves_every_intrinsic_non_allow_pre_floor() {
-    let mut observed_snapshot = snapshot(policy("block"));
+    let mut observed_snapshot = snapshot(policy("allow"));
     observed_snapshot.mode = "observe".into();
     for action in ["review", "require-reapproval", "sandbox-required", "block"] {
         let intrinsic = apply_pre_tool_policy(
@@ -146,6 +146,57 @@ fn observe_preserves_every_intrinsic_non_allow_pre_floor() {
     assert_eq!(malformed.minimum_action, "block");
     assert_eq!(malformed.decision, "deny");
     assert_eq!(malformed.reason_code, "native_pre_tool_malformed_payload");
+}
+
+#[test]
+fn observe_policy_block_raises_existing_review_to_non_overridable_floor() {
+    let mut observed_snapshot = snapshot(policy("block"));
+    observed_snapshot.mode = "observe".into();
+    let result = apply_pre_tool_policy(
+        &observed_snapshot,
+        &Value::Object(Map::new()),
+        generic_result("review"),
+    )
+    .unwrap();
+    assert_eq!(result.minimum_action, "block");
+    assert_eq!(result.policy_action, "block");
+    assert_eq!(result.decision, "deny");
+}
+
+#[test]
+fn action_floor_matrix_rejects_inconsistent_decision_fields() {
+    let mut policy_block = generic_result("review");
+    policy_block.policy_action = "block".into();
+    assert_eq!(
+        validate_pre_tool_result_matrix(&policy_block).unwrap_err(),
+        "native_policy_decision_inconsistent"
+    );
+
+    let mut allow_for_block = generic_result("block");
+    allow_for_block.decision = "allow".into();
+    assert_eq!(
+        validate_pre_tool_result_matrix(&allow_for_block).unwrap_err(),
+        "native_policy_decision_inconsistent"
+    );
+
+    let mut benign_warning = generic_result("warn");
+    benign_warning.explicitly_benign = true;
+    assert_eq!(
+        validate_pre_tool_result_matrix(&benign_warning).unwrap_err(),
+        "native_policy_decision_inconsistent"
+    );
+
+    for action in [
+        "allow",
+        "warn",
+        "review",
+        "require-reapproval",
+        "sandbox-required",
+        "block",
+    ] {
+        let result = generic_result(action);
+        assert!(validate_pre_tool_result_matrix(&result).is_ok(), "{action}");
+    }
 }
 
 fn post_request(payload: Value) -> NativeHookRequestV1 {

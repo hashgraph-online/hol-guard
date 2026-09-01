@@ -459,6 +459,12 @@ jobs:
         with:
           name: distributions
           path: base-dist/
+      - name: Verify release approval enrollment root pin
+        if: needs.build.outputs.channel != 'canary'
+        env:
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+        run: uv run --no-sync python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
       - name: Install pinned Rust target
         shell: bash
         env:
@@ -477,6 +483,8 @@ jobs:
         env:
           HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
           HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
           RUSTFLAGS: ${{ matrix.rustflags }}
           RUST_TARGET: ${{ matrix.target }}
           RUNTIME: ${{ matrix.runtime }}

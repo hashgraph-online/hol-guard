@@ -18,7 +18,9 @@ guard-rule-contract = { path = "../guard-rule-contract" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 getrandom.workspace = true
 hex.workspace = true
+fs2.workspace = true
 libc.workspace = true
+ring.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true

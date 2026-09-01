@@ -279,10 +279,13 @@
         "ci/native_runtime/**",
         "src/codex_plugin_scanner/guard/native_policy_test_support.py",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
+        "docs/guard/native-approval-enrollment.md",
         "scripts/ci/hook_data_plane_ownership_contract.py",
         "scripts/bench_guard_native_release_gate.py",
         "scripts/ci/rust_pretool_no_python_gate.py",
         "scripts/ci/rust_authority_ownership_gate.py",
+        "scripts/ci/native_approval_contract_gate.py",
+        ".github/workflows/publish.yml",
         "tests/test_native_hook_edge.py",
         "tests/test_native_pretool_generic.py"
       ],
@@ -312,7 +315,7 @@
         "rust/crates/guard-runtime/**",
         "rust/crates/guard-scanner/**"
       ],
-      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
+      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
       "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"
     },
     {
@@ -344,10 +347,13 @@
     ".github/workflows/rust-authority-ownership.yml",
     "ci/native_runtime/**",
     "docs/guard/contracts/hook-data-plane-ownership.v2.json",
-      "scripts/ci/hook_data_plane_ownership_contract.py",
+    "docs/guard/native-approval-enrollment.md",
+    "scripts/ci/hook_data_plane_ownership_contract.py",
     "scripts/bench_guard_native_release_gate.py",
     "scripts/ci/rust_pretool_no_python_gate.py",
     "scripts/ci/rust_authority_ownership_gate.py",
+    "scripts/ci/native_approval_contract_gate.py",
+    ".github/workflows/publish.yml",
     "tests/test_native_hook_edge.py",
     "tests/test_native_pretool_generic.py"
   ],

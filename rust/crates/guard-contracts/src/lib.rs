@@ -3,6 +3,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod approval_contracts;
+pub use approval_contracts::*;
+
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";
 pub const GUARD_HOOK_EDGE_RESULT_V2_SCHEMA: &str = "guard-hook-edge-result.v2";
@@ -27,7 +30,7 @@ pub struct GuardHookSourceMetadataV2 {
     pub source_ref_external_allowed: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct GuardHookEnvelopeV2 {
     pub schema: String,
@@ -104,22 +107,7 @@ pub enum PreToolOperationV1 {
     Unknown,
 }
 
-/// Bounded, typed action metadata.  This type is safe to place in a result:
-/// it contains no untrusted raw content and has no open-ended map.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct PreToolActionV1 {
-    pub schema: String,
-    pub version: u16,
-    pub harness: String,
-    pub event: String,
-    pub action_type: PreToolActionTypeV1,
-    pub operation: PreToolOperationV1,
-    pub bounded: bool,
-    pub sensitive_target: bool,
-}
-
-/// Versioned generic PreToolUse result.  Keep this contract independent of
+/// Versioned generic PreToolUse result. Keep this contract independent of
 /// harness JSON so adapters can only render the native minimum floor.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
