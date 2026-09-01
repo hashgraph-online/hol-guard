@@ -28,7 +28,6 @@ def prepare_native_hook_policy(
     if prepared_policy is not None:
         return True
     if hook_action_is_emergency_safe(payload, workspace=workspace_path):
-        daemon_server.hook_worker.metrics.record_route("native_degraded")
         return True
     daemon_server.hook_worker.metrics.record_route("native_fail_safe")
     handler._write_json(
