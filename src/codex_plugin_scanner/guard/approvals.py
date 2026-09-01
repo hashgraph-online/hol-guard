@@ -1512,7 +1512,10 @@ def _live_hook_verification(
             if harness == "cursor":
                 from .cursor_hook_health import cursor_runtime_hooks_verified
 
-                verified[harness] = cursor_runtime_hooks_verified(context)
+                proven = cursor_runtime_hooks_verified(context)
+                if proven is None:
+                    continue
+                verified[harness] = proven
                 continue
             if harness == "grok":
                 from .adapters.grok import grok_runtime_hooks_verified

@@ -148,6 +148,41 @@ def _looks_like_guard_codex_hook(blob: str) -> bool:
     return "codex_plugin_scanner.cli" in blob and "guard hook" in blob
 
 
+def _command_tokens(command: str) -> list[str]:
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.split()
+
+
+def _skip_leading_flags(tokens: Sequence[str]) -> list[str]:
+    rest = list(tokens)
+    while rest and rest[0].startswith("-") and rest[0] != "-c":
+        rest = rest[1:]
+    return rest
+
+
+def _is_live_guard_codex_hook_command(command: str) -> bool:
+    tokens = _command_tokens(command)
+    if not tokens:
+        return False
+    first = Path(tokens[0]).name.lower()
+    rest = tokens[1:]
+    if Path(tokens[0]).name == "codex_daemon_hook_bridge.py":
+        return True
+    if first.startswith("python"):
+        payload = _skip_leading_flags(rest)
+        if not payload:
+            return False
+        if payload[0] == "-c":
+            script = " ".join(payload[1:])
+            return "codex_plugin_scanner.cli" in script and "guard" in script.split() and "hook" in script.split()
+        return Path(payload[0]).name == "codex_daemon_hook_bridge.py"
+    if first in {"hol-guard", "hol-guard.exe"}:
+        return "hook" in rest and _has_codex_harness(" ".join(rest))
+    return False
+
+
 _HEALTH_INTERCEPT_EVENTS = ("PreToolUse", "PermissionRequest")
 
 
@@ -173,10 +208,11 @@ def _group_has_active_guard_shell_handler(group: Mapping[str, object]) -> bool:
             isinstance(handler, dict)
             and _hook_entry_is_active(handler)
             and isinstance(handler.get("command"), str)
-            and _looks_like_guard_codex_hook(str(handler.get("command")))
+            and _is_live_guard_codex_hook_command(str(handler.get("command")))
             for handler in handlers
         )
-    return _looks_like_guard_codex_hook(_hook_group_command_blob(group))
+    command = group.get("command")
+    return isinstance(command, str) and _is_live_guard_codex_hook_command(command)
 
 
 def live_guard_codex_hooks_intercept(hooks: object) -> bool:

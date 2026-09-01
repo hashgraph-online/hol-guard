@@ -7,13 +7,16 @@ from .adapters.cursor_hook_config import _json_object, live_guard_cursor_hooks_i
 from .adapters.cursor_hooks import cursor_hooks_path
 
 
-def cursor_runtime_hooks_verified(context: HarnessContext) -> bool:
+def cursor_runtime_hooks_verified(context: HarnessContext) -> bool | None:
     """Return whether live Cursor hooks still intercept Guard's blocking events."""
 
+    hooks_path = cursor_hooks_path(context)
+    if not hooks_path.is_file():
+        return None
     try:
-        payload = _json_object(cursor_hooks_path(context), recover_missing=True)
+        payload = _json_object(hooks_path, recover_missing=False)
     except RuntimeError:
-        return False
+        return None
     return live_guard_cursor_hooks_intercept(payload.get("hooks"))
 
 

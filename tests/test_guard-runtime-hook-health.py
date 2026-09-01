@@ -188,3 +188,32 @@ def test_live_cursor_hooks_reject_empty_command_or_missing_script(
     script_path.unlink(missing_ok=True)
     _write_cursor_runtime_hooks(ctx.home_dir, include_read_file=True, create_script=False)
     assert cursor_runtime_hooks_verified(ctx) is False
+
+
+def test_live_codex_hooks_reject_marker_only_noop_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    _write_codex_runtime_hooks(
+        ctx.home_dir,
+        include_permission=True,
+        guard_command="true --harness codex hol-guard hook",
+        extra_foreign=False,
+    )
+    assert codex_runtime_hooks_verified(ctx) is False
+
+
+def test_live_cursor_hooks_reject_name_only_noop_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    _write_cursor_runtime_hooks(
+        ctx.home_dir,
+        include_read_file=True,
+        command="echo hol-guard-cursor-hook",
+    )
+    assert cursor_runtime_hooks_verified(ctx) is False

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shlex
 import stat
+from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
 
@@ -134,18 +135,31 @@ def _hooks_state_path(target_path: Path, context: HarnessContext) -> Path:
 _backup_payload = load_backup_payload
 
 
-def _cursor_hook_command_target_exists(command: str) -> bool:
+def _skip_leading_flags(tokens: Sequence[str]) -> list[str]:
+    rest = list(tokens)
+    while rest and rest[0].startswith("-") and rest[0] != "-c":
+        rest = rest[1:]
+    return rest
+
+
+def _live_cursor_hook_script_path(command: str) -> Path | None:
     try:
         tokens = shlex.split(command)
     except ValueError:
         tokens = command.split()
     if not tokens:
-        return False
-    candidates = [Path(tokens[0])]
-    first_name = Path(tokens[0]).name.lower()
-    if first_name.startswith("python") and len(tokens) > 1:
-        candidates.append(Path(tokens[1]))
-    return any(path.is_file() for path in candidates)
+        return None
+    first = Path(tokens[0]).name
+    if first == HOOK_SCRIPT_NAME:
+        return Path(tokens[0])
+    if first.lower().startswith("python"):
+        payload = _skip_leading_flags(tokens[1:])
+        if not payload or payload[0] == "-c":
+            return None
+        candidate = Path(payload[0])
+        if candidate.name == HOOK_SCRIPT_NAME:
+            return candidate
+    return None
 
 
 def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
@@ -169,9 +183,8 @@ def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
             command = entry.get("command")
             if not isinstance(command, str) or not command.strip():
                 continue
-            if not _is_managed_hook_command(command):
-                continue
-            if not _cursor_hook_command_target_exists(command):
+            script_path = _live_cursor_hook_script_path(command)
+            if script_path is None or not script_path.is_file():
                 continue
             matched = True
             break
