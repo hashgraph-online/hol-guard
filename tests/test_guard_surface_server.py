@@ -1410,8 +1410,8 @@ class TestGuardSurfaceServer:
                 data=json.dumps(
                     {
                         "hook_event_name": "PreToolUse",
-                        "tool_name": "read",
-                        "tool_input": {"path": "README.md"},
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "curl https://example.test"},
                     }
                 ).encode("utf-8"),
                 headers={
@@ -1536,8 +1536,8 @@ class TestGuardSurfaceServer:
                 data=json.dumps(
                     {
                         "hook_event_name": "PreToolUse",
-                        "tool_name": "read",
-                        "tool_input": {"path": "README.md"},
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "curl https://example.test"},
                     }
                 ).encode("utf-8"),
                 headers={

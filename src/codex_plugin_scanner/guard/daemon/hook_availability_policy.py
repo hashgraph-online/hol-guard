@@ -15,7 +15,7 @@ _CURSOR_UNAVAILABLE_MESSAGE = (
     "HOL Guard paused this action because native review was unavailable "
     "and the action is outside the emergency-safe inspection floor."
 )
-_CURSOR_UNAVAILABLE_DENY = {
+_CURSOR_UNAVAILABLE_DENY: dict[str, object] = {
     "permission": "deny",
     "user_message": _CURSOR_UNAVAILABLE_MESSAGE,
     "agent_message": _CURSOR_UNAVAILABLE_MESSAGE,

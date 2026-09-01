@@ -243,7 +243,27 @@ def test_filesystem_root_workspace_rejects_relative_reads() -> None:
     assert hook_action_is_emergency_safe(payload, workspace=Path("/")) is False
 
 
-def test_inspection_without_target_is_not_emergency_safe() -> None:
+def test_tilde_and_home_paths_are_not_emergency_safe(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "cat ~/.bashrc"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "~/.ssh/id_ed25519"},
+            },
+            workspace=workspace,
+        )
+        is False
+    )
     payload = {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}}
     assert hook_action_is_emergency_safe(payload) is False
 

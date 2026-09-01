@@ -362,6 +362,8 @@ def _path_is_workspace_local(path: str, workspace: Path | None) -> bool:
     posix = path.strip().replace("\\", "/")
     if not posix or posix.startswith("//"):
         return False
+    if posix.startswith("~") or posix.lower().startswith("$home") or posix.lower().startswith("%userprofile%"):
+        return False
     forms = _posix_forms(posix)
     if not forms:
         return False
@@ -394,6 +396,8 @@ def _path_token_value(token: str) -> str:
 
 def _token_looks_like_path(token: str) -> bool:
     value = _path_token_value(token)
+    if value.startswith("~") or value.lower().startswith("$home") or value.lower().startswith("%userprofile%"):
+        return True
     if value in {"..", "."}:
         return True
     if token.startswith("-") and "=" not in token:
