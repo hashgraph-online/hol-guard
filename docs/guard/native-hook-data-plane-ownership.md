@@ -64,6 +64,39 @@ Rust raw envelope
 | Native command, policy, rules, runtime, scanner | Rust semantic | Complete supported hook authority |
 | Native hook core and secure filesystem | Rust I/O | Complete decision-critical I/O |
 
+## NHD-061–070 decision-critical I/O contract
+
+The `decision_critical_io` section of the v2 JSON contract makes this boundary
+machine-checkable. In `auto` and `force`, Rust exclusively owns:
+
+- PostToolUse source reads and bounded output extraction;
+- sensitive-path, symlink, regular-file, permission, and hard-link
+  classification;
+- pre/post file identity, replacement detection, hashing, and content
+  equivalence;
+- archive/decode/package inspection whenever such content is reachable from a
+  supported hook; and
+- policy-snapshot admission and its fail-closed decision binding.
+
+Python source readers and scanners remain compatibility-only (`off`/`shadow`)
+and differential-test fixtures. Python may inspect the package-bound native
+executable to establish transport identity, and the policy publisher may read
+configuration on its background thread; neither is a source decision or a
+request-time policy read. Unknown, changed, unreadable, oversized, malformed,
+or encoding-invalid input is not eligible for an allow result.
+
+`scripts/ci/rust_io_ownership_gate.py` builds an AST inventory of synchronous
+Python filesystem, hash, decode, and archive operations and walks supported
+hook entrypoints. `scripts/ci/rust_io_privacy_gate.py` statically checks route,
+metrics, journal, and enrichment serializers and dynamically probes raw source,
+command, secret, and private-path payloads. Both gates emit versioned,
+aggregate-only JSON evidence.
+
+Route and evidence artifacts contain only bounded dimensions, reason codes,
+counts, hashes, and booleans. They exclude raw payloads, source, commands,
+prompts, content, secrets, tokens, and paths. The `workspace_bound` boolean may
+record that a workspace was present without disclosing its name or location.
+
 ## Harness route inventory
 
 The v2 contract maps all harnesses in `HARNESS_CONTRACTS`, including harnesses

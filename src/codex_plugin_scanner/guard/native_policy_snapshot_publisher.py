@@ -83,15 +83,10 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             if self._started or self._closed:
                 return
             self._started = True
-        # Provision the verifier before the first client request can start a
-        # managed resident.  Publication still happens asynchronously, but a
-        # shadow/diagnostic caller cannot race resident startup against key
-        # creation.  Failures remain a barrier miss and are retried by the
-        # publisher thread; they never become a Python semantic fallback.
-        try:
-            self._provision_verifier_key()
-        except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as error:
-            self._record_error(str(error) or type(error).__name__)
+        # Startup only schedules publication.  Key derivation and policy
+        # compilation belong to the publisher thread so a hook cannot perform
+        # synchronous config/secret filesystem I/O while establishing its
+        # native decision route.
         with self._condition:
             if self._closed:
                 return
@@ -377,6 +372,10 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 renew_after_generation = self._renewal_after_generation
             publish_epoch = self._epoch
         try:
+            # Keep verifier provisioning and effective-policy compilation in
+            # the asynchronous publication worker.  A failure is a barrier
+            # miss and is retried; it never becomes a Python semantic fallback.
+            self._provision_verifier_key()
             context = self._publication_context()
             if context is None:
                 return

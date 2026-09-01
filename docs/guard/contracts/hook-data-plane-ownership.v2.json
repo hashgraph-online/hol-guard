@@ -65,6 +65,80 @@
     "runtime_download": false,
     "unsupported_platform": "deterministic_fail_safe"
   },
+  "decision_critical_io": {
+    "schema": "hol-guard.decision-critical-io.v1",
+    "native_authority": "rust",
+    "native_modes": ["auto", "force"],
+    "compatibility_modes": ["off", "shadow"],
+    "failure": "fail_closed",
+    "capabilities": [
+      {
+        "id": "post_tool_source_read",
+        "authority": "rust",
+        "rust_symbols": ["guard_secure_fs::read_bounded", "guard_hook_core::review_post_tool"],
+        "python_semantic_fallback": false,
+        "failure": "fail_closed"
+      },
+      {
+        "id": "sensitive_path_and_symlink_classification",
+        "authority": "rust",
+        "rust_symbols": ["guard_secure_fs::classify_source_path", "guard_secure_fs::contains_symlink_component"],
+        "python_semantic_fallback": false,
+        "failure": "fail_closed"
+      },
+      {
+        "id": "pre_post_identity_and_equivalence",
+        "authority": "rust",
+        "rust_symbols": ["guard_secure_fs::FileIdentity", "guard_hook_core::review_post_tool"],
+        "python_semantic_fallback": false,
+        "failure": "fail_closed"
+      },
+      {
+        "id": "archive_decode_package_inspection",
+        "authority": "rust_when_hook_reachable",
+        "rust_symbols": [
+          "guard_command::pretool::evaluate_pre_tool_envelope",
+          "guard_runtime::strict_json::parse",
+          "guard_hook_core::extract_payload_output"
+        ],
+        "python_semantic_fallback": false,
+        "failure": "fail_closed"
+      },
+      {
+        "id": "policy_snapshot_admission",
+        "authority": "rust",
+        "rust_symbols": [
+          "guard_runtime::policy_store::PolicySnapshotStore",
+          "guard_runtime::edge::evaluate_envelope_with_store"
+        ],
+        "python_semantic_fallback": false,
+        "python_decision_time_disk_io": false,
+        "failure": "fail_closed"
+      }
+    ]
+  },
+  "privacy_artifacts": {
+    "schema": "hol-guard.native-hook-io-privacy.v1",
+    "raw_source": false,
+    "raw_commands": false,
+    "excluded_fields": [
+      "raw_payload",
+      "command",
+      "prompt",
+      "path",
+      "source",
+      "content",
+      "secret",
+      "token",
+      "private_path"
+    ],
+    "serializers": [
+      "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
+      "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
+      "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+      "src/codex_plugin_scanner/guard/native_route_receipt.py"
+    ]
+  },
   "routes": [
     {
       "id": "http_pre_tool_use",
@@ -246,11 +320,13 @@
       "class": "python_control",
       "paths": [
         "src/codex_plugin_scanner/guard/approvals.py",
+        "src/codex_plugin_scanner/guard/**/approval*.py",
         "src/codex_plugin_scanner/guard/config.py",
         "src/codex_plugin_scanner/guard/config_mutation.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_*.py",
-        "src/codex_plugin_scanner/guard/store_approvals.py"
+        "src/codex_plugin_scanner/guard/store_approvals.py",
+        "src/codex_plugin_scanner/guard/**/continuation*.py"
       ],
       "current": "asynchronous effective-policy compilation/publication plus approval presentation, persistence, and continuation",
       "target": "asynchronous snapshot publication and approval presentation only"
@@ -276,16 +352,25 @@
         ".github/workflows/rust-daemon-edge-hardening.yml",
         ".github/workflows/rust-runtime.yml",
         ".github/workflows/rust-authority-ownership.yml",
+        ".github/workflows/rust-pretool-authority-acceptance.yml",
+        ".github/workflows/rust-posttool-authority-acceptance.yml",
+        ".github/workflows/native-release-contract.yml",
         "ci/native_runtime/**",
         "src/codex_plugin_scanner/guard/native_policy_test_support.py",
         "docs/guard/contracts/hook-data-plane-ownership.v2.json",
         "docs/guard/native-approval-enrollment.md",
         "scripts/ci/hook_data_plane_ownership_contract.py",
+        "scripts/ci/rust_io_ownership_gate.py",
+        "scripts/ci/rust_io_privacy_gate.py",
         "scripts/bench_guard_native_release_gate.py",
         "scripts/ci/rust_pretool_no_python_gate.py",
         "scripts/ci/rust_authority_ownership_gate.py",
         "scripts/ci/native_approval_contract_gate.py",
         ".github/workflows/publish.yml",
+        "scripts/verify_native_runtime_release.py",
+        "tests/test_rust_io_ownership_gate.py",
+        "tests/test_rust_io_privacy_gate.py",
+        ".github/workflows/decision-critical-io.yml",
         "tests/test_native_hook_edge.py",
         "tests/test_native_pretool_generic.py"
       ],
@@ -332,11 +417,16 @@
   ],
   "protected_change_globs": [
     "rust/**",
+    "rust/crates/*/src/approval*.rs",
+    "rust/crates/guard-runtime/src/resident_protocol.rs",
     "src/codex_plugin_scanner/guard/adapters/*.py",
     "src/codex_plugin_scanner/guard/daemon/*hook*.py",
     "src/codex_plugin_scanner/guard/daemon/server.py",
     "src/codex_plugin_scanner/guard/config.py",
+    "src/codex_plugin_scanner/guard/**/approval*.py",
+    "src/codex_plugin_scanner/guard/**/continuation*.py",
     "src/codex_plugin_scanner/guard/native_*.py",
+    "src/codex_plugin_scanner/guard/native_response_decoder.py",
     "src/codex_plugin_scanner/guard/runtime/hook_*.py",
     "src/codex_plugin_scanner/guard/runtime/source_paths.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
@@ -345,6 +435,10 @@
     ".github/workflows/rust-daemon-edge-hardening.yml",
     ".github/workflows/rust-runtime.yml",
     ".github/workflows/rust-authority-ownership.yml",
+    ".github/workflows/rust-pretool-authority-acceptance.yml",
+    ".github/workflows/rust-posttool-authority-acceptance.yml",
+    ".github/workflows/native-release-contract.yml",
+    ".github/workflows/decision-critical-io.yml",
     "ci/native_runtime/**",
     "docs/guard/contracts/hook-data-plane-ownership.v2.json",
     "docs/guard/native-approval-enrollment.md",
@@ -354,6 +448,11 @@
     "scripts/ci/rust_authority_ownership_gate.py",
     "scripts/ci/native_approval_contract_gate.py",
     ".github/workflows/publish.yml",
+    "scripts/ci/rust_io_ownership_gate.py",
+    "scripts/ci/rust_io_privacy_gate.py",
+    "scripts/verify_native_runtime_release.py",
+    "tests/test_rust_io_ownership_gate.py",
+    "tests/test_rust_io_privacy_gate.py",
     "tests/test_native_hook_edge.py",
     "tests/test_native_pretool_generic.py"
   ],
