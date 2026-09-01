@@ -76,6 +76,10 @@ class HookWorkerUnsupported(RuntimeError):  # noqa: N818
     """Raised only for explicit off/shadow compatibility requests."""
 
 
+class NativeApprovalCoordinationRequired(HookWorkerUnsupported):
+    """Rust required review; route to the approval-center coordinator."""
+
+
 _NATIVE_POLICY_READY_TIMEOUT_SECONDS = 0.25
 
 
@@ -297,6 +301,10 @@ class HookWorker:
             return post_tool_fail_safe_response(harness, reason_code="native_hook_edge_invalid_response")
         self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
+            if str(native_result.get("minimum_action") or "") == "review":
+                raise NativeApprovalCoordinationRequired(
+                    "native PreToolUse review requires approval coordination"
+                )
             return harness_json_from_native_pre_tool(native_harness, native_result)
         self._record_post_tool_activity(
             harness=native_harness,

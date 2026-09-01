@@ -34,6 +34,11 @@ from codex_plugin_scanner.guard.daemon import hook_process_spawner as hook_spawn
 from codex_plugin_scanner.guard.daemon import hook_process_worker as hook_worker_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.hook_process_protocol import capture_hook_command
+from codex_plugin_scanner.guard.daemon.hook_process_request import (
+    build_hook_process_review_request,
+    coerce_resident_hook_request,
+    compatibility_hook_args,
+)
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview, HookWorkerSlot
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
@@ -43,6 +48,81 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 class _MutableUnicodeBuffer(Protocol):
     value: str
+
+
+def test_native_review_floor_is_bound_to_private_worker_request(tmp_path: Path) -> None:
+    request = build_hook_process_review_request(
+        payload={"hook_event_name": "PreToolUse"},
+        harness="omp",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        hook_env={},
+        claim_saved_approval=True,
+        claimed_saved_allow_hash=None,
+        claimed_trusted_request_override=False,
+        claimed_approval_request_id=None,
+        native_minimum_action="review",
+    )
+
+    parsed = coerce_resident_hook_request(request)
+
+    assert parsed is not None
+    assert parsed.native_minimum_action == "review"
+    assert compatibility_hook_args(parsed).policy_action == "review"
+
+
+def test_private_worker_request_rejects_unknown_native_floor(tmp_path: Path) -> None:
+    request = build_hook_process_review_request(
+        payload={"hook_event_name": "PreToolUse"},
+        harness="omp",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=None,
+        hook_env={},
+        claim_saved_approval=True,
+        claimed_saved_allow_hash=None,
+        claimed_trusted_request_override=False,
+        claimed_approval_request_id=None,
+    )
+    request["native_minimum_action"] = "allow"
+
+    assert coerce_resident_hook_request(request) is None
+
+
+def test_native_review_floor_queues_resolvable_approval(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    request = build_hook_process_review_request(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_call_id": "native-review-1",
+            "tool_name": "bash",
+            "tool_input": {"command": "gh pr checks 1 --repo example/example"},
+        },
+        harness="omp",
+        home_dir=tmp_path / "home",
+        guard_home=guard_home,
+        workspace=tmp_path / "workspace",
+        hook_env={},
+        claim_saved_approval=True,
+        claimed_saved_allow_hash=None,
+        claimed_trusted_request_override=False,
+        claimed_approval_request_id=None,
+        native_minimum_action="review",
+    )
+
+    result = hook_entrypoint_module._run_resident_hook_request(  # pyright: ignore[reportPrivateUsage]
+        request,
+        stores={},
+        hook_workers={},
+        configured_guard_home=str(guard_home),
+    )
+    payload = result.get("payload")
+
+    assert isinstance(payload, dict)
+    assert payload.get("approval_request_id")
+    assert payload.get("approval_url")
+    assert payload.get("approval_center_url")
 
 
 def test_default_review_deadline_stays_inside_pi_host_budget() -> None:

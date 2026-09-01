@@ -182,6 +182,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
         claimed_saved_allow_hash: str | None = None,
         claimed_trusted_request_override: bool = False,
         claimed_approval_request_id: str | None = None,
+        native_minimum_action: str | None = None,
         _transient_not_ready_retries: int = _HOOK_PROCESS_TRANSIENT_NOT_READY_RETRIES,
     ) -> HookProcessReview:
         with self._state_lock:
@@ -206,6 +207,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
             claimed_saved_allow_hash=claimed_saved_allow_hash,
             claimed_trusted_request_override=claimed_trusted_request_override,
             claimed_approval_request_id=claimed_approval_request_id,
+            native_minimum_action=native_minimum_action,
         )
         try:
             if review_deadline <= time.monotonic():
@@ -303,6 +305,7 @@ class HookProcessRunner(HookProcessRunnerLifecycleMixin):
                     claimed_saved_allow_hash=claimed_saved_allow_hash,
                     claimed_trusted_request_override=claimed_trusted_request_override,
                     claimed_approval_request_id=claimed_approval_request_id,
+                    native_minimum_action=native_minimum_action,
                     _transient_not_ready_retries=_transient_not_ready_retries - 1,
                 )
             return self._terminal_failed_review(typed_result.get("route"), reason_code)

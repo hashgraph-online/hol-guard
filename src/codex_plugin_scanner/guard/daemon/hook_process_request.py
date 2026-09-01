@@ -27,6 +27,7 @@ def build_hook_process_review_request(
     claimed_saved_allow_hash: str | None,
     claimed_trusted_request_override: bool,
     claimed_approval_request_id: str | None,
+    native_minimum_action: str | None = None,
 ) -> dict[str, object]:
     return {
         "payload": dict(payload),
@@ -39,6 +40,7 @@ def build_hook_process_review_request(
         "claimed_saved_allow_hash": claimed_saved_allow_hash,
         "claimed_trusted_request_override": claimed_trusted_request_override,
         "claimed_approval_request_id": claimed_approval_request_id,
+        "native_minimum_action": native_minimum_action,
     }
 
 
@@ -63,6 +65,7 @@ class ResidentHookRequest:
     claimed_saved_allow_hash: str | None
     claimed_trusted_request_override: bool
     claimed_approval_request_id: str | None
+    native_minimum_action: str | None
 
 
 def coerce_resident_hook_request(request: dict[str, object]) -> ResidentHookRequest | None:
@@ -75,6 +78,7 @@ def coerce_resident_hook_request(request: dict[str, object]) -> ResidentHookRequ
     claimed_saved_allow_hash = request.get("claimed_saved_allow_hash")
     claimed_trusted_request_override = request.get("claimed_trusted_request_override", False)
     claimed_approval_request_id = request.get("claimed_approval_request_id")
+    native_minimum_action = request.get("native_minimum_action")
     typed_payload = as_string_object_dict(payload)
     if typed_payload is None or not isinstance(harness, str):
         return None
@@ -88,6 +92,9 @@ def coerce_resident_hook_request(request: dict[str, object]) -> ResidentHookRequ
         return None
     if claimed_approval_request_id is not None and not isinstance(claimed_approval_request_id, str):
         return None
+    if native_minimum_action not in {None, "review"}:
+        return None
+    typed_native_minimum_action = native_minimum_action if isinstance(native_minimum_action, str) else None
     return ResidentHookRequest(
         payload=typed_payload,
         harness=harness,
@@ -98,6 +105,7 @@ def coerce_resident_hook_request(request: dict[str, object]) -> ResidentHookRequ
         claimed_saved_allow_hash=claimed_saved_allow_hash,
         claimed_trusted_request_override=claimed_trusted_request_override,
         claimed_approval_request_id=claimed_approval_request_id,
+        native_minimum_action=typed_native_minimum_action,
     )
 
 
@@ -141,7 +149,7 @@ def compatibility_hook_args(parsed: ResidentHookRequest) -> Namespace:
         harness=parsed.harness,
         artifact_id=None,
         artifact_name=None,
-        policy_action=None,
+        policy_action=parsed.native_minimum_action,
         event_file=None,
         json=True,
     )

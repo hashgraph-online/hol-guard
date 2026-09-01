@@ -6011,15 +6011,35 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None = None,
     ) -> None:
         if self._hook_fast_path_enabled() or _native_mode_requires_rust():
-            result = self._handle_runtime_hook_fast(
-                payload,
-                params,
-                default_harness=default_harness,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-                deadline=deadline,
-            )
+            from .hook_worker import NativeApprovalCoordinationRequired
+
+            try:
+                result = self._handle_runtime_hook_fast(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    deadline=deadline,
+                )
+            except NativeApprovalCoordinationRequired:
+                # Rust remains authoritative for allow/block and failures. Its
+                # explicit review floor uses the established approval delivery
+                # path so harnesses receive a resolvable request instead of a
+                # terminal denial with no approval URL.
+                self._handle_runtime_hook_compatibility_cli(
+                    payload,
+                    params,
+                    hook_env=hook_env,
+                    default_harness=default_harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    deadline=deadline,
+                    native_minimum_action="review",
+                )
+                return
             if result is not None:
                 if deadline is not None and time.monotonic() >= deadline:
                     result = self._runtime_hook_fail_safe_response(
@@ -6073,7 +6093,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         deadline: float | None,
     ) -> dict[str, object] | None:
         """Try the resident hook worker; only explicit rollback may fall back."""
-        from .hook_worker import HookWorkerUnsupported
+        from .hook_worker import HookWorkerUnsupported, NativeApprovalCoordinationRequired
 
         daemon_server = self._daemon_server()
         effective_home_dir = Path(home_dir) if home_dir is not None else daemon_server.home_dir
@@ -6090,6 +6110,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace=Path(workspace) if workspace else None,
                 deadline=deadline,
             )
+        except NativeApprovalCoordinationRequired:
+            raise
         except HookWorkerUnsupported:
             if _native_mode_requires_rust():
                 return self._runtime_hook_fail_safe_response(
@@ -6129,6 +6151,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         guard_home: str | None,
         workspace: str | None,
         deadline: float | None,
+        native_minimum_action: str | None = None,
     ) -> None:
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = runtime_harness or default_harness
@@ -6175,6 +6198,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace=workspace_path,
                 hook_env=hook_env,
                 deadline=process_deadline,
+                native_minimum_action=native_minimum_action,
             )
         scheduler_stats = daemon_server.runtime_hook_process_scheduler.stats()
         daemon_server.hook_process_runner.observe_load(

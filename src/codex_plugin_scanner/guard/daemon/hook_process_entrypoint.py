@@ -230,7 +230,9 @@ def _run_resident_hook_request(
     store_key = str(parsed.guard_home)
     store, context = resident_hook_store_and_context(parsed, stores)
     event_name = runtime_hook_event_name(parsed.payload)
-    if _native_mode_requires_rust() or event_name in {"PreToolUse", "PostToolUse"}:
+    if parsed.native_minimum_action is None and (
+        _native_mode_requires_rust() or event_name in {"PreToolUse", "PostToolUse"}
+    ):
         worker = hook_workers.get(store_key)
         if worker is None:
             worker = HookWorker(store=store)

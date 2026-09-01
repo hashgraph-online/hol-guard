@@ -1700,6 +1700,42 @@ class TestGuardSurfaceServer:
         assert stats["completed"] == 2
         assert stats["rejected"] == {}
 
+    def test_native_review_routes_to_approval_coordinator(self, monkeypatch) -> None:
+        from codex_plugin_scanner.guard.daemon.hook_worker import NativeApprovalCoordinationRequired
+
+        handler_type = daemon_server_module._GuardDaemonHandler
+        handler = object.__new__(handler_type)
+        coordinated: list[tuple[dict[str, object], object]] = []
+
+        monkeypatch.setattr(handler_type, "_hook_fast_path_enabled", lambda _self: True)
+        monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
+
+        def native_review(*_args, **_kwargs):
+            raise NativeApprovalCoordinationRequired("review")
+
+        def coordinate(_self, payload, _params, **kwargs):
+            coordinated.append((payload, kwargs.get("native_minimum_action")))
+
+        monkeypatch.setattr(handler_type, "_handle_runtime_hook_fast", native_review)
+        monkeypatch.setattr(handler_type, "_handle_runtime_hook_compatibility_cli", coordinate)
+
+        payload = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "bash",
+            "tool_input": {"command": "gh pr checks 1 --repo example/example"},
+        }
+        handler._execute_runtime_hook(
+            payload,
+            {},
+            hook_env={},
+            default_harness="omp",
+            home_dir=None,
+            guard_home=None,
+            workspace=None,
+        )
+
+        assert coordinated == [(payload, "review")]
+
     def test_guard_daemon_native_dispatch_keeps_referenced_payload_opaque(
         self,
         tmp_path,

@@ -13,7 +13,11 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from codex_plugin_scanner.guard.daemon.hook_worker import (
+    HookWorker,
+    HookWorkerUnsupported,
+    NativeApprovalCoordinationRequired,
+)
 from codex_plugin_scanner.guard.native_route_receipt import (
     native_hook_route,
     record_native_hook_route,
@@ -104,7 +108,7 @@ def test_hook_worker_returns_native_allow(
     assert hook_output["permissionDecision"] == "allow"
 
 
-def test_hook_worker_native_review_does_not_escape_to_python_semantics(
+def test_hook_worker_native_review_routes_to_approval_coordination(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -125,18 +129,16 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
     reset_native_hook_route()
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
 
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
-        params={},
-        default_harness="codex",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard-home",
-        workspace=tmp_path / "workspace",
-    )
+    with pytest.raises(NativeApprovalCoordinationRequired):
+        worker.review_http_payload(
+            payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
+            params={},
+            default_harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+        )
 
-    hook_output = result["hookSpecificOutput"]
-    assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "deny"
     assert native_hook_route() == "native_resident"
 
 
