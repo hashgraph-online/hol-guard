@@ -27,7 +27,6 @@ pub(super) fn write_platform_secret_for_v4(account: &str, value: &str) -> Result
 }
 
 const STATE_VERSION: u16 = 4;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
 const SERVICE_NAME: &str = "org.hashgraphonline.hol-guard.native-approval-enrollment.v1";
 const ACCOUNT_DOMAIN: &[u8] = b"hol-guard-native-approval-enrollment-account-v1\0";
 const DEVICE_ACCOUNT_DOMAIN: &[u8] = b"hol-guard-native-approval-device-v1\0";

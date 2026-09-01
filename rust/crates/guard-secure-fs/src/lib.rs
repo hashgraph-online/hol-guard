@@ -172,11 +172,9 @@ fn identity(metadata: &Metadata) -> FileIdentity {
 fn map_secure_open_error(error: SecureOpenError) -> SecureReadError {
     match error {
         SecureOpenError::PathChanged => SecureReadError::PathChanged,
-        #[cfg(unix)]
         SecureOpenError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
             SecureReadError::PermissionDenied
         }
-        #[cfg(unix)]
         SecureOpenError::Io(_) => SecureReadError::ReadFailed,
     }
 }
@@ -257,7 +255,6 @@ mod tests {
         temporary_root.join(format!("guard-secure-fs-{name}-{}", std::process::id()))
     }
 
-    #[cfg(unix)]
     #[test]
     fn bounded_read_hashes_regular_file() {
         let dir = fixture_root("read");
