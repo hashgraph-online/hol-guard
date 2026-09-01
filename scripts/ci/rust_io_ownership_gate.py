@@ -216,24 +216,20 @@ def _root_record(root: Path, spec: RootSpec, records: dict[tuple[str, str], list
 def _calls(record: FunctionRecord) -> tuple[str, ...]:
     names: list[str] = []
     for node in ast.walk(record.node):
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                name = node.func.id
-            elif isinstance(node.func, ast.Attribute):
-                chain = _attribute_chain(node.func)
-                if len(chain) == 2 and chain[0] in {"self", "cls"}:
-                    name = node.func.attr
-                elif len(chain) >= 2:
-                    # Keep qualified calls so the resolver can follow
-                    # repository-module aliases instead of silently dropping
-                    # potentially decision-critical helpers.
-                    name = ".".join(chain)
-                else:
-                    name = None
-            else:
-                name = None
-            if name is not None:
-                names.append(name)
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name):
+            names.append(node.func.id)
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        chain = _attribute_chain(node.func)
+        if len(chain) == 2 and chain[0] in {"self", "cls"}:
+            names.append(node.func.attr)
+        elif len(chain) >= 2:
+            # Keep qualified calls so the resolver can follow repository-module
+            # aliases instead of silently dropping decision-critical helpers.
+            names.append(".".join(chain))
     return tuple(names)
 
 
