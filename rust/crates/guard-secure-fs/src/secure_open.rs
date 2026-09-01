@@ -1,13 +1,15 @@
-use std::fs::{self, File, Metadata};
+use std::fs::File;
+#[cfg(unix)]
+use std::fs::{self, Metadata};
 use std::io;
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::{Component, PathBuf};
 
 #[cfg(unix)]
 use nix::fcntl::{open, openat, OFlag};
 #[cfg(unix)]
 use nix::sys::stat::Mode;
-#[cfg(not(unix))]
-use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
@@ -89,8 +91,9 @@ fn same_unix_directory_identity(expected: &Metadata, actual: &Metadata) -> bool 
 }
 
 #[cfg(not(unix))]
-pub(crate) fn secure_open(path: &Path, _canonical_path: &Path) -> Result<File, SecureOpenError> {
-    let mut options = OpenOptions::new();
-    options.read(true);
-    options.open(path).map_err(SecureOpenError::Io)
+pub(crate) fn secure_open(_path: &Path, _canonical_path: &Path) -> Result<File, SecureOpenError> {
+    // Opening the caller-provided path directly would reintroduce a TOCTOU
+    // window. Keep non-Unix platforms fail-closed until they have an
+    // equivalent descriptor/handle-bound path walk.
+    Err(SecureOpenError::PathChanged)
 }

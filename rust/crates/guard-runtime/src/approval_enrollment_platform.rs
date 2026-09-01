@@ -3,6 +3,7 @@ use std::io::{ErrorKind, Write};
 #[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use super::{MAX_SECRET_TEXT_BYTES, SERVICE_NAME};
 
 #[cfg(target_os = "macos")]

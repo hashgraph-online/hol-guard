@@ -27,7 +27,6 @@ if __package__ is None:
 
 from scripts.ci.rust_io_ownership_resolver import resolve_call
 
-
 SCHEMA: Final = "hol-guard.decision-critical-io.v1"
 NATIVE_MODES: Final = frozenset({"auto", "force"})
 COMPATIBILITY_MODES: Final = frozenset({"off", "shadow"})
@@ -220,12 +219,17 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name):
                 name = node.func.id
-            elif (
-                isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id in {"self", "cls"}
-            ):
-                name = node.func.attr
+            elif isinstance(node.func, ast.Attribute):
+                chain = _attribute_chain(node.func)
+                if len(chain) == 2 and chain[0] in {"self", "cls"}:
+                    name = node.func.attr
+                elif len(chain) >= 2:
+                    # Keep qualified calls so the resolver can follow
+                    # repository-module aliases instead of silently dropping
+                    # potentially decision-critical helpers.
+                    name = ".".join(chain)
+                else:
+                    name = None
             else:
                 name = None
             if name is not None:

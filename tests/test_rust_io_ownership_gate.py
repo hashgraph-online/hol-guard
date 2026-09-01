@@ -81,3 +81,82 @@ def test_gate_rejects_synchronous_policy_compilation(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="decision-time config or secret I/O"):
         MODULE.validate(tmp_path)
+
+
+def _write_guard_fixture(root: Path, name: str, source: str) -> str:
+    relative = f"src/codex_plugin_scanner/guard/{name}.py"
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8")
+    return relative
+
+
+def test_resolver_follows_qualified_repository_module_alias(tmp_path: Path) -> None:
+    helper_path = _write_guard_fixture(
+        tmp_path,
+        "qualified_helper",
+        "def read_source() -> str:\n    return 'source'\n",
+    )
+    caller_path = _write_guard_fixture(
+        tmp_path,
+        "qualified_caller",
+        "from . import qualified_helper\n\n"
+        "def call() -> str:\n    return qualified_helper.read_source()\n",
+    )
+    records = MODULE._function_map(tmp_path)
+    caller = records[(caller_path, "call")][0]
+
+    assert "qualified_helper.read_source" in MODULE._calls(caller)
+    resolved = MODULE.resolve_call(tmp_path, caller, "qualified_helper.read_source", records)
+    assert resolved is not None
+    assert resolved.path == helper_path
+
+
+def test_resolver_uses_only_imports_in_the_caller_scope(tmp_path: Path) -> None:
+    first_helper = _write_guard_fixture(
+        tmp_path,
+        "first_helper",
+        "def read_source() -> str:\n    return 'first'\n",
+    )
+    second_helper = _write_guard_fixture(
+        tmp_path,
+        "second_helper",
+        "def read_source() -> str:\n    return 'second'\n",
+    )
+    caller_path = _write_guard_fixture(
+        tmp_path,
+        "scoped_caller",
+        "from .first_helper import read_source\n\n"
+        "def call() -> str:\n    return read_source()\n\n"
+        "def unrelated() -> str:\n"
+        "    from .second_helper import read_source\n"
+        "    return read_source()\n",
+    )
+    records = MODULE._function_map(tmp_path)
+
+    call = records[(caller_path, "call")][0]
+    unrelated = records[(caller_path, "unrelated")][0]
+    resolved_call = MODULE.resolve_call(tmp_path, call, "read_source", records)
+    resolved_unrelated = MODULE.resolve_call(tmp_path, unrelated, "read_source", records)
+
+    assert resolved_call is not None and resolved_call.path == first_helper
+    assert resolved_unrelated is not None and resolved_unrelated.path == second_helper
+
+
+def test_resolver_fails_closed_for_unknown_symbol_on_repository_module(tmp_path: Path) -> None:
+    _write_guard_fixture(
+        tmp_path,
+        "known_helper",
+        "def other() -> str:\n    return 'other'\n",
+    )
+    caller_path = _write_guard_fixture(
+        tmp_path,
+        "unknown_symbol_caller",
+        "from . import known_helper\n\n"
+        "def call() -> str:\n    return known_helper.read_source()\n",
+    )
+    records = MODULE._function_map(tmp_path)
+    caller = records[(caller_path, "call")][0]
+
+    with pytest.raises(RuntimeError, match="unresolved repository-qualified helper call"):
+        MODULE.resolve_call(tmp_path, caller, "known_helper.read_source", records)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, TypeVar
 
@@ -104,7 +105,26 @@ def _import_target_path(
         base = root / "src"
     if not node.module and imported_name:
         parts = (imported_name,)
-    return _module_file(root, (base / Path(*parts)).relative_to(root))
+    try:
+        relative_target = (base / Path(*parts)).relative_to(root)
+    except ValueError:
+        return None
+    return _module_file(root, relative_target)
+
+
+def _repository_module_path(root: Path, module_name: str) -> str | None:
+    """Resolve a dotted import to a repository-relative module file."""
+
+    parts = tuple(part for part in module_name.split(".") if part)
+    if not parts:
+        return None
+    for base in (root / "src", root):
+        target = base.joinpath(*parts)
+        relative_target = target.relative_to(root)
+        resolved = _module_file(root, relative_target)
+        if resolved is not None:
+            return resolved
+    return None
 
 
 def _resolve_exported_symbol(
@@ -146,29 +166,141 @@ def _resolve_exported_symbol(
     return None
 
 
+@dataclass(frozen=True, slots=True)
+class _VisibleImport:
+    node: ast.Import | ast.ImportFrom
+    scope: int
+
+
+def _function_scopes(tree: ast.Module, qualname: str) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...]:
+    """Return enclosing function scopes for a qualified function name."""
+
+    def visit(
+        body: list[ast.stmt],
+        prefix: str,
+        enclosing: tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...],
+    ) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...] | None:
+        for item in body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                current = f"{prefix}.{item.name}" if prefix else item.name
+                if current == qualname:
+                    return (*enclosing, item)
+                if qualname.startswith(f"{current}."):
+                    nested = visit(item.body, current, (*enclosing, item))
+                    if nested is not None:
+                        return nested
+            elif isinstance(item, ast.ClassDef):
+                current = f"{prefix}.{item.name}" if prefix else item.name
+                if qualname.startswith(f"{current}."):
+                    nested = visit(item.body, current, enclosing)
+                    if nested is not None:
+                        return nested
+        return None
+
+    return visit(tree.body, "", ()) or ()
+
+
+def _scope_imports(body: list[ast.stmt]) -> tuple[ast.Import | ast.ImportFrom, ...]:
+    """Collect imports in one lexical scope, excluding nested scopes."""
+
+    imports: list[ast.Import | ast.ImportFrom] = []
+
+    class Collector(ast.NodeVisitor):
+        def visit_Import(self, node: ast.Import) -> None:
+            imports.append(node)
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            imports.append(node)
+
+        def visit_FunctionDef(self, _node: ast.FunctionDef) -> None:
+            return
+
+        def visit_AsyncFunctionDef(self, _node: ast.AsyncFunctionDef) -> None:
+            return
+
+        def visit_ClassDef(self, _node: ast.ClassDef) -> None:
+            return
+
+        def visit_Lambda(self, _node: ast.Lambda) -> None:
+            return
+
+    collector = Collector()
+    for statement in body:
+        collector.visit(statement)
+    return tuple(imports)
+
+
+def _visible_imports(root: Path, record: FunctionRecordLike) -> tuple[_VisibleImport, ...]:
+    """Return module and enclosing-function imports visible to ``record``."""
+
+    tree = ast.parse(_read(root / record.path), filename=record.path)
+    visible = [_VisibleImport(node, 0) for node in _scope_imports(tree.body)]
+    for scope, function in enumerate(_function_scopes(tree, record.qualname), start=1):
+        visible.extend(_VisibleImport(node, scope) for node in _scope_imports(function.body))
+    return tuple(visible)
+
+
+def _qualified_parts(name: str) -> tuple[str, str] | None:
+    parts = name.split(".")
+    if len(parts) < 2 or any(not part for part in parts):
+        return None
+    return parts[0], parts[-1]
+
+
 def imported_symbol_path(root: Path, record: FunctionRecordLike, name: str) -> str | None:
     """Return the repository path imported for ``name`` at a call site."""
 
-    tree = ast.parse(_read(root / record.path), filename=record.path)
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        for alias in node.names:
-            local_name = alias.asname or alias.name
-            if alias.name != "*" and local_name != name:
-                continue
-            if alias.name == "*":
-                target = _import_target_path(root, record.path, node)
+    qualified = _qualified_parts(name)
+    binding_name, symbol_name = qualified or (name, name)
+    imports = sorted(_visible_imports(root, record), key=lambda item: (item.scope, item.node.lineno))
+    for visible in reversed(imports):
+        node = visible.node
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if qualified is not None:
+                    local_name = alias.asname or alias.name
+                    if alias.name == "*" or local_name != binding_name:
+                        continue
+                    target = _import_target_path(root, record.path, node, alias.name)
+                    if target is None:
+                        continue
+                    resolved = _resolve_exported_symbol(root, target, symbol_name, set())
+                    if resolved is None:
+                        raise RuntimeError(
+                            f"unresolved repository-qualified helper call {name!r} "
+                            f"from {record.path}:{record.qualname}"
+                        )
+                    return resolved
+                else:
+                    local_name = alias.asname or alias.name
+                    if alias.name != "*" and local_name != name:
+                        continue
+                    target = _import_target_path(root, record.path, node, alias.name if alias.name != "*" else None)
+                    if target is None:
+                        continue
+                    if alias.name == "*":
+                        resolved = _resolve_exported_symbol(root, target, name, set())
+                        if resolved is not None:
+                            return resolved
+                    else:
+                        return _resolve_exported_symbol(root, target, alias.name, set()) or target
+        else:
+            for alias in node.names:
+                local_name = alias.asname or alias.name.split(".", maxsplit=1)[0]
+                if local_name != binding_name:
+                    continue
+                target = _repository_module_path(root, alias.name if alias.asname else local_name)
                 if target is None:
                     continue
-                resolved = _resolve_exported_symbol(root, target, name, set())
-                if resolved is not None:
-                    return resolved
-                continue
-            target = _import_target_path(root, record.path, node, alias.name)
-            if target is None:
-                continue
-            return _resolve_exported_symbol(root, target, alias.name, set()) or target
+                if qualified is None:
+                    return target
+                resolved = _resolve_exported_symbol(root, target, symbol_name, set())
+                if resolved is None:
+                    raise RuntimeError(
+                        f"unresolved repository-qualified helper call {name!r} "
+                        f"from {record.path}:{record.qualname}"
+                    )
+                return resolved
     return None
 
 
@@ -180,8 +312,13 @@ def resolve_call(
 ) -> RecordT | None:
     """Resolve a call or fail closed when duplicate helpers remain ambiguous."""
 
-    if name in _local_binding_names(record):
+    if "." not in name and name in _local_binding_names(record):
         return None
+    imported_path = imported_symbol_path(root, record, name)
+    if "." in name:
+        if imported_path is None:
+            return None
+        name = name.rsplit(".", 1)[-1]
     matches = [
         candidate
         for (_path, candidate_name), values in records.items()
@@ -190,7 +327,6 @@ def resolve_call(
     ]
     if not matches:
         return None
-    imported_path = imported_symbol_path(root, record, name)
     if imported_path is not None:
         imported_matches = [candidate for candidate in matches if candidate.path == imported_path]
         if len(imported_matches) == 1:
