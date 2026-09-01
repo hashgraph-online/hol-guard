@@ -220,7 +220,14 @@ def _hook_cli_graph_failures(root: Path) -> list[str]:
         failures.append("CLI hook command entrypoint is missing")
         return failures
     load_call = _called_node(hook_command, "_load_hook_payload")
-    native_call = _called_node(hook_command, "try_native_or_source_ref_hook")
+    native_calls = [
+        child
+        for child in ast.walk(hook_command)
+        if isinstance(child, ast.Call)
+        and isinstance(child.func, ast.Name)
+        and child.func.id == "try_native_or_source_ref_hook"
+    ]
+    native_call = min(native_calls, key=lambda child: child.lineno, default=None)
     hydrate_call = _called_node(hook_command, "hydrate_hook_payload_reference")
     normalize_call = _called_node(hook_command, "_normalize_hook_payload")
     normalize_value = _keyword_value(load_call, "normalize") if load_call is not None else None

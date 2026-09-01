@@ -9,6 +9,7 @@ import os
 import signal
 import time
 from contextlib import suppress
+from dataclasses import replace
 from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, cast
@@ -219,7 +220,13 @@ def _run_resident_hook_request(
     from ..cli.commands_hook import _run_guard_hook_command
     from ..cli.commands_support_connect import _synced_policy_payload
     from ..config import load_guard_config, overlay_synced_guard_policy
-    from .hook_worker import HookWorker, HookWorkerUnsupported, post_tool_fail_safe_response, runtime_hook_event_name
+    from .hook_worker import (
+        HookWorker,
+        HookWorkerUnsupported,
+        NativeApprovalCoordinationRequired,
+        post_tool_fail_safe_response,
+        runtime_hook_event_name,
+    )
 
     parsed = coerce_resident_hook_request(request)
     if parsed is None:
@@ -246,6 +253,8 @@ def _run_resident_hook_request(
                 guard_home=parsed.guard_home,
                 workspace=parsed.workspace,
             )
+        except NativeApprovalCoordinationRequired:
+            parsed = replace(parsed, native_minimum_action="review")
         except HookWorkerUnsupported:
             if _native_mode_requires_rust():
                 record_native_hook_route("native_fail_safe")

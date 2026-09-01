@@ -8,7 +8,7 @@ from typing import Any
 
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
-from ..daemon.hook_worker import HookWorker, HookWorkerUnsupported
+from ..daemon.hook_worker import HookWorker, HookWorkerUnsupported, NativeApprovalCoordinationRequired
 from ..daemon.hook_worker_responses import post_tool_fail_safe_response
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..native_route_receipt import record_python_semantic_hook_route
@@ -45,6 +45,8 @@ def try_native_hook_authority(
             guard_home=guard_home,
             workspace=workspace,
         )
+    except NativeApprovalCoordinationRequired:
+        raise
     except HookWorkerUnsupported:
         return None
     except Exception:

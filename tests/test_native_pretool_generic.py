@@ -319,6 +319,31 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
     assert response["decision"] == "block"
 
 
+def test_direct_cli_preserves_native_review_coordination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ReviewWorker:
+        def __init__(self, *, store: object) -> None:
+            del store
+
+        def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
+            raise NativeApprovalCoordinationRequired("review required")
+
+    monkeypatch.setattr(commands_hook_native_authority, "_native_mode_requires_rust", lambda: True)
+    monkeypatch.setattr(commands_hook_native_authority, "HookWorker", ReviewWorker)
+
+    with pytest.raises(NativeApprovalCoordinationRequired):
+        commands_hook_native_authority.try_native_hook_authority(
+            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "gh pr checks 1"}},
+            harness="omp",
+            home_dir=tmp_path / "home",
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+            store=GuardStore(tmp_path / "guard-home"),
+        )
+
+
 def test_cli_frames_raw_payload_before_harness_normalization(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

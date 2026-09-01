@@ -129,6 +129,58 @@ def test_native_review_floor_queues_resolvable_approval(
     assert payload.get("approval_center_url")
 
 
+def test_resident_native_review_queues_resolvable_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
+
+    class ReviewWorker:
+        def __init__(self, *, store: object) -> None:
+            del store
+
+        def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
+            from codex_plugin_scanner.guard.daemon.hook_worker import NativeApprovalCoordinationRequired
+
+            raise NativeApprovalCoordinationRequired("review required")
+
+    monkeypatch.setattr(hook_entrypoint_module, "HookWorker", ReviewWorker, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.HookWorker",
+        ReviewWorker,
+    )
+    guard_home = tmp_path / "guard-home"
+    request = build_hook_process_review_request(
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_call_id": "resident-native-review-1",
+            "tool_name": "bash",
+            "tool_input": {"command": "gh pr checks 1 --repo example/example"},
+        },
+        harness="omp",
+        home_dir=tmp_path / "home",
+        guard_home=guard_home,
+        workspace=tmp_path / "workspace",
+        hook_env={},
+        claim_saved_approval=True,
+        claimed_saved_allow_hash=None,
+        claimed_trusted_request_override=False,
+        claimed_approval_request_id=None,
+    )
+
+    result = hook_entrypoint_module._run_resident_hook_request(  # pyright: ignore[reportPrivateUsage]
+        request,
+        stores={},
+        hook_workers={},
+        configured_guard_home=str(guard_home),
+    )
+    payload = result.get("payload")
+
+    assert isinstance(payload, dict)
+    assert payload.get("approval_request_id")
+    assert payload.get("approval_url")
+
+
 def test_default_review_deadline_stays_inside_pi_host_budget() -> None:
     pi_host_timeout_seconds = 4.5
     pi_daemon_timeout_seconds = 3.1

@@ -89,15 +89,20 @@ def _run_guard_hook_command(
         raise RuntimeError("Unsupported native minimum action")
     raw_routed = None
     if _native_minimum_action is None:
-        raw_routed = try_native_or_source_ref_hook(
-            args,
-            config=config,
-            context=context,
-            payload=payload,
-            runtime_workspace=workspace,
-            store=store,
-            allow_compatibility=False,
-        )
+        from ..daemon.hook_worker import NativeApprovalCoordinationRequired
+
+        try:
+            raw_routed = try_native_or_source_ref_hook(
+                args,
+                config=config,
+                context=context,
+                payload=payload,
+                runtime_workspace=workspace,
+                store=store,
+                allow_compatibility=False,
+            )
+        except NativeApprovalCoordinationRequired:
+            _native_minimum_action = "review"
     if raw_routed is not None:
         return raw_routed
     # Explicit off/shadow compatibility reaches this point after native has
