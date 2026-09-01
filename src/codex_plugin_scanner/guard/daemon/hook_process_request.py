@@ -6,7 +6,7 @@ from argparse import Namespace
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .hook_process_protocol import HOOK_ENV_ALLOWLIST, as_string_object_dict
 
@@ -94,7 +94,7 @@ def coerce_resident_hook_request(request: dict[str, object]) -> ResidentHookRequ
         return None
     if native_minimum_action not in {None, "review"}:
         return None
-    typed_native_minimum_action = native_minimum_action if isinstance(native_minimum_action, str) else None
+    typed_native_minimum_action = cast(str | None, native_minimum_action)
     return ResidentHookRequest(
         payload=typed_payload,
         harness=harness,
@@ -140,6 +140,8 @@ def resident_hook_store_and_context(
 def compatibility_hook_args(parsed: ResidentHookRequest) -> Namespace:
     """Build the private CLI namespace used by the explicit compatibility path."""
 
+    # Generic hooks read ``policy_action`` while runtime-artifact hooks read
+    # the trusted marker, so both consumers must receive the Rust floor.
     return Namespace(
         guard_command="hook",
         home=str(parsed.home_dir),

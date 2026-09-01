@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import tempfile
 from pathlib import Path
@@ -332,16 +333,51 @@ def test_direct_cli_preserves_native_review_coordination(
 
     monkeypatch.setattr(commands_hook_native_authority, "_native_mode_requires_rust", lambda: True)
     monkeypatch.setattr(commands_hook_native_authority, "HookWorker", ReviewWorker)
+    guard_home = tmp_path / "guard-home"
+    context = HarnessContext(tmp_path / "home", tmp_path / "workspace", guard_home)
+    store = GuardStore(guard_home)
+    config = GuardConfig(guard_home=guard_home, workspace=context.workspace_dir)
+    args = argparse.Namespace(
+        harness="omp",
+        runtime_harness="omp",
+        event_file=None,
+        artifact_id=None,
+        artifact_name=None,
+        policy_action=None,
+        native_minimum_action=None,
+        json=True,
+    )
+    output = io.StringIO()
+    monkeypatch.setattr(
+        commands_hook,
+        "try_native_or_source_ref_hook",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(NativeApprovalCoordinationRequired("review required")),
+    )
 
-    with pytest.raises(NativeApprovalCoordinationRequired):
-        commands_hook_native_authority.try_native_hook_authority(
-            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "gh pr checks 1"}},
-            harness="omp",
-            home_dir=tmp_path / "home",
-            guard_home=tmp_path / "guard-home",
-            workspace=tmp_path / "workspace",
-            store=GuardStore(tmp_path / "guard-home"),
-        )
+    result = commands_hook._run_guard_hook_command(
+        args,
+        guard_home=guard_home,
+        workspace=context.workspace_dir,
+        context=context,
+        store=store,
+        config=config,
+        input_text=json.dumps(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_call_id": "direct-native-review-1",
+                "tool_name": "bash",
+                "tool_input": {"command": "gh pr checks 1 --repo example/example"},
+            }
+        ),
+        output_stream=output,
+    )
+    response = json.loads(output.getvalue())
+
+    assert result == 2
+    assert args.native_minimum_action == "review"
+    assert args.policy_action == "review"
+    assert response["approval_request_id"]
+    assert response["approval_url"]
 
 
 def test_cli_frames_raw_payload_before_harness_normalization(

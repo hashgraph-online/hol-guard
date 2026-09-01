@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..action_lattice import most_restrictive_guard_action
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
@@ -103,6 +104,13 @@ def _run_guard_hook_command(
             )
         except NativeApprovalCoordinationRequired:
             _native_minimum_action = "review"
+            args.native_minimum_action = "review"
+            existing_policy_action = getattr(args, "policy_action", None)
+            args.policy_action = (
+                "review"
+                if existing_policy_action is None
+                else most_restrictive_guard_action(existing_policy_action, "review")
+            )
     if raw_routed is not None:
         return raw_routed
     # Explicit off/shadow compatibility reaches this point after native has
@@ -137,6 +145,8 @@ def _run_guard_hook_command(
     if args.harness == "copilot":
         runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
     routed = None
+    # Native authority already evaluated a coordinated review handoff. Other
+    # requests still perform the normalized second-stage native/source route.
     if _native_minimum_action is None:
         routed = try_native_or_source_ref_hook(
             args,
