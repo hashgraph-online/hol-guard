@@ -380,11 +380,11 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 renew_after_generation = self._renewal_after_generation
             publish_epoch = self._epoch
         try:
-            # Keep effective-policy compilation in the asynchronous publication
-            # worker. A failure is a barrier miss and is retried; it never
-            # becomes a Python semantic fallback. Verifier provisioning is
-            # repeated here so a rotated/removed key is repaired off-path.
-            self._provision_verifier_key()
+            # Keep effective-policy compilation and snapshot key validation in
+            # the asynchronous publication worker. A failure is a barrier miss
+            # and is retried; it never becomes a Python semantic fallback.
+            # ``native_policy_snapshot_v3`` owns the authoritative verifier-key
+            # check, while ``start`` bootstraps it before this worker runs.
             context = self._publication_context()
             if context is None:
                 return
