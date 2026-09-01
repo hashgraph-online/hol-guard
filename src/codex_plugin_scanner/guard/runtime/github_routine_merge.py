@@ -11,6 +11,8 @@ ROUTINE_SQUASH_MERGE_DETAIL = (
 _MAX_PULL_REQUEST_NUMBER_DIGITS = 20
 _MAX_REPOSITORY_LENGTH = 255
 _STATIC_REPOSITORY = re.compile(r"(?:[A-Za-z0-9.-]+/)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+_TRUE_OPTION_VALUES = frozenset({"1", "t", "T", "TRUE", "true", "True"})
+_FALSE_OPTION_VALUES = frozenset({"0", "f", "F", "FALSE", "false", "False"})
 
 
 def _is_positive_pull_request(value: str) -> bool:
@@ -35,9 +37,13 @@ def is_routine_squash_merge(args: Sequence[str]) -> bool:
             if squash:
                 return False
             squash = True
-        elif argument == "--delete-branch":
+        elif argument == "--delete-branch" or argument.startswith("--delete-branch="):
             if delete_branch:
                 return False
+            if argument.startswith("--delete-branch="):
+                value = argument.split("=", maxsplit=1)[1]
+                if value not in _TRUE_OPTION_VALUES and value not in _FALSE_OPTION_VALUES:
+                    return False
             delete_branch = True
         elif argument in {"--repo", "-R"}:
             if repository is not None or index + 1 >= len(args):

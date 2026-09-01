@@ -229,7 +229,7 @@ def classify_github_cli(args: Sequence[str]) -> GitHubCommandAssessment:
             admin_merge = admin_state == "true"
             merge_capability: GitHubCommandCapability = "admin_merge_remote" if admin_merge else "merge_remote"
             capabilities: tuple[GitHubCommandCapability, ...] = (merge_capability,)
-            if _has_option(tail, "--delete-branch"):
+            if _boolean_option_state(tail, "--delete-branch") == "true":
                 capabilities = (*capabilities, "delete_remote")
             return _assessment(
                 capabilities,
