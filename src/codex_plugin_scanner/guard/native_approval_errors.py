@@ -103,6 +103,7 @@ NATIVE_APPROVAL_ERROR_CODES = frozenset(
         "native_approval_signing_authority_replaced",
         "native_approval_signing_authority_unavailable",
         "native_resident_request_invalid_json",
+        "native_resident_clock_invalid",
         "native_request_invalid_json",
         "native_response_encode_failed",
         "native_response_too_large",

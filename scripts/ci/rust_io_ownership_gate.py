@@ -25,6 +25,8 @@ from typing import Final
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.ci.rust_io_ownership_resolver import resolve_call
+
 
 SCHEMA: Final = "hol-guard.decision-critical-io.v1"
 NATIVE_MODES: Final = frozenset({"auto", "force"})
@@ -216,7 +218,16 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
     names: list[str] = []
     for node in ast.walk(record.node):
         if isinstance(node, ast.Call):
-            name = _call_name(node)
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+            elif (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in {"self", "cls"}
+            ):
+                name = node.func.attr
+            else:
+                name = None
             if name is not None:
                 names.append(name)
     return tuple(names)
@@ -290,14 +301,9 @@ def _reachable_records(
         seen.add(identity)
         result.append(record)
         for name in _calls(record):
-            matches = [
-                candidate
-                for (_path, candidate_name), values in records.items()
-                if candidate_name == name
-                for candidate in values
-            ]
-            if len(matches) == 1:
-                pending.append(matches[0])
+            resolved = resolve_call(root, record, name, records)
+            if resolved is not None:
+                pending.append(resolved)
     return tuple(result)
 
 
@@ -349,7 +355,6 @@ def _branch_failures(root: Path, records: dict[tuple[str, str], list[FunctionRec
         failures.append("native policy publisher start function is missing")
     else:
         forbidden = (
-            "_provision_verifier_key",
             "_publication_context",
             "_compiled_effective_policy",
             "load_guard_config",

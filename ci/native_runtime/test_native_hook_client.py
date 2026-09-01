@@ -33,6 +33,40 @@ def test_native_hook_client_reuses_one_authenticated_generation(
     assert len(_state_files(state_dir)) == 1
 
 
+def test_release_resident_starts_without_authority_and_rejects_approval(
+    native_runtime: tuple[Path, Path],
+    tmp_path: Path,
+) -> None:
+    runtime, state_dir = native_runtime
+    request = _request(runtime, tmp_path, default_action="review")
+    ordinary = _invoke(runtime, state_dir, request)
+    assert ordinary["authority"] == "rust"
+    assert _result(ordinary)["minimum_action"] == "review"
+
+    envelope = json.loads(request)
+    approval_request = json.dumps(
+        {
+            "operation": "approval_challenge",
+            "request": {
+                "schema": "guard-native-approval-challenge-request.v3",
+                "version": 3,
+                "envelope": envelope,
+            },
+        },
+        separators=(",", ":"),
+    ).encode()
+    result = subprocess.run(
+        (str(runtime), "resident-client", "--stdin", str(state_dir)),
+        input=approval_request,
+        check=False,
+        capture_output=True,
+        timeout=3,
+    )
+    assert result.returncode == 0
+    response = json.loads(result.stdout)
+    assert response["error"] == "native_approval_signing_authority_unavailable"
+
+
 def test_native_hook_client_rejects_self_authenticated_forged_state(
     native_runtime: tuple[Path, Path],
     tmp_path: Path,

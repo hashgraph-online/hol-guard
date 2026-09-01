@@ -1,11 +1,7 @@
 #![forbid(unsafe_code)]
 
-//! Resident-memory replay fencing for native approvals.
-//!
-//! Approval artifacts are useful only to the resident that issued their
-//! challenge.  A fresh random epoch is generated for every resident start;
-//! pending, claimed, and consumed nonces never leave that process.  This
-//! deliberately avoids same-UID files and secrets for replay state.
+//! Resident-memory replay fencing for native approvals; replay state never
+//! leaves the resident process.
 
 use guard_contracts::{
     NATIVE_APPROVAL_MAX_STRING_BYTES, NATIVE_APPROVAL_REPLAY_MEMORY_MAX_ENTRIES,
@@ -20,6 +16,12 @@ enum ReplayStatus {
     Pending,
     Claimed,
     Consumed,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ReplayTransition {
+    Claim,
+    Consume,
 }
 
 #[derive(Debug, Clone)]
@@ -39,15 +41,13 @@ struct ReplayState {
     entries: HashMap<ReplayKey, ReplayEntry>,
 }
 
-/// Bounded one-resident replay state.  The epoch is intentionally not
-/// persisted; restarting the resident invalidates every prior artifact.
+/// Bounded one-resident replay state; restarting invalidates prior artifacts.
 pub(crate) struct ApprovalReplayMemory {
     epoch: String,
     state: Mutex<ReplayState>,
 }
 
-/// Privacy-safe identity held beside a live challenge. The resident retains
-/// only bounded identifiers/digests, never raw command text or hook payloads.
+/// Privacy-safe identity beside a live challenge; no raw command or payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ApprovalReplayBinding {
     pub(crate) request_id_digest: String,
@@ -180,6 +180,7 @@ impl ApprovalReplayMemory {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn claim(
         &self,
         epoch: &str,
@@ -187,32 +188,18 @@ impl ApprovalReplayMemory {
         binding: &ApprovalReplayBinding,
         now: u64,
     ) -> Result<(), String> {
-        let key = nonce_digest_key(epoch, nonce_digest)?;
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| "native_approval_replay_unavailable".to_owned())?;
-        let Some(entry) = state.entries.get_mut(&key) else {
-            return Err("native_approval_receipt_not_claimed".to_owned());
-        };
-        if entry.binding.expires_at_ms <= now {
-            state.entries.remove(&key);
-            return Err("native_approval_receipt_expired".to_owned());
-        }
-        if &entry.binding != binding {
-            return Err("native_approval_binding_mismatch".to_owned());
-        }
-        match entry.status {
-            ReplayStatus::Pending => {
-                entry.status = ReplayStatus::Claimed;
-                Ok(())
-            }
-            ReplayStatus::Claimed | ReplayStatus::Consumed => {
-                Err("native_approval_replay".to_owned())
-            }
-        }
+        self.transition_and_emit(
+            epoch,
+            nonce_digest,
+            binding,
+            now,
+            ReplayTransition::Claim,
+            || Ok(Vec::new()),
+        )
+        .map(|_| ())
     }
 
+    #[cfg(test)]
     pub(crate) fn consume(
         &self,
         epoch: &str,
@@ -220,28 +207,121 @@ impl ApprovalReplayMemory {
         binding: &ApprovalReplayBinding,
         now: u64,
     ) -> Result<(), String> {
+        self.transition_and_emit(
+            epoch,
+            nonce_digest,
+            binding,
+            now,
+            ReplayTransition::Consume,
+            || Ok(Vec::new()),
+        )
+        .map(|_| ())
+    }
+
+    pub(crate) fn claim_and_emit<F>(
+        &self,
+        epoch: &str,
+        nonce_digest: &str,
+        binding: &ApprovalReplayBinding,
+        now: u64,
+        emit: F,
+    ) -> Result<Vec<u8>, String>
+    where
+        F: FnOnce() -> Result<Vec<u8>, String>,
+    {
+        self.transition_and_emit(
+            epoch,
+            nonce_digest,
+            binding,
+            now,
+            ReplayTransition::Claim,
+            emit,
+        )
+    }
+
+    pub(crate) fn consume_and_emit<F>(
+        &self,
+        epoch: &str,
+        nonce_digest: &str,
+        binding: &ApprovalReplayBinding,
+        now: u64,
+        emit: F,
+    ) -> Result<Vec<u8>, String>
+    where
+        F: FnOnce() -> Result<Vec<u8>, String>,
+    {
+        self.transition_and_emit(
+            epoch,
+            nonce_digest,
+            binding,
+            now,
+            ReplayTransition::Consume,
+            emit,
+        )
+    }
+
+    fn transition_and_emit<F>(
+        &self,
+        epoch: &str,
+        nonce_digest: &str,
+        binding: &ApprovalReplayBinding,
+        now: u64,
+        transition: ReplayTransition,
+        emit: F,
+    ) -> Result<Vec<u8>, String>
+    where
+        F: FnOnce() -> Result<Vec<u8>, String>,
+    {
         let key = nonce_digest_key(epoch, nonce_digest)?;
         let mut state = self
             .state
             .lock()
             .map_err(|_| "native_approval_replay_unavailable".to_owned())?;
+        // Prune on every transition, preserving the target-specific expiry error.
+        let target_expired = state
+            .entries
+            .get(&key)
+            .is_some_and(|entry| entry.binding.expires_at_ms <= now);
+        state
+            .entries
+            .retain(|_, entry| entry.binding.expires_at_ms > now);
+        if target_expired {
+            return Err("native_approval_receipt_expired".to_owned());
+        }
         let Some(entry) = state.entries.get_mut(&key) else {
             return Err("native_approval_receipt_not_claimed".to_owned());
         };
-        if entry.binding.expires_at_ms <= now {
-            state.entries.remove(&key);
-            return Err("native_approval_receipt_expired".to_owned());
-        }
         if &entry.binding != binding {
             return Err("native_approval_binding_mismatch".to_owned());
         }
-        match entry.status {
-            ReplayStatus::Pending => Err("native_approval_receipt_not_claimed".to_owned()),
-            ReplayStatus::Claimed => {
-                entry.status = ReplayStatus::Consumed;
-                Ok(())
+        let previous_status = entry.status;
+        match (transition, previous_status) {
+            (ReplayTransition::Claim, ReplayStatus::Pending) => {
+                entry.status = ReplayStatus::Claimed
             }
-            ReplayStatus::Consumed => Err("native_approval_receipt_consumed".to_owned()),
+            (ReplayTransition::Claim, ReplayStatus::Claimed | ReplayStatus::Consumed) => {
+                return Err("native_approval_replay".to_owned());
+            }
+            (ReplayTransition::Consume, ReplayStatus::Pending) => {
+                return Err("native_approval_receipt_not_claimed".to_owned());
+            }
+            (ReplayTransition::Consume, ReplayStatus::Claimed) => {
+                entry.status = ReplayStatus::Consumed
+            }
+            (ReplayTransition::Consume, ReplayStatus::Consumed) => {
+                return Err("native_approval_receipt_consumed".to_owned());
+            }
+        }
+
+        // Keep the lock while emitting so a failed emission can roll back atomically.
+        match emit() {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                if let Some(entry) = state.entries.get_mut(&key) {
+                    entry.status = previous_status;
+                }
+                Err(error)
+            }
         }
     }
 
@@ -259,6 +339,10 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use std::thread;
+
+    mod transition_tests {
+        include!("approval_replay_memory_transition_tests.rs");
+    }
 
     fn binding(expires_at_ms: u64) -> ApprovalReplayBinding {
         ApprovalReplayBinding {

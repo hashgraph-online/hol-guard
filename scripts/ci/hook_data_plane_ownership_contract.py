@@ -169,7 +169,7 @@ def _validate_privacy_artifacts(value: dict[str, object]) -> None:
     if contract.get("raw_source") is not False or contract.get("raw_commands") is not False:
         raise RuntimeError("hook route/evidence artifacts may contain raw source or commands")
     excluded = contract.get("excluded_fields")
-    required = {"raw_payload", "command", "prompt", "path", "source", "content", "secret", "token"}
+    required = {"raw_payload", "command", "prompt", "path", "source", "content", "secret", "token", "private_path"}
     if not isinstance(excluded, list) or not required <= set(excluded):
         raise RuntimeError("hook route/evidence privacy exclusions are incomplete")
     serializers = contract.get("serializers")

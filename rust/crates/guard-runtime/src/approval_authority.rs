@@ -168,12 +168,11 @@ pub(super) fn load(state_base: &Path) -> Result<Option<ApprovalAuthority>, Strin
 fn load_locked(state_base: &Path) -> Result<Option<ApprovalAuthority>, String> {
     let path = state_base.join(APPROVAL_AUTHORITY_FILE_NAME);
     let Some((record, bytes, fingerprint)) = read_authority_record(&path)? else {
-        #[cfg(not(test))]
-        if let Some(secure) = super::approval_enrollment::load_unlocked(state_base)? {
-            if secure.pending && secure.generation > 0 {
-                return Err("native_approval_authority_recovery_pending".to_owned());
-            }
-        }
+        // An unenrolled installation must not probe or mutate the platform
+        // secure store during ordinary resident startup. Enrollment state is
+        // consulted only after a signed public authority record exists; this
+        // keeps fresh developer/CI homes usable without weakening the
+        // fail-closed approval path (approval operations have no authority).
         return Ok(None);
     };
     #[cfg(test)]

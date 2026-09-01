@@ -104,9 +104,11 @@ impl PolicySnapshotStore {
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
+        if snapshot.expires_at_ms <= now {
+            return Err("native_approval_receipt_expired".to_owned());
+        }
         self.approval_replay_memory
-            .claim(resident_epoch, nonce_digest, binding, now)?;
-        emit()
+            .claim_and_emit(resident_epoch, nonce_digest, binding, now, emit)
     }
 
     pub(crate) fn consume_approval_nonce_fenced<F>(
@@ -142,8 +144,15 @@ impl PolicySnapshotStore {
         {
             return Err("native_approval_policy_context_mismatch".to_owned());
         }
-        self.approval_replay_memory
-            .consume(resident_epoch, nonce_digest, binding, now)?;
-        emit()
+        if snapshot.expires_at_ms <= now {
+            return Err("native_approval_receipt_expired".to_owned());
+        }
+        self.approval_replay_memory.consume_and_emit(
+            resident_epoch,
+            nonce_digest,
+            binding,
+            now,
+            emit,
+        )
     }
 }

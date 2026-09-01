@@ -56,7 +56,13 @@ def _rule_digest(runtime: Path) -> str:
     return digest
 
 
-def _request(runtime: Path, root: Path, *, command: str = "pwd") -> bytes:
+def _request(
+    runtime: Path,
+    root: Path,
+    *,
+    command: str = "pwd",
+    default_action: str = "allow",
+) -> bytes:
     runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
     rule_digest = _rule_digest(runtime)
     policy_master = b"\x07" * 32
@@ -66,7 +72,7 @@ def _request(runtime: Path, root: Path, *, command: str = "pwd") -> bytes:
             "mode": "enforce",
             "protection_posture": "protected",
             "security_level": "balanced",
-            "default_action": "allow",
+            "default_action": default_action,
             "unknown_publisher_action": "review",
             "changed_hash_action": "require-reapproval",
             "new_network_domain_action": "warn",

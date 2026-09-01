@@ -1,29 +1,25 @@
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-use std::io::Write;
-use std::process::Command;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-use std::process::Stdio;
+#[cfg(target_os = "linux")]
+use std::io::{ErrorKind, Write};
+#[cfg(target_os = "linux")]
+use std::process::{Command, Stdio};
 
 use super::{MAX_SECRET_TEXT_BYTES, SERVICE_NAME};
 
 #[cfg(target_os = "macos")]
 pub(super) fn read_platform_secret(account: &str) -> Result<Option<String>, String> {
-    let output = Command::new("/usr/bin/security")
-        .args([
-            "find-generic-password",
-            "-a",
-            account,
-            "-s",
-            SERVICE_NAME,
-            "-w",
-        ])
-        .output()
-        .map_err(|_| "native_approval_secure_state_unavailable".to_owned())?;
-    if !output.status.success() {
-        return Ok(None);
-    }
-    let value = String::from_utf8(output.stdout)
-        .map_err(|_| "native_approval_secure_state_invalid".to_owned())?;
+    use security_framework::passwords::generic_password;
+
+    let value = match generic_password(
+        security_framework::passwords::PasswordOptions::new_generic_password(SERVICE_NAME, account),
+    ) {
+        Ok(value) => value,
+        // Security.framework's stable errSecItemNotFound value. Do not turn
+        // any other keychain failure into an apparent unenrolled state.
+        Err(error) if error.code() == -25300 => return Ok(None),
+        Err(error) => return Err(map_keychain_error(error)),
+    };
+    let value =
+        String::from_utf8(value).map_err(|_| "native_approval_secure_state_invalid".to_owned())?;
     if value.len() > MAX_SECRET_TEXT_BYTES {
         return Err("native_approval_secure_state_invalid".to_owned());
     }
@@ -32,55 +28,32 @@ pub(super) fn read_platform_secret(account: &str) -> Result<Option<String>, Stri
 
 #[cfg(target_os = "macos")]
 pub(super) fn write_platform_secret(account: &str, value: &str) -> Result<(), String> {
+    use security_framework::passwords::set_generic_password;
+
     if value.len() > MAX_SECRET_TEXT_BYTES {
         return Err("native_approval_secure_state_invalid".to_owned());
     }
-    let executable = std::env::current_exe()
-        .ok()
-        .and_then(|path| std::fs::canonicalize(path).ok())
-        .ok_or_else(|| "native_approval_secure_state_unavailable".to_owned())?;
-    let mut child = Command::new("/usr/bin/security")
-        .args([
-            "add-generic-password",
-            "-U",
-            "-a",
-            account,
-            "-s",
-            SERVICE_NAME,
-            "-T",
-        ])
-        .arg(executable)
-        .arg("-w")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|_| "native_approval_secure_state_unavailable".to_owned())?;
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "native_approval_secure_state_unavailable".to_owned())?;
-    stdin
-        .write_all(value.as_bytes())
-        .and_then(|()| stdin.write_all(b"\n"))
-        .map_err(|_| "native_approval_secure_state_unavailable".to_owned())?;
-    drop(stdin);
-    let status = child
-        .wait()
-        .map_err(|_| "native_approval_secure_state_unavailable".to_owned())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err("native_approval_secure_state_unavailable".to_owned())
-    }
+    set_generic_password(SERVICE_NAME, account, value.as_bytes()).map_err(map_keychain_error)
+}
+
+#[cfg(target_os = "macos")]
+fn map_keychain_error(_error: security_framework::base::Error) -> String {
+    "native_approval_secure_state_unavailable".to_owned()
 }
 
 #[cfg(target_os = "linux")]
 pub(super) fn read_platform_secret(account: &str) -> Result<Option<String>, String> {
-    let output = Command::new("/usr/bin/secret-tool")
+    let output = match Command::new("/usr/bin/secret-tool")
         .args(["lookup", "service", SERVICE_NAME, "account", account])
         .output()
-        .map_err(|_| "native_approval_secure_state_unavailable".to_owned())?;
+    {
+        Ok(output) => output,
+        // A developer or CI image may not have a desktop secret store.  With
+        // no enrollment record this is equivalent to an empty store; writes
+        // still fail closed below.
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("native_approval_secure_state_unavailable".to_owned()),
+    };
     if !output.status.success() {
         return Ok(None);
     }

@@ -68,14 +68,14 @@ def test_gate_rejects_native_branch_semantic_fallback(tmp_path: Path) -> None:
         MODULE.validate(tmp_path)
 
 
-def test_gate_rejects_synchronous_policy_provisioning(tmp_path: Path) -> None:
+def test_gate_rejects_synchronous_policy_compilation(tmp_path: Path) -> None:
     _copy_gate_sources(tmp_path)
     publisher = tmp_path / "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py"
     source = publisher.read_text(encoding="utf-8")
     marker = "            self._started = True\n"
     assert marker in source
     publisher.write_text(
-        source.replace(marker, marker + "        self._provision_verifier_key()\n", 1),
+        source.replace(marker, marker + "        self._compiled_effective_policy()\n", 1),
         encoding="utf-8",
     )
 

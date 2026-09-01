@@ -17,12 +17,12 @@ def native_policy_snapshot(guard_home: Path) -> Iterator[Mapping[str, object]]:
 
     publisher = get_native_policy_snapshot_publisher(GuardStore(guard_home))
     publisher.start()
-    if not publisher.wait_until_ready(time.monotonic() + 3.0):
-        raise AssertionError(f"native policy publisher was not ready: {publisher.last_error}")
-    snapshot = publisher.current_snapshot()
-    if snapshot is None:
-        raise AssertionError("native policy publisher returned no ACKed snapshot")
     try:
+        if not publisher.wait_until_ready(time.monotonic() + 3.0):
+            raise AssertionError(f"native policy publisher was not ready: {publisher.last_error}")
+        snapshot = publisher.current_snapshot()
+        if snapshot is None:
+            raise AssertionError("native policy publisher returned no ACKed snapshot")
         yield snapshot
     finally:
         publisher.close()

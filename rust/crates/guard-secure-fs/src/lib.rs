@@ -2,17 +2,19 @@
 
 use guard_rules::MAX_SCAN_BYTES;
 use sha2::{Digest, Sha256};
-use std::fs::{self, File, Metadata, OpenOptions};
+use std::fs::{self, Metadata};
 use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 use std::time::SystemTime;
 use thiserror::Error;
 
 #[cfg(unix)]
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::MetadataExt;
 
+mod secure_open;
 mod source_path;
 
+use secure_open::{secure_open, SecureOpenError};
 pub use source_path::{classify_source_path, sensitive_path_family, source_like};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,12 +169,14 @@ fn identity(metadata: &Metadata) -> FileIdentity {
     }
 }
 
-fn secure_open(path: &Path) -> io::Result<File> {
-    let mut options = OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    options.open(path)
+fn map_secure_open_error(error: SecureOpenError) -> SecureReadError {
+    match error {
+        SecureOpenError::PathChanged => SecureReadError::PathChanged,
+        SecureOpenError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            SecureReadError::PermissionDenied
+        }
+        SecureOpenError::Io(_) => SecureReadError::ReadFailed,
+    }
 }
 
 pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureReadError> {
@@ -186,13 +190,7 @@ pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureR
     // after the descriptor was opened.  The descriptor remains the source of
     // truth for bytes and stat identity.
     let canonical_before = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
-    let mut file = secure_open(path).map_err(|error| {
-        if error.kind() == io::ErrorKind::PermissionDenied {
-            SecureReadError::PermissionDenied
-        } else {
-            SecureReadError::ReadFailed
-        }
-    })?;
+    let mut file = secure_open(path, &canonical_before).map_err(map_secure_open_error)?;
     let before_metadata = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
     if !before_metadata.is_file() {
         return Err(SecureReadError::NotRegularFile);
@@ -242,6 +240,7 @@ pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureR
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
     use std::io::Write;
 
     #[cfg(unix)]

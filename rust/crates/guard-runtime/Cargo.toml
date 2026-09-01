@@ -30,6 +30,9 @@ sysinfo.workspace = true
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7.0"
+
 [target.'cfg(windows)'.dependencies]
 windows-permissions.workspace = true
 

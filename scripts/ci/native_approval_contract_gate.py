@@ -43,6 +43,8 @@ ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
 )
 DECODER = Path("src/codex_plugin_scanner/guard/native_response_decoder.py")
+PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_protocol.py")
+ERRORS = Path("src/codex_plugin_scanner/guard/native_approval_errors.py")
 APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_contracts.rs")
 AUTHORITY = Path("rust/crates/guard-runtime/src/approval_authority.rs")
 RUNTIME_APPROVAL = Path("rust/crates/guard-runtime/src/approval.rs")
@@ -141,7 +143,7 @@ def _error_codes(text: str, marker: str) -> frozenset[str]:
         end = text.find("\n_APPROVAL_HEX64", start)
     if end < 0:
         raise RuntimeError(f"approval error list is unterminated: {marker}")
-    return frozenset(re.findall(r'"(native_approval_[a-z0-9_]+)"', text[start:end]))
+    return frozenset(re.findall(r'"(native_[a-z0-9_]+|snapshot_expired)"', text[start:end]))
 
 
 def _check_file_sizes(root: Path) -> None:
@@ -201,14 +203,18 @@ def _check_authority_fence(root: Path) -> None:
 def _check_contracts(root: Path) -> None:
     rust_contract = _read(root / APPROVAL_CONTRACT)
     decoder = _read(root / DECODER)
+    protocol = _read(root / PROTOCOL)
+    errors = _read(root / ERRORS)
     if _struct_fields(rust_contract, "ApprovalReceiptV3") != RECEIPT_FIELDS:
         raise RuntimeError("native receipt fields do not match the declared contract")
-    if _python_key_set(decoder, "_APPROVAL_RECEIPT_KEYS") != RECEIPT_FIELDS:
+    if _python_key_set(protocol, "_RECEIPT_KEYS") != RECEIPT_FIELDS:
         raise RuntimeError("Python receipt decoder fields drifted from the native contract")
-    if "resident_epoch" not in _python_key_set(decoder, "_APPROVAL_CHALLENGE_KEYS"):
+    if "resident_epoch" not in _python_key_set(protocol, "_CHALLENGE_KEYS"):
         raise RuntimeError("Python challenge decoder does not bind the resident epoch")
-    if _error_codes(rust_contract, "NATIVE_APPROVAL_ERROR_CODES") != _error_codes(
-        decoder, "_NATIVE_APPROVAL_ERROR_CODES"
+    if "from .native_approval_errors import NATIVE_APPROVAL_ERROR_CODES" not in decoder:
+        raise RuntimeError("Python response decoder does not use the canonical approval error vocabulary")
+    if _error_codes(rust_contract, "NATIVE_APPROVAL_ERROR_CODES") != _python_key_set(
+        errors, "NATIVE_APPROVAL_ERROR_CODES"
     ):
         raise RuntimeError("native and Python approval error allowlists differ")
     resident = _read(root / RESIDENT_PROTOCOL)
@@ -226,7 +232,7 @@ def _check_release_root(root: Path, *, require_environment: bool) -> None:
     for name in names:
         if name not in authority or name not in docs:
             raise RuntimeError(f"release enrollment root contract is missing: {name}")
-    if "option_env!(\"HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX\")" not in authority:
+    if 'option_env!("HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX")' not in authority:
         raise RuntimeError("production approval authority has no pinned compile-time root")
     if "cfg(test)" not in authority or "[42u8; 32]" not in authority:
         raise RuntimeError("test enrollment root is not isolated from production")

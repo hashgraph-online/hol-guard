@@ -197,6 +197,7 @@ class NativeApprovalBridge:
         """Return one detached challenge; retain only private transport state."""
 
         self._last_error_code = None
+        _ = _LAST_FAILURE_CODE.set(None)
         deadline_data = self._deadline(deadline)
         if deadline_data is None:
             self._fail("native_approval_deadline_expired")
@@ -241,6 +242,7 @@ class NativeApprovalBridge:
         """Validate an external artifact and immediately consume it in Rust."""
 
         self._last_error_code = None
+        _ = _LAST_FAILURE_CODE.set(None)
         if not isinstance(session, NativeApprovalSession):
             self._fail("native_approval_request_invalid")
             return None

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -83,10 +84,17 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
             if self._started or self._closed:
                 return
             self._started = True
-        # Startup only schedules publication.  Key derivation and policy
-        # compilation belong to the publisher thread so a hook cannot perform
-        # synchronous config/secret filesystem I/O while establishing its
-        # native decision route.
+        # Provision the verifier before the worker can publish.  GuardStore has
+        # completed its schema setup by the time a publisher is constructed;
+        # keeping this one-time key bootstrap synchronous prevents the worker
+        # from racing a partially initialized ``sync_state`` table.  Effective
+        # policy compilation and resident publication remain asynchronous.
+        try:
+            self._provision_verifier_key()
+        except NativePolicySnapshotError as error:
+            self._record_error(str(error))
+        except (OSError, RuntimeError, TypeError, ValueError, AttributeError, sqlite3.Error) as error:
+            self._record_error(type(error).__name__)
         with self._condition:
             if self._closed:
                 return
@@ -372,9 +380,10 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 renew_after_generation = self._renewal_after_generation
             publish_epoch = self._epoch
         try:
-            # Keep verifier provisioning and effective-policy compilation in
-            # the asynchronous publication worker.  A failure is a barrier
-            # miss and is retried; it never becomes a Python semantic fallback.
+            # Keep effective-policy compilation in the asynchronous publication
+            # worker. A failure is a barrier miss and is retried; it never
+            # becomes a Python semantic fallback. Verifier provisioning is
+            # repeated here so a rotated/removed key is repaired off-path.
             self._provision_verifier_key()
             context = self._publication_context()
             if context is None:
@@ -415,7 +424,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 self._condition.notify_all()
         except NativePolicySnapshotError as error:
             self._record_error(str(error))
-        except (OSError, RuntimeError, TypeError, ValueError, AttributeError) as error:
+        except (OSError, RuntimeError, TypeError, ValueError, AttributeError, sqlite3.Error) as error:
             self._record_error(type(error).__name__)
 
     def _publication_context(

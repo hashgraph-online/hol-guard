@@ -144,16 +144,15 @@ fn collect_binding_values<'a>(
                     && !child.is_object()
                     && !child.is_array()
                 {
-                    let text = child
-                        .as_str()
-                        .ok_or_else(|| "native_approval_binding_invalid".to_owned())?;
-                    bounded_string(
-                        text,
-                        false,
-                        NATIVE_APPROVAL_MAX_STRING_BYTES,
-                        "native_approval_binding_invalid",
-                    )?;
-                    output.push(text);
+                    if let Some(text) = child.as_str() {
+                        bounded_string(
+                            text,
+                            false,
+                            NATIVE_APPROVAL_MAX_STRING_BYTES,
+                            "native_approval_binding_invalid",
+                        )?;
+                        output.push(text);
+                    }
                 }
                 collect_binding_values(child, keys, output, depth.saturating_add(1), nodes)?;
             }
