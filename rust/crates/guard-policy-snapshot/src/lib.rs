@@ -156,6 +156,11 @@ pub struct PolicySnapshotAckV1 {
     pub generation: u64,
     pub policy_digest: String,
     pub idempotent: bool,
+    /// Startup generation of the managed resident that accepted the push.
+    /// This binds an asynchronous publisher ACK to the resident instance
+    /// whose in-memory policy was updated, rather than only to the policy
+    /// generation shared by successive residents.
+    pub resident_generation: u64,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]

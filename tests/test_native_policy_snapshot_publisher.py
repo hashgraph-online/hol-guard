@@ -118,7 +118,7 @@ def test_publisher_repushes_after_resident_generation_change(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, resident_generation=2 if len(calls) > 1 else 1)
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -142,6 +142,75 @@ def test_publisher_repushes_after_resident_generation_change(
         publisher.close()
 
 
+def test_publisher_does_not_republish_for_generation_created_by_own_ack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    master = b"v" * 32
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    calls: list[bytes] = []
+
+    def client_request(**kwargs: object) -> bytes:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        calls.append(payload)
+        resident_state = guard_home / "native-runtime" / "resident-v3-owned"
+        resident_state.mkdir(mode=0o700)
+        (resident_state / "generation-1.json").write_text("{}", encoding="utf-8")
+        return _ack(payload)
+
+    publisher = NativePolicySnapshotPublisher(
+        store=store,
+        status_provider=_status,
+        client_request=client_request,
+        poll_interval_seconds=0.05,
+    )
+    publisher.start()
+    try:
+        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        time.sleep(0.2)
+        assert len(calls) == 1
+    finally:
+        publisher.close()
+
+
+def test_publisher_rejects_ack_after_resident_restart_before_barrier(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    master = b"y" * 32
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
+    resident_fingerprints = iter(
+        (
+            (),
+            (("resident-v3-test/generation-00000000000000000001.json", 1, 1),),
+        )
+    )
+    def client_request(**kwargs: object) -> bytes:
+        payload = kwargs["payload"]
+        assert isinstance(payload, bytes)
+        return _ack(payload, resident_generation=1)
+
+    publisher = NativePolicySnapshotPublisher(
+        store=store,
+        status_provider=_status,
+        client_request=client_request,
+        poll_interval_seconds=0.05,
+    )
+    monkeypatch.setattr(publisher, "_current_resident_fingerprint", lambda: next(resident_fingerprints))
+    publisher._epoch = 1
+    publisher._publish_once()
+    try:
+        assert not publisher.is_ready()
+        assert publisher.current_snapshot() is None
+    finally:
+        publisher.close()
+
+
 def test_publisher_rejects_mutated_ack_without_opening_barrier(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -161,6 +230,7 @@ def test_publisher_rejects_mutated_ack_without_opening_barrier(
                 "generation": snapshot["generation"],
                 "policy_digest": "c" * 64,
                 "idempotent": False,
+                "resident_generation": 1,
             }
         ).encode()
 

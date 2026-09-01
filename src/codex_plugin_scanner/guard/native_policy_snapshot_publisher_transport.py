@@ -24,7 +24,13 @@ def _decode_ack_v3(output: bytes | None) -> dict[str, object] | None:
         value = _strict_json_loads_v3(output)
     except NativePolicySnapshotError:
         return None
-    if not isinstance(value, dict) or set(value) != {"status", "generation", "policy_digest", "idempotent"}:
+    if not isinstance(value, dict) or set(value) != {
+        "status",
+        "generation",
+        "policy_digest",
+        "idempotent",
+        "resident_generation",
+    }:
         return None
     status = value.get("status")
     if not isinstance(status, str) or status not in {"accepted", POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION}:
@@ -35,6 +41,9 @@ def _decode_ack_v3(output: bytes | None) -> dict[str, object] | None:
         or value.get("generation", 0) <= 0
         or not _valid_digest_v3(value.get("policy_digest"))
         or not isinstance(value.get("idempotent"), bool)
+        or isinstance(value.get("resident_generation"), bool)
+        or not isinstance(value.get("resident_generation"), int)
+        or value.get("resident_generation", 0) <= 0
     ):
         return None
     if status == POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION and value.get("idempotent") is not False:
@@ -51,7 +60,7 @@ def _publish_snapshot_v3(
     master_key: bytes,
     client: Callable[..., bytes | None],
     renew_after_generation: int | None,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], int]:
     """Materialize, push, and authenticate a snapshot, including one recovery retry."""
 
     from .native_runtime import _isolated_environment
@@ -95,4 +104,11 @@ def _publish_snapshot_v3(
             continue
         if ack["generation"] != snapshot["generation"] or ack["policy_digest"] != snapshot["policy_digest"]:
             raise NativePolicySnapshotError("native_policy_snapshot_ack_mismatch")
-        return snapshot
+        resident_generation = ack.get("resident_generation")
+        if (
+            isinstance(resident_generation, bool)
+            or not isinstance(resident_generation, int)
+            or resident_generation <= 0
+        ):
+            raise NativePolicySnapshotError("native_policy_snapshot_ack_mismatch")
+        return snapshot, resident_generation

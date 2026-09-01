@@ -7,6 +7,8 @@ mod approval_contracts;
 pub use approval_contracts::*;
 mod native_hook_receipt;
 pub use native_hook_receipt::*;
+mod approval_v4_contracts;
+pub use approval_v4_contracts::*;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";

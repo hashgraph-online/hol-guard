@@ -278,9 +278,13 @@
         "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py",
         "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py",
         "src/codex_plugin_scanner/guard/native_approval_bridge.py",
+        "src/codex_plugin_scanner/guard/native_approval_bridge_v3.py",
         "src/codex_plugin_scanner/guard/native_approval_errors.py",
         "src/codex_plugin_scanner/guard/native_approval_models.py",
-        "src/codex_plugin_scanner/guard/native_approval_protocol.py"
+        "src/codex_plugin_scanner/guard/native_approval_protocol.py",
+        "src/codex_plugin_scanner/guard/native_approval_v4_bridge.py",
+        "src/codex_plugin_scanner/guard/native_approval_v4_portal.py",
+        "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py"
       ],
       "current": "mechanical bounded guard-hook-envelope.v2 serialization, package-bound native invocation, typed result decoding, and harness response projection",
       "target": "minimal launcher, serialization, and response projection only"
@@ -414,7 +418,7 @@
         "rust/crates/guard-runtime/**",
         "rust/crates/guard-scanner/**"
       ],
-      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
+      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 V3 and root-authenticated WebAuthn V4 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
       "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"
     },
     {

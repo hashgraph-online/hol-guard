@@ -37,7 +37,7 @@ fn scope_digest(root: &Path) -> String {
     digest_bytes(root.to_string_lossy().as_bytes())
 }
 
-fn root(label: &str) -> PathBuf {
+pub(super) fn root(label: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "hol-guard-approval-{label}-{}-{}",
         std::process::id(),
@@ -84,7 +84,7 @@ fn snapshot(root: &Path, key: &[u8; 32]) -> PolicySnapshotV3 {
     snapshot
 }
 
-fn store_and_envelope(
+pub(super) fn store_and_envelope(
     label: &str,
 ) -> (
     PathBuf,

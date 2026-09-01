@@ -23,6 +23,14 @@ use std::sync::{
 pub(crate) mod approval_authority;
 #[path = "approval_enrollment.rs"]
 pub(crate) mod approval_enrollment;
+#[path = "approval_v4_assertion_state.rs"]
+pub(crate) mod approval_v4_assertion_state;
+#[path = "approval_v4_authority.rs"]
+pub(crate) mod approval_v4_authority;
+#[path = "approval_v4_enrollment.rs"]
+pub(crate) mod approval_v4_enrollment;
+#[path = "approval_v4_secure_state.rs"]
+pub(crate) mod approval_v4_secure_state;
 #[path = "policy_store_approval.rs"]
 mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
@@ -33,6 +41,7 @@ mod policy_store_migration;
 mod policy_store_persistence;
 
 use approval_authority::ApprovalAuthority;
+use approval_v4_authority::ApprovalV4Authority;
 pub(crate) use policy_store_approval::ApprovalPolicyFence;
 use policy_store_authority::*;
 use policy_store_persistence::*;
@@ -134,9 +143,13 @@ pub(crate) struct PolicySnapshotStore {
     expected_rule_digest: String,
     expected_guard_home: String,
     expected_scope_digest: String,
+    // Managed resident startup generation; zero for direct store tests.
+    resident_generation: u64,
     verifier_key: [u8; VERIFIER_KEY_BYTES],
     approval_authority: Option<ApprovalAuthority>,
     approval_authority_observed: Arc<Mutex<Option<String>>>,
+    approval_v4_authority: Option<ApprovalV4Authority>,
+    approval_v4_authority_observed: Arc<Mutex<Option<String>>>,
     approval_replay_memory: crate::approval::ApprovalReplayMemory,
     authority_observed: Arc<Mutex<Option<String>>>,
     authority_changed: Arc<AtomicBool>,
@@ -144,7 +157,15 @@ pub(crate) struct PolicySnapshotStore {
 }
 
 impl PolicySnapshotStore {
+    #[cfg(test)]
     pub(crate) fn new(state_base: &Path, runtime_identity: &str) -> Result<Self, String> {
+        Self::new_with_resident_generation(state_base, runtime_identity, 0)
+    }
+    pub(crate) fn new_with_resident_generation(
+        state_base: &Path,
+        runtime_identity: &str,
+        resident_generation: u64,
+    ) -> Result<Self, String> {
         validate_private_directory(state_base)?;
         let verifier_key = read_verifier_key(state_base)?;
         let authority_path = state_base.join(SNAPSHOT_FILE_NAME);
@@ -159,6 +180,7 @@ impl PolicySnapshotStore {
             &verifier_key,
         )?;
         let approval_authority = approval_authority::load(state_base)?;
+        let approval_v4_authority = approval_v4_authority::load(state_base)?;
         let approval_authority_observed = Arc::new(Mutex::new(
             approval_authority
                 .as_ref()
@@ -166,6 +188,16 @@ impl PolicySnapshotStore {
                 .or_else(|| {
                     authority_fingerprint(
                         &state_base.join(approval_authority::APPROVAL_AUTHORITY_FILE_NAME),
+                    )
+                }),
+        ));
+        let approval_v4_authority_observed = Arc::new(Mutex::new(
+            approval_v4_authority
+                .as_ref()
+                .map(|authority| authority.fingerprint.clone())
+                .or_else(|| {
+                    authority_fingerprint(
+                        &state_base.join(approval_v4_authority::AUTHORITY_FILE_NAME),
                     )
                 }),
         ));
@@ -182,15 +214,23 @@ impl PolicySnapshotStore {
             Arc::clone(&approval_authority_observed),
             Arc::downgrade(&authority_changed),
         );
+        start_authority_watcher(
+            state_base.join(approval_v4_authority::AUTHORITY_FILE_NAME),
+            Arc::clone(&approval_v4_authority_observed),
+            Arc::downgrade(&authority_changed),
+        );
         Ok(Self {
             authority_path,
             expected_runtime_identity: runtime_identity.to_owned(),
             expected_rule_digest,
             expected_guard_home,
             expected_scope_digest,
+            resident_generation,
             verifier_key,
             approval_authority,
             approval_authority_observed,
+            approval_v4_authority,
+            approval_v4_authority_observed,
             approval_replay_memory,
             authority_observed,
             authority_changed,
@@ -204,8 +244,7 @@ impl PolicySnapshotStore {
         })
     }
 
-    /// Migrate pre-transactional policy files only when an explicit upgrade
-    /// command requests it. Resident startup never reads the legacy files.
+    /// Migrate legacy policy files only on an explicit upgrade command.
     pub(crate) fn migrate_legacy_state(
         state_base: &Path,
         runtime_identity: &str,
@@ -254,9 +293,7 @@ impl PolicySnapshotStore {
         if state.invalid_on_startup && state.generation_floor == 0 {
             return Err("native_policy_snapshot_invalid".to_owned());
         }
-        // Validate the candidate's own signature and all identity/expiry
-        // bindings before considering floor recovery.  A malformed or
-        // unauthenticated request can never elicit the recovery status.
+        // Validate the candidate before considering authenticated floor recovery.
         let minimum_generation = if state.snapshot.is_none()
             && state.policy_digest.is_some()
             && request.snapshot.generation <= state.generation_floor
@@ -282,14 +319,14 @@ impl PolicySnapshotStore {
                 if snapshot_bytes != state.canonical_bytes {
                     return Err("native_policy_snapshot_generation_reused".to_owned());
                 }
-                return encode_ack(current.as_ref(), true);
+                return encode_ack(current.as_ref(), true, self.resident_generation);
             }
         } else if request.snapshot.generation <= state.generation_floor {
             // There is no current snapshot to compare for normal idempotent
             // retry.  The authenticated floor is still authoritative, so
             // equal/older input must force the publisher to allocate a new
             // generation rather than silently reusing the floor.
-            return encode_requires_new_generation(&state);
+            return encode_requires_new_generation(&state, self.resident_generation);
         }
         persist_authority(
             &self.authority_path,
@@ -312,7 +349,7 @@ impl PolicySnapshotStore {
             !policy_store_authority::authorities_unchanged(self),
             Ordering::SeqCst,
         );
-        encode_ack(&request.snapshot, false)
+        encode_ack(&request.snapshot, false, self.resident_generation)
     }
 
     pub(crate) fn validate_request_snapshot(

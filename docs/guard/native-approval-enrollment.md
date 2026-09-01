@@ -38,6 +38,33 @@ Unsigned records, same-generation substitutions, rollback, and replacement of
 the public file fail closed. A crash during a transition can retry only the
 same root-signed record; a different candidate is rejected.
 
+## WebAuthn approval V4
+
+V4 uses a separate root-signed `approval-authority-v4.json` record and a
+purpose-scoped secure-store account for the WebAuthn credential and
+authenticator counter. The external root ceremony remains mandatory; the
+runtime never contains or generates the root private key.
+
+1. The trusted installer runs `hol-guard-runtime
+   prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID
+   --origin ORIGIN`.
+2. The external authority signs the returned request, including the exact
+   device and installation bindings, and supplies the credential ID, COSE
+   public key, algorithm (`-7` ES256 or `-8` Ed25519), and generation in
+   `approval-authority-v4.json`.
+3. The trusted installer runs `hol-guard-runtime
+   enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD`.
+
+The V4 resident issues the browser challenge and verifies the returned
+assertion itself. It checks the exact challenge, origin, RP ID, credential
+`id`/`rawId`, `public-key` type, authenticator `UP` and `UV` flags, signature,
+and counter before returning a Rust receipt. The browser/Portal
+`guard-native-approval-proof.v4` envelope is presentation-only; the Python
+bridge copies its challenge and assertion into the native artifact contract
+without verifying or assigning approval semantics. A missing release root,
+invalid record, stale generation, revoked authority, missing secure state,
+counter replay, or failed ceremony produces a safe failure.
+
 Approval challenges and artifacts are additionally bound to the managed
 resident's random per-boot epoch and a live in-memory challenge entry. The
 entry records only bounded identifiers/digests and expires with the challenge;

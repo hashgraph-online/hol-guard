@@ -16,6 +16,16 @@ use std::path::Path;
 mod platform;
 use platform::{read_platform_secret, write_platform_secret};
 
+#[cfg(not(test))]
+pub(super) fn read_platform_secret_for_v4(account: &str) -> Result<Option<String>, String> {
+    read_platform_secret(account)
+}
+
+#[cfg(not(test))]
+pub(super) fn write_platform_secret_for_v4(account: &str, value: &str) -> Result<(), String> {
+    write_platform_secret(account, value)
+}
+
 const STATE_VERSION: u16 = 4;
 const SERVICE_NAME: &str = "org.hashgraphonline.hol-guard.native-approval-enrollment.v1";
 const ACCOUNT_DOMAIN: &[u8] = b"hol-guard-native-approval-enrollment-account-v1\0";
@@ -169,7 +179,7 @@ struct SecureApprovalStateRecord {
     pending_record_digest: String,
 }
 
-fn account_for_state_base(state_base: &Path) -> Result<String, String> {
+pub(super) fn account_for_state_base(state_base: &Path) -> Result<String, String> {
     super::validate_private_directory(state_base)?;
     let canonical = std::fs::canonicalize(state_base)
         .map_err(|_| "native_approval_secure_state_unavailable".to_owned())?;
@@ -307,7 +317,7 @@ pub(crate) fn prepare_enrollment(state_base: &Path) -> Result<(String, String), 
     with_transition_lock(state_base, || prepare_enrollment_unlocked(state_base))
 }
 
-fn prepare_enrollment_unlocked(state_base: &Path) -> Result<(String, String), String> {
+pub(super) fn prepare_enrollment_unlocked(state_base: &Path) -> Result<(String, String), String> {
     if let Some(existing) = load_unlocked(state_base)? {
         if existing.pending {
             return Ok((existing.device_binding, existing.installation_binding));
