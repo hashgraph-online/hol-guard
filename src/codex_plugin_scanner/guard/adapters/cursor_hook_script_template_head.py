@@ -497,5 +497,4 @@ def _cursor_reason(guard_payload: dict[str, object]) -> str:
         return f"{reason} Review: {url_str}"
     return reason
 
-
 '''
