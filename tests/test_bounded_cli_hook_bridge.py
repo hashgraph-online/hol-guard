@@ -88,6 +88,35 @@ def test_timeout_emits_successful_native_deny(
         assert payload[key] == value
 
 
+def test_timeout_allows_emergency_safe_read(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "run_isolated_hook_process",
+        _runner_result(BoundedHookProcessResult(None, "", False, True)),
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness="kimi"),
+            input_text=json.dumps(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Read",
+                    "tool_input": {"file_path": "src/app.ts"},
+                }
+            ),
+        )
+
+    payload = _json_object(output.getvalue())
+    assert returncode == 0
+    hook_output = payload["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"
+
+
 @pytest.mark.parametrize("harness", ["kimi", "zcode"])
 def test_claude_shaped_timeout_emits_deny_and_block_exit(
     monkeypatch: pytest.MonkeyPatch,

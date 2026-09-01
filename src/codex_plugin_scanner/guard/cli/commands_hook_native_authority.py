@@ -8,6 +8,8 @@ from typing import Any
 
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
+from ..daemon.hook_availability_policy import availability_harness_response
+from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..daemon.hook_worker import HookWorker, HookWorkerUnsupported
 from ..daemon.hook_worker_responses import post_tool_fail_safe_response
 from ..daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
@@ -62,10 +64,14 @@ def try_native_hook_authority(
     except HookWorkerUnsupported:
         return None
     except Exception:
-        return post_tool_fail_safe_response(
-            harness,
-            reason="HOL Guard could not complete the native hook decision safely.",
+        return availability_harness_response(
+            payload,
+            harness=harness,
+            event_name=runtime_hook_event_name(payload),
             reason_code="native_hook_worker_exception",
+            reason="HOL Guard could not complete the native hook decision safely.",
+            workspace=workspace,
+            home_dir=home_dir,
         )
     finally:
         if worker is not None:
@@ -113,17 +119,20 @@ def try_native_or_source_ref_hook(
         # Native mode never escapes to Python semantics, including unknown or
         # malformed event labels. The worker normally returns this floor;
         # retain a deterministic terminal result for transport failure.
-        reason_code = (
-            "native_hook_worker_unavailable"
-            if allow_compatibility
-            else "native_hook_worker_unavailable_before_compatibility"
-        )
         _emit(
             "hook",
-            post_tool_fail_safe_response(
-                args.harness,
+            availability_harness_response(
+                payload,
+                harness=args.harness,
+                event_name=runtime_hook_event_name(payload),
+                reason_code=(
+                    "native_hook_worker_unavailable"
+                    if allow_compatibility
+                    else "native_hook_worker_unavailable_before_compatibility"
+                ),
                 reason="HOL Guard could not complete the native hook decision safely.",
-                reason_code=reason_code,
+                workspace=runtime_workspace,
+                home_dir=context.home_dir,
             ),
             getattr(args, "json", False),
         )

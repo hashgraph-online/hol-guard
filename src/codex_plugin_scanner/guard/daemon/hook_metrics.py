@@ -28,7 +28,7 @@ _DECISIONS = {"allow", "deny", "ask", "block", "warn", "error"}
 _CACHE_STATUSES = {"hit", "miss", "bypass", "disabled", "error"}
 _FALLBACK_KINDS = {"none", "fail_closed", "local", "cache", "error"}
 _EVENTS = {"pretooluse", "posttooluse", "permissionrequest", "userpromptsubmit"}
-_ROUTES = {"native_resident", "native_oneshot", "native_fail_safe", "python_semantic"}
+_ROUTES = {"native_resident", "native_oneshot", "native_fail_safe", "native_degraded", "python_semantic"}
 
 
 def _bounded_dimension(value: str, allowed: set[str]) -> str:

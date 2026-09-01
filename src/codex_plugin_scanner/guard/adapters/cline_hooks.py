@@ -293,6 +293,16 @@ def proof(outcome):
         pass
 
 
+def emergency_continue(value):
+    if not BLOCKING:
+        return False
+    try:
+        from codex_plugin_scanner.guard.daemon.hook_availability_policy import hook_action_is_emergency_safe
+        return hook_action_is_emergency_safe(value)
+    except Exception:
+        return False
+
+
 def main():
     raw = sys.stdin.buffer.read(MAX_BYTES + 1)
     if len(raw) > MAX_BYTES:
@@ -329,10 +339,18 @@ def main():
                 check=False,
             )
         except (OSError, subprocess.SubprocessError):
+            if emergency_continue(value):
+                emit({{"cancel": False, "errorMessage": "", "contextModification": ""}})
+                proof("degraded")
+                return 0
             fail("HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed.")
             return 0
         decision = parse_output(result.stdout)
         if decision is None:
+            if emergency_continue(value):
+                emit({{"cancel": False, "errorMessage": "", "contextModification": ""}})
+                proof("degraded")
+                return 0
             fail("HOL Guard returned an invalid decision; this Cline action was not allowed to proceed.")
             return 0
         if blocked(decision):

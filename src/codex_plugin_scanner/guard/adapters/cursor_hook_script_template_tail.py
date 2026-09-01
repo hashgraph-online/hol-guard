@@ -234,7 +234,57 @@ def _compute_cursor_after_observer_proof(
     return hmac.new(secret, message, hashlib.sha256).hexdigest()
 
 
+def _cursor_availability_response(
+    payload: Mapping[str, object],
+    *,
+    hook_event_name: str,
+    workspace: str | None,
+) -> tuple[dict[str, object], int]:
+    workspace_path = Path(workspace) if workspace else None
+    try:
+        from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
+
+        return cursor_fallback_permission(
+            payload,
+            hook_event_name=hook_event_name,
+            workspace=workspace_path,
+        )
+    except Exception:
+        compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
+        if compact in {"aftershellexecution", "aftermcpexecution"}:
+            return {}, 0
+        if compact == "beforereadfile":
+            path = str(payload.get("file_path") or "")
+            lowered = path.lower()
+            if any(marker in lowered for marker in (".env", "id_rsa", ".npmrc", ".pypirc", "credentials")):
+                return {
+                    "permission": "deny",
+                    "user_message": "HOL Guard paused a sensitive file read while native review was unavailable.",
+                }, 2
+            return {"permission": "allow"}, 0
+        return {
+            "permission": "deny",
+            "user_message": "HOL Guard paused this action because native review was unavailable.",
+            "agent_message": "HOL Guard paused this action because native review was unavailable.",
+        }, 2
+
+
 def main() -> int:
+    try:
+        return _main_inner()
+    except Exception:
+        print(
+            json.dumps(
+                {
+                    "permission": "deny",
+                    "user_message": "HOL Guard could not complete this Cursor hook safely.",
+                }
+            )
+        )
+        return 2
+
+
+def _main_inner() -> int:
     raw = sys.stdin.read()
     if not raw.strip():
         print(json.dumps({"permission": "deny", "user_message": "HOL Guard received empty Cursor hook input."}))
@@ -276,18 +326,35 @@ def main() -> int:
         workspace=workspace,
         hook_env_overlay=_daemon_hook_env_overlay(guard_env),
     )
-    if daemon_result is None and daemon_failure_kind not in {None, "overload"}:
-        _run_guard_recovery(
-            daemon_failure_kind,
-            guard_env=guard_env,
-            deadline_monotonic=deadline_monotonic,
-        )
-        daemon_result, _retry_failure_kind = _daemon_hook_result(
-            payload_json,
-            deadline_monotonic=deadline_monotonic,
+    if daemon_result is None:
+        availability, availability_code = _cursor_availability_response(
+            prepared,
+            hook_event_name=hook_event_name,
             workspace=workspace,
-            hook_env_overlay=_daemon_hook_env_overlay(guard_env),
         )
+        if availability_code == 0 and availability.get("permission") == "allow":
+            if daemon_failure_kind not in {None, "overload"}:
+                threading.Thread(
+                    target=_run_guard_recovery,
+                    args=(daemon_failure_kind,),
+                    kwargs={"guard_env": guard_env, "deadline_monotonic": deadline_monotonic},
+                    daemon=True,
+                    name="hol-guard-cursor-recovery",
+                ).start()
+            print(json.dumps(availability))
+            return availability_code
+        if daemon_failure_kind not in {None, "overload"}:
+            _run_guard_recovery(
+                daemon_failure_kind,
+                guard_env=guard_env,
+                deadline_monotonic=deadline_monotonic,
+            )
+            daemon_result, _retry_failure_kind = _daemon_hook_result(
+                payload_json,
+                deadline_monotonic=deadline_monotonic,
+                workspace=workspace,
+                hook_env_overlay=_daemon_hook_env_overlay(guard_env),
+            )
     try:
         if daemon_result is not None:
             proc = subprocess.CompletedProcess(
@@ -303,29 +370,14 @@ def main() -> int:
                 guard_env=guard_env,
                 deadline_monotonic=deadline_monotonic,
             )
-    except subprocess.TimeoutExpired:
-        print(
-            json.dumps(
-                {
-                    "permission": "deny",
-                    "user_message": (
-                        f"HOL Guard hook timed out after {GUARD_HOOK_TIMEOUT_SECONDS}s. "
-                        "Open the Guard approval center or native Cursor prompt, resolve pending requests, then retry."
-                    ),
-                }
-            )
+    except (subprocess.TimeoutExpired, Exception):
+        response, exit_code = _cursor_availability_response(
+            prepared,
+            hook_event_name=hook_event_name,
+            workspace=workspace,
         )
-        return 2
-    except Exception as exc:
-        print(
-            json.dumps(
-                {
-                    "permission": "deny",
-                    "user_message": f"HOL Guard hook execution failed: {exc}",
-                }
-            )
-        )
-        return 2
+        print(json.dumps(response))
+        return exit_code
     guard_payload: dict[str, object] = {}
     if proc.stdout.strip():
         try:
@@ -342,27 +394,22 @@ def main() -> int:
         if _recording_only_from_guard_home():
             print(json.dumps({"permission": "allow"}))
             return 0
-        print(
-            json.dumps(
-                {
-                    "permission": "deny",
-                    "user_message": "HOL Guard returned an invalid policy action and failed closed.",
-                }
-            )
+        response, exit_code = _cursor_availability_response(
+            prepared,
+            hook_event_name=hook_event_name,
+            workspace=workspace,
         )
-        return 2
+        print(json.dumps(response))
+        return exit_code
     policy_action = raw_policy_action
     if proc.returncode != 0 and not guard_payload:
-        print(
-            json.dumps(
-                {
-                    "permission": "deny",
-                    "user_message": (proc.stderr or "HOL Guard hook failed.").strip()
-                    or "HOL Guard hook failed.",
-                }
-            )
+        response, exit_code = _cursor_availability_response(
+            prepared,
+            hook_event_name=hook_event_name,
+            workspace=workspace,
         )
-        return 2
+        print(json.dumps(response))
+        return exit_code
     response, exit_code = _emit_cursor_response(
         hook_event_name=hook_event_name,
         policy_action=policy_action,

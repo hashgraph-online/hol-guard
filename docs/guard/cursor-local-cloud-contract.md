@@ -30,7 +30,11 @@ Guard installs command hooks documented by Cursor:
 - `preToolUse` with matchers for Shell, MCP, Bash, and Read tools
 - `beforeReadFile` for sensitive file reads before they reach the model
 
-Hooks call a managed bridge script (`.cursor/hooks/hol-guard-cursor-hook.py`) that forwards stdin JSON to `hol-guard hook --harness cursor --json` and maps Guard policy results to Cursor `permission` responses (`allow`, `deny`, `ask`).
+Hooks call a managed bridge script (`.cursor/hooks/hol-guard-cursor-hook.py`) through the attested Guard Python interpreter, so a missing execute bit cannot freeze the IDE. The script forwards stdin JSON to the local daemon first, then `hol-guard hook --harness cursor --json`, and maps Guard policy results to Cursor `permission` responses (`allow`, `deny`, `ask`).
+
+When native review, daemon transport, or hook execution cannot complete, Guard keeps a schema-valid response on every path. Local inspection (workspace source reads, grep/glob/`rg`/`cat`, `git status`/`diff`/`log`, `hol-guard status`/`doctor`) continues under the emergency-safe action-class floor without waiting for daemon recovery. Mutating, network, secret, destructive, MCP, and uncertain actions still pause. Empty or malformed Cursor input remains deny.
+
+Restart Cursor after install so hook config reloads.
 
 Review decisions still appear in the approval inbox so the same request is visible outside Cursor. Accepting the native Cursor prompt resolves that inbox item after the attested `afterShellExecution` or `afterMCPExecution` observer runs. The native Accept is the approval; the inbox should not require a second decision.
 

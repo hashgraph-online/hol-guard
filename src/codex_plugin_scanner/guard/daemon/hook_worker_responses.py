@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .hook_availability_policy import hook_action_is_emergency_safe
+
 
 def prepare_native_hook_policy(
     handler: Any,
@@ -18,11 +20,15 @@ def prepare_native_hook_policy(
 ) -> bool:
     """Apply the production native-policy barrier before hook admission."""
 
+    workspace_path = Path(workspace) if workspace is not None else None
     prepared_policy = daemon_server.hook_worker.prepare_workspace_policy(
-        Path(workspace) if workspace is not None else None,
+        workspace_path,
         deadline=deadline,
     )
     if prepared_policy is not None:
+        return True
+    if hook_action_is_emergency_safe(payload, workspace=workspace_path):
+        daemon_server.hook_worker.metrics.record_route("native_degraded")
         return True
     daemon_server.hook_worker.metrics.record_route("native_fail_safe")
     handler._write_json(
@@ -75,9 +81,11 @@ def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, objec
             "reason": reason,
             "model_output_action": "block",
             "notice": "warning",
+            "policy_action": "block",
             "reason_code": reason_code,
         }
     return {
+        "policy_action": "block",
         "reason_code": reason_code,
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",

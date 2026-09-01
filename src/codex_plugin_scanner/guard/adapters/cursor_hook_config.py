@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shlex
 import stat
+import sys
 from hashlib import sha256
 from pathlib import Path
 
@@ -23,15 +24,23 @@ _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EV
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
 
 
+def _managed_hook_command(*, python_executable: Path | None, script_path: Path) -> str:
+    script = str(script_path.resolve())
+    if python_executable is None:
+        return shlex.join([sys.executable, script])
+    return shlex.join([str(python_executable), script])
+
+
 def _managed_hook_entry(
     context: HarnessContext,
     *,
     script_path: Path,
     event_name: str,
+    python_executable: Path | None = None,
 ) -> dict[str, object]:
     del context
     entry: dict[str, object] = {
-        "command": str(script_path.resolve()),
+        "command": _managed_hook_command(python_executable=python_executable, script_path=script_path),
         "timeout": _MANAGED_HOOK_TIMEOUT_SECONDS,
         "failClosed": event_name in _BLOCKING_MANAGED_HOOK_EVENTS,
     }

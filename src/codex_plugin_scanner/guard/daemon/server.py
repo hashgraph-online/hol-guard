@@ -5983,14 +5983,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 },
             }
         if event == "PreToolUse":
-            return {
-                "reason_code": reason_code,
-                "hookSpecificOutput": {
-                    "hookEventName": event,
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                },
-            }
+            from .hook_availability_policy import availability_harness_response
+
+            payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
+            return availability_harness_response(
+                payload_dict,
+                harness=harness,
+                event_name="PreToolUse",
+                reason_code=reason_code,
+                reason=reason,
+            )
         return {
             "continue": False,
             "stopReason": reason,

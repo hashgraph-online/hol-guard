@@ -145,8 +145,11 @@ def test_hook_worker_watch_native_unavailable_fails_closed_without_cli_escape(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["reason_code"] == "native_pre_tool_unavailable"
-    assert result["decision"] == "block"
+    assert result["reason_code"] == "native_degraded_emergency_safe"
+    assert result["policy_action"] == "warn"
+    hook_output = result["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"
 
 
 def test_hook_worker_watch_native_allow_still_allows(

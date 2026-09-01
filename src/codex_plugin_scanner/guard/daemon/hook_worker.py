@@ -12,10 +12,12 @@ Security:
 - Native PostToolUse is decided by Rust for ``auto``/``force``. Native failure
   fails closed instead of spilling into Python review. Explicit ``off`` is a
   fail-safe disablement in production; only a test-injected oracle may run.
-- Supported generic PreToolUse is decided by Rust. Native failure fails closed
-  in auto/force. Explicit off/shadow have no production semantic fallback.
-  Native review and block results are rendered mechanically and never escape to
-  the Python semantic CLI path.
+- Supported generic PreToolUse is decided by Rust. Native failure uses the
+  mechanical emergency-safe action-class floor: local inspection may continue,
+  while mutating, network, secret, destructive, and uncertain actions pause.
+  Explicit off/shadow have no production semantic fallback. Native review and
+  block results are rendered mechanically and never escape to the Python
+  semantic CLI path.
 """
 
 from __future__ import annotations
@@ -182,8 +184,9 @@ class HookWorker(HookWorkerNativeMixin):
 
         Workspace overlays are published asynchronously, so the first hook
         for a workspace must complete this same barrier used by normal hook
-        evaluation. The barrier is always capped at the native readiness
-        budget; a timeout returns ``None`` and callers fail closed.
+        evaluation.         The barrier is always capped at the native readiness
+        budget; a timeout returns ``None``. Callers then admit emergency-safe
+        inspection or pause high-impact actions.
         """
 
         if native_mode() not in {"auto", "force", "shadow"}:
@@ -226,9 +229,10 @@ class HookWorker(HookWorkerNativeMixin):
         """Review a hook HTTP payload and return harness JSON.
 
         ``auto`` and ``force`` require the native runtime. When native is
-        unavailable or returns no result, supported PreToolUse and PostToolUse
-        fail closed. ``off`` and ``shadow`` can use only an explicit test
-        oracle; production requests remain fail-safe.
+        unavailable or returns no result, PostToolUse and high-impact
+        PreToolUse fail closed. Emergency-safe local inspection continues
+        with an explicit degraded reason code. ``off`` and ``shadow`` can use
+        only an explicit test oracle; production requests remain fail-safe.
         """
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness

@@ -137,8 +137,14 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
 
     payload = _managed_hooks_payload(_json_object(hooks_path, recover_missing=True))
     hooks = _inline_hooks(payload)
+    python_executable = guard_cli.python.executable if guard_cli.python is not None else None
     for event_name in _MANAGED_HOOK_EVENTS:
-        entry = _managed_hook_entry(context, script_path=script_path, event_name=event_name)
+        entry = _managed_hook_entry(
+            context,
+            script_path=script_path,
+            event_name=event_name,
+            python_executable=python_executable,
+        )
         hooks[event_name] = _merge_hook_entries(hooks.get(event_name), entry, event_name=event_name)
     pre_tool_use = hooks.get("preToolUse")
     if pre_tool_use is not None:
@@ -468,7 +474,6 @@ def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
         if (
             stat.S_ISLNK(metadata.st_mode)
             or not stat.S_ISREG(metadata.st_mode)
-            or not _hook_script_mode_is_executable(metadata.st_mode)
             or source != expected_source
         ):
             return {
@@ -493,7 +498,12 @@ def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
         }
     for event_name in _MANAGED_HOOK_EVENTS:
         entries = hooks.get(event_name)
-        expected_entry = _managed_hook_entry(context, script_path=script_path, event_name=event_name)
+        expected_entry = _managed_hook_entry(
+            context,
+            script_path=script_path,
+            event_name=event_name,
+            python_executable=guard_cli.python.executable if guard_cli.python is not None else None,
+        )
         if not isinstance(entries, list) or sum(entry == expected_entry for entry in entries) != 1:
             return {
                 "protection_active": False,

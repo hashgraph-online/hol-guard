@@ -220,7 +220,7 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}},
         params={},
         default_harness="pi",
         home_dir=tmp_path / "home",
@@ -254,7 +254,7 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}},
         params={},
         default_harness="pi",
         home_dir=tmp_path / "home",
@@ -293,7 +293,7 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
         )
 
 
-def test_hook_worker_fails_closed_for_non_command_pretool_without_native_result(
+def test_hook_worker_uses_emergency_safe_floor_for_non_command_pretool_without_native_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -308,6 +308,31 @@ def test_hook_worker_fails_closed_for_non_command_pretool_without_native_result(
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "src/foo.ts"}},
+        params={},
+        default_harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["decision"] == "allow"
+    assert result["reason_code"] == "native_degraded_emergency_safe"
+
+
+def test_hook_worker_pauses_secret_read_without_native_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
+        lambda: "auto",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    result = worker.review_http_payload(
+        payload={"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": ".env"}},
         params={},
         default_harness="pi",
         home_dir=tmp_path / "home",

@@ -230,6 +230,22 @@ def test_run_local_fallback_degrades_invalid_json() -> None:
     assert "malformed hook JSON" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def test_degraded_pretool_allows_emergency_safe_read() -> None:
+    response = bridge._degraded(
+        "daemon unavailable",
+        json.dumps(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "src/app.ts"},
+            }
+        ),
+    )
+
+    payload = json.loads(response)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
 def test_valid_hook_json_degrades_empty_daemon_body() -> None:
     response = bridge._valid_hook_json_or_degraded(
         "",

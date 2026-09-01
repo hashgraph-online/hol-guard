@@ -13,6 +13,7 @@ if __package__:
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
     from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+    from ..daemon.hook_availability_policy import EMERGENCY_SAFE_REASON, hook_action_is_emergency_safe
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -40,6 +41,10 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         bridge_config_from_argv as _parse_bridge_config,
     )
     from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+    from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+        EMERGENCY_SAFE_REASON,
+        hook_action_is_emergency_safe,
+    )
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -128,12 +133,26 @@ def _fail_closed(event_name: str, reason: str = _FAIL_CLOSED_REASON) -> dict[str
     }
 
 
-def _unavailable_response(event_name: str, reason: str) -> dict[str, object]:
+def _unavailable_response(
+    event_name: str,
+    reason: str,
+    data: str | None = None,
+) -> dict[str, object]:
     if event_name == "UserPromptSubmit":
         return {
             "continue": True,
             "systemMessage": reason,
         }
+    if event_name == "PreToolUse" and data:
+        payload = _json_object(data)
+        if payload is not None and hook_action_is_emergency_safe(payload):
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": event_name,
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": EMERGENCY_SAFE_REASON,
+                }
+            }
     return _fail_closed(event_name, reason)
 
 
@@ -206,7 +225,7 @@ def main(
             if launch_integrity_failed
             else _FAIL_CLOSED_REASON
         )
-        response = _unavailable_response(event_name, failure_reason)
+        response = _unavailable_response(event_name, failure_reason, data)
     sys.stdout.write(
         _bridge_output(
             response,

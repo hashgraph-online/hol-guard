@@ -283,7 +283,7 @@ def test_auto_hook_uses_barrier_without_loading_config_per_request(
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
     started_at = time.monotonic()
     result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}},
         params={},
         default_harness="codex",
         home_dir=tmp_path / "home",

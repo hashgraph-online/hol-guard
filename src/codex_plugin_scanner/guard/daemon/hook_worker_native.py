@@ -14,6 +14,7 @@ from ..native_route_receipt import record_python_semantic_hook_route
 from ..native_runtime import NativeRuntimeStatus
 from ..protection_posture import protection_is_off
 from ..runtime.hook_review_types import HookReviewRequest, HookReviewResponse
+from .hook_availability_policy import availability_harness_response
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import (
     harness_json_from_native_post_tool,
@@ -142,7 +143,6 @@ class HookWorkerNativeMixin:
             policy_snapshot=policy_snapshot,
         )
         if edge is None:
-            self.metrics.record_route("native_fail_safe")
             if event_name == "PostToolUse":
                 self._record_post_tool_activity(
                     harness=harness,
@@ -153,17 +153,42 @@ class HookWorkerNativeMixin:
                 "PostToolUse": "native_post_tool_unavailable",
                 "PreToolUse": "native_pre_tool_unavailable",
             }.get(event_name, "native_hook_event_unavailable")
-            return post_tool_fail_safe_response(
-                harness,
-                reason="HOL Guard could not complete the native hook decision safely.",
+            response = availability_harness_response(
+                payload,
+                harness=harness,
+                event_name=event_name,
                 reason_code=reason_code,
+                reason="HOL Guard could not complete the native hook decision safely.",
+                workspace=workspace,
+                home_dir=home_dir,
             )
+            route = (
+                "native_degraded"
+                if response.get("reason_code") == "native_degraded_emergency_safe"
+                else "native_fail_safe"
+            )
+            self.metrics.record_route(route)
+            return response
         native_event = str(edge["event_name"])
         native_harness = str(edge["harness"])
         native_result = edge["result"]
         if not isinstance(native_result, Mapping):
-            self.metrics.record_route("native_fail_safe")
-            return post_tool_fail_safe_response(harness, reason_code="native_hook_edge_invalid_response")
+            response = availability_harness_response(
+                payload,
+                harness=harness,
+                event_name=event_name,
+                reason_code="native_hook_edge_invalid_response",
+                reason="HOL Guard could not complete the native hook decision safely.",
+                workspace=workspace,
+                home_dir=home_dir,
+            )
+            route = (
+                "native_degraded"
+                if response.get("reason_code") == "native_degraded_emergency_safe"
+                else "native_fail_safe"
+            )
+            self.metrics.record_route(route)
+            return response
         self._record_native_decision_receipt(edge.get("receipt"))
         self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":

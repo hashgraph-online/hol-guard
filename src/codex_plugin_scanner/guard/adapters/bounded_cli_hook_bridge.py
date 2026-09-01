@@ -23,6 +23,7 @@ from ..codex_hook_launch_runtime import (
     isolated_hook_environment,
     run_isolated_hook_process,
 )
+from ..daemon.hook_availability_policy import EMERGENCY_SAFE_REASON, hook_action_is_emergency_safe
 from ..private_file_io import read_private_regular_text
 
 _MAX_HOOK_INPUT_BYTES = 1_000_000
@@ -363,7 +364,33 @@ def _has_json_object_line(output: str) -> bool:
     return False
 
 
-def _failure_payload(*, harness: str, event_name: str, reason: str) -> tuple[dict[str, object], int]:
+def _failure_payload(
+    *,
+    harness: str,
+    event_name: str,
+    reason: str,
+    input_text: str = "",
+) -> tuple[dict[str, object], int]:
+    payload = _json_object(input_text or "{}")
+    if (
+        event_name == "PreToolUse"
+        and isinstance(payload, dict)
+        and hook_action_is_emergency_safe(payload)
+    ):
+        if harness == "copilot":
+            return {
+                "permissionDecision": "allow",
+                "permissionDecisionReason": EMERGENCY_SAFE_REASON,
+            }, 0
+        if harness in {"grok", "hermes", "openclaw"}:
+            return {"decision": "allow", "reason": EMERGENCY_SAFE_REASON}, 0
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "permissionDecision": "allow",
+                "permissionDecisionReason": EMERGENCY_SAFE_REASON,
+            }
+        }, 0
     if harness == "copilot":
         if event_name == "PermissionRequest":
             return {
@@ -406,6 +433,7 @@ def _emit_failure(*, harness: str, input_text: str, reason: str = _FAILURE_REASO
         harness=harness,
         event_name=_event_name(input_text),
         reason=reason,
+        input_text=input_text,
     )
     _ = sys.stdout.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
     return returncode
