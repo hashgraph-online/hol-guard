@@ -31,11 +31,8 @@ from .native_policy_snapshot_constants import (
 from .native_policy_snapshot_contract import (
     snapshot_bytes_v3,
 )
-from .native_policy_snapshot_windows_acl import _windows_verify_private_dacl
-from .native_policy_snapshot_windows_io import _windows_close_handle, _windows_open_handle
 from .native_policy_snapshot_windows_support import (
     _runtime_state_directory,
-    _windows_owner_sid,
     _windows_path_has_reparse_component,
 )
 
@@ -195,6 +192,7 @@ def _write_v3_snapshot_file(
 ) -> bytes:
     """Atomically retain one signed snapshot in a private state file."""
 
+    api = _snapshot_api()
     payload = snapshot_bytes_v3(snapshot)
     state_dir = _runtime_state_directory(guard_home)
     path = state_dir / name
@@ -228,12 +226,20 @@ def _write_v3_snapshot_file(
             finally:
                 os.close(directory_descriptor)
         else:
-            owner_sid = _windows_owner_sid()
-            kernel32, handle, _information = _windows_open_handle(path, directory=False)
-            try:
-                _windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-            finally:
-                _windows_close_handle(kernel32, handle)
+            # ``os.open`` cannot carry Windows security attributes. Reapply
+            # the owner-private descriptor to the replaced file through the
+            # same handle used for verification before publishing readiness.
+            with api._windows_private_descriptor(False) as (_advapi32, descriptor, dacl, owner_sid):
+                kernel32, handle, _information = api._windows_open_handle(
+                    path,
+                    directory=False,
+                    descriptor=descriptor,
+                )
+                try:
+                    api._windows_apply_private_dacl(kernel32, handle, descriptor, dacl, False)
+                    api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
+                finally:
+                    api._windows_close_handle(kernel32, handle)
     except OSError as error:
         raise NativePolicySnapshotError("native_policy_snapshot_cache_sync_failed") from error
     finally:

@@ -8,6 +8,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import final
 
+from . import hook_process_creation
 from .hook_process_capacity import (
     AdaptiveHookProcessCapacity,
     HookProcessStats,
@@ -15,7 +16,6 @@ from .hook_process_capacity import (
     initial_hook_worker_target,
     process_cpu_ratio,
 )
-from . import hook_process_creation
 from .hook_process_protocol import as_string_object_dict, is_pair
 from .hook_process_request import build_hook_process_review_request, runtime_hook_review_is_idempotent
 from .hook_process_runner_lifecycle import HookProcessRunnerLifecycleMixin, hook_worker_ready_timeout

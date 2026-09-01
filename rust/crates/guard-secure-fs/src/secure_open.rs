@@ -1,3 +1,5 @@
+#[cfg(not(unix))]
+use std::fs;
 use std::fs::File;
 #[cfg(unix)]
 use std::fs::{self, Metadata};
@@ -90,6 +92,13 @@ fn same_unix_directory_identity(expected: &Metadata, actual: &Metadata) -> bool 
     expected.dev() == actual.dev()
         && expected.ino() == actual.ino()
         && expected.mode() == actual.mode()
+}
+
+#[cfg(not(unix))]
+pub(crate) fn is_oversized_regular_file(path: &Path, max_bytes: usize) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.is_file() && metadata.len() > max_bytes as u64)
+        .unwrap_or(false)
 }
 
 #[cfg(not(unix))]

@@ -273,8 +273,15 @@ class _ResidentService:
 
     def _publish_started_credential(self, started: _StartedResident) -> bool:
         auth_token, stop_event, generation = started
-        socket_path = self.socket_path
-        identity = _socket_identity(socket_path) if socket_path is not None else None
+        # Snapshot both the destination and its identity with the generation;
+        # a concurrent close/restart must not publish credentials to a
+        # different socket instance.
+        with self._lock:
+            if self._closed or self._generation != generation:
+                stop_event.set()
+                return False
+            socket_path = self.socket_path
+            identity = _socket_identity(socket_path) if socket_path is not None else None
         if (
             socket_path is None
             or identity is None

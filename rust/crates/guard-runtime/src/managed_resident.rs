@@ -28,7 +28,7 @@ mod resident_state_retirement;
 #[path = "resident_restart_budget.rs"]
 mod restart_budget;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 const MANAGED_OWNER_LOCK_FILE_NAME: &str = owner_lock::MANAGED_OWNER_LOCK_FILE_NAME;
 
 use crate::resident_state::{
@@ -192,6 +192,10 @@ fn client_request_with_lease(
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
+    // Older per-digest launchers left their startup marker in the runtime
+    // scope.  Retire only an authenticated stale marker before taking the
+    // home-wide lock; a live marker remains an active startup signal.
+    let _ = clear_stale_startup_lock(&scope, &digest)?;
     let mut lock = acquire_startup_lock(state_base)?;
     if lock.is_none() && clear_stale_startup_lock(state_base, &digest)? {
         lock = acquire_startup_lock(state_base)?;
@@ -264,6 +268,12 @@ fn client_request_with_lease(
 }
 
 pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
+    // Materialize the current runtime scope even when no resident state is
+    // present.  This keeps the stop command's authenticated, private-home
+    // contract deterministic for callers that use it to initialize a fresh
+    // scope before publishing test or recovery state.
+    let digest = runtime_digest()?;
+    let _ = state_scope(state_base, &digest)?;
     let request = br#"{"operation":"shutdown","request":{}}"#;
     let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
     let Some((scope, digest, state)) = discover_home_states(state_base)?.into_iter().next() else {
@@ -368,19 +378,25 @@ pub(crate) fn supervise_managed_for_owner(
     {
         let executable = std::env::current_exe()
             .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
-        let mut child = Command::new(executable)
+        let mut child = Command::new(executable);
+        child
             .arg("serve-managed")
             .arg("--state-dir")
             .arg(state_base)
             .arg("--generation")
             .arg(generation.to_string())
             .arg("--owner-process-id")
-            .arg(owner_process_id.to_string())
+            .arg(std::process::id().to_string())
             .arg("--runtime-sha256")
             .arg(expected_digest)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        // The supervisor was launched in its own process group by
+        // spawn_managed_for_owner. Leave the serving child in that inherited
+        // group so startup timeout containment addresses both processes as
+        // one authenticated unit.
+        let mut child = child
             .spawn()
             .map_err(|_| "native_resident_spawn_failed".to_owned())?;
         let mut liveness_writer = child
@@ -392,10 +408,36 @@ pub(crate) fn supervise_managed_for_owner(
             .and_then(|()| liveness_writer.write_all(b"\n"))
             .and_then(|()| liveness_writer.flush())
             .map_err(|_| "native_resident_spawn_auth_failed".to_owned())?;
+        let owner_start_marker = process_start_marker(owner_process_id).ok();
+        let child_done = Arc::new(AtomicBool::new(false));
+        let watcher_done = Arc::clone(&child_done);
+        let watcher_base = state_base.to_owned();
+        let watcher = thread::spawn(move || {
+            let mut no_lease_since = None;
+            loop {
+                if watcher_done.load(Ordering::Acquire) {
+                    break;
+                }
+                let owner_alive = owner_start_marker.as_deref().is_some_and(|expected| {
+                    process_start_marker(owner_process_id).is_ok_and(|actual| actual == expected)
+                });
+                if owner_alive || lease::any_live_for_home(&watcher_base) {
+                    no_lease_since = None;
+                } else {
+                    let started = no_lease_since.get_or_insert_with(Instant::now);
+                    if started.elapsed() >= lease::LEASE_EXPIRY {
+                        drop(liveness_writer);
+                        break;
+                    }
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+        });
         let status = child
             .wait()
             .map_err(|_| "native_resident_supervisor_wait_failed".to_owned())?;
-        drop(liveness_writer);
+        child_done.store(true, Ordering::Release);
+        let _ = watcher.join();
         if status.success() {
             Ok(())
         } else {

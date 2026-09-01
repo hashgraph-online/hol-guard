@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
@@ -117,7 +117,21 @@ fn validate_process_start_marker(
     Ok(())
 }
 
-fn process_executable_path(process_id: u32) -> Result<std::path::PathBuf, String> {
+#[cfg(target_os = "macos")]
+fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
+    let path = libproc::proc_pid::pidpath(process_id as i32)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
+    fs::canonicalize(path).map_err(|_| "native_resident_process_identity_unavailable".to_owned())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
+    fs::canonicalize(format!("/proc/{process_id}/exe"))
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "android")))]
+fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
     let pid = Pid::from_u32(process_id);
     let mut system = System::new();
     system.refresh_processes_specifics(

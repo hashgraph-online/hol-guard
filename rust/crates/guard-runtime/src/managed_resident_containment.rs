@@ -38,16 +38,9 @@ fn state_process_identity(state: &ResidentState) -> ManagedProcessIdentity {
 pub(super) fn state_process_identities(states: &[ResidentState]) -> Vec<ManagedProcessIdentity> {
     states
         .iter()
-        .flat_map(|state| {
-            [
-                state_process_identity(state),
-                ManagedProcessIdentity {
-                    process_id: state.owner_process_id,
-                    start_marker: Some(state.owner_process_start_marker.clone()),
-                    runtime_digest: Some(state.runtime_sha256.clone()),
-                },
-            ]
-        })
+        // The owner is a shared client lease, not a managed resident.  A
+        // stop request must never wait for or terminate that requester.
+        .map(state_process_identity)
         .collect()
 }
 
@@ -84,6 +77,14 @@ pub(super) fn spawn_managed_for_owner(
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        // The supervisor and serving child form one containment unit.  The
+        // child inherits this group before it can run, closing the startup
+        // timeout race that otherwise strands serve-managed at PID 1.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
         let mut child = command
             .spawn()
             .map_err(|_| "native_resident_spawn_failed".to_owned())?;
@@ -118,16 +119,38 @@ pub(super) fn child_process_id(child: &SpawnedManaged) -> u32 {
 
 #[cfg(not(windows))]
 pub(super) fn terminate_spawned_managed(child: &mut SpawnedManaged) -> Result<(), String> {
-    let status = child
+    if child
         .try_wait()
-        .map_err(|_| "native_resident_spawn_containment_failed".to_owned())?;
-    if status.is_some() {
+        .map_err(|_| "native_resident_spawn_containment_failed".to_owned())?
+        .is_some()
+    {
         return Ok(());
     }
-    match child.kill() {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(_) => return Err("native_resident_spawn_containment_failed".to_owned()),
+    let process_id = child.id();
+    let start_marker = process_start_marker(process_id).ok();
+    let runtime_identity_proven = start_marker.as_deref().is_some_and(|marker| {
+        runtime_digest().is_ok_and(|digest| {
+            validate_runtime_process_identity(process_id, marker, &digest).is_ok()
+        })
+    });
+    if runtime_identity_proven {
+        use nix::sys::signal::{kill, Signal};
+        use nix::unistd::Pid;
+
+        // spawn_managed_for_owner sets process_group(0), making the
+        // supervisor PID the group ID inherited by serve-managed.  Keep the
+        // identity proof immediately before addressing the group so a stale
+        // or reused PID can never authorize a broad kill.
+        match kill(Pid::from_raw(-(process_id as i32)), Signal::SIGKILL) {
+            Ok(()) | Err(nix::errno::Errno::ESRCH) => {}
+            Err(_) => return Err("native_resident_spawn_containment_failed".to_owned()),
+        }
+    } else {
+        match child.kill() {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) => return Err("native_resident_spawn_containment_failed".to_owned()),
+        }
     }
     child
         .wait()

@@ -50,8 +50,8 @@ def test_adaptive_deferred_start_returns_before_startup_floor_is_ready(monkeypat
     with runner._state_lock:
         enabled_not_before = runner._backfill_not_before
 
-    assert enabled_not_before < startup_not_before
-    assert enabled_not_before <= time.monotonic()
+    assert enabled_not_before == startup_not_before
+    assert enabled_not_before > time.monotonic()
     release_spawn.set()
     assert runner.close_contained()
 
@@ -90,14 +90,30 @@ def test_zero_delay_full_capacity_bounds_active_review_deferral(
         runner._started = True  # pyright: ignore[reportPrivateUsage]
         runner._generation = 1  # pyright: ignore[reportPrivateUsage]
         runner._active_reviews[1] = 1  # pyright: ignore[reportPrivateUsage]
-        runner._backfill_not_before = 130.0  # pyright: ignore[reportPrivateUsage]
-        runner._backfill_force_after = 135.0  # pyright: ignore[reportPrivateUsage]
+        runner._backfill_not_before = 0.0  # pyright: ignore[reportPrivateUsage]
+        runner._backfill_force_after = 0.0  # pyright: ignore[reportPrivateUsage]
     monkeypatch.setattr(hook_runner_module.time, "monotonic", lambda: 100.0)
 
     runner.enable_full_capacity(delay_seconds=0, active_deferral_seconds=0.2)
 
     assert runner._backfill_not_before == 0.0  # pyright: ignore[reportPrivateUsage]
     assert runner._backfill_force_after == 100.2  # pyright: ignore[reportPrivateUsage]
+
+
+def test_zero_delay_full_capacity_preserves_existing_backfill_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = HookProcessRunner()
+    with runner._state_lock:  # pyright: ignore[reportPrivateUsage]
+        runner._started = True  # pyright: ignore[reportPrivateUsage]
+        runner._backfill_not_before = 130.0  # pyright: ignore[reportPrivateUsage]
+        runner._backfill_force_after = 135.0  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(hook_runner_module.time, "monotonic", lambda: 100.0)
+
+    runner.enable_full_capacity(delay_seconds=0, active_deferral_seconds=0.2)
+
+    assert runner._backfill_not_before == 130.0  # pyright: ignore[reportPrivateUsage]
+    assert runner._backfill_force_after == 135.0  # pyright: ignore[reportPrivateUsage]
 
 
 def test_full_capacity_batches_slow_worker_spawns_within_startup_deadline(

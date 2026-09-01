@@ -11,8 +11,10 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import selectors
 import socket
 import threading
+from contextlib import suppress
 from dataclasses import dataclass
 from http.server import ThreadingHTTPServer
 from typing import Any, cast
@@ -190,7 +192,12 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._BaseServer__shutdown_request = False
+        self._guard_stop_requested = threading.Event()
+        self._guard_serve_stopped = threading.Event()
+        self._guard_serve_stopped.set()
+        self._guard_wakeup_reader, self._guard_wakeup_writer = socket.socketpair()
+        self._guard_wakeup_reader.setblocking(False)
+        self._guard_wakeup_writer.setblocking(False)
         capacity = _bounded_int(
             "HOL_GUARD_DAEMON_MAX_ACTIVE_REQUESTS",
             _DEFAULT_ACTIVE_REQUESTS,
@@ -206,12 +213,53 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
     def request_serve_stop(self) -> None:
         """Request loop termination without waiting for loop entry.
 
-        ``BaseServer.shutdown`` waits for ``serve_forever`` to acknowledge the
-        request, which deadlocks if startup has not entered the loop yet. The
-        loop reads this flag both before and after polling, so setting it is
-        safe on either side of loop entry.
+        The owned event remains safe when startup has not entered the loop yet.
+        ``BaseServer.shutdown`` cannot provide that guarantee because its
+        request flag is reset when its implementation starts.
         """
-        self._BaseServer__shutdown_request = True
+        self._guard_stop_requested.set()
+        with suppress(BlockingIOError, OSError):
+            self._guard_wakeup_writer.send(b"\x00")
+
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        """Serve requests while polling the Guard-owned stop event.
+
+        This mirrors the small public portion of ``BaseServer``'s loop while
+        avoiding its private shutdown state.  A stop request made before loop
+        entry is therefore observed on the first iteration.
+        """
+        self._guard_serve_stopped.clear()
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(self, selectors.EVENT_READ, data="server")
+                selector.register(self._guard_wakeup_reader, selectors.EVENT_READ, data="wakeup")
+                while not self._guard_stop_requested.is_set():
+                    try:
+                        ready = selector.select(timeout=max(0.0, poll_interval))
+                    except OSError:
+                        if self._guard_stop_requested.is_set():
+                            break
+                        raise
+                    for key, _mask in ready:
+                        if key.data == "wakeup":
+                            with suppress(BlockingIOError, OSError):
+                                self._guard_wakeup_reader.recv(4096)
+                            continue
+                        self.handle_request()
+                    self.service_actions()
+        finally:
+            self._guard_stop_requested.clear()
+            self._guard_serve_stopped.set()
+
+    def shutdown(self) -> None:
+        """Stop serving without waiting on an unentered BaseServer loop."""
+        self.request_serve_stop()
+        self._guard_serve_stopped.wait()
+
+    def server_close(self) -> None:
+        super().server_close()
+        self._guard_wakeup_reader.close()
+        self._guard_wakeup_writer.close()
 
     def verify_request(self, request: Any, client_address: Any) -> bool:
         if not _loopback(client_address):

@@ -225,6 +225,7 @@ def test_hook_worker_returns_native_allow(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "off")
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_pre_tool_native",
         lambda *_args, **_kwargs: _native_allow("pwd"),
@@ -245,6 +246,7 @@ def test_hook_worker_clears_native_route_before_python_review_continuation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "off")
     native_review = _native_block("git push")
     native_review["minimum_action"] = "review"
     native_review["policy_action"] = "review"
@@ -277,6 +279,7 @@ def test_full_cli_review_continuation_keeps_python_terminal_provenance(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "off")
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     home = tmp_path / "home"
@@ -365,7 +368,7 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}},
         params={},
         default_harness="pi",
         home_dir=tmp_path / "home",
@@ -398,7 +401,7 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}},
         params={},
         default_harness="pi",
         home_dir=tmp_path / "home",
@@ -437,7 +440,7 @@ def test_hook_worker_falls_back_when_native_mode_is_off(
         )
 
 
-def test_hook_worker_fails_closed_for_non_command_pretool_without_native_result(
+def test_hook_worker_uses_emergency_safe_floor_for_non_command_pretool_without_native_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -458,8 +461,8 @@ def test_hook_worker_fails_closed_for_non_command_pretool_without_native_result(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "deny"
-    assert result["reason_code"] == "native_pre_tool_unavailable"
+    assert result["decision"] == "allow"
+    assert result["reason_code"] == "native_degraded_emergency_safe"
 
 
 def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(

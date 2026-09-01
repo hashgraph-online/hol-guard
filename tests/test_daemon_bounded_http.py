@@ -59,6 +59,18 @@ def _get(port: int, path: str) -> tuple[int, bytes]:
         connection.close()
 
 
+def test_bounded_server_honors_stop_requested_before_loop_entry() -> None:
+    server = BoundedThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    server.request_serve_stop()
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        thread.join(timeout=1)
+        assert not thread.is_alive()
+    finally:
+        server.server_close()
+
+
 def test_bounded_server_recovers_after_client_abort() -> None:
     server, thread = _serve()
     port = server.server_address[1]

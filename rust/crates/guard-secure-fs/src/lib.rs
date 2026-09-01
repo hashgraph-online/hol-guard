@@ -186,11 +186,11 @@ pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureR
     if contains_symlink_component(path) {
         return Err(SecureReadError::SymlinkInPath);
     }
-    // Resolve once before opening and once after reading.  O_NOFOLLOW closes
-    // the final-component race on Unix; the paired canonical checks also
-    // catch a parent-directory replacement or a path substitution observed
-    // after the descriptor was opened.  The descriptor remains the source of
-    // truth for bytes and stat identity.
+    #[cfg(not(unix))]
+    if secure_open::is_oversized_regular_file(path, max_bytes) {
+        return Err(SecureReadError::TooLarge);
+    }
+    // Canonicalize around a descriptor-bound read to close path races.
     let canonical_before = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
     let mut file = secure_open(path, &canonical_before).map_err(map_secure_open_error)?;
     let before_metadata = file.metadata().map_err(|_| SecureReadError::ReadFailed)?;
@@ -242,8 +242,8 @@ pub fn read_bounded(path: &Path, max_bytes: usize) -> Result<SecureRead, SecureR
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
-    use std::io::Write;
+    #[cfg(unix)]
+    use std::{fs::File, io::Write};
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
