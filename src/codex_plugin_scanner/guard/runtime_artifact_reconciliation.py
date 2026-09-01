@@ -51,12 +51,39 @@ def _runtime_context(
     )
 
 
+def _managed_install_needs_artifact_repair(
+    harness: str,
+    *,
+    context: HarnessContext,
+    verified: Mapping[str, bool],
+) -> bool:
+    if harness == "grok":
+        from .cli.install_commands import grok_hooks_protection_ready
+
+        return grok_hooks_protection_ready(context) is not True
+    return verified.get(harness) is not True
+
+
+def _managed_install_artifacts_ready(
+    harness: str,
+    *,
+    context: HarnessContext,
+    install: Mapping[str, object],
+    store: GuardStore,
+) -> bool:
+    if harness == "grok":
+        from .cli.install_commands import grok_hooks_protection_ready
+
+        return grok_hooks_protection_ready(context) is True
+    return _live_hook_verification([install], store).get(harness) is True
+
+
 def repair_failing_managed_harness_hooks(
     store: GuardStore,
     *,
     home_dir: Path | None = None,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Repair only active managed installs that fail live verification."""
+    """Repair active managed installs whose live hooks or owned artifacts are incomplete."""
 
     installs: list[Mapping[str, object]] = list(store.list_managed_installs())
     verified = _live_hook_verification(installs, store)
@@ -66,8 +93,6 @@ def repair_failing_managed_harness_hooks(
         harness = install.get("harness")
         if not isinstance(harness, str) or install.get("active") is not True:
             continue
-        if verified.get(harness) is True:
-            continue
         stored_workspace = install.get("workspace")
         workspace = stored_workspace if isinstance(stored_workspace, str) and stored_workspace else None
         context = _runtime_context(
@@ -75,6 +100,8 @@ def repair_failing_managed_harness_hooks(
             home_dir=home_dir,
             workspace_dir=Path(workspace).expanduser() if workspace is not None else None,
         )
+        if not _managed_install_needs_artifact_repair(harness, context=context, verified=verified):
+            continue
         try:
             apply_managed_install(
                 "install",
@@ -89,7 +116,12 @@ def repair_failing_managed_harness_hooks(
             failed.append(harness)
             continue
         refreshed = store.get_managed_install(harness)
-        if refreshed is None or _live_hook_verification([refreshed], store).get(harness) is not True:
+        if refreshed is None or not _managed_install_artifacts_ready(
+            harness,
+            context=context,
+            install=refreshed,
+            store=store,
+        ):
             failed.append(harness)
             continue
         repaired.append(harness)

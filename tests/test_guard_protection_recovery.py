@@ -111,6 +111,29 @@ def test_live_grok_hooks_pass_when_managed_config_is_missing(
     assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": True}
 
 
+def test_repair_restores_missing_grok_managed_config_when_hooks_already_intercept(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _ctx(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: ctx.home_dir)
+    _write_intercepting_grok_hooks(ctx.home_dir / ".grok" / "hooks")
+    store = GuardStore(ctx.guard_home, prime_policy_integrity=False)
+    store.set_managed_install("grok", True, None, {"harness": "grok", "active": True}, "2026-08-17T12:00:00+00:00")
+    managed = ctx.home_dir / ".grok" / "managed_config.toml"
+    assert managed.is_file() is False
+    assert grok_hooks_protection_ready(ctx) is False
+    assert grok_runtime_hooks_verified(ctx) is True
+
+    repaired, failed = repair_failing_managed_harness_hooks(store)
+
+    assert failed == ()
+    assert repaired == ("grok",)
+    assert managed.is_file() is True
+    assert grok_hooks_protection_ready(ctx) is True
+    assert _live_hook_verification(store.list_managed_installs(), store) == {"grok": True}
+
+
 def test_live_grok_hooks_reject_empty_observe_events(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
