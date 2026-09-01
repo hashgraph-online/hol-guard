@@ -83,10 +83,31 @@ def _result(*, phase: str, challenge: dict[str, object] | None = None) -> dict[s
         "receipt": {
             "schema": "guard-native-approval-receipt.v3",
             "version": 3,
+            "phase": phase,
             "request_id": source["request_id"],
             "request_digest": source["request_digest"],
             "action_digest": source["action_digest"],
             "policy_generation": source["policy_generation"],
+            "policy_digest": source["policy_digest"],
+            "rule_digest": source["rule_digest"],
+            "runtime_identity": source["runtime_identity"],
+            "runtime_protocol_version": source["runtime_protocol_version"],
+            "runtime_package": source["runtime_package"],
+            "runtime_version": source["runtime_version"],
+            "runtime_binary_identity": source["runtime_binary_identity"],
+            "harness": source["harness"],
+            "workspace_binding": source["workspace_binding"],
+            "device_binding": source["device_binding"],
+            "installation_binding": source["installation_binding"],
+            "publisher_binding": source["publisher_binding"],
+            "artifact_binding": source["artifact_binding"],
+            "scope_contract_version": source["scope_contract_version"],
+            "scope_contract_digest": source["scope_contract_digest"],
+            "scope_binding": source["scope_binding"],
+            "resident_epoch": source["resident_epoch"],
+            "nonce": source["nonce"],
+            "issued_at_ms": source["issued_at_ms"],
+            "expires_at_ms": source["expires_at_ms"],
             "decision": "allow",
             "requested_action": source["requested_action"],
             "approved_action": "allow",
@@ -227,6 +248,44 @@ def test_preconsume_forged_cross_request_policy_and_harness_values_fail(tmp_path
         assert not native_approval_continuation_allowed(consumed, **mutated)
 
 
+def test_native_consumed_receipt_must_bind_full_context(tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+    changed = _challenge()
+    changed["resident_epoch"] = _DIGEST_A
+    bridge = _bridge(
+        tmp_path, [_challenge(), _result(phase="validated"), _result(phase="consumed", challenge=changed)], calls
+    )
+    session = _create_session(bridge, tmp_path)
+    assert session is not None
+
+    assert bridge.validate_and_consume(session, _artifact(), deadline=100.5) is None
+    assert [call["operation"] for call in calls] == [
+        "approval_challenge",
+        "approval_validate",
+        "approval_consume",
+    ]
+    assert bridge.last_error_code == "native_approval_receipt_binding_mismatch"
+
+
+def test_native_consumed_receipt_missing_context_is_rejected_at_bridge(tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+    consumed = _result(phase="consumed")
+    receipt = consumed["receipt"]
+    assert isinstance(receipt, dict)
+    receipt.pop("policy_digest")
+    bridge = _bridge(tmp_path, [_challenge(), _result(phase="validated"), consumed], calls)
+    session = _create_session(bridge, tmp_path)
+    assert session is not None
+
+    assert bridge.validate_and_consume(session, _artifact(), deadline=100.5) is None
+    assert [call["operation"] for call in calls] == [
+        "approval_challenge",
+        "approval_validate",
+        "approval_consume",
+    ]
+    assert bridge.last_error_code == "native_approval_decoder_rejected"
+
+
 def test_cross_request_artifact_is_rejected_before_native_validation(tmp_path: Path) -> None:
     calls: list[dict[str, object]] = []
     bridge = _bridge(tmp_path, [_challenge()], calls)
@@ -273,6 +332,22 @@ def test_decoders_reject_floor_lowering_unknown_fields_duplicate_json_and_unknow
         assert decode_native_approval_challenge(challenge | {key: []}) is None
     assert decode_native_approval_result(_result(phase="validated"), phase="consumed") is None
     assert decode_native_approval_artifact(_artifact() | {"extra": "forged"}) is None
+    for key in (
+        "phase",
+        "policy_digest",
+        "rule_digest",
+        "runtime_identity",
+        "harness",
+        "scope_binding",
+        "resident_epoch",
+        "nonce",
+        "expires_at_ms",
+    ):
+        missing = _result(phase="consumed")
+        receipt = missing["receipt"]
+        assert isinstance(receipt, dict)
+        receipt.pop(key)
+        assert decode_native_approval_result(missing, phase="consumed") is None
 
     calls: list[dict[str, object]] = []
     bridge = _bridge(

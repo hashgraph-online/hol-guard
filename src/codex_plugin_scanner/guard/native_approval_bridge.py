@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import cast
 
 from . import native_approval_protocol as _protocol
+from .native_approval_errors import FINITE_FAILURE_CODES, NATIVE_APPROVAL_ERROR_CODES
 from .native_approval_models import (
     NativeApprovalSession,
     NativeConsumedReceipt,
@@ -41,9 +42,7 @@ class NativeApprovalBridgeError(ValueError):
 
     def __init__(self, code: str):
         safe_code = (
-            code
-            if isinstance(code, str) and code in _protocol._FINITE_FAILURE_CODES
-            else "native_approval_transport_failed"
+            code if isinstance(code, str) and code in FINITE_FAILURE_CODES else "native_approval_transport_failed"
         )
         self.code: str = safe_code
         super().__init__(safe_code)
@@ -90,9 +89,7 @@ class NativeApprovalBridge:
 
     def _fail(self, code: str) -> None:
         safe_code = (
-            code
-            if isinstance(code, str) and code in _protocol._FINITE_FAILURE_CODES
-            else "native_approval_transport_failed"
+            code if isinstance(code, str) and code in FINITE_FAILURE_CODES else "native_approval_transport_failed"
         )
         self._last_error_code = safe_code
         _ = _LAST_FAILURE_CODE.set(safe_code)
@@ -177,7 +174,7 @@ class NativeApprovalBridge:
             error = decoded.get("error")
             if (
                 not isinstance(error, str)
-                or error not in _protocol._NATIVE_APPROVAL_ERROR_CODES
+                or error not in NATIVE_APPROVAL_ERROR_CODES
                 or not isinstance(decoded.get("retryable"), bool)
             ):
                 self._fail("native_approval_decoder_rejected")
@@ -344,6 +341,7 @@ def native_approval_continuation_allowed(
         and payload.get("policy_generation") == session.policy_generation == policy_generation
         and session.policy_digest == policy_digest
         and session.harness == harness
+        and _receipt_matches_session(payload, session)
     )
 
 

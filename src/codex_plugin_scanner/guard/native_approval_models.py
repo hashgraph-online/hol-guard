@@ -162,14 +162,37 @@ def _build_envelope(
     return (envelope, encoded) if encoded is not None else None
 
 
+_RECEIPT_BINDING_FIELDS = (
+    "request_id",
+    "request_digest",
+    "action_digest",
+    "policy_generation",
+    "policy_digest",
+    "rule_digest",
+    "runtime_identity",
+    "runtime_protocol_version",
+    "runtime_package",
+    "runtime_version",
+    "runtime_binary_identity",
+    "harness",
+    "workspace_binding",
+    "device_binding",
+    "installation_binding",
+    "publisher_binding",
+    "artifact_binding",
+    "scope_contract_version",
+    "scope_contract_digest",
+    "scope_binding",
+    "resident_epoch",
+    "nonce",
+    "issued_at_ms",
+    "expires_at_ms",
+    "requested_action",
+)
+
+
 def _receipt_matches_session(receipt: Mapping[str, object], session: NativeApprovalSession) -> bool:
-    return (
-        receipt.get("request_id") == session.request_id
-        and receipt.get("request_digest") == session.request_digest
-        and receipt.get("action_digest") == session.action_digest
-        and receipt.get("policy_generation") == session.policy_generation
-        and receipt.get("requested_action") == session._challenge.get("requested_action")
-    )
+    return all(receipt.get(key) == session._challenge.get(key) for key in _RECEIPT_BINDING_FIELDS)
 
 
 def _artifact_matches_session(artifact: Mapping[str, object], session: NativeApprovalSession) -> bool:

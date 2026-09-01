@@ -106,10 +106,31 @@ _RECEIPT_KEYS = frozenset(
     [
         "schema",
         "version",
+        "phase",
         "request_id",
         "request_digest",
         "action_digest",
         "policy_generation",
+        "policy_digest",
+        "rule_digest",
+        "runtime_identity",
+        "runtime_protocol_version",
+        "runtime_package",
+        "runtime_version",
+        "runtime_binary_identity",
+        "harness",
+        "workspace_binding",
+        "device_binding",
+        "installation_binding",
+        "publisher_binding",
+        "artifact_binding",
+        "scope_contract_version",
+        "scope_contract_digest",
+        "scope_binding",
+        "resident_epoch",
+        "nonce",
+        "issued_at_ms",
+        "expires_at_ms",
         "decision",
         "requested_action",
         "approved_action",
@@ -119,140 +140,6 @@ _RECEIPT_KEYS = frozenset(
     ]
 )
 _INTEGRITY_KEYS = frozenset(["algorithm", "key_id", "signature"])
-
-# Keep this allowlist finite.  In particular, do not replace it with a prefix
-# or regular expression that could carry arbitrary runtime data as an error.
-_NATIVE_APPROVAL_ERROR_CODES = frozenset(
-    [
-        "native_approval_action_digest_failed",
-        "native_approval_action_identity_invalid",
-        "native_approval_action_not_approvable",
-        "native_approval_action_reconstruction_failed",
-        "native_approval_artifact_invalid",
-        "native_approval_artifact_schema_mismatch",
-        "native_approval_artifact_serialization_failed",
-        "native_approval_artifact_too_large",
-        "native_approval_binding_ambiguous",
-        "native_approval_binding_invalid",
-        "native_approval_binding_mismatch",
-        "native_approval_challenge_request_invalid",
-        "native_approval_clock_invalid",
-        "native_approval_consume_request_invalid",
-        "native_approval_consumed",
-        "native_approval_digest_invalid",
-        "native_approval_edge_result_invalid",
-        "native_approval_edge_result_too_large",
-        "native_approval_event_not_approvable",
-        "native_approval_failed",
-        "native_approval_floor_mismatch",
-        "native_approval_floor_not_approvable",
-        "native_approval_floor_not_overridable",
-        "native_approval_integrity_invalid",
-        "native_approval_integrity_mismatch",
-        "native_approval_intrinsic_action_invalid",
-        "native_approval_ledger_busy",
-        "native_approval_ledger_claim_invalid",
-        "native_approval_ledger_corrupt",
-        "native_approval_ledger_encode_failed",
-        "native_approval_ledger_full",
-        "native_approval_ledger_lock_failed",
-        "native_approval_ledger_lock_invalid",
-        "native_approval_ledger_lock_not_private",
-        "native_approval_ledger_not_private",
-        "native_approval_ledger_parent_invalid",
-        "native_approval_ledger_parent_not_private",
-        "native_approval_ledger_persistence_failed",
-        "native_approval_ledger_read_failed",
-        "native_approval_ledger_replace_failed",
-        "native_approval_ledger_stat_failed",
-        "native_approval_ledger_sync_failed",
-        "native_approval_ledger_unavailable",
-        "native_approval_ledger_write_failed",
-        "native_approval_minimum_action_invalid",
-        "native_approval_nonce_invalid",
-        "native_approval_policy_context_mismatch",
-        "native_approval_random_failed",
-        "native_approval_receipt_consumed",
-        "native_approval_receipt_expired",
-        "native_approval_receipt_invalid",
-        "native_approval_receipt_not_claimed",
-        "native_approval_replay",
-        "native_approval_replay_full",
-        "native_approval_replay_unavailable",
-        "native_approval_request_bounds_exceeded",
-        "native_approval_request_id_mismatch",
-        "native_approval_request_id_missing",
-        "native_approval_response_too_large",
-        "native_approval_result_invalid",
-        "native_approval_runtime_mismatch",
-        "native_approval_time_invalid",
-        "native_approval_validate_request_invalid",
-        "native_approval_validated",
-        "native_approval_authority_enrollment_invalid",
-        "native_approval_authority_generation_invalid",
-        "native_approval_authority_generation_rollback",
-        "native_approval_authority_invalid",
-        "native_approval_authority_key_id_mismatch",
-        "native_approval_authority_missing",
-        "native_approval_authority_noncanonical",
-        "native_approval_authority_provenance_mismatch",
-        "native_approval_authority_recovery_pending",
-        "native_approval_authority_revoked",
-        "native_approval_authority_root_invalid",
-        "native_approval_authority_root_unconfigured",
-        "native_approval_authority_root_provenance_invalid",
-        "native_approval_authority_root_provenance_unconfigured",
-        "native_approval_authority_already_enrolled",
-        "native_approval_already_enrolled",
-        "native_approval_authority_busy",
-        "native_approval_authority_lock_failed",
-        "native_approval_authority_lock_invalid",
-        "native_approval_authority_lock_not_private",
-        "native_approval_device_identity_invalid",
-        "native_approval_enrollment_request_invalid",
-        "native_approval_enrollment_required",
-        "native_approval_secure_state_invalid",
-        "native_approval_secure_state_unavailable",
-        "native_approval_signing_authority_replaced",
-        "native_approval_signing_authority_unavailable",
-        "native_resident_request_invalid_json",
-        "native_request_invalid_json",
-        "native_response_encode_failed",
-        "native_response_too_large",
-        "native_policy_snapshot_unavailable",
-        "native_policy_snapshot_context_mismatch",
-        "native_policy_snapshot_not_current",
-        "native_policy_snapshot_request_mismatch",
-        "native_policy_snapshot_scope_mismatch",
-        "native_policy_snapshot_invalid",
-        "native_policy_snapshot_missing",
-        "native_policy_snapshot_state_unavailable",
-        "native_policy_snapshot_required",
-        "native_policy_snapshot_push_invalid",
-        "native_policy_snapshot_push_schema_mismatch",
-        "native_policy_snapshot_generation_downgrade",
-        "native_policy_snapshot_generation_reused",
-        "native_policy_snapshot_rule_mismatch",
-        "native_policy_snapshot_authority_persistence_failed",
-        "snapshot_expired",
-        "native_runtime_panicked",
-        "native_overloaded",
-    ]
-)
-_GENERIC_FAILURE_CODES = frozenset(
-    [
-        "native_approval_decoder_rejected",
-        "native_approval_runtime_unavailable",
-        "native_approval_protocol_unsupported",
-        "native_approval_transport_failed",
-        "native_approval_request_invalid",
-        "native_approval_deadline_expired",
-        "native_approval_artifact_input_invalid",
-        "native_approval_receipt_binding_mismatch",
-        "native_approval_continuation_denied",
-    ]
-)
-_FINITE_FAILURE_CODES = _NATIVE_APPROVAL_ERROR_CODES | _GENERIC_FAILURE_CODES
 
 _REQUEST_ID_PATTERN = re.compile(r"[a-z0-9._-]{1,256}")
 _OUTPUT_REQUEST_ID_PATTERN = re.compile(r"[a-z0-9._:-]{1,256}")
@@ -422,10 +309,30 @@ def _receipt_is_valid(payload: Mapping[str, object], *, phase: NativeApprovalPha
         set(payload) == _RECEIPT_KEYS
         and payload.get("schema") == _RECEIPT_SCHEMA
         and payload.get("version") == 3
+        and payload.get("phase") == phase
         and _output_request_id(payload.get("request_id"))
         and _lower_hex(payload.get("request_digest"), 64)
         and _lower_hex(payload.get("action_digest"), 64)
         and _positive_integer(payload.get("policy_generation"))
+        and _lower_hex(payload.get("policy_digest"), 64)
+        and _lower_hex(payload.get("rule_digest"), 64)
+        and _lower_hex(payload.get("runtime_identity"), 64)
+        and payload.get("runtime_protocol_version") == _NATIVE_PROTOCOL_VERSION
+        and _bounded_text(payload.get("runtime_package"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES)
+        and _bounded_text(payload.get("runtime_version"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES)
+        and _lower_hex(payload.get("runtime_binary_identity"), 64)
+        and _bounded_text(payload.get("harness"), maximum=_MAX_HARNESS_BYTES)
+        and _optional_digest(payload.get("workspace_binding"))
+        and _optional_digest(payload.get("device_binding"))
+        and _optional_digest(payload.get("installation_binding"))
+        and _optional_digest(payload.get("publisher_binding"))
+        and _optional_digest(payload.get("artifact_binding"))
+        and _bounded_text(payload.get("scope_contract_version"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES)
+        and _lower_hex(payload.get("scope_contract_digest"), 64)
+        and _optional_digest(payload.get("scope_binding"))
+        and _lower_hex(payload.get("resident_epoch"), 64)
+        and _lower_hex(payload.get("nonce"), _NATIVE_APPROVAL_NONCE_HEX_LENGTH)
+        and _valid_approval_times(payload)
         and payload.get("decision") == "allow"
         and _allowed_text(payload.get("requested_action"), _APPROVAL_ACTIONS)
         and payload.get("approved_action") == "allow"
