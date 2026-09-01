@@ -400,8 +400,8 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 # The master is only an ephemeral input to derivation/signing;
                 # never retain it in publisher state or an exception context.
                 master_key = None
-            # Keep the slow full fingerprint read outside the condition.
             resident_fingerprint = self._current_input_fingerprint()[1]
+            resident_directory_fingerprint = self._resident_directory_fingerprint()
             with self._condition:
                 # A mutation may have invalidated the barrier while this
                 # request was in flight. Do not let an older ACK make that
@@ -414,6 +414,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                     resident_fingerprint_before,
                     resident_fingerprint,
                     resident_generation,
+                    resident_directory_fingerprint,
                 )
                 if resident_fingerprint_confirmed is None:
                     return

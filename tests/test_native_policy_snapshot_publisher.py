@@ -187,10 +187,9 @@ def test_publisher_rejects_ack_after_resident_restart_before_barrier(
     resident_fingerprints = iter(
         (
             (),
-            (("resident-v3-test/generation-00000000000000000002.json", 2, 1),),
+            (("resident-v3-test/generation-00000000000000000001.json", 1, 1),),
         )
     )
-
     def client_request(**kwargs: object) -> bytes:
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)

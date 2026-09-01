@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 from threading import Condition
 from typing import cast
@@ -92,20 +93,52 @@ class NativePolicySnapshotPublisherInputs:
                 resident_values.append((f"{directory.name}/{entry.name}", metadata.st_mtime_ns, metadata.st_size))
         return tuple(resident_values)
 
+    def _resident_directory_fingerprint(self) -> tuple[int, int] | None:
+        """Read only the runtime-state directory metadata for the commit fence."""
+
+        try:
+            metadata = (self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY).lstat()
+        except OSError:
+            return None
+        if not stat.S_ISDIR(metadata.st_mode):
+            return None
+        return metadata.st_mtime_ns, metadata.st_size
+
+    def _resident_paths_match(self, observed: tuple[tuple[str, int, int], ...]) -> bool:
+        """Recheck sampled resident paths without enumerating the directory."""
+
+        state_dir = self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
+        for path_key, mtime_ns, size in observed:
+            try:
+                metadata = (state_dir / path_key).lstat()
+            except OSError:
+                return False
+            if not stat.S_ISREG(metadata.st_mode) and not stat.S_ISDIR(metadata.st_mode):
+                return False
+            if metadata.st_mtime_ns != mtime_ns or metadata.st_size != size:
+                return False
+        return True
+
     def _confirm_resident_fingerprint(
         self,
         before: tuple[tuple[str, int, int], ...],
         observed: tuple[tuple[str, int, int], ...],
         resident_generation: int,
+        observed_directory: tuple[int, int] | None,
     ) -> tuple[tuple[str, int, int], ...] | None:
         """Reject ACKs that do not identify the resident observed after push."""
 
-        # ``observed`` is read after the ACK and before the barrier commit.
-        # Avoid another filesystem walk while holding the condition: the ACK
-        # generation is the exact resident identity for this post-ACK read.
         if before and before != observed:
             return None
         if not self._resident_fingerprint_matches_generation(observed, resident_generation):
+            return None
+        # Re-read only bounded metadata while the barrier is held. A changed
+        # state-directory identity or sampled path means a resident restarted
+        # after the full post-ACK sample; the stale ACK must not open readiness.
+        if observed_directory is None:
+            if observed:
+                return None
+        elif self._resident_directory_fingerprint() != observed_directory or not self._resident_paths_match(observed):
             return None
         return observed
 
