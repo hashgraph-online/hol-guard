@@ -339,7 +339,7 @@ def main():
                 check=False,
             )
         except (OSError, subprocess.SubprocessError):
-            if emergency_continue(value):
+            if emergency_continue(item):
                 emit({{"cancel": False, "errorMessage": "", "contextModification": ""}})
                 proof("degraded")
                 return 0
@@ -347,7 +347,7 @@ def main():
             return 0
         decision = parse_output(result.stdout)
         if decision is None:
-            if emergency_continue(value):
+            if emergency_continue(item):
                 emit({{"cancel": False, "errorMessage": "", "contextModification": ""}})
                 proof("degraded")
                 return 0

@@ -267,8 +267,15 @@ def _cursor_availability_response(
                 for marker in (
                     ".env",
                     "id_rsa",
+                    "id_ed25519",
+                    "id_ecdsa",
                     ".npmrc",
                     ".pypirc",
+                    ".netrc",
+                    ".ssh/",
+                    ".aws/",
+                    ".gnupg/",
+                    ".kube/",
                     "credentials",
                     "/etc/",
                     "/proc/",
@@ -276,6 +283,7 @@ def _cursor_availability_response(
                     "/dev/",
                     "/root/",
                     "/var/root/",
+                    "/private/etc/",
                 )
             ):
                 return {

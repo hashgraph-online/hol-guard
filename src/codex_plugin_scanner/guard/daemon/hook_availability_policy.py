@@ -73,7 +73,12 @@ _UNSAFE_FIND_FLAGS = frozenset(
         "-okdir",
         "-fprint",
         "-fprintf",
+        "-fwrite",
+        "-printf",
         "-fls",
+        "-L",
+        "-H",
+        "-follow",
     }
 )
 _UNSAFE_ABSOLUTE_PREFIXES = (
@@ -169,6 +174,13 @@ _UNSAFE_INSPECTION_FLAGS = frozenset(
         "--exec",
         "--exec-batch",
         "--execdir",
+        "--replace",
+        "--recursive",
+        "--dereference",
+        "--follow",
+        "-R",
+        "-r",
+        "-L",
     }
 )
 _UNSAFE_FD_FLAGS = frozenset(
@@ -206,7 +218,7 @@ def hook_action_is_emergency_safe(
         return False
     if _payload_source_events(payload) & _BLOCKED_SOURCE_EVENTS:
         return False
-    if _payload_is_mcp(payload):
+    if _payload_is_mcp(payload) or _tool_name(payload).startswith("plugin-"):
         return False
     if workspace is None:
         cwd = payload.get("cwd")
@@ -452,12 +464,36 @@ def _path_is_workspace_local(path: str, workspace: Path | None) -> bool:
     return True
 
 
+def _path_token_value(token: str) -> str:
+    if token.startswith("-") and "=" in token:
+        return token.split("=", 1)[1]
+    if ":" in token and not token.startswith(":") and "/" not in token.split(":", 1)[0]:
+        return token.rsplit(":", 1)[-1]
+    return token
+
+
 def _token_looks_like_path(token: str) -> bool:
-    if token in {"..", "."}:
+    value = _path_token_value(token)
+    if value in {"..", "."}:
         return True
-    if token.startswith("-"):
+    if token.startswith("-") and "=" not in token:
         return False
-    return "/" in token or "\\" in token or token.startswith(".") or ".." in token
+    return "/" in value or "\\" in value or value.startswith(".") or ".." in value
+
+
+def _token_is_secret_sensitive(
+    token: str,
+    *,
+    workspace: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    candidates = [token, _path_token_value(token)]
+    if ":" in token:
+        candidates.append(token.rsplit(":", 1)[-1])
+    return any(
+        candidate and classify_secret_path(candidate, cwd=workspace, home_dir=home_dir) is not None
+        for candidate in candidates
+    )
 
 
 def _flag_name(token: str) -> str:
@@ -483,9 +519,13 @@ def _command_is_emergency_safe(
         return False
     binary = Path(tokens[0]).name.lower()
     args = tokens[1:]
-    if any(classify_secret_path(token, cwd=workspace, home_dir=home_dir) is not None for token in args):
+    if any(_token_is_secret_sensitive(token, workspace=workspace, home_dir=home_dir) for token in args):
         return False
-    if any(not _path_is_workspace_local(token, workspace) for token in args if _token_looks_like_path(token)):
+    if any(
+        not _path_is_workspace_local(_path_token_value(token), workspace)
+        for token in args
+        if _token_looks_like_path(token)
+    ):
         return False
     if binary in {"pwd", "true", "which"}:
         return not args

@@ -267,7 +267,32 @@ def test_fd_exec_short_flag_is_not_emergency_safe(tmp_path: Path) -> None:
     )
     assert (
         hook_action_is_emergency_safe(
-            {"hook_event_name": "PreToolUse", "tool_input": {"command": "git diff --ext-diff"}},
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "find . -fwrite /tmp/out"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "git show HEAD:.env"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "rg --replace x foo"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "plugin-github",
+                "tool_input": {"command": "git status"},
+            },
             workspace=workspace,
         )
         is False
