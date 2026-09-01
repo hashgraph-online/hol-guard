@@ -128,6 +128,8 @@ class NativeApprovalBridge:
             feature = "native-approval-validation-v3"
         elif operation == "approval_consume":
             feature = "native-approval-consume-v3"
+        elif operation in {"approval_challenge_v4", "approval_validate_v4", "approval_consume_v4"}:
+            feature = "native-approval-webauthn-v4"
         else:
             self._fail("native_approval_request_invalid")
             return None
@@ -313,6 +315,174 @@ class NativeApprovalBridge:
             return None
         return _new_consumed_receipt(receipt, session)
 
+    def create_v4_challenge(
+        self,
+        *,
+        payload: dict[str, object],
+        harness: str,
+        guard_home: Path,
+        home_dir: Path,
+        cwd: Path | None,
+        policy_snapshot: Mapping[str, object],
+        deadline: float | None = None,
+    ) -> NativeApprovalSession | None:
+        """Create a Rust-issued V4 challenge for a browser passkey ceremony."""
+
+        self._last_error_code = None
+        _ = _LAST_FAILURE_CODE.set(None)
+        deadline_data = self._deadline(deadline)
+        if deadline_data is None:
+            self._fail("native_approval_deadline_expired")
+            return None
+        deadline_monotonic, budget_ms = deadline_data
+        envelope_data = _build_envelope(
+            payload=payload,
+            harness=harness,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            cwd=cwd,
+            policy_snapshot=policy_snapshot,
+            deadline_budget_ms=budget_ms,
+        )
+        if envelope_data is None:
+            self._fail("native_approval_request_invalid")
+            return None
+        envelope, encoded_envelope = envelope_data
+        response = self._request(
+            operation="approval_challenge_v4",
+            request={
+                "schema": _protocol._CHALLENGE_REQUEST_V4_SCHEMA,
+                "version": 4,
+                "envelope": envelope,
+            },
+            deadline=deadline_monotonic,
+        )
+        challenge = _protocol.decode_native_approval_v4_challenge(response) if response is not None else None
+        if challenge is None:
+            if self._last_error_code is None:
+                self._fail("native_approval_decoder_rejected")
+            return None
+        return _new_session(challenge, encoded_envelope)
+
+    def validate_and_consume_v4(
+        self,
+        session: NativeApprovalSession,
+        artifact: Mapping[str, object] | bytes,
+        *,
+        deadline: float | None = None,
+    ) -> NativeConsumedReceipt | None:
+        """Forward a browser assertion through Rust V4 validate then consume.
+
+        The Portal emits the transport-only ``guard-native-approval-proof.v4``
+        envelope (the exact challenge plus a browser assertion), while the
+        resident protocol accepts the flattened V4 artifact. This conversion
+        copies fields mechanically; it does not verify, sign, or assign
+        approval semantics. Rust rechecks every copied field and performs the
+        WebAuthn verification before returning an allow receipt.
+        """
+
+        self._last_error_code = None
+        _ = _LAST_FAILURE_CODE.set(None)
+        if not isinstance(session, NativeApprovalSession):
+            self._fail("native_approval_request_invalid")
+            return None
+        if isinstance(artifact, bytes):
+            artifact_payload = _protocol._decode_json_object(
+                artifact, maximum=_protocol._NATIVE_APPROVAL_MAX_BYTES
+            )
+        elif isinstance(artifact, Mapping):
+            artifact_payload = dict(artifact)
+        else:
+            artifact_payload = None
+        decoded_proof = _protocol.decode_native_approval_v4_proof(artifact_payload)
+        if decoded_proof is not None:
+            proof_challenge = decoded_proof.get("challenge")
+            if proof_challenge != session.challenge:
+                self._fail("native_approval_binding_mismatch")
+                return None
+            assertion = decoded_proof.get("assertion")
+            if not isinstance(assertion, dict):
+                self._fail("native_approval_artifact_input_invalid")
+                return None
+            # This is a mechanical adaptation from the browser/Portal proof
+            # envelope to the resident's flattened artifact contract. The
+            # resident, not this adapter, is authoritative for `allow`.
+            decoded_artifact = dict(cast(dict[str, object], proof_challenge))
+            decoded_artifact["schema"] = _protocol._ARTIFACT_V4_SCHEMA
+            decoded_artifact["approved_action"] = "allow"
+            decoded_artifact["webauthn"] = assertion
+            decoded_artifact = _protocol.decode_native_approval_v4_artifact(decoded_artifact)
+        else:
+            decoded_artifact = _protocol.decode_native_approval_v4_artifact(artifact_payload)
+        if decoded_artifact is None:
+            self._fail("native_approval_artifact_input_invalid")
+            return None
+        if not _artifact_matches_session(decoded_artifact, session):
+            self._fail("native_approval_binding_mismatch")
+            return None
+        deadline_data = self._deadline(deadline)
+        if deadline_data is None:
+            self._fail("native_approval_deadline_expired")
+            return None
+        deadline_monotonic, _ = deadline_data
+        envelope = _protocol._decode_json_object(session._envelope, maximum=_protocol._NATIVE_REQUEST_MAX_BYTES)
+        if envelope is None:
+            self._fail("native_approval_request_invalid")
+            return None
+        validated_response = self._request(
+            operation="approval_validate_v4",
+            request={
+                "schema": _protocol._VALIDATE_REQUEST_V4_SCHEMA,
+                "version": 4,
+                "envelope": envelope,
+                "artifact": decoded_artifact,
+            },
+            deadline=deadline_monotonic,
+        )
+        validated = (
+            _protocol.decode_native_approval_v4_result(validated_response, phase="validated")
+            if validated_response is not None
+            else None
+        )
+        if validated is None:
+            if self._last_error_code is None:
+                self._fail("native_approval_decoder_rejected")
+            return None
+        validated_receipt = cast(dict[str, object], validated["receipt"])
+        if not _receipt_matches_session(validated_receipt, session):
+            self._fail("native_approval_receipt_binding_mismatch")
+            return None
+        consume_envelope = _protocol._decode_json_object(
+            session._envelope, maximum=_protocol._NATIVE_REQUEST_MAX_BYTES
+        )
+        if consume_envelope is None:
+            self._fail("native_approval_request_invalid")
+            return None
+        consumed_response = self._request(
+            operation="approval_consume_v4",
+            request={
+                "schema": _protocol._CONSUME_REQUEST_V4_SCHEMA,
+                "version": 4,
+                "envelope": consume_envelope,
+                "artifact": decoded_artifact,
+            },
+            deadline=deadline_monotonic,
+        )
+        consumed = (
+            _protocol.decode_native_approval_v4_result(consumed_response, phase="consumed")
+            if consumed_response is not None
+            else None
+        )
+        if consumed is None:
+            if self._last_error_code is None:
+                self._fail("native_approval_decoder_rejected")
+            return None
+        receipt = cast(dict[str, object], consumed["receipt"])
+        if not _receipt_matches_session(receipt, session):
+            self._fail("native_approval_receipt_binding_mismatch")
+            return None
+        return _new_consumed_receipt(receipt, session)
+
 
 def native_approval_continuation_allowed(
     receipt: object,
@@ -332,10 +502,15 @@ def native_approval_continuation_allowed(
     if receipt._session is not session or receipt._provenance is not session._provenance:
         return False
     payload = receipt._receipt
+    receipt_valid = (
+        _protocol._receipt_v4_is_valid(payload, phase="consumed")
+        if session._challenge.get("version") == 4
+        else _protocol._receipt_is_valid(payload, phase="consumed")
+    )
     return (
-        _protocol._receipt_is_valid(payload, phase="consumed")
+        receipt_valid
         and payload.get("decision") == "allow"
-        and payload.get("reason_code") == "native_approval_consumed"
+        and payload.get("reason_code") in {"native_approval_consumed", "native_approval_v4_consumed"}
         and payload.get("replay_claimed") is True
         and payload.get("request_id") == session.request_id == request_id
         and payload.get("request_digest") == session.request_digest == request_digest
@@ -390,6 +565,40 @@ def validate_and_consume_native_approval(
     return _DEFAULT_BRIDGE.validate_and_consume(session, artifact, deadline=deadline)
 
 
+def create_native_approval_v4_challenge(
+    *,
+    payload: dict[str, object],
+    harness: str,
+    guard_home: Path,
+    home_dir: Path,
+    cwd: Path | None,
+    policy_snapshot: Mapping[str, object],
+    deadline: float | None = None,
+) -> NativeApprovalSession | None:
+    """Create one V4 WebAuthn challenge through the default resident bridge."""
+
+    return _DEFAULT_BRIDGE.create_v4_challenge(
+        payload=payload,
+        harness=harness,
+        guard_home=guard_home,
+        home_dir=home_dir,
+        cwd=cwd,
+        policy_snapshot=policy_snapshot,
+        deadline=deadline,
+    )
+
+
+def validate_and_consume_native_approval_v4(
+    session: NativeApprovalSession,
+    artifact: Mapping[str, object] | bytes,
+    *,
+    deadline: float | None = None,
+) -> NativeConsumedReceipt | None:
+    """Validate then immediately consume one V4 browser assertion."""
+
+    return _DEFAULT_BRIDGE.validate_and_consume_v4(session, artifact, deadline=deadline)
+
+
 def native_consumed_receipt_allows_continuation(
     receipt: object,
     *,
@@ -424,14 +633,20 @@ __all__ = [
     "NativeApprovalSession",
     "NativeConsumedReceipt",
     "create_native_approval_challenge",
+    "create_native_approval_v4_challenge",
     "decode_native_approval_artifact",
     "decode_native_approval_challenge",
     "decode_native_approval_result",
+    "decode_native_approval_v4_artifact",
+    "decode_native_approval_v4_challenge",
+    "decode_native_approval_v4_proof",
+    "decode_native_approval_v4_result",
     "native_approval_continuation_allowed",
     "native_approval_last_failure_code",
     "native_consumed_receipt_allows_continuation",
     "present_native_approval_challenge",
     "validate_and_consume_native_approval",
+    "validate_and_consume_native_approval_v4",
 ]
 
 
@@ -440,3 +655,7 @@ __all__ = [
 decode_native_approval_artifact = _protocol.decode_native_approval_artifact
 decode_native_approval_challenge = _protocol.decode_native_approval_challenge
 decode_native_approval_result = _protocol.decode_native_approval_result
+decode_native_approval_v4_artifact = _protocol.decode_native_approval_v4_artifact
+decode_native_approval_v4_challenge = _protocol.decode_native_approval_v4_challenge
+decode_native_approval_v4_proof = _protocol.decode_native_approval_v4_proof
+decode_native_approval_v4_result = _protocol.decode_native_approval_v4_result

@@ -23,6 +23,14 @@ use std::sync::{
 pub(crate) mod approval_authority;
 #[path = "approval_enrollment.rs"]
 pub(crate) mod approval_enrollment;
+#[path = "approval_v4_assertion_state.rs"]
+pub(crate) mod approval_v4_assertion_state;
+#[path = "approval_v4_authority.rs"]
+pub(crate) mod approval_v4_authority;
+#[path = "approval_v4_enrollment.rs"]
+pub(crate) mod approval_v4_enrollment;
+#[path = "approval_v4_secure_state.rs"]
+pub(crate) mod approval_v4_secure_state;
 #[path = "policy_store_approval.rs"]
 mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
@@ -33,6 +41,7 @@ mod policy_store_migration;
 mod policy_store_persistence;
 
 use approval_authority::ApprovalAuthority;
+use approval_v4_authority::ApprovalV4Authority;
 pub(crate) use policy_store_approval::ApprovalPolicyFence;
 use policy_store_authority::*;
 use policy_store_persistence::*;
@@ -137,6 +146,8 @@ pub(crate) struct PolicySnapshotStore {
     verifier_key: [u8; VERIFIER_KEY_BYTES],
     approval_authority: Option<ApprovalAuthority>,
     approval_authority_observed: Arc<Mutex<Option<String>>>,
+    approval_v4_authority: Option<ApprovalV4Authority>,
+    approval_v4_authority_observed: Arc<Mutex<Option<String>>>,
     approval_replay_memory: crate::approval::ApprovalReplayMemory,
     authority_observed: Arc<Mutex<Option<String>>>,
     authority_changed: Arc<AtomicBool>,
@@ -159,6 +170,7 @@ impl PolicySnapshotStore {
             &verifier_key,
         )?;
         let approval_authority = approval_authority::load(state_base)?;
+        let approval_v4_authority = approval_v4_authority::load(state_base)?;
         let approval_authority_observed = Arc::new(Mutex::new(
             approval_authority
                 .as_ref()
@@ -168,6 +180,11 @@ impl PolicySnapshotStore {
                         &state_base.join(approval_authority::APPROVAL_AUTHORITY_FILE_NAME),
                     )
                 }),
+        ));
+        let approval_v4_authority_observed = Arc::new(Mutex::new(
+            approval_v4_authority
+                .as_ref()
+                .map(|authority| authority.fingerprint.clone()),
         ));
         let approval_replay_memory = crate::approval::ApprovalReplayMemory::new()?;
         let authority_observed = Arc::new(Mutex::new(authority_fingerprint(&authority_path)));
@@ -182,6 +199,11 @@ impl PolicySnapshotStore {
             Arc::clone(&approval_authority_observed),
             Arc::downgrade(&authority_changed),
         );
+        start_authority_watcher(
+            state_base.join(approval_v4_authority::AUTHORITY_FILE_NAME),
+            Arc::clone(&approval_v4_authority_observed),
+            Arc::downgrade(&authority_changed),
+        );
         Ok(Self {
             authority_path,
             expected_runtime_identity: runtime_identity.to_owned(),
@@ -191,6 +213,8 @@ impl PolicySnapshotStore {
             verifier_key,
             approval_authority,
             approval_authority_observed,
+            approval_v4_authority,
+            approval_v4_authority_observed,
             approval_replay_memory,
             authority_observed,
             authority_changed,

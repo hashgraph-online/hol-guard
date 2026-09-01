@@ -1,6 +1,7 @@
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
-    ApprovalChallengeRequestV3, ApprovalConsumeRequestV3, ApprovalValidateRequestV3,
+    ApprovalChallengeRequestV3, ApprovalChallengeRequestV4, ApprovalConsumeRequestV3,
+    ApprovalConsumeRequestV4, ApprovalValidateRequestV3, ApprovalValidateRequestV4,
     GuardHookEnvelopeV2, NativeHookRequestV1, RuntimeCapabilitiesV1, GUARD_HOOK_ENVELOPE_V2_SCHEMA,
     MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_APPROVAL_MAX_BYTES,
     NATIVE_PROTOCOL_VERSION,
@@ -20,6 +21,9 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalChallenge(ApprovalChallengeRequestV3),
     ApprovalValidate(ApprovalValidateRequestV3),
     ApprovalConsume(ApprovalConsumeRequestV3),
+    ApprovalChallengeV4(ApprovalChallengeRequestV4),
+    ApprovalValidateV4(ApprovalValidateRequestV4),
+    ApprovalConsumeV4(ApprovalConsumeRequestV4),
     Health(Value),
     Shutdown(Value),
 }
@@ -53,6 +57,10 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-approval-challenge-v3".into(),
         "native-approval-validation-v3".into(),
         "native-approval-consume-v3".into(),
+        "native-approval-webauthn-v4".into(),
+        "native-approval-challenge-v4".into(),
+        "native-approval-validation-v4".into(),
+        "native-approval-consume-v4".into(),
         "native-approval-replay-memory-v1".into(),
         "native-policy-in-memory-v1".into(),
         "hook-envelope-v2".into(),
@@ -83,7 +91,14 @@ pub(crate) fn evaluate_resident_bytes(
     if bytes.len() > NATIVE_APPROVAL_MAX_BYTES
         && matches!(
             value.get("operation").and_then(Value::as_str),
-            Some("approval_challenge" | "approval_validate" | "approval_consume")
+            Some(
+                "approval_challenge"
+                    | "approval_validate"
+                    | "approval_consume"
+                    | "approval_challenge_v4"
+                    | "approval_validate_v4"
+                    | "approval_consume_v4",
+            )
         )
     {
         return Err("native_approval_request_bounds_exceeded".to_owned());
@@ -138,6 +153,21 @@ pub(crate) fn evaluate_resident_bytes(
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
                 crate::approval::consume_approval(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalChallengeV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::approval::approval_v4::create_challenge(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalValidateV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::approval::approval_v4::validate_approval(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalConsumeV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::approval::approval_v4::consume_approval(request, policy_store)
             }
             ResidentOperationV1::Health(_request) => encode_response(&serde_json::json!({
                 "status": "ready",

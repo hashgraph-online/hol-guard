@@ -21,6 +21,7 @@ from typing import Final
 
 ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-contracts/src/approval_contracts.rs"),
+    Path("rust/crates/guard-contracts/src/approval_v4_contracts.rs"),
     Path("rust/crates/guard-runtime/src/approval.rs"),
     Path("rust/crates/guard-runtime/src/approval_authority.rs"),
     Path("rust/crates/guard-runtime/src/approval_authority_tests.rs"),
@@ -28,6 +29,15 @@ ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-runtime/src/approval_enrollment.rs"),
     Path("rust/crates/guard-runtime/src/approval_enrollment_platform.rs"),
     Path("rust/crates/guard-runtime/src/approval_replay_memory.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_assertion_state.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_authority.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_authority_tests.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_crypto.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_enrollment.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_negative_tests.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_secure_state.rs"),
+    Path("rust/crates/guard-runtime/src/approval_v4_tests.rs"),
     Path("rust/crates/guard-runtime/src/approval_v3_lifecycle_tests.rs"),
     Path("rust/crates/guard-runtime/src/approval_v3_tests.rs"),
     Path("rust/crates/guard-runtime/src/edge.rs"),

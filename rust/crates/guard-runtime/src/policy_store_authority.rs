@@ -158,7 +158,16 @@ pub(super) fn authorities_unchanged(store: &PolicySnapshotStore) -> bool {
         .lock()
         .map(|observed| *observed == approval_current)
         .unwrap_or(false);
-    policy_matches && approval_matches
+    let approval_v4_current = store
+        .approval_v4_authority
+        .as_ref()
+        .and_then(|authority| authority_fingerprint(&authority.path));
+    let approval_v4_matches = store
+        .approval_v4_authority_observed
+        .lock()
+        .map(|observed| *observed == approval_v4_current)
+        .unwrap_or(false);
+    policy_matches && approval_matches && approval_v4_matches
 }
 
 pub(super) fn authority_unchanged_fenced(store: &PolicySnapshotStore) -> bool {

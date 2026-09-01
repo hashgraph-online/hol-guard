@@ -414,7 +414,7 @@
         "rust/crates/guard-runtime/**",
         "rust/crates/guard-scanner/**"
       ],
-      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
+      "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 V3 and root-authenticated WebAuthn V4 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
       "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"
     },
     {

@@ -52,13 +52,13 @@ pub(super) struct ApprovalAuthority {
 const ENROLLMENT_REQUEST_SCHEMA: &str = "guard-native-approval-enrollment-request.v1";
 
 #[cfg(test)]
-fn enrollment_root_public_key() -> [u8; 32] {
+pub(super) fn enrollment_root_public_key() -> [u8; 32] {
     let key_pair = ring::signature::Ed25519KeyPair::from_seed_unchecked(&[42u8; 32]).unwrap();
     key_pair.public_key().as_ref().try_into().unwrap()
 }
 
 #[cfg(not(test))]
-fn enrollment_root_public_key() -> Result<[u8; 32], String> {
+pub(super) fn enrollment_root_public_key() -> Result<[u8; 32], String> {
     let encoded = option_env!("HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX")
         .ok_or_else(|| "native_approval_authority_root_unconfigured".to_owned())?;
     let expected_fingerprint = option_env!("HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX")
