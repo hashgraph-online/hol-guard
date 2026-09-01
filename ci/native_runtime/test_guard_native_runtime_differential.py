@@ -234,7 +234,7 @@ def test_compiled_native_rejected_workspace_source_path_parity(
                 workspace=tmp_path,
                 reference_path=relative_path,
                 text=text,
-                request_id=f"source-rejected-{relative_path}",
+                request_id=f"source-rejected-{relative_path.replace('/', '-')}",
             )
         )
     finally:
@@ -260,7 +260,7 @@ def test_compiled_native_allowed_workspace_source_path_parity(
                 workspace=tmp_path,
                 reference_path=relative_path,
                 text=text,
-                request_id=f"source-allowed-{relative_path}",
+                request_id=f"source-allowed-{relative_path.replace('/', '-')}",
             )
         )
     finally:
