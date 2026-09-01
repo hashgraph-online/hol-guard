@@ -148,6 +148,28 @@ def _looks_like_guard_codex_hook(blob: str) -> bool:
     return "codex_plugin_scanner.cli" in blob and "guard hook" in blob
 
 
+_HEALTH_INTERCEPT_EVENTS = ("PreToolUse", "PermissionRequest")
+
+
+def live_guard_codex_hooks_intercept(hooks: object) -> bool:
+    """Return whether live Codex config still routes Guard intercept hooks.
+
+    Authenticated manifest mismatches stay repair work. They must not fail
+    machine-wide protection health while Guard still intercepts PreToolUse and
+    PermissionRequest.
+    """
+
+    if not isinstance(hooks, dict):
+        return False
+    for event_name in _HEALTH_INTERCEPT_EVENTS:
+        groups = hooks.get(event_name)
+        if not isinstance(groups, list) or not any(
+            _looks_like_guard_codex_hook(_hook_group_command_blob(group)) for group in groups
+        ):
+            return False
+    return True
+
+
 def _normalize_guard_home_path(value: str) -> Path | None:
     stripped = value.strip().strip("'\"")
     if not stripped:
@@ -269,6 +291,7 @@ __all__ = [
     "exact_legacy_hook_bindings",
     "install_managed_codex_hook_groups",
     "is_foreign_guard_codex_hook_group",
+    "live_guard_codex_hooks_intercept",
     "prune_foreign_guard_codex_hook_groups",
     "remove_manifest_bound_hook_events",
 ]

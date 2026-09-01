@@ -134,5 +134,22 @@ def _hooks_state_path(target_path: Path, context: HarnessContext) -> Path:
 _backup_payload = load_backup_payload
 
 
+def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
+    """Return whether live Cursor config still routes Guard blocking hooks.
+
+    Exact attested CLI/script identity stays repair work. Extra third-party
+    hook entries must not fail machine-wide protection health while Guard still
+    intercepts shell, MCP, and file-read events.
+    """
+
+    if not isinstance(hooks, dict):
+        return False
+    for event_name in _BLOCKING_MANAGED_HOOK_EVENTS:
+        entries = hooks.get(event_name)
+        if not isinstance(entries, list) or not any(_is_managed_hook_entry(entry, command="") for entry in entries):
+            return False
+    return True
+
+
 def _make_executable(path: Path) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

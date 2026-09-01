@@ -1505,20 +1505,14 @@ def _live_hook_verification(
             continue
         try:
             if harness == "codex":
-                from .adapters.codex import codex_native_hook_state
+                from .codex_hook_health import codex_runtime_hooks_verified
 
-                proven = _recorded_hook_verification(codex_native_hook_state(context))
-                if proven is None:
-                    continue
-                verified[harness] = proven
+                verified[harness] = codex_runtime_hooks_verified(context)
                 continue
             if harness == "cursor":
-                from .adapters.cursor_hooks import cursor_native_hook_state
+                from .cursor_hook_health import cursor_runtime_hooks_verified
 
-                proven = _recorded_hook_verification(cursor_native_hook_state(context))
-                if proven is None:
-                    continue
-                verified[harness] = proven
+                verified[harness] = cursor_runtime_hooks_verified(context)
                 continue
             if harness == "grok":
                 from .adapters.grok import grok_runtime_hooks_verified
