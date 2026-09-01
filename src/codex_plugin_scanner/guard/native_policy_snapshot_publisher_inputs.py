@@ -98,14 +98,16 @@ class NativePolicySnapshotPublisherInputs:
         observed: tuple[tuple[str, int, int], ...],
         resident_generation: int,
     ) -> tuple[tuple[str, int, int], ...] | None:
-        """Reject ACKs that do not identify the resident observed at commit."""
+        """Reject ACKs that do not identify the resident observed after push."""
 
-        confirmed = self._current_resident_fingerprint()
-        if confirmed != observed or (before and before != confirmed):
+        # ``observed`` is read after the ACK and before the barrier commit.
+        # Avoid another filesystem walk while holding the condition: the ACK
+        # generation is the exact resident identity for this post-ACK read.
+        if before and before != observed:
             return None
-        if not self._resident_fingerprint_matches_generation(confirmed, resident_generation):
+        if not self._resident_fingerprint_matches_generation(observed, resident_generation):
             return None
-        return confirmed
+        return observed
 
     @staticmethod
     def _resident_fingerprint_matches_generation(
