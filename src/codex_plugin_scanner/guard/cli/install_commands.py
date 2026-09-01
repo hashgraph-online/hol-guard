@@ -408,6 +408,7 @@ def _grok_hook_command_is_guard(command: str) -> bool:
         "hol-guard" in tokens
         or any(token.endswith("/hol-guard") or token.endswith("\\hol-guard") for token in tokens)
         or "__guard-bounded-hook" in lowered
+        or "__guard-cursor-hook" in lowered
         or "bounded_cli_hook_bridge" in lowered
         or "codex_plugin_scanner.guard" in lowered
     )

@@ -15,6 +15,7 @@ from .hook_payloads import inline_hooks_payload
 from .state_files import load_backup_payload
 
 HOOK_SCRIPT_NAME = "hol-guard-cursor-hook.py"
+FROZEN_CURSOR_HOOK_COMMAND = "__guard-cursor-hook"
 _BLOCKING_MANAGED_HOOK_EVENTS = (
     "beforeShellExecution",
     "beforeMCPExecution",
@@ -27,9 +28,42 @@ _MANAGED_HOOK_TIMEOUT_SECONDS = 45
 
 def _managed_hook_command(*, python_executable: Path | None, script_path: Path) -> str:
     script = str(script_path.resolve())
-    if python_executable is None:
-        return shlex.join([sys.executable, script])
-    return shlex.join([str(python_executable), script])
+    if python_executable is not None:
+        return shlex.join([str(python_executable), script])
+    if bool(getattr(sys, "frozen", False)):
+        return shlex.join([sys.executable, FROZEN_CURSOR_HOOK_COMMAND, script])
+    return shlex.join([sys.executable, script])
+
+
+def _is_managed_cursor_hook_script(path: Path) -> bool:
+    parts = [part.lower() for part in path.parts]
+    if not parts or parts[-1] != HOOK_SCRIPT_NAME.lower() or ".." in parts:
+        return False
+    if len(parts) >= 3 and parts[-3:-1] == [".cursor", "hooks"]:
+        return True
+    return len(parts) >= 3 and parts[-3:-1] == ["managed", "cursor"]
+
+
+def run_frozen_cursor_hook(argv: Sequence[str]) -> int:
+    """Execute the installed Cursor hook script from a frozen Guard binary."""
+
+    if len(argv) != 1:
+        return 2
+    script = Path(argv[0])
+    if not _is_managed_cursor_hook_script(script) or not script.is_file():
+        return 2
+    import runpy
+
+    try:
+        runpy.run_path(str(script), run_name="__main__")
+    except SystemExit as error:
+        code = error.code
+        if code is None:
+            return 0
+        if isinstance(code, int):
+            return code
+        return 1
+    return 0
 
 
 def _managed_hook_entry(
@@ -77,6 +111,8 @@ def _is_managed_hook_command(command: object) -> bool:
         return False
     lowered = command.lower()
     if "hol-guard-cursor-hook" in lowered:
+        return True
+    if FROZEN_CURSOR_HOOK_COMMAND in lowered:
         return True
     if HOOK_SCRIPT_NAME.lower() in lowered:
         return True
@@ -161,6 +197,11 @@ def _live_cursor_hook_script_path(command: str) -> Path | None:
     first = Path(tokens[0]).name
     if first == HOOK_SCRIPT_NAME:
         return Path(tokens[0])
+    if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
+        candidate = Path(tokens[2])
+        if candidate.name == HOOK_SCRIPT_NAME:
+            return candidate
+        return None
     if first.lower().startswith("python"):
         payload = _skip_leading_flags(tokens[1:])
         if not payload or payload[0] == "-c":
