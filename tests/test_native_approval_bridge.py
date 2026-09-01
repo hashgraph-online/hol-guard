@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 from codex_plugin_scanner.guard.native_approval_bridge import (
     NativeApprovalBridge,
+    NativeApprovalSession,
     NativeConsumedReceipt,
     decode_native_approval_artifact,
     decode_native_approval_challenge,
@@ -246,6 +248,19 @@ def test_preconsume_forged_cross_request_policy_and_harness_values_fail(tmp_path
     ):
         mutated = valid | mutation
         assert not native_approval_continuation_allowed(consumed, **mutated)
+
+
+def test_continuation_rejects_non_session_before_private_field_access() -> None:
+    assert not native_approval_continuation_allowed(
+        object(),
+        session=cast(NativeApprovalSession, object()),
+        request_id=_REQUEST_ID,
+        request_digest=_DIGEST_A,
+        action_digest=_DIGEST_B,
+        policy_generation=7,
+        policy_digest=_DIGEST_C,
+        harness="claude-code",
+    )
 
 
 def test_native_consumed_receipt_must_bind_full_context(tmp_path: Path) -> None:

@@ -380,17 +380,14 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 renew_after_generation = self._renewal_after_generation
             publish_epoch = self._epoch
         try:
-            # Keep effective-policy compilation and snapshot key validation in
-            # the asynchronous publication worker. A failure is a barrier miss
-            # and is retried; it never becomes a Python semantic fallback.
-            # ``native_policy_snapshot_v3`` owns the authoritative verifier-key
-            # check, while ``start`` bootstraps it before this worker runs.
+            # Compile and validate policy asynchronously; failures keep the barrier closed.
             context = self._publication_context()
             if context is None:
                 return
             identity, capabilities, master_key, config, client = context
+            resident_fingerprint_before = self._current_input_fingerprint()[1]
             try:
-                snapshot = _publish_snapshot_v3(
+                snapshot, resident_generation = _publish_snapshot_v3(
                     publisher=self,
                     identity=identity,
                     capabilities=capabilities,
@@ -403,15 +400,22 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 # The master is only an ephemeral input to derivation/signing;
                 # never retain it in publisher state or an exception context.
                 master_key = None
-            # Resident generation files may be created by the client during
-            # publication. Read that fingerprint outside the condition so a
-            # slow filesystem cannot delay a hook waiting for the ACK.
+            # Keep the slow full fingerprint read outside the condition.
             resident_fingerprint = self._current_input_fingerprint()[1]
             with self._condition:
                 # A mutation may have invalidated the barrier while this
                 # request was in flight. Do not let an older ACK make that
                 # newer policy appear ready.
                 if self._closed or self._epoch != publish_epoch:
+                    return
+                # Bind the ACK to the resident observed before publication,
+                # after publication, and at the barrier commit point.
+                resident_fingerprint_confirmed = self._confirm_resident_fingerprint(
+                    resident_fingerprint_before,
+                    resident_fingerprint,
+                    resident_generation,
+                )
+                if resident_fingerprint_confirmed is None:
                     return
                 # The first client request may create the resident generation
                 # state files. Treat those files as the state of this ACK,
@@ -421,7 +425,7 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 # before publication so a config change observed during the
                 # request still forces a republish on the next poll.
                 if self._input_fingerprint is not None:
-                    self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint)
+                    self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint_confirmed)
                 self._snapshot = snapshot
                 self._published_config_digest = cast(str, snapshot["config_digest"])
                 self._published_policy_fingerprint = (

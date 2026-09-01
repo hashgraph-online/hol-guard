@@ -79,6 +79,8 @@ def native_approval_continuation_allowed(
 ) -> bool:
     """Require exact consumed native provenance before harness continuation."""
 
+    if not isinstance(session, NativeApprovalSession):
+        return False
     if session._challenge.get("version") != 4:
         return _v3.native_approval_continuation_allowed(
             receipt,
@@ -90,7 +92,7 @@ def native_approval_continuation_allowed(
             policy_digest=policy_digest,
             harness=harness,
         )
-    if not isinstance(receipt, NativeConsumedReceipt) or not isinstance(session, NativeApprovalSession):
+    if not isinstance(receipt, NativeConsumedReceipt):
         return False
     if receipt._session is not session or receipt._provenance is not session._provenance:
         return False

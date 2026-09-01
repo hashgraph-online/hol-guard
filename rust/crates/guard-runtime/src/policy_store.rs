@@ -143,6 +143,8 @@ pub(crate) struct PolicySnapshotStore {
     expected_rule_digest: String,
     expected_guard_home: String,
     expected_scope_digest: String,
+    // Managed resident startup generation; zero for direct store tests.
+    resident_generation: u64,
     verifier_key: [u8; VERIFIER_KEY_BYTES],
     approval_authority: Option<ApprovalAuthority>,
     approval_authority_observed: Arc<Mutex<Option<String>>>,
@@ -155,7 +157,15 @@ pub(crate) struct PolicySnapshotStore {
 }
 
 impl PolicySnapshotStore {
+    #[cfg(test)]
     pub(crate) fn new(state_base: &Path, runtime_identity: &str) -> Result<Self, String> {
+        Self::new_with_resident_generation(state_base, runtime_identity, 0)
+    }
+    pub(crate) fn new_with_resident_generation(
+        state_base: &Path,
+        runtime_identity: &str,
+        resident_generation: u64,
+    ) -> Result<Self, String> {
         validate_private_directory(state_base)?;
         let verifier_key = read_verifier_key(state_base)?;
         let authority_path = state_base.join(SNAPSHOT_FILE_NAME);
@@ -215,6 +225,7 @@ impl PolicySnapshotStore {
             expected_rule_digest,
             expected_guard_home,
             expected_scope_digest,
+            resident_generation,
             verifier_key,
             approval_authority,
             approval_authority_observed,
@@ -233,8 +244,7 @@ impl PolicySnapshotStore {
         })
     }
 
-    /// Migrate pre-transactional policy files only when an explicit upgrade
-    /// command requests it. Resident startup never reads the legacy files.
+    /// Migrate legacy policy files only on an explicit upgrade command.
     pub(crate) fn migrate_legacy_state(
         state_base: &Path,
         runtime_identity: &str,
@@ -283,9 +293,7 @@ impl PolicySnapshotStore {
         if state.invalid_on_startup && state.generation_floor == 0 {
             return Err("native_policy_snapshot_invalid".to_owned());
         }
-        // Validate the candidate's own signature and all identity/expiry
-        // bindings before considering floor recovery.  A malformed or
-        // unauthenticated request can never elicit the recovery status.
+        // Validate the candidate before considering authenticated floor recovery.
         let minimum_generation = if state.snapshot.is_none()
             && state.policy_digest.is_some()
             && request.snapshot.generation <= state.generation_floor
@@ -311,14 +319,14 @@ impl PolicySnapshotStore {
                 if snapshot_bytes != state.canonical_bytes {
                     return Err("native_policy_snapshot_generation_reused".to_owned());
                 }
-                return encode_ack(current.as_ref(), true);
+                return encode_ack(current.as_ref(), true, self.resident_generation);
             }
         } else if request.snapshot.generation <= state.generation_floor {
             // There is no current snapshot to compare for normal idempotent
             // retry.  The authenticated floor is still authoritative, so
             // equal/older input must force the publisher to allocate a new
             // generation rather than silently reusing the floor.
-            return encode_requires_new_generation(&state);
+            return encode_requires_new_generation(&state, self.resident_generation);
         }
         persist_authority(
             &self.authority_path,
@@ -341,7 +349,7 @@ impl PolicySnapshotStore {
             !policy_store_authority::authorities_unchanged(self),
             Ordering::SeqCst,
         );
-        encode_ack(&request.snapshot, false)
+        encode_ack(&request.snapshot, false, self.resident_generation)
     }
 
     pub(crate) fn validate_request_snapshot(

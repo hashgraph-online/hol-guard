@@ -57,6 +57,11 @@ class NativePolicySnapshotPublisherInputs:
                         (metadata.st_mtime_ns, metadata.st_size, metadata.st_ino, metadata.st_ctime_ns),
                     )
                 )
+        return tuple(values), self._current_resident_fingerprint()
+
+    def _current_resident_fingerprint(self) -> tuple[tuple[str, int, int], ...]:
+        """Observe resident generation metadata without policy/config reads."""
+
         resident_values: list[tuple[str, int, int]] = []
         state_dir = self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
         try:
@@ -85,7 +90,44 @@ class NativePolicySnapshotPublisherInputs:
                 except OSError:
                     continue
                 resident_values.append((f"{directory.name}/{entry.name}", metadata.st_mtime_ns, metadata.st_size))
-        return tuple(values), tuple(resident_values)
+        return tuple(resident_values)
+
+    def _confirm_resident_fingerprint(
+        self,
+        before: tuple[tuple[str, int, int], ...],
+        observed: tuple[tuple[str, int, int], ...],
+        resident_generation: int,
+    ) -> tuple[tuple[str, int, int], ...] | None:
+        """Reject ACKs that do not identify the resident observed at commit."""
+
+        confirmed = self._current_resident_fingerprint()
+        if confirmed != observed or (before and before != confirmed):
+            return None
+        if not self._resident_fingerprint_matches_generation(confirmed, resident_generation):
+            return None
+        return confirmed
+
+    @staticmethod
+    def _resident_fingerprint_matches_generation(
+        fingerprint: tuple[tuple[str, int, int], ...],
+        resident_generation: int,
+    ) -> bool:
+        """Require the ACK generation to be the newest observed resident."""
+
+        generations: list[int] = []
+        for path_key, _mtime_ns, _size in fingerprint:
+            filename = path_key.rsplit("/", 1)[-1]
+            if not filename.startswith("generation-") or not filename.endswith(".json"):
+                continue
+            raw_generation = filename[len("generation-") : -len(".json")]
+            if not raw_generation.isdigit():
+                return False
+            generations.append(int(raw_generation))
+        # Test doubles may acknowledge without materializing state files. A
+        # real managed resident always publishes at least one generation file;
+        # when files are present, an ACK for anything other than the newest
+        # resident is definitively stale.
+        return not generations or max(generations) == resident_generation
 
     def _workspace_policy_paths(self) -> tuple[Path, ...]:
         with self._condition:

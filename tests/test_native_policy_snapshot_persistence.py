@@ -124,6 +124,7 @@ def test_floor_only_ack_materializes_strictly_new_generation(tmp_path: Path, mon
                     "generation": snapshot["generation"],
                     "policy_digest": "d" * 64,
                     "idempotent": False,
+                    "resident_generation": 1,
                 }
             ).encode()
         return _ack(payload)
@@ -155,12 +156,14 @@ def test_floor_only_ack_materializes_strictly_new_generation(tmp_path: Path, mon
             "generation": 1,
             "policy_digest": "d" * 64,
             "idempotent": True,
+            "resident_generation": 1,
         },
         {
             "status": POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION,
             "generation": 1,
             "policy_digest": "d" * 64,
             "idempotent": False,
+            "resident_generation": 1,
             "unexpected": True,
         },
     ),

@@ -337,10 +337,13 @@ pub(crate) fn serve_managed(
     }
     let scope = state_scope(state_base, expected_digest)?;
     let _owner_lock = acquire_managed_owner_lock(&scope)?;
-    let policy_store = std::sync::Arc::new(crate::policy_store::PolicySnapshotStore::new(
-        state_base,
-        expected_digest,
-    )?);
+    let policy_store = std::sync::Arc::new(
+        crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+            state_base,
+            expected_digest,
+            generation,
+        )?,
+    );
     let token = crate::read_resident_auth_token()?;
     let owner_alive = crate::resident_stdin_liveness();
     if cfg!(unix) {

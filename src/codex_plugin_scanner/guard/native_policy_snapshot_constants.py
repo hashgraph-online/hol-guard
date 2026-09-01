@@ -55,6 +55,7 @@ _REQUIRED_PUBLISH_FEATURES = frozenset(
     {
         "policy-snapshot-v3",
         "policy-snapshot-push-v1",
+        "policy-snapshot-resident-generation-v1",
         "native-policy-in-memory-v1",
         "native-resident-client-v1",
     }

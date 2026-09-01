@@ -56,6 +56,9 @@ test_publisher_repushes_after_resident_generation_change = (
 test_publisher_does_not_republish_for_generation_created_by_own_ack = (
     _publisher_tests.test_publisher_does_not_republish_for_generation_created_by_own_ack
 )
+test_publisher_rejects_ack_after_resident_restart_before_barrier = (
+    _publisher_tests.test_publisher_rejects_ack_after_resident_restart_before_barrier
+)
 test_publisher_startup_ack_and_mutation_push = _publisher_tests.test_publisher_startup_ack_and_mutation_push
 test_same_generation_retries_reuse_exact_signed_snapshot_bytes = (
     _publisher_tests.test_same_generation_retries_reuse_exact_signed_snapshot_bytes
@@ -87,10 +90,11 @@ __all__ = [
     "test_policy_merge_never_downgrades_enforcing_posture_to_watch",
     "test_prepare_workspace_policy_uses_bounded_first_workspace_handshake",
     "test_publisher_does_not_ack_snapshot_after_concurrent_mutation",
+    "test_publisher_does_not_republish_for_generation_created_by_own_ack",
     "test_publisher_process_restart_reuses_cached_payload",
+    "test_publisher_rejects_ack_after_resident_restart_before_barrier",
     "test_publisher_rejects_mutated_ack_without_opening_barrier",
     "test_publisher_repushes_after_resident_generation_change",
-    "test_publisher_does_not_republish_for_generation_created_by_own_ack",
     "test_publisher_startup_ack_and_mutation_push",
     "test_renewal_failure_keeps_barrier_closed_at_expiry",
     "test_renewal_materializes_higher_generation_before_expiry",

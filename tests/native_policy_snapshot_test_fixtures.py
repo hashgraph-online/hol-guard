@@ -42,6 +42,7 @@ def _status() -> SimpleNamespace:
                 "resident-protocol-v2",
                 "policy-snapshot-v3",
                 "policy-snapshot-push-v1",
+                "policy-snapshot-resident-generation-v1",
                 "native-policy-in-memory-v1",
                 "native-resident-client-v1",
             ),
@@ -49,7 +50,7 @@ def _status() -> SimpleNamespace:
     )
 
 
-def _ack(payload: bytes) -> bytes:
+def _ack(payload: bytes, *, resident_generation: int = 1) -> bytes:
     snapshot = json.loads(payload)["request"]["snapshot"]
     return json.dumps(
         {
@@ -57,6 +58,7 @@ def _ack(payload: bytes) -> bytes:
             "generation": snapshot["generation"],
             "policy_digest": snapshot["policy_digest"],
             "idempotent": False,
+            "resident_generation": resident_generation,
         }
     ).encode()
 
