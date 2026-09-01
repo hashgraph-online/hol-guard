@@ -692,7 +692,7 @@ def _init_notification_summary(payload: dict[str, object]) -> str:
 
 
 def _protection_display_name(payload: dict[str, object], fallback: str) -> str:
-    label = payload.get("protection_label")
+    label = payload.get("runtime_protection_label") or payload.get("protection_label")
     if isinstance(label, str) and label.strip():
         return label.strip()
     return fallback

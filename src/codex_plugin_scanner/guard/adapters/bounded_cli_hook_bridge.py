@@ -1,8 +1,4 @@
-"""Bounded subprocess bridge for harnesses without a daemon-native hook.
-
-Tries the already-running daemon first (loopback HTTP, ~15ms) and falls back
-to an isolated subprocess (~1s) when the daemon is unreachable.
-"""
+"""Bounded subprocess bridge for harnesses without a daemon-native hook."""
 
 from __future__ import annotations
 
@@ -116,6 +112,7 @@ def bounded_cli_hook_command(
 _EVENT_ALIASES = {
     "permissionrequest": "PermissionRequest",
     "pretooluse": "PreToolUse",
+    "pretoolcall": "PreToolUse",
     "userpromptsubmit": "UserPromptSubmit",
     "posttooluse": "PostToolUse",
     "sessionstart": "SessionStart",
@@ -305,7 +302,8 @@ def _failure_payload(
             "permissionDecisionReason": reason,
         }, 0
     if harness in {"grok", "hermes", "openclaw"}:
-        return {"decision": "deny", "reason": reason}, 0
+        decision = "block" if harness == "hermes" else "deny"
+        return {"decision": decision, "reason": reason}, (2 if harness == "hermes" else 0)
     if event_name == "UserPromptSubmit":
         return {
             "decision": "block",
@@ -403,7 +401,10 @@ def _native_hook_permission_decision(policy_action: str) -> str | None:
 def _should_exit_block(harness: str, event_name: str, policy_action: str) -> bool:
     """Mirror _should_emit_native_hook_exit_block."""
     canonical = harness.strip().lower().replace("_", "-")
-    if canonical in {"kimi", "grok", "pi", "omp", "zcode"} and event_name in {"PreToolUse", "UserPromptSubmit"}:
+    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode"} and event_name in {
+        "PreToolUse",
+        "UserPromptSubmit",
+    }:
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
     return False
 
@@ -490,7 +491,6 @@ def _daemon_response_to_native(
 
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     exit_code = 2 if _should_exit_block(harness, event_name, policy_action) else 0
-    # kimi surfaces stderr to the user as the blocking explanation
     stderr = reason if exit_code == 2 and canonical == "kimi" else ""
     return stdout, stderr, exit_code
 
@@ -502,11 +502,7 @@ def _try_daemon_hook(
     input_text: str,
     timeout_seconds: float,
 ) -> tuple[str, str, int] | None:
-    """POST the hook payload to the running daemon; return (stdout_json, stderr, exit_code) or None.
-
-    Returns None on any auth/transport/malformed-response failure so the caller
-    falls back to the isolated CLI path (fail-closed).
-    """
+    """POST the hook payload to the running daemon; return native stdout or None."""
     if harness.strip().lower() == "grok" and _event_name(input_text) == "PreToolUse":
         return None
 
@@ -560,6 +556,10 @@ def _try_daemon_hook(
     if not isinstance(parsed, dict):
         return None
     event_name = _event_name(input_text)
+    if harness.strip().lower().replace("_", "-") == "hermes":
+        from .hermes_runtime_hooks import hermes_bridge_response as _hermes_native
+
+        return _hermes_native(parsed, event_name=event_name)
     return _daemon_response_to_native(parsed, harness=harness, event_name=event_name)
 
 

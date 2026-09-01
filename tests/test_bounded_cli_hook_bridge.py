@@ -60,7 +60,7 @@ def _config(tmp_path: Path, *, harness: str) -> dict[str, object]:
     [
         ("copilot", {"permissionDecision": "deny"}),
         ("grok", {"decision": "deny"}),
-        ("hermes", {"decision": "deny"}),
+        ("hermes", {"decision": "block"}),
         ("openclaw", {"decision": "deny"}),
     ],
 )
@@ -83,7 +83,7 @@ def test_timeout_emits_successful_native_deny(
         )
 
     payload = _json_object(output.getvalue())
-    assert returncode == 0
+    assert returncode == (2 if harness == "hermes" else 0)
     for key, value in expected.items():
         assert payload[key] == value
 

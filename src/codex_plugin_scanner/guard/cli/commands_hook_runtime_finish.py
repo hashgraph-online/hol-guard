@@ -260,7 +260,7 @@ def _finalize_runtime_artifact_hook(
                 approval_context,
                 _embedded_script_remediation(state),
             )
-        if _canonical_harness_name(args.harness) == "kimi":
+        if _canonical_harness_name(args.harness) in {"kimi", "hermes"}:
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action=policy_action,

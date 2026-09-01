@@ -1299,7 +1299,7 @@ def _run_hook_generic_payload(
             approval_context,
             _embedded_script_remediation(command_text),
         )
-        if _canonical_harness_name(args.harness) == "kimi":
+        if _canonical_harness_name(args.harness) in {"kimi", "hermes"}:
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action=policy_action,

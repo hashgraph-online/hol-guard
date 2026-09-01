@@ -297,7 +297,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         browser_fallback=True,
         resume_support=False,
         known_blind_spots=(
-            "Hermes is an early-access harness; some event surface coverage depends on the Hermes version installed."
+            "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
         ),
         smoke_command="hol-guard install hermes --dry-run",
     ),

@@ -401,9 +401,9 @@ def normalize_hermes_payload(
     home_dir: Path | str | None = None,
 ) -> GuardActionEnvelope:
     """Normalize a Hermes runtime payload into a typed action envelope."""
-
+    from ..adapters.hermes_runtime_hooks import prepare_hermes_hook_payload
     return _normalize_action_payload(
-        payload,
+        prepare_hermes_hook_payload(payload),
         harness="hermes",
         default_event_name=None,
         workspace=workspace,
