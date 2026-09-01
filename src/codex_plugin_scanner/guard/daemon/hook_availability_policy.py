@@ -78,11 +78,24 @@ _UNSAFE_FIND_FLAGS = frozenset(
 )
 _UNSAFE_ABSOLUTE_PREFIXES = (
     "/etc/",
+    "/private/etc/",
     "/root/",
+    "/var/root/",
+    "/private/var/root/",
     "/proc/",
     "/sys/",
     "/dev/",
-    "/private/etc/",
+    "/private/dev/",
+)
+_BLOCKED_SOURCE_EVENTS = frozenset(
+    {
+        "beforewritefile",
+        "beforemcpexecution",
+        "aftershellexecution",
+        "aftermcpexecution",
+        "afterwritefile",
+        "afterreadfile",
+    }
 )
 _MUTATING_TOOLS = frozenset(
     {
@@ -136,6 +149,9 @@ _UNSAFE_GIT_FLAGS = frozenset(
         "--work-tree",
         "--git-dir",
         "-C",
+        "--output",
+        "--ext-diff",
+        "--textconv",
     }
 )
 _SAFE_HOL_GUARD_SUBCOMMANDS = frozenset(
@@ -145,7 +161,23 @@ _SAFE_HOL_GUARD_SUBCOMMANDS = frozenset(
         "version",
         "--version",
         "-V",
-        "hook",
+    }
+)
+_UNSAFE_INSPECTION_FLAGS = frozenset(
+    {
+        "--pre",
+        "--exec",
+        "--exec-batch",
+        "--execdir",
+    }
+)
+_UNSAFE_FD_FLAGS = frozenset(
+    {
+        "--exec",
+        "--exec-batch",
+        "--execdir",
+        "-x",
+        "-X",
     }
 )
 _UNSAFE_SHELL_MARKERS = ("|", ";", "`", "$(", "${", ">", "<", "\n", "\r", "&&", "||", "&")
@@ -172,8 +204,14 @@ def hook_action_is_emergency_safe(
     event_name = runtime_hook_event_name(payload)
     if event_name != "PreToolUse":
         return False
+    if _payload_source_events(payload) & _BLOCKED_SOURCE_EVENTS:
+        return False
     if _payload_is_mcp(payload):
         return False
+    if workspace is None:
+        cwd = payload.get("cwd")
+        if isinstance(cwd, str) and cwd.strip():
+            workspace = Path(cwd.strip())
     tool_name = _tool_name(payload)
     if tool_name in _MUTATING_TOOLS and tool_name not in {"bash", "shell"}:
         return False
@@ -234,6 +272,17 @@ def availability_harness_response(
     )
 
 
+_CURSOR_UNAVAILABLE_MESSAGE = (
+    "HOL Guard paused this action because native review was unavailable "
+    "and the action is outside the emergency-safe inspection floor."
+)
+_CURSOR_UNAVAILABLE_DENY = {
+    "permission": "deny",
+    "user_message": _CURSOR_UNAVAILABLE_MESSAGE,
+    "agent_message": _CURSOR_UNAVAILABLE_MESSAGE,
+}
+
+
 def cursor_fallback_permission(
     payload: Mapping[str, object],
     *,
@@ -246,25 +295,38 @@ def cursor_fallback_permission(
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
-    if (
-        compact == "beforereadfile" or runtime_hook_event_name(payload) == "PreToolUse"
-    ) and hook_action_is_emergency_safe(payload, workspace=workspace, home_dir=home_dir):
+    if compact in {"beforewritefile", "beforemcpexecution"}:
+        return dict(_CURSOR_UNAVAILABLE_DENY), 2
+    if hook_action_is_emergency_safe(payload, workspace=workspace, home_dir=home_dir):
         return {"permission": "allow"}, 0
     response = {
         "permission": "deny",
-        "user_message": (
-            "HOL Guard paused this action because native review was unavailable "
-            "and the action is outside the emergency-safe inspection floor."
-        ),
+        "user_message": _CURSOR_UNAVAILABLE_MESSAGE,
     }
     if compact != "beforereadfile":
-        response["agent_message"] = str(response["user_message"])
+        response["agent_message"] = _CURSOR_UNAVAILABLE_MESSAGE
     return response, 2
 
 
+def _payload_source_events(payload: Mapping[str, object]) -> set[str]:
+    events: set[str] = set()
+    for key in (
+        "cursor_source_hook_event",
+        "hook_event_name",
+        "hookEventName",
+        "event",
+        "eventName",
+        "hook_name",
+        "hookName",
+    ):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            events.add(value.strip().lower().replace("_", "").replace("-", ""))
+    return events
+
+
 def _payload_is_mcp(payload: Mapping[str, object]) -> bool:
-    source_event = payload.get("cursor_source_hook_event")
-    if isinstance(source_event, str) and source_event.strip().lower() == "beforemcpexecution":
+    if "beforemcpexecution" in _payload_source_events(payload):
         return True
     tool_name = _tool_name(payload)
     return tool_name.startswith("mcp") or tool_name in {"mcp", "call_mcp_tool"}
@@ -311,7 +373,7 @@ def _payload_paths(payload: Mapping[str, object]) -> list[str]:
     for nested_key in ("tool_call", "preToolUse"):
         nested = payload.get(nested_key)
         if isinstance(nested, Mapping):
-            candidates.extend((nested, nested.get("input"), nested.get("parameters")))
+            candidates.extend((nested, nested.get("input"), nested.get("parameters"), nested.get("arguments")))
     for candidate in candidates:
         if not isinstance(candidate, Mapping):
             continue
@@ -325,21 +387,81 @@ def _payload_paths(payload: Mapping[str, object]) -> list[str]:
     return paths
 
 
-def _path_is_workspace_local(path: str, workspace: Path | None) -> bool:
-    normalized = path.replace("\\", "/")
-    lowered = normalized.lower()
-    if any(lowered == prefix.rstrip("/") or lowered.startswith(prefix) for prefix in _UNSAFE_ABSOLUTE_PREFIXES):
-        return False
+def _posix_forms(path: str) -> tuple[str, ...]:
+    posix = path.strip().replace("\\", "/").lower()
+    if not posix:
+        return ()
+    forms = [posix]
+    if posix.startswith("/private/"):
+        forms.append(posix[len("/private") :] or "/")
+    elif posix.startswith("/tmp/") or posix in {"/tmp", "/var"} or posix.startswith("/var/"):
+        forms.append("/private" + posix)
+    return tuple(dict.fromkeys(forms))
+
+
+def _workspace_anchor(workspace: Path | None) -> str | None:
     if workspace is None:
-        return True
-    try:
-        workspace_resolved = workspace.expanduser().resolve()
-        candidate = Path(path).expanduser()
-        resolved = candidate.resolve() if candidate.is_absolute() else (workspace_resolved / candidate).resolve()
-        resolved.relative_to(workspace_resolved)
-    except (OSError, RuntimeError, ValueError):
+        return None
+    posix = str(workspace).replace("\\", "/").rstrip("/")
+    if not posix or posix == "/" or posix.endswith(":"):
+        return None
+    if any(
+        form == prefix.rstrip("/") or form.startswith(prefix)
+        for form in _posix_forms(posix)
+        for prefix in _UNSAFE_ABSOLUTE_PREFIXES
+    ):
+        return None
+    parts = [part for part in posix.split("/") if part and part != "."]
+    if not parts or any(part == ".." for part in parts):
+        return None
+    lowered = posix.lower()
+    if lowered.startswith("/users/") or lowered.startswith("/home/"):
+        if len(parts) < 3:
+            return None
+    elif posix.startswith("/") and len(parts) < 2:
+        return None
+    elif len(posix) > 1 and posix[1] == ":":
+        if len(parts) < 2:
+            return None
+        if len(parts) < 3 and parts[1].lower() in {"users", "documents and settings"}:
+            return None
+    return posix
+
+
+def _path_is_workspace_local(path: str, workspace: Path | None) -> bool:
+    posix = path.strip().replace("\\", "/")
+    if not posix or posix.startswith("//"):
         return False
+    forms = _posix_forms(posix)
+    if not forms:
+        return False
+    if any(
+        form == prefix.rstrip("/") or form.startswith(prefix) for form in forms for prefix in _UNSAFE_ABSOLUTE_PREFIXES
+    ):
+        return False
+    parts = tuple(part for part in posix.split("/") if part not in {"", "."})
+    if any(part == ".." for part in parts):
+        return False
+    candidate_is_absolute = posix.startswith("/") or (len(posix) > 1 and posix[1] == ":")
+    workspace_posix = _workspace_anchor(workspace)
+    if workspace_posix is None:
+        return not candidate_is_absolute
+    if candidate_is_absolute:
+        workspace_forms = _posix_forms(workspace_posix)
+        return any(form == prefix or form.startswith(prefix + "/") for form in forms for prefix in workspace_forms)
     return True
+
+
+def _token_looks_like_path(token: str) -> bool:
+    if token in {"..", "."}:
+        return True
+    if token.startswith("-"):
+        return False
+    return "/" in token or "\\" in token or token.startswith(".") or ".." in token
+
+
+def _flag_name(token: str) -> str:
+    return token.split("=", 1)[0]
 
 
 def _command_is_emergency_safe(
@@ -363,22 +485,22 @@ def _command_is_emergency_safe(
     args = tokens[1:]
     if any(classify_secret_path(token, cwd=workspace, home_dir=home_dir) is not None for token in args):
         return False
-    if any(not _path_is_workspace_local(token, workspace) for token in args if "/" in token or "\\" in token):
+    if any(not _path_is_workspace_local(token, workspace) for token in args if _token_looks_like_path(token)):
         return False
     if binary in {"pwd", "true", "which"}:
         return not args
     if binary in {"ls", "dir"}:
-        return True
+        return not any(_flag_name(token) in _UNSAFE_INSPECTION_FLAGS for token in args)
+    if binary == "fd":
+        return not any(_flag_name(token) in _UNSAFE_FD_FLAGS | _UNSAFE_INSPECTION_FLAGS for token in args)
     if binary in _SAFE_INSPECTION_BINARIES:
-        return not any(token == "--pre" or token.startswith("--pre=") for token in args)
+        return not any(_flag_name(token) in _UNSAFE_INSPECTION_FLAGS for token in args)
     if binary == "find":
-        return not any(token in _UNSAFE_FIND_FLAGS for token in args)
+        return not any(token in _UNSAFE_FIND_FLAGS or _flag_name(token) in _UNSAFE_INSPECTION_FLAGS for token in args)
     if binary == "git":
         return _git_command_is_emergency_safe(args)
     if binary in {"hol-guard", "plugin-guard"}:
         return _hol_guard_command_is_emergency_safe(args)
-    if binary == "chmod":
-        return _chmod_hook_script_is_emergency_safe(args)
     return False
 
 
@@ -392,7 +514,7 @@ def _git_command_is_emergency_safe(args: list[str]) -> bool:
         return len(args) > 1 and args[1] in _SAFE_GIT_STASH_SUBCOMMANDS
     if subcommand not in _SAFE_GIT_SUBCOMMANDS:
         return False
-    return not any(token in _UNSAFE_GIT_FLAGS for token in args[1:])
+    return not any(_flag_name(token) in _UNSAFE_GIT_FLAGS for token in args[1:])
 
 
 def _hol_guard_command_is_emergency_safe(args: list[str]) -> bool:
@@ -400,16 +522,8 @@ def _hol_guard_command_is_emergency_safe(args: list[str]) -> bool:
         return False
     first = args[0]
     if first in _SAFE_HOL_GUARD_SUBCOMMANDS:
-        return first != "hook" or "--json" in args
+        return True
     return first == "guard" and len(args) > 1 and args[1] in _SAFE_HOL_GUARD_SUBCOMMANDS
-
-
-def _chmod_hook_script_is_emergency_safe(args: list[str]) -> bool:
-    if len(args) < 2:
-        return False
-    target = args[-1].replace("\\", "/")
-    mode = args[0].lstrip("-")
-    return Path(target).name == "hol-guard-cursor-hook.py" and mode in {"x", "+x", "755", "0755", "a+x", "u+x"}
 
 
 __all__ = [

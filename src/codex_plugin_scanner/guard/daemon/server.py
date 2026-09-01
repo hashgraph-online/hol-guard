@@ -5986,12 +5986,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             from .hook_availability_policy import availability_harness_response
 
             payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
+            workspace_value = self._optional_string(params.get("workspace", [None])[-1])
+            home_value = self._optional_string(params.get("home", [None])[-1])
             return availability_harness_response(
                 payload_dict,
                 harness=harness,
                 event_name="PreToolUse",
                 reason_code=reason_code,
                 reason=reason,
+                workspace=Path(workspace_value) if workspace_value else None,
+                home_dir=Path(home_value) if home_value else None,
             )
         return {
             "continue": False,

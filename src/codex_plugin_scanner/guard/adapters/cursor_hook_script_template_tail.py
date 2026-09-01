@@ -254,9 +254,30 @@ def _cursor_availability_response(
         if compact in {"aftershellexecution", "aftermcpexecution"}:
             return {}, 0
         if compact == "beforereadfile":
-            path = str(payload.get("file_path") or "")
-            lowered = path.lower()
-            if any(marker in lowered for marker in (".env", "id_rsa", ".npmrc", ".pypirc", "credentials")):
+            path = str(payload.get("file_path") or payload.get("path") or "")
+            posix = path.replace("\\\\", "/")
+            lowered = posix.lower()
+            if not posix.strip() or posix.startswith("//") or ".." in posix.split("/"):
+                return {
+                    "permission": "deny",
+                    "user_message": "HOL Guard paused a file read while native review was unavailable.",
+                }, 2
+            if any(
+                marker in lowered
+                for marker in (
+                    ".env",
+                    "id_rsa",
+                    ".npmrc",
+                    ".pypirc",
+                    "credentials",
+                    "/etc/",
+                    "/proc/",
+                    "/sys/",
+                    "/dev/",
+                    "/root/",
+                    "/var/root/",
+                )
+            ):
                 return {
                     "permission": "deny",
                     "user_message": "HOL Guard paused a sensitive file read while native review was unavailable.",

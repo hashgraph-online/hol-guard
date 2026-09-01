@@ -116,10 +116,10 @@ def test_hol_guard_status_is_emergency_safe() -> None:
     assert hook_action_is_emergency_safe(payload) is True
 
 
-def test_chmod_hook_script_is_emergency_safe(tmp_path: Path) -> None:
+def test_chmod_hook_script_is_not_emergency_safe(tmp_path: Path) -> None:
     script = tmp_path / "hol-guard-cursor-hook.py"
     payload = {"hook_event_name": "PreToolUse", "tool_input": {"command": f"chmod +x {script}"}}
-    assert hook_action_is_emergency_safe(payload, workspace=tmp_path) is True
+    assert hook_action_is_emergency_safe(payload, workspace=tmp_path) is False
 
 
 def test_rg_and_cat_are_emergency_safe(tmp_path: Path) -> None:
@@ -177,3 +177,108 @@ def test_cline_read_files_is_emergency_safe() -> None:
         "tool_call": {"name": "read_files", "input": {"paths": ["README.md"]}},
     }
     assert hook_action_is_emergency_safe(payload) is True
+
+
+def test_parent_dir_and_exec_flags_are_not_emergency_safe(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "ls .."}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "fd --exec rm"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "git diff --output=review.txt"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "hol-guard hook --json"}},
+            workspace=workspace,
+        )
+        is False
+    )
+
+
+def test_nested_arguments_path_is_validated(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_call": {"name": "read_files", "arguments": {"file_path": "/etc/passwd"}},
+    }
+    assert hook_action_is_emergency_safe(payload, workspace=workspace) is False
+
+
+def test_filesystem_root_workspace_does_not_fail_open() -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "/etc/passwd"},
+    }
+    assert hook_action_is_emergency_safe(payload, workspace=Path("/")) is False
+    assert hook_action_is_emergency_safe(payload, workspace=Path("/Users")) is False
+
+
+def test_before_write_file_is_not_emergency_safe(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    payload = {
+        "hook_event_name": "beforeWriteFile",
+        "file_path": str(workspace / "src" / "app.ts"),
+        "tool_name": "Write",
+    }
+    assert hook_action_is_emergency_safe(payload, workspace=workspace) is False
+    deny, code = cursor_fallback_permission(payload, hook_event_name="beforeWriteFile", workspace=workspace)
+    assert code == 2
+    assert deny["permission"] == "deny"
+
+
+def test_missing_workspace_rejects_absolute_paths() -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "/etc/passwd"},
+    }
+    assert hook_action_is_emergency_safe(payload) is False
+
+
+def test_fd_exec_short_flag_is_not_emergency_safe(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "fd -x rm"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "git diff --ext-diff"}},
+            workspace=workspace,
+        )
+        is False
+    )
+
+
+def test_macos_private_prefix_stays_workspace_local() -> None:
+    workspace = Path("/tmp/guard-project")
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "/private/tmp/guard-project/src/app.ts"},
+    }
+    assert hook_action_is_emergency_safe(payload, workspace=workspace) is True
