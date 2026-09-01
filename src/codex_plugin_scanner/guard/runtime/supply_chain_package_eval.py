@@ -1286,14 +1286,20 @@ def _evaluate_with_cloud(
                 if resolve_cloud_failure_decision() == "block":
                     return (
                         _cloud_fail_closed_evaluation(
-                            code="cloud_validation_error",
-                            message="Guard cloud evaluation timed out, so strict mode blocked this package request.",
+                            code="cloud_timeout",
+                            message=(
+                                "Guard Cloud evaluation timed out, so this package request is paused for "
+                                "explicit review."
+                            ),
                             artifact=artifact,
                             targets=targets,
                             workspace_dir=workspace_dir,
                             workspace_fingerprint=workspace_fingerprint,
                             bundle_meta=bundle_meta,
-                            fail_closed_decision=resolve_cloud_failure_decision(),
+                            # A timeout is a transient availability failure, not a
+                            # package verdict. Keep the install stopped, but put it
+                            # in the approval queue so a human can decide remotely.
+                            fail_closed_decision="ask",
                         ),
                         None,
                     )
@@ -1346,14 +1352,19 @@ def _evaluate_with_cloud(
         if resolve_cloud_failure_decision() == "block":
             return (
                 _cloud_fail_closed_evaluation(
-                    code="cloud_validation_error",
-                    message="Guard cloud evaluation timed out, so strict mode blocked this package request.",
+                    code="cloud_timeout",
+                    message=(
+                        "Guard Cloud evaluation timed out, so this package request is paused for explicit review."
+                    ),
                     artifact=artifact,
                     targets=targets,
                     workspace_dir=workspace_dir,
                     workspace_fingerprint=workspace_fingerprint,
                     bundle_meta=bundle_meta,
-                    fail_closed_decision=resolve_cloud_failure_decision(),
+                    # A timeout is a transient availability failure, not a
+                    # package verdict. Keep the install stopped, but put it
+                    # in the approval queue so a human can decide remotely.
+                    fail_closed_decision="ask",
                 ),
                 None,
             )

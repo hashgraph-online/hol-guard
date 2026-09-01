@@ -316,6 +316,62 @@ def test_contract_digest_is_deterministic_and_binds_security_fields() -> None:
     )
 
 
+def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_context() -> None:
+    request = _request("retry-metadata").to_dict()
+    request["action_envelope_json"] = {
+        "action_type": "shell_command",
+        "command": "echo test",
+        "raw_payload_redacted": {
+            "tool_use_id": "first-tool-call",
+            "transcript_path": "/tmp/first.jsonl",
+            "model": "first-model",
+            "permission_mode": "ask",
+        },
+    }
+    first = request_scope_contract(request)
+
+    retried = {
+        **request,
+        "changed_fields": ["different-display-label"],
+        "source_scope": "different-display-scope",
+        "config_path": "/workspace/other/.guard/config.toml",
+        "launch_target": "echo different preview",
+        "normalized_identity_key": "different-preview-key",
+        "queue_group_id": "different-queue-id",
+        "transport": "different-transport",
+        "scanner_evidence": [
+            {"source": "policy_composition", "authoritative_action": "require-reapproval"},
+            {"source": "approval_reuse", "status": "not_found", "reason_code": "fresh_action"},
+        ],
+        "action_envelope_json": {
+            "action_type": "shell_command",
+            "command": "echo test",
+            "raw_payload_redacted": {
+                "tool_use_id": "second-tool-call",
+                "transcript_path": "/tmp/second.jsonl",
+                "model": "second-model",
+                "permission_mode": "ask",
+            },
+        },
+    }
+    assert request_scope_contract(retried).digest == first.digest
+
+    package_context = {
+        "kind": "package_execution_context",
+        "schema_version": 2,
+        "portable": True,
+        "context_digest": "a" * 64,
+        "components": [{"name": "repository_identity", "digest": "b" * 64}],
+    }
+    with_context = {**request, "scanner_evidence": [package_context]}
+    changed_context = {
+        **request,
+        "scanner_evidence": [{**package_context, "context_digest": "c" * 64}],
+    }
+    assert request_scope_contract(with_context).digest != first.digest
+    assert request_scope_contract(changed_context).digest != request_scope_contract(with_context).digest
+
+
 def test_deduped_request_identity_change_invalidates_scope_contract(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     row = _store_request(store, _request("deduped", artifact_hash="hash-old"))
@@ -345,6 +401,55 @@ def test_deduped_request_identity_change_invalidates_scope_contract(tmp_path: Pa
     assert stored["status"] == "pending"
     assert store.list_policy_decisions() == []
     assert store.list_events(event_name="approval.resolved") == []
+
+
+def test_deduped_retry_delivery_metadata_keeps_browser_selection_resolvable(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    base = replace(
+        _request("retry-selection"),
+        action_envelope_json={
+            "action_type": "shell_command",
+            "command": "echo test",
+            "raw_payload_redacted": {
+                "tool_use_id": "initial-tool-call",
+                "transcript_path": "/tmp/initial.jsonl",
+                "model": "initial-model",
+                "permission_mode": "ask",
+            },
+        },
+    )
+    first = _store_request(store, base)
+    selection = _v2_selection(first, "artifact")
+    replacement = replace(
+        base,
+        request_id="retry-selection-retry",
+        action_envelope_json={
+            **(base.action_envelope_json or {}),
+            "raw_payload_redacted": {
+                "tool_use_id": "retry-tool-call",
+                "transcript_path": "/tmp/retry.jsonl",
+                "model": "retry-model",
+                "permission_mode": "ask",
+            },
+        },
+    )
+    assert store.add_approval_request(replacement, "2026-07-19T00:00:01+00:00") == base.request_id
+    current = store.get_approval_request(base.request_id)
+    assert current is not None
+    assert current["scope_contract_digest"] == first["scope_contract_digest"]
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, response = _post(daemon, "/v1/requests/retry-selection/approve", selection)
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert response["resolved"] is True
+    resolved = store.get_approval_request(base.request_id)
+    assert resolved is not None
+    assert resolved["status"] == "resolved"
 
 
 def test_stored_payload_overrides_untrusted_decision_scope_advertisement(tmp_path: Path) -> None:

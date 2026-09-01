@@ -13,7 +13,7 @@ from .adapters.base import HarnessContext
 from .approvals import _live_hook_verification
 from .cli.install_commands import apply_managed_install
 from .shim_refresh import refresh_stale_harness_shims
-from .shims import package_shim_status, repair_package_shims
+from .shims import package_shim_dashboard_status, package_shim_status, repair_package_shims
 from .store import GuardStore
 
 
@@ -49,6 +49,21 @@ def _runtime_context(
         home_override_explicit=home_dir is not None,
         workspace_override_explicit=workspace_dir is not None,
     )
+
+
+def _package_shim_reconciliation_status(context: HarnessContext) -> dict[str, object]:
+    """Use persisted shell activation for daemon health, not the daemon PATH.
+
+    The resident daemon intentionally does not source interactive shell profiles.
+    When the Guard shims are intact and their profile blocks are present, a
+    restart-required process PATH is expected and must not degrade protection.
+    Keep the raw status as the fallback for incomplete or damaged setup.
+    """
+
+    status = package_shim_status(context)
+    if status.get("path_status") == "restart_required" and status.get("shell_profile_configured") is True:
+        return package_shim_dashboard_status(context)
+    return status
 
 
 def _managed_install_needs_artifact_repair(
@@ -158,7 +173,7 @@ def reconcile_runtime_artifacts(
 
     repaired_managers: tuple[str, ...] = ()
     try:
-        shim_status = package_shim_status(context)
+        shim_status = _package_shim_reconciliation_status(context)
         manifest_state = shim_status.get("manifest_state")
         if manifest_state not in (None, "absent", "valid"):
             errors.append(f"package:manifest:{manifest_state}")
@@ -176,7 +191,7 @@ def reconcile_runtime_artifacts(
                 if isinstance(repaired_values, list)
                 else ()
             )
-            verified = package_shim_status(context)
+            verified = _package_shim_reconciliation_status(context)
             manager_details = verified.get("manager_details")
             if isinstance(manager_details, list):
                 for detail in manager_details:

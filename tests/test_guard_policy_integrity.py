@@ -3061,6 +3061,40 @@ def test_build_trust_doctor_payload_reports_active_approval_center_port(
     assert payload["approval_url_base"] == "http://127.0.0.1:5481"
 
 
+def test_build_trust_doctor_payload_reads_daemon_snapshot_without_store_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    observed_stores: list[GuardStore | None] = []
+
+    def fake_trust_payload(
+        observed_store: GuardStore | None,
+        *,
+        guard_home: Path | None = None,
+        command: str,
+        backend: str,
+    ) -> dict[str, object]:
+        observed_stores.append(observed_store)
+        assert guard_home == home_dir
+        assert command == "doctor"
+        assert backend == "auto"
+        return {
+            "remembered_rules": "enforced",
+            "runtime_protection": "protected",
+            "one_time_approvals": "available",
+            "passive_prompt_allowed": False,
+            "cloud_policy_status": "available",
+        }
+
+    monkeypatch.setattr(trust_dispatch_module, "_trust_status_payload", fake_trust_payload)
+
+    trust_dispatch_module.build_trust_doctor_payload(store)
+
+    assert observed_stores == [None]
+
+
 def test_build_trust_doctor_payload_prefers_live_daemon_port_when_locator_is_stale(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

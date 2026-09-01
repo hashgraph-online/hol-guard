@@ -1231,7 +1231,7 @@ def test_evaluate_package_request_artifact_refreshes_expired_cloud_access_token(
 @pytest.mark.parametrize(
     ("refreshed_error", "expected_code", "expected_action"),
     [
-        (TimeoutError("refresh timed out"), "cloud_validation_error", "block"),
+        (TimeoutError("refresh timed out"), "cloud_timeout", "require-reapproval"),
         (ValueError("invalid response"), "cloud_validation_error", "block"),
     ],
 )
@@ -1399,7 +1399,7 @@ def test_malformed_auth_context_without_sync_url_fails_closed(
     assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
-def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachable(
+def test_evaluate_package_request_artifact_strict_mode_queues_cloud_timeout_for_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1436,10 +1436,10 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "block"
-    assert result.policy_action == "block"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
     assert result.enforcement == "premium_cloud"
-    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
+    assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
     cached = store.get_cached_supply_chain_evaluation(
         workspace_id=WORKSPACE_ID,
         package_intent_hash=result.package_intent_hash,
@@ -1448,7 +1448,7 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
         scoring_version="scf-v1",
         bundle_version="1747612800000-deadbeef",
     )
-    assert isinstance(cached, dict)
+    assert cached is None
 
     monkeypatch.setattr(
         evaluator_module,
@@ -1468,7 +1468,7 @@ def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachab
     )
 
     assert retried.decision == "monitor"
-    assert not any(reason["code"] == "cloud_validation_error" for reason in retried.reasons)
+    assert not any(reason["code"] == "cloud_timeout" for reason in retried.reasons)
 
 
 def test_evaluate_package_request_artifact_rejects_untrusted_cloud_endpoint_before_network(

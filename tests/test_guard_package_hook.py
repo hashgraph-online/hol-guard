@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
+import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
@@ -359,6 +360,56 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     risk_summary = pending[0]["risk_summary"]
     assert isinstance(risk_summary, str)
     assert "minimist" in risk_summary.lower()
+
+
+def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    payload_path = workspace_dir / "hook-event.json"
+    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install @modelcontextprotocol/server-memory")
+    store = GuardStore(home_dir)
+    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    def fail_daemon(_home: Path) -> object:
+        raise RuntimeError("no daemon client")
+
+    def timeout(*_args: object, **_kwargs: object) -> object:
+        raise TimeoutError("cloud evaluation timed out")
+
+    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", timeout)
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    pending = store.list_approval_requests(status="pending", limit=5)
+
+    assert rc == 1
+    assert output["policy_action"] == "require-reapproval"
+    assert output["approval_requests"]
+    assert len(pending) == 1
+    assert pending[0]["policy_action"] == "require-reapproval"
+    assert pending[0]["decision_v2_json"]["package_review_cloud_reason_code"] == "cloud_timeout"
 
 
 def test_guard_hook_ask_package_native_denial_surfaces_approval_url(

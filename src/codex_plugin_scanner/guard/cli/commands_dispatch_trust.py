@@ -290,7 +290,9 @@ def _passive_read_guarantee() -> str:
 
 def build_trust_doctor_payload(store: GuardStore, *, backend: str = "auto") -> dict[str, object]:
     payload = _trust_status_payload(
-        store,
+        # Doctor is a passive diagnostic. Read the daemon-authored snapshot so
+        # Linux keyring implementation details cannot disagree with live trust.
+        None,
         guard_home=store.guard_home,
         command="doctor",
         backend=backend,

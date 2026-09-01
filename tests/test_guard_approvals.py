@@ -138,6 +138,8 @@ class TestGuardApprovals:
             approval_url="http://127.0.0.1:5474/requests/req-first",
         )
         store.add_approval_request(base, "2026-08-11T00:00:00+00:00")
+        first = store.get_approval_request("req-first")
+        assert first is not None
         second = replace(
             base,
             request_id="req-second",
@@ -160,6 +162,7 @@ class TestGuardApprovals:
         pending = store.list_approval_requests(limit=10)
         assert len(pending) == 1
         assert pending[0]["dedupe_count"] == 2
+        assert pending[0]["scope_contract_digest"] == first["scope_contract_digest"]
 
     def test_guard_queue_keeps_permission_modes_separate(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
