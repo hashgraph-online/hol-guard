@@ -257,6 +257,7 @@ mod tests {
         temporary_root.join(format!("guard-secure-fs-{name}-{}", std::process::id()))
     }
 
+    #[cfg(unix)]
     #[test]
     fn bounded_read_hashes_regular_file() {
         let dir = fixture_root("read");
