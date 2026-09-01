@@ -297,6 +297,7 @@ def _run_resident_hook_request(
                 _claimed_saved_allow_hash=parsed.claimed_saved_allow_hash,
                 _claimed_trusted_request_override=parsed.claimed_trusted_request_override,
                 _claimed_approval_request_id=parsed.claimed_approval_request_id,
+                _native_minimum_action=parsed.native_minimum_action,
             )
         )
         response["route"] = _current_decision_route()

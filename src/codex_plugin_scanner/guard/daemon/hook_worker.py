@@ -302,9 +302,7 @@ class HookWorker:
         self.metrics.record_route("native_resident")
         if native_event == "PreToolUse":
             if str(native_result.get("minimum_action") or "") == "review":
-                raise NativeApprovalCoordinationRequired(
-                    "native PreToolUse review requires approval coordination"
-                )
+                raise NativeApprovalCoordinationRequired("native PreToolUse review requires approval coordination")
             return harness_json_from_native_pre_tool(native_harness, native_result)
         self._record_post_tool_activity(
             harness=native_harness,

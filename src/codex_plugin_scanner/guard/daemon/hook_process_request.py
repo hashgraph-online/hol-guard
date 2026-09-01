@@ -150,6 +150,7 @@ def compatibility_hook_args(parsed: ResidentHookRequest) -> Namespace:
         artifact_id=None,
         artifact_name=None,
         policy_action=parsed.native_minimum_action,
+        native_minimum_action=parsed.native_minimum_action,
         event_file=None,
         json=True,
     )

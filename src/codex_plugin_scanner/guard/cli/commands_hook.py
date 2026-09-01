@@ -64,6 +64,7 @@ def _run_guard_hook_command(
     _claimed_saved_allow_hash: str | None = None,
     _claimed_trusted_request_override: bool = False,
     _claimed_approval_request_id: str | None = None,
+    _native_minimum_action: str | None = None,
 ) -> int:
     if guard_home is None:
         raise RuntimeError("Guard home is required")
@@ -84,15 +85,19 @@ def _run_guard_hook_command(
     # any harness adapter or generic semantic normalization can project it.
     # Explicit off/shadow returns here and continues through the compatibility
     # normalizers below.
-    raw_routed = try_native_or_source_ref_hook(
-        args,
-        config=config,
-        context=context,
-        payload=payload,
-        runtime_workspace=workspace,
-        store=store,
-        allow_compatibility=False,
-    )
+    if _native_minimum_action not in {None, "review"}:
+        raise RuntimeError("Unsupported native minimum action")
+    raw_routed = None
+    if _native_minimum_action is None:
+        raw_routed = try_native_or_source_ref_hook(
+            args,
+            config=config,
+            context=context,
+            payload=payload,
+            runtime_workspace=workspace,
+            store=store,
+            allow_compatibility=False,
+        )
     if raw_routed is not None:
         return raw_routed
     # Explicit off/shadow compatibility reaches this point after native has
@@ -126,14 +131,16 @@ def _run_guard_hook_command(
         return cursor_result
     if args.harness == "copilot":
         runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
-    routed = try_native_or_source_ref_hook(
-        args,
-        config=config,
-        context=context,
-        payload=payload,
-        runtime_workspace=runtime_workspace,
-        store=store,
-    )
+    routed = None
+    if _native_minimum_action is None:
+        routed = try_native_or_source_ref_hook(
+            args,
+            config=config,
+            context=context,
+            payload=payload,
+            runtime_workspace=runtime_workspace,
+            store=store,
+        )
     if routed is not None:
         return routed
     action_envelope = _hook_action_envelope(

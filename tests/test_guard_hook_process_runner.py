@@ -90,7 +90,11 @@ def test_private_worker_request_rejects_unknown_native_floor(tmp_path: Path) -> 
     assert coerce_resident_hook_request(request) is None
 
 
-def test_native_review_floor_queues_resolvable_approval(tmp_path: Path) -> None:
+def test_native_review_floor_queues_resolvable_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
     guard_home = tmp_path / "guard-home"
     request = build_hook_process_review_request(
         payload={

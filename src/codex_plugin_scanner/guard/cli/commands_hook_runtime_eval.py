@@ -444,15 +444,20 @@ def _evaluate_runtime_artifact_hook(
         # Hook payloads are untrusted hints.  They may make a decision stricter,
         # but can never lower current local policy or suppress later scanners.
         current_action_inputs.append(payload_action_normalization.action)
-    native_pre_tool_floor = attach_native_pre_tool_floor(
-        event_name,
-        payload_map,
-        action_envelope,
-        current_action_inputs,
-        guard_home=context.guard_home,
-        cwd=runtime_workspace,
-        home_dir=context.home_dir,
-    )
+    trusted_native_floor = getattr(args, "native_minimum_action", None)
+    if trusted_native_floor == "review":
+        native_pre_tool_floor: GuardAction | None = "review"
+        current_action_inputs.append(native_pre_tool_floor)
+    else:
+        native_pre_tool_floor = attach_native_pre_tool_floor(
+            event_name,
+            payload_map,
+            action_envelope,
+            current_action_inputs,
+            guard_home=context.guard_home,
+            cwd=runtime_workspace,
+            home_dir=context.home_dir,
+        )
     policy_action = most_restrictive_guard_action(*current_action_inputs)
     approval_context_policy_action = most_restrictive_guard_action(
         approval_context_config_action,

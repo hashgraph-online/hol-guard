@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_authority
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import hook_process_entrypoint
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker, NativeApprovalCoordinationRequired
 from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.native_pretool import _decode_pre_tool
@@ -144,7 +144,7 @@ def test_generic_result_decoder_accepts_complete_policy_action_lattice(
     assert _decode_pre_tool(result, command="ignored") == result
 
 
-def test_native_review_is_mechanical_and_never_raises_worker_unsupported(
+def test_native_review_requires_approval_coordination(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -158,18 +158,15 @@ def test_native_review_is_mechanical_and_never_raises_worker_unsupported(
         lambda *_args, **_kwargs: edge,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    response = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
-        params={},
-        default_harness="codex",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard-home",
-        workspace=tmp_path / "workspace",
-    )
-    hook_output = response["hookSpecificOutput"]
-    assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "deny"
-    assert response["reason_code"] == "native_pre_tool_unknown_review"
+    with pytest.raises(NativeApprovalCoordinationRequired):
+        worker.review_http_payload(
+            payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
+            params={},
+            default_harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+        )
 
 
 def test_result_helper_has_no_untyped_result_payload() -> None:
