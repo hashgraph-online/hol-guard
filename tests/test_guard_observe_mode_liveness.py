@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
+from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
 from codex_plugin_scanner.guard.store import GuardStore
 
 _DEADLINE_REASON = "daemon_hook_process_deadline_exhausted"
@@ -25,6 +26,9 @@ def _review_request(
     event: str = "PreToolUse",
     guard_home: Path,
     workspace: Path,
+    command: str = "git status --short",
+    tool_name: str = "Bash",
+    tool_input: dict[str, object] | None = None,
 ) -> dict[str, object]:
     request = urllib.request.Request(
         (
@@ -35,8 +39,8 @@ def _review_request(
         data=json.dumps(
             {
                 "hook_event_name": event,
-                "tool_name": "Bash",
-                "tool_input": {"command": "git status --short"},
+                "tool_name": tool_name,
+                "tool_input": tool_input if tool_input is not None else {"command": command},
             }
         ).encode(),
         headers={
@@ -189,6 +193,7 @@ def test_prompt_mode_still_blocks_failed_local_review(
             endpoint=endpoint,
             guard_home=guard_home,
             workspace=workspace,
+            command="curl https://example.test",
         )
     finally:
         daemon.stop()
@@ -200,3 +205,73 @@ def test_prompt_mode_still_blocks_failed_local_review(
         assert isinstance(hook_output, dict)
         assert hook_output["permissionDecision"] == "deny"
     assert payload["reason_code"] == _DEADLINE_REASON
+
+
+@pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
+def test_prompt_mode_continues_emergency_safe_inspection_when_review_cannot_complete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    endpoint: str,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True)
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    monkeypatch.setattr(
+        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
+        "review",
+        _failed_review,
+    )
+
+    try:
+        payload = _review_request(
+            daemon,
+            endpoint=endpoint,
+            guard_home=guard_home,
+            workspace=workspace,
+        )
+    finally:
+        daemon.stop()
+
+    if endpoint == "pi":
+        assert payload["decision"] == "allow"
+    else:
+        hook_output = payload["hookSpecificOutput"]
+        assert isinstance(hook_output, dict)
+        assert hook_output["permissionDecision"] == "allow"
+    assert payload["reason_code"] == "native_degraded_emergency_safe"
+
+
+def test_hook_overload_continues_emergency_safe_workspace_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    source = workspace / "src" / "app.ts"
+    source.parent.mkdir(parents=True)
+    source.write_text("export {}\n", encoding="utf-8")
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon.start()
+    monkeypatch.setattr(
+        daemon._server.runtime_hook_scheduler,  # pyright: ignore[reportPrivateUsage]
+        "acquire",
+        lambda **_kwargs: RuntimeHookAdmission(permit=None, reason_code="daemon_hook_queue_capacity"),
+    )
+    try:
+        payload = _review_request(
+            daemon,
+            endpoint="claude-code",
+            guard_home=guard_home,
+            workspace=workspace,
+            tool_name="Read",
+            tool_input={"file_path": str(source)},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["reason_code"] == "native_degraded_emergency_safe"
+    hook_output = payload["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"

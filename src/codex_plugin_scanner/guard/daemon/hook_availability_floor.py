@@ -176,6 +176,8 @@ _UNSAFE_INSPECTION_FLAGS = frozenset(
         "-R",
         "-r",
         "-L",
+        "-o",
+        "--output",
     }
 )
 _UNSAFE_FD_FLAGS = frozenset(
@@ -232,7 +234,7 @@ def hook_action_is_emergency_safe(
     if command is not None:
         return _command_is_emergency_safe(command, workspace=workspace, home_dir=home_dir)
     if tool_name in _INSPECTION_TOOLS:
-        return True
+        return bool(paths)
     return bool(paths) and tool_name in {"", "read"}
 
 
@@ -372,6 +374,8 @@ def _path_is_workspace_local(path: str, workspace: Path | None) -> bool:
         return False
     candidate_is_absolute = posix.startswith("/") or (len(posix) > 1 and posix[1] == ":")
     workspace_posix = _workspace_anchor(workspace)
+    if workspace is not None and workspace_posix is None:
+        return False
     if workspace_posix is None:
         return not candidate_is_absolute
     if candidate_is_absolute:

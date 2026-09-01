@@ -262,7 +262,7 @@ def command_payloads(value):
             item = item.get("command", item.get("cmd"))
         if not isinstance(item, str) or not item.strip():
             continue
-        out.append({{
+        entry = {{
             "hookName": "PreToolUse",
             "hook_event_name": "PreToolUse",
             "tool_call": {{
@@ -270,7 +270,11 @@ def command_payloads(value):
                 "name": "run_command",
                 "input": {{"command": item}},
             }},
-        }})
+        }}
+        cwd = value.get("cwd")
+        if isinstance(cwd, str) and cwd.strip():
+            entry["cwd"] = cwd.strip()
+        out.append(entry)
     return out or [value]
 
 
@@ -328,6 +332,7 @@ def main():
         return 0
     denied = False
     why = ""
+    degraded = False
     for item in command_payloads(value):
         try:
             result = subprocess.run(
@@ -340,17 +345,15 @@ def main():
             )
         except (OSError, subprocess.SubprocessError):
             if emergency_continue(item):
-                emit({{"cancel": False, "errorMessage": "", "contextModification": ""}})
-                proof("degraded")
-                return 0
+                degraded = True
+                continue
             fail("HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed.")
             return 0
         decision = parse_output(result.stdout)
         if decision is None:
             if emergency_continue(item):
-                emit({{"cancel": False, "errorMessage": "", "contextModification": ""}})
-                proof("degraded")
-                return 0
+                degraded = True
+                continue
             fail("HOL Guard returned an invalid decision; this Cline action was not allowed to proceed.")
             return 0
         if blocked(decision):
@@ -358,7 +361,7 @@ def main():
             why = reason(decision)
             break
     if BLOCKING:
-        outcome = "blocked" if denied else "allowed"
+        outcome = "blocked" if denied else ("degraded" if degraded else "allowed")
     else:
         outcome = "observed"
     proof(outcome)

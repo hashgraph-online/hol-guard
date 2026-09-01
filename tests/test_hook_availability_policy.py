@@ -232,6 +232,48 @@ def test_filesystem_root_workspace_does_not_fail_open() -> None:
     assert hook_action_is_emergency_safe(payload, workspace=Path("/Users")) is False
 
 
+def test_filesystem_root_workspace_rejects_relative_reads() -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "notes.txt"},
+        "cwd": "/",
+    }
+    assert hook_action_is_emergency_safe(payload) is False
+    assert hook_action_is_emergency_safe(payload, workspace=Path("/")) is False
+
+
+def test_inspection_without_target_is_not_emergency_safe() -> None:
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}}
+    assert hook_action_is_emergency_safe(payload) is False
+
+
+def test_tree_output_file_is_not_emergency_safe(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "tree -o out.txt"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "tree --output=out.txt"}},
+            workspace=workspace,
+        )
+        is False
+    )
+    assert (
+        hook_action_is_emergency_safe(
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "tree"}},
+            workspace=workspace,
+        )
+        is True
+    )
+
+
 def test_before_write_file_is_not_emergency_safe(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

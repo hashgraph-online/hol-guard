@@ -160,6 +160,22 @@ def test_native_pretool_pauses_mutation_when_guard_is_unavailable(tmp_path: Path
     assert json.loads(result.stdout)["cancel"] is True
 
 
+def test_native_pretool_validates_every_command_when_guard_is_unavailable(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    _activate(context, "hooks")
+    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    result = _run_hook(
+        source,
+        tmp_path,
+        {
+            "hookName": "PreToolUse",
+            "tool_call": {"id": "1", "name": "run_commands", "input": {"commands": ["git status", "rm -rf /"]}},
+        },
+    )
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["cancel"] is True
+
+
 def test_native_pretool_fans_out_cline_parallel_commands(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")

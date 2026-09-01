@@ -5963,6 +5963,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "reason_code": reason_code,
                 "observed_review_failure": True,
             }
+        if event == "PreToolUse":
+            from .hook_availability_policy import availability_harness_response
+
+            payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
+            workspace_value = self._optional_string(params.get("workspace", [None])[-1])
+            home_value = self._optional_string(params.get("home", [None])[-1])
+            return availability_harness_response(
+                payload_dict,
+                harness=harness,
+                event_name="PreToolUse",
+                reason_code=reason_code,
+                reason=reason,
+                workspace=Path(workspace_value) if workspace_value else None,
+                home_dir=Path(home_value) if home_value else None,
+            )
         if harness in {"pi", "omp"}:
             return {
                 "decision": "deny",
@@ -5982,21 +5997,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     },
                 },
             }
-        if event == "PreToolUse":
-            from .hook_availability_policy import availability_harness_response
-
-            payload_dict = dict(payload) if isinstance(payload, Mapping) else {}
-            workspace_value = self._optional_string(params.get("workspace", [None])[-1])
-            home_value = self._optional_string(params.get("home", [None])[-1])
-            return availability_harness_response(
-                payload_dict,
-                harness=harness,
-                event_name="PreToolUse",
-                reason_code=reason_code,
-                reason=reason,
-                workspace=Path(workspace_value) if workspace_value else None,
-                home_dir=Path(home_value) if home_value else None,
-            )
         return {
             "continue": False,
             "stopReason": reason,

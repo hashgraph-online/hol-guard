@@ -372,11 +372,7 @@ def _failure_payload(
     input_text: str = "",
 ) -> tuple[dict[str, object], int]:
     payload = _json_object(input_text or "{}")
-    if (
-        event_name == "PreToolUse"
-        and isinstance(payload, dict)
-        and hook_action_is_emergency_safe(payload)
-    ):
+    if event_name == "PreToolUse" and isinstance(payload, dict) and hook_action_is_emergency_safe(payload):
         if harness == "copilot":
             return {
                 "permissionDecision": "allow",

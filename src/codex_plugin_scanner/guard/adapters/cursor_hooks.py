@@ -471,11 +471,7 @@ def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
                 "integrity_status": "missing",
                 "reason": "guard_cursor_hook_script_missing",
             }
-        if (
-            stat.S_ISLNK(metadata.st_mode)
-            or not stat.S_ISREG(metadata.st_mode)
-            or source != expected_source
-        ):
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or source != expected_source:
             return {
                 "protection_active": False,
                 "integrity_status": "tampered",
