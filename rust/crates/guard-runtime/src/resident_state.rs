@@ -12,21 +12,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[path = "resident_state_files.rs"]
 mod resident_state_files;
-#[path = "resident_state_identity.rs"]
-mod resident_state_identity;
 
 use resident_state_files::{ensure_private_directory, private_file};
 #[cfg(windows)]
 pub(crate) use resident_state_files::{
     open_private_read, protect_windows_private_path, verify_windows_private_path,
-};
-#[cfg(test)]
-pub(crate) use resident_state_identity::process_is_terminal;
-#[cfg(all(test, target_os = "macos"))]
-pub(crate) use resident_state_identity::process_start_marker;
-pub(crate) use resident_state_identity::{
-    package_process_start_marker, validate_package_process_identity,
-    validate_package_process_identity_with_marker,
 };
 
 const STATE_SCHEMA: &str = "hol-guard-resident-state.v3";
@@ -45,7 +35,9 @@ pub(crate) struct ResidentState {
     pub(crate) schema: String,
     pub(crate) generation: u64,
     pub(crate) process_id: u32,
+    pub(crate) process_start_marker: String,
     pub(crate) owner_process_id: u32,
+    pub(crate) owner_process_start_marker: String,
     pub(crate) runtime_sha256: String,
     pub(crate) transport: String,
     pub(crate) endpoint: String,
@@ -109,6 +101,10 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
     executable_digest(&executable)
 }
 
+pub(crate) use crate::resident_process_identity::{
+    process_start_marker, validate_package_process_identity,
+};
+
 pub(crate) fn state_scope(base: &Path, digest: &str) -> Result<PathBuf, String> {
     if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("native_resident_runtime_digest_invalid".to_owned());
@@ -148,11 +144,13 @@ pub(crate) fn socket_directory(scope: &Path, digest: &str) -> Result<PathBuf, St
 
 fn state_message(state: &ResidentState) -> Vec<u8> {
     format!(
-        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
+        "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         state.schema,
         state.generation,
         state.process_id,
+        state.process_start_marker,
         state.owner_process_id,
+        state.owner_process_start_marker,
         state.runtime_sha256,
         state.transport,
         state.endpoint,
@@ -189,6 +187,8 @@ fn validate_state(
         || state.generation == 0
         || state.process_id == 0
         || state.owner_process_id == 0
+        || state.process_start_marker.is_empty()
+        || state.owner_process_start_marker.is_empty()
         || state.runtime_sha256 != expected_digest
         || !matches!(state.transport.as_str(), "unix" | "loopback")
         || state.endpoint.len() > 32 * 1024
@@ -300,7 +300,9 @@ pub(crate) fn discover_states(
 pub(crate) fn next_generation(scope: &Path, digest: &str) -> Result<u64, String> {
     let highest = discover_states(scope, digest)?
         .into_iter()
-        .find(|state| validate_package_process_identity(state.process_id).is_ok())
+        .find(|state| {
+            validate_package_process_identity(state.process_id, &state.process_start_marker).is_ok()
+        })
         .map(|state| state.generation)
         .unwrap_or(0);
     Ok(now_ms()?.max(highest.saturating_add(1)).max(1))
@@ -315,11 +317,16 @@ pub(crate) fn publish_state(
     endpoint: String,
     token: &[u8],
 ) -> Result<ResidentState, String> {
+    let process_id = std::process::id();
+    let serving_start_marker = process_start_marker(process_id)?;
+    let owner_process_start_marker = process_start_marker(owner_process_id)?;
     let mut state = ResidentState {
         schema: STATE_SCHEMA.to_owned(),
         generation,
-        process_id: std::process::id(),
+        process_id,
+        process_start_marker: serving_start_marker,
         owner_process_id,
+        owner_process_start_marker,
         runtime_sha256: digest.to_owned(),
         transport: transport.to_owned(),
         endpoint,
@@ -340,8 +347,13 @@ pub(crate) fn publish_state(
     let retained_generations = discover_states(scope, digest)?
         .into_iter()
         .filter(|candidate| {
-            validate_package_process_identity(candidate.process_id).is_ok()
-                && validate_package_process_identity(candidate.owner_process_id).is_ok()
+            validate_package_process_identity(candidate.process_id, &candidate.process_start_marker)
+                .is_ok()
+                && validate_package_process_identity(
+                    candidate.owner_process_id,
+                    &candidate.owner_process_start_marker,
+                )
+                .is_ok()
         })
         .take(RETAINED_STATE_FILES)
         .map(|candidate| candidate.generation)
@@ -381,7 +393,9 @@ pub(crate) fn acquire_startup_lock(scope: &Path) -> Result<Option<StartupLock>, 
     let path = scope.join("startup.lock");
     let mut nonce_bytes = [0u8; 32];
     getrandom::fill(&mut nonce_bytes).map_err(|_| "native_client_random_failed".to_owned())?;
-    let nonce = format!("{}:{}", std::process::id(), hex_bytes(&nonce_bytes));
+    let process_id = std::process::id();
+    let start_marker = process_start_marker(process_id)?;
+    let nonce = format!("{process_id}:{start_marker}:{}", hex_bytes(&nonce_bytes));
     match private_file(&path, true) {
         Ok(mut file) => {
             file.write_all(nonce.as_bytes())
@@ -415,19 +429,19 @@ pub(crate) fn clear_stale_startup_lock(
     }
     let contents =
         fs::read_to_string(&path).map_err(|_| "native_resident_lock_read_failed".to_owned())?;
-    let owner_process_id = contents
-        .split_once(':')
-        .and_then(|(process_id, nonce)| {
-            if nonce.len() == 64 && nonce.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                process_id.parse::<u32>().ok()
-            } else {
-                None
-            }
-        })
-        .filter(|process_id| *process_id > 0);
-    if owner_process_id
-        .is_some_and(|process_id| validate_package_process_identity(process_id).is_ok())
-    {
+    let owner_identity = contents.split_once(':').and_then(|(process_id, rest)| {
+        let (start_marker, nonce) = rest.rsplit_once(':')?;
+        if start_marker.is_empty()
+            || nonce.len() != 64
+            || !nonce.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return None;
+        }
+        Some((process_id.parse::<u32>().ok()?, start_marker.to_owned()))
+    });
+    if owner_identity.is_some_and(|(process_id, start_marker)| {
+        process_id > 0 && validate_package_process_identity(process_id, &start_marker).is_ok()
+    }) {
         return Ok(false);
     }
     fs::remove_file(path).map_err(|_| "native_resident_lock_recovery_failed".to_owned())?;

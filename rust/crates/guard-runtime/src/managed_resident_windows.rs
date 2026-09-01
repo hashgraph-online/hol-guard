@@ -28,7 +28,7 @@ pub(crate) fn spawn_managed(
         .map_err(|_| "native_resident_spawn_failed".to_owned())?;
     let write_result = {
         let Some(mut stdin) = child.take_stdin() else {
-            let _ = child.terminate();
+            let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
             return Err("native_resident_spawn_stdin_failed".to_owned());
         };
         stdin
@@ -37,7 +37,7 @@ pub(crate) fn spawn_managed(
             .and_then(|()| stdin.flush())
     };
     if write_result.is_err() {
-        let _ = child.terminate();
+        let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
         return Err("native_resident_spawn_auth_failed".to_owned());
     }
     Ok(child)
@@ -73,18 +73,20 @@ fn supervise_managed_child(
     let argument_refs: Vec<&OsStr> = arguments.iter().map(OsString::as_os_str).collect();
     let mut child = spawn_managed_child(executable, &argument_refs)
         .map_err(|_| "native_resident_spawn_failed".to_owned())?;
-    let mut liveness_writer = child
-        .take_stdin()
-        .ok_or_else(|| "native_resident_spawn_stdin_failed".to_owned())?;
+    let mut liveness_writer = child.take_stdin().ok_or_else(|| {
+        let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
+        "native_resident_spawn_stdin_failed".to_owned()
+    })?;
     let write_result = liveness_writer
         .write_all(hex_token(token).as_bytes())
         .and_then(|()| liveness_writer.write_all(b"\n"))
         .and_then(|()| liveness_writer.flush());
     if write_result.is_err() {
-        let _ = child.terminate();
+        let _ = child.terminate_with_timeout(super::MANAGED_STOP_TIMEOUT);
         return Err("native_resident_spawn_auth_failed".to_owned());
     }
-    let status_result = child.wait_success();
+    let status_result =
+        child.wait_success_with_timeout(super::MANAGED_IDLE_TIMEOUT + super::MANAGED_STOP_TIMEOUT);
     drop(liveness_writer);
     let status_success =
         status_result.map_err(|_| "native_resident_supervisor_wait_failed".to_owned())?;

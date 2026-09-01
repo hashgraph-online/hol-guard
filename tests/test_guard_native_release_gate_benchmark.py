@@ -114,3 +114,27 @@ def test_native_warm_uses_persistent_authenticated_resident_ipc(
 
     assert len(values) == 2
     assert [request["request_id"] for request in requests] == ["native-warm-0", "native-warm-1"]
+
+
+def test_native_production_warm_requires_resident_route(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[str] = []
+
+    def fake_review(request: object, *, observe_mode: bool, policy_snapshot: object = None) -> SimpleNamespace:
+        del observe_mode
+        del policy_snapshot
+        requests.append(str(getattr(request, "request_id", None)))
+        return SimpleNamespace(decision="allow")
+
+    monkeypatch.setattr(benchmark, "review_post_tool_native", fake_review)
+    monkeypatch.setattr(benchmark, "native_hook_route", lambda: "native_resident")
+    values = benchmark._bench_native_warm_production(
+        workspace=tmp_path,
+        guard_home=tmp_path / "guard-home",
+        iterations=2,
+    )
+
+    assert len(values) == 2
+    assert requests == ["native-production-warm-0", "native-production-warm-1"]

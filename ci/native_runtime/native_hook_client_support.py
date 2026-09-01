@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.live_process_identity import process_start_token
 from codex_plugin_scanner.guard.native_policy_snapshot import (
     _policy_snapshot_push_bytes_v3,
     build_policy_snapshot_v3,
@@ -198,11 +199,15 @@ def _write_forged_state(runtime: Path, state_dir: Path) -> None:
     runtime_digest = hashlib.sha256(runtime.read_bytes()).hexdigest()
     scope = _initialize_protected_scope(runtime, state_dir)
     token = secrets.token_bytes(32)
+    start_marker = process_start_token(os.getpid())
+    assert start_marker is not None
     state: dict[str, object] = {
         "schema": "hol-guard-resident-state.v3",
         "generation": 18_000_000_000_000_000_000,
         "process_id": os.getpid(),
+        "process_start_marker": start_marker,
         "owner_process_id": os.getpid(),
+        "owner_process_start_marker": start_marker,
         "runtime_sha256": runtime_digest,
         "transport": "loopback",
         "endpoint": "127.0.0.1:9",
@@ -215,7 +220,9 @@ def _write_forged_state(runtime: Path, state_dir: Path) -> None:
             "schema",
             "generation",
             "process_id",
+            "process_start_marker",
             "owner_process_id",
+            "owner_process_start_marker",
             "runtime_sha256",
             "transport",
             "endpoint",

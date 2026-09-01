@@ -46,7 +46,7 @@ pub(super) fn serve_unix_managed(
     listener
         .set_nonblocking(true)
         .map_err(|_| "native_socket_nonblocking_failed".to_owned())?;
-    publish_state(
+    let published = publish_state(
         scope,
         generation,
         owner_process_id,
@@ -59,7 +59,14 @@ pub(super) fn serve_unix_managed(
     if fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_socket()) {
         let _ = fs::remove_file(path);
     }
-    resident_state_retirement::retire_state(scope, generation, std::process::id(), digest, &token);
+    resident_state_retirement::retire_state(
+        scope,
+        generation,
+        published.process_id,
+        &published.process_start_marker,
+        digest,
+        &token,
+    );
     result
 }
 
@@ -132,7 +139,7 @@ pub(super) fn serve_loopback_managed(
     listener
         .set_nonblocking(true)
         .map_err(|_| "native_resident_loopback_nonblocking_failed".to_owned())?;
-    publish_state(
+    let published = publish_state(
         scope,
         generation,
         owner_process_id,
@@ -174,6 +181,13 @@ pub(super) fn serve_loopback_managed(
             Err(_) => break Err("native_resident_loopback_accept_failed".to_owned()),
         }
     };
-    resident_state_retirement::retire_state(scope, generation, std::process::id(), digest, &token);
+    resident_state_retirement::retire_state(
+        scope,
+        generation,
+        published.process_id,
+        &published.process_start_marker,
+        digest,
+        &token,
+    );
     result
 }

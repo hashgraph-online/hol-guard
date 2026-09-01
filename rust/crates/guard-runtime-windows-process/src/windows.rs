@@ -9,7 +9,7 @@ use std::ptr::{null, null_mut};
 use winapi::shared::basetsd::SIZE_T;
 use winapi::shared::minwindef::{DWORD, FALSE, TRUE};
 use winapi::shared::ntdef::HANDLE;
-use winapi::shared::winerror::{ERROR_INVALID_PARAMETER, WAIT_TIMEOUT};
+use winapi::shared::winerror::WAIT_TIMEOUT;
 use winapi::um::errhandlingapi::GetLastError;
 #[cfg(test)]
 use winapi::um::fileapi::GetFileType;
@@ -30,12 +30,15 @@ use winapi::um::synchapi::WaitForSingleObject;
 #[cfg(test)]
 use winapi::um::winbase::FILE_TYPE_UNKNOWN;
 use winapi::um::winbase::{
-    CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, HANDLE_FLAG_INHERIT, INFINITE,
+    CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT, HANDLE_FLAG_INHERIT,
     STARTF_USESTDHANDLES, STARTUPINFOEXW, WAIT_FAILED, WAIT_OBJECT_0,
 };
-use winapi::um::winnt::{
-    FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, SYNCHRONIZE,
+use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE};
+
+#[path = "process_lifecycle.rs"]
+mod process_lifecycle;
+pub use process_lifecycle::{
+    process_start_marker, terminate_process, terminate_process_verified, wait_for_process_exit,
 };
 
 // SAFETY: This module is the sole Win32 FFI boundary. Every borrowed handle is
@@ -64,56 +67,6 @@ fn open_process(process_id: u32, access: DWORD) -> io::Result<OwnedHandle> {
     }
 }
 
-/// Wait for a process to terminate, treating an already-gone PID as exited.
-pub fn wait_for_process_exit(process_id: u32, timeout: std::time::Duration) -> io::Result<bool> {
-    let process = match open_process(process_id, SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION) {
-        Ok(process) => process,
-        Err(error) if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) => {
-            return Ok(true)
-        }
-        Err(error) => return Err(error),
-    };
-    let millis = timeout.as_millis().min(u32::MAX as u128) as DWORD;
-    // SAFETY: `process` owns a valid process handle until this call returns.
-    let wait = unsafe { WaitForSingleObject(process.as_raw_handle() as HANDLE, millis) };
-    match wait {
-        WAIT_OBJECT_0 => Ok(true),
-        WAIT_TIMEOUT => Ok(false),
-        WAIT_FAILED => Err(io::Error::last_os_error()),
-        _ => Err(io::Error::other("unexpected process wait result")),
-    }
-}
-
-/// Terminate a process identified by an already-validated PID and wait for exit.
-pub fn terminate_process(process_id: u32) -> io::Result<()> {
-    let process = match open_process(
-        process_id,
-        SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
-    ) {
-        Ok(process) => process,
-        Err(error) if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) => return Ok(()),
-        Err(error) => return Err(error),
-    };
-    let mut exit_code = 0;
-    // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
-    if unsafe { GetExitCodeProcess(process.as_raw_handle() as HANDLE, &mut exit_code) } == FALSE {
-        return Err(io::Error::last_os_error());
-    }
-    if exit_code == STILL_ACTIVE {
-        // SAFETY: The process handle is owned and termination is followed by a wait.
-        if unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, 1) } == FALSE {
-            return Err(io::Error::last_os_error());
-        }
-    }
-    // SAFETY: `process` owns a valid process handle until this call returns.
-    let wait = unsafe { WaitForSingleObject(process.as_raw_handle() as HANDLE, INFINITE) };
-    if wait == WAIT_OBJECT_0 {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
 /// A managed child process whose standard streams cannot leak to descendants.
 pub struct ManagedChild {
     process: OwnedHandle,
@@ -134,12 +87,31 @@ impl ManagedChild {
         self.stdin.take()
     }
 
+    /// Return the exact creation-time marker associated with this owned child.
+    pub fn start_marker(&self) -> io::Result<String> {
+        process_lifecycle::process_start_marker_for_handle(&self.process)
+    }
+
     /// Wait for the child and report whether it exited successfully.
     pub fn wait_success(&self) -> io::Result<bool> {
+        self.wait_success_with_timeout(std::time::Duration::from_secs(60 * 60 + 2))
+    }
+
+    /// Wait for the child with an explicit finite timeout.
+    pub fn wait_success_with_timeout(&self, timeout: std::time::Duration) -> io::Result<bool> {
         // SAFETY: `process` owns a live process handle until this method returns.
-        let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, INFINITE) };
-        if wait != WAIT_OBJECT_0 {
-            return Err(io::Error::last_os_error());
+        let millis = timeout.as_millis().min(u32::MAX as u128) as DWORD;
+        let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, millis) };
+        match wait {
+            WAIT_OBJECT_0 => {}
+            WAIT_TIMEOUT => {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "process wait timed out",
+                ))
+            }
+            WAIT_FAILED => return Err(io::Error::last_os_error()),
+            _ => return Err(io::Error::other("unexpected process wait result")),
         }
         let mut exit_code = 0;
         // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
@@ -153,6 +125,11 @@ impl ManagedChild {
 
     /// Terminate the child if it is still running, then wait for it to exit.
     pub fn terminate(&self) -> io::Result<()> {
+        self.terminate_with_timeout(std::time::Duration::from_secs(2))
+    }
+
+    /// Terminate the child with an explicit finite timeout.
+    pub fn terminate_with_timeout(&self, timeout: std::time::Duration) -> io::Result<()> {
         let mut exit_code = 0;
         // SAFETY: The process handle is owned and `exit_code` is a valid output pointer.
         if unsafe { GetExitCodeProcess(self.process.as_raw_handle() as HANDLE, &mut exit_code) }
@@ -166,12 +143,17 @@ impl ManagedChild {
         {
             return Err(io::Error::last_os_error());
         }
+        let millis = timeout.as_millis().min(u32::MAX as u128) as DWORD;
         // SAFETY: `process` owns a live process handle until this method returns.
-        let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, INFINITE) };
-        if wait == WAIT_OBJECT_0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
+        let wait = unsafe { WaitForSingleObject(self.process.as_raw_handle() as HANDLE, millis) };
+        match wait {
+            WAIT_OBJECT_0 => Ok(()),
+            WAIT_TIMEOUT => Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "process termination wait timed out",
+            )),
+            WAIT_FAILED => Err(io::Error::last_os_error()),
+            _ => Err(io::Error::other("unexpected process wait result")),
         }
     }
 }
@@ -452,7 +434,9 @@ mod tests {
         let mut stdin = child.take_stdin().unwrap();
         stdin.flush().unwrap();
         drop(stdin);
-        assert!(child.wait_success().unwrap());
+        assert!(child
+            .wait_success_with_timeout(std::time::Duration::from_secs(2))
+            .unwrap());
         env::remove_var(SENTINEL_ENV);
         drop(open_handles);
     }

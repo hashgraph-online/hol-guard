@@ -52,6 +52,9 @@ def test_native_hook_client_start_timeout_contains_new_managed_processes(
     )
     assert result.returncode is not None
     assert result.returncode != 0
-    assert b"native_resident_start_timeout" in result.stderr
+    assert result.stderr in {
+        b"native_client_deadline_exceeded\n",
+        b"native_resident_start_timeout\n",
+    }
     assert not any(process_is_alive(process_id) for process_id in observed_process_ids)
     assert not _state_files(state_dir)

@@ -7,18 +7,46 @@ use std::io::Write;
 use std::path::Path;
 #[cfg(not(windows))]
 use std::process::{Child, Command, Stdio};
-#[cfg(windows)]
 use std::time::Duration;
 use std::time::Instant;
 
 use crate::resident_state::{
-    discover_states, token_from_state, validate_package_process_identity, ResidentState,
+    discover_states, process_start_marker, token_from_state, validate_package_process_identity,
+    ResidentState,
 };
 
 #[cfg(not(windows))]
 pub(super) type SpawnedManaged = Child;
 #[cfg(windows)]
 pub(super) type SpawnedManaged = ManagedChild;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ManagedProcessIdentity {
+    process_id: u32,
+    start_marker: Option<String>,
+}
+
+fn state_process_identity(state: &ResidentState) -> ManagedProcessIdentity {
+    ManagedProcessIdentity {
+        process_id: state.process_id,
+        start_marker: Some(state.process_start_marker.clone()),
+    }
+}
+
+pub(super) fn state_process_identities(states: &[ResidentState]) -> Vec<ManagedProcessIdentity> {
+    states
+        .iter()
+        .flat_map(|state| {
+            [
+                state_process_identity(state),
+                ManagedProcessIdentity {
+                    process_id: state.owner_process_id,
+                    start_marker: Some(state.owner_process_start_marker.clone()),
+                },
+            ]
+        })
+        .collect()
+}
 
 pub(super) fn spawn_managed(
     state_base: &Path,
@@ -98,20 +126,23 @@ pub(super) fn terminate_spawned_managed(child: &mut SpawnedManaged) -> Result<()
 #[cfg(windows)]
 pub(super) fn terminate_spawned_managed(child: &mut SpawnedManaged) -> Result<(), String> {
     child
-        .terminate()
+        .terminate_with_timeout(super::MANAGED_STOP_TIMEOUT)
         .map_err(|_| "native_resident_spawn_containment_failed".to_owned())
 }
 
-fn process_is_alive(process_id: u32) -> Result<bool, String> {
-    if process_id == std::process::id() {
-        return Ok(true);
-    }
-    if validate_package_process_identity(process_id).is_err() {
+fn process_is_alive(identity: &ManagedProcessIdentity) -> Result<bool, String> {
+    let Some(start_marker) = identity.start_marker.as_deref() else {
         return Ok(false);
+    };
+    if validate_package_process_identity(identity.process_id, start_marker).is_err() {
+        return Ok(false);
+    }
+    if identity.process_id == std::process::id() {
+        return Ok(true);
     }
     #[cfg(windows)]
     let platform_result =
-        guard_runtime_windows_process::wait_for_process_exit(process_id, Duration::ZERO)
+        guard_runtime_windows_process::wait_for_process_exit(identity.process_id, Duration::ZERO)
             .map(|exited| !exited)
             .map_err(|_| "native_resident_process_liveness_failed".to_owned());
     #[cfg(not(windows))]
@@ -119,18 +150,38 @@ fn process_is_alive(process_id: u32) -> Result<bool, String> {
     platform_result
 }
 
-fn terminate_managed_process(process_id: u32) -> Result<(), String> {
-    if !process_is_alive(process_id)? {
+fn terminate_managed_process(
+    identity: &ManagedProcessIdentity,
+    timeout: Duration,
+) -> Result<(), String> {
+    #[cfg(not(windows))]
+    let _ = timeout;
+    let Some(start_marker) = identity.start_marker.as_deref() else {
+        return Ok(());
+    };
+    if !process_is_alive(identity)? {
         return Ok(());
     }
     #[cfg(windows)]
-    let platform_result = guard_runtime_windows_process::terminate_process(process_id)
-        .map_err(|_| "native_resident_spawn_containment_failed".to_owned());
+    let platform_result = guard_runtime_windows_process::terminate_process_verified(
+        identity.process_id,
+        Some(start_marker),
+        timeout,
+    )
+    .and_then(|confirmed| {
+        confirmed
+            .then_some(())
+            .ok_or_else(|| std::io::Error::other("native_resident_spawn_containment_failed"))
+    })
+    .map_err(|_| "native_resident_spawn_containment_failed".to_owned());
     #[cfg(unix)]
     let platform_result = {
         use nix::sys::signal::{kill, Signal};
         use nix::unistd::Pid;
-        match kill(Pid::from_raw(process_id as i32), Signal::SIGKILL) {
+        if validate_package_process_identity(identity.process_id, start_marker).is_err() {
+            return Ok(());
+        }
+        match kill(Pid::from_raw(identity.process_id as i32), Signal::SIGKILL) {
             Ok(()) | Err(nix::errno::Errno::ESRCH) => Ok(()),
             Err(_) => Err("native_resident_spawn_containment_failed".to_owned()),
         }
@@ -138,21 +189,25 @@ fn terminate_managed_process(process_id: u32) -> Result<(), String> {
     platform_result
 }
 
-fn generation_process_ids(states: &[ResidentState], known_process_ids: &[u32]) -> Vec<u32> {
-    let mut process_ids = known_process_ids.to_vec();
-    for state in states {
-        process_ids.push(state.process_id);
-        process_ids.push(state.owner_process_id);
-    }
-    process_ids.retain(|process_id| *process_id != std::process::id());
-    process_ids.sort_unstable();
+fn generation_process_ids(
+    states: &[ResidentState],
+    known_processes: &[ManagedProcessIdentity],
+) -> Vec<ManagedProcessIdentity> {
+    let mut process_ids = known_processes.to_vec();
+    process_ids.extend(state_process_identities(states));
+    process_ids.retain(|identity| identity.process_id != std::process::id());
+    process_ids.sort_unstable_by(|left, right| {
+        left.process_id
+            .cmp(&right.process_id)
+            .then(left.start_marker.cmp(&right.start_marker))
+    });
     process_ids.dedup();
     process_ids
 }
 
-fn any_process_alive(process_ids: &[u32]) -> Result<bool, String> {
+fn any_process_alive(process_ids: &[ManagedProcessIdentity]) -> Result<bool, String> {
     for process_id in process_ids {
-        if process_is_alive(*process_id)? {
+        if process_is_alive(process_id)? {
             return Ok(true);
         }
     }
@@ -164,7 +219,7 @@ pub(super) fn wait_for_generation_containment(
     digest: &str,
     generation: u64,
     token: &[u8],
-    known_process_ids: &[u32],
+    known_processes: &[ManagedProcessIdentity],
 ) -> Result<(), String> {
     let deadline = Instant::now() + super::MANAGED_STOP_TIMEOUT;
     loop {
@@ -174,16 +229,19 @@ pub(super) fn wait_for_generation_containment(
             .filter(|state| state.generation == generation)
             .cloned()
             .collect::<Vec<_>>();
-        let process_ids = generation_process_ids(&generation_states, known_process_ids);
+        let process_ids = generation_process_ids(&generation_states, known_processes);
+        let timeout = deadline.saturating_duration_since(Instant::now());
         for process_id in &process_ids {
-            terminate_managed_process(*process_id)?;
+            terminate_managed_process(process_id, timeout)?;
         }
         for state in &generation_states {
-            if !process_is_alive(state.process_id)? {
+            let identity = state_process_identity(state);
+            if !process_is_alive(&identity)? {
                 super::resident_state_retirement::retire_state(
                     scope,
                     state.generation,
                     state.process_id,
+                    &state.process_start_marker,
                     digest,
                     token,
                 );
@@ -207,26 +265,28 @@ pub(super) fn wait_for_stop_containment(
     scope: &Path,
     digest: &str,
     deadline: Instant,
-    known_process_ids: &[u32],
+    known_processes: &[ManagedProcessIdentity],
 ) -> Result<(), String> {
     loop {
         let states = discover_states(scope, digest)?;
-        let process_ids = generation_process_ids(&states, known_process_ids);
+        let process_ids = generation_process_ids(&states, known_processes);
         let processes_remain = any_process_alive(&process_ids)?;
         if states.is_empty() && !processes_remain {
             return Ok(());
         }
         if Instant::now() >= deadline {
             for process_id in &process_ids {
-                terminate_managed_process(*process_id)?;
+                terminate_managed_process(process_id, Duration::ZERO)?;
             }
             for state in &states {
-                if !process_is_alive(state.process_id)? {
+                let identity = state_process_identity(state);
+                if !process_is_alive(&identity)? {
                     if let Ok(token) = token_from_state(state) {
                         super::resident_state_retirement::retire_state(
                             scope,
                             state.generation,
                             state.process_id,
+                            &state.process_start_marker,
                             digest,
                             &token,
                         );
@@ -251,7 +311,11 @@ pub(super) fn contain_spawned_managed(
     generation: u64,
     token: &[u8],
 ) -> Result<(), String> {
-    let known_process_ids = [child_process_id(child)];
+    let process_id = child_process_id(child);
+    let known_processes = [ManagedProcessIdentity {
+        process_id,
+        start_marker: process_start_marker(process_id).ok(),
+    }];
     terminate_spawned_managed(child)?;
-    wait_for_generation_containment(scope, digest, generation, token, &known_process_ids)
+    wait_for_generation_containment(scope, digest, generation, token, &known_processes)
 }

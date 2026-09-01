@@ -88,13 +88,8 @@ fn stale_process_identity_errors_are_platform_scoped() {
         is_stale_process_identity_error("native_resident_process_identity_unavailable");
     let stale_mismatch =
         is_stale_process_identity_error("native_resident_process_identity_mismatch");
-    if cfg!(windows) {
-        assert!(stale_unavailable);
-        assert!(stale_mismatch);
-    } else {
-        assert!(!stale_unavailable);
-        assert!(!stale_mismatch);
-    }
+    assert!(stale_unavailable);
+    assert!(stale_mismatch);
     assert!(!is_stale_process_identity_error(
         "native_resident_state_mac_invalid"
     ));

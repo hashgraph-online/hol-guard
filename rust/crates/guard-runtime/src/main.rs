@@ -9,6 +9,7 @@ mod oneshot;
 mod policy_enforcement;
 mod policy_store;
 mod resident_client;
+mod resident_process_identity;
 mod resident_protocol;
 mod resident_state;
 mod resident_state_encoding;

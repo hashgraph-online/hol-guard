@@ -6611,6 +6611,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 try:
                     with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
                         daemon_server.store.add_event(event_name, payload, _now())
+                except TimeoutError:
+                    daemon_server.diagnostics.record_exception("auth_audit_persistence_timeout")
+                    return
                 except sqlite3.OperationalError as error:
                     if attempt == 0 and any(
                         marker in str(error).lower() for marker in ("database is locked", "database table is locked")

@@ -4,14 +4,14 @@
 Only aggregate synthetic measurements are emitted. No user commands, file
 contents, secrets, or machine paths are included in benchmark output.
 
-The warm comparison measures two already-resident IPC paths. The Python
-reference explicitly disables native authority and varies synthetic samples to
-avoid cache distortion. Relative speed remains informative because trivial
-allow payloads can be faster in Python, while release acceptance follows the
-contract: native p95 must either stay below the absolute ceiling or materially
-improve over the pinned Python reference. The cold comparison measures the
-process topology that the native runtime is intended to replace and therefore
-retains the stronger relative-speedup gate.
+The enforced warm comparison measures the production adapter-to-decision path
+against a persistent Python worker. A direct resident IPC measurement is also
+reported as a diagnostic. The Python reference explicitly disables native
+authority and varies synthetic samples to avoid cache distortion. Relative
+speed remains informative because trivial allow payloads can be faster in
+Python, while release acceptance follows the contract: native p95 must either
+stay below the absolute ceiling or materially improve over the pinned Python
+reference. Cold comparison retains the stronger relative-speedup gate.
 """
 
 from __future__ import annotations
@@ -25,29 +25,25 @@ import tempfile
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.append(str(_REPO_ROOT))
-
-from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process  # noqa: E402
-from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner  # noqa: E402
-from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot  # noqa: E402
-from codex_plugin_scanner.guard.native_runtime import (  # noqa: E402
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
+from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route
+from codex_plugin_scanner.guard.native_runtime import (
     native_runtime_status,
     review_post_tool_native,
 )
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest  # noqa: E402
-from scripts import native_release_reporting as _native_release_reporting  # noqa: E402
-from scripts.native_slo_session import stop_native_resident  # noqa: E402
+from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes, resident_native_request
+from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-_DIRECT_CONCURRENCY = _native_release_reporting.DIRECT_CONCURRENCY
-_build_result = _native_release_reporting.build_result
-_measurement_summaries = _native_release_reporting.measurement_summaries
-_performance_failures = _native_release_reporting.performance_failures
+_MIN_WARM_P95_SPEEDUP = 1.15
+_MAX_WARM_P95_MS = 20.0
+_MIN_COLD_P95_SPEEDUP = 5.0
+_MAX_COLD_P95_MS = 100.0
+_MAX_NATIVE_READINESS_MS = 250.0
 
 
 @contextmanager
@@ -196,77 +192,100 @@ def _bench_python_warm(
         values.append((time.perf_counter() - started) * 1_000.0)
     return values
 
+
+def _bench_python_warm_reference(*, workspace: Path, guard_home: Path, iterations: int) -> list[float]:
+    with _python_reference_mode():
+        runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
+        runner.start()
+        try:
+            _python_review(runner, workspace=workspace, guard_home=guard_home)
+            return _bench_python_warm(
+                runner,
+                workspace=workspace,
+                guard_home=guard_home,
+                iterations=iterations,
+            )
+        finally:
+            runner.close()
+
+
 def _bench_native_warm(
     *,
     workspace: Path,
     guard_home: Path,
     iterations: int,
-    policy_snapshot: Mapping[str, object],
 ) -> list[float]:
+    """Measure direct authenticated resident IPC as a diagnostic."""
+    status = native_runtime_status()
+    if status.identity is None:
+        raise RuntimeError("Native resident runtime identity is unavailable")
     values: list[float] = []
     for index in range(iterations):
-        request = _request(
+        request = _wire_request(
             workspace=workspace,
             guard_home=guard_home,
             request_id=f"native-warm-{index}",
             sample=index,
         )
         started = time.perf_counter()
-        response = review_post_tool_native(request, observe_mode=False, policy_snapshot=policy_snapshot)
+        response_bytes = resident_native_request(
+            executable=status.identity.path,
+            identity_sha256=status.identity.sha256,
+            guard_home=guard_home,
+            environment=_native_environment(workspace),
+            payload=request.encode("utf-8"),
+            timeout_seconds=5.0,
+        )
         values.append((time.perf_counter() - started) * 1_000.0)
-        if response is None or response.decision != "allow":
+        if response_bytes is None:
+            raise RuntimeError("Native resident IPC request failed")
+        response = json.loads(response_bytes)
+        if response.get("decision") != "allow":
             raise RuntimeError(
                 "Native resident runtime did not return the expected allow decision: "
-                f"sample={index} reason_code={getattr(response, 'reason_code', None)} "
-                f"reason={getattr(response, 'reason', None)}"
+                f"sample={index} response={response!r}"
             )
     return values
 
 
-def _bench_native_concurrent(
+def _bench_native_warm_production(
     *,
     workspace: Path,
     guard_home: Path,
-    policy_snapshot: Mapping[str, object],
-) -> tuple[list[float], int]:
-    """Measure direct resident native c16 latency and completed-call errors."""
-
-    def review(index: int) -> float:
-        request = _request(workspace=workspace, guard_home=guard_home, request_id=f"native-concurrent-{index}")
-        started = time.perf_counter()
-        response = review_post_tool_native(request, observe_mode=False, policy_snapshot=policy_snapshot)
-        elapsed_ms = (time.perf_counter() - started) * 1_000.0
-        if response is None or response.decision != "allow":
-            raise RuntimeError("Direct native concurrent runtime returned an unexpected decision")
-        return elapsed_ms
-
+    iterations: int,
+    policy_snapshot: Mapping[str, object] | None = None,
+) -> list[float]:
+    """Measure the production adapter-to-decision route over a warm resident."""
     values: list[float] = []
-    errors = 0
-    with ThreadPoolExecutor(max_workers=_DIRECT_CONCURRENCY) as executor:
-        futures = [executor.submit(review, index) for index in range(_DIRECT_CONCURRENCY)]
-        for future in futures:
-            try:
-                values.append(future.result(timeout=5))
-            except Exception:
-                errors += 1
-    return values, errors
-
-
-def _prewarm_native_concurrent(
-    *,
-    workspace: Path,
-    guard_home: Path,
-    policy_snapshot: Mapping[str, object],
-) -> None:
-    """Start every resident stream before collecting the direct c16 sample."""
-
-    values, errors = _bench_native_concurrent(
-        workspace=workspace,
-        guard_home=guard_home,
-        policy_snapshot=policy_snapshot,
-    )
-    if errors or len(values) != _DIRECT_CONCURRENCY:
-        raise RuntimeError("Native resident concurrency prewarm did not fill the client pool")
+    for index in range(iterations):
+        reset_native_hook_route()
+        request = _request(
+            workspace=workspace,
+            guard_home=guard_home,
+            request_id=f"native-production-warm-{index}",
+            sample=index,
+        )
+        started = time.perf_counter()
+        if policy_snapshot is None:
+            response = review_post_tool_native(request, observe_mode=False, policy_snapshot=None)
+        else:
+            response = review_post_tool_native(
+                request,
+                observe_mode=False,
+                policy_snapshot=policy_snapshot,
+            )
+        values.append((time.perf_counter() - started) * 1_000.0)
+        if native_hook_route() != "native_resident":
+            raise RuntimeError(
+                "Native production warm benchmark did not use the authenticated resident route: "
+                f"sample={index} route={native_hook_route()!r}"
+            )
+        if response is None or response.decision != "allow":
+            raise RuntimeError(
+                "Native production warm benchmark returned an unexpected decision: "
+                f"sample={index} reason_code={getattr(response, 'reason_code', None)}"
+            )
+    return values
 
 
 def _bench_python_cold(*, workspace: Path, guard_home: Path, iterations: int) -> list[float]:
@@ -313,6 +332,10 @@ def _bench_native_oneshot(
     return values
 
 
+def _speedup(slower_p95: float, faster_p95: float) -> float:
+    return round(slower_p95 / max(faster_p95, 0.001), 2)
+
+
 def _validated_runtime(path: Path) -> Path:
     lexical = path.expanduser()
     if lexical.is_symlink():
@@ -338,64 +361,53 @@ def _readiness_failure(response: object) -> RuntimeError:
     )
 
 
-def _collect_measurements(
-    runtime: Path,
-    *,
-    warm_iterations: int,
-    cold_iterations: int,
-) -> tuple[
-    list[float],
-    list[float],
-    list[float],
-    list[float],
-    float,
-    list[float],
-    int,
-]:
-    with tempfile.TemporaryDirectory(prefix="hol-guard-native-bench-") as temp_dir:
+def _run_benchmarks(
+    *, runtime: Path, warm_iterations: int, cold_iterations: int
+) -> tuple[list[float], list[float], list[float], list[float], list[float], float]:
+    short_temp_root = "/tmp" if os.name != "nt" and Path("/tmp").is_dir() else None
+    with tempfile.TemporaryDirectory(prefix="hg-native-bench-", dir=short_temp_root) as temp_dir:
         workspace = Path(temp_dir)
         guard_home = workspace / "guard-home"
         guard_home.mkdir(mode=0o700)
-        python_runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
-        python_runner.start()
+
+        python_warm = _bench_python_warm_reference(
+            workspace=workspace,
+            guard_home=guard_home,
+            iterations=warm_iterations,
+        )
+
+        close_resident_native_runtimes()
         try:
-            _python_review(python_runner, workspace=workspace, guard_home=guard_home)
-            stop_native_resident(runtime, guard_home)
             readiness_started = time.perf_counter()
             with native_policy_snapshot(guard_home) as snapshot:
+                reset_native_hook_route()
                 readiness_response = review_post_tool_native(
                     _request(workspace=workspace, guard_home=guard_home, request_id="native-readiness"),
                     observe_mode=False,
                     policy_snapshot=snapshot,
                 )
                 native_readiness_ms = (time.perf_counter() - readiness_started) * 1_000.0
-                if readiness_response is None or readiness_response.decision != "allow":
+                if (
+                    readiness_response is None
+                    or readiness_response.decision != "allow"
+                    or native_hook_route() != "native_resident"
+                ):
                     raise _readiness_failure(readiness_response)
-                python_warm = _bench_python_warm(
-                    python_runner,
-                    workspace=workspace,
-                    guard_home=guard_home,
-                    iterations=warm_iterations,
-                )
-                native_warm = _bench_native_warm(
+                native_warm = _bench_native_warm_production(
                     workspace=workspace,
                     guard_home=guard_home,
                     iterations=warm_iterations,
                     policy_snapshot=snapshot,
                 )
-                _prewarm_native_concurrent(
+                native_warm_ipc = _bench_native_warm(
                     workspace=workspace,
                     guard_home=guard_home,
-                    policy_snapshot=snapshot,
-                )
-                native_concurrent, native_concurrent_errors = _bench_native_concurrent(
-                    workspace=workspace,
-                    guard_home=guard_home,
-                    policy_snapshot=snapshot,
+                    iterations=warm_iterations,
                 )
         finally:
-            python_runner.close()
-            stop_native_resident(runtime, guard_home)
+            _stop_native_resident(runtime, guard_home / "native-runtime", workspace)
+            close_resident_native_runtimes()
+
         python_cold = _bench_python_cold(
             workspace=workspace,
             guard_home=guard_home,
@@ -407,15 +419,7 @@ def _collect_measurements(
             guard_home=guard_home,
             iterations=cold_iterations,
         )
-    return (
-        python_warm,
-        native_warm,
-        python_cold,
-        native_oneshot,
-        native_readiness_ms,
-        native_concurrent,
-        native_concurrent_errors,
-    )
+    return python_warm, native_warm, native_warm_ipc, python_cold, native_oneshot, native_readiness_ms
 
 
 def main() -> int:
@@ -429,36 +433,41 @@ def main() -> int:
     if args.warm_iterations < 10 or args.cold_iterations < 2:
         parser.error("benchmark iteration counts are too small")
     runtime = _validated_runtime(args.runtime)
-    (
-        python_warm,
-        native_warm,
-        python_cold,
-        native_oneshot,
-        native_readiness_ms,
-        native_concurrent,
-        native_concurrent_errors,
-    ) = _collect_measurements(
-        runtime,
+    python_warm, native_warm, native_warm_ipc, python_cold, native_oneshot, native_readiness_ms = _run_benchmarks(
+        runtime=runtime,
         warm_iterations=args.warm_iterations,
         cold_iterations=args.cold_iterations,
     )
-
-    (
-        python_warm_summary,
-        native_warm_summary,
-        python_cold_summary,
-        native_oneshot_summary,
-        native_concurrent_summary,
-    ) = _measurement_summaries(_summary, python_warm, native_warm, python_cold, native_oneshot, native_concurrent)
-    result, warm_speedup, cold_speedup = _build_result(
-        python_warm_summary=python_warm_summary,
-        native_warm_summary=native_warm_summary,
-        python_cold_summary=python_cold_summary,
-        native_oneshot_summary=native_oneshot_summary,
-        native_concurrent_summary=native_concurrent_summary,
-        native_readiness_ms=native_readiness_ms,
-        native_concurrent_errors=native_concurrent_errors,
-    )
+    python_warm_summary = _summary(python_warm)
+    native_warm_summary = _summary(native_warm)
+    native_warm_ipc_summary = _summary(native_warm_ipc)
+    python_cold_summary = _summary(python_cold)
+    native_oneshot_summary = _summary(native_oneshot)
+    warm_speedup = _speedup(python_warm_summary["p95_ms"], native_warm_summary["p95_ms"])
+    cold_speedup = _speedup(python_cold_summary["p95_ms"], native_oneshot_summary["p95_ms"])
+    result = {
+        "schema": "hol-guard-native-performance.v1",
+        "warm": {
+            "python_hook_process": python_warm_summary,
+            "native_resident": native_warm_summary,
+            "native_resident_ipc_diagnostic": native_warm_ipc_summary,
+            "p95_speedup": warm_speedup,
+        },
+        "cold": {
+            "python_hook_process": python_cold_summary,
+            "native_oneshot": native_oneshot_summary,
+            "p95_speedup": cold_speedup,
+        },
+        "native_readiness_ms": round(native_readiness_ms, 3),
+        "gates": {
+            "warm_acceptance": "p95_ms_lte_maximum_or_speedup_gte_minimum",
+            "minimum_warm_p95_speedup": _MIN_WARM_P95_SPEEDUP,
+            "maximum_warm_p95_ms": _MAX_WARM_P95_MS,
+            "minimum_cold_p95_speedup": _MIN_COLD_P95_SPEEDUP,
+            "maximum_cold_p95_ms": _MAX_COLD_P95_MS,
+            "maximum_native_readiness_ms": _MAX_NATIVE_READINESS_MS,
+        },
+    }
     rendered = json.dumps(result, indent=2, sort_keys=True)
     print(rendered)
     if args.json is not None:
@@ -467,16 +476,19 @@ def main() -> int:
 
     if not args.enforce:
         return 0
-    failures = _performance_failures(
-        warm_speedup=warm_speedup,
-        native_warm_summary=native_warm_summary,
-        cold_speedup=cold_speedup,
-        native_oneshot_summary=native_oneshot_summary,
-        native_readiness_ms=native_readiness_ms,
-        native_concurrent=native_concurrent,
-        native_concurrent_errors=native_concurrent_errors,
-        native_concurrent_summary=native_concurrent_summary,
-    )
+    failures: list[str] = []
+    if warm_speedup < _MIN_WARM_P95_SPEEDUP and native_warm_summary["p95_ms"] > _MAX_WARM_P95_MS:
+        failures.append(
+            "warm native resident p95 neither meets the "
+            f"{_MAX_WARM_P95_MS:.0f}ms ceiling nor improves by "
+            f"{_MIN_WARM_P95_SPEEDUP:.2f}x"
+        )
+    if cold_speedup < _MIN_COLD_P95_SPEEDUP:
+        failures.append(f"cold native one-shot p95 speedup is below {_MIN_COLD_P95_SPEEDUP:.0f}x")
+    if native_oneshot_summary["p95_ms"] > _MAX_COLD_P95_MS:
+        failures.append(f"cold native one-shot p95 exceeds {_MAX_COLD_P95_MS:.0f}ms")
+    if native_readiness_ms > _MAX_NATIVE_READINESS_MS:
+        failures.append(f"native resident readiness exceeds {_MAX_NATIVE_READINESS_MS:.0f}ms")
     if failures:
         for failure in failures:
             print(f"PERFORMANCE GATE: {failure}", file=sys.stderr)

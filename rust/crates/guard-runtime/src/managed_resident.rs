@@ -22,11 +22,9 @@ mod resident_state_retirement;
 #[path = "resident_restart_budget.rs"]
 mod restart_budget;
 
-#[cfg(not(windows))]
-use crate::resident_state::validate_package_process_identity;
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_states, next_generation,
-    runtime_digest, state_scope, token_from_state,
+    runtime_digest, state_scope, token_from_state, validate_package_process_identity,
 };
 
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(600);
@@ -158,19 +156,11 @@ fn shutdown_requested() -> bool {
 }
 
 fn is_stale_process_identity_error(error: &str) -> bool {
-    #[cfg(windows)]
-    {
-        matches!(
-            error,
-            "native_resident_process_identity_unavailable"
-                | "native_resident_process_identity_mismatch"
-        )
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = error;
-        false
-    }
+    matches!(
+        error,
+        "native_resident_process_identity_unavailable"
+            | "native_resident_process_identity_mismatch"
+    )
 }
 
 fn try_states(
@@ -184,11 +174,9 @@ fn try_states(
         if timeout.is_zero() {
             return Ok(None);
         }
-        if state.transport == "loopback" {
-            #[cfg(not(windows))]
-            if validate_package_process_identity(state.process_id).is_err() {
-                continue;
-            }
+        if validate_package_process_identity(state.process_id, &state.process_start_marker).is_err()
+        {
+            continue;
         }
         let token = token_from_state(&state)?;
         match crate::resident_client::send_request(
@@ -198,6 +186,7 @@ fn try_states(
             payload,
             timeout,
             state.process_id,
+            &state.process_start_marker,
         ) {
             Ok(response) => return Ok(Some(response)),
             Err(error)
@@ -297,10 +286,7 @@ pub(crate) fn stop_managed(state_base: &Path) -> Result<(), String> {
     let request = br#"{"operation":"shutdown","request":{}}"#;
     let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
     let initial_states = discover_states(&scope, &digest)?;
-    let process_ids = initial_states
-        .iter()
-        .flat_map(|state| [state.process_id, state.owner_process_id])
-        .collect::<Vec<_>>();
+    let process_ids = containment::state_process_identities(&initial_states);
     if try_states(&scope, &digest, request, deadline)?.is_some() {
         return containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids);
     }

@@ -45,20 +45,22 @@ fn authenticate(
     Ok(nonce)
 }
 
-#[cfg(windows)]
-fn validate_loopback_owner(_address: &SocketAddr, expected_process_id: u32) -> Result<(), String> {
-    crate::resident_state::validate_package_process_identity(expected_process_id)
-}
-
-#[cfg(not(windows))]
-fn validate_loopback_owner(_address: &SocketAddr, _expected_process_id: u32) -> Result<(), String> {
-    Ok(())
+fn validate_loopback_owner(
+    _address: &SocketAddr,
+    expected_process_id: u32,
+    expected_start_marker: &str,
+) -> Result<(), String> {
+    crate::resident_state::validate_package_process_identity(
+        expected_process_id,
+        expected_start_marker,
+    )
 }
 
 fn connect_loopback(
     endpoint: &str,
     timeout: Duration,
     expected_process_id: u32,
+    expected_start_marker: &str,
 ) -> Result<BoxedResidentStream, String> {
     let address: SocketAddr = endpoint
         .parse()
@@ -66,9 +68,10 @@ fn connect_loopback(
     if address.ip() != Ipv4Addr::LOCALHOST || address.port() == 0 {
         return Err("native_client_endpoint_invalid".to_owned());
     }
-    validate_loopback_owner(&address, expected_process_id)?;
+    validate_loopback_owner(&address, expected_process_id, expected_start_marker)?;
     let stream = TcpStream::connect_timeout(&address, timeout)
         .map_err(|_| "native_client_connect_failed".to_owned())?;
+    validate_loopback_owner(&address, expected_process_id, expected_start_marker)?;
     Ok(Box::new(stream))
 }
 
@@ -77,6 +80,7 @@ fn connect_unix(
     endpoint: &str,
     timeout: Duration,
     expected_process_id: u32,
+    expected_start_marker: &str,
 ) -> Result<BoxedResidentStream, String> {
     use nix::errno::Errno;
     use nix::fcntl::{fcntl, FcntlArg, FdFlag, OFlag};
@@ -142,6 +146,10 @@ fn connect_unix(
     if peer_process_id != expected_process_id {
         return Err("native_client_peer_identity_mismatch".to_owned());
     }
+    crate::resident_state::validate_package_process_identity(
+        expected_process_id,
+        expected_start_marker,
+    )?;
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|_| "native_client_timeout_failed".to_owned())?;
@@ -156,6 +164,7 @@ fn connect_unix(
     _endpoint: &str,
     _timeout: Duration,
     _expected_process_id: u32,
+    _expected_start_marker: &str,
 ) -> Result<BoxedResidentStream, String> {
     Err("native_client_unix_unavailable".to_owned())
 }
@@ -165,10 +174,21 @@ fn connect(
     endpoint: &str,
     timeout: Duration,
     expected_process_id: u32,
+    expected_start_marker: &str,
 ) -> Result<BoxedResidentStream, String> {
     match transport {
-        "unix" => connect_unix(endpoint, timeout, expected_process_id),
-        "loopback" => connect_loopback(endpoint, timeout, expected_process_id),
+        "unix" => connect_unix(
+            endpoint,
+            timeout,
+            expected_process_id,
+            expected_start_marker,
+        ),
+        "loopback" => connect_loopback(
+            endpoint,
+            timeout,
+            expected_process_id,
+            expected_start_marker,
+        ),
         _ => Err("native_client_transport_invalid".to_owned()),
     }
 }
@@ -235,9 +255,16 @@ pub(crate) fn send_request(
     payload: &[u8],
     timeout: Duration,
     expected_process_id: u32,
+    expected_start_marker: &str,
 ) -> Result<Vec<u8>, String> {
     let started = std::time::Instant::now();
-    let mut stream = connect(transport, endpoint, timeout, expected_process_id)?;
+    let mut stream = connect(
+        transport,
+        endpoint,
+        timeout,
+        expected_process_id,
+        expected_start_marker,
+    )?;
     let remaining = timeout.saturating_sub(started.elapsed());
     if remaining.is_zero() {
         return Err("native_client_deadline_exceeded".to_owned());
@@ -266,7 +293,7 @@ mod tests {
 
     #[test]
     fn rejects_non_loopback_tcp_endpoint() {
-        let error = match connect_loopback("192.0.2.1:80", Duration::from_millis(1), 1) {
+        let error = match connect_loopback("192.0.2.1:80", Duration::from_millis(1), 1, "") {
             Ok(_) => panic!("non-loopback endpoint was accepted"),
             Err(error) => error,
         };

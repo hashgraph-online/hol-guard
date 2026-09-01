@@ -9,6 +9,7 @@ pub(crate) fn retire_state(
     scope: &Path,
     generation: u64,
     process_id: u32,
+    process_start_marker: &str,
     expected_digest: &str,
     token: &[u8],
 ) {
@@ -22,7 +23,7 @@ pub(crate) fn retire_state(
     else {
         return;
     };
-    if state.process_id != process_id {
+    if state.process_id != process_id || state.process_start_marker != process_start_marker {
         return;
     }
     let Ok(state_token) = token_from_state(&state) else {

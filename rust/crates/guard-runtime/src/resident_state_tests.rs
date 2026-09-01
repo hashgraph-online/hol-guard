@@ -59,7 +59,9 @@ fn state_mac_rejects_endpoint_mutation() {
         schema: STATE_SCHEMA.to_owned(),
         generation: 1,
         process_id: 1,
+        process_start_marker: "linux:1".to_owned(),
         owner_process_id: 1,
+        owner_process_start_marker: "linux:1".to_owned(),
         runtime_sha256: digest,
         transport: "loopback".to_owned(),
         endpoint: "127.0.0.1:1234".to_owned(),
@@ -70,6 +72,14 @@ fn state_mac_rejects_endpoint_mutation() {
     state.state_mac = state_mac(&state, &token);
     state.endpoint = "127.0.0.1:4321".to_owned();
     assert_ne!(state.state_mac, state_mac(&state, &token));
+}
+
+#[test]
+fn process_identity_rejects_a_reused_same_binary_pid_marker() {
+    let process_id = std::process::id();
+    let marker = process_start_marker(process_id).unwrap();
+    assert!(validate_package_process_identity(process_id, &marker).is_ok());
+    assert!(validate_package_process_identity(process_id, "stale-process-start-marker").is_err());
 }
 
 #[test]
