@@ -431,7 +431,7 @@
   "oversized_files": {
     ".github/workflows/ci.yml": 554,
     ".github/workflows/desktop-core-alpha-feed.yml": 539,
-    ".github/workflows/publish.yml": 1718,
+    ".github/workflows/publish.yml": 1724,
     "dashboard/src/app.tsx": 1051,
     "dashboard/src/approval-center-primitives.tsx": 1049,
     "dashboard/src/approval-center-utils.ts": 748,
@@ -736,7 +736,7 @@
     "tests/test_policy_bundle_v2.py": 537,
     "tests/test_policy_decision_source_context.py": 570,
     "tests/test_policy_document_io.py": 679,
-    "tests/test_release_train_workflow.py": 628,
+    "tests/test_release_train_workflow.py": 636,
     "tests/test_update_desktop_core.py": 644,
     "tests/test_verify_release_registry.py": 567,
     "tests/test_zcode_adapter.py": 685

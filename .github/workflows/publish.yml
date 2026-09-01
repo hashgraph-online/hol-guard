@@ -116,6 +116,12 @@ jobs:
             --setup-action-ref "$SETUP_UV_ACTION_REF"
       - name: Install dependencies
         run: uv sync --frozen --extra dev --extra publish --extra cisco
+      - name: Verify release approval enrollment root pin
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0')
+        env:
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
+          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
+        run: uv run --no-sync python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
       - name: Compute publish version
         id: version
         env:

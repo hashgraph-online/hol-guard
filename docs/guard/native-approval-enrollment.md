@@ -15,9 +15,10 @@ values:
   those 32 raw public-key bytes, encoded as 64 lowercase hexadecimal
   characters.
 
-The runtime refuses enrollment when either value is absent or the fingerprint
-does not match. The root private key is never stored in this repository or in
-the Guard state directory. The `[42; 32]` root used by Rust tests is compiled
+Stable and alpha native-wheel jobs compile these values from GitHub repository
+variables of the same names. The runtime refuses enrollment when either value
+is absent or the fingerprint does not match. The root private key is never
+stored in this repository or in the Guard state directory. The `[42; 32]` root used by Rust tests is compiled
 only under `cfg(test)` and is not a production fallback. Release packaging
 must record the root fingerprint and signing provenance in its attestation.
 
