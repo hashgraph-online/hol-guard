@@ -5,6 +5,8 @@ from __future__ import annotations
 import shlex
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     FROZEN_CURSOR_HOOK_COMMAND,
     HOOK_SCRIPT_NAME,
@@ -52,4 +54,21 @@ def test_run_frozen_cursor_hook_rejects_unmanaged_script(tmp_path: Path) -> None
     script = tmp_path / "not-hooks" / HOOK_SCRIPT_NAME
     script.parent.mkdir()
     script.write_text("raise SystemExit(0)\n", encoding="utf-8")
-    assert run_frozen_cursor_hook([str(script)]) == 2
+    assert run_frozen_cursor_hook([str(script)]) == 3
+
+
+def test_run_frozen_cursor_hook_rejects_symlink(tmp_path: Path) -> None:
+    target = tmp_path / "payload.py"
+    target.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    script.parent.mkdir(parents=True)
+    try:
+        script.symlink_to(target)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symlink creation unavailable: {error}")
+    assert run_frozen_cursor_hook([str(script)]) == 3
+
+
+def test_run_frozen_cursor_hook_rejects_wrong_argc() -> None:
+    assert run_frozen_cursor_hook([]) == 2
+    assert run_frozen_cursor_hook(["a", "b"]) == 2

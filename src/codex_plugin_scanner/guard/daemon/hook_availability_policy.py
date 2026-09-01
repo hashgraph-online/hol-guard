@@ -81,7 +81,7 @@ def cursor_fallback_permission(
         return dict(_CURSOR_UNAVAILABLE_DENY), 2
     if hook_action_is_emergency_safe(payload, workspace=workspace, home_dir=home_dir):
         return {"permission": "allow"}, 0
-    response = {
+    response: dict[str, object] = {
         "permission": "deny",
         "user_message": _CURSOR_UNAVAILABLE_MESSAGE,
     }

@@ -44,14 +44,34 @@ def _is_managed_cursor_hook_script(path: Path) -> bool:
     return len(parts) >= 3 and parts[-3:-1] == ["managed", "cursor"]
 
 
+def _cursor_hook_path_contains_symlink(path: Path) -> bool:
+    parts = path.parts
+    if not parts:
+        return True
+    current = Path(parts[0])
+    try:
+        if current.is_symlink():
+            return True
+    except OSError:
+        return True
+    for part in parts[1:]:
+        current = current / part
+        try:
+            if current.is_symlink():
+                return True
+        except OSError:
+            return True
+    return False
+
+
 def run_frozen_cursor_hook(argv: Sequence[str]) -> int:
     """Execute the installed Cursor hook script from a frozen Guard binary."""
 
     if len(argv) != 1:
         return 2
     script = Path(argv[0])
-    if not _is_managed_cursor_hook_script(script) or not script.is_file():
-        return 2
+    if not _is_managed_cursor_hook_script(script) or not script.is_file() or _cursor_hook_path_contains_symlink(script):
+        return 3
     import runpy
 
     try:
@@ -199,7 +219,7 @@ def _live_cursor_hook_script_path(command: str) -> Path | None:
         return Path(tokens[0])
     if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
         candidate = Path(tokens[2])
-        if candidate.name == HOOK_SCRIPT_NAME:
+        if _is_managed_cursor_hook_script(candidate):
             return candidate
         return None
     if first.lower().startswith("python"):

@@ -530,7 +530,7 @@
     "src/codex_plugin_scanner/guard/daemon/hook_process_runner.py": 600,
     "src/codex_plugin_scanner/guard/daemon/manager.py": 3100,
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py": 535,
-    "src/codex_plugin_scanner/guard/daemon/server.py": 8813,
+    "src/codex_plugin_scanner/guard/daemon/server.py": 8841,
     "src/codex_plugin_scanner/guard/inventory_contract.py": 1818,
     "src/codex_plugin_scanner/guard/local_supply_chain.py": 4513,
     "src/codex_plugin_scanner/guard/mcp_tool_calls.py": 1576,
