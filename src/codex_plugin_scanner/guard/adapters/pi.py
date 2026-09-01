@@ -69,8 +69,8 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
         return _resolve_command(self.executable, self.executable_candidates(context))
 
     def executable_candidates(self, context: HarnessContext) -> tuple[Path, ...]:
-        # Linux package installers commonly place user-owned CLIs in
-        # ~/.local/bin without exporting that directory to GUI-launched apps.
+        # Linux package installers commonly place user-owned CLIs in a
+        # user-local bin directory without exporting it to GUI-launched apps.
         # Resolve that durable install directly so diagnostics and Guard's
         # launcher agree with the command the user can run from a terminal.
         return (context.home_dir / ".local" / "bin" / self.executable,)

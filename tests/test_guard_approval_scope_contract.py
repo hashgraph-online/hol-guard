@@ -323,7 +323,7 @@ def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_conte
         "command": "echo test",
         "raw_payload_redacted": {
             "tool_use_id": "first-tool-call",
-            "transcript_path": "/tmp/first.jsonl",
+            "transcript_path": "/workspace/first.jsonl",
             "model": "first-model",
             "permission_mode": "ask",
         },
@@ -348,7 +348,7 @@ def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_conte
             "command": "echo test",
             "raw_payload_redacted": {
                 "tool_use_id": "second-tool-call",
-                "transcript_path": "/tmp/second.jsonl",
+                "transcript_path": "/workspace/second.jsonl",
                 "model": "second-model",
                 "permission_mode": "ask",
             },
@@ -412,7 +412,7 @@ def test_deduped_retry_delivery_metadata_keeps_browser_selection_resolvable(tmp_
             "command": "echo test",
             "raw_payload_redacted": {
                 "tool_use_id": "initial-tool-call",
-                "transcript_path": "/tmp/initial.jsonl",
+                "transcript_path": "/workspace/initial.jsonl",
                 "model": "initial-model",
                 "permission_mode": "ask",
             },
@@ -427,7 +427,7 @@ def test_deduped_retry_delivery_metadata_keeps_browser_selection_resolvable(tmp_
             **(base.action_envelope_json or {}),
             "raw_payload_redacted": {
                 "tool_use_id": "retry-tool-call",
-                "transcript_path": "/tmp/retry.jsonl",
+                "transcript_path": "/workspace/retry.jsonl",
                 "model": "retry-model",
                 "permission_mode": "ask",
             },
