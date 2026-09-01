@@ -1,8 +1,5 @@
 use super::*;
 
-#[cfg(unix)]
-static MANAGED_OWNER_LOCK_TEST_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 #[test]
 fn generation_parser_rejects_zero_and_non_numeric() {
     assert!(parse_generation("0").is_err());
@@ -20,66 +17,102 @@ fn client_deadline_is_bounded() {
 }
 
 #[test]
-fn client_stream_frames_are_bounded_and_binary_safe() {
+fn client_stream_eof_is_clean_and_partial_headers_fail_closed() {
     use std::io::Cursor;
 
-    let payload = b"{\"raw_payload\":\"line\\nvalue\"}";
-    let mut framed = (payload.len() as u32).to_be_bytes().to_vec();
-    framed.extend_from_slice(payload);
-    let mut input = Cursor::new(framed);
     assert_eq!(
-        read_client_stream_frame(&mut input).unwrap(),
-        Some(payload.to_vec())
+        read_client_stream_frame(&mut Cursor::new(Vec::<u8>::new())).unwrap(),
+        None
     );
-
-    let mut output = Vec::new();
-    write_client_stream_frame(&mut output, payload).unwrap();
-    assert_eq!(&output[..4], &(payload.len() as u32).to_be_bytes());
-    assert_eq!(&output[4..], payload);
+    let error = read_client_stream_frame(&mut Cursor::new(vec![0, 0])).unwrap_err();
+    assert_eq!(error, "native_client_stream_frame_truncated");
 }
 
 #[test]
-fn client_stream_rejects_truncated_and_oversized_frames() {
+fn client_stream_frames_are_bounded_and_big_endian() {
     use std::io::Cursor;
 
-    let mut truncated = Cursor::new((4u32).to_be_bytes().to_vec());
+    let mut encoded = Vec::new();
+    write_client_stream_frame(&mut encoded, b"{}").unwrap();
+    assert_eq!(&encoded[..4], &[0, 0, 0, 2]);
     assert_eq!(
-        read_client_stream_frame(&mut truncated).unwrap_err(),
-        "native_client_stream_frame_truncated"
+        read_client_stream_frame(&mut Cursor::new(encoded)).unwrap(),
+        Some(b"{}".to_vec())
     );
-    let oversized = (crate::MAX_NATIVE_REQUEST_BYTES as u32 + 1).to_be_bytes();
-    let mut input = Cursor::new(oversized);
+    let oversized = vec![0xff; crate::MAX_NATIVE_RESPONSE_BYTES + 1];
     assert_eq!(
-        read_client_stream_frame(&mut input).unwrap_err(),
-        "native_client_stream_request_too_large"
+        write_client_stream_frame(&mut Vec::new(), &oversized).unwrap_err(),
+        "native_client_stream_response_too_large"
     );
 }
 
 #[test]
-fn client_stream_returns_cleanly_when_input_is_already_exhausted() {
-    use std::io::Cursor;
+fn client_leases_keep_shared_resident_alive_until_last_client_closes() {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    let mut input = Cursor::new(Vec::<u8>::new());
-
-    assert_eq!(read_client_stream_frame(&mut input).unwrap(), None);
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-client-lease-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    let digest = runtime_digest().unwrap();
+    let first = lease::acquire(&root).unwrap();
+    let second = lease::acquire(&root).unwrap();
+    assert!(lease::any_live(&root, &digest));
+    let foreign = root
+        .join("resident-client-leases.v1")
+        .join("client-foreign.lease");
+    fs::write(
+        &foreign,
+        format!(
+            "{}\n{}\n{}\n",
+            std::process::id(),
+            process_start_marker(std::process::id()).unwrap(),
+            "f".repeat(64)
+        ),
+    )
+    .unwrap();
+    assert!(lease::any_live_for_home(&root));
+    drop(first);
+    assert!(lease::any_live(&root, &digest));
+    drop(second);
+    assert!(!lease::any_live(&root, &digest));
+    fs::remove_file(foreign).unwrap();
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn client_stream_propagates_header_read_errors() {
-    use std::io::{self, Read};
+fn owner_liveness_expires_after_launcher_and_all_clients_disappear() {
+    use std::fs;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    struct FailingReader;
-
-    impl Read for FailingReader {
-        fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
-            Err(io::Error::other("read failed"))
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-managed-owner-liveness-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    let lease = lease::acquire(&root).unwrap();
+    let alive = managed_owner_liveness(&root, 1, "never-matches".to_owned());
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(alive.load(Ordering::Acquire));
+    drop(lease);
+    for _ in 0..40 {
+        if !alive.load(Ordering::Acquire) {
+            break;
         }
+        std::thread::sleep(Duration::from_millis(50));
     }
-
-    assert_eq!(
-        read_client_stream_frame(&mut FailingReader).unwrap_err(),
-        "native_client_stream_read_failed"
-    );
+    assert!(!alive.load(Ordering::Acquire));
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -100,42 +133,11 @@ fn stale_process_identity_errors_are_platform_scoped() {
 
 #[cfg(unix)]
 #[test]
-fn shutdown_containment_ignores_recorded_processes_after_server_exit() {
-    use crate::resident_state::ResidentState;
-
-    let endpoint = std::env::temp_dir().join(format!(
-        "hol-guard-managed-resident-containment-{}-missing.sock",
-        std::process::id()
-    ));
-    let state = ResidentState {
-        schema: String::new(),
-        generation: 1,
-        // An impossible PID models a serving process that has exited.
-        process_id: u32::MAX,
-        // The supervisor may still be live or unreaped while its serving child
-        // has released the owner lock and removed the endpoint.
-        owner_process_id: std::process::id(),
-        runtime_sha256: String::new(),
-        transport: "unix".to_owned(),
-        endpoint: endpoint.to_string_lossy().into_owned(),
-        token_hex: String::new(),
-        created_ms: 0,
-        state_mac: String::new(),
-    };
-
-    assert!(stop::published_endpoints_are_contained(&[state]));
-}
-
-#[cfg(unix)]
-#[test]
 fn managed_owner_lock_is_exclusive_for_resident_lifetime() {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let _test_guard = MANAGED_OWNER_LOCK_TEST_GUARD
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-owner-lock-{}-{}",
         std::process::id(),
@@ -176,9 +178,6 @@ fn managed_owner_lock_rejects_second_process() {
     use std::process::{Command, Stdio};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let _test_guard = MANAGED_OWNER_LOCK_TEST_GUARD
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(root) = std::env::var_os("HOL_GUARD_OWNER_LOCK_CHILD") {
         let root = PathBuf::from(root);
         let _lock = acquire_managed_owner_lock(&root).unwrap();

@@ -8,12 +8,15 @@ use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[path = "resident_state_discovery.rs"]
+mod resident_state_discovery;
 #[path = "resident_state_files.rs"]
 mod resident_state_files;
 
-use resident_state_files::{ensure_private_directory, private_file};
+pub(crate) use resident_state_files::{ensure_private_directory, private_file};
 #[cfg(windows)]
 pub(crate) use resident_state_files::{
     open_private_read, protect_windows_private_path, verify_windows_private_path,
@@ -28,6 +31,8 @@ const MAX_STATE_FILES: usize = 64;
 const RETAINED_STATE_FILES: usize = 8;
 const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
 const LOCK_STALE_AFTER: Duration = Duration::from_secs(10);
+
+pub(crate) use resident_state_discovery::discover_home_states;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -96,13 +101,19 @@ fn executable_digest(executable: &Path) -> Result<String, String> {
 }
 
 pub(crate) fn runtime_digest() -> Result<String, String> {
-    let executable =
-        std::env::current_exe().map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
-    executable_digest(&executable)
+    static RUNTIME_DIGEST: OnceLock<Result<String, String>> = OnceLock::new();
+    RUNTIME_DIGEST
+        .get_or_init(|| {
+            let executable = std::env::current_exe()
+                .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
+            executable_digest(&executable)
+        })
+        .clone()
 }
 
 pub(crate) use crate::resident_process_identity::{
-    process_start_marker, validate_package_process_identity,
+    parent_process_id, process_start_marker, validate_package_process_identity,
+    validate_runtime_process_identity,
 };
 
 pub(crate) fn state_scope(base: &Path, digest: &str) -> Result<PathBuf, String> {
@@ -221,11 +232,7 @@ fn validate_state(
     Ok(())
 }
 
-fn read_state_file(
-    path: &Path,
-    scope: &Path,
-    expected_digest: &str,
-) -> Result<ResidentState, String> {
+fn read_state_file_raw(path: &Path) -> Result<ResidentState, String> {
     #[cfg(windows)]
     let file = resident_state_files::open_private_read(path, MAX_STATE_BYTES, "state")?
         .ok_or_else(|| "native_resident_state_stat_failed".to_owned())?;
@@ -266,6 +273,15 @@ fn read_state_file(
         crate::strict_json_value(&bytes).map_err(|_| "native_resident_state_invalid".to_owned())?;
     let state = serde_json::from_value::<ResidentState>(value)
         .map_err(|_| "native_resident_state_invalid".to_owned())?;
+    Ok(state)
+}
+
+fn read_state_file(
+    path: &Path,
+    scope: &Path,
+    expected_digest: &str,
+) -> Result<ResidentState, String> {
+    let state = read_state_file_raw(path)?;
     validate_state(scope, &state, expected_digest)?;
     Ok(state)
 }

@@ -2944,7 +2944,7 @@ def _wait_for_guard_daemon_url(
 
 
 @contextmanager
-def _guard_daemon_recovery_lock(guard_home: Path):
+def _guard_daemon_recovery_lock(guard_home: Path, *, timeout_seconds: float | None = None):
     """Serialize a complete daemon recovery transaction for one Guard home."""
 
     lock_key = str(guard_home.resolve())

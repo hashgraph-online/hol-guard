@@ -11,8 +11,8 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::resident_state::{
-    discover_states, process_start_marker, token_from_state, validate_package_process_identity,
-    ResidentState,
+    discover_states, process_start_marker, runtime_digest, token_from_state,
+    validate_package_process_identity, validate_runtime_process_identity, ResidentState,
 };
 
 #[cfg(not(windows))]
@@ -24,12 +24,14 @@ pub(super) type SpawnedManaged = ManagedChild;
 pub(super) struct ManagedProcessIdentity {
     process_id: u32,
     start_marker: Option<String>,
+    runtime_digest: Option<String>,
 }
 
 fn state_process_identity(state: &ResidentState) -> ManagedProcessIdentity {
     ManagedProcessIdentity {
         process_id: state.process_id,
         start_marker: Some(state.process_start_marker.clone()),
+        runtime_digest: Some(state.runtime_sha256.clone()),
     }
 }
 
@@ -42,20 +44,28 @@ pub(super) fn state_process_identities(states: &[ResidentState]) -> Vec<ManagedP
                 ManagedProcessIdentity {
                     process_id: state.owner_process_id,
                     start_marker: Some(state.owner_process_start_marker.clone()),
+                    runtime_digest: Some(state.runtime_sha256.clone()),
                 },
             ]
         })
         .collect()
 }
 
-pub(super) fn spawn_managed(
+pub(super) fn spawn_managed_for_owner(
     state_base: &Path,
     generation: u64,
     digest: &str,
     token: &[u8],
+    owner_process_id: u32,
 ) -> Result<SpawnedManaged, String> {
     #[cfg(windows)]
-    return super::managed_resident_windows::spawn_managed(state_base, generation, digest, token);
+    return super::managed_resident_windows::spawn_managed(
+        state_base,
+        generation,
+        digest,
+        token,
+        owner_process_id,
+    );
     #[cfg(not(windows))]
     {
         let executable = std::env::current_exe()
@@ -67,6 +77,8 @@ pub(super) fn spawn_managed(
             .arg(state_base)
             .arg("--generation")
             .arg(generation.to_string())
+            .arg("--owner-process-id")
+            .arg(owner_process_id.to_string())
             .arg("--runtime-sha256")
             .arg(digest)
             .stdin(Stdio::piped())
@@ -134,7 +146,13 @@ fn process_is_alive(identity: &ManagedProcessIdentity) -> Result<bool, String> {
     let Some(start_marker) = identity.start_marker.as_deref() else {
         return Ok(false);
     };
-    if validate_package_process_identity(identity.process_id, start_marker).is_err() {
+    let identity_valid = match identity.runtime_digest.as_deref() {
+        Some(digest) => {
+            validate_runtime_process_identity(identity.process_id, start_marker, digest).is_ok()
+        }
+        None => validate_package_process_identity(identity.process_id, start_marker).is_ok(),
+    };
+    if !identity_valid {
         return Ok(false);
     }
     if identity.process_id == std::process::id() {
@@ -178,7 +196,13 @@ fn terminate_managed_process(
     let platform_result = {
         use nix::sys::signal::{kill, Signal};
         use nix::unistd::Pid;
-        if validate_package_process_identity(identity.process_id, start_marker).is_err() {
+        let identity_valid = match identity.runtime_digest.as_deref() {
+            Some(digest) => {
+                validate_runtime_process_identity(identity.process_id, start_marker, digest).is_ok()
+            }
+            None => validate_package_process_identity(identity.process_id, start_marker).is_ok(),
+        };
+        if !identity_valid {
             return Ok(());
         }
         match kill(Pid::from_raw(identity.process_id as i32), Signal::SIGKILL) {
@@ -315,6 +339,7 @@ pub(super) fn contain_spawned_managed(
     let known_processes = [ManagedProcessIdentity {
         process_id,
         start_marker: process_start_marker(process_id).ok(),
+        runtime_digest: runtime_digest().ok(),
     }];
     terminate_spawned_managed(child)?;
     wait_for_generation_containment(scope, digest, generation, token, &known_processes)

@@ -64,6 +64,7 @@ REPLAY_MEMORY = Path("rust/crates/guard-runtime/src/approval_replay_memory.rs")
 POLICY_AUTHORITY = Path("rust/crates/guard-runtime/src/policy_store_authority.rs")
 RESIDENT_PROTOCOL = Path("rust/crates/guard-runtime/src/resident_protocol.rs")
 MANAGED_RESIDENT = Path("rust/crates/guard-runtime/src/managed_resident.rs")
+MANAGED_OWNER_LOCK = Path("rust/crates/guard-runtime/src/managed_resident_owner_lock.rs")
 WORKFLOW = Path(".github/workflows/rust-authority-ownership.yml")
 PUBLISH_WORKFLOW = Path(".github/workflows/publish.yml")
 ENROLLMENT_DOC = Path("docs/guard/native-approval-enrollment.md")
@@ -316,7 +317,8 @@ def _check_ownership_contract(root: Path) -> None:
         if name not in publish:
             raise RuntimeError(f"release workflow does not pass the pinned enrollment root: {name}")
     managed = _read(root / MANAGED_RESIDENT)
-    if "managed-resident-owner.v1.lock" not in managed or "_owner_lock" not in managed:
+    owner_lock = _read(root / MANAGED_OWNER_LOCK)
+    if "managed-resident-owner.v1.lock" not in managed + owner_lock or "_owner_lock" not in managed:
         raise RuntimeError("managed resident does not retain its owner lock for its full lifetime")
     managed_tests = _read(root / Path("rust/crates/guard-runtime/src/managed_resident_tests.rs"))
     if "managed_owner_lock_rejects_second_process" not in managed_tests:

@@ -13,6 +13,12 @@ use crate::{
     SERVER_PROOF_LABEL,
 };
 
+pub(crate) struct ExpectedProcessIdentity<'a> {
+    pub(crate) process_id: u32,
+    pub(crate) start_marker: &'a str,
+    pub(crate) digest: Option<&'a str>,
+}
+
 fn read_exact(stream: &mut dyn crate::ResidentStream, output: &mut [u8]) -> Result<(), String> {
     stream
         .read_exact(output)
@@ -45,22 +51,24 @@ fn authenticate(
     Ok(nonce)
 }
 
-fn validate_loopback_owner(
-    _address: &SocketAddr,
-    expected_process_id: u32,
-    expected_start_marker: &str,
-) -> Result<(), String> {
-    crate::resident_state::validate_package_process_identity(
-        expected_process_id,
-        expected_start_marker,
-    )
+fn validate_runtime_owner(identity: &ExpectedProcessIdentity<'_>) -> Result<(), String> {
+    match identity.digest {
+        Some(digest) => crate::resident_state::validate_runtime_process_identity(
+            identity.process_id,
+            identity.start_marker,
+            digest,
+        ),
+        None => crate::resident_state::validate_package_process_identity(
+            identity.process_id,
+            identity.start_marker,
+        ),
+    }
 }
 
-fn connect_loopback(
+fn connect_loopback_with_digest(
     endpoint: &str,
     timeout: Duration,
-    expected_process_id: u32,
-    expected_start_marker: &str,
+    identity: &ExpectedProcessIdentity<'_>,
 ) -> Result<BoxedResidentStream, String> {
     let address: SocketAddr = endpoint
         .parse()
@@ -68,19 +76,18 @@ fn connect_loopback(
     if address.ip() != Ipv4Addr::LOCALHOST || address.port() == 0 {
         return Err("native_client_endpoint_invalid".to_owned());
     }
-    validate_loopback_owner(&address, expected_process_id, expected_start_marker)?;
+    validate_runtime_owner(identity)?;
     let stream = TcpStream::connect_timeout(&address, timeout)
         .map_err(|_| "native_client_connect_failed".to_owned())?;
-    validate_loopback_owner(&address, expected_process_id, expected_start_marker)?;
+    validate_runtime_owner(identity)?;
     Ok(Box::new(stream))
 }
 
 #[cfg(unix)]
-fn connect_unix(
+fn connect_unix_with_digest(
     endpoint: &str,
     timeout: Duration,
-    expected_process_id: u32,
-    expected_start_marker: &str,
+    identity: &ExpectedProcessIdentity<'_>,
 ) -> Result<BoxedResidentStream, String> {
     use nix::errno::Errno;
     use nix::fcntl::{fcntl, FcntlArg, FdFlag, OFlag};
@@ -142,14 +149,11 @@ fn connect_unix(
         target_os = "linux",
         target_os = "android"
     )))]
-    let peer_process_id = expected_process_id;
-    if peer_process_id != expected_process_id {
+    let peer_process_id = identity.process_id;
+    if peer_process_id != identity.process_id {
         return Err("native_client_peer_identity_mismatch".to_owned());
     }
-    crate::resident_state::validate_package_process_identity(
-        expected_process_id,
-        expected_start_marker,
-    )?;
+    validate_runtime_owner(identity)?;
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|_| "native_client_timeout_failed".to_owned())?;
@@ -160,12 +164,12 @@ fn connect_unix(
 }
 
 #[cfg(not(unix))]
-fn connect_unix(
-    _endpoint: &str,
-    _timeout: Duration,
-    _expected_process_id: u32,
-    _expected_start_marker: &str,
+fn connect_unix_with_digest(
+    endpoint: &str,
+    timeout: Duration,
+    identity: &ExpectedProcessIdentity<'_>,
 ) -> Result<BoxedResidentStream, String> {
+    let _ = (endpoint, timeout, identity);
     Err("native_client_unix_unavailable".to_owned())
 }
 
@@ -173,22 +177,11 @@ fn connect(
     transport: &str,
     endpoint: &str,
     timeout: Duration,
-    expected_process_id: u32,
-    expected_start_marker: &str,
+    identity: &ExpectedProcessIdentity<'_>,
 ) -> Result<BoxedResidentStream, String> {
     match transport {
-        "unix" => connect_unix(
-            endpoint,
-            timeout,
-            expected_process_id,
-            expected_start_marker,
-        ),
-        "loopback" => connect_loopback(
-            endpoint,
-            timeout,
-            expected_process_id,
-            expected_start_marker,
-        ),
+        "unix" => connect_unix_with_digest(endpoint, timeout, identity),
+        "loopback" => connect_loopback_with_digest(endpoint, timeout, identity),
         _ => Err("native_client_transport_invalid".to_owned()),
     }
 }
@@ -248,23 +241,16 @@ fn read_response(
     Ok(response)
 }
 
-pub(crate) fn send_request(
+pub(crate) fn send_request_for_digest(
     transport: &str,
     endpoint: &str,
     token: &[u8],
     payload: &[u8],
     timeout: Duration,
-    expected_process_id: u32,
-    expected_start_marker: &str,
+    identity: &ExpectedProcessIdentity<'_>,
 ) -> Result<Vec<u8>, String> {
     let started = std::time::Instant::now();
-    let mut stream = connect(
-        transport,
-        endpoint,
-        timeout,
-        expected_process_id,
-        expected_start_marker,
-    )?;
+    let mut stream = connect(transport, endpoint, timeout, identity)?;
     let remaining = timeout.saturating_sub(started.elapsed());
     if remaining.is_zero() {
         return Err("native_client_deadline_exceeded".to_owned());
@@ -293,7 +279,15 @@ mod tests {
 
     #[test]
     fn rejects_non_loopback_tcp_endpoint() {
-        let error = match connect_loopback("192.0.2.1:80", Duration::from_millis(1), 1, "") {
+        let error = match connect_loopback_with_digest(
+            "192.0.2.1:80",
+            Duration::from_millis(1),
+            &ExpectedProcessIdentity {
+                process_id: 1,
+                start_marker: "",
+                digest: None,
+            },
+        ) {
             Ok(_) => panic!("non-loopback endpoint was accepted"),
             Err(error) => error,
         };

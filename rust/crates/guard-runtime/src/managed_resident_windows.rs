@@ -11,6 +11,7 @@ pub(crate) fn spawn_managed(
     generation: u64,
     digest: &str,
     token: &[u8],
+    owner_process_id: u32,
 ) -> Result<ManagedChild, String> {
     let executable =
         std::env::current_exe().map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
@@ -20,6 +21,8 @@ pub(crate) fn spawn_managed(
         state_base.as_os_str().to_owned(),
         OsString::from("--generation"),
         OsString::from(generation.to_string()),
+        OsString::from("--owner-process-id"),
+        OsString::from(owner_process_id.to_string()),
         OsString::from("--runtime-sha256"),
         OsString::from(digest),
     ];
@@ -47,6 +50,7 @@ pub(crate) fn supervise_managed(
     state_base: &Path,
     generation: u64,
     expected_digest: &str,
+    owner_process_id: u32,
     token: &[u8],
 ) -> Result<(), String> {
     let executable =
@@ -58,7 +62,7 @@ pub(crate) fn supervise_managed(
         OsString::from("--generation"),
         OsString::from(generation.to_string()),
         OsString::from("--owner-process-id"),
-        OsString::from(std::process::id().to_string()),
+        OsString::from(owner_process_id.to_string()),
         OsString::from("--runtime-sha256"),
         OsString::from(expected_digest),
     ];

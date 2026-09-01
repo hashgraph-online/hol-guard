@@ -19,7 +19,7 @@ pub(crate) fn verify_windows_private_path(path: &Path, _directory: bool) -> Resu
     windows_security::verify_windows_path(path, owner.as_ref())
 }
 
-pub(super) fn private_file(path: &Path, create_new: bool) -> Result<File, String> {
+pub(crate) fn private_file(path: &Path, create_new: bool) -> Result<File, String> {
     let mut options = OpenOptions::new();
     options.write(true).create(true).create_new(create_new);
     if !create_new {
@@ -82,7 +82,7 @@ pub(crate) fn open_private_read(
     Ok(Some(file))
 }
 
-pub(super) fn ensure_private_directory(
+pub(crate) fn ensure_private_directory(
     path: &Path,
     protect_windows: bool,
 ) -> Result<PathBuf, String> {

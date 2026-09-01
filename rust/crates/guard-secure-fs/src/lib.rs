@@ -172,9 +172,11 @@ fn identity(metadata: &Metadata) -> FileIdentity {
 fn map_secure_open_error(error: SecureOpenError) -> SecureReadError {
     match error {
         SecureOpenError::PathChanged => SecureReadError::PathChanged,
+        #[cfg(unix)]
         SecureOpenError::Io(error) if error.kind() == io::ErrorKind::PermissionDenied => {
             SecureReadError::PermissionDenied
         }
+        #[cfg(unix)]
         SecureOpenError::Io(_) => SecureReadError::ReadFailed,
     }
 }
@@ -245,7 +247,6 @@ mod tests {
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
-
     fn fixture_root(name: &str) -> PathBuf {
         #[cfg(unix)]
         let temporary_root =
@@ -255,6 +256,7 @@ mod tests {
         temporary_root.join(format!("guard-secure-fs-{name}-{}", std::process::id()))
     }
 
+    #[cfg(unix)]
     #[test]
     fn bounded_read_hashes_regular_file() {
         let dir = fixture_root("read");
@@ -269,6 +271,20 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    #[cfg(not(unix))]
+    #[test]
+    fn bounded_read_fails_closed_without_descriptor_path_walk() {
+        let dir = fixture_root("read");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sample.rs");
+        fs::write(&path, b"fn main() {}\n").unwrap();
+        assert!(matches!(
+            read_bounded(&path, MAX_SCAN_BYTES),
+            Err(SecureReadError::PathChanged)
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[cfg(unix)]
     #[test]
     fn bounded_read_rejects_hard_linked_source() {
@@ -278,7 +294,6 @@ mod tests {
         let alias = dir.join("alias.rs");
         fs::write(&source, b"fn source() {}\n").unwrap();
         fs::hard_link(&source, &alias).unwrap();
-
         assert!(matches!(
             read_bounded(&alias, MAX_SCAN_BYTES),
             Err(SecureReadError::HardLinkedFile)
@@ -297,12 +312,10 @@ mod tests {
         let mut permissions = path.metadata().unwrap().permissions();
         permissions.set_mode(original_mode & !0o444);
         fs::set_permissions(&path, permissions).unwrap();
-
         assert!(matches!(
             read_bounded(&path, MAX_SCAN_BYTES),
             Err(SecureReadError::PermissionDenied)
         ));
-
         let mut permissions = path.metadata().unwrap().permissions();
         permissions.set_mode(original_mode);
         fs::set_permissions(&path, permissions).unwrap();
@@ -318,7 +331,6 @@ mod tests {
         let link = dir.join("source.rs");
         fs::write(&target, b"fn target() {}\n").unwrap();
         std::os::unix::fs::symlink(&target, &link).unwrap();
-
         assert!(matches!(
             read_bounded(&link, MAX_SCAN_BYTES),
             Err(SecureReadError::SymlinkInPath)
