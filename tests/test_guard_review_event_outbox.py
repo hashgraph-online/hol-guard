@@ -241,6 +241,7 @@ def test_requeue_appends_snapshot_without_replacing_history(tmp_path) -> None:
     store.add_approval_request(_request("request-1"), _NOW)
 
     assert store.requeue_pending_review_events(changed_at=_LATER) == 1
+    assert store.requeue_pending_review_events(changed_at=_LATER) == 0
     rows = store.list_ready_review_events(now=_LATER, limit=10, **binding)
     assert [row["event_type"] for row in rows] == [
         "review.request.created",

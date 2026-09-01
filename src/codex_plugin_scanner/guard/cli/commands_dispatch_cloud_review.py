@@ -56,18 +56,19 @@ def apply_connect_time_cloud_review_consent(
         return {**payload, "cloud_review": {"enabled": False, "reason": "connect_not_completed"}}
     previously_enabled = exact_cloud_review_status(store).get("enabled") is True
     try:
-        pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
         capability = enable_exact_cloud_review(store, issuer="connect-consent")
+        pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
     except PendingReviewRequeueError:
         return {
             **payload,
             "cloud_review": {
-                "capability_enabled": previously_enabled,
+                "capability_enabled": True,
                 "enabled": False,
                 "reason": "pending_request_requeue_failed",
                 "pending_requests_requeued": 0,
                 "pending_request_requeue_status": "retry_required",
                 "retained_existing_capability": previously_enabled,
+                "activation_status": "enabled_requeue_retry_required",
             },
         }
     except ExactCloudReviewError as error:
@@ -105,17 +106,18 @@ def _run_guard_cloud_review_command(
     command = getattr(args, "cloud_review_command", None)
     pending_requests_requeued = 0
     previously_enabled = False
+    capability: dict[str, object] | None = None
     if command == "status":
         _emit("cloud-review", exact_cloud_review_status(store), bool(getattr(args, "json", False)))
         return 0
     try:
         if command == "enable":
             previously_enabled = exact_cloud_review_status(store).get("enabled") is True
-            pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
             capability = enable_exact_cloud_review(
                 store,
                 ttl_seconds=int(getattr(args, "expires_in_days", 30)) * 24 * 60 * 60,
             )
+            pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
             status = "enabled"
         elif command == "disable":
             capability = disable_exact_cloud_review(store)
@@ -129,10 +131,12 @@ def _run_guard_cloud_review_command(
             {
                 "status": "error",
                 "error": "pending_request_requeue_failed",
-                "capability_enabled": previously_enabled,
+                "capability_enabled": True,
                 "pending_requests_requeued": 0,
                 "pending_request_requeue_status": "retry_required",
                 "retained_existing_capability": previously_enabled,
+                "activation_status": "enabled_requeue_retry_required",
+                "capability": capability,
             },
             bool(getattr(args, "json", False)),
         )

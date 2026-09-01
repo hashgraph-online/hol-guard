@@ -314,6 +314,12 @@ def test_contract_digest_is_deterministic_and_binds_security_fields() -> None:
         ).digest
         != first.digest
     )
+    assert (
+        request_scope_contract(
+            {**request, "action_envelope_json": {"action_type": "shell_command", "raw_command_text": "echo changed"}}
+        ).digest
+        != first.digest
+    )
 
 
 def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_context() -> None:
@@ -321,6 +327,7 @@ def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_conte
     request["action_envelope_json"] = {
         "action_type": "shell_command",
         "command": "echo test",
+        "wrapper_chain": ["bash"],
         "raw_payload_redacted": {
             "tool_use_id": "first-tool-call",
             "transcript_path": "/workspace/first.jsonl",
@@ -333,8 +340,6 @@ def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_conte
     retried = {
         **request,
         "changed_fields": ["different-display-label"],
-        "source_scope": "different-display-scope",
-        "config_path": "/workspace/other/.guard/config.toml",
         "launch_target": "echo different preview",
         "normalized_identity_key": "different-preview-key",
         "queue_group_id": "different-queue-id",
@@ -346,6 +351,7 @@ def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_conte
         "action_envelope_json": {
             "action_type": "shell_command",
             "command": "echo test",
+            "wrapper_chain": ["bash"],
             "raw_payload_redacted": {
                 "tool_use_id": "second-tool-call",
                 "transcript_path": "/workspace/second.jsonl",
@@ -355,6 +361,23 @@ def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_conte
         },
     }
     assert request_scope_contract(retried).digest == first.digest
+    assert request_scope_contract({**request, "source_scope": "session"}).digest != first.digest
+    assert (
+        request_scope_contract({**request, "config_path": "/workspace/other/.guard/config.toml"}).digest
+        != first.digest
+    )
+    assert (
+        request_scope_contract(
+            {
+                **request,
+                "action_envelope_json": {
+                    **request["action_envelope_json"],
+                    "wrapper_chain": ["zsh"],
+                },
+            }
+        ).digest
+        != first.digest
+    )
 
     package_context = {
         "kind": "package_execution_context",

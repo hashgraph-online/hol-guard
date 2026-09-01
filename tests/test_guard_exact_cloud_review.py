@@ -346,6 +346,40 @@ def test_cloud_review_enable_requeues_existing_pending_requests(
     assert payload["worker"] == {"status": "refreshed"}
 
 
+def test_cloud_review_enable_failure_does_not_requeue_pending_requests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = _connected_store(tmp_path)
+    _add_request(store, _request("enable-fails-before-requeue"))
+
+    def fail_enable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise ExactCloudReviewError("cloud_review_grant_binding_missing")
+
+    monkeypatch.setattr(
+        cloud_review_dispatch,
+        "enable_exact_cloud_review",
+        fail_enable,
+    )
+
+    exit_code = cloud_review_dispatch._run_guard_cloud_review_command(
+        argparse.Namespace(cloud_review_command="enable", expires_in_days=30, json=True),
+        guard_home=store.guard_home,
+        store=store,
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["error"] == "cloud_review_grant_binding_missing"
+    assert exact_cloud_review_operations(store) == ()
+    with store._connect() as connection:
+        event_types = [row[0] for row in connection.execute(
+            "select event_type from guard_review_outbox_events order by stream_sequence"
+        ).fetchall()]
+    assert event_types == ["review.request.created"]
+
+
 def test_cloud_review_requeue_database_failure_is_retryable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -392,12 +426,13 @@ def test_connect_consent_does_not_enable_capability_when_requeue_needs_retry(
 
     cloud_review = connected["cloud_review"]
     assert isinstance(cloud_review, dict)
-    assert cloud_review["capability_enabled"] is False
+    assert cloud_review["capability_enabled"] is True
     assert cloud_review["enabled"] is False
     assert cloud_review["reason"] == "pending_request_requeue_failed"
     assert cloud_review["pending_request_requeue_status"] == "retry_required"
     assert cloud_review["retained_existing_capability"] is False
-    assert exact_cloud_review_operations(store) == ()
+    assert cloud_review["activation_status"] == "enabled_requeue_retry_required"
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
 def test_cloud_review_enable_reports_requeue_retry_without_crashing(
@@ -433,9 +468,10 @@ def test_cloud_review_enable_reports_requeue_retry_without_crashing(
     assert payload["error"] == "pending_request_requeue_failed"
     assert payload["pending_requests_requeued"] == 0
     assert payload["pending_request_requeue_status"] == "retry_required"
-    assert payload["capability_enabled"] is False
+    assert payload["capability_enabled"] is True
     assert payload["retained_existing_capability"] is False
-    assert exact_cloud_review_operations(store) == ()
+    assert payload["activation_status"] == "enabled_requeue_retry_required"
+    assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
 def test_connect_consent_reports_retained_capability_as_failed_activation(
@@ -468,6 +504,7 @@ def test_connect_consent_reports_retained_capability_as_failed_activation(
     assert cloud_review["capability_enabled"] is True
     assert cloud_review["retained_existing_capability"] is True
     assert cloud_review["reason"] == "pending_request_requeue_failed"
+    assert cloud_review["activation_status"] == "enabled_requeue_retry_required"
 
 
 def test_cloud_review_enable_reports_retained_capability_when_requeue_retry_fails(
@@ -498,6 +535,7 @@ def test_cloud_review_enable_reports_retained_capability_when_requeue_retry_fail
     assert payload["error"] == "pending_request_requeue_failed"
     assert payload["capability_enabled"] is True
     assert payload["retained_existing_capability"] is True
+    assert payload["activation_status"] == "enabled_requeue_retry_required"
     assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
 

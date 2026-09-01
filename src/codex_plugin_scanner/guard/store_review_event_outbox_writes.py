@@ -169,6 +169,18 @@ def requeue_pending_request_events(connection: sqlite3.Connection, *, source: st
     appended = 0
     for row in rows:
         request_id = str(row["request_id"])
+        existing_snapshot = connection.execute(
+            """
+            select 1 from guard_review_outbox_events
+            where local_request_id = ?
+              and event_type = 'review.request.snapshot_requeued'
+              and acknowledged_at is null
+            limit 1
+            """,
+            (request_id,),
+        ).fetchone()
+        if existing_snapshot is not None:
+            continue
         bind_review_events_for_request(connection, request_id=request_id, oauth_source=source)
         appended += append_request_snapshot_event(
             connection,

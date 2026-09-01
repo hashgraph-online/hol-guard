@@ -46,6 +46,9 @@ _SCOPE_ACTION_ENVELOPE_KEYS: Final = (
     "workspace_hash",
     "tool_name",
     "command",
+    "raw_command_text",
+    "command_text",
+    "commandText",
     "prompt_excerpt",
     "target_paths",
     "network_hosts",
@@ -57,6 +60,7 @@ _SCOPE_ACTION_ENVELOPE_KEYS: Final = (
     "package_intent_kind",
     "package_targets",
     "script_name",
+    "wrapper_chain",
 )
 
 _SCOPE_PACKAGE_CONTEXT_KEYS: Final = (
@@ -512,6 +516,12 @@ def _scope_contract_request_material(request: Mapping[str, object]) -> dict[str,
         "artifact_hash": _json_boundary_value(request.get("artifact_hash")),
         "policy_action": _json_boundary_value(request.get("policy_action")),
         "publisher": _json_boundary_value(request.get("publisher")),
+        # These fields feed runtime_tool_action_exact_match_context and must
+        # invalidate a browser contract when the target context changes.
+        "source_scope": _json_boundary_value(request.get("source_scope")),
+        "config_path": _json_boundary_value(request.get("config_path")),
+        "wrapper_chain": _scope_wrapper_chain_material(request),
+        "permission_mode": _scope_permission_mode_material(request),
         "workspace": _json_boundary_value(_derived_workspace_scope_target(request)),
         "action_identity": _json_boundary_value(request.get("action_identity")),
         "action_envelope": _scope_action_envelope_material(request.get("action_envelope_json")),
@@ -523,7 +533,37 @@ def _scope_contract_request_material(request: Mapping[str, object]) -> dict[str,
 def _scope_action_envelope_material(value: object) -> dict[str, object] | None:
     if not isinstance(value, Mapping):
         return None
-    return {key: _json_boundary_value(value.get(key)) for key in _SCOPE_ACTION_ENVELOPE_KEYS}
+    material = {key: _json_boundary_value(value.get(key)) for key in _SCOPE_ACTION_ENVELOPE_KEYS}
+    raw_payload = value.get("raw_payload_redacted")
+    if isinstance(raw_payload, Mapping):
+        permission_mode = raw_payload.get("permission_mode")
+        if permission_mode is None:
+            permission_mode = raw_payload.get("permissionMode")
+        material["permission_mode"] = _json_boundary_value(permission_mode)
+    return material
+
+
+def _scope_wrapper_chain_material(request: Mapping[str, object]) -> list[object]:
+    wrapper_chain = request.get("wrapper_chain")
+    envelope = request.get("action_envelope_json")
+    if (not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str)) and isinstance(envelope, Mapping):
+        wrapper_chain = envelope.get("wrapper_chain")
+    if not isinstance(wrapper_chain, Sequence) or isinstance(wrapper_chain, str | bytes):
+        return []
+    return [_json_boundary_value(item) for item in wrapper_chain]
+
+
+def _scope_permission_mode_material(request: Mapping[str, object]) -> object:
+    envelope = request.get("action_envelope_json")
+    if not isinstance(envelope, Mapping):
+        return None
+    raw_payload = envelope.get("raw_payload_redacted")
+    if not isinstance(raw_payload, Mapping):
+        return None
+    permission_mode = raw_payload.get("permission_mode")
+    if permission_mode is None:
+        permission_mode = raw_payload.get("permissionMode")
+    return _json_boundary_value(permission_mode)
 
 
 def _scope_scanner_evidence_material(value: object) -> list[dict[str, object]]:
