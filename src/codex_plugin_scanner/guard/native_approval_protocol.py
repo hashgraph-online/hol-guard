@@ -304,43 +304,50 @@ def _artifact_is_valid(payload: dict[str, object]) -> bool:
     )
 
 
-def _receipt_is_valid(payload: Mapping[str, object], *, phase: NativeApprovalPhase) -> bool:
-    return (
-        set(payload) == _RECEIPT_KEYS
-        and payload.get("schema") == _RECEIPT_SCHEMA
-        and payload.get("version") == 3
-        and payload.get("phase") == phase
-        and _output_request_id(payload.get("request_id"))
-        and _lower_hex(payload.get("request_digest"), 64)
-        and _lower_hex(payload.get("action_digest"), 64)
-        and _positive_integer(payload.get("policy_generation"))
-        and _lower_hex(payload.get("policy_digest"), 64)
-        and _lower_hex(payload.get("rule_digest"), 64)
-        and _lower_hex(payload.get("runtime_identity"), 64)
-        and payload.get("runtime_protocol_version") == _NATIVE_PROTOCOL_VERSION
-        and _bounded_text(payload.get("runtime_package"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES)
-        and _bounded_text(payload.get("runtime_version"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES)
-        and _lower_hex(payload.get("runtime_binary_identity"), 64)
-        and _bounded_text(payload.get("harness"), maximum=_MAX_HARNESS_BYTES)
-        and _optional_digest(payload.get("workspace_binding"))
-        and _optional_digest(payload.get("device_binding"))
-        and _optional_digest(payload.get("installation_binding"))
-        and _optional_digest(payload.get("publisher_binding"))
-        and _optional_digest(payload.get("artifact_binding"))
-        and _bounded_text(payload.get("scope_contract_version"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES)
-        and _lower_hex(payload.get("scope_contract_digest"), 64)
-        and _optional_digest(payload.get("scope_binding"))
-        and _lower_hex(payload.get("resident_epoch"), 64)
-        and _lower_hex(payload.get("nonce"), _NATIVE_APPROVAL_NONCE_HEX_LENGTH)
-        and _valid_approval_times(payload)
-        and payload.get("decision") == "allow"
-        and _allowed_text(payload.get("requested_action"), _APPROVAL_ACTIONS)
-        and payload.get("approved_action") == "allow"
-        and payload.get("reason_code") == f"native_approval_{phase}"
-        and _bounded_text(payload.get("reason_code"), maximum=_NATIVE_APPROVAL_MAX_REASON_BYTES)
-        and _lower_hex(payload.get("nonce_digest"), 64)
-        and payload.get("replay_claimed") is True
+def _receipt_fields_are_valid(payload: Mapping[str, object], *, phase: NativeApprovalPhase) -> bool:
+    return all(
+        (
+            payload.get("schema") == _RECEIPT_SCHEMA,
+            payload.get("version") == 3,
+            payload.get("phase") == phase,
+            _output_request_id(payload.get("request_id")),
+            _lower_hex(payload.get("request_digest"), 64),
+            _lower_hex(payload.get("action_digest"), 64),
+            _positive_integer(payload.get("policy_generation")),
+            _lower_hex(payload.get("policy_digest"), 64),
+            _lower_hex(payload.get("rule_digest"), 64),
+            _lower_hex(payload.get("runtime_identity"), 64),
+            payload.get("runtime_protocol_version") == _NATIVE_PROTOCOL_VERSION,
+            _bounded_text(payload.get("runtime_package"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES),
+            _bounded_text(payload.get("runtime_version"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES),
+            _lower_hex(payload.get("runtime_binary_identity"), 64),
+            _bounded_text(payload.get("harness"), maximum=_MAX_HARNESS_BYTES),
+            _optional_digest(payload.get("workspace_binding")),
+            _optional_digest(payload.get("device_binding")),
+            _optional_digest(payload.get("installation_binding")),
+            _optional_digest(payload.get("publisher_binding")),
+            _optional_digest(payload.get("artifact_binding")),
+            _bounded_text(payload.get("scope_contract_version"), maximum=_NATIVE_APPROVAL_MAX_STRING_BYTES),
+            _lower_hex(payload.get("scope_contract_digest"), 64),
+            _optional_digest(payload.get("scope_binding")),
+            _lower_hex(payload.get("resident_epoch"), 64),
+            _lower_hex(payload.get("nonce"), _NATIVE_APPROVAL_NONCE_HEX_LENGTH),
+            _valid_approval_times(payload),
+            payload.get("decision") == "allow",
+            _allowed_text(payload.get("requested_action"), _APPROVAL_ACTIONS),
+            payload.get("approved_action") == "allow",
+            payload.get("reason_code") == f"native_approval_{phase}",
+            _bounded_text(payload.get("reason_code"), maximum=_NATIVE_APPROVAL_MAX_REASON_BYTES),
+            _lower_hex(payload.get("nonce_digest"), 64),
+            payload.get("replay_claimed") is True,
+        )
     )
+
+
+def _receipt_is_valid(payload: Mapping[str, object], *, phase: NativeApprovalPhase) -> bool:
+    if set(payload) != _RECEIPT_KEYS:
+        return False
+    return _receipt_fields_are_valid(payload, phase=phase)
 
 
 def _encode_json_object(payload: Mapping[str, object], *, maximum: int) -> bytes | None:

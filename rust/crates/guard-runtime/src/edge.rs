@@ -290,6 +290,15 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     Ok(())
 }
 
+fn validate_pre_tool_result(result: &Value) -> Result<(), String> {
+    let typed: guard_contracts::PreToolResultV1 = serde_json::from_value(result.clone())
+        .map_err(|_| "native_hook_pre_tool_result_invalid".to_owned())?;
+    if typed.schema != "guard-pre-tool-result.v1" || typed.authority != "rust" {
+        return Err("native_hook_pre_tool_result_schema_invalid".to_owned());
+    }
+    Ok(())
+}
+
 fn evaluate_validated_envelope(
     envelope: GuardHookEnvelopeV2,
     policy_snapshot: Option<&PolicySnapshotV3>,
@@ -317,8 +326,10 @@ fn evaluate_validated_envelope(
             } else {
                 native
             };
-            serde_json::to_value(evaluated)
-                .map_err(|_| "native_hook_edge_response_invalid".to_owned())?
+            let value = serde_json::to_value(evaluated)
+                .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
+            validate_pre_tool_result(&value)?;
+            value
         }
         "PostToolUse" => {
             let payload_kind = kind.clone();

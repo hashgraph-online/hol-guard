@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Literal, cast
+from typing import Literal, TypeGuard, cast
 
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookDecision, HookReviewResponse, ModelOutputAction
 
@@ -212,7 +212,7 @@ def _approval_optional_digest(value: object) -> bool:
     return value is None or _approval_digest(value)
 
 
-def _approval_positive_int(value: object) -> bool:
+def _approval_positive_int(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
@@ -233,35 +233,45 @@ def _approval_request_id(value: object) -> bool:
     return all(character.islower() or character.isdigit() or character in "-_.:" for character in value)
 
 
+def _approval_time_window_is_safe(issued_at_ms: object, expires_at_ms: object) -> bool:
+    if not _approval_positive_int(issued_at_ms) or not _approval_positive_int(expires_at_ms):
+        return False
+    return expires_at_ms > issued_at_ms and expires_at_ms - issued_at_ms <= _APPROVAL_MAX_TTL_MS
+
+
+def _approval_challenge_fields_are_safe(payload: dict[str, object]) -> bool:
+    return all(
+        (
+            payload.get("schema") == "guard-native-approval-challenge.v3",
+            payload.get("version") == 3,
+            payload.get("floor_class") == "approvable",
+            payload.get("approval_eligible") is True,
+            payload.get("runtime_protocol_version") == 1,
+            payload.get("requested_action") in {"review", "require-reapproval"},
+            payload.get("action_type") in _APPROVAL_ACTION_TYPES,
+            payload.get("operation") in _APPROVAL_OPERATIONS,
+            _approval_request_id(payload.get("request_id")),
+            _approval_digest(payload.get("request_digest")),
+            _approval_digest(payload.get("action_digest")),
+            _approval_digest(payload.get("policy_digest")),
+            _approval_digest(payload.get("rule_digest")),
+            _approval_digest(payload.get("runtime_identity")),
+            _approval_digest(payload.get("runtime_binary_identity")),
+            _approval_digest(payload.get("scope_contract_digest")),
+            _approval_digest(payload.get("resident_epoch")),
+            _approval_digest(payload.get("signing_key_id")),
+            _approval_nonce(payload.get("nonce")),
+            _approval_positive_int(payload.get("policy_generation")),
+        )
+    )
+
+
 def _approval_challenge_is_safe(payload: dict[str, object]) -> bool:
     if set(payload) != _APPROVAL_CHALLENGE_KEYS:
         return False
-    if (
-        payload.get("schema") != "guard-native-approval-challenge.v3"
-        or payload.get("version") != 3
-        or payload.get("floor_class") != "approvable"
-        or payload.get("approval_eligible") is not True
-        or payload.get("runtime_protocol_version") != 1
-        or payload.get("requested_action") not in {"review", "require-reapproval"}
-        or payload.get("action_type") not in _APPROVAL_ACTION_TYPES
-        or payload.get("operation") not in _APPROVAL_OPERATIONS
-        or not _approval_request_id(payload.get("request_id"))
-        or not _approval_digest(payload.get("request_digest"))
-        or not _approval_digest(payload.get("action_digest"))
-        or not _approval_digest(payload.get("policy_digest"))
-        or not _approval_digest(payload.get("rule_digest"))
-        or not _approval_digest(payload.get("runtime_identity"))
-        or not _approval_digest(payload.get("runtime_binary_identity"))
-        or not _approval_digest(payload.get("scope_contract_digest"))
-        or not _approval_digest(payload.get("resident_epoch"))
-        or not _approval_digest(payload.get("signing_key_id"))
-        or not _approval_nonce(payload.get("nonce"))
-        or not _approval_positive_int(payload.get("policy_generation"))
-        or not _approval_positive_int(payload.get("issued_at_ms"))
-        or not _approval_positive_int(payload.get("expires_at_ms"))
-        or payload["expires_at_ms"] <= payload["issued_at_ms"]
-        or payload["expires_at_ms"] - payload["issued_at_ms"] > _APPROVAL_MAX_TTL_MS
-    ):
+    if not _approval_challenge_fields_are_safe(payload):
+        return False
+    if not _approval_time_window_is_safe(payload.get("issued_at_ms"), payload.get("expires_at_ms")):
         return False
     for key in ("intrinsic_action", "minimum_action"):
         if payload.get(key) not in _APPROVAL_FLOORS:
@@ -295,6 +305,55 @@ def decode_native_approval_challenge(payload: object) -> dict[str, object] | Non
     return decoded if _approval_challenge_is_safe(decoded) else None
 
 
+def _approval_receipt_fields_are_safe(receipt: dict[str, object], phase: Literal["validated", "consumed"]) -> bool:
+    return all(
+        (
+            receipt.get("schema") == "guard-native-approval-receipt.v3",
+            receipt.get("version") == 3,
+            receipt.get("phase") == phase,
+            _approval_request_id(receipt.get("request_id")),
+            _approval_digest(receipt.get("request_digest")),
+            _approval_digest(receipt.get("action_digest")),
+            _approval_positive_int(receipt.get("policy_generation")),
+            receipt.get("runtime_protocol_version") == 1,
+            _approval_digest(receipt.get("policy_digest")),
+            _approval_digest(receipt.get("rule_digest")),
+            _approval_digest(receipt.get("runtime_identity")),
+            _approval_digest(receipt.get("runtime_binary_identity")),
+            _approval_digest(receipt.get("scope_contract_digest")),
+            _approval_digest(receipt.get("resident_epoch")),
+            _approval_nonce(receipt.get("nonce")),
+            _approval_time_window_is_safe(receipt.get("issued_at_ms"), receipt.get("expires_at_ms")),
+            receipt.get("decision") == "allow",
+            receipt.get("requested_action") in {"review", "require-reapproval"},
+            receipt.get("approved_action") == "allow",
+            receipt.get("reason_code") == f"native_approval_{phase}",
+            receipt.get("reason_code") in _APPROVAL_REASON_CODES,
+            _approval_digest(receipt.get("nonce_digest")),
+            receipt.get("replay_claimed") is True,
+        )
+    )
+
+
+def _approval_receipt_is_safe(receipt: dict[str, object], phase: Literal["validated", "consumed"]) -> bool:
+    if set(receipt) != _APPROVAL_RECEIPT_KEYS or not _approval_receipt_fields_are_safe(receipt, phase):
+        return False
+    for key in ("runtime_package", "runtime_version", "harness", "scope_contract_version"):
+        if not _approval_bounded_text(receipt.get(key)):
+            return False
+    for key in (
+        "workspace_binding",
+        "device_binding",
+        "installation_binding",
+        "publisher_binding",
+        "artifact_binding",
+        "scope_binding",
+    ):
+        if not _approval_optional_digest(receipt.get(key)):
+            return False
+    return True
+
+
 def decode_native_approval_result(
     payload: object,
     *,
@@ -310,50 +369,8 @@ def decode_native_approval_result(
     if decoded.get("authority") != "rust":
         return None
     receipt = _string_dict(decoded.get("receipt"))
-    if receipt is None or set(receipt) != _APPROVAL_RECEIPT_KEYS:
+    if receipt is None or not _approval_receipt_is_safe(receipt, phase):
         return None
-    if (
-        receipt.get("schema") != "guard-native-approval-receipt.v3"
-        or receipt.get("version") != 3
-        or receipt.get("phase") != phase
-        or not _approval_request_id(receipt.get("request_id"))
-        or not _approval_digest(receipt.get("request_digest"))
-        or not _approval_digest(receipt.get("action_digest"))
-        or not _approval_positive_int(receipt.get("policy_generation"))
-        or receipt.get("runtime_protocol_version") != 1
-        or not _approval_digest(receipt.get("policy_digest"))
-        or not _approval_digest(receipt.get("rule_digest"))
-        or not _approval_digest(receipt.get("runtime_identity"))
-        or not _approval_digest(receipt.get("runtime_binary_identity"))
-        or not _approval_digest(receipt.get("scope_contract_digest"))
-        or not _approval_digest(receipt.get("resident_epoch"))
-        or not _approval_nonce(receipt.get("nonce"))
-        or not _approval_positive_int(receipt.get("issued_at_ms"))
-        or not _approval_positive_int(receipt.get("expires_at_ms"))
-        or receipt["expires_at_ms"] <= receipt["issued_at_ms"]
-        or receipt["expires_at_ms"] - receipt["issued_at_ms"] > _APPROVAL_MAX_TTL_MS
-        or receipt.get("decision") != "allow"
-        or receipt.get("requested_action") not in {"review", "require-reapproval"}
-        or receipt.get("approved_action") != "allow"
-        or receipt.get("reason_code") != f"native_approval_{phase}"
-        or receipt.get("reason_code") not in _APPROVAL_REASON_CODES
-        or not _approval_digest(receipt.get("nonce_digest"))
-        or receipt.get("replay_claimed") is not True
-    ):
-        return None
-    for key in ("runtime_package", "runtime_version", "harness", "scope_contract_version"):
-        if not _approval_bounded_text(receipt.get(key)):
-            return None
-    for key in (
-        "workspace_binding",
-        "device_binding",
-        "installation_binding",
-        "publisher_binding",
-        "artifact_binding",
-        "scope_binding",
-    ):
-        if not _approval_optional_digest(receipt.get(key)):
-            return None
     return decoded
 
 

@@ -228,7 +228,6 @@ def _pretool_gate() -> None:
     if "evaluate_command(" in _read(pretool):
         raise RuntimeError("native PreToolUse transport calls the Python command evaluator")
     _assert_policy_floor_fail_closed(pretool)
-
     hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker.py"))
     if "review_pre_tool_native" not in hook:
         raise RuntimeError("PreToolUse hook path is not bound to the native runtime")

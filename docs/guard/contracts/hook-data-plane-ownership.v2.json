@@ -271,7 +271,11 @@
       "paths": [
         "src/codex_plugin_scanner/guard/native_hook_edge.py",
         "src/codex_plugin_scanner/guard/native_response_decoder.py",
-        "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py"
+        "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py",
+        "src/codex_plugin_scanner/guard/native_approval_bridge.py",
+        "src/codex_plugin_scanner/guard/native_approval_errors.py",
+        "src/codex_plugin_scanner/guard/native_approval_models.py",
+        "src/codex_plugin_scanner/guard/native_approval_protocol.py"
       ],
       "current": "mechanical bounded guard-hook-envelope.v2 serialization, package-bound native invocation, typed result decoding, and harness response projection",
       "target": "minimal launcher, serialization, and response projection only"
