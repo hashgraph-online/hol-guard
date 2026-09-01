@@ -403,6 +403,10 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 # The master is only an ephemeral input to derivation/signing;
                 # never retain it in publisher state or an exception context.
                 master_key = None
+            # Resident generation files may be created by the client during
+            # publication. Read that fingerprint outside the condition so a
+            # slow filesystem cannot delay a hook waiting for the ACK.
+            resident_fingerprint = self._current_input_fingerprint()[1]
             with self._condition:
                 # A mutation may have invalidated the barrier while this
                 # request was in flight. Do not let an older ACK make that
@@ -416,7 +420,6 @@ class NativePolicySnapshotPublisher(NativePolicySnapshotPublisherInputs):
                 # under a concurrent hook. Keep the policy-input half from
                 # before publication so a config change observed during the
                 # request still forces a republish on the next poll.
-                resident_fingerprint = self._current_input_fingerprint()[1]
                 if self._input_fingerprint is not None:
                     self._input_fingerprint = (self._input_fingerprint[0], resident_fingerprint)
                 self._snapshot = snapshot
