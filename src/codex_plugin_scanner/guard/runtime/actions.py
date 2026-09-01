@@ -535,6 +535,28 @@ def normalize_omp_payload(
     return _normalize_pi_family_payload(payload, harness="omp", workspace=workspace, home_dir=home_dir)
 
 
+def normalize_optiqra_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize an OptiQra ``auto-fix-project`` action into a typed action envelope.
+
+    OptiQra resolves its own fix action, target files, and final diff before
+    calling this hook, so payloads already speak the shared generic shape
+    (``tool_name`` / ``tool_input``) rather than a harness-specific protocol.
+    """
+
+    return _normalize_action_payload(
+        payload,
+        harness="optiqra",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def normalize_kimi_payload(
     payload: Mapping[str, object],
     *,
@@ -572,6 +594,7 @@ _ACTION_PAYLOAD_NORMALIZERS = {
     "omp": normalize_omp_payload,
     "zcode": normalize_zcode_hook_payload,
     "zai": normalize_zcode_hook_payload,
+    "optiqra": normalize_optiqra_payload,
 }
 
 

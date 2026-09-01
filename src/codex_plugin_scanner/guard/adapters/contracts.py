@@ -143,6 +143,7 @@ _DISPLAY_NAMES = {
     "pi": "Pi",
     "omp": "Oh My Pi",
     "zcode": "ZCode",
+    "optiqra": "OptiQra",
 }
 
 
@@ -405,6 +406,23 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "configured package surfaces plus the prompt and tool events forwarded by the managed extension."
         ),
         smoke_command="hol-guard install omp --dry-run",
+    ),
+    HarnessProtectionContract(
+        harness="optiqra",
+        install_aliases=("optiqra",),
+        config_paths=(),
+        event_surfaces=("file_write",),
+        native_approval=False,
+        browser_fallback=False,
+        resume_support=False,
+        known_blind_spots=(
+            "OptiQra calls `guard hook --harness optiqra` directly from its own "
+            "/api/auto-fix-project backend rather than through a locally installed "
+            "config hook, so Guard cannot detect whether the integration is present. "
+            "Guard only sees the resolved action and target files it is given, and "
+            "cannot see file mutations OptiQra applies without calling the hook."
+        ),
+        smoke_command="hol-guard install optiqra --dry-run",
     ),
     HarnessProtectionContract(
         harness="zcode",
