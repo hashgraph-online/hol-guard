@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::io;
 use std::mem::{offset_of, size_of, zeroed};
+use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, RawHandle};
 use std::path::Path;
 use std::ptr::null_mut;
@@ -380,12 +381,8 @@ pub(super) fn rename_into_directory(
     source: &std::fs::File,
     destination: &OsStr,
 ) -> io::Result<()> {
-    let dest_path = binding.path().join(destination);
-    let mut name = super::wide_path(&dest_path)?;
-    if name.last() == Some(&0) {
-        name.pop();
-    }
-    if name.is_empty() {
+    let name = destination.encode_wide().collect::<Vec<_>>();
+    if name.is_empty() || name.contains(&0) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "private destination name is invalid",
@@ -407,7 +404,7 @@ pub(super) fn rename_into_directory(
     unsafe {
         let info = buffer.as_mut_ptr() as *mut FILE_RENAME_INFO;
         (*info).ReplaceIfExists = TRUE;
-        (*info).RootDirectory = null_mut();
+        (*info).RootDirectory = binding.handle().as_raw_handle() as HANDLE;
         (*info).FileNameLength = byte_count as DWORD;
         std::ptr::copy_nonoverlapping(
             name.as_ptr() as *const u8,
