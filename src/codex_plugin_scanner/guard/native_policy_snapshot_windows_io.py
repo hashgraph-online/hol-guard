@@ -43,6 +43,7 @@ def _windows_open_handle(
     *,
     directory: bool,
     create_new: bool = False,
+    share_write: bool = False,
     descriptor: Any | None = None,
 ) -> tuple[Any, Any, Any]:
     """Open/create one non-reparse Windows object while denying deletion."""
@@ -82,6 +83,8 @@ def _windows_open_handle(
     else:
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new else 0)
         share_mode = _WINDOWS_FILE_SHARE_READ
+        if share_write:
+            share_mode |= _WINDOWS_FILE_SHARE_WRITE
     if descriptor is not None:
         # SetSecurityInfo needs WRITE_DAC on the handle. Ownership is left
         # unchanged so existing administrator- or SYSTEM-owned state can be

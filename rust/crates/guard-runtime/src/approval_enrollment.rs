@@ -8,7 +8,7 @@
 use guard_policy_snapshot::canonical_json_bytes;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::path::Path;
 
 #[path = "approval_enrollment_platform.rs"]
@@ -87,51 +87,7 @@ fn validate_transition_lock(path: &Path, file: &File) -> Result<(), String> {
 }
 
 fn open_transition_lock(path: &Path) -> Result<File, String> {
-    let mut create = OpenOptions::new();
-    create.read(true).write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        create
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        const FILE_SHARE_READ: u32 = 0x0000_0001;
-        const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-        create
-            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-    }
-    match create.open(path) {
-        Ok(file) => Ok(file),
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let mut existing = OpenOptions::new();
-            existing.read(true).write(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                existing.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-            }
-            #[cfg(windows)]
-            {
-                use std::os::windows::fs::OpenOptionsExt;
-                const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-                const FILE_SHARE_READ: u32 = 0x0000_0001;
-                const FILE_SHARE_WRITE: u32 = 0x0000_0002;
-                existing
-                    .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
-                    .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-            }
-            existing
-                .open(path)
-                .map_err(|_| "native_approval_authority_lock_failed".to_owned())
-        }
-        Err(_) => Err("native_approval_authority_lock_failed".to_owned()),
-    }
+    crate::resident_state::private_lock_file(path)
 }
 
 pub(crate) fn with_transition_lock<T, F>(state_base: &Path, operation: F) -> Result<T, String>
@@ -142,7 +98,7 @@ where
     let file = open_transition_lock(&path)?;
     validate_transition_lock(&path, &file)?;
     fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::WouldBlock {
+        if crate::resident_state::is_lock_contention(&error) {
             "native_approval_authority_busy".to_owned()
         } else {
             "native_approval_authority_lock_failed".to_owned()

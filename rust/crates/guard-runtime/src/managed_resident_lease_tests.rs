@@ -57,7 +57,8 @@ fn stale_malformed_lease_is_removed_by_liveness_cleanup() {
     let root = test_directory("malformed-stale");
     let directory = lease_directory(&root).expect("lease directory should be available");
     let path = directory.join("client-malformed.lease");
-    let mut file = fs::File::create(&path).expect("malformed fixture should be created");
+    let mut file = crate::resident_state::private_file(&path, true)
+        .expect("malformed fixture should be created");
     file.write_all(b"partial lease")
         .expect("fixture should be written");
     file.set_modified(

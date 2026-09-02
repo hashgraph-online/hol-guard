@@ -151,10 +151,14 @@ def test_windows_open_handle_uses_disk_nonreparse_read_contract(
     hardened = snapshot_module._windows_open_handle(
         Path("C:/Guard/snapshot.json"),
         directory=False,
+        share_write=True,
         descriptor=descriptor,
     )
     assert create_arguments[1][1] == snapshot_module._WINDOWS_GENERIC_READ | snapshot_module._WINDOWS_WRITE_DAC
     assert create_arguments[1][1] & snapshot_module._WINDOWS_WRITE_OWNER == 0
+    assert create_arguments[1][2] == (
+        snapshot_module._WINDOWS_FILE_SHARE_READ | snapshot_module._WINDOWS_FILE_SHARE_WRITE
+    )
     snapshot_module._windows_apply_private_dacl(
         hardened[0],
         hardened[1],

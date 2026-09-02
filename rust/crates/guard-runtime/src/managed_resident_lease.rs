@@ -88,7 +88,7 @@ fn acquire_directory_lock(directory: &Path) -> Result<Option<LeaseDirectoryLock>
     let file = crate::resident_state::private_lock_file(&path)?;
     match fs2::FileExt::try_lock_exclusive(&file) {
         Ok(()) => Ok(Some(LeaseDirectoryLock { file })),
-        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+        Err(error) if crate::resident_state::is_lock_contention(&error) => {
             #[cfg(test)]
             notify_lock_busy_for_test();
             Ok(None)

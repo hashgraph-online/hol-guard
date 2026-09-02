@@ -273,6 +273,7 @@ def _v3_generation_lock(guard_home: Path, *, deadline_monotonic: float | None) -
                 kernel32, handle, _information = api._windows_open_handle(
                     path,
                     directory=False,
+                    share_write=True,
                     descriptor=security_descriptor,
                 )
                 try:

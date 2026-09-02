@@ -22,7 +22,9 @@ mod resident_state_files;
 pub(crate) use resident_startup_lock::{
     acquire_startup_lock, clear_stale_startup_lock, StartupLock,
 };
-pub(crate) use resident_state_files::{ensure_private_directory, private_file, private_lock_file};
+pub(crate) use resident_state_files::{
+    ensure_private_directory, is_lock_contention, private_file, private_lock_file,
+};
 #[cfg(windows)]
 pub(crate) use resident_state_files::{
     open_private_read, protect_windows_private_path, verify_windows_private_path,

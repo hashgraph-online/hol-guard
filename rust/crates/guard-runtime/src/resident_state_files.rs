@@ -5,6 +5,23 @@ use std::path::{Path, PathBuf};
 #[path = "resident_state_windows.rs"]
 mod windows_security;
 
+pub(crate) fn is_lock_contention(error: &std::io::Error) -> bool {
+    if error.kind() == std::io::ErrorKind::WouldBlock {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+        const ERROR_LOCK_VIOLATION: i32 = 33;
+        return matches!(
+            error.raw_os_error(),
+            Some(ERROR_SHARING_VIOLATION) | Some(ERROR_LOCK_VIOLATION)
+        );
+    }
+    #[cfg(not(windows))]
+    false
+}
+
 #[cfg(windows)]
 pub(crate) fn protect_windows_private_path(path: &Path, directory: bool) -> Result<(), String> {
     windows_security::protect_windows_path(path, directory)
@@ -235,4 +252,23 @@ pub(crate) fn ensure_private_directory(
         }
     }
     Ok(resolved)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_lock_contention;
+
+    #[test]
+    fn would_block_is_lock_contention() {
+        let error = std::io::Error::from(std::io::ErrorKind::WouldBlock);
+        assert!(is_lock_contention(&error));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_lock_violations_are_contention() {
+        assert!(is_lock_contention(&std::io::Error::from_raw_os_error(32)));
+        assert!(is_lock_contention(&std::io::Error::from_raw_os_error(33)));
+        assert!(!is_lock_contention(&std::io::Error::from_raw_os_error(5)));
+    }
 }
