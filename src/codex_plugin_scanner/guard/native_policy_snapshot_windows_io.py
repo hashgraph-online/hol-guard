@@ -131,9 +131,7 @@ def _windows_open_configuration(
         # Overlapping resident, watcher, and identity-check handles must be able
         # to open the same owner-private file. DACL, not share mode, is the
         # confidentiality boundary.
-        share_mode = (
-            _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE | _WINDOWS_FILE_SHARE_DELETE
-        )
+        share_mode = _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE | _WINDOWS_FILE_SHARE_DELETE
         if share_delete:
             share_mode |= _WINDOWS_FILE_SHARE_DELETE
     if not rename_parent and (descriptor is not None or repair):

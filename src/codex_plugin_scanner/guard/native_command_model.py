@@ -283,14 +283,14 @@ def review_command_model_native(
                 resident_payload = json.loads(resident_output)
             except (UnicodeDecodeError, json.JSONDecodeError):
                 resident_payload = None
-            error = _native_error(resident_payload)
-            if error == "native_overloaded":
+            if _native_error(resident_payload) == "native_overloaded":
                 native_record_overload(status.identity.sha256, guard_home)
                 return None
             decoded = _decode_command_model(resident_payload, **decoder_arguments)
             if decoded is not None:
                 native_record_resident_success(status.identity.sha256, guard_home)
                 return decoded
+            error = _native_error(resident_payload)
             if error:
                 record_native_resident_client_failure_code(error)
         native_record_resident_failure(
