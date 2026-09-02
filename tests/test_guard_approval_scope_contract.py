@@ -314,11 +314,19 @@ def test_contract_digest_is_deterministic_and_binds_security_fields() -> None:
         ).digest
         != first.digest
     )
+    baseline_envelope = {
+        "action_type": "shell_command",
+        "command": "echo unchanged",
+        "raw_command_text": "echo original",
+    }
+    baseline_with_raw_command = {**request, "action_envelope_json": baseline_envelope}
+    raw_command_changed = {
+        **baseline_with_raw_command,
+        "action_envelope_json": {**baseline_envelope, "raw_command_text": "echo changed"},
+    }
     assert (
-        request_scope_contract(
-            {**request, "action_envelope_json": {"action_type": "shell_command", "raw_command_text": "echo changed"}}
-        ).digest
-        != first.digest
+        request_scope_contract(raw_command_changed).digest
+        != request_scope_contract(baseline_with_raw_command).digest
     )
 
 
