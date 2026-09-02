@@ -12,6 +12,8 @@ use winapi::um::winnt::{
     DELETE, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
     GENERIC_READ, GENERIC_WRITE, SYNCHRONIZE, WRITE_DAC,
 };
+use windows_permissions::constants::{SeObjectType, SecurityInformation};
+use windows_permissions::wrappers::SetSecurityInfo;
 use windows_permissions::SecurityDescriptor;
 
 use super::private_files::{mark_handle_for_delete, validate_handle};
@@ -100,6 +102,25 @@ fn status_error(status: i32) -> io::Error {
     io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(status) } as i32)
 }
 
+fn apply_private_descriptor(
+    file: &mut std::fs::File,
+    descriptor: &SecurityDescriptor,
+) -> io::Result<()> {
+    let dacl = descriptor
+        .dacl()
+        .ok_or_else(|| io::Error::other("private file DACL unavailable"))?;
+    SetSecurityInfo(
+        file,
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
+        None,
+        None,
+        Some(dacl),
+        None,
+    )
+    .map_err(io::Error::other)
+}
+
 fn create_or_open_relative(
     parent: &std::fs::File,
     name: &OsStr,
@@ -124,9 +145,7 @@ fn create_or_open_relative(
         root_directory: parent.as_raw_handle() as HANDLE,
         object_name: &mut unicode,
         attributes: OBJ_CASE_INSENSITIVE,
-        security_descriptor: security_descriptor
-            .map(|descriptor| descriptor as *const _ as *mut _)
-            .unwrap_or(null_mut()),
+        security_descriptor: null_mut(),
         security_quality_of_service: null_mut(),
     };
     let mut io_status = IoStatusBlock {
@@ -160,7 +179,15 @@ fn create_or_open_relative(
         return Err(status_error(status));
     }
     // SAFETY: NtCreateFile returned this handle exactly once.
-    let file = unsafe { std::fs::File::from_raw_handle(handle as RawHandle) };
+    let mut file = unsafe { std::fs::File::from_raw_handle(handle as RawHandle) };
+    if create {
+        if let Some(descriptor) = security_descriptor {
+            if let Err(error) = apply_private_descriptor(&mut file, descriptor) {
+                let _ = mark_handle_for_delete(&file);
+                return Err(error);
+            }
+        }
+    }
     if let Err(error) = validate_handle(&file, false) {
         if create {
             let _ = mark_handle_for_delete(&file);

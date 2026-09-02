@@ -45,18 +45,21 @@ def _windows_rename_file_handle(
     name: str,
     *,
     replace_if_exists: bool = True,
+    destination_path: Path | None = None,
 ) -> None:
-    """Rename an open file relative to an already verified parent handle."""
+    """Rename an open file onto a verified destination path."""
 
     import ctypes
 
     _ = kernel32
-    encoded_name = _windows_child_name(name).encode("utf-16-le")
+    _ = parent_handle
+    target = destination_path if destination_path is not None else Path(name)
+    encoded_name = str(target).encode("utf-16-le")
     file_name_offset = _FileRenameInfo.file_name.offset
     buffer = ctypes.create_string_buffer(ctypes.sizeof(_FileRenameInfo) + len(encoded_name))
     info = ctypes.cast(buffer, ctypes.POINTER(_FileRenameInfo)).contents
     info.replace_if_exists = replace_if_exists
-    info.root_directory = _windows_handle_value(parent_handle)
+    info.root_directory = 0
     info.file_name_length = len(encoded_name)
     ctypes.memmove(ctypes.addressof(buffer) + file_name_offset, encoded_name, len(encoded_name))
     native_library = ctypes.WinDLL("ntdll", use_last_error=True)
@@ -175,6 +178,7 @@ def _windows_commit_private_file_handle(
             parent_handle,
             destination_name,
             replace_if_exists=replace_existing,
+            destination_path=target_path,
         )
         if rename_state is not None:
             rename_state[0] = True
