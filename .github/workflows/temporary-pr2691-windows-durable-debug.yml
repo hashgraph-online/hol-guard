@@ -1,4 +1,4 @@
-name: Temporary PR 2691 Windows durable-state repair validation
+name: Temporary PR 2691 Windows atomic rename diagnostic
 
 on:
   push:
@@ -11,14 +11,14 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  diagnose:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: tmp/pr2691-windows-durable-debug-20260902
           persist-credentials: false
-      - name: Apply and validate Windows repairs
+      - name: Trace Windows atomic rename
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -30,7 +30,7 @@ jobs:
               text = path.read_text(encoding='utf-8')
               count = text.count(old)
               if count != 1:
-                  raise RuntimeError(f'{path}: expected one replacement target, found {count}')
+                  raise RuntimeError(f'{path}: expected one target, found {count}')
               path.write_text(text.replace(old, new, 1), encoding='utf-8')
 
           state_windows = Path('rust/crates/guard-runtime/src/resident_state_windows.rs')
@@ -68,26 +68,48 @@ jobs:
               '''    let header_size = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
           ''',
           )
-
-          lease_tests = Path('rust/crates/guard-runtime/src/managed_resident_lease_tests.rs')
           replace_once(
-              lease_tests,
-              '''        let mut file = crate::resident_state::private_file(path, true, private_root).unwrap();
+              private_files,
+              '''    if unsafe {
+                  SetFileInformationByHandle(
+                      source.as_raw_handle() as HANDLE,
+                      FileRenameInfo,
+                      buffer.as_ptr() as *mut _,
+                      buffer_size as DWORD,
+                  )
+              } == FALSE
+              {
+                  return Err(io::Error::last_os_error());
+              }
           ''',
-              '''        let mut file = crate::resident_state::private_file(path, false, private_root).unwrap();
+              '''    if unsafe {
+                  SetFileInformationByHandle(
+                      source.as_raw_handle() as HANDLE,
+                      FileRenameInfo,
+                      buffer.as_ptr() as *mut _,
+                      buffer_size as DWORD,
+                  )
+              } == FALSE
+              {
+                  let error = io::Error::last_os_error();
+                  eprintln!(
+                      "DBG rename destination={:?} struct_size={} filename_offset={} buffer_size={} kind={:?} raw={:?} error={}",
+                      destination,
+                      size_of::<FILE_RENAME_INFO>(),
+                      header_size,
+                      buffer_size,
+                      error.kind(),
+                      error.raw_os_error(),
+                      error
+                  );
+                  return Err(error);
+              }
           ''',
           )
           '@ | python -
 
-          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt
           rustup default 1.88.0
           cargo fmt --manifest-path rust/Cargo.toml --all
-          cargo fmt --manifest-path rust/Cargo.toml --all -- --check
-          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
-
           $env:RUST_BACKTRACE = '1'
           cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime approval::approval_v4::tests::ed25519_assertion_validates_and_persists_counter_zero_and_one -- --nocapture --test-threads=1
-          cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime managed_resident::restart_budget::tests::repeated_updates_replace_budget_without_leaving_temporary_state -- --nocapture --test-threads=1
-          cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime policy_store::policy_store_persistence::windows_recovery_tests::authority_recovery_replaces_only_valid_private_backup -- --nocapture --test-threads=1
-          cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime managed_resident::lease::tests::dropping_owned_malformed_lease_removes_the_owned_artifact -- --nocapture --test-threads=1
-          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
