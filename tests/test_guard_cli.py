@@ -30,7 +30,10 @@ from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+from codex_plugin_scanner.guard.adapters.hermes import (
+    _HERMES_LOCAL_MODE_NOTE,
+    HermesHarnessAdapter,
+)
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
@@ -5016,6 +5019,7 @@ args = ["-lc", "echo hi"]
 
         assert rc == 0
         assert output["protection_label"] == "launch-review only"
+        assert output["protection_help"] == _HERMES_LOCAL_MODE_NOTE
         assert any(
             "runtime shell enforcement requires a Guard Cloud pairing" in warning
             for warning in output["warnings"]

@@ -360,14 +360,12 @@ def _run_guard_doctor_command(
     if (
         args.harness == "hermes"
         and isinstance(runtime_probe, dict)
-        and runtime_probe.get("managed_install_ready") is True
         and runtime_probe.get("cloud_agent_identity_configured") is False
     ):
+        from ..adapters.hermes import _HERMES_LOCAL_MODE_NOTE
+
         payload["protection_label"] = "launch-review only"
-        payload["protection_help"] = (
-            "Hermes local installs only cover launch-time artifacts; "
-            "runtime shell enforcement requires a Guard Cloud pairing."
-        )
+        payload["protection_help"] = _HERMES_LOCAL_MODE_NOTE
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 

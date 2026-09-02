@@ -297,8 +297,8 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         browser_fallback=True,
         resume_support=False,
         known_blind_spots=(
-            "Hermes local installs only guarantee launch-time artifact review; "
-            "runtime shell enforcement requires a Guard Cloud pairing or a Guard-launched session."
+            "Hermes local installs only cover launch-time artifacts; "
+            "runtime shell enforcement requires a Guard Cloud pairing."
         ),
         smoke_command="hol-guard install hermes --dry-run",
     ),

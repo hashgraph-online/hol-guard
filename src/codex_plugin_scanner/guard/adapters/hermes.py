@@ -22,6 +22,7 @@ from ..skill_directory_identity import (
     inspect_skill_directory,
     skill_directory_identity_metadata,
 )
+from ..store import GuardStore
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
@@ -62,6 +63,10 @@ _HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
 _HERMES_MANAGED_PROMPT_CHANNEL = "native"
 _HERMES_LOCAL_MODE_NOTE = (
     "Hermes local installs only cover launch-time artifacts; runtime shell enforcement requires a Guard Cloud pairing."
+)
+_HERMES_MANAGED_INSTALL_INCOMPLETE_NOTE = (
+    "Hermes managed installation is incomplete; "
+    "runtime shell enforcement remains unavailable until the bundle is repaired."
 )
 _GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS = 3
 _GUARD_PRETOOL_HOST_TIMEOUT_SECONDS = 5
@@ -153,6 +158,10 @@ def _hermes_home_has_artifacts(hermes_home: Path) -> bool:
     return False
 
 
+def _hermes_cloud_identity_configured(context: HarnessContext) -> bool:
+    return GuardStore(context.guard_home).get_cloud_sync_profile() is not None
+
+
 def _manifest_notes(payload: dict[str, object]) -> list[str]:
     notes = payload.get("notes")
     if not isinstance(notes, list):
@@ -195,6 +204,9 @@ class HermesHarnessAdapter(HarnessAdapter):
         )
         overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
         cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
+        cloud_configured = _hermes_cloud_identity_configured(context)
+        if not cloud_configured:
+            cloud_identity = None
         overlay_path.write_text(json.dumps(overlay_servers, indent=2) + "\n", encoding="utf-8")
         pretool_path.write_text(
             json.dumps(_pretool_payload(context=context), indent=2) + "\n",
@@ -244,6 +256,7 @@ class HermesHarnessAdapter(HarnessAdapter):
             "notes": [
                 "Guard generated a Hermes MCP overlay and pre-tool hook bundle.",
                 *([_HERMES_LOCAL_MODE_NOTE] if cloud_identity is None else []),
+                *([_HERMES_MANAGED_INSTALL_INCOMPLETE_NOTE] if not cloud_configured else []),
                 "Guard wrote Guard-managed MCP proxy entries into the Hermes config.yaml.",
                 *_manifest_notes(shim_manifest),
             ],
@@ -331,7 +344,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                 and isinstance(pretool_path, str)
                 and Path(pretool_path).exists()
             ),
-            "cloud_agent_identity_configured": bool(cloud_agent_identity_hints(context, runtime=self.harness)),
+            "cloud_agent_identity_configured": _hermes_cloud_identity_configured(context),
         }
 
     def diagnostic_warnings(
@@ -343,10 +356,15 @@ class HermesHarnessAdapter(HarnessAdapter):
         if (
             detection.installed
             and isinstance(runtime_probe, dict)
-            and runtime_probe.get("managed_install_ready") is True
             and runtime_probe.get("cloud_agent_identity_configured") is False
         ):
             warnings.append(_HERMES_LOCAL_MODE_NOTE)
+        if (
+            detection.installed
+            and isinstance(runtime_probe, dict)
+            and runtime_probe.get("managed_install_ready") is False
+        ):
+            warnings.append(_HERMES_MANAGED_INSTALL_INCOMPLETE_NOTE)
         return warnings
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
