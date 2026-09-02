@@ -55,6 +55,8 @@ pub(crate) fn request_shutdown() {
     MANAGED_SHUTDOWN_REQUESTED.store(true, Ordering::Release);
 }
 
+pub(crate) fn shutdown_response_sent() {}
+
 fn shutdown_requested() -> bool {
     MANAGED_SHUTDOWN_REQUESTED.load(Ordering::Acquire)
 }
