@@ -693,7 +693,7 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
     "command",
     (
         "gh api -H 'Accept: application/vnd.github.raw+json' "
-        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=release/3.0' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
         "| jq '{tests: .tests, total: .total}'",
         "gh pr view 1 -tREVIEW",
         "gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'",
