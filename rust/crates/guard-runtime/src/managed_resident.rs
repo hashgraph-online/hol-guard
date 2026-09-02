@@ -42,7 +42,7 @@ pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
 }
 
 const CLIENT_START_TIMEOUT: Duration =
-    Duration::from_millis(if cfg!(windows) { 2_500 } else { 600 });
+    Duration::from_millis(if cfg!(windows) { 6_000 } else { 600 });
 const CLIENT_RETRY_DELAY: Duration = Duration::from_millis(5);
 
 fn try_live_or_restart(
@@ -192,7 +192,8 @@ fn client_request_with_lease(
     if timeout.is_zero() {
         return Err("native_client_deadline_exceeded".to_owned());
     }
-    let overall_deadline = Instant::now() + timeout;
+    let overall_deadline = Instant::now()
+        + timeout.saturating_sub(Duration::from_millis(if cfg!(windows) { 300 } else { 0 }));
     let digest = runtime_digest()?;
     let scope = state_scope(state_base, &digest)?;
     if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
@@ -256,23 +257,11 @@ fn client_request_with_lease(
     match request_result {
         Ok(Some(response)) => Ok(response),
         Ok(None) => {
-            containment::abort_spawned_managed(
-                &mut spawned,
-                &scope,
-                &digest,
-                generation,
-                &token,
-            );
+            containment::abort_spawned_managed(&mut spawned, &scope, &digest, generation, &token);
             Err("native_resident_start_timeout".to_owned())
         }
         Err(error) => {
-            containment::abort_spawned_managed(
-                &mut spawned,
-                &scope,
-                &digest,
-                generation,
-                &token,
-            );
+            containment::abort_spawned_managed(&mut spawned, &scope, &digest, generation, &token);
             Err(error)
         }
     }

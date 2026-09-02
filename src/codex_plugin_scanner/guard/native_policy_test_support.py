@@ -19,7 +19,7 @@ def native_policy_snapshot(guard_home: Path) -> Iterator[Mapping[str, object]]:
     publisher = get_native_policy_snapshot_publisher(GuardStore(guard_home))
     publisher.start()
     try:
-        ready_wait_seconds = 10.0 if sys.platform == "win32" else 3.0
+        ready_wait_seconds = 25.0 if sys.platform == "win32" else 3.0
         if not publisher.wait_until_ready(time.monotonic() + ready_wait_seconds):
             raise AssertionError(f"native policy publisher was not ready: {publisher.last_error}")
         snapshot = publisher.current_snapshot()

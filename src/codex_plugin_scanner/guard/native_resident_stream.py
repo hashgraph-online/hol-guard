@@ -153,9 +153,12 @@ class _PersistentNativeClient:
             self._record_failure("native_client_request_invalid")
             return None
         with self._request_lock:
+            spawn_started = time.monotonic()
             snapshot = self._request_snapshot()
             if snapshot is None:
                 return None
+            # Starting the helper process is setup, not request budget.
+            deadline_monotonic += max(0.0, time.monotonic() - spawn_started)
             process, stdin, responses = snapshot
             if not self._request_is_current(process, responses):
                 self._record_failure("native_client_stream_failed")
