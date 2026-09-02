@@ -20,13 +20,13 @@ def test_cleanup_contract_covers_every_scoped_hook_capability() -> None:
 
     assert payload["schema"] == "hol-guard.python-capability-cleanup.v1"
     assert payload["status"] == "passed"
-    assert payload["scope_files"] == 85
-    assert payload["capabilities"]["legacy_python_resident_transport"] == 1
+    assert payload["scope_files"] == 87
+    assert payload["capabilities"]["legacy_python_resident_transport"] == 2
     assert payload["candidate_evidence"] == [
         {
             "path": "src/codex_plugin_scanner/guard/native_runtime_resident.py",
             "module": "codex_plugin_scanner.guard.native_runtime_resident",
-            "loc": 569,
+            "loc": 493,
             "source_importers": [],
             "package_excluded": True,
         }

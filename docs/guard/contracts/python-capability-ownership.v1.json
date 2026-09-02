@@ -99,7 +99,7 @@
       "id": "legacy_python_resident_transport",
       "class": "dead_duplicate",
       "patterns": [
-        "src/codex_plugin_scanner/guard/native_runtime_resident.py"
+        "src/codex_plugin_scanner/guard/native_runtime_resident*.py"
       ],
       "exclude_patterns": [],
       "production_role": "superseded Python resident transport; source retained pending separate deletion authorization",

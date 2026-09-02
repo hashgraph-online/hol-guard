@@ -8,35 +8,29 @@ generation state, response binding, and resident lifecycle.
 from __future__ import annotations
 
 import atexit
-import struct
-import subprocess
 import threading
 import time
 from collections.abc import Mapping
-from contextlib import suppress
 from contextvars import ContextVar
 from pathlib import Path
-from queue import Empty, Full, Queue
 
 from .codex_hook_launch_runtime import (
     BoundedHookProcessResult,
-    isolated_hook_environment,
 )
 from .codex_hook_launch_runtime import (
     run_isolated_hook_process as _legacy_run_isolated_hook_process,
 )
 from .native_approval_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
+from .native_resident_stream import _PersistentNativeClient, _StreamFailure
 
-# Keep the former runner as a test seam. Production always uses the framed
-# stream below; tests can replace this binding with a bounded fake.
+# Retain the old runner name as a test seam. Production always leaves this
+# binding untouched and uses the persistent Rust client below.
 run_isolated_hook_process = _legacy_run_isolated_hook_process
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
-_STREAM_FRAME_HEADER_BYTES = 4
-_CLIENT_CLOSE_TIMEOUT_SECONDS = 0.5
-_CLIENT_RETIRE_TIMEOUT_SECONDS = 2.5
 _MAX_PERSISTENT_CLIENTS = 16
+_MAX_PERSISTENT_POOLS = 16
 _MAX_FAILURE_CODE_LENGTH = 128
 _LAST_FAILURE_CODE: ContextVar[str | None] = ContextVar(
     "native_resident_client_failure_code",
@@ -78,189 +72,102 @@ def _record_failure_code(result: BoundedHookProcessResult) -> None:
     _LAST_FAILURE_CODE.set(_allowlisted_failure_code(result.stderr) or _classify_failure(result))
 
 
-class _StreamFailure:
-    """Sentinel for a Rust stream that exited before returning a frame."""
+class _PersistentNativeClientPool:
+    """Bounded lazy pool of streams for one executable and Guard state root.
 
+    A stream carries one request at a time because its response frames have no
+    request identifier. Multiple persistent streams therefore provide bounded
+    parallel dispatch without changing the authenticated wire protocol.
+    """
 
-class _PersistentNativeClient:
-    """One bounded Rust client process with a serialized framed stream."""
-
-    def __init__(
-        self,
-        *,
-        executable: Path,
-        state_dir: Path,
-        environment: Mapping[str, str],
-    ) -> None:
+    def __init__(self, *, executable: Path, state_dir: Path, environment: Mapping[str, str]) -> None:
         self._executable = executable
         self._state_dir = state_dir
-        self._environment = isolated_hook_environment(environment)
-        self._process: subprocess.Popen[bytes] | None = None
-        self._responses: Queue[bytes | _StreamFailure] = Queue(maxsize=1)
-        self._reader: threading.Thread | None = None
-        self._lock = threading.Lock()
+        self._environment = environment
+        self._clients: set[_PersistentNativeClient] = set()
+        self._idle: list[_PersistentNativeClient] = []
+        self._condition = threading.Condition()
+        self._closed = False
 
-    def _start(self) -> bool:
-        if self._process is not None and self._process.poll() is None:
-            return True
-        if self._process is not None:
-            self._close_locked()
-        while True:
-            try:
-                self._responses.get_nowait()
-            except Empty:
-                break
-        try:
-            self._process = subprocess.Popen(
-                (
-                    str(self._executable),
-                    "resident-client-stream",
-                    "--stdin",
-                    str(self._state_dir),
-                ),
-                cwd=self._executable.parent,
-                env=self._environment,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        except OSError:
-            self._process = None
-            return False
-        self._reader = threading.Thread(
-            target=self._read_responses,
-            name="hol-guard-native-client",
-            daemon=True,
-        )
-        self._reader.start()
-        return True
-
-    def _read_responses(self) -> None:
-        process = self._process
-        stdout = process.stdout if process is not None else None
-        if stdout is None:
-            return
-        try:
-            while True:
-                header = stdout.read(_STREAM_FRAME_HEADER_BYTES)
-                if not header:
+    def _lease(self, *, deadline_monotonic: float) -> _PersistentNativeClient | None:
+        with self._condition:
+            while not self._closed:
+                if self._idle:
+                    return self._idle.pop()
+                if len(self._clients) < _MAX_PERSISTENT_CLIENTS:
+                    client = _PersistentNativeClient(
+                        executable=self._executable,
+                        state_dir=self._state_dir,
+                        environment=self._environment,
+                        failure_recorder=_LAST_FAILURE_CODE.set,
+                    )
+                    self._clients.add(client)
+                    return client
+                remaining = deadline_monotonic - time.monotonic()
+                if remaining <= 0:
                     break
-                if len(header) != _STREAM_FRAME_HEADER_BYTES:
-                    break
-                length = struct.unpack(">I", header)[0]
-                if length <= 0 or length > _MAX_RESPONSE_BYTES:
-                    break
-                response = stdout.read(length)
-                if len(response) != length:
-                    break
-                try:
-                    self._responses.put_nowait(response)
-                except Full:
-                    break
-        except (OSError, ValueError):
-            pass
-        with suppress(Exception):
-            self._responses.put_nowait(_StreamFailure())
+                self._condition.wait(timeout=remaining)
+        _LAST_FAILURE_CODE.set("native_client_pool_exhausted")
+        return None
 
     def request(self, payload: bytes, *, deadline_monotonic: float) -> bytes | None:
-        if not payload or len(payload) > _MAX_REQUEST_BYTES:
-            _LAST_FAILURE_CODE.set("native_client_request_invalid")
+        client = self._lease(deadline_monotonic=deadline_monotonic)
+        if client is None:
             return None
-        with self._lock:
-            if not self._start():
-                _LAST_FAILURE_CODE.set("native_client_start_failed")
-                return None
-            process = self._process
-            stdin = process.stdin if process is not None else None
-            if stdin is None:
-                _LAST_FAILURE_CODE.set("native_client_stdin_unavailable")
-                return None
-            try:
-                stdin.write(struct.pack(">I", len(payload)))
-                stdin.write(payload)
-                stdin.flush()
-            except OSError:
-                self._close_locked()
-                _LAST_FAILURE_CODE.set("native_client_frame_write_failed")
-                return None
-            remaining = deadline_monotonic - time.monotonic()
-            if remaining <= 0:
-                self._close_locked()
-                _LAST_FAILURE_CODE.set("native_client_timed_out")
-                return None
-            try:
-                response = self._responses.get(timeout=remaining)
-            except Empty:
-                self._close_locked()
-                _LAST_FAILURE_CODE.set("native_client_timed_out")
-                return None
-            if isinstance(response, _StreamFailure):
-                self._close_locked()
-                _LAST_FAILURE_CODE.set("native_client_stream_failed")
-                return None
+        response: bytes | None = None
+        try:
+            response = client.request(payload, deadline_monotonic=deadline_monotonic)
             return response
-
-    def _close_locked(self) -> None:
-        process = self._process
-        reader = self._reader
-        self._process = None
-        self._reader = None
-        if process is None:
-            return
-        if process.poll() is None:
-            with suppress(OSError):
-                process.terminate()
-            try:
-                process.wait(timeout=_CLIENT_CLOSE_TIMEOUT_SECONDS)
-            except subprocess.TimeoutExpired:
-                with suppress(OSError):
-                    process.kill()
-                with suppress(subprocess.TimeoutExpired):
-                    process.wait(timeout=_CLIENT_CLOSE_TIMEOUT_SECONDS)
-        for stream in (process.stdin, process.stdout):
-            if stream is not None:
-                with suppress(OSError, ValueError):
-                    stream.close()
-        if reader is not None and reader is not threading.current_thread():
-            reader.join(timeout=_CLIENT_CLOSE_TIMEOUT_SECONDS)
+        finally:
+            close_client = False
+            with self._condition:
+                if client not in self._clients:
+                    close_client = True
+                elif self._closed or response is None:
+                    self._clients.remove(client)
+                    close_client = True
+                else:
+                    self._idle.append(client)
+                self._condition.notify()
+            if close_client:
+                client.close()
 
     def close(self) -> None:
-        with self._lock:
-            self._close_locked()
-
-    def close_and_contain(self) -> None:
-        """Close the stream and retire only its managed resident state."""
-        self.close()
-        _contain_persistent_resident(self)
+        with self._condition:
+            self._closed = True
+            clients = tuple(self._clients)
+            self._clients.clear()
+            self._idle.clear()
+            self._condition.notify_all()
+        for client in clients:
+            client.close()
+        for client in clients:
+            _contain_persistent_resident(client)
 
 
 _CLIENTS_LOCK = threading.Lock()
-_CLIENTS: dict[tuple[str, str], _PersistentNativeClient] = {}
+_CLIENT_POOLS: dict[tuple[str, str], _PersistentNativeClientPool] = {}
 
 
-def _client_for(
-    executable: Path,
-    state_dir: Path,
-    environment: Mapping[str, str],
-) -> _PersistentNativeClient:
-    key = (str(executable), str(state_dir))
-    evicted: _PersistentNativeClient | None = None
+def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str, str]) -> _PersistentNativeClientPool:
+    normalized_state_dir = state_dir.expanduser().resolve()
+    key = (str(executable), str(normalized_state_dir))
+    evicted: _PersistentNativeClientPool | None = None
     with _CLIENTS_LOCK:
-        client = _CLIENTS.get(key)
-        if client is None:
-            if len(_CLIENTS) >= _MAX_PERSISTENT_CLIENTS:
-                evicted_key = next(iter(_CLIENTS))
-                evicted = _CLIENTS.pop(evicted_key)
-            client = _PersistentNativeClient(
+        pool = _CLIENT_POOLS.get(key)
+        if pool is None:
+            if len(_CLIENT_POOLS) >= _MAX_PERSISTENT_POOLS:
+                evicted_key = next(iter(_CLIENT_POOLS))
+                evicted = _CLIENT_POOLS.pop(evicted_key)
+            pool = _PersistentNativeClientPool(
                 executable=executable,
-                state_dir=state_dir,
+                state_dir=normalized_state_dir,
                 environment=environment,
             )
-            _CLIENTS[key] = client
+            _CLIENT_POOLS[key] = pool
     if evicted is not None:
-        evicted.close_and_contain()
-    return client
+        evicted.close()
+    return pool
 
 
 def _state_files(state_dir: Path) -> tuple[Path, ...]:
@@ -273,7 +180,7 @@ def _state_files(state_dir: Path) -> tuple[Path, ...]:
 def _has_client_for_state(state_dir: Path) -> bool:
     state_key = str(state_dir)
     with _CLIENTS_LOCK:
-        return any(key[1] == state_key for key in _CLIENTS)
+        return any(key[1] == state_key for key in _CLIENT_POOLS)
 
 
 def _contain_persistent_resident(client: _PersistentNativeClient) -> None:
@@ -290,40 +197,36 @@ def _contain_persistent_resident(client: _PersistentNativeClient) -> None:
         executable=client._executable,
         state_dir=client._state_dir,
         environment=client._environment,
-        timeout_seconds=_CLIENT_CLOSE_TIMEOUT_SECONDS,
+        timeout_seconds=0.5,
     )
-    deadline = time.monotonic() + _CLIENT_RETIRE_TIMEOUT_SECONDS
+    deadline = time.monotonic() + 2.5
     while _state_files(client._state_dir) and time.monotonic() < deadline:
         time.sleep(0.025)
 
 
 def close_native_resident_clients(guard_home: Path | None = None) -> None:
     """Close persistent Rust clients, optionally limited to one Guard home."""
-    resolved_guard_home = guard_home.expanduser() if guard_home is not None else None
 
-    def belongs_to_guard_home(key: tuple[str, str]) -> bool:
-        if resolved_guard_home is None:
-            return True
-        state_parent = Path(key[1]).parent
-        try:
-            return state_parent.samefile(resolved_guard_home)
-        except OSError:
-            return state_parent == resolved_guard_home
+    resolved_guard_home = guard_home.expanduser().resolve() if guard_home is not None else None
 
     with _CLIENTS_LOCK:
-        selected = [(key, client) for key, client in _CLIENTS.items() if belongs_to_guard_home(key)]
-        for key, _client in selected:
-            _CLIENTS.pop(key, None)
-    for _key, client in selected:
-        client.close()
-    for _key, client in selected:
-        _contain_persistent_resident(client)
+        selected = [
+            (key, pool)
+            for key, pool in _CLIENT_POOLS.items()
+            if resolved_guard_home is None or Path(key[1]).parent == resolved_guard_home
+        ]
+        for key, _pool in selected:
+            _CLIENT_POOLS.pop(key, None)
+    for _key, pool in selected:
+        pool.close()
 
 
 atexit.register(close_native_resident_clients)
 
 
 def _track_resident(executable: Path, state_dir: Path, environment: Mapping[str, str]) -> None:
+    if not state_dir.is_dir():
+        return
     with _RESIDENTS_LOCK:
         _RESIDENTS[(executable, state_dir)] = dict(environment)
 
@@ -348,7 +251,7 @@ def stop_native_resident(
         result.returncode == 0
         and not result.timed_out
         and not result.containment_failed
-        and not list(state_dir.glob("resident-v3-*/generation-*.json"))
+        and not _state_files(state_dir)
     )
 
 
@@ -359,8 +262,7 @@ def close_native_residents() -> None:
         residents = list(_RESIDENTS.items())
     remaining: dict[tuple[Path, Path], Mapping[str, str]] = {}
     for (executable, state_dir), environment in residents:
-        state_files = list(state_dir.glob("resident-v3-*/generation-*.json"))
-        if state_files and not stop_native_resident(
+        if _state_files(state_dir) and not stop_native_resident(
             executable=executable,
             state_dir=state_dir,
             environment=environment,
@@ -377,9 +279,9 @@ def _legacy_native_resident_client_request(
     guard_home: Path,
     environment: Mapping[str, str],
     payload: bytes,
-    timeout_seconds: float | None = None,
-    raw_hook_envelope: bool = False,
-    deadline_monotonic: float | None = None,
+    timeout_seconds: float | None,
+    raw_hook_envelope: bool,
+    deadline_monotonic: float | None,
 ) -> bytes | None:
     """Exercise the former one-shot seam for isolated unit-test fakes only."""
     try:
@@ -466,13 +368,15 @@ def native_resident_client_request(
     if deadline is None:
         assert timeout_seconds is not None
         deadline = time.monotonic() + timeout_seconds
-    return _client_for(executable, guard_home / "native-runtime", environment).request(
+    return _client_pool_for(executable, guard_home / "native-runtime", environment).request(
         payload,
         deadline_monotonic=deadline,
     )
 
 
 __all__ = [
+    "_PersistentNativeClient",
+    "_StreamFailure",
     "close_native_resident_clients",
     "close_native_residents",
     "native_resident_client_failure_code",
