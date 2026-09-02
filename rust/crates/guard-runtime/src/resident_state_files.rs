@@ -13,10 +13,10 @@ pub(crate) fn is_lock_contention(error: &std::io::Error) -> bool {
     {
         const ERROR_SHARING_VIOLATION: i32 = 32;
         const ERROR_LOCK_VIOLATION: i32 = 33;
-        return matches!(
+        matches!(
             error.raw_os_error(),
             Some(ERROR_SHARING_VIOLATION) | Some(ERROR_LOCK_VIOLATION)
-        );
+        )
     }
     #[cfg(not(windows))]
     false

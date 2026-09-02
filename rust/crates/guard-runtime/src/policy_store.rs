@@ -59,6 +59,11 @@ const GENERATION_FLOOR_SCHEMA: &str = "guard-policy-snapshot-generation-floor.v1
 const AUTHORITY_RECORD_SCHEMA: &str = "guard-policy-snapshot-authority.v3";
 const AUTHORITY_RECORD_MAX_BYTES: u64 = POLICY_SNAPSHOT_MAX_BYTES as u64 + 16 * 1024;
 
+#[cfg(test)]
+pub(crate) fn scope_digest_for_test(state_base: &Path) -> String {
+    scope_binding_for_state_base(state_base).1
+}
+
 #[derive(Clone, Copy)]
 #[repr(u8)]
 enum PersistBoundary {

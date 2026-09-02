@@ -68,6 +68,8 @@ fn stale_malformed_lease_is_removed_by_liveness_cleanup() {
     )
     .expect("fixture should become stale");
 
+    drop(file);
+
     assert!(!any_live_for_home(&root));
     assert!(!path.exists());
     fs::remove_dir_all(root).expect("test directory should be removable");

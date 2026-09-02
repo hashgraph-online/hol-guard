@@ -236,16 +236,24 @@ mod tests {
         let digest = digest_character.repeat(64);
         let guard_home = generation_state_root();
         fs::create_dir_all(&guard_home).expect("create generation fixture");
-        fs::write(
-            guard_home.join(POLICY_GENERATION_STATE_NAME),
-            serde_json::to_vec(&json!({
-                "schema": POLICY_GENERATION_STATE_SCHEMA,
-                "generation": generation,
-                "policy_digest": digest.clone(),
-            }))
-            .expect("encode generation fixture"),
-        )
-        .expect("write generation fixture");
+        #[cfg(windows)]
+        crate::resident_state::protect_windows_private_path(&guard_home, true)
+            .expect("protect generation fixture");
+        let state_path = guard_home.join(POLICY_GENERATION_STATE_NAME);
+        let state_bytes = serde_json::to_vec(&json!({
+            "schema": POLICY_GENERATION_STATE_SCHEMA,
+            "generation": generation,
+            "policy_digest": digest.clone(),
+        }))
+        .expect("encode generation fixture");
+        #[cfg(windows)]
+        {
+            let mut file = crate::resident_state::private_file(&state_path, false)
+                .expect("create private generation fixture");
+            std::io::Write::write_all(&mut file, &state_bytes).expect("write generation fixture");
+        }
+        #[cfg(not(windows))]
+        fs::write(&state_path, &state_bytes).expect("write generation fixture");
         json!({
             "guard_home": guard_home,
             "policy_snapshot": {

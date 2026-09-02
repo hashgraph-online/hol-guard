@@ -5,9 +5,9 @@ use guard_contracts::{
     PreToolOperationV1, GUARD_HOOK_ENVELOPE_V2_SCHEMA, NATIVE_APPROVAL_CHALLENGE_V3_SCHEMA,
 };
 use guard_policy_snapshot::{
-    config_digest, digest_bytes, integrity_mac, policy_digest, verifier_key_id,
-    EffectiveNativePolicyV3, PolicySnapshotV3, ScopeContractV3, SnapshotIntegrityV3,
-    POLICY_SNAPSHOT_INTEGRITY_ALGORITHM, POLICY_SNAPSHOT_PUSH_SCHEMA, POLICY_SNAPSHOT_SCHEMA,
+    config_digest, integrity_mac, policy_digest, verifier_key_id, EffectiveNativePolicyV3,
+    PolicySnapshotV3, ScopeContractV3, SnapshotIntegrityV3, POLICY_SNAPSHOT_INTEGRITY_ALGORITHM,
+    POLICY_SNAPSHOT_PUSH_SCHEMA, POLICY_SNAPSHOT_SCHEMA,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -34,7 +34,7 @@ fn policy() -> EffectiveNativePolicyV3 {
 }
 
 fn scope_digest(root: &Path) -> String {
-    digest_bytes(root.to_string_lossy().as_bytes())
+    crate::policy_store::scope_digest_for_test(root)
 }
 
 pub(super) fn root(label: &str) -> PathBuf {

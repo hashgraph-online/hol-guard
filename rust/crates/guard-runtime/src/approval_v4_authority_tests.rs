@@ -29,6 +29,8 @@ pub(crate) fn write_test_record(
     let bytes = test_record_bytes(record)?;
     let path = state_base.join(AUTHORITY_FILE_NAME);
     fs::write(&path, &bytes).map_err(|_| "native_approval_v4_authority_invalid".to_owned())?;
+    #[cfg(windows)]
+    crate::resident_state::protect_windows_private_path(&path, false)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
