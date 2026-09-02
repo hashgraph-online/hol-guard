@@ -128,7 +128,12 @@ def _windows_open_configuration(
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new or repair else 0)
         if create_new or rename_source:
             desired_access |= _WINDOWS_DELETE
-        share_mode = _WINDOWS_FILE_SHARE_READ
+        # Overlapping resident, watcher, and identity-check handles must be able
+        # to open the same owner-private file. DACL, not share mode, is the
+        # confidentiality boundary.
+        share_mode = (
+            _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE | _WINDOWS_FILE_SHARE_DELETE
+        )
         if share_delete:
             share_mode |= _WINDOWS_FILE_SHARE_DELETE
     if not rename_parent and (descriptor is not None or repair):

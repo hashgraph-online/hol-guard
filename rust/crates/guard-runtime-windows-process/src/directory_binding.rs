@@ -11,8 +11,8 @@ use windows_permissions::SecurityDescriptor;
 
 use super::private_files::{
     create_private_file as create_path_private_file, file_information, mark_handle_for_delete,
-    open_directory_bound, open_raw, open_raw_directory_bound, open_rename_directory,
-    rename_into_directory, validate_handle, verify_private_file,
+    open_directory_bound, open_inspect_private_file, open_raw, open_raw_directory_bound,
+    open_rename_directory, rename_into_directory, validate_handle, verify_private_file,
 };
 
 const ERROR_ALREADY_EXISTS: i32 = 183;
@@ -80,10 +80,10 @@ impl PrivateDirectoryBinding {
         source: &std::fs::File,
         destination: &OsStr,
     ) -> io::Result<()> {
-        self.child_path(destination)?;
+        let destination_path = self.child_path(destination)?;
         validate_handle(source, false)?;
         verify_private_file(source)?;
-        match self.open_private_file(destination) {
+        match open_inspect_private_file(&destination_path) {
             Ok(existing) => drop(existing),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
@@ -101,7 +101,7 @@ impl PrivateDirectoryBinding {
         self.handles
             .push(open_directory_bound(&self.path, false, true)?);
         renamed?;
-        let committed = self.open_private_file(destination)?;
+        let committed = open_inspect_private_file(&destination_path)?;
         if file_information(source.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
             != file_information(committed.as_raw_handle() as winapi::shared::ntdef::HANDLE)?
         {

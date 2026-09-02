@@ -6,7 +6,7 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, RawHandle};
 use std::path::Path;
 use std::ptr::null_mut;
 
-use winapi::shared::minwindef::{DWORD, FALSE, TRUE};
+use winapi::shared::minwindef::{BOOL, DWORD, FALSE};
 use winapi::shared::ntdef::HANDLE;
 use winapi::um::fileapi::{
     CreateFileW, GetFileInformationByHandle, GetFileType, SetFileInformationByHandle,
@@ -35,7 +35,9 @@ const ERROR_ALREADY_EXISTS: i32 = 183;
 const ERROR_FILE_EXISTS: i32 = 80;
 const FILE_FLAG_OPEN_REPARSE_POINT: DWORD = 0x0020_0000;
 const FILE_FLAG_WRITE_THROUGH: DWORD = 0x8000_0000;
-const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
+const FILE_RENAME_INFORMATION_EX_CLASS: u32 = 65;
+const FILE_RENAME_REPLACE_IF_EXISTS: DWORD = 0x0000_0001;
+const FILE_RENAME_POSIX_SEMANTICS: DWORD = 0x0000_0002;
 
 #[repr(C)]
 struct IoStatusBlock {
@@ -121,6 +123,23 @@ pub(super) fn open_existing(path: &Path, directory: bool) -> io::Result<std::fs:
         true,
     )?;
     validate_handle(&file, directory)?;
+    Ok(file)
+}
+
+/// Inspect an existing private file without WRITE_DAC or DELETE.
+///
+/// Authority watchers and the replace source already hold the object. A second
+/// WRITE_DAC open is not covered by FILE_SHARE_WRITE and fails the identity
+/// check after rename.
+pub(super) fn open_inspect_private_file(path: &Path) -> io::Result<std::fs::File> {
+    let file = open_raw_with_access(
+        path,
+        false,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        GENERIC_READ,
+    )?;
+    validate_handle(&file, false)?;
+    verify_private_file(&file)?;
     Ok(file)
 }
 
@@ -414,7 +433,8 @@ pub(super) fn rename_into_directory(
     // UTF-16 payload expected by FILE_RENAME_INFO.
     unsafe {
         let info = buffer.as_mut_ptr() as *mut FILE_RENAME_INFO;
-        (*info).ReplaceIfExists = TRUE;
+        (*info).ReplaceIfExists =
+            (FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS) as BOOL;
         (*info).RootDirectory = parent.as_raw_handle() as HANDLE;
         (*info).FileNameLength = byte_count as DWORD;
         std::ptr::copy_nonoverlapping(
@@ -428,14 +448,16 @@ pub(super) fn rename_into_directory(
         information: 0,
     };
     // SAFETY: `source` is a live DELETE-capable handle and `buffer` remains
-    // valid for the synchronous FileRenameInformation call.
+    // valid for the synchronous FileRenameInformationEx call. POSIX semantics
+    // replace a destination that still has read handles, such as the policy
+    // authority watcher.
     let status = unsafe {
         NtSetInformationFile(
             source.as_raw_handle() as HANDLE,
             &mut io_status,
             buffer.as_mut_ptr(),
             buffer_size as u32,
-            FILE_RENAME_INFORMATION_CLASS,
+            FILE_RENAME_INFORMATION_EX_CLASS,
         )
     };
     if status < 0 {

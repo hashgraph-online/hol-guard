@@ -475,6 +475,20 @@ mod windows_recovery_tests {
     }
 
     #[test]
+    fn authority_replace_succeeds_while_a_reader_holds_the_target() {
+        let root = test_root("replace-reader");
+        let target = root.join("policy-snapshot-v3.json");
+        let temporary = root.join(".policy-snapshot-v3.json.tmp");
+        private_bytes(&target, b"before");
+        private_bytes(&temporary, b"after-replace");
+        let reader = std::fs::File::open(&target).unwrap();
+        crate::resident_state::replace_windows_private_file(&temporary, &target, &root).unwrap();
+        drop(reader);
+        assert_eq!(std::fs::read(&target).unwrap(), b"after-replace");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn authority_recovery_rejects_non_file_backup() {
         let root = test_root("reparse-or-directory");
         let target = root.join("policy-snapshot-v3.json");

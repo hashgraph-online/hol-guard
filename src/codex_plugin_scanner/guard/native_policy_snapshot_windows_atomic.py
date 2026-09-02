@@ -198,7 +198,6 @@ def _windows_rename_releasing_barrier(
                 directory=True,
                 lock=True,
                 add_file=True,
-                repair=True,
             )
             directory_handles.append((restored_kernel32, restored_handle))
 

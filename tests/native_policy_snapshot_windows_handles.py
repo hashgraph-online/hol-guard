@@ -53,7 +53,11 @@ def test_windows_open_handle_uses_disk_nonreparse_read_contract(
 
     assert getattr(opened[1], "value", opened[1]) == 71
     assert create_arguments[0][1] == snapshot_module._WINDOWS_GENERIC_READ
-    assert create_arguments[0][2] == snapshot_module._WINDOWS_FILE_SHARE_READ
+    assert create_arguments[0][2] == (
+        snapshot_module._WINDOWS_FILE_SHARE_READ
+        | snapshot_module._WINDOWS_FILE_SHARE_WRITE
+        | snapshot_module._WINDOWS_FILE_SHARE_DELETE
+    )
     assert create_arguments[0][5] & snapshot_module._WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
     assert closed == []
     snapshot_module._windows_close_handle(*opened[:2])
