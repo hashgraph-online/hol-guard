@@ -269,7 +269,7 @@ Required validation:
 - CodeQL
 - Security Gates
 - Full repository CI
-- Diff and test-suite ratchets
+- Structural code-quality ratchet
 - No skipped required gate and no baseline inflation without reviewed evidence
 
 PR and review requirements:
