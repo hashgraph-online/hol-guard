@@ -243,6 +243,7 @@ def _cursor_availability_response(
     workspace: str | None,
 ) -> tuple[dict[str, object], int]:
     workspace_path = Path(workspace) if workspace else None
+    recording_only = _recording_only_from_guard_home(workspace)
     try:
         from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
 
@@ -251,10 +252,10 @@ def _cursor_availability_response(
             hook_event_name=hook_event_name,
             workspace=workspace_path,
             guard_home=Path(GUARD_HOME),
-            recording_only=_recording_only_from_guard_home(workspace),
+            recording_only=recording_only,
         )
     except Exception:
-        if _recording_only_from_guard_home(workspace):
+        if recording_only:
             compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
             if compact in {"aftershellexecution", "aftermcpexecution"}:
                 return {}, 0
