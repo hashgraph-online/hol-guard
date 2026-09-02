@@ -45,6 +45,11 @@ def native_resident_client_failure_code() -> str | None:
     return _LAST_FAILURE_CODE.get()
 
 
+def record_native_resident_client_failure_code(code: str) -> None:
+    """Record a privacy-safe failure code for the current native client request."""
+    _LAST_FAILURE_CODE.set(code)
+
+
 def _allowlisted_failure_code(stderr: str) -> str | None:
     for line in stderr.splitlines():
         if len(line) <= _MAX_FAILURE_CODE_LENGTH and line in NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES:
@@ -381,5 +386,6 @@ __all__ = [
     "close_native_residents",
     "native_resident_client_failure_code",
     "native_resident_client_request",
+    "record_native_resident_client_failure_code",
     "stop_native_resident",
 ]

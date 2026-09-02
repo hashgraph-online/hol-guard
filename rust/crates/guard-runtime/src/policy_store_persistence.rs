@@ -12,20 +12,14 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Recover the only intermediate states possible with a Windows replacement
-/// sequence and discard fully written temporary candidates left by a crash.
-/// POSIX rename is already a single atomic replacement; this cleanup remains
-/// useful there for a process dying after temp fsync and before rename.
+/// Recover a crash mid-replacement; POSIX rename is already one syscall.
 pub(super) fn recover_authority_replacement(path: &Path) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "native_policy_snapshot_authority_parent_missing".to_owned())?;
     #[cfg(windows)]
     {
-        // Keep one handle-bound ancestry proof alive for the complete
-        // recovery transaction. Every candidate is opened relative to this
-        // binding, so a pathname replacement cannot switch parent identity
-        // between enumeration, validation, and mutation.
+        // One bound ancestry for the whole recovery transaction.
         let private_root = crate::resident_state::private_root_for_state_base(parent)
             .map_err(|_| "native_policy_snapshot_authority_recovery_failed".to_owned())?;
         let mut binding =

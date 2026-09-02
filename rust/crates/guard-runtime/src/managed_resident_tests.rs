@@ -18,6 +18,10 @@ fn client_deadline_is_bounded() {
         Duration::from_secs(9)
     );
     assert_eq!(client_timeout(br#"{}"#), Duration::from_millis(750));
+    assert_eq!(
+        client_timeout(br#"{"deadline_budget_ms":250}"#),
+        Duration::from_millis(250)
+    );
 }
 
 #[test]

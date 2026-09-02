@@ -108,7 +108,8 @@ def _publish_snapshot_v3(
         ack = _ack_from_resident_output(output)
         if ack is None:
             raise NativePolicySnapshotError(
-                native_resident_client_failure_code() or "native_policy_snapshot_ack_invalid"
+                (native_resident_client_failure_code() if output is None else "native_policy_snapshot_ack_invalid")
+                or "native_policy_snapshot_ack_invalid"
             )
         if ack["status"] == POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION:
             floor = ack["generation"]

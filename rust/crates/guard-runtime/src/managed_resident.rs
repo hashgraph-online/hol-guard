@@ -192,8 +192,10 @@ fn client_request_with_lease(
     if timeout.is_zero() {
         return Err("native_client_deadline_exceeded".to_owned());
     }
-    let overall_deadline = Instant::now()
-        + timeout.saturating_sub(Duration::from_millis(if cfg!(windows) { 300 } else { 0 }));
+    // Keep the caller's budget intact. Windows spawn already has
+    // CLIENT_START_TIMEOUT; shrinking every live request by 300ms makes the
+    // 250ms command-model SLO miss the ready serve entirely.
+    let overall_deadline = Instant::now() + timeout;
     let digest = runtime_digest()?;
     let scope = state_scope(state_base, &digest)?;
     if let Some(response) = try_home_states(state_base, payload, overall_deadline, &digest)? {
