@@ -1,0 +1,73 @@
+name: Temporary PR 2691 Windows relative-child diagnostic
+
+on:
+  push:
+    branches:
+      - fix/native-runtime-process-lifecycle
+    paths:
+      - .github/workflows/temporary-pr2691-windows-relative-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/native-runtime-process-lifecycle
+          persist-credentials: false
+      - name: Test parent traverse access
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python - <<'PY'
+          from pathlib import Path
+
+          private_files = Path('rust/crates/guard-runtime-windows-process/src/private_files.rs')
+          text = private_files.read_text(encoding='utf-8')
+          old = '''    DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
+              FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+              GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
+          '''
+          new = '''    DELETE, FILE_ADD_FILE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
+              FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+              FILE_TRAVERSE, GENERIC_READ, GENERIC_WRITE, WRITE_DAC,
+          '''
+          if text.count(old) != 1:
+              raise RuntimeError(f'private_files.rs import target count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+          old = '    let mut access = GENERIC_READ;\n'
+          new = '    let mut access = GENERIC_READ | FILE_TRAVERSE;\n'
+          if text.count(old) != 1:
+              raise RuntimeError(f'private_files.rs access target count: {text.count(old)}')
+          private_files.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          relative_child = Path('rust/crates/guard-runtime-windows-process/src/relative_child.rs')
+          text = relative_child.read_text(encoding='utf-8')
+          old = '''    if status < 0 {
+                  return Err(status_error(status));
+              }
+          '''
+          new = '''    if status < 0 {
+                  let error = status_error(status);
+                  eprintln!(
+                      "relative child open failed: status=0x{:08x}, raw={:?}, kind={:?}",
+                      status as u32,
+                      error.raw_os_error(),
+                      error.kind()
+                  );
+                  return Err(error);
+              }
+          '''
+          if text.count(old) != 1:
+              raise RuntimeError(f'relative_child.rs status target count: {text.count(old)}')
+          relative_child.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.88.0
+          cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+          cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime approval::approval_v4::tests::ed25519_assertion_validates_and_persists_counter_zero_and_one -- --nocapture
+          cargo test --manifest-path rust/Cargo.toml --locked --workspace --all-targets
