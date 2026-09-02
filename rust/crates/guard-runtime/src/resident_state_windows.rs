@@ -23,14 +23,6 @@ fn private_descriptor(directory: bool) -> Result<LocalBox<SecurityDescriptor>, S
         .map_err(|_| "native_resident_windows_acl_build_failed".to_owned())
 }
 
-fn trusted_profile() -> Result<PathBuf, String> {
-    std::env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .ok_or_else(|| "native_resident_user_profile_missing".to_owned())?
-        .canonicalize()
-        .map_err(|_| "native_resident_user_profile_invalid".to_owned())
-}
-
 fn with_directory_binding<T, F>(
     path: &Path,
     private_root: &Path,
@@ -42,12 +34,11 @@ where
 {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-    let trusted_base = trusted_profile()?;
     let result = if private {
         let descriptor = private_descriptor(true)?;
         guard_runtime_windows_process::bind_private_directory(
             path,
-            &trusted_base,
+            private_root,
             private_root,
             &descriptor,
             |handle, _is_target, created, is_private| {
@@ -64,7 +55,7 @@ where
     } else {
         guard_runtime_windows_process::bind_directory(
             path,
-            &trusted_base,
+            private_root,
             private_root,
             |handle, _is_target, _created, is_private| {
                 if is_private {
@@ -95,11 +86,10 @@ pub(super) fn bind_windows_private_directory_under(
 ) -> Result<guard_runtime_windows_process::PrivateDirectoryBinding, String> {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-    let trusted_base = trusted_profile()?;
     let descriptor = private_descriptor(true)?;
     guard_runtime_windows_process::bind_private_directory(
         path,
-        &trusted_base,
+        private_root,
         private_root,
         &descriptor,
         |handle, _is_target, created, is_private| {
@@ -129,10 +119,9 @@ pub(super) fn bind_windows_existing_directory_under(
 ) -> Result<guard_runtime_windows_process::PrivateDirectoryBinding, String> {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-    let trusted_base = trusted_profile()?;
     guard_runtime_windows_process::bind_directory(
         path,
-        &trusted_base,
+        private_root,
         private_root,
         |handle, _is_target, _created, is_private| {
             if is_private {
@@ -151,10 +140,9 @@ where
 {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-    let trusted_base = trusted_profile()?;
     guard_runtime_windows_process::bind_directory(
         path,
-        &trusted_base,
+        private_root,
         private_root,
         |handle, _is_target, _created, is_private| {
             if is_private {

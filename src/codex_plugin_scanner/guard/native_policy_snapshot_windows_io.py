@@ -13,6 +13,7 @@ from .native_policy_snapshot_constants import (
     _WINDOWS_ERROR_FILE_EXISTS,
     _WINDOWS_ERROR_FILE_NOT_FOUND,
     _WINDOWS_ERROR_PATH_NOT_FOUND,
+    _WINDOWS_FILE_ADD_FILE,
     _WINDOWS_FILE_ATTRIBUTE_DIRECTORY,
     _WINDOWS_FILE_ATTRIBUTE_NORMAL,
     _WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT,
@@ -104,7 +105,11 @@ def _windows_open_configuration(
     flags = _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
     if directory:
         flags |= _WINDOWS_FILE_FLAG_BACKUP_SEMANTICS
-        desired_access = _WINDOWS_GENERIC_READ
+        # A directory used as FILE_RENAME_INFO.RootDirectory needs
+        # FILE_ADD_FILE in addition to read access. Keep the handle's
+        # delete-sharing lock while granting only the directory operation
+        # required by the handle-bound rename.
+        desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_FILE_ADD_FILE if lock else 0)
         share_mode = _WINDOWS_FILE_SHARE_READ if lock else _WINDOWS_FILE_SHARE_READ | _WINDOWS_FILE_SHARE_WRITE
     else:
         desired_access = _WINDOWS_GENERIC_READ | (_WINDOWS_GENERIC_WRITE if create_new or repair else 0)

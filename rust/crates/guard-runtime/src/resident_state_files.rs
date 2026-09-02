@@ -264,12 +264,10 @@ pub(crate) fn ensure_private_directory_under(
     {
         let resolved =
             windows_security::ensure_private_directory_path(path, private_root, protect_windows)?;
-        let profile = std::env::var_os("USERPROFILE")
-            .map(PathBuf::from)
-            .ok_or_else(|| "native_resident_user_profile_missing".to_owned())?
+        let private_root = private_root
             .canonicalize()
-            .map_err(|_| "native_resident_user_profile_invalid".to_owned())?;
-        if !resolved.starts_with(profile) {
+            .map_err(|_| "native_resident_state_dir_outside_user_profile".to_owned())?;
+        if !resolved.starts_with(&private_root) {
             return Err("native_resident_state_dir_outside_user_profile".to_owned());
         }
         Ok(resolved)
